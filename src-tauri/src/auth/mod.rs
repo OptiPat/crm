@@ -14,7 +14,14 @@ use tauri::{AppHandle, Manager};
 pub struct AuthConfig {
     pub password_hash: String,
     pub recovery_key: String,
+    #[serde(default = "default_db_key")]
+    pub db_encryption_key: String, // Clé de chiffrement pour SQLCipher
     pub created_at: i64,
+}
+
+// Fonction par défaut pour les anciens fichiers sans db_encryption_key
+fn default_db_key() -> String {
+    String::new() // Retourne une chaîne vide pour déclencher la génération dans load_config
 }
 
 pub struct AuthManager {
@@ -62,19 +69,19 @@ impl AuthManager {
         // Générer une clé de récupération (8 mots aléatoires)
         let recovery_key = Self::generate_recovery_key();
 
+        // Générer une clé de chiffrement pour la base de données (64 caractères hexadécimaux = 256 bits)
+        let db_key = Self::generate_db_encryption_key();
+
         // Créer la configuration
         let config = AuthConfig {
             password_hash,
             recovery_key: recovery_key.clone(),
+            db_encryption_key: db_key,
             created_at: chrono::Utc::now().timestamp(),
         };
 
         // Sauvegarder la configuration
-        let config_json = serde_json::to_string_pretty(&config)
-            .map_err(|e| format!("Failed to serialize config: {}", e))?;
-
-        fs::write(&self.config_path, config_json)
-            .map_err(|e| format!("Failed to write config: {}", e))?;
+        self.save_config(&config)?;
 
         println!("✅ Master password created successfully");
 
@@ -104,10 +111,29 @@ impl AuthManager {
         let config_str = fs::read_to_string(&self.config_path)
             .map_err(|e| format!("Failed to read config: {}", e))?;
 
-        let config: AuthConfig = serde_json::from_str(&config_str)
+        let mut config: AuthConfig = serde_json::from_str(&config_str)
             .map_err(|e| format!("Failed to parse config: {}", e))?;
 
+        // Si la clé de chiffrement DB a été générée automatiquement (migration),
+        // sauvegarder le fichier mis à jour
+        if config.db_encryption_key.is_empty() {
+            config.db_encryption_key = Self::generate_db_encryption_key();
+            self.save_config(&config)?;
+            println!("✅ Migrated auth.json: added db_encryption_key");
+        }
+
         Ok(config)
+    }
+
+    /// Sauvegarde la configuration
+    fn save_config(&self, config: &AuthConfig) -> Result<(), String> {
+        let config_json = serde_json::to_string_pretty(config)
+            .map_err(|e| format!("Failed to serialize config: {}", e))?;
+        
+        fs::write(&self.config_path, config_json)
+            .map_err(|e| format!("Failed to write config: {}", e))?;
+        
+        Ok(())
     }
 
     /// Génère une clé de récupération aléatoire
@@ -131,5 +157,19 @@ impl AuthManager {
     pub fn get_recovery_key(&self) -> Result<String, String> {
         let config = self.load_config()?;
         Ok(config.recovery_key)
+    }
+
+    /// Récupère la clé de chiffrement de la base de données
+    pub fn get_db_encryption_key(&self) -> Result<String, String> {
+        let config = self.load_config()?;
+        Ok(config.db_encryption_key)
+    }
+
+    /// Génère une clé de chiffrement aléatoire pour la base de données
+    fn generate_db_encryption_key() -> String {
+        use rand::RngCore;
+        let mut key = [0u8; 32]; // 256 bits
+        OsRng.fill_bytes(&mut key);
+        hex::encode(key)
     }
 }

@@ -141,3 +141,44 @@ pub struct NewDocument {
     pub date_document: Option<String>,
     pub notes: Option<String>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TemplateEmail {
+    pub id: i64,
+    pub nom: String,
+    pub sujet: String,
+    pub corps: String,
+    pub categorie: String,
+    pub variables: Option<String>, // JSON string
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewTemplateEmail {
+    pub nom: String,
+    pub sujet: String,
+    pub corps: String,
+    pub categorie: String,
+    pub variables: Option<String>, // JSON string
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Alerte {
+    pub id: i64,
+    pub contact_id: i64,
+    pub type_alerte: String,
+    pub message: String,
+    pub date_alerte: i64,
+    pub lue: bool,
+    pub traitee: bool,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewAlerte {
+    pub contact_id: i64,
+    pub type_alerte: String,
+    pub message: String,
+    pub date_alerte: Option<i64>,
+}

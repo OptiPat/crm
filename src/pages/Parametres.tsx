@@ -2,9 +2,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Database, Bell, User } from "lucide-react";
+import { Lock, Database, Bell, User, Mail } from "lucide-react";
+import { SmtpConfigForm } from "@/components/emails/SmtpConfigForm";
+import { useState } from "react";
 
 export function Parametres() {
+  const [showSmtpConfig, setShowSmtpConfig] = useState(false);
+  
   return (
     <div className="space-y-6">
       <div>
@@ -96,6 +100,24 @@ export function Parametres() {
         </CardContent>
       </Card>
 
+      {/* Email / SMTP */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Mail className="h-5 w-5 text-primary" />
+            <CardTitle>Configuration Email (SMTP)</CardTitle>
+          </div>
+          <CardDescription>
+            Configurez votre compte email pour envoyer des emails depuis l'application
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => setShowSmtpConfig(true)}>
+            Configurer mon compte email
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Notifications */}
       <Card>
         <CardHeader>
@@ -113,6 +135,12 @@ export function Parametres() {
           </p>
         </CardContent>
       </Card>
+
+      {/* Formulaire de configuration SMTP */}
+      <SmtpConfigForm
+        open={showSmtpConfig}
+        onOpenChange={setShowSmtpConfig}
+      />
     </div>
   );
 }

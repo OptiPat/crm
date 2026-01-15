@@ -10,6 +10,8 @@ import { Partenaires } from "@/pages/Partenaires";
 import { Documents } from "@/pages/Documents";
 import { Interactions } from "@/pages/Interactions";
 import { Parametres } from "@/pages/Parametres";
+import { TemplatesEmail } from "@/pages/TemplatesEmail";
+import { Suivi } from "@/pages/Suivi";
 
 function App() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -58,6 +60,10 @@ function App() {
         return <Documents />;
       case "interactions":
         return <Interactions />;
+      case "templates-email":
+        return <TemplatesEmail />;
+      case "suivi":
+        return <Suivi />;
       case "parametres":
         return <Parametres />;
       default:

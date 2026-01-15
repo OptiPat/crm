@@ -527,4 +527,285 @@ impl Database {
         self.conn.execute("DELETE FROM documents WHERE id = ?1", params![id])?;
         Ok(())
     }
+
+    // ========== TEMPLATES EMAIL ==========
+
+    pub fn get_all_templates_email(&self) -> Result<Vec<super::models::TemplateEmail>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nom, sujet, corps, categorie, variables, created_at, updated_at
+             FROM templates_email 
+             ORDER BY created_at DESC"
+        )?;
+
+        let templates = stmt.query_map([], |row| {
+            Ok(super::models::TemplateEmail {
+                id: row.get(0)?,
+                nom: row.get(1)?,
+                sujet: row.get(2)?,
+                corps: row.get(3)?,
+                categorie: row.get(4)?,
+                variables: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for template in templates {
+            result.push(template?);
+        }
+        Ok(result)
+    }
+
+    pub fn create_template_email(&self, template: super::models::NewTemplateEmail) -> Result<super::models::TemplateEmail> {
+        self.conn.execute(
+            "INSERT INTO templates_email (nom, sujet, corps, categorie, variables) 
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                &template.nom,
+                &template.sujet,
+                &template.corps,
+                &template.categorie,
+                &template.variables,
+            ],
+        )?;
+
+        let id = self.conn.last_insert_rowid();
+        self.get_template_email_by_id(id)
+    }
+
+    pub fn get_template_email_by_id(&self, id: i64) -> Result<super::models::TemplateEmail> {
+        self.conn.query_row(
+            "SELECT id, nom, sujet, corps, categorie, variables, created_at, updated_at
+             FROM templates_email 
+             WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(super::models::TemplateEmail {
+                    id: row.get(0)?,
+                    nom: row.get(1)?,
+                    sujet: row.get(2)?,
+                    corps: row.get(3)?,
+                    categorie: row.get(4)?,
+                    variables: row.get(5)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn update_template_email(&self, id: i64, template: &super::models::NewTemplateEmail) -> Result<super::models::TemplateEmail> {
+        self.conn.execute(
+            "UPDATE templates_email SET 
+                nom = ?1,
+                sujet = ?2,
+                corps = ?3,
+                categorie = ?4,
+                variables = ?5,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?6",
+            params![
+                &template.nom,
+                &template.sujet,
+                &template.corps,
+                &template.categorie,
+                &template.variables,
+                id
+            ],
+        )?;
+
+        self.get_template_email_by_id(id)
+    }
+
+    pub fn delete_template_email(&self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM templates_email WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    // ========== ALERTES ==========
+
+    pub fn get_all_alertes(&self) -> Result<Vec<super::models::Alerte>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
+             FROM alertes 
+             ORDER BY date_alerte DESC, created_at DESC"
+        )?;
+
+        let alertes = stmt.query_map([], |row| {
+            Ok(super::models::Alerte {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                type_alerte: row.get(2)?,
+                message: row.get(3)?,
+                date_alerte: row.get(4)?,
+                lue: row.get::<_, i64>(5)? != 0,
+                traitee: row.get::<_, i64>(6)? != 0,
+                created_at: row.get(7)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for alerte in alertes {
+            result.push(alerte?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_alertes_non_traitees(&self) -> Result<Vec<super::models::Alerte>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
+             FROM alertes 
+             WHERE traitee = 0
+             ORDER BY date_alerte DESC, created_at DESC"
+        )?;
+
+        let alertes = stmt.query_map([], |row| {
+            Ok(super::models::Alerte {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                type_alerte: row.get(2)?,
+                message: row.get(3)?,
+                date_alerte: row.get(4)?,
+                lue: row.get::<_, i64>(5)? != 0,
+                traitee: row.get::<_, i64>(6)? != 0,
+                created_at: row.get(7)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for alerte in alertes {
+            result.push(alerte?);
+        }
+        Ok(result)
+    }
+
+    pub fn create_alerte(&self, alerte: super::models::NewAlerte) -> Result<super::models::Alerte> {
+        let date_alerte = alerte.date_alerte.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+        });
+
+        self.conn.execute(
+            "INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee) 
+             VALUES (?1, ?2, ?3, ?4, 0, 0)",
+            params![
+                &alerte.contact_id,
+                &alerte.type_alerte,
+                &alerte.message,
+                date_alerte,
+            ],
+        )?;
+
+        let id = self.conn.last_insert_rowid();
+        self.get_alerte_by_id(id)
+    }
+
+    pub fn get_alerte_by_id(&self, id: i64) -> Result<super::models::Alerte> {
+        self.conn.query_row(
+            "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
+             FROM alertes 
+             WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(super::models::Alerte {
+                    id: row.get(0)?,
+                    contact_id: row.get(1)?,
+                    type_alerte: row.get(2)?,
+                    message: row.get(3)?,
+                    date_alerte: row.get(4)?,
+                    lue: row.get::<_, i64>(5)? != 0,
+                    traitee: row.get::<_, i64>(6)? != 0,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn marquer_alerte_lue(&self, id: i64) -> Result<()> {
+        self.conn.execute("UPDATE alertes SET lue = 1 WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn marquer_alerte_traitee(&self, id: i64) -> Result<()> {
+        self.conn.execute("UPDATE alertes SET traitee = 1, lue = 1 WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn delete_alerte(&self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM alertes WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    // Génération automatique des alertes
+    pub fn generer_alertes_automatiques(&self) -> Result<usize> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let contacts = self.get_all_contacts()?;
+        let mut count = 0;
+
+        for contact in contacts {
+            // Vérifier si une alerte existe déjà pour ce contact
+            let existing_alerte: Result<i64> = self.conn.query_row(
+                "SELECT COUNT(*) FROM alertes WHERE contact_id = ?1 AND traitee = 0",
+                params![contact.id],
+                |row| row.get(0),
+            );
+
+            if existing_alerte.unwrap_or(0) > 0 {
+                continue; // Alerte déjà existante
+            }
+
+            let date_dernier_contact = contact.date_dernier_contact.and_then(|d| d.parse::<i64>().ok());
+
+            // Client sans contact depuis > 12 mois
+            if contact.categorie == "CLIENT" {
+                let should_alert = if let Some(last_contact) = date_dernier_contact {
+                    let diff_seconds = now - last_contact;
+                    let diff_months = diff_seconds / (30 * 24 * 60 * 60);
+                    diff_months > 12
+                } else {
+                    true // Pas de date de dernier contact
+                };
+
+                if should_alert {
+                    self.create_alerte(super::models::NewAlerte {
+                        contact_id: contact.id.unwrap(),
+                        type_alerte: "SUIVI_CLIENT_ANNUEL".to_string(),
+                        message: format!("{} {} - Client à recontacter (> 12 mois)", contact.prenom, contact.nom),
+                        date_alerte: Some(now),
+                    })?;
+                    count += 1;
+                }
+            }
+
+            // Suspect sans contact depuis > 6 mois
+            if contact.categorie.contains("SUSPECT") {
+                let should_alert = if let Some(last_contact) = date_dernier_contact {
+                    let diff_seconds = now - last_contact;
+                    let diff_months = diff_seconds / (30 * 24 * 60 * 60);
+                    diff_months > 6
+                } else {
+                    false // Pour les suspects, on n'alerte pas s'il n'y a jamais eu de contact
+                };
+
+                if should_alert {
+                    self.create_alerte(super::models::NewAlerte {
+                        contact_id: contact.id.unwrap(),
+                        type_alerte: "SUIVI_PROSPECT_6MOIS".to_string(),
+                        message: format!("{} {} - Suspect à relancer (> 6 mois)", contact.prenom, contact.nom),
+                        date_alerte: Some(now),
+                    })?;
+                    count += 1;
+                }
+            }
+        }
+
+        Ok(count)
+    }
 }

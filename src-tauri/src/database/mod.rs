@@ -10,6 +10,10 @@ pub struct Database {
 
 impl Database {
     pub fn new(app_handle: &AppHandle) -> Result<Self> {
+        Self::new_with_key(app_handle, None)
+    }
+
+    pub fn new_with_key(app_handle: &AppHandle, encryption_key: Option<&str>) -> Result<Self> {
         // Obtenir le chemin du dossier de données de l'application
         let app_data_dir = app_handle
             .path()
@@ -26,6 +30,16 @@ impl Database {
         
         // Ouvrir la connexion
         let conn = Connection::open(db_path)?;
+        
+        // TEMPORAIRE : SQLCipher désactivé (nécessite OpenSSL sur Windows)
+        // Si une clé de chiffrement est fournie, l'utiliser pour SQLCipher
+        // if let Some(key) = encryption_key {
+        //     conn.execute(&format!("PRAGMA key = 'x\\'{}\\''", key), [])?;
+        //     println!("✅ Database encryption enabled with SQLCipher");
+        // }
+        if encryption_key.is_some() {
+            println!("⚠️ Database encryption NOT enabled (SQLCipher requires OpenSSL on Windows)");
+        }
         
         // Activer les clés étrangères
         conn.execute("PRAGMA foreign_keys = ON", [])?;

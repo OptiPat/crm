@@ -30,7 +30,7 @@ interface ContactFormProps {
 export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<NewContact>({
-    categorie: contact?.categorie || "PROSPECT",
+    categorie: contact?.categorie || "SUSPECT_CLIENT",
     nom: contact?.nom || "",
     prenom: contact?.prenom || "",
     email: contact?.email || "",
@@ -58,7 +58,7 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
       onOpenChange(false);
       // Réinitialiser le formulaire
       setFormData({
-        categorie: "PROSPECT",
+        categorie: "SUSPECT_CLIENT",
         nom: "",
         prenom: "",
         email: "",
@@ -107,8 +107,10 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="CLIENT">Client</SelectItem>
-                  <SelectItem value="PROSPECT">Prospect</SelectItem>
-                  <SelectItem value="ANCIEN_CLIENT">Ancien client</SelectItem>
+                  <SelectItem value="PROSPECT_CLIENT">Prospect client</SelectItem>
+                  <SelectItem value="PROSPECT_FILLEUL">Prospect filleul</SelectItem>
+                  <SelectItem value="SUSPECT_CLIENT">Suspect client</SelectItem>
+                  <SelectItem value="SUSPECT_FILLEUL">Suspect filleul</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -126,8 +128,8 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ACTIF">Actif</SelectItem>
-                  <SelectItem value="INACTIF">Inactif</SelectItem>
-                  <SelectItem value="EN_ATTENTE">En attente</SelectItem>
+                  <SelectItem value="EN_PAUSE">En pause</SelectItem>
+                  <SelectItem value="ARCHIVE">Archivé</SelectItem>
                 </SelectContent>
               </Select>
             </div>

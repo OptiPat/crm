@@ -5,6 +5,8 @@ import {
   UserPlus, 
   FileText, 
   MessageSquare, 
+  Mail,
+  Bell,
   Settings,
   ChevronLeft,
   ChevronRight
@@ -21,10 +23,12 @@ interface SidebarProps {
 const menuItems = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
   { id: "contacts", label: "Contacts", icon: Users },
+  { id: "suivi", label: "Suivi", icon: Bell },
   { id: "foyers", label: "Foyers", icon: Building2 },
   { id: "partenaires", label: "Partenaires", icon: UserPlus },
   { id: "documents", label: "Documents", icon: FileText },
   { id: "interactions", label: "Interactions", icon: MessageSquare },
+  { id: "templates-email", label: "Templates Email", icon: Mail },
   { id: "parametres", label: "Paramètres", icon: Settings },
 ];
 

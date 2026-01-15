@@ -34,7 +34,9 @@ export const contacts = sqliteTable("contacts", {
       "SUSPECT_CLIENT",
       "SUSPECT_FILLEUL",
     ],
-  }).notNull(),
+  })
+    .notNull()
+    .default("SUSPECT_CLIENT"),
   civilite: text("civilite", { enum: ["M", "MME", "AUTRE"] }),
   nom: text("nom").notNull(),
   prenom: text("prenom").notNull(),
