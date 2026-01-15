@@ -1,0 +1,32 @@
+[package]
+name = "patrimoine-crm"
+version = "0.1.0"
+description = "CRM Desktop pour Conseillers en Gestion de Patrimoine"
+authors = ["you"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = [] }
+tauri-plugin-shell = "2.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+anyhow = "1.0"
+argon2 = "0.5"
+rand = "0.8"
+chrono = "0.4"
+tauri-plugin-dialog = "2.6.0"
+tauri-plugin-fs = "2.4.5"
+
+[profile.dev]
+incremental = true
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true
