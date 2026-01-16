@@ -1,7 +1,8 @@
 # 📊 Rapport d'implémentation - Patrimoine CRM
 
-**Date** : 15 janvier 2026
+**Date** : 16 janvier 2026
 **Version** : 0.1.0
+**Dernière mise à jour** : Module Investissements terminé
 
 ---
 
@@ -163,7 +164,117 @@
 
 ---
 
-### 6️⃣ Chiffrement SQLCipher (implémenté mais désactivé) ⚠️
+### 6️⃣ Module Dashboard avec KPIs et Graphiques ✅
+
+**Fichiers créés** :
+- `src/pages/Dashboard.tsx` - Page principale
+- `src/components/dashboard/StatCard.tsx` - Cartes KPIs
+- `src/components/dashboard/CategoryPieChart.tsx` - Camembert catégories
+- `src/components/dashboard/ProductPieChart.tsx` - Camembert produits
+- `src/components/dashboard/MonthlyChart.tsx` - Courbe mensuelle
+- `src/components/dashboard/PipelineChart.tsx` - Barres pipeline
+- `src/components/dashboard/AlertsPreview.tsx` - Aperçu alertes
+- `src/lib/api/tauri-dashboard.ts` - API TypeScript
+
+**Dépendance ajoutée** :
+- `recharts` v3.6.0 - Bibliothèque de graphiques React
+
+**Fichiers modifiés** :
+- `src-tauri/src/database/operations.rs` - Ajout fonctions stats
+- `src-tauri/src/database/models.rs` - Modèles stats
+- `src-tauri/src/commands.rs` - 6 nouvelles commandes
+- `src-tauri/src/main.rs` - Enregistrement des commandes
+
+**Fonctionnalités** :
+- **5 cartes KPIs** :
+  - Total clients
+  - Total prospects
+  - Total suspects
+  - Encours total (€)
+  - Alertes non traitées
+- **4 graphiques interactifs** :
+  - Camembert répartition par catégorie (5 types de contacts)
+  - Camembert répartition par type de produit
+  - Courbe évolution mensuelle (nouveaux contacts)
+  - Barres horizontales pipeline (suspects → prospects → clients)
+- **Aperçu des alertes** : 5 premières alertes avec lien vers contacts
+- **Actions rapides** : Boutons création contact/foyer/partenaire
+
+**Commandes Rust ajoutées** :
+- `get_dashboard_stats` - Stats globales
+- `get_category_stats` - Répartition par catégorie
+- `get_monthly_stats` - Évolution sur 12 mois
+- `get_product_stats` - Répartition par produit
+- `get_pipeline_stats` - Pipeline commercial
+- `get_alertes_with_contacts` - Alertes avec infos contact
+
+---
+
+### 7️⃣ Module Investissements (CRUD complet) ✅
+
+**Fichiers créés** :
+- `src/pages/Investissements.tsx` - Page principale avec tableau
+- `src/components/investissements/InvestissementForm.tsx` - Formulaire
+- `src/lib/api/tauri-investissements.ts` - API TypeScript
+
+**Fichiers modifiés** :
+- `src-tauri/src/database/models.rs` - Modèles Investissement
+- `src-tauri/src/database/operations.rs` - CRUD + requêtes complexes
+- `src-tauri/src/commands.rs` - 8 nouvelles commandes
+- `src-tauri/src/main.rs` - Enregistrement
+- `src/App.tsx` - Ajout route "investissements"
+- `src/components/layout/Sidebar.tsx` - Ajout menu (icône Wallet)
+
+**Fonctionnalités** :
+- **Vue tableau** avec toutes les informations :
+  - Nom du produit + type (badge coloré)
+  - Client associé (nom + prénom)
+  - Partenaire
+  - Montant initial (formaté €)
+  - Date de souscription
+  - Options : VP, Réinvestissement dividendes
+  - Date fin démembrement (si SCPI_DEMEMBREMENT)
+- **Filtres** :
+  - Par type de produit (10 types)
+  - Par partenaire
+  - Recherche textuelle (produit, client, partenaire)
+- **Actions** :
+  - Modifier (ouvre le formulaire pré-rempli)
+  - Supprimer (avec confirmation)
+- **Formulaire complet** :
+  - Sélection client (avec recherche)
+  - Option investissement commun (foyer)
+  - Tous les types de produits supportés
+  - Sélection partenaire
+  - Montant, dates
+  - Versement programmé (montant + fréquence)
+  - Réinvestissement dividendes
+  - Notes
+
+**Commandes Rust ajoutées** :
+- `get_all_investissements` - Lister tous
+- `get_investissements_by_contact` - Par contact
+- `get_investissements_by_foyer` - Par foyer
+- `get_investissements_with_details` - Avec noms contact/foyer/partenaire (JOIN SQL)
+- `create_investissement` - Créer
+- `get_investissement_by_id` - Lire un
+- `update_investissement` - Modifier
+- `delete_investissement` - Supprimer
+
+**Types de produits supportés** :
+- IMMOBILIER
+- SCPI
+- SCPI_DEMEMBREMENT (avec date de fin)
+- ASSURANCE_VIE
+- FIP_FCPI
+- FCPR
+- PER
+- G3F
+- AUTRE
+
+---
+
+### 8️⃣ Chiffrement SQLCipher (implémenté mais désactivé) ⚠️
 
 **Fichiers modifiés** :
 - `src-tauri/Cargo.toml` - Feature bundled-sqlcipher
@@ -408,14 +519,25 @@ rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }  # SQLite + ch
 
 ## 🏁 CONCLUSION
 
-**Toutes les tâches des Priorités 1 et 2 ont été complétées avec succès !**
+**Phase 1 complète + Dashboard + Investissements terminés !**
 
-L'application est **fonctionnelle** et prête à être testée. Les fondations sont solides pour continuer le développement des fonctionnalités suivantes.
+L'application est **pleinement fonctionnelle** et prête à être testée en conditions réelles. Les fondations sont solides et le cœur métier est opérationnel.
 
-**Progression globale** : **~40% du projet total** (Phase 1 complète)
+**Progression globale** : **~60% du projet total**
+- ✅ Phase 1 : 100%
+- ✅ Dashboard : 100%
+- ✅ Investissements : 100%
+
+**Ce qui reste** :
+- PDF OCR (lecture automatique)
+- PDF Génération (pré-remplissage)
+- GED (arborescence documentaire)
+- Workflows (automatisation)
+- Calendrier (intégration OAuth)
 
 ---
 
-**Développé le** : 15 janvier 2026
-**Temps de développement** : ~2 heures
-**Lignes de code** : ~2000 lignes
+**Développé** : 15-16 janvier 2026
+**Temps de développement** : ~4-5 heures
+**Lignes de code** : ~4000 lignes
+**Commandes Tauri** : 50+ commandes

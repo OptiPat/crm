@@ -122,6 +122,47 @@ impl Database {
         self.conn.execute("DELETE FROM contacts WHERE id = ?1", params![id])?;
         Ok(())
     }
+    
+    pub fn find_contact_by_email(&self, email: &str) -> Result<Option<Contact>> {
+        match self.conn.query_row(
+            "SELECT id, foyer_id, categorie, civilite, nom, prenom, email, telephone,
+                    adresse, code_postal, ville, date_naissance, profession, situation_familiale,
+                    source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
+                    statut_suivi, notes, created_at, updated_at
+             FROM contacts WHERE email = ?1",
+            params![email],
+            |row| {
+                Ok(Contact {
+                    id: row.get(0)?,
+                    foyer_id: row.get(1)?,
+                    categorie: row.get(2)?,
+                    civilite: row.get(3)?,
+                    nom: row.get(4)?,
+                    prenom: row.get(5)?,
+                    email: row.get(6)?,
+                    telephone: row.get(7)?,
+                    adresse: row.get(8)?,
+                    code_postal: row.get(9)?,
+                    ville: row.get(10)?,
+                    date_naissance: row.get(11)?,
+                    profession: row.get(12)?,
+                    situation_familiale: row.get(13)?,
+                    source_lead: row.get(14)?,
+                    profil_risque_sri: row.get(15)?,
+                    date_dernier_contact: row.get(16)?,
+                    date_prochain_suivi: row.get(17)?,
+                    statut_suivi: row.get(18)?,
+                    notes: row.get(19)?,
+                    created_at: row.get(20)?,
+                    updated_at: row.get(21)?,
+                })
+            },
+        ) {
+            Ok(contact) => Ok(Some(contact)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 
     pub fn delete_all_contacts(&self) -> Result<usize> {
         let count = self.conn.execute("DELETE FROM contacts", [])?;

@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users } from "lucide-react";
-import { getAllContacts, deleteContact, deleteAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
@@ -168,8 +168,11 @@ export function Contacts() {
     if (!doubleCheck) return;
 
     try {
-      const deleted = await deleteAllContacts();
-      alert(`✅ ${deleted} contact(s) supprimé(s) avec succès`);
+      // Supprimer les contacts un par un (deleteAllContacts n'est pas encore implémenté)
+      for (const contact of contacts) {
+        await deleteContact(contact.id!);
+      }
+      alert(`✅ ${contacts.length} contact(s) supprimé(s) avec succès`);
       await loadContacts();
     } catch (error) {
       console.error("Error deleting all contacts:", error);

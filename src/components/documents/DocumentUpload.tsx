@@ -18,8 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, File, X } from "lucide-react";
+import { Upload, File, X, FileText } from "lucide-react";
 import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
+import { extractTextFromPDFPath, parseAuto, type ExtractedData } from "@/lib/pdf";
+import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
+import { findContactByEmail, createContact, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -37,6 +40,11 @@ export function DocumentUpload({
   foyerId,
 }: DocumentUploadProps) {
   const [loading, setLoading] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [autoExtract, setAutoExtract] = useState(true);
+  const [extractedText, setExtractedText] = useState<string>("");
+  const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<{
     path: string;
     name: string;
@@ -59,11 +67,230 @@ export function DocumentUpload({
           ...prev,
           nom_fichier: file.name,
         }));
+
+        // Si c'est un PDF et que l'extraction auto est activée
+        if (autoExtract && file.name.toLowerCase().endsWith(".pdf")) {
+          await handleExtractText(file.path);
+        }
       }
     } catch (error) {
       console.error("Error selecting file:", error);
       alert("Erreur lors de la sélection du fichier: " + String(error));
     }
+  };
+
+  const handleExtractText = async (filePath: string) => {
+    setExtracting(true);
+    setExtractedText("");
+    setExtractedData(null);
+
+    try {
+      console.log("🔍 Extraction du texte du PDF...");
+      const result = await extractTextFromPDFPath(filePath);
+
+      console.log("✅ Extraction réussie!");
+      console.log(`📄 Pages: ${result.numPages}`);
+      console.log(`📊 Longueur du texte: ${result.text.length} caractères`);
+
+      setExtractedText(result.text);
+
+      // Parser les données
+      console.log("🔍 Parsing des données...");
+      const parsedData = parseAuto(result.text);
+
+      console.log("✅ Données extraites:", parsedData);
+      console.log(`📊 Confiance: ${parsedData.confidence}%`);
+
+      setExtractedData(parsedData);
+
+      // Afficher l'interface de prévisualisation
+      setShowPreview(true);
+    } catch (error) {
+      console.error("❌ Erreur lors de l'extraction:", error);
+      alert("Erreur lors de l'extraction du texte: " + String(error));
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  /**
+   * Convertit une date française (jj/mm/aaaa) en timestamp
+   */
+  const parseFrenchDate = (dateStr?: string): Date | undefined => {
+    if (!dateStr) return undefined;
+    
+    // Format: 19/07/1995 ou 08/04/2025
+    const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return undefined;
+    
+    const [, day, month, year] = match;
+    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+  };
+
+  /**
+   * Mappe ExtractedData vers NewContact
+   */
+  const mapExtractedDataToContact = (data: ExtractedData): NewContact => {
+    const contact: NewContact = {
+      nom: data.nom || "",
+      prenom: data.prenom || "",
+      categorie: "SUSPECT_CLIENT", // Par défaut
+      statut_suivi: "ACTIF", // Par défaut
+    };
+
+    // Civilité (conversion MME/M vers MME/M du schema)
+    if (data.civilite) {
+      const civiliteMap: Record<string, "M" | "MME" | "AUTRE"> = {
+        "M": "M",
+        "M.": "M",
+        "MONSIEUR": "M",
+        "MME": "MME",
+        "MADAME": "MME",
+      };
+      contact.civilite = civiliteMap[data.civilite.toUpperCase()] || "AUTRE";
+    }
+
+    // Coordonnées
+    if (data.email) contact.email = data.email;
+    if (data.telephone) contact.telephone = data.telephone;
+    if (data.adresse) contact.adresse = data.adresse;
+    if (data.codePostal) contact.codePostal = data.codePostal;
+    if (data.ville) contact.ville = data.ville;
+
+    // Informations personnelles
+    if (data.dateNaissance) {
+      contact.dateNaissance = parseFrenchDate(data.dateNaissance);
+    }
+    if (data.profession) contact.profession = data.profession;
+
+    // Situation familiale (conversion)
+    if (data.situationFamiliale) {
+      const situationMap: Record<string, "CELIBATAIRE" | "MARIE" | "PACSE" | "DIVORCE" | "VEUF" | "AUTRE"> = {
+        "CELIBATAIRE": "CELIBATAIRE",
+        "MARIE": "MARIE",
+        "MARIÉ": "MARIE",
+        "MARIEE": "MARIE",
+        "MARIÉE": "MARIE",
+        "PACSE": "PACSE",
+        "PACS": "PACSE",
+        "PACSÉ": "PACSE",
+        "PACSEE": "PACSE",
+        "DIVORCE": "DIVORCE",
+        "DIVORCÉ": "DIVORCE",
+        "DIVORCEE": "DIVORCE",
+        "DIVORCÉE": "DIVORCE",
+        "VEUF": "VEUF",
+        "VEUVE": "VEUF",
+      };
+      contact.situationFamiliale = situationMap[data.situationFamiliale.toUpperCase()] || "AUTRE";
+    }
+
+    return contact;
+  };
+
+  /**
+   * Applique les données extraites : crée ou met à jour le contact
+   */
+  const handleApplyData = async (data: ExtractedData) => {
+    console.log("📝 Données à appliquer:", data);
+    setLoading(true);
+
+    try {
+      let finalContactId = contactId;
+      let successMessage = "";
+      
+      // 1. Chercher un contact existant par email
+      if (data.email) {
+        const existingContact = await findContactByEmail(data.email);
+        
+        if (existingContact) {
+          // Contact existant → UPDATE (fusion des données)
+          console.log("✏️ Mise à jour du contact existant:", existingContact.id);
+          const newData = mapExtractedDataToContact(data);
+          const mergedData = {
+            ...existingContact, // Garder les valeurs existantes
+            ...newData, // Écraser avec les nouvelles données
+            statut_suivi: existingContact.statut_suivi, // Préserver le statut actuel
+          };
+          await updateContact(existingContact.id, mergedData);
+          finalContactId = existingContact.id;
+          successMessage = `✅ Contact mis à jour: ${data.prenom} ${data.nom}`;
+        } else {
+          // Contact inexistant → CREATE
+          console.log("➕ Création d'un nouveau contact");
+          const contactData = mapExtractedDataToContact(data);
+          const newContact = await createContact(contactData);
+          finalContactId = newContact.id;
+          successMessage = `✅ Nouveau contact créé: ${data.prenom} ${data.nom}`;
+        }
+      } else {
+        // Pas d'email → impossible de chercher, on crée forcément
+        console.log("⚠️ Pas d'email → création forcée");
+        const contactData = mapExtractedDataToContact(data);
+        const newContact = await createContact(contactData);
+        finalContactId = newContact.id;
+        successMessage = `✅ Nouveau contact créé: ${data.prenom} ${data.nom} (sans email)`;
+      }
+
+      // 2. Enregistrer le document lié au contact
+      if (uploadedFile && finalContactId) {
+        const newDoc: NewDocument = {
+          contact_id: finalContactId,
+          foyer_id: foyerId,
+          type_document: data.typeDocument === "RIO" ? "PATRIMOINE" : formData.type_document || "AUTRE",
+          nom_fichier: uploadedFile.name,
+          chemin_fichier: uploadedFile.path,
+          taille_fichier: uploadedFile.size,
+          mime_type: getMimeType(uploadedFile.name),
+          date_document: data.dateDocument ? convertDateToISO(data.dateDocument) : formData.date_document || undefined,
+          notes: formData.notes,
+        };
+
+        await createDocument(newDoc);
+        console.log("📄 Document enregistré");
+      }
+
+      // 3. Afficher le succès
+      alert(successMessage + "\n\n📄 Document enregistré avec succès!");
+
+      // 4. Fermer et rafraîchir
+      setShowPreview(false);
+      setExtractedData(null);
+      onSuccess();
+      onOpenChange(false);
+
+      // Réinitialiser
+      setUploadedFile(null);
+      setExtractedText("");
+      setFormData({
+        contact_id: contactId,
+        foyer_id: foyerId,
+        type_document: "AUTRE",
+        date_document: "",
+        notes: "",
+      });
+
+    } catch (error) {
+      console.error("❌ Erreur lors de l'application des données:", error);
+      alert("❌ Erreur lors de l'enregistrement:\n\n" + String(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Convertit une date française en format ISO (YYYY-MM-DD)
+   */
+  const convertDateToISO = (dateStr: string): string => {
+    const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!match) return dateStr;
+    const [, day, month, year] = match;
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleIgnoreData = () => {
+    console.log("🚫 Données ignorées");
+    setExtractedData(null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -95,6 +322,8 @@ export function DocumentUpload({
       
       // Réinitialiser
       setUploadedFile(null);
+      setExtractedText("");
+      setExtractedData(null);
       setFormData({
         contact_id: contactId,
         foyer_id: foyerId,
@@ -133,8 +362,20 @@ export function DocumentUpload({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+    <>
+      {/* Dialog de prévisualisation des données */}
+      {extractedData && (
+        <ExtractedDataPreviewAdvanced
+          open={showPreview}
+          onOpenChange={setShowPreview}
+          extractedData={extractedData}
+          onApply={handleApplyData}
+          onIgnore={handleIgnoreData}
+        />
+      )}
+
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importer un document</DialogTitle>
           <DialogDescription>
@@ -147,22 +388,43 @@ export function DocumentUpload({
           <div className="space-y-2">
             <Label>Fichier *</Label>
             {uploadedFile ? (
-              <div className="flex items-center gap-2 p-3 border border-border rounded-lg">
-                <File className="h-5 w-5 text-primary" />
-                <div className="flex-1">
-                  <div className="font-medium">{uploadedFile.name}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {formatFileSize(uploadedFile.size)}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 p-3 border border-border rounded-lg">
+                  <File className="h-5 w-5 text-primary" />
+                  <div className="flex-1">
+                    <div className="font-medium">{uploadedFile.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {formatFileSize(uploadedFile.size)}
+                    </div>
                   </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => {
+                      setUploadedFile(null);
+                      setExtractedText("");
+                    }}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setUploadedFile(null)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+
+                {/* Indicateur d'extraction */}
+                {extracting && (
+                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                    <FileText className="h-4 w-4 animate-pulse" />
+                    Extraction du texte en cours...
+                  </div>
+                )}
+
+                {/* Texte extrait (succès) */}
+                {!extracting && extractedText && (
+                  <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                    <FileText className="h-4 w-4" />
+                    Texte extrait ({extractedText.length} caractères)
+                  </div>
+                )}
               </div>
             ) : (
               <Button
@@ -175,6 +437,23 @@ export function DocumentUpload({
                 Sélectionner un fichier
               </Button>
             )}
+
+            {/* Option d'extraction automatique */}
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="auto-extract"
+                checked={autoExtract}
+                onChange={(e) => setAutoExtract(e.target.checked)}
+                className="h-4 w-4 rounded border-gray-300"
+              />
+              <Label
+                htmlFor="auto-extract"
+                className="text-sm font-normal cursor-pointer"
+              >
+                Extraire automatiquement les données des PDF
+              </Label>
+            </div>
           </div>
 
           {/* Type de document */}
@@ -242,5 +521,6 @@ export function DocumentUpload({
         </form>
       </DialogContent>
     </Dialog>
+    </>
   );
 }

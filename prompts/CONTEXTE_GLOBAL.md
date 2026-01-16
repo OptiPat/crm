@@ -94,8 +94,9 @@ patrimoine-crm/
 
 ---
 
-## ✅ Ce qui est FAIT (Phase 1 - 90%)
+## ✅ Ce qui est FAIT (60% du projet)
 
+### Phase 1 - Fondations ✅
 | Fonctionnalité | Status |
 |----------------|--------|
 | Setup Tauri + React + Vite + Tailwind | ✅ |
@@ -110,6 +111,14 @@ patrimoine-crm/
 | Configuration SMTP + envoi emails | ✅ |
 | Alertes automatiques + page Suivi | ✅ |
 | Upload de documents (basique) | ✅ |
+
+### Phase 2/3 - Productivité ✅
+| Fonctionnalité | Status |
+|----------------|--------|
+| Dashboard avec KPIs (5 cartes) | ✅ |
+| Graphiques (catégories, produits, pipeline, mensuel) | ✅ |
+| Module Investissements (CRUD complet) | ✅ |
+| Filtres et recherche investissements | ✅ |
 
 ---
 

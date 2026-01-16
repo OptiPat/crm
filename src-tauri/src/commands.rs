@@ -58,6 +58,15 @@ pub fn update_contact(db: State<'_, DbState>, id: i64, contact: NewContact) -> R
         .map_err(|e| format!("Failed to update contact: {}", e))
 }
 
+#[tauri::command]
+pub fn find_contact_by_email(db: State<'_, DbState>, email: String) -> Result<Option<Contact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.find_contact_by_email(&email)
+        .map_err(|e| format!("Failed to find contact by email: {}", e))
+}
+
 // ========== FOYERS ==========
 
 #[tauri::command]
@@ -505,4 +514,21 @@ pub fn check_and_create_demembrement_alerts(db: State<'_, DbState>) -> Result<Ve
     
     database.check_and_create_demembrement_alerts()
         .map_err(|e| format!("Failed to check demembrement alerts: {}", e))
+}
+
+// ========== PDF ==========
+
+#[tauri::command]
+pub fn read_pdf_file(file_path: String) -> Result<Vec<u8>, String> {
+    use std::fs;
+    
+    println!("🔍 Reading PDF file: {}", file_path);
+    
+    // Lire le fichier
+    let bytes = fs::read(&file_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    
+    println!("✅ File read successfully: {} bytes", bytes.len());
+    
+    Ok(bytes)
 }

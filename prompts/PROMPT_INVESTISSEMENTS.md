@@ -1,5 +1,16 @@
 # 💼 MODULE : Suivi des Investissements
 
+> **✅ MODULE TERMINÉ - 16 janvier 2026**
+>
+> Toutes les fonctionnalités sont implémentées :
+> - Page Investissements avec tableau complet
+> - Formulaire d'ajout/modification (tous types de produits)
+> - Filtres par type, partenaire, recherche
+> - Badges colorés par type de produit
+> - Affichage des options (VP, réinvestissement, démembrement)
+> - CRUD complet côté backend Rust
+> - API TypeScript complète
+>
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
 ---

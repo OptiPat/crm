@@ -211,14 +211,17 @@ export function ContactDetail({
                 <DialogTitle className="text-2xl">
                   {contact.prenom} {contact.nom}
                 </DialogTitle>
-                <DialogDescription className="flex gap-2 mt-2">
+                <DialogDescription className="sr-only">
+                  Détails du contact et informations personnelles
+                </DialogDescription>
+                <div className="flex gap-2 mt-2">
                   <Badge className={getCategorieColor(contact.categorie)}>
                     {contact.categorie}
                   </Badge>
                   <Badge className={getStatutColor(contact.statut_suivi)}>
                     {contact.statut_suivi}
                   </Badge>
-                </DialogDescription>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button

@@ -8,9 +8,9 @@
 
 ## 📊 ÉTAT ACTUEL DU PROJET
 
-**Date de mise à jour** : 15 janvier 2026  
+**Date de mise à jour** : 16 janvier 2026  
 **Version** : 0.1.0  
-**Progression globale** : ~40% (Phase 1 complétée à 90%)
+**Progression globale** : ~60% (Phase 1 + Dashboard + Investissements ✅)
 
 ---
 
@@ -30,6 +30,8 @@
 | Configuration SMTP + envoi emails | ✅ | `email/`, `SmtpConfigForm.tsx` |
 | Alertes automatiques + page Suivi | ✅ | `Suivi.tsx`, `tauri-alertes.ts` |
 | Upload de documents (basique) | ✅ | `DocumentUpload.tsx` |
+| Dashboard avec KPIs et graphiques | ✅ | `Dashboard.tsx`, tous composants dashboard/ |
+| Module Investissements (CRUD complet) | ✅ | `Investissements.tsx`, `InvestissementForm.tsx` |
 
 ### ⚠️ Partiellement fait
 - **SQLCipher** : Implémenté mais désactivé (nécessite OpenSSL)
@@ -40,17 +42,17 @@
 ## 🔄 CE QUI RESTE À FAIRE
 
 ### Phase 2 - Productivité
-| Module | Prompt dédié | Priorité |
-|--------|--------------|----------|
-| Dashboard avec KPIs et graphiques | `prompts/PROMPT_DASHBOARD.md` | 🔴 Haute |
-| Import/lecture PDF avec OCR | `prompts/PROMPT_PDF_OCR.md` | 🟠 Moyenne |
-| Génération PDF pré-remplis | `prompts/PROMPT_PDF_GENERATION.md` | 🟠 Moyenne |
+| Module | Prompt dédié | Priorité | Status |
+|--------|--------------|----------|--------|
+| ~~Dashboard avec KPIs et graphiques~~ | `prompts/PROMPT_DASHBOARD.md` | 🔴 Haute | ✅ FAIT |
+| Import/lecture PDF avec OCR | `prompts/PROMPT_PDF_OCR.md` | 🔴 Haute | 🔄 À faire |
+| Génération PDF pré-remplis | `prompts/PROMPT_PDF_GENERATION.md` | 🟠 Moyenne | 🔄 À faire |
 
 ### Phase 3 - Approfondissement
-| Module | Prompt dédié | Priorité |
-|--------|--------------|----------|
-| Suivi des investissements (UI) | `prompts/PROMPT_INVESTISSEMENTS.md` | 🟠 Moyenne |
-| Gestion documentaire (GED) | `prompts/PROMPT_GED.md` | 🟡 Basse |
+| Module | Prompt dédié | Priorité | Status |
+|--------|--------------|----------|--------|
+| ~~Suivi des investissements (UI)~~ | `prompts/PROMPT_INVESTISSEMENTS.md` | 🟠 Moyenne | ✅ FAIT |
+| Gestion documentaire (GED) | `prompts/PROMPT_GED.md` | 🟡 Basse | 🔄 À faire |
 
 ### Phase 4 - Automatisation avancée
 | Module | Prompt dédié | Priorité |
@@ -141,7 +143,7 @@ patrimoine-crm/
 | `foyers` | ✅ | Groupes familiaux |
 | `contacts` | ✅ | 5 catégories (CLIENT, PROSPECT_*, SUSPECT_*) |
 | `partenaires` | ✅ | Fournisseurs de produits |
-| `investissements` | ✅ Table, 🔄 UI | Produits souscrits |
+| `investissements` | ✅ | Produits souscrits (UI complète) |
 | `documents` | ✅ | Fichiers attachés |
 | `interactions` | ✅ Table | Historique des échanges |
 | `emails` | ✅ | Emails envoyés |
@@ -230,13 +232,13 @@ Attends ma validation après chaque étape.
 
 ## 📋 ORDRE DE DÉVELOPPEMENT RECOMMANDÉ
 
-1. **Dashboard** (PROMPT_DASHBOARD.md) - Pour avoir une vue d'ensemble
-2. **Investissements** (PROMPT_INVESTISSEMENTS.md) - Core business
-3. **PDF OCR** (PROMPT_PDF_OCR.md) - Productivité
-4. **PDF Génération** (PROMPT_PDF_GENERATION.md) - Productivité
-5. **GED** (PROMPT_GED.md) - Organisation
-6. **Workflows** (PROMPT_WORKFLOWS.md) - Automatisation
-7. **Calendrier** (PROMPT_CALENDRIER.md) - Intégration externe
+1. ~~**Dashboard**~~ ✅ FAIT
+2. ~~**Investissements**~~ ✅ FAIT
+3. **PDF OCR** (PROMPT_PDF_OCR.md) - Import et lecture automatique ← **PROCHAIN**
+4. **PDF Génération** (PROMPT_PDF_GENERATION.md) - Pré-remplissage automatique
+5. **GED** (PROMPT_GED.md) - Organisation documentaire
+6. **Workflows** (PROMPT_WORKFLOWS.md) - Automatisation avancée
+7. **Calendrier** (PROMPT_CALENDRIER.md) - Intégration Google/Outlook
 
 ---
 
@@ -250,4 +252,4 @@ Attends ma validation après chaque étape.
 
 ---
 
-**🎯 Prochaine étape recommandée : Dashboard avec KPIs et graphiques**
+**🎯 Prochaine étape recommandée : Import et lecture PDF avec OCR (Tesseract.js)**

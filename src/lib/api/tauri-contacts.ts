@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 export interface Contact {
-  id?: number;
+  id: number;
   foyer_id?: number;
   categorie: string;
   civilite?: string;
@@ -12,22 +12,22 @@ export interface Contact {
   adresse?: string;
   code_postal?: string;
   ville?: string;
-  date_naissance?: string;
+  date_naissance?: number;
   profession?: string;
   situation_familiale?: string;
   source_lead?: string;
   profil_risque_sri?: number;
-  date_dernier_contact?: string;
-  date_prochain_suivi?: string;
+  date_dernier_contact?: number;
+  date_prochain_suivi?: number;
   statut_suivi: string;
   notes?: string;
-  created_at?: number;
-  updated_at?: number;
+  created_at: number;
+  updated_at: number;
 }
 
 export interface NewContact {
   foyer_id?: number;
-  categorie: string;
+  categorie?: string;
   civilite?: string;
   nom: string;
   prenom: string;
@@ -36,13 +36,13 @@ export interface NewContact {
   adresse?: string;
   code_postal?: string;
   ville?: string;
-  date_naissance?: string;
+  date_naissance?: Date;
   profession?: string;
   situation_familiale?: string;
   source_lead?: string;
   profil_risque_sri?: number;
-  date_dernier_contact?: string;
-  date_prochain_suivi?: string;
+  date_dernier_contact?: Date;
+  date_prochain_suivi?: Date;
   statut_suivi?: string;
   notes?: string;
 }
@@ -59,14 +59,14 @@ export async function createContact(newContact: NewContact): Promise<Contact> {
   return await invoke<Contact>("create_contact", { newContact });
 }
 
+export async function updateContact(id: number, contact: NewContact): Promise<Contact> {
+  return await invoke<Contact>("update_contact", { id, contact });
+}
+
 export async function deleteContact(id: number): Promise<void> {
   return await invoke<void>("delete_contact", { id });
 }
 
-export async function deleteAllContacts(): Promise<number> {
-  return await invoke<number>("delete_all_contacts");
-}
-
-export async function updateContact(id: number, contact: NewContact): Promise<Contact> {
-  return await invoke<Contact>("update_contact", { id, contact });
+export async function findContactByEmail(email: string): Promise<Contact | null> {
+  return await invoke<Contact | null>("find_contact_by_email", { email });
 }
