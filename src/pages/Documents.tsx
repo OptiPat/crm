@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Search, FileText, File, Trash2, Filter, Download } from "lucide-react";
+import { Upload, Search, Trash2, Filter } from "lucide-react";
 import { getAllDocuments, deleteDocument, type Document } from "@/lib/api/tauri-documents";
 import { DocumentUpload } from "@/components/documents/DocumentUpload";
 

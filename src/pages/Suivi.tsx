@@ -78,9 +78,24 @@ export function Suivi() {
       const nextDate = new Date(now.getTime() + mois * 30 * 24 * 60 * 60 * 1000);
       const nextDateTimestamp = Math.floor(nextDate.getTime() / 1000).toString();
 
-      // Mettre à jour le contact
+      // Mettre à jour le contact (ne passer que les champs nécessaires)
       await updateContact(alerte.contact_id, {
-        ...contact,
+        nom: contact.nom,
+        prenom: contact.prenom,
+        categorie: contact.categorie,
+        civilite: contact.civilite,
+        email: contact.email,
+        telephone: contact.telephone,
+        adresse: contact.adresse,
+        code_postal: contact.code_postal,
+        ville: contact.ville,
+        profession: contact.profession,
+        situation_familiale: contact.situation_familiale,
+        source_lead: contact.source_lead,
+        profil_risque_sri: contact.profil_risque_sri,
+        statut_suivi: contact.statut_suivi,
+        notes: contact.notes,
+        foyer_id: contact.foyer_id,
         date_prochain_suivi: nextDateTimestamp,
         date_dernier_contact: Math.floor(now.getTime() / 1000).toString(),
       });

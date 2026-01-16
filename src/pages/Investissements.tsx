@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter, Trash2, Eye, Pencil } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Pencil } from "lucide-react";
 import {
   getInvestissementsWithDetails,
   deleteInvestissement,

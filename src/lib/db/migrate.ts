@@ -20,7 +20,5 @@ export function runMigrations() {
   }
 }
 
-// Si ce fichier est exécuté directement
-if (import.meta.url === `file://${process.argv[1]}`) {
-  runMigrations();
-}
+// Si ce fichier est exécuté directement (désactivé pour Tauri)
+// runMigrations();

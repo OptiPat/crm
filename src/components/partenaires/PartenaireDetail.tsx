@@ -14,7 +14,6 @@ import {
   Phone,
   MapPin,
   Briefcase,
-  Target,
   FileText,
   Edit,
   Trash2,

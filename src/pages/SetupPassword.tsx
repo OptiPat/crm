@@ -12,7 +12,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Check, Copy, Eye, EyeOff, Lock } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 
 interface SetupPasswordProps {
   onPasswordCreated: () => void;

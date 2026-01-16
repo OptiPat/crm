@@ -154,12 +154,15 @@ export function DocumentUpload({
     if (data.email) contact.email = data.email;
     if (data.telephone) contact.telephone = data.telephone;
     if (data.adresse) contact.adresse = data.adresse;
-    if (data.codePostal) contact.codePostal = data.codePostal;
+    if (data.codePostal) contact.code_postal = data.codePostal;
     if (data.ville) contact.ville = data.ville;
 
     // Informations personnelles
     if (data.dateNaissance) {
-      contact.dateNaissance = parseFrenchDate(data.dateNaissance);
+      const parsedDate = parseFrenchDate(data.dateNaissance);
+      if (parsedDate) {
+        contact.date_naissance = parsedDate.toISOString();
+      }
     }
     if (data.profession) contact.profession = data.profession;
 
@@ -182,7 +185,7 @@ export function DocumentUpload({
         "VEUF": "VEUF",
         "VEUVE": "VEUF",
       };
-      contact.situationFamiliale = situationMap[data.situationFamiliale.toUpperCase()] || "AUTRE";
+      contact.situation_familiale = situationMap[data.situationFamiliale.toUpperCase()] || "AUTRE";
     }
 
     return contact;
@@ -207,10 +210,13 @@ export function DocumentUpload({
           // Contact existant → UPDATE (fusion des données)
           console.log("✏️ Mise à jour du contact existant:", existingContact.id);
           const newData = mapExtractedDataToContact(data);
-          const mergedData = {
-            ...existingContact, // Garder les valeurs existantes
-            ...newData, // Écraser avec les nouvelles données
+          const mergedData: NewContact = {
+            ...newData, // Nouvelles données
+            foyer_id: existingContact.foyer_id,
             statut_suivi: existingContact.statut_suivi, // Préserver le statut actuel
+            notes: existingContact.notes,
+            source_lead: existingContact.source_lead,
+            profil_risque_sri: existingContact.profil_risque_sri,
           };
           await updateContact(existingContact.id, mergedData);
           finalContactId = existingContact.id;

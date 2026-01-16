@@ -14,7 +14,7 @@ interface ContactImportSimpleProps {
   onSuccess: () => void;
 }
 
-export function ContactImportSimple({ open, onOpenChange, onSuccess }: ContactImportSimpleProps) {
+export function ContactImportSimple({ open, onOpenChange, onSuccess: _onSuccess }: ContactImportSimpleProps) {
   const [message, setMessage] = useState("Composant chargé !");
 
   return (

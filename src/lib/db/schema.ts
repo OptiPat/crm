@@ -148,7 +148,7 @@ export const investissements = sqliteTable("investissements", {
   
   // Versements programmés
   versementProgramme: integer("versement_programme", { mode: "boolean" })
-    .default(0)
+    .default(false)
     .notNull(),
   montantVersementProgramme: integer("montant_versement_programme"), // En centimes
   frequenceVersement: text("frequence_versement", {
@@ -159,7 +159,7 @@ export const investissements = sqliteTable("investissements", {
   reinvestissementDividendes: integer("reinvestissement_dividendes", {
     mode: "boolean",
   })
-    .default(0)
+    .default(false)
     .notNull(),
   
   // Notes
@@ -319,8 +319,8 @@ export const alertes = sqliteTable("alertes", {
   message: text("message").notNull(),
   dateAlerte: integer("date_alerte", { mode: "timestamp" }).notNull(),
   
-  lue: integer("lue", { mode: "boolean" }).default(0).notNull(),
-  traitee: integer("traitee", { mode: "boolean" }).default(0).notNull(),
+  lue: integer("lue", { mode: "boolean" }).default(false).notNull(),
+  traitee: integer("traitee", { mode: "boolean" }).default(false).notNull(),
   
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)

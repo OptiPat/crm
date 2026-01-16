@@ -343,17 +343,19 @@ export function FoyerDetail({
                             )}
                             {inv.reinvestissement_dividendes && (
                               <Badge variant="outline" className="text-xs">
-                                Reinv. {inv.pourcentage_reinvestissement}%
+                                Reinv. dividendes
                               </Badge>
                             )}
                           </div>
                           <div className="font-medium">{inv.nom_produit}</div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Souscrit le{" "}
-                            {new Date(inv.date_souscription * 1000).toLocaleDateString(
-                              "fr-FR"
-                            )}
-                          </div>
+                          {inv.date_souscription && (
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Souscrit le{" "}
+                              {new Date(inv.date_souscription * 1000).toLocaleDateString(
+                                "fr-FR"
+                              )}
+                            </div>
+                          )}
                           {inv.date_fin_demembrement && (
                             <div className="text-xs text-orange-600 mt-1">
                               Fin démembrement:{" "}

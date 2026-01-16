@@ -18,7 +18,7 @@ export async function extractTextFromPDFPath(
   try {
     // Lire le fichier via Tauri
     const uint8Array = await readPdfFile(filePath);
-    const arrayBuffer = uint8Array.buffer;
+    const arrayBuffer = uint8Array.buffer as ArrayBuffer;
 
     // Charger le document PDF
     const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
@@ -48,7 +48,7 @@ export async function extractTextFromPDFPath(
 
     // Extraire les métadonnées
     const metadata = await pdf.getMetadata();
-    const info = metadata.info;
+    const info = metadata.info as Record<string, string> | undefined;
 
     return {
       text: fullText.trim(),
@@ -116,7 +116,7 @@ export async function extractTextFromPDF(
 
     // Extraire les métadonnées
     const metadata = await pdf.getMetadata();
-    const info = metadata.info;
+    const info = metadata.info as Record<string, string> | undefined;
 
     return {
       text: fullText.trim(),
