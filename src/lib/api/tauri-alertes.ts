@@ -45,3 +45,7 @@ export async function deleteAlerte(id: number): Promise<void> {
 export async function genererAlertesAutomatiques(): Promise<number> {
   return invoke<number>("generer_alertes_automatiques");
 }
+
+export async function checkAndCreateDemembrementAlerts(): Promise<Alerte[]> {
+  return invoke<Alerte[]>("check_and_create_demembrement_alerts");
+}

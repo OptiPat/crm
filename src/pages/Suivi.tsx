@@ -8,6 +8,7 @@ import {
   marquerAlerteTraitee,
   deleteAlerte,
   genererAlertesAutomatiques,
+  checkAndCreateDemembrementAlerts,
   type Alerte,
 } from "@/lib/api/tauri-alertes";
 import { getContactById, updateContact } from "@/lib/api/tauri-contacts";
@@ -30,6 +31,10 @@ export function Suivi() {
 
   const loadAlertes = async () => {
     try {
+      // Vérifier et créer les alertes de fin de démembrement
+      await checkAndCreateDemembrementAlerts();
+      
+      // Charger toutes les alertes non traitées
       const data = await getAlertesNonTraitees();
       setAlertes(data);
     } catch (error) {

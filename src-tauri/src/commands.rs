@@ -1,6 +1,6 @@
 use tauri::State;
 use std::sync::Mutex;
-use crate::database::{Database, models::{Contact, NewContact, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact}};
+use crate::database::{Database, models::{Contact, NewContact, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact, Investissement, NewInvestissement, InvestissementWithDetails}};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -422,4 +422,87 @@ pub fn get_alertes_with_contacts(db: State<'_, DbState>, limit: i64) -> Result<V
             Err(format!("Failed to get alertes with contacts: {}", e))
         }
     }
+}
+
+// ========== INVESTISSEMENTS ==========
+
+#[tauri::command]
+pub fn get_all_investissements(db: State<'_, DbState>) -> Result<Vec<Investissement>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_all_investissements()
+        .map_err(|e| format!("Failed to get investissements: {}", e))
+}
+
+#[tauri::command]
+pub fn get_investissements_by_contact(db: State<'_, DbState>, contact_id: i64) -> Result<Vec<Investissement>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_investissements_by_contact(contact_id)
+        .map_err(|e| format!("Failed to get investissements by contact: {}", e))
+}
+
+#[tauri::command]
+pub fn get_investissements_by_foyer(db: State<'_, DbState>, foyer_id: i64) -> Result<Vec<Investissement>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_investissements_by_foyer(foyer_id)
+        .map_err(|e| format!("Failed to get investissements by foyer: {}", e))
+}
+
+#[tauri::command]
+pub fn get_investissements_with_details(db: State<'_, DbState>) -> Result<Vec<InvestissementWithDetails>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_investissements_with_details()
+        .map_err(|e| format!("Failed to get investissements with details: {}", e))
+}
+
+#[tauri::command]
+pub fn create_investissement(db: State<'_, DbState>, new_investissement: NewInvestissement) -> Result<Investissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.create_investissement(new_investissement)
+        .map_err(|e| format!("Failed to create investissement: {}", e))
+}
+
+#[tauri::command]
+pub fn get_investissement_by_id(db: State<'_, DbState>, id: i64) -> Result<Investissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_investissement_by_id(id)
+        .map_err(|e| format!("Failed to get investissement: {}", e))
+}
+
+#[tauri::command]
+pub fn update_investissement(db: State<'_, DbState>, id: i64, investissement: NewInvestissement) -> Result<Investissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.update_investissement(id, &investissement)
+        .map_err(|e| format!("Failed to update investissement: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_investissement(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.delete_investissement(id)
+        .map_err(|e| format!("Failed to delete investissement: {}", e))
+}
+
+#[tauri::command]
+pub fn check_and_create_demembrement_alerts(db: State<'_, DbState>) -> Result<Vec<Alerte>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.check_and_create_demembrement_alerts()
+        .map_err(|e| format!("Failed to check demembrement alerts: {}", e))
 }

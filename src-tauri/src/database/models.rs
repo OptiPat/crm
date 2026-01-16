@@ -232,3 +232,64 @@ pub struct AlerteWithContact {
     pub message: String,
     pub date_alerte: i64,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Investissement {
+    pub id: i64,
+    pub contact_id: i64,
+    pub foyer_id: Option<i64>,
+    pub type_produit: String,
+    pub partenaire_id: Option<i64>,
+    pub nom_produit: String,
+    pub montant_initial: Option<i64>,
+    pub date_souscription: Option<i64>,
+    pub date_fin_demembrement: Option<i64>,
+    pub versement_programme: bool,
+    pub montant_versement_programme: Option<i64>,
+    pub frequence_versement: Option<String>,
+    pub reinvestissement_dividendes: bool,
+    pub notes: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewInvestissement {
+    pub contact_id: i64,
+    pub foyer_id: Option<i64>,
+    pub type_produit: String,
+    pub partenaire_id: Option<i64>,
+    pub nom_produit: String,
+    pub montant_initial: Option<i64>,
+    pub date_souscription: Option<i64>,
+    pub date_fin_demembrement: Option<i64>,
+    pub versement_programme: Option<bool>,
+    pub montant_versement_programme: Option<i64>,
+    pub frequence_versement: Option<String>,
+    pub reinvestissement_dividendes: Option<bool>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InvestissementWithDetails {
+    pub id: i64,
+    pub contact_id: i64,
+    pub contact_nom: String,
+    pub contact_prenom: String,
+    pub foyer_id: Option<i64>,
+    pub foyer_nom: Option<String>,
+    pub type_produit: String,
+    pub partenaire_id: Option<i64>,
+    pub partenaire_nom: Option<String>,
+    pub nom_produit: String,
+    pub montant_initial: Option<i64>,
+    pub date_souscription: Option<i64>,
+    pub date_fin_demembrement: Option<i64>,
+    pub versement_programme: bool,
+    pub montant_versement_programme: Option<i64>,
+    pub frequence_versement: Option<String>,
+    pub reinvestissement_dividendes: bool,
+    pub notes: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}

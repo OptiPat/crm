@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,9 +18,13 @@ import {
   Edit,
   Trash2,
   User,
+  Wallet,
+  Plus,
 } from "lucide-react";
 import { type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "./ContactForm";
+import { getInvestissementsByContact, type Investissement } from "@/lib/api/tauri-investissements";
+import { InvestissementForm } from "@/components/investissements/InvestissementForm";
 
 interface ContactDetailProps {
   open: boolean;
@@ -38,6 +42,63 @@ export function ContactDetail({
   onUpdate,
 }: ContactDetailProps) {
   const [showEditForm, setShowEditForm] = useState(false);
+  const [showInvestissementForm, setShowInvestissementForm] = useState(false);
+  const [investissements, setInvestissements] = useState<Investissement[]>([]);
+  const [loadingInvestissements, setLoadingInvestissements] = useState(false);
+
+  // Charger les investissements du contact
+  useEffect(() => {
+    if (contact?.id && open) {
+      loadInvestissements();
+    }
+  }, [contact?.id, open]);
+
+  const loadInvestissements = async () => {
+    if (!contact?.id) return;
+    
+    setLoadingInvestissements(true);
+    try {
+      const data = await getInvestissementsByContact(contact.id);
+      setInvestissements(data);
+    } catch (error) {
+      console.error("Error loading investissements:", error);
+    } finally {
+      setLoadingInvestissements(false);
+    }
+  };
+
+  // Calculer le total des encours
+  const totalEncours = investissements.reduce(
+    (total, inv) => total + (inv.montant_initial || 0),
+    0
+  );
+
+  // Formatage des montants
+  const formatEuro = (centimes?: number) => {
+    if (!centimes) return "-";
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: "EUR",
+    }).format(centimes / 100);
+  };
+
+  // Couleurs des badges par type de produit
+  const getTypeProduitColor = (type: string) => {
+    switch (type) {
+      case "SCPI":
+        return "bg-blue-100 text-blue-800";
+      case "SCPI_DEMEMBREMENT":
+        return "bg-purple-100 text-purple-800";
+      case "ASSURANCE_VIE":
+        return "bg-green-100 text-green-800";
+      case "PER":
+        return "bg-emerald-100 text-emerald-800";
+      case "IMMOBILIER":
+        return "bg-amber-100 text-amber-800";
+      default:
+        return "bg-gray-100 text-gray-800";
+    }
+  };
 
   if (!contact) return null;
 
@@ -335,6 +396,85 @@ export function ContactDetail({
               </Card>
             )}
 
+            {/* Investissements */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Wallet className="h-5 w-5" />
+                      Investissements ({investissements.length})
+                    </CardTitle>
+                    {totalEncours > 0 && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Total encours : <span className="font-semibold text-primary">{formatEuro(totalEncours)}</span>
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowInvestissementForm(true)}
+                    className="gap-2"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Ajouter
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingInvestissements ? (
+                  <p className="text-sm text-muted-foreground">Chargement...</p>
+                ) : investissements.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    Aucun investissement enregistré
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {investissements.map((inv) => (
+                      <div
+                        key={inv.id}
+                        className="p-3 border border-border rounded-lg hover:bg-accent transition-colors"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold">{inv.nom_produit}</p>
+                              <Badge className={getTypeProduitColor(inv.type_produit)}>
+                                {inv.type_produit}
+                              </Badge>
+                            </div>
+                            <div className="text-sm text-muted-foreground flex gap-4">
+                              <span className="font-medium text-primary">
+                                {formatEuro(inv.montant_initial)}
+                              </span>
+                              {inv.date_souscription && (
+                                <span>
+                                  {new Date(inv.date_souscription * 1000).toLocaleDateString("fr-FR")}
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              {inv.versement_programme && (
+                                <Badge variant="outline" className="text-xs">
+                                  VP
+                                </Badge>
+                              )}
+                              {inv.reinvestissement_dividendes && (
+                                <Badge variant="outline" className="text-xs">
+                                  {inv.notes?.match(/Réinv\. (\d+)%/)?.[0] || "Réinv. 100%"}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Produits souscrits */}
             {products.length > 0 && (
               <Card>
@@ -490,6 +630,15 @@ export function ContactDetail({
           onUpdate();
           setShowEditForm(false);
         }}
+      />
+
+      {/* Formulaire d'ajout d'investissement */}
+      <InvestissementForm
+        open={showInvestissementForm}
+        onOpenChange={setShowInvestissementForm}
+        investissement={null}
+        defaultContactId={contact?.id}
+        onSuccess={loadInvestissements}
       />
     </>
   );

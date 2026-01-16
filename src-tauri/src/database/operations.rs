@@ -846,8 +846,15 @@ impl Database {
             |row| row.get(0),
         )?;
 
-        // Encours total (pour l'instant 0, sera calculé quand la table investissements sera utilisée)
-        let encours_total: f64 = 0.0;
+        // Encours total (somme des investissements)
+        let encours_total: f64 = self.conn.query_row(
+            "SELECT COALESCE(SUM(montant_initial), 0) FROM investissements",
+            [],
+            |row| {
+                let centimes: i64 = row.get(0)?;
+                Ok(centimes as f64 / 100.0) // Convertir centimes en euros
+            },
+        ).unwrap_or(0.0);
 
         // Compter les alertes non traitées (gérer si la table n'existe pas)
         let alertes_non_traitees: i64 = self.conn.query_row(
@@ -1058,5 +1065,372 @@ impl Database {
             result.push(alerte?);
         }
         Ok(result)
+    }
+
+    // ========== INVESTISSEMENTS ==========
+
+    pub fn get_all_investissements(&self) -> Result<Vec<super::models::Investissement>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+                    montant_initial, date_souscription, date_fin_demembrement,
+                    versement_programme, montant_versement_programme, frequence_versement,
+                    reinvestissement_dividendes, notes, created_at, updated_at
+             FROM investissements 
+             ORDER BY date_souscription DESC"
+        )?;
+
+        let investissements = stmt.query_map([], |row| {
+            Ok(super::models::Investissement {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                foyer_id: row.get(2)?,
+                type_produit: row.get(3)?,
+                partenaire_id: row.get(4)?,
+                nom_produit: row.get(5)?,
+                montant_initial: row.get(6)?,
+                date_souscription: row.get(7)?,
+                date_fin_demembrement: row.get(8)?,
+                versement_programme: row.get::<_, i64>(9)? != 0,
+                montant_versement_programme: row.get(10)?,
+                frequence_versement: row.get(11)?,
+                reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
+                notes: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for investissement in investissements {
+            result.push(investissement?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_investissements_by_contact(&self, contact_id: i64) -> Result<Vec<super::models::Investissement>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+                    montant_initial, date_souscription, date_fin_demembrement,
+                    versement_programme, montant_versement_programme, frequence_versement,
+                    reinvestissement_dividendes, notes, created_at, updated_at
+             FROM investissements 
+             WHERE contact_id = ?1
+             ORDER BY date_souscription DESC"
+        )?;
+
+        let investissements = stmt.query_map(params![contact_id], |row| {
+            Ok(super::models::Investissement {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                foyer_id: row.get(2)?,
+                type_produit: row.get(3)?,
+                partenaire_id: row.get(4)?,
+                nom_produit: row.get(5)?,
+                montant_initial: row.get(6)?,
+                date_souscription: row.get(7)?,
+                date_fin_demembrement: row.get(8)?,
+                versement_programme: row.get::<_, i64>(9)? != 0,
+                montant_versement_programme: row.get(10)?,
+                frequence_versement: row.get(11)?,
+                reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
+                notes: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for investissement in investissements {
+            result.push(investissement?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_investissements_by_foyer(&self, foyer_id: i64) -> Result<Vec<super::models::Investissement>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+                    montant_initial, date_souscription, date_fin_demembrement,
+                    versement_programme, montant_versement_programme, frequence_versement,
+                    reinvestissement_dividendes, notes, created_at, updated_at
+             FROM investissements 
+             WHERE foyer_id = ?1
+             ORDER BY date_souscription DESC"
+        )?;
+
+        let investissements = stmt.query_map(params![foyer_id], |row| {
+            Ok(super::models::Investissement {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                foyer_id: row.get(2)?,
+                type_produit: row.get(3)?,
+                partenaire_id: row.get(4)?,
+                nom_produit: row.get(5)?,
+                montant_initial: row.get(6)?,
+                date_souscription: row.get(7)?,
+                date_fin_demembrement: row.get(8)?,
+                versement_programme: row.get::<_, i64>(9)? != 0,
+                montant_versement_programme: row.get(10)?,
+                frequence_versement: row.get(11)?,
+                reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
+                notes: row.get(13)?,
+                created_at: row.get(14)?,
+                updated_at: row.get(15)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for investissement in investissements {
+            result.push(investissement?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_investissements_with_details(&self) -> Result<Vec<super::models::InvestissementWithDetails>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT i.id, i.contact_id, c.nom, c.prenom, i.foyer_id, f.nom as foyer_nom,
+                    i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
+                    i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement,
+                    i.versement_programme, i.montant_versement_programme, i.frequence_versement,
+                    i.reinvestissement_dividendes, i.notes, i.created_at, i.updated_at
+             FROM investissements i
+             INNER JOIN contacts c ON i.contact_id = c.id
+             LEFT JOIN foyers f ON i.foyer_id = f.id
+             LEFT JOIN partenaires p ON i.partenaire_id = p.id
+             ORDER BY i.date_souscription DESC"
+        )?;
+
+        let investissements = stmt.query_map([], |row| {
+            Ok(super::models::InvestissementWithDetails {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                contact_nom: row.get(2)?,
+                contact_prenom: row.get(3)?,
+                foyer_id: row.get(4)?,
+                foyer_nom: row.get(5)?,
+                type_produit: row.get(6)?,
+                partenaire_id: row.get(7)?,
+                partenaire_nom: row.get(8)?,
+                nom_produit: row.get(9)?,
+                montant_initial: row.get(10)?,
+                date_souscription: row.get(11)?,
+                date_fin_demembrement: row.get(12)?,
+                versement_programme: row.get::<_, i64>(13)? != 0,
+                montant_versement_programme: row.get(14)?,
+                frequence_versement: row.get(15)?,
+                reinvestissement_dividendes: row.get::<_, i64>(16)? != 0,
+                notes: row.get(17)?,
+                created_at: row.get(18)?,
+                updated_at: row.get(19)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for investissement in investissements {
+            result.push(investissement?);
+        }
+        Ok(result)
+    }
+
+    pub fn create_investissement(&self, investissement: super::models::NewInvestissement) -> Result<super::models::Investissement> {
+        let versement_programme = if investissement.versement_programme.unwrap_or(false) { 1 } else { 0 };
+        let reinvestissement_dividendes = if investissement.reinvestissement_dividendes.unwrap_or(false) { 1 } else { 0 };
+
+        self.conn.execute(
+            "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+                                         montant_initial, date_souscription, date_fin_demembrement,
+                                         versement_programme, montant_versement_programme, frequence_versement,
+                                         reinvestissement_dividendes, notes) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            params![
+                &investissement.contact_id,
+                &investissement.foyer_id,
+                &investissement.type_produit,
+                &investissement.partenaire_id,
+                &investissement.nom_produit,
+                &investissement.montant_initial,
+                &investissement.date_souscription,
+                &investissement.date_fin_demembrement,
+                versement_programme,
+                &investissement.montant_versement_programme,
+                &investissement.frequence_versement,
+                reinvestissement_dividendes,
+                &investissement.notes,
+            ],
+        )?;
+
+        let id = self.conn.last_insert_rowid();
+        self.get_investissement_by_id(id)
+    }
+
+    pub fn get_investissement_by_id(&self, id: i64) -> Result<super::models::Investissement> {
+        self.conn.query_row(
+            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+                    montant_initial, date_souscription, date_fin_demembrement,
+                    versement_programme, montant_versement_programme, frequence_versement,
+                    reinvestissement_dividendes, notes, created_at, updated_at
+             FROM investissements 
+             WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(super::models::Investissement {
+                    id: row.get(0)?,
+                    contact_id: row.get(1)?,
+                    foyer_id: row.get(2)?,
+                    type_produit: row.get(3)?,
+                    partenaire_id: row.get(4)?,
+                    nom_produit: row.get(5)?,
+                    montant_initial: row.get(6)?,
+                    date_souscription: row.get(7)?,
+                    date_fin_demembrement: row.get(8)?,
+                    versement_programme: row.get::<_, i64>(9)? != 0,
+                    montant_versement_programme: row.get(10)?,
+                    frequence_versement: row.get(11)?,
+                    reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
+                    notes: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
+                })
+            },
+        )
+    }
+
+    pub fn update_investissement(&self, id: i64, investissement: &super::models::NewInvestissement) -> Result<super::models::Investissement> {
+        let versement_programme = if investissement.versement_programme.unwrap_or(false) { 1 } else { 0 };
+        let reinvestissement_dividendes = if investissement.reinvestissement_dividendes.unwrap_or(false) { 1 } else { 0 };
+
+        self.conn.execute(
+            "UPDATE investissements SET 
+                contact_id = ?1,
+                foyer_id = ?2,
+                type_produit = ?3,
+                partenaire_id = ?4,
+                nom_produit = ?5,
+                montant_initial = ?6,
+                date_souscription = ?7,
+                date_fin_demembrement = ?8,
+                versement_programme = ?9,
+                montant_versement_programme = ?10,
+                frequence_versement = ?11,
+                reinvestissement_dividendes = ?12,
+                notes = ?13,
+                updated_at = unixepoch()
+            WHERE id = ?14",
+            params![
+                &investissement.contact_id,
+                &investissement.foyer_id,
+                &investissement.type_produit,
+                &investissement.partenaire_id,
+                &investissement.nom_produit,
+                &investissement.montant_initial,
+                &investissement.date_souscription,
+                &investissement.date_fin_demembrement,
+                versement_programme,
+                &investissement.montant_versement_programme,
+                &investissement.frequence_versement,
+                reinvestissement_dividendes,
+                &investissement.notes,
+                id
+            ],
+        )?;
+
+        self.get_investissement_by_id(id)
+    }
+
+    pub fn delete_investissement(&self, id: i64) -> Result<()> {
+        self.conn.execute("DELETE FROM investissements WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    // Générer les alertes pour les SCPI en démembrement arrivant à échéance dans les 6 prochains mois
+    pub fn check_and_create_demembrement_alerts(&self) -> Result<Vec<super::models::Alerte>> {
+        // Timestamp actuel
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        
+        // Timestamp dans 6 mois (approximatif: 6 * 30 jours)
+        let six_months = 6 * 30 * 24 * 60 * 60;
+        let six_months_later = now + six_months;
+
+        // Récupérer les SCPI en démembrement qui arrivent à échéance dans les 6 prochains mois
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, nom_produit, date_fin_demembrement
+             FROM investissements
+             WHERE type_produit = 'SCPI_DEMEMBREMENT'
+               AND date_fin_demembrement IS NOT NULL
+               AND date_fin_demembrement > ?1
+               AND date_fin_demembrement <= ?2"
+        )?;
+
+        let investissements = stmt.query_map(params![now, six_months_later], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,  // id
+                row.get::<_, i64>(1)?,  // contact_id
+                row.get::<_, String>(2)?,  // nom_produit
+                row.get::<_, i64>(3)?,  // date_fin_demembrement
+            ))
+        })?;
+
+        let mut created_alerts = Vec::new();
+
+        for inv_result in investissements {
+            let (_inv_id, contact_id, nom_produit, date_fin) = inv_result?;
+
+            // Vérifier si une alerte existe déjà pour cet investissement
+            let existing: Result<i64> = self.conn.query_row(
+                "SELECT COUNT(*) FROM alertes 
+                 WHERE contact_id = ?1 
+                   AND type_alerte = 'FIN_DEMEMBREMENT'
+                   AND message LIKE ?2
+                   AND traitee = 0",
+                params![contact_id, format!("%{}%", nom_produit)],
+                |row| row.get(0),
+            );
+
+            // Si aucune alerte n'existe, en créer une
+            if existing.unwrap_or(0) == 0 {
+                let date_fin_formatted = chrono::DateTime::from_timestamp(date_fin, 0)
+                    .map(|dt| dt.format("%d/%m/%Y").to_string())
+                    .unwrap_or_else(|| "date inconnue".to_string());
+
+                let message = format!(
+                    "Fin de démembrement SCPI \"{}\" prévue le {}",
+                    nom_produit,
+                    date_fin_formatted
+                );
+
+                self.conn.execute(
+                    "INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee)
+                     VALUES (?1, 'FIN_DEMEMBREMENT', ?2, ?3, 0, 0)",
+                    params![contact_id, message, date_fin],
+                )?;
+
+                let alerte_id = self.conn.last_insert_rowid();
+                
+                // Récupérer l'alerte créée
+                let alerte = self.conn.query_row(
+                    "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
+                     FROM alertes WHERE id = ?1",
+                    params![alerte_id],
+                    |row| {
+                        Ok(super::models::Alerte {
+                            id: row.get(0)?,
+                            contact_id: row.get(1)?,
+                            type_alerte: row.get(2)?,
+                            message: row.get(3)?,
+                            date_alerte: row.get(4)?,
+                            lue: row.get::<_, i64>(5)? != 0,
+                            traitee: row.get::<_, i64>(6)? != 0,
+                            created_at: row.get(7)?,
+                        })
+                    },
+                )?;
+                
+                created_alerts.push(alerte);
+            }
+        }
+
+        Ok(created_alerts)
     }
 }

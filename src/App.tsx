@@ -7,6 +7,7 @@ import { Dashboard } from "@/pages/Dashboard";
 import { Contacts } from "@/pages/Contacts";
 import { Foyers } from "@/pages/Foyers";
 import { Partenaires } from "@/pages/Partenaires";
+import { Investissements } from "@/pages/Investissements";
 import { Documents } from "@/pages/Documents";
 import { Interactions } from "@/pages/Interactions";
 import { Parametres } from "@/pages/Parametres";
@@ -61,6 +62,8 @@ function App() {
         return <Foyers />;
       case "partenaires":
         return <Partenaires />;
+      case "investissements":
+        return <Investissements />;
       case "documents":
         return <Documents />;
       case "interactions":
