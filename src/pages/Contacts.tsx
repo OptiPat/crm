@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -22,7 +23,7 @@ export function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [categorieFilter, setCategorieFilter] = useState<string>("ALL");
+  const [categorieFilter, setCategorieFilter] = useState<string>("CLIENT");
   const [statutFilter, setStatutFilter] = useState<string>("ALL");
   const [showForm, setShowForm] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -76,6 +77,17 @@ export function Contacts() {
     return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "🟢 Suivi à jour" };
   };
 
+  // Calcul des compteurs par catégorie
+  const categoryCounts = useMemo(() => {
+    return {
+      CLIENT: contacts.filter(c => c.categorie === "CLIENT").length,
+      PROSPECT_CLIENT: contacts.filter(c => c.categorie === "PROSPECT_CLIENT").length,
+      SUSPECT_CLIENT: contacts.filter(c => c.categorie === "SUSPECT_CLIENT").length,
+      PROSPECT_FILLEUL: contacts.filter(c => c.categorie === "PROSPECT_FILLEUL").length,
+      SUSPECT_FILLEUL: contacts.filter(c => c.categorie === "SUSPECT_FILLEUL").length,
+    };
+  }, [contacts]);
+
   const filteredContacts = contacts
     .filter((contact) => {
       // Filtre de recherche textuelle
@@ -87,8 +99,7 @@ export function Contacts() {
         contact.telephone?.toLowerCase().includes(search);
 
       // Filtre par catégorie
-      const matchesCategorie =
-        categorieFilter === "ALL" || contact.categorie === categorieFilter;
+      const matchesCategorie = contact.categorie === categorieFilter;
 
       // Filtre par statut
       const matchesStatut =
@@ -216,7 +227,7 @@ export function Contacts() {
               <div>
                 <CardTitle>Liste des contacts</CardTitle>
                 <CardDescription>
-                  {filteredContacts.length} contact{filteredContacts.length > 1 ? "s" : ""} sur {contacts.length}
+                  {filteredContacts.length} contact{filteredContacts.length > 1 ? "s" : ""}
                 </CardDescription>
               </div>
               {contacts.length > 0 && (
@@ -232,7 +243,43 @@ export function Contacts() {
               )}
             </div>
 
-            {/* Barre de recherche et filtres */}
+            {/* Onglets par catégorie */}
+            <Tabs value={categorieFilter} onValueChange={setCategorieFilter} className="w-full">
+              <TabsList className="grid w-full grid-cols-5 h-auto">
+                <TabsTrigger value="CLIENT" className="gap-2 py-2.5">
+                  <span>Clients</span>
+                  <Badge variant="secondary" className="bg-green-50 text-green-700 ml-1 border border-green-200">
+                    {categoryCounts.CLIENT}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="PROSPECT_CLIENT" className="gap-2 py-2.5">
+                  <span>Prospects Clients</span>
+                  <Badge variant="secondary" className="bg-purple-50 text-purple-700 ml-1 border border-purple-200">
+                    {categoryCounts.PROSPECT_CLIENT}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="SUSPECT_CLIENT" className="gap-2 py-2.5">
+                  <span>Suspects Clients</span>
+                  <Badge variant="secondary" className="bg-slate-50 text-slate-700 ml-1 border border-slate-200">
+                    {categoryCounts.SUSPECT_CLIENT}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="PROSPECT_FILLEUL" className="gap-2 py-2.5">
+                  <span>Prospects Filleuls</span>
+                  <Badge variant="secondary" className="bg-indigo-50 text-indigo-700 ml-1 border border-indigo-200">
+                    {categoryCounts.PROSPECT_FILLEUL}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger value="SUSPECT_FILLEUL" className="gap-2 py-2.5">
+                  <span>Suspects Filleuls</span>
+                  <Badge variant="secondary" className="bg-amber-50 text-amber-700 ml-1 border border-amber-200">
+                    {categoryCounts.SUSPECT_FILLEUL}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {/* Barre de recherche et filtre statut */}
             <div className="flex gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -243,21 +290,6 @@ export function Contacts() {
                   className="pl-9"
                 />
               </div>
-
-              <Select value={categorieFilter} onValueChange={setCategorieFilter}>
-                <SelectTrigger className="w-[180px]">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Toutes catégories</SelectItem>
-                  <SelectItem value="CLIENT">Clients</SelectItem>
-                  <SelectItem value="PROSPECT_CLIENT">Prospects clients</SelectItem>
-                  <SelectItem value="PROSPECT_FILLEUL">Prospects filleuls</SelectItem>
-                  <SelectItem value="SUSPECT_CLIENT">Suspects clients</SelectItem>
-                  <SelectItem value="SUSPECT_FILLEUL">Suspects filleuls</SelectItem>
-                </SelectContent>
-              </Select>
 
               <Select value={statutFilter} onValueChange={setStatutFilter}>
                 <SelectTrigger className="w-[180px]">
@@ -325,7 +357,7 @@ export function Contacts() {
                               {contact.telephone}
                             </div>
                           )}
-                          {contact.date_dernier_contact && (
+                          {contact.date_dernier_contact && contact.date_dernier_contact > 0 && (
                             <div className="flex items-center gap-1 text-xs">
                               <span>
                                 Dernier contact : {new Date(contact.date_dernier_contact * 1000).toLocaleDateString('fr-FR')}

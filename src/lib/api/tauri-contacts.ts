@@ -36,13 +36,13 @@ export interface NewContact {
   adresse?: string;
   code_postal?: string;
   ville?: string;
-  date_naissance?: Date;
+  date_naissance?: string; // ISO string ou timestamp
   profession?: string;
   situation_familiale?: string;
   source_lead?: string;
   profil_risque_sri?: number;
-  date_dernier_contact?: Date;
-  date_prochain_suivi?: Date;
+  date_dernier_contact?: string; // ISO string ou timestamp
+  date_prochain_suivi?: string; // ISO string ou timestamp
   statut_suivi?: string;
   notes?: string;
 }

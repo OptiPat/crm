@@ -43,7 +43,28 @@ impl Database {
     }
     
     pub fn create_contact(&self, new_contact: NewContact) -> Result<Contact> {
+        use chrono::{DateTime, Utc};
+        
         let statut = new_contact.statut_suivi.unwrap_or("ACTIF".to_string());
+        
+        // Convertir les dates ISO string en timestamps Unix
+        let date_dernier_contact_timestamp = new_contact.date_dernier_contact.and_then(|date_str| {
+            DateTime::parse_from_rfc3339(&date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
+        
+        let date_prochain_suivi_timestamp = new_contact.date_prochain_suivi.and_then(|date_str| {
+            DateTime::parse_from_rfc3339(&date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
+        
+        let date_naissance_timestamp = new_contact.date_naissance.and_then(|date_str| {
+            DateTime::parse_from_rfc3339(&date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
         
         self.conn.execute(
             "INSERT INTO contacts (
@@ -63,13 +84,13 @@ impl Database {
                 new_contact.adresse,
                 new_contact.code_postal,
                 new_contact.ville,
-                new_contact.date_naissance,
+                date_naissance_timestamp,
                 new_contact.profession,
                 new_contact.situation_familiale,
                 new_contact.source_lead,
                 new_contact.profil_risque_sri,
-                new_contact.date_dernier_contact,
-                new_contact.date_prochain_suivi,
+                date_dernier_contact_timestamp,
+                date_prochain_suivi_timestamp,
                 statut,
                 new_contact.notes,
             ],

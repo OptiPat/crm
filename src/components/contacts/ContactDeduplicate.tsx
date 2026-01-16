@@ -52,7 +52,37 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
           const mainContact = duplicates[0];
           const otherContacts = duplicates.slice(1);
 
-          // Construire les notes consolidées
+          // === RÈGLES DE FUSION INTELLIGENTES ===
+          
+          // 1. Date dernier contact : garder la PLUS RÉCENTE
+          let mostRecentDate = mainContact.date_dernier_contact;
+          duplicates.forEach(contact => {
+            if (contact.date_dernier_contact && (!mostRecentDate || contact.date_dernier_contact > mostRecentDate)) {
+              mostRecentDate = contact.date_dernier_contact;
+            }
+          });
+
+          // 2. Catégorie : garder la PLUS AVANCÉE (CLIENT > PROSPECT > SUSPECT)
+          const categorieOrder = {
+            "CLIENT": 3,
+            "PROSPECT_CLIENT": 2,
+            "PROSPECT_FILLEUL": 2,
+            "SUSPECT_CLIENT": 1,
+            "SUSPECT_FILLEUL": 1,
+          };
+          
+          let bestCategorie = mainContact.categorie;
+          let bestCategorieScore = categorieOrder[mainContact.categorie as keyof typeof categorieOrder] || 0;
+          
+          duplicates.forEach(contact => {
+            const score = categorieOrder[contact.categorie as keyof typeof categorieOrder] || 0;
+            if (score > bestCategorieScore) {
+              bestCategorie = contact.categorie;
+              bestCategorieScore = score;
+            }
+          });
+
+          // 3. Notes : fusionner toutes les notes
           let allNotes: string[] = [];
           
           // Ajouter les notes du contact principal s'il y en a
@@ -67,18 +97,18 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
             }
           });
 
-          // Mettre à jour le contact principal avec toutes les notes
-          if (allNotes.length > 0) {
-            const consolidatedNotes = allNotes.join('\n---\n');
-            
-            await invoke("update_contact", {
-              id: mainContact.id,
-              contact: {
-                ...mainContact,
-                notes: consolidatedNotes,
-              },
-            });
-          }
+          const consolidatedNotes = allNotes.length > 0 ? allNotes.join('\n---\n') : mainContact.notes;
+
+          // Mettre à jour le contact principal avec toutes les infos fusionnées
+          await invoke("update_contact", {
+            id: mainContact.id,
+            contact: {
+              ...mainContact,
+              date_dernier_contact: mostRecentDate,
+              categorie: bestCategorie,
+              notes: consolidatedNotes,
+            },
+          });
 
           // Supprimer les doublons
           for (const duplicate of otherContacts) {
@@ -130,9 +160,11 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
               </p>
               <ul className="text-sm text-blue-800 mt-2 space-y-1 list-disc list-inside">
                 <li>Détecter tous les contacts en double (même nom + prénom)</li>
-                <li>Garder le contact le plus ancien</li>
-                <li>Consolider toutes les informations dans les Notes</li>
-                <li>Supprimer les doublons</li>
+                <li>Garder le contact le plus ancien (ID le plus bas)</li>
+                <li>📅 Conserver la date de dernier contact <strong>la plus récente</strong></li>
+                <li>🎯 Conserver la catégorie <strong>la plus avancée</strong> (CLIENT &gt; PROSPECT &gt; SUSPECT)</li>
+                <li>📝 Fusionner toutes les notes avec séparateur</li>
+                <li>🗑️ Supprimer les doublons</li>
               </ul>
             </div>
 

@@ -66,6 +66,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     { value: "mode_detention", label: "Mode de détention SCPI (→ Notes)" },
     { value: "reinvestissement", label: "Réinvestissement dividendes (→ Notes, si SCPI)" },
     { value: "dernier_rdv", label: "Dernier RDV (→ Notes)" },
+    { value: "prospect_filleul", label: "Prospect Filleul (OUI/NON)" },
     { value: "commentaires", label: "Commentaires / Notes" },
   ];
 
@@ -73,8 +74,21 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
   const detectColumnMapping = (cols: string[]) => {
     const detectedMapping: Record<string, string> = {};
     
+    console.log("🔍 Colonnes à analyser pour le mapping:", cols);
+    
     cols.forEach(col => {
       const colLower = col.toLowerCase().trim();
+      
+      // Debug pour "Dernier RDV"
+      if (colLower.includes("dernier") || colLower.includes("rdv")) {
+        console.log(`🔍 Analyse colonne "${col}":`, {
+          original: col,
+          colLower: colLower,
+          includesRdv: colLower.includes("rdv"),
+          includesDernier: colLower.includes("dernier"),
+          strictMatch: colLower === "dernier rdv",
+        });
+      }
       
       if (colLower.includes("nom") && !colLower.includes("prenom") && !colLower.includes("prénom")) {
         detectedMapping[col] = "nom";
@@ -147,8 +161,21 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         detectedMapping[col] = "date_souscription";
       } else if (colLower.includes("montant") && colLower.includes("souscrit")) {
         detectedMapping[col] = "montant";
-      } else if (colLower.includes("dernier") && colLower.includes("rdv")) {
+      } else if (
+        (colLower.includes("dernier") && colLower.includes("rdv")) ||
+        (colLower.includes("dernier") && colLower.includes("suivi")) ||
+        colLower === "dernier rdv de suivi" ||
+        colLower === "dernier rdv" ||
+        colLower === "dernier suivi"
+      ) {
         detectedMapping[col] = "dernier_rdv";
+      } else if (
+        colLower.includes("filleul") ||
+        colLower === "prospect filleul" ||
+        colLower === "prospects filleuls" ||
+        colLower === "filleul"
+      ) {
+        detectedMapping[col] = "prospect_filleul";
       } else if (
         (colLower.includes("montant") && colLower.includes("vp")) ||
         col === "Montant VP" // Exact match
@@ -168,6 +195,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         detectedMapping[col] = "mode_detention";
       }
     });
+    
+    console.log("✅ Mapping final détecté:", detectedMapping);
+    console.log("📋 Nombre de colonnes mappées:", Object.keys(detectedMapping).length, "sur", cols.length);
     
     return detectedMapping;
   };
@@ -260,13 +290,22 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       const existingContacts = await getAllContacts();
       console.log("Existing contacts loaded:", existingContacts.length);
       
-      const preparedRows: ImportRow[] = rows.map(row => {
+      const preparedRows: ImportRow[] = rows.map((row, idx) => {
         const contactData: Record<string, any> = {};
+        
+        // Debug pour voir les clés disponibles dans row
+        if (idx === 0) {
+          console.log("🔍 Toutes les clés disponibles dans row[0]:", Object.keys(row));
+          console.log("🔍 Valeur de row['Dernier RDV']:", row["Dernier RDV"]);
+          console.log("🔍 Mapping à appliquer:", mapping);
+        }
         
         // Mapper les colonnes
         Object.entries(mapping).forEach(([sourceCol, targetField]) => {
-          if (targetField && targetField !== "SKIP" && row[sourceCol]) {
-            contactData[targetField] = row[sourceCol];
+          if (targetField && targetField !== "SKIP") {
+            // Utiliser la valeur de la colonne, même si undefined (pour permettre le traitement)
+            // row[sourceCol] peut être undefined si la cellule est vide dans Excel
+            contactData[targetField] = row[sourceCol] !== undefined ? row[sourceCol] : null;
           }
         });
 
@@ -354,16 +393,54 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 ? `${existingContact.notes}${separator}${newInfos.join('\n')}`
                 : newInfos.join('\n');
               
+              // Recalculer la catégorie selon la logique métier
+              let updatedCategorie = existingContact.categorie;
+              
+              // Si on ajoute un produit, le contact devient CLIENT
+              if (row.data.produit && existingContact.categorie !== "CLIENT") {
+                const produitStr = String(row.data.produit).trim().toUpperCase();
+                if (
+                  produitStr && 
+                  produitStr !== "NON" && 
+                  produitStr !== "N/A" && 
+                  produitStr !== "NA" &&
+                  produitStr !== "-" &&
+                  produitStr !== "AUCUN"
+                ) {
+                  updatedCategorie = "CLIENT"; // 🎯 Promotion automatique en CLIENT
+                }
+              }
+              // Si le contact est SUSPECT mais qu'on ajoute une date de RDV, il devient PROSPECT
+              else if (row.data.dernier_rdv && 
+                       existingContact.categorie.includes("SUSPECT") &&
+                       !existingContact.categorie.includes("PROSPECT")) {
+                const dernierRdvStr = String(row.data.dernier_rdv);
+                if (dernierRdvStr && dernierRdvStr !== "-") {
+                  updatedCategorie = existingContact.categorie.replace("SUSPECT", "PROSPECT"); // SUSPECT_CLIENT → PROSPECT_CLIENT
+                }
+              }
+              
               // Mettre à jour le contact
               await invoke("update_contact", { 
                 id: existingContactId, 
                 contact: { 
                   ...existingContact,
-                  notes: updatedNotes 
+                  notes: updatedNotes,
+                  categorie: updatedCategorie
                 } 
               });
               
-              updatedRows[i] = { ...row, status: "success", message: "Consolidé avec le contact existant" };
+              const wasPromoted = updatedCategorie !== existingContact.categorie;
+              let message = "Consolidé avec le contact existant";
+              if (wasPromoted) {
+                if (updatedCategorie === "CLIENT") {
+                  message = "Consolidé et promu en CLIENT (produit souscrit)";
+                } else if (updatedCategorie.includes("PROSPECT")) {
+                  message = "Consolidé et promu en PROSPECT (contacté)";
+                }
+              }
+              
+              updatedRows[i] = { ...row, status: "success", message };
             }
           } catch (error) {
             updatedRows[i] = { ...row, status: "error", message: `Erreur consolidation: ${String(error)}` };
@@ -414,6 +491,104 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           const parsed = parseInt(String(row.data.profil_risque_sri));
           if (!isNaN(parsed)) {
             profilRisque = parsed;
+          }
+        }
+
+        // Parser la date du dernier RDV de suivi
+        let dateDernierContact: Date | null = null;
+        let dernierRdvFormatted: string | null = null;
+        
+        // Debug pour voir ce qui est lu depuis l'Excel (seulement si valeur présente)
+        if (row.data.dernier_rdv && row.data.dernier_rdv !== "-") {
+          const dernierRdvStr = String(row.data.dernier_rdv).trim();
+          
+          // Debug SANS limite pour voir TOUS les contacts avec date
+          console.log(`📅 Date parsing pour contact ${i + 1} (${row.data.prenom} ${row.data.nom}):`, {
+            valeurBrute: row.data.dernier_rdv,
+            typeOf: typeof row.data.dernier_rdv,
+            valeurString: dernierRdvStr,
+          });
+          
+          // Essayer de parser comme date Excel (nombre)
+          const excelDate = parseFloat(dernierRdvStr);
+          if (!isNaN(excelDate) && excelDate > 1) {
+            // Conversion date Excel vers objet Date
+            // Note: Excel compte depuis le 01/01/1900, donc valeur minimale réaliste > 1
+            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+            
+            // Vérifier que la date est valide et raisonnable (après 1950)
+            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
+              dateDernierContact = jsDate;
+              dernierRdvFormatted = jsDate.toLocaleDateString('fr-FR');
+              
+              console.log(`✅ Date Excel parsée (contact ${i + 1}):`, {
+                excelDate,
+                jsDate: jsDate.toISOString(),
+                formatted: dernierRdvFormatted,
+              });
+            } else {
+              console.log(`❌ Date Excel invalide (contact ${i + 1}):`, jsDate);
+            }
+          } else {
+            // Essayer de parser comme date texte (format FR ou ISO)
+            const datePatterns = [
+              // Format DD/MM/YYYY
+              /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+              // Format DD-MM-YYYY
+              /^(\d{1,2})-(\d{1,2})-(\d{4})$/,
+              // Format YYYY-MM-DD (ISO)
+              /^(\d{4})-(\d{1,2})-(\d{1,2})$/,
+            ];
+            
+            for (const pattern of datePatterns) {
+              const match = dernierRdvStr.match(pattern);
+              if (match) {
+                let day, month, year;
+                
+                // Déterminer l'ordre selon le pattern
+                if (pattern.source.startsWith('^(\\d{4})')) {
+                  // Format YYYY-MM-DD
+                  [, year, month, day] = match;
+                } else {
+                  // Format DD/MM/YYYY ou DD-MM-YYYY
+                  [, day, month, year] = match;
+                }
+                
+                const parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                
+                // Vérifier que la date est valide et raisonnable
+                if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1950) {
+                  dateDernierContact = parsedDate;
+                  dernierRdvFormatted = parsedDate.toLocaleDateString('fr-FR');
+                  
+                  console.log(`✅ Date texte parsée (contact ${i + 1}):`, {
+                    pattern: pattern.source,
+                    parsedDate: parsedDate.toISOString(),
+                    formatted: dernierRdvFormatted,
+                  });
+                  break;
+                }
+              }
+            }
+            
+            // Si pas de match avec les patterns, essayer Date.parse
+            if (!dateDernierContact) {
+              const parsedDate = new Date(dernierRdvStr);
+              if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1950) {
+                dateDernierContact = parsedDate;
+                dernierRdvFormatted = parsedDate.toLocaleDateString('fr-FR');
+                
+                console.log(`✅ Date.parse réussie (contact ${i + 1}):`, {
+                  parsedDate: parsedDate.toISOString(),
+                  formatted: dernierRdvFormatted,
+                });
+              } else {
+                // Si échec de parsing, garder la valeur brute pour les notes
+                dernierRdvFormatted = dernierRdvStr;
+                
+                console.log(`❌ Échec parsing date (contact ${i + 1}), valeur brute conservée:`, dernierRdvStr);
+              }
+            }
           }
         }
 
@@ -475,8 +650,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         }
         
-        if (row.data.dernier_rdv && row.data.dernier_rdv !== "-") {
-          notesArray.push(`Dernier RDV: ${row.data.dernier_rdv}`);
+        // Ajouter le dernier RDV aux notes (si parsé avec succès)
+        if (dernierRdvFormatted) {
+          notesArray.push(`Dernier RDV de suivi: ${dernierRdvFormatted}`);
         }
         
         if (row.data.commentaires) {
@@ -484,6 +660,49 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         }
         
         const finalNotes = notesArray.length > 0 ? notesArray.join('\n') : null;
+
+        // Déterminer automatiquement la catégorie selon la logique métier :
+        // 1. CLIENT = A souscrit un produit
+        // 2. PROSPECT = Déjà contacté (date RDV) mais pas encore investi
+        // 3. SUSPECT = Pas encore contacté
+        // + Variante FILLEUL si colonne "Prospects Filleuls" = "OUI"
+        
+        const hasProduit = row.data.produit ? (() => {
+          const produitStr = String(row.data.produit).trim().toUpperCase();
+          return produitStr && 
+            produitStr !== "NON" && 
+            produitStr !== "N/A" && 
+            produitStr !== "N.A" &&
+            produitStr !== "NA" &&
+            produitStr !== "-" &&
+            produitStr !== "/" &&
+            produitStr !== "AUCUN" &&
+            produitStr !== "VIDE";
+        })() : false;
+        
+        // Vérifier si c'est un filleul
+        const isFilleul = row.data.prospect_filleul ? (() => {
+          const filleulStr = String(row.data.prospect_filleul).trim().toUpperCase();
+          return filleulStr === "OUI" || filleulStr === "YES" || filleulStr === "O" || filleulStr === "Y";
+        })() : false;
+        
+        let categorie = "SUSPECT_CLIENT";
+        
+        if (hasProduit) {
+          // 🎯 A souscrit un produit = CLIENT (jamais filleul car déjà client)
+          categorie = "CLIENT";
+        } else if (dateDernierContact) {
+          // 📞 Déjà contacté mais pas encore investi
+          categorie = isFilleul ? "PROSPECT_FILLEUL" : "PROSPECT_CLIENT";
+        } else {
+          // 🆕 Jamais contacté
+          categorie = isFilleul ? "SUSPECT_FILLEUL" : "SUSPECT_CLIENT";
+        }
+
+        // Convertir la date en string ISO pour Rust
+        const dateDernierContactISO = dateDernierContact 
+          ? dateDernierContact.toISOString() 
+          : undefined;
 
         const newContact: NewContact = {
           nom: row.data.nom || "",
@@ -496,10 +715,20 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           profession: cleanString(row.data.profession),
           source_lead: cleanString(row.data.source_lead),
           profil_risque_sri: profilRisque,
-          categorie: row.data.categorie || "SUSPECT_CLIENT",
+          date_dernier_contact: dateDernierContactISO,
+          categorie: categorie,
           statut_suivi: "ACTIF",
           notes: finalNotes,
         };
+        
+        // Debug pour voir ce qui est envoyé
+        if (dateDernierContact) {
+          console.log(`🔍 Envoi date ISO pour ${row.data.prenom} ${row.data.nom}:`, {
+            dateObject: dateDernierContact,
+            dateISO: dateDernierContactISO,
+            timestamp: Math.floor(dateDernierContact.getTime() / 1000),
+          });
+        }
 
         // Debug: log après nettoyage
         if (i < 3) {
@@ -620,6 +849,18 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               </p>
             </div>
 
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <p className="text-xs text-green-900 mb-2">
+                <strong>💡 Catégorisation automatique intelligente :</strong>
+              </p>
+              <ul className="text-xs text-green-800 space-y-1 ml-4">
+                <li>🎯 <strong>CLIENT</strong> = Produit souscrit</li>
+                <li>📞 <strong>PROSPECT</strong> = Déjà contacté (date RDV) mais pas encore investi</li>
+                <li>🆕 <strong>SUSPECT</strong> = Pas encore contacté</li>
+                <li>👥 <strong>FILLEUL</strong> = Si colonne "Prospects Filleuls" = OUI → PROSPECT_FILLEUL ou SUSPECT_FILLEUL</li>
+              </ul>
+            </div>
+
             {/* DEBUG : Aperçu des données ET du mapping */}
             {rows.length > 0 && (
               <div className="space-y-3">
@@ -711,6 +952,66 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       {duplicateCount} doublon{duplicateCount > 1 ? "s" : ""} détecté{duplicateCount > 1 ? "s" : ""} (même nom/prénom)
                     </p>
                   )}
+                  {/* Compteurs par catégorie */}
+                  {importRows.length > 0 && (() => {
+                    const clientCount = importRows.filter(r => {
+                      const hasProduit = r.data.produit && (() => {
+                        const produitStr = String(r.data.produit).trim().toUpperCase();
+                        return produitStr && produitStr !== "NON" && produitStr !== "N/A" && produitStr !== "-";
+                      })();
+                      return hasProduit;
+                    }).length;
+                    
+                    const prospectClientCount = importRows.filter(r => {
+                      const hasProduit = r.data.produit && (() => {
+                        const produitStr = String(r.data.produit).trim().toUpperCase();
+                        return produitStr && produitStr !== "NON" && produitStr !== "N/A" && produitStr !== "-";
+                      })();
+                      const hasContact = r.data.dernier_rdv && r.data.dernier_rdv !== "-";
+                      const isFilleul = r.data.prospect_filleul && String(r.data.prospect_filleul).trim().toUpperCase() === "OUI";
+                      return !hasProduit && hasContact && !isFilleul;
+                    }).length;
+                    
+                    const suspectClientCount = importRows.filter(r => {
+                      const hasProduit = r.data.produit && (() => {
+                        const produitStr = String(r.data.produit).trim().toUpperCase();
+                        return produitStr && produitStr !== "NON" && produitStr !== "N/A" && produitStr !== "-";
+                      })();
+                      const hasContact = r.data.dernier_rdv && r.data.dernier_rdv !== "-";
+                      const isFilleul = r.data.prospect_filleul && String(r.data.prospect_filleul).trim().toUpperCase() === "OUI";
+                      return !hasProduit && !hasContact && !isFilleul;
+                    }).length;
+                    
+                    const prospectFilleulCount = importRows.filter(r => {
+                      const hasProduit = r.data.produit && (() => {
+                        const produitStr = String(r.data.produit).trim().toUpperCase();
+                        return produitStr && produitStr !== "NON" && produitStr !== "N/A" && produitStr !== "-";
+                      })();
+                      const hasContact = r.data.dernier_rdv && r.data.dernier_rdv !== "-";
+                      const isFilleul = r.data.prospect_filleul && String(r.data.prospect_filleul).trim().toUpperCase() === "OUI";
+                      return !hasProduit && hasContact && isFilleul;
+                    }).length;
+                    
+                    const suspectFilleulCount = importRows.filter(r => {
+                      const hasProduit = r.data.produit && (() => {
+                        const produitStr = String(r.data.produit).trim().toUpperCase();
+                        return produitStr && produitStr !== "NON" && produitStr !== "N/A" && produitStr !== "-";
+                      })();
+                      const hasContact = r.data.dernier_rdv && r.data.dernier_rdv !== "-";
+                      const isFilleul = r.data.prospect_filleul && String(r.data.prospect_filleul).trim().toUpperCase() === "OUI";
+                      return !hasProduit && !hasContact && isFilleul;
+                    }).length;
+                    
+                    return (
+                      <p className="text-xs text-muted-foreground">
+                        {clientCount > 0 && <span className="mr-3">🎯 {clientCount} CLIENT{clientCount > 1 ? 'S' : ''}</span>}
+                        {prospectClientCount > 0 && <span className="mr-3">📞 {prospectClientCount} PROSPECT CLIENT{prospectClientCount > 1 ? 'S' : ''}</span>}
+                        {suspectClientCount > 0 && <span className="mr-3">🆕 {suspectClientCount} SUSPECT CLIENT{suspectClientCount > 1 ? 'S' : ''}</span>}
+                        {prospectFilleulCount > 0 && <span className="mr-3">👥 {prospectFilleulCount} PROSPECT FILLEUL{prospectFilleulCount > 1 ? 'S' : ''}</span>}
+                        {suspectFilleulCount > 0 && <span>🎁 {suspectFilleulCount} SUSPECT FILLEUL{suspectFilleulCount > 1 ? 'S' : ''}</span>}
+                      </p>
+                    );
+                  })()}
                 </div>
 
                 {duplicateCount > 0 && (
@@ -744,28 +1045,79 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     <th className="p-2 text-left">Nom</th>
                     <th className="p-2 text-left">Prénom</th>
                     <th className="p-2 text-left">Email</th>
+                    <th className="p-2 text-left">Catégorie</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {importRows.slice(0, 50).map((row, idx) => (
-                    <tr key={idx} className="border-t">
-                      <td className="p-2">
-                        {row.status === "duplicate" && (
-                          <Badge variant="outline" className="bg-orange-50 text-orange-800">
-                            Doublon
+                  {importRows.slice(0, 50).map((row, idx) => {
+                    // Déterminer la catégorie qui sera appliquée (même logique que l'import)
+                    const hasProduit = row.data.produit && (() => {
+                      const produitStr = String(row.data.produit).trim().toUpperCase();
+                      return produitStr && 
+                        produitStr !== "" &&
+                        produitStr !== "NON" && 
+                        produitStr !== "N/A" && 
+                        produitStr !== "NA" &&
+                        produitStr !== "-" &&
+                        produitStr !== "AUCUN";
+                    })();
+                    
+                    const hasContact = row.data.dernier_rdv && row.data.dernier_rdv !== "-";
+                    
+                    const isFilleul = row.data.prospect_filleul && (() => {
+                      const filleulStr = String(row.data.prospect_filleul).trim().toUpperCase();
+                      return filleulStr === "OUI" || filleulStr === "YES" || filleulStr === "O" || filleulStr === "Y";
+                    })();
+                    
+                    let finalCategorie = "SUSPECT_CLIENT";
+                    if (hasProduit) {
+                      finalCategorie = "CLIENT";
+                    } else if (hasContact) {
+                      finalCategorie = isFilleul ? "PROSPECT_FILLEUL" : "PROSPECT_CLIENT";
+                    } else {
+                      finalCategorie = isFilleul ? "SUSPECT_FILLEUL" : "SUSPECT_CLIENT";
+                    }
+                    
+                    return (
+                      <tr key={idx} className="border-t">
+                        <td className="p-2">
+                          {row.status === "duplicate" && (
+                            <Badge variant="outline" className="bg-orange-50 text-orange-800">
+                              Doublon
+                            </Badge>
+                          )}
+                          {row.status === "pending" && (
+                            <Badge variant="outline" className="bg-green-50 text-green-800">
+                              Prêt
+                            </Badge>
+                          )}
+                        </td>
+                        <td className="p-2">{row.data.nom}</td>
+                        <td className="p-2">{row.data.prenom}</td>
+                        <td className="p-2">{row.data.email || "-"}</td>
+                        <td className="p-2">
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              finalCategorie === "CLIENT" 
+                                ? "bg-green-50 text-green-700 border-green-300" 
+                                : finalCategorie === "PROSPECT_CLIENT"
+                                ? "bg-purple-50 text-purple-700 border-purple-300"
+                                : finalCategorie === "SUSPECT_CLIENT"
+                                ? "bg-slate-50 text-slate-700 border-slate-300"
+                                : finalCategorie === "PROSPECT_FILLEUL"
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-300"
+                                : finalCategorie === "SUSPECT_FILLEUL"
+                                ? "bg-amber-50 text-amber-700 border-amber-300"
+                                : "bg-gray-50 text-gray-600"
+                            }
+                          >
+                            {finalCategorie.replace("_", " ")}
                           </Badge>
-                        )}
-                        {row.status === "pending" && (
-                          <Badge variant="outline" className="bg-green-50 text-green-800">
-                            Prêt
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="p-2">{row.data.nom}</td>
-                      <td className="p-2">{row.data.prenom}</td>
-                      <td className="p-2">{row.data.email || "-"}</td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
               {importRows.length > 50 && (
