@@ -19,6 +19,8 @@ import {
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
+import { createInvestissement, type NewInvestissement } from "@/lib/api/tauri-investissements";
+import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenaire } from "@/lib/api/tauri-partenaires";
 import { Badge } from "@/components/ui/badge";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -35,7 +37,7 @@ interface ImportRow {
 }
 
 export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportProps) {
-  const [file, setFile] = useState<File | null>(null);
+  const [_file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<any[]>([]);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -64,6 +66,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     { value: "montant", label: "Montant souscrit (→ Notes)" },
     { value: "montant_vp", label: "Montant VP (→ Notes, si SCPI/AV/PER)" },
     { value: "mode_detention", label: "Mode de détention SCPI (→ Notes)" },
+    { value: "duree_demembrement", label: "Durée démembrement (en années ou 'viager')" },
     { value: "reinvestissement", label: "Réinvestissement dividendes (→ Notes, si SCPI)" },
     { value: "dernier_rdv", label: "Dernier RDV (→ Notes)" },
     { value: "prospect_filleul", label: "Prospect Filleul (OUI/NON)" },
@@ -193,6 +196,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         col === "Mode de détention SCPI" // Exact match
       ) {
         detectedMapping[col] = "mode_detention";
+      } else if (
+        col.toLowerCase().includes("durée") && 
+        (col.toLowerCase().includes("démembrement") || col.toLowerCase().includes("demembrement"))
+      ) {
+        detectedMapping[col] = "duree_demembrement";
       }
     });
     
@@ -290,6 +298,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       const existingContacts = await getAllContacts();
       console.log("Existing contacts loaded:", existingContacts.length);
       
+      // Map pour suivre les contacts déjà vus dans l'import en cours
+      const seenInImport = new Map<string, { rowIndex: number }>();
+      
       const preparedRows: ImportRow[] = rows.map((row, idx) => {
         const contactData: Record<string, any> = {};
         
@@ -309,27 +320,61 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         });
 
-        // Détecter les doublons par Nom+Prénom OU Email OU Téléphone
-        const duplicateContact = existingContacts.find(contact => {
-          // Doublon par Nom + Prénom (le plus important pour ce cas d'usage)
-          if (contactData.nom && contactData.prenom) {
-            const sameName = contact.nom.toLowerCase() === contactData.nom.toLowerCase() &&
-                           contact.prenom.toLowerCase() === contactData.prenom.toLowerCase();
-            if (sameName) return true;
+        // Créer une clé unique basée sur Nom+Prénom
+        const contactKey = contactData.nom && contactData.prenom 
+          ? `${String(contactData.nom).toLowerCase()}_${String(contactData.prenom).toLowerCase()}`
+          : null;
+
+        // Détecter les doublons dans l'Excel lui-même (priorité 1)
+        let isDuplicate = false;
+        let duplicateContact = null;
+        let duplicateSource = null;
+        let firstOccurrenceInExcel = null;
+
+        if (contactKey && seenInImport.has(contactKey)) {
+          // Doublon dans l'Excel en cours d'import
+          firstOccurrenceInExcel = seenInImport.get(contactKey)!;
+          isDuplicate = true;
+          duplicateSource = "excel";
+          console.log(`🔄 Doublon détecté dans Excel: ligne ${idx + 1} = ligne ${firstOccurrenceInExcel.rowIndex + 1}`);
+        } else if (contactKey) {
+          // Marquer ce contact comme vu dans l'Excel
+          seenInImport.set(contactKey, { rowIndex: idx });
+          
+          // Détecter les doublons dans la BDD existante (priorité 2)
+          duplicateContact = existingContacts.find(contact => {
+            // Doublon par Nom + Prénom (le plus important pour ce cas d'usage)
+            if (contactData.nom && contactData.prenom) {
+              const sameName = contact.nom.toLowerCase() === String(contactData.nom).toLowerCase() &&
+                             contact.prenom.toLowerCase() === String(contactData.prenom).toLowerCase();
+              if (sameName) return true;
+            }
+            // Doublon par Email
+            if (contactData.email && contact.email === contactData.email) return true;
+            // Doublon par Téléphone
+            if (contactData.telephone && contact.telephone === contactData.telephone) return true;
+            return false;
+          });
+          
+          isDuplicate = !!duplicateContact;
+          if (isDuplicate) {
+            duplicateSource = "database";
           }
-          // Doublon par Email
-          if (contactData.email && contact.email === contactData.email) return true;
-          // Doublon par Téléphone
-          if (contactData.telephone && contact.telephone === contactData.telephone) return true;
-          return false;
-        });
-        
-        const isDuplicate = !!duplicateContact;
+        }
 
         return {
-          data: { ...contactData, _duplicateContactId: duplicateContact?.id },
+          data: { 
+            ...contactData, 
+            _duplicateContactId: duplicateContact?.id,
+            _duplicateSource: duplicateSource,
+            _firstOccurrenceRowIndex: firstOccurrenceInExcel?.rowIndex,
+          },
           status: isDuplicate ? "duplicate" : "pending",
-          message: isDuplicate ? `Doublon détecté (${duplicateContact?.prenom} ${duplicateContact?.nom})` : undefined,
+          message: isDuplicate 
+            ? (duplicateSource === "excel" 
+                ? `Doublon dans l'Excel (→ ligne ${firstOccurrenceInExcel!.rowIndex + 1})`
+                : `Doublon en base (${duplicateContact?.prenom} ${duplicateContact?.nom})`)
+            : undefined,
         };
       });
 
@@ -348,6 +393,18 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     setStep("importing");
 
     const updatedRows = [...importRows];
+    
+    // Charger tous les partenaires existants
+    let allPartenaires: Partenaire[] = [];
+    try {
+      allPartenaires = await getAllPartenaires();
+      console.log(`📋 ${allPartenaires.length} partenaires chargés`);
+    } catch (error) {
+      console.error("Erreur chargement partenaires:", error);
+    }
+
+    // Map pour tracer les contacts créés pendant l'import (pour gérer les doublons dans l'Excel)
+    const createdContactsInImport = new Map<number, number>(); // rowIndex -> contactId
 
     for (let i = 0; i < updatedRows.length; i++) {
       const row = updatedRows[i];
@@ -359,39 +416,18 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         } else if (duplicateAction === "consolidate") {
           // Consolider : ajouter les nouvelles infos aux notes du contact existant
           try {
-            const existingContactId = row.data._duplicateContactId;
+            // Déterminer le contact à consolider
+            let existingContactId = row.data._duplicateContactId;
+            
+            // Si c'est un doublon dans l'Excel, récupérer le contact créé précédemment
+            if (row.data._duplicateSource === "excel" && row.data._firstOccurrenceRowIndex !== undefined) {
+              existingContactId = createdContactsInImport.get(row.data._firstOccurrenceRowIndex);
+              console.log(`📎 Doublon Excel détecté: ligne ${i + 1} → utiliser contact créé à la ligne ${row.data._firstOccurrenceRowIndex + 1} (ID: ${existingContactId})`);
+            }
+            
             if (existingContactId) {
               // Récupérer le contact existant
               const existingContact = await invoke<Contact>("get_contact_by_id", { id: existingContactId });
-              
-              // Construire les nouvelles infos à ajouter
-              let newInfos: string[] = [];
-              
-              if (row.data.produit) {
-                newInfos.push(`Produit: ${row.data.produit}`);
-              }
-              
-              if (row.data.partenaire) {
-                newInfos.push(`Partenaire: ${row.data.partenaire}`);
-              }
-              
-              if (row.data.date_souscription) {
-                const excelDate = parseFloat(String(row.data.date_souscription));
-                if (!isNaN(excelDate)) {
-                  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                  newInfos.push(`Date: ${jsDate.toLocaleDateString('fr-FR')}`);
-                }
-              }
-              
-              if (row.data.montant) {
-                newInfos.push(`Montant: ${row.data.montant}€`);
-              }
-              
-              // Ajouter aux notes existantes avec séparateur
-              const separator = "\n---\n";
-              const updatedNotes = existingContact.notes 
-                ? `${existingContact.notes}${separator}${newInfos.join('\n')}`
-                : newInfos.join('\n');
               
               // Recalculer la catégorie selon la logique métier
               let updatedCategorie = existingContact.categorie;
@@ -425,18 +461,232 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 id: existingContactId, 
                 contact: { 
                   ...existingContact,
-                  notes: updatedNotes,
                   categorie: updatedCategorie
                 } 
               });
               
+              // Créer un investissement si un produit est renseigné dans cette ligne
+              let investissementCree = false;
+              if (row.data.produit) {
+                try {
+                  const produitStr = String(row.data.produit).trim();
+                  
+                  // Déterminer le type de produit depuis le nom
+                  let typeProduit = "AUTRE";
+                  const produitUpper = produitStr.toUpperCase();
+                  
+                  if (produitUpper.includes('SCPI') && produitUpper.includes('DEMEMBR')) {
+                    typeProduit = "SCPI_DEMEMBREMENT";
+                  } else if (produitUpper.includes('SCPI')) {
+                    typeProduit = "SCPI";
+                  } else if (produitUpper.includes('AV') || produitUpper.includes('ASSURANCE') || produitUpper.includes('VIE')) {
+                    typeProduit = "ASSURANCE_VIE";
+                  } else if (produitUpper.includes('PER')) {
+                    typeProduit = "PER";
+                  } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
+                    typeProduit = "FIP_FCPI";
+                  } else if (produitUpper.includes('FCPR')) {
+                    typeProduit = "FCPR";
+                  } else if (produitUpper.includes('G3F')) {
+                    typeProduit = "G3F";
+                  } else if (produitUpper.includes('IMMOBILIER') || produitUpper.includes('PINEL') || produitUpper.includes('MALRAUX')) {
+                    typeProduit = "IMMOBILIER";
+                  }
+                  
+                  // Trouver ou créer le partenaire
+                  let partenaireId = null;
+                  if (row.data.partenaire) {
+                    const partenaireNom = String(row.data.partenaire).trim();
+                    
+                    let partenaire = allPartenaires.find(p => 
+                      p.raison_sociale.toLowerCase() === partenaireNom.toLowerCase()
+                    );
+                    
+                    if (!partenaire) {
+                      try {
+                        const newPartenaire: NewPartenaire = {
+                          type_partenaire: "FOURNISSEUR",
+                          raison_sociale: partenaireNom,
+                        };
+                        partenaire = await createPartenaire(newPartenaire);
+                        allPartenaires.push(partenaire);
+                        console.log(`✅ Partenaire créé: ${partenaireNom} (ID: ${partenaire.id})`);
+                      } catch (partError) {
+                        console.error(`❌ Erreur création partenaire ${partenaireNom}:`, partError);
+                      }
+                    }
+                    
+                    if (partenaire) {
+                      partenaireId = partenaire.id;
+                    }
+                  }
+                  
+                  // Parser le montant souscrit (en centimes)
+                  let montantInitial = null;
+                  if (row.data.montant) {
+                    const montantStr = String(row.data.montant).replace(/[^\d.,]/g, '').replace(',', '.');
+                    const montantEuros = parseFloat(montantStr);
+                    if (!isNaN(montantEuros)) {
+                      montantInitial = Math.round(montantEuros * 100);
+                    }
+                  }
+                  
+                  // Parser le montant VP (en centimes)
+                  let montantVP = null;
+                  if (row.data.montant_vp) {
+                    const montantVPStr = String(row.data.montant_vp).replace(/[^\d.,]/g, '').replace(',', '.');
+                    const montantVPEuros = parseFloat(montantVPStr);
+                    if (!isNaN(montantVPEuros)) {
+                      montantVP = Math.round(montantVPEuros * 100);
+                    }
+                  }
+                  
+                  // Parser la date de souscription
+                  let dateSouscription = null;
+                  let dateSouscriptionDate = null; // Garder l'objet Date pour calcul démembrement
+                  if (row.data.date_souscription) {
+                    const excelDate = parseFloat(String(row.data.date_souscription));
+                    if (!isNaN(excelDate) && excelDate > 1) {
+                      const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                      dateSouscription = jsDate.toISOString();
+                      dateSouscriptionDate = jsDate;
+                    }
+                  }
+                  
+                  // Calculer la date de fin de démembrement
+                  let dateFinDemembrement = null;
+                  let dureeDemembrement = null;
+                  let isViager = false;
+                  
+                  const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
+                  const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+                  
+                  if (!isPP && row.data.duree_demembrement) {
+                    const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
+                    console.log(`🔍 Mode détention: ${modeDetention}, isPP: ${isPP}, Durée brute: "${row.data.duree_demembrement}", Durée str: "${dureeStr}"`);
+                    
+                    if (dureeStr === 'VIAGER') {
+                      isViager = true;
+                      dureeDemembrement = 'viager';
+                      console.log(`✅ Viager détecté !`);
+                    } else {
+                      // Parser le nombre d'années
+                      const dureeNum = parseInt(dureeStr);
+                      if (!isNaN(dureeNum) && dureeNum > 0 && dateSouscriptionDate) {
+                        dureeDemembrement = dureeNum;
+                        // Calculer la date de fin
+                        const dateFin = new Date(dateSouscriptionDate);
+                        dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
+                        dateFinDemembrement = dateFin.toISOString();
+                        console.log(`📅 Démembrement: ${dureeNum} ans → Fin le ${dateFin.toLocaleDateString('fr-FR')}`);
+                      }
+                    }
+                  }
+                  
+                  // Réinvestissement dividendes
+                  let reinvestissement = false;
+                  let reinvestissementPourcentage = null;
+                  
+                  if (row.data.reinvestissement) {
+                    console.log(`📊 Valeur brute réinvestissement:`, row.data.reinvestissement, `(type: ${typeof row.data.reinvestissement})`);
+                    
+                    // Si c'est un nombre (format Excel)
+                    if (typeof row.data.reinvestissement === 'number') {
+                      const num = row.data.reinvestissement;
+                      
+                      // Si c'est entre 0 et 1, c'est un pourcentage décimal (ex: 1 = 100%, 0.5 = 50%)
+                      if (num > 0 && num <= 1) {
+                        reinvestissementPourcentage = Math.round(num * 100).toString();
+                        reinvestissement = true;
+                        console.log(`✅ Pourcentage Excel (décimal): ${num} → ${reinvestissementPourcentage}%`);
+                      } 
+                      // Si c'est > 1, c'est déjà un pourcentage (ex: 100, 50)
+                      else if (num > 1) {
+                        reinvestissementPourcentage = Math.round(num).toString();
+                        reinvestissement = true;
+                        console.log(`✅ Pourcentage Excel (entier): ${reinvestissementPourcentage}%`);
+                      }
+                    } 
+                    // Si c'est une chaîne
+                    else {
+                      const reinvStr = String(row.data.reinvestissement).trim();
+                      console.log(`📊 Valeur string:`, reinvStr);
+                      
+                      // Nettoyer et extraire le nombre
+                      const cleanStr = reinvStr.replace(/[\s,]/g, '').replace('%', '');
+                      const num = parseFloat(cleanStr);
+                      
+                      if (!isNaN(num)) {
+                        // Si c'est entre 0 et 1, multiplier par 100
+                        if (num > 0 && num <= 1) {
+                          reinvestissementPourcentage = Math.round(num * 100).toString();
+                        } else {
+                          reinvestissementPourcentage = Math.round(num).toString();
+                        }
+                        reinvestissement = true;
+                        console.log(`✅ Pourcentage capturé: ${reinvestissementPourcentage}%`);
+                      } else if (reinvStr.toUpperCase() === 'OUI') {
+                        reinvestissement = true;
+                        reinvestissementPourcentage = '100';
+                        console.log(`✅ Réinvestissement: OUI (100% par défaut)`);
+                      }
+                    }
+                  }
+                  
+                  // Notes de l'investissement (mode de détention + réinvestissement % + durée démembrement)
+                  let notesArray: string[] = [];
+                  
+                  if (row.data.mode_detention) {
+                    notesArray.push(`Mode de détention: ${row.data.mode_detention}`);
+                  }
+                  
+                  if (dureeDemembrement) {
+                    if (isViager) {
+                      notesArray.push(`Durée: viager`);
+                      console.log(`✅ Durée viager ajoutée aux notes`);
+                    } else {
+                      notesArray.push(`Durée: ${dureeDemembrement} ans`);
+                      console.log(`✅ Durée ${dureeDemembrement} ans ajoutée aux notes`);
+                    }
+                  }
+                  
+                  if (reinvestissementPourcentage) {
+                    notesArray.push(`${reinvestissementPourcentage}%`);
+                  }
+                  
+                  const investissementNotes = notesArray.length > 0 ? notesArray.join(' | ') : undefined;
+                  console.log(`📝 Notes investissement:`, investissementNotes);
+                  
+                  // Créer l'investissement
+                  const newInvestissement: NewInvestissement = {
+                    contact_id: existingContactId,
+                    type_produit: typeProduit,
+                    nom_produit: produitStr,
+                    partenaire_id: partenaireId || undefined,
+                    montant_initial: montantInitial || undefined,
+                    date_souscription: dateSouscription || undefined,
+                    date_fin_demembrement: dateFinDemembrement || undefined,
+                    versement_programme: montantVP ? true : false,
+                    montant_versement_programme: montantVP || undefined,
+                    reinvestissement_dividendes: reinvestissement,
+                    notes: investissementNotes || undefined,
+                  };
+                  
+                  await createInvestissement(newInvestissement);
+                  investissementCree = true;
+                  console.log(`✅ Investissement créé pour contact existant ${existingContactId}: ${produitStr}`);
+                } catch (invError) {
+                  console.error(`❌ Erreur création investissement pour contact ${existingContactId}:`, invError);
+                }
+              }
+              
               const wasPromoted = updatedCategorie !== existingContact.categorie;
-              let message = "Consolidé avec le contact existant";
+              let message = investissementCree ? "Investissement ajouté au contact existant" : "Consolidé avec le contact existant";
               if (wasPromoted) {
                 if (updatedCategorie === "CLIENT") {
-                  message = "Consolidé et promu en CLIENT (produit souscrit)";
+                  message = investissementCree ? "Investissement ajouté et promu en CLIENT" : "Consolidé et promu en CLIENT (produit souscrit)";
                 } else if (updatedCategorie.includes("PROSPECT")) {
-                  message = "Consolidé et promu en PROSPECT (contacté)";
+                  message = investissementCree ? "Investissement ajouté et promu en PROSPECT" : "Consolidé et promu en PROSPECT (contacté)";
                 }
               }
               
@@ -454,7 +704,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       try {
         // Nettoyer et convertir les données
         const cleanString = (val: any) => {
-          if (!val) return null;
+          if (!val) return undefined;
           const str = String(val).trim().toUpperCase();
           // Ignorer les valeurs vides ou invalides
           if (
@@ -470,7 +720,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             str === "NULL" ||
             str === "UNDEFINED"
           ) {
-            return null;
+            return undefined;
           }
           // Retourner la valeur originale (avec la casse d'origine)
           return String(val).trim();
@@ -486,7 +736,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         }
 
         // Convertir profil_risque_sri en nombre si présent
-        let profilRisque = null;
+        let profilRisque: number | undefined = undefined;
         if (row.data.profil_risque_sri) {
           const parsed = parseInt(String(row.data.profil_risque_sri));
           if (!isNaN(parsed)) {
@@ -592,74 +842,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         }
 
-        // Construire les notes avec toutes les infos supplémentaires
-        let notesArray: string[] = [];
-        
-        // Déterminer le type de produit
-        const produitStr = row.data.produit ? String(row.data.produit).toUpperCase() : '';
-        const isSCPI = produitStr.includes('SCPI');
-        const isAV = produitStr.includes('AV') || produitStr.includes('ASSURANCE') || produitStr.includes('VIE');
-        const isPER = produitStr.includes('PER');
-        const isFinancialProduct = isSCPI || isAV || isPER;
-        
-        // Produit et Partenaire en premier
-        if (row.data.produit) {
-          notesArray.push(`Produit: ${row.data.produit}`);
-        }
-        
-        if (row.data.partenaire) {
-          notesArray.push(`Partenaire: ${row.data.partenaire}`);
-        }
-        
-        if (row.data.date_souscription) {
-          // Convertir la date Excel en date lisible
-          const excelDate = parseFloat(String(row.data.date_souscription));
-          if (!isNaN(excelDate)) {
-            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-            notesArray.push(`Date de souscription: ${jsDate.toLocaleDateString('fr-FR')}`);
-          } else {
-            notesArray.push(`Date de souscription: ${row.data.date_souscription}`);
-          }
-        }
-        
-        if (row.data.montant) {
-          notesArray.push(`Montant souscrit: ${row.data.montant}€`);
-        }
-        
-        // Montant VP uniquement pour SCPI/AV/PER
-        if (row.data.montant_vp && isFinancialProduct) {
-          const montantVP = String(row.data.montant_vp).trim();
-          if (montantVP && montantVP !== '-' && montantVP !== 'NON') {
-            notesArray.push(`Montant VP: ${montantVP}${montantVP.includes('€') ? '' : '€'}`);
-          }
-        }
-        
-        // Mode de détention uniquement pour SCPI
-        if (row.data.mode_detention && isSCPI) {
-          const mode = String(row.data.mode_detention).trim();
-          if (mode && mode !== '-' && mode !== 'NON') {
-            notesArray.push(`Mode de détention: ${mode}`);
-          }
-        }
-        
-        // Réinvestissement uniquement pour SCPI
-        if (row.data.reinvestissement && isSCPI) {
-          const reinvest = String(row.data.reinvestissement).trim();
-          if (reinvest && reinvest !== '-' && reinvest !== 'NON') {
-            notesArray.push(`Réinvestissement dividendes: ${reinvest}`);
-          }
-        }
-        
-        // Ajouter le dernier RDV aux notes (si parsé avec succès)
-        if (dernierRdvFormatted) {
-          notesArray.push(`Dernier RDV de suivi: ${dernierRdvFormatted}`);
-        }
-        
-        if (row.data.commentaires) {
-          notesArray.push(String(row.data.commentaires));
-        }
-        
-        const finalNotes = notesArray.length > 0 ? notesArray.join('\n') : null;
+        // Notes = UNIQUEMENT la colonne "Commentaire" de l'Excel
+        const finalNotes = row.data.commentaires ? String(row.data.commentaires).trim() : undefined;
 
         // Déterminer automatiquement la catégorie selon la logique métier :
         // 1. CLIENT = A souscrit un produit
@@ -739,7 +923,227 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           });
         }
 
-        await createContact(newContact);
+        const createdContact = await createContact(newContact);
+        
+        // Sauvegarder le contact créé dans la map (pour gérer les doublons dans l'Excel)
+        createdContactsInImport.set(i, createdContact.id);
+        console.log(`✅ Contact créé à la ligne ${i + 1} avec ID ${createdContact.id}`);
+        
+        // Créer un investissement si un produit est renseigné
+        if (row.data.produit) {
+          try {
+            const produitStr = String(row.data.produit).trim();
+            
+            // Déterminer le type de produit depuis le nom
+            let typeProduit = "AUTRE";
+            const produitUpper = produitStr.toUpperCase();
+            
+            if (produitUpper.includes('SCPI') && produitUpper.includes('DEMEMBR')) {
+              typeProduit = "SCPI_DEMEMBREMENT";
+            } else if (produitUpper.includes('SCPI')) {
+              typeProduit = "SCPI";
+            } else if (produitUpper.includes('AV') || produitUpper.includes('ASSURANCE') || produitUpper.includes('VIE')) {
+              typeProduit = "ASSURANCE_VIE";
+            } else if (produitUpper.includes('PER')) {
+              typeProduit = "PER";
+            } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
+              typeProduit = "FIP_FCPI";
+            } else if (produitUpper.includes('FCPR')) {
+              typeProduit = "FCPR";
+            } else if (produitUpper.includes('G3F')) {
+              typeProduit = "G3F";
+            } else if (produitUpper.includes('IMMOBILIER') || produitUpper.includes('PINEL') || produitUpper.includes('MALRAUX')) {
+              typeProduit = "IMMOBILIER";
+            }
+            
+            // Trouver ou créer le partenaire
+            let partenaireId = null;
+            if (row.data.partenaire) {
+              const partenaireNom = String(row.data.partenaire).trim();
+              
+              // Chercher le partenaire existant (case-insensitive)
+              let partenaire = allPartenaires.find(p => 
+                p.raison_sociale.toLowerCase() === partenaireNom.toLowerCase()
+              );
+              
+              // Si n'existe pas, créer
+              if (!partenaire) {
+                try {
+                  const newPartenaire: NewPartenaire = {
+                    type_partenaire: "FOURNISSEUR",
+                    raison_sociale: partenaireNom,
+                  };
+                  partenaire = await createPartenaire(newPartenaire);
+                  allPartenaires.push(partenaire); // Ajouter à la liste pour éviter doublons
+                  console.log(`✅ Partenaire créé: ${partenaireNom} (ID: ${partenaire.id})`);
+                } catch (partError) {
+                  console.error(`❌ Erreur création partenaire ${partenaireNom}:`, partError);
+                }
+              }
+              
+              if (partenaire) {
+                partenaireId = partenaire.id;
+              }
+            }
+            
+            // Parser le montant souscrit (en centimes)
+            let montantInitial = null;
+            if (row.data.montant) {
+              const montantStr = String(row.data.montant).replace(/[^\d.,]/g, '').replace(',', '.');
+              const montantEuros = parseFloat(montantStr);
+              if (!isNaN(montantEuros)) {
+                montantInitial = Math.round(montantEuros * 100); // Convertir en centimes
+              }
+            }
+            
+            // Parser le montant VP (en centimes)
+            let montantVP = null;
+            if (row.data.montant_vp) {
+              const montantVPStr = String(row.data.montant_vp).replace(/[^\d.,]/g, '').replace(',', '.');
+              const montantVPEuros = parseFloat(montantVPStr);
+              if (!isNaN(montantVPEuros)) {
+                montantVP = Math.round(montantVPEuros * 100);
+              }
+            }
+            
+            // Parser la date de souscription
+            let dateSouscription = null;
+            let dateSouscriptionDate = null; // Garder l'objet Date pour calcul démembrement
+            if (row.data.date_souscription) {
+              const excelDate = parseFloat(String(row.data.date_souscription));
+              if (!isNaN(excelDate) && excelDate > 1) {
+                const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                dateSouscription = jsDate.toISOString();
+                dateSouscriptionDate = jsDate;
+              }
+            }
+            
+            // Calculer la date de fin de démembrement
+            let dateFinDemembrement = null;
+            let dureeDemembrement = null;
+            let isViager = false;
+            
+            const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
+            const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+            
+            if (!isPP && row.data.duree_demembrement) {
+              const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
+              console.log(`🔍 Mode détention: ${modeDetention}, isPP: ${isPP}, Durée brute: "${row.data.duree_demembrement}", Durée str: "${dureeStr}"`);
+              
+              if (dureeStr === 'VIAGER') {
+                isViager = true;
+                dureeDemembrement = 'viager';
+                console.log(`✅ Viager détecté !`);
+              } else {
+                // Parser le nombre d'années
+                const dureeNum = parseInt(dureeStr);
+                if (!isNaN(dureeNum) && dureeNum > 0 && dateSouscriptionDate) {
+                  dureeDemembrement = dureeNum;
+                  // Calculer la date de fin
+                  const dateFin = new Date(dateSouscriptionDate);
+                  dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
+                  dateFinDemembrement = dateFin.toISOString();
+                  console.log(`📅 Démembrement: ${dureeNum} ans → Fin le ${dateFin.toLocaleDateString('fr-FR')}`);
+                }
+              }
+            }
+            
+            // Réinvestissement dividendes
+            let reinvestissement = false;
+            let reinvestissementPourcentage = null;
+            
+            if (row.data.reinvestissement) {
+              console.log(`📊 Valeur brute réinvestissement:`, row.data.reinvestissement, `(type: ${typeof row.data.reinvestissement})`);
+              
+              // Si c'est un nombre (format Excel)
+              if (typeof row.data.reinvestissement === 'number') {
+                const num = row.data.reinvestissement;
+                
+                // Si c'est entre 0 et 1, c'est un pourcentage décimal (ex: 1 = 100%, 0.5 = 50%)
+                if (num > 0 && num <= 1) {
+                  reinvestissementPourcentage = Math.round(num * 100).toString();
+                  reinvestissement = true;
+                  console.log(`✅ Pourcentage Excel (décimal): ${num} → ${reinvestissementPourcentage}%`);
+                } 
+                // Si c'est > 1, c'est déjà un pourcentage (ex: 100, 50)
+                else if (num > 1) {
+                  reinvestissementPourcentage = Math.round(num).toString();
+                  reinvestissement = true;
+                  console.log(`✅ Pourcentage Excel (entier): ${reinvestissementPourcentage}%`);
+                }
+              } 
+              // Si c'est une chaîne
+              else {
+                const reinvStr = String(row.data.reinvestissement).trim();
+                console.log(`📊 Valeur string:`, reinvStr);
+                
+                // Nettoyer et extraire le nombre
+                const cleanStr = reinvStr.replace(/[\s,]/g, '').replace('%', '');
+                const num = parseFloat(cleanStr);
+                
+                if (!isNaN(num)) {
+                  // Si c'est entre 0 et 1, multiplier par 100
+                  if (num > 0 && num <= 1) {
+                    reinvestissementPourcentage = Math.round(num * 100).toString();
+                  } else {
+                    reinvestissementPourcentage = Math.round(num).toString();
+                  }
+                  reinvestissement = true;
+                  console.log(`✅ Pourcentage capturé: ${reinvestissementPourcentage}%`);
+                } else if (reinvStr.toUpperCase() === 'OUI') {
+                  reinvestissement = true;
+                  reinvestissementPourcentage = '100';
+                  console.log(`✅ Réinvestissement: OUI (100% par défaut)`);
+                }
+              }
+            }
+            
+            // Notes de l'investissement (mode de détention + réinvestissement % + durée démembrement)
+            let notesArray: string[] = [];
+            
+            if (row.data.mode_detention) {
+              notesArray.push(`Mode de détention: ${row.data.mode_detention}`);
+            }
+            
+            if (dureeDemembrement) {
+              if (isViager) {
+                notesArray.push(`Durée: viager`);
+                console.log(`✅ Durée viager ajoutée aux notes`);
+              } else {
+                notesArray.push(`Durée: ${dureeDemembrement} ans`);
+                console.log(`✅ Durée ${dureeDemembrement} ans ajoutée aux notes`);
+              }
+            }
+            
+            if (reinvestissementPourcentage) {
+              notesArray.push(`${reinvestissementPourcentage}%`);
+            }
+            
+            const investissementNotes = notesArray.length > 0 ? notesArray.join(' | ') : undefined;
+            console.log(`📝 Notes investissement:`, investissementNotes);
+            
+            // Créer l'investissement
+            const newInvestissement: NewInvestissement = {
+              contact_id: createdContact.id,
+              type_produit: typeProduit,
+              nom_produit: produitStr,
+              partenaire_id: partenaireId || undefined,
+              montant_initial: montantInitial || undefined,
+              date_souscription: dateSouscription || undefined,
+              date_fin_demembrement: dateFinDemembrement || undefined,
+              versement_programme: montantVP ? true : false,
+              montant_versement_programme: montantVP || undefined,
+              reinvestissement_dividendes: reinvestissement,
+              notes: investissementNotes || undefined,
+            };
+            
+            await createInvestissement(newInvestissement);
+            console.log(`✅ Investissement créé pour ${row.data.prenom} ${row.data.nom}: ${produitStr}`);
+          } catch (invError) {
+            console.error(`❌ Erreur création investissement pour ${row.data.prenom} ${row.data.nom}:`, invError);
+          }
+        }
+        
         updatedRows[i] = { ...row, status: "success", message: "Importé avec succès" };
       } catch (error) {
         updatedRows[i] = { ...row, status: "error", message: String(error) };

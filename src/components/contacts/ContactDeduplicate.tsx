@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Users, CheckCircle } from "lucide-react";
 import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
+import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
 import { invoke } from "@tauri-apps/api/core";
 
 interface ContactDeduplicateProps {
@@ -109,6 +110,31 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
               notes: consolidatedNotes,
             },
           });
+
+          // Transférer les investissements des doublons vers le contact principal
+          for (const duplicate of otherContacts) {
+            try {
+              const investissements = await getInvestissementsByContact(duplicate.id!);
+              
+              // Pour chaque investissement, le rattacher au contact principal
+              for (const inv of investissements) {
+                await invoke("update_investissement", {
+                  id: inv.id,
+                  investissement: {
+                    ...inv,
+                    contact_id: mainContact.id,
+                  },
+                });
+                console.log(`✅ Investissement ${inv.id} transféré de contact ${duplicate.id} → ${mainContact.id}`);
+              }
+              
+              if (investissements.length > 0) {
+                console.log(`📦 ${investissements.length} investissement(s) transféré(s) de "${duplicate.prenom} ${duplicate.nom}" (ID: ${duplicate.id})`);
+              }
+            } catch (error) {
+              console.error(`❌ Erreur transfert investissements du contact ${duplicate.id}:`, error);
+            }
+          }
 
           // Supprimer les doublons
           for (const duplicate of otherContacts) {

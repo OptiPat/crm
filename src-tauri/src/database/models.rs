@@ -261,8 +261,8 @@ pub struct NewInvestissement {
     pub partenaire_id: Option<i64>,
     pub nom_produit: String,
     pub montant_initial: Option<i64>,
-    pub date_souscription: Option<i64>,
-    pub date_fin_demembrement: Option<i64>,
+    pub date_souscription: Option<String>, // ISO string
+    pub date_fin_demembrement: Option<String>, // ISO string
     pub versement_programme: Option<bool>,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,

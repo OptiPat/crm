@@ -31,11 +31,9 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
   const [loading, setLoading] = useState(false);
   
   // Convertir les timestamps en dates pour les inputs
-  const timestampToDate = (timestamp: string | undefined) => {
+  const timestampToDate = (timestamp: number | undefined) => {
     if (!timestamp) return "";
-    const ts = parseInt(timestamp);
-    if (isNaN(ts)) return "";
-    const date = new Date(ts * 1000);
+    const date = new Date(timestamp * 1000);
     return date.toISOString().split('T')[0];
   };
   
@@ -48,7 +46,7 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
     adresse: contact?.adresse || "",
     code_postal: contact?.code_postal || "",
     ville: contact?.ville || "",
-    date_naissance: contact?.date_naissance || "",
+    date_naissance: timestampToDate(contact?.date_naissance),
     profession: contact?.profession || "",
     source_lead: contact?.source_lead || "",
     profil_risque_sri: contact?.profil_risque_sri || undefined,
@@ -63,17 +61,15 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
     setLoading(true);
 
     try {
-      // Convertir les dates en timestamps Unix si elles sont fournies
+      // Convertir les dates en ISO strings si elles sont fournies
       const dataToSubmit = { ...formData };
       
       if (formData.date_dernier_contact) {
-        const timestamp = Math.floor(new Date(formData.date_dernier_contact + "T00:00:00").getTime() / 1000).toString();
-        dataToSubmit.date_dernier_contact = timestamp;
+        dataToSubmit.date_dernier_contact = new Date(formData.date_dernier_contact + "T00:00:00").toISOString();
       }
       
       if (formData.date_prochain_suivi) {
-        const timestamp = Math.floor(new Date(formData.date_prochain_suivi + "T00:00:00").getTime() / 1000).toString();
-        dataToSubmit.date_prochain_suivi = timestamp;
+        dataToSubmit.date_prochain_suivi = new Date(formData.date_prochain_suivi + "T00:00:00").toISOString();
       }
       
       if (contact) {

@@ -1294,8 +1294,23 @@ impl Database {
     }
 
     pub fn create_investissement(&self, investissement: super::models::NewInvestissement) -> Result<super::models::Investissement> {
+        use chrono::{DateTime, Utc};
+        
         let versement_programme = if investissement.versement_programme.unwrap_or(false) { 1 } else { 0 };
         let reinvestissement_dividendes = if investissement.reinvestissement_dividendes.unwrap_or(false) { 1 } else { 0 };
+
+        // Convertir les dates ISO string en timestamps Unix
+        let date_souscription_timestamp = investissement.date_souscription.and_then(|date_str| {
+            DateTime::parse_from_rfc3339(&date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
+        
+        let date_fin_demembrement_timestamp = investissement.date_fin_demembrement.and_then(|date_str| {
+            DateTime::parse_from_rfc3339(&date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
 
         self.conn.execute(
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
@@ -1310,8 +1325,8 @@ impl Database {
                 &investissement.partenaire_id,
                 &investissement.nom_produit,
                 &investissement.montant_initial,
-                &investissement.date_souscription,
-                &investissement.date_fin_demembrement,
+                date_souscription_timestamp,
+                date_fin_demembrement_timestamp,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,
@@ -1357,8 +1372,23 @@ impl Database {
     }
 
     pub fn update_investissement(&self, id: i64, investissement: &super::models::NewInvestissement) -> Result<super::models::Investissement> {
+        use chrono::{DateTime, Utc};
+        
         let versement_programme = if investissement.versement_programme.unwrap_or(false) { 1 } else { 0 };
         let reinvestissement_dividendes = if investissement.reinvestissement_dividendes.unwrap_or(false) { 1 } else { 0 };
+
+        // Convertir les dates ISO string en timestamps Unix
+        let date_souscription_timestamp = investissement.date_souscription.as_ref().and_then(|date_str| {
+            DateTime::parse_from_rfc3339(date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
+        
+        let date_fin_demembrement_timestamp = investissement.date_fin_demembrement.as_ref().and_then(|date_str| {
+            DateTime::parse_from_rfc3339(date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
 
         self.conn.execute(
             "UPDATE investissements SET 
@@ -1384,8 +1414,8 @@ impl Database {
                 &investissement.partenaire_id,
                 &investissement.nom_produit,
                 &investissement.montant_initial,
-                &investissement.date_souscription,
-                &investissement.date_fin_demembrement,
+                date_souscription_timestamp,
+                date_fin_demembrement_timestamp,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,

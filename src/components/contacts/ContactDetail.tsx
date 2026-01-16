@@ -23,7 +23,8 @@ import {
 } from "lucide-react";
 import { type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "./ContactForm";
-import { getInvestissementsByContact, type Investissement } from "@/lib/api/tauri-investissements";
+import { getInvestissementsByContact, deleteInvestissement, type Investissement } from "@/lib/api/tauri-investissements";
+import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
 
 interface ContactDetailProps {
@@ -43,8 +44,23 @@ export function ContactDetail({
 }: ContactDetailProps) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showInvestissementForm, setShowInvestissementForm] = useState(false);
+  const [selectedInvestissement, setSelectedInvestissement] = useState<Investissement | null>(null);
   const [investissements, setInvestissements] = useState<Investissement[]>([]);
   const [loadingInvestissements, setLoadingInvestissements] = useState(false);
+  const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
+
+  // Charger les partenaires au montage
+  useEffect(() => {
+    const loadPartenaires = async () => {
+      try {
+        const data = await getAllPartenaires();
+        setPartenaires(data);
+      } catch (error) {
+        console.error("Error loading partenaires:", error);
+      }
+    };
+    loadPartenaires();
+  }, []);
 
   // Charger les investissements du contact
   useEffect(() => {
@@ -84,85 +100,32 @@ export function ContactDetail({
 
   // Couleurs des badges par type de produit
   const getTypeProduitColor = (type: string) => {
-    switch (type) {
-      case "SCPI":
-        return "bg-blue-100 text-blue-800";
-      case "SCPI_DEMEMBREMENT":
-        return "bg-purple-100 text-purple-800";
-      case "ASSURANCE_VIE":
-        return "bg-green-100 text-green-800";
-      case "PER":
-        return "bg-emerald-100 text-emerald-800";
-      case "IMMOBILIER":
-        return "bg-amber-100 text-amber-800";
-      default:
-        return "bg-gray-100 text-gray-800";
+    // Immobilier : #85ad39 (vert)
+    if (type === "IMMOBILIER") {
+      return "text-white";
     }
+    // Placements financiers : #dc216e (rose foncé)
+    return "text-white";
+  };
+  
+  const getTypeProduitBgColor = (type: string) => {
+    // Immobilier : #85ad39 (vert)
+    if (type === "IMMOBILIER") {
+      return "#85ad39";
+    }
+    // Placements financiers : #dc216e (rose foncé)
+    return "#dc216e";
+  };
+
+  const getPartenaireNom = (partenaireId?: number): string | null => {
+    if (!partenaireId) return null;
+    const partenaire = partenaires.find(p => p.id === partenaireId);
+    return partenaire?.raison_sociale || null;
   };
 
   if (!contact) return null;
 
   console.log("ContactDetail rendering for:", contact.id, contact.prenom, contact.nom, contact.email, contact.telephone);
-
-  // Parser les notes pour extraire les produits
-  const parseProducts = (notes: string | null | undefined) => {
-    if (!notes) return { products: [], comments: "" };
-    
-    const sections = notes.split('---').map(s => s.trim());
-    const products: Array<{ 
-      produit?: string; 
-      partenaire?: string; 
-      date?: string; 
-      montant?: string;
-      montantVP?: string;
-      modeDetention?: string;
-      reinvestissement?: string;
-    }> = [];
-    const comments: string[] = [];
-    
-    sections.forEach(section => {
-      const lines = section.split('\n').map(l => l.trim()).filter(l => l);
-      const productData: any = {};
-      let isProduct = false;
-      
-      lines.forEach(line => {
-        if (line.startsWith('Produit:')) {
-          productData.produit = line.replace('Produit:', '').trim();
-          isProduct = true;
-        } else if (line.startsWith('Partenaire:')) {
-          productData.partenaire = line.replace('Partenaire:', '').trim();
-          isProduct = true;
-        } else if (line.startsWith('Date de souscription:') || line.startsWith('Date:')) {
-          productData.date = line.replace('Date de souscription:', '').replace('Date:', '').trim();
-          isProduct = true;
-        } else if (line.startsWith('Montant souscrit:') || line.startsWith('Montant:')) {
-          productData.montant = line.replace('Montant souscrit:', '').replace('Montant:', '').trim();
-          isProduct = true;
-        } else if (line.startsWith('Montant VP:')) {
-          productData.montantVP = line.replace('Montant VP:', '').trim();
-          isProduct = true;
-        } else if (line.startsWith('Mode de détention:')) {
-          productData.modeDetention = line.replace('Mode de détention:', '').trim();
-          isProduct = true;
-        } else if (line.startsWith('Réinvestissement dividendes:')) {
-          productData.reinvestissement = line.replace('Réinvestissement dividendes:', '').trim();
-          isProduct = true;
-        } else if (!isProduct) {
-          comments.push(line);
-        }
-      });
-      
-      if (isProduct && Object.keys(productData).length > 0) {
-        products.push(productData);
-      } else if (!isProduct && lines.length > 0) {
-        comments.push(...lines);
-      }
-    });
-    
-    return { products, comments: comments.join('\n').trim() };
-  };
-
-  const { products, comments } = parseProducts(contact.notes);
 
   const getCategorieColor = (categorie: string) => {
     switch (categorie) {
@@ -199,6 +162,37 @@ export function ContactDetail({
       onDelete(contact.id);
       onOpenChange(false);
     }
+  };
+
+  const handleEditInvestissement = (inv: Investissement) => {
+    setSelectedInvestissement(inv);
+    setShowInvestissementForm(true);
+  };
+
+  const handleDeleteInvestissement = async (inv: Investissement) => {
+    if (
+      window.confirm(
+        `Êtes-vous sûr de vouloir supprimer l'investissement "${inv.nom_produit}" ?`
+      )
+    ) {
+      try {
+        await deleteInvestissement(inv.id);
+        await loadInvestissements(); // Recharger la liste
+      } catch (error) {
+        console.error("Error deleting investissement:", error);
+        alert("Erreur lors de la suppression: " + String(error));
+      }
+    }
+  };
+
+  const handleInvestissementFormClose = () => {
+    setShowInvestissementForm(false);
+    setSelectedInvestissement(null);
+  };
+
+  const handleInvestissementSuccess = () => {
+    loadInvestissements(); // Recharger la liste
+    handleInvestissementFormClose();
   };
 
   return (
@@ -253,12 +247,7 @@ export function ContactDetail({
             {contact.profession && <div><strong>Profession:</strong> {contact.profession}</div>}
             {contact.source_lead && <div><strong>Source/Produit:</strong> {contact.source_lead}</div>}
             {contact.profil_risque_sri && <div><strong>Profil risque:</strong> {contact.profil_risque_sri}</div>}
-            {contact.notes && (
-              <>
-                {products.length > 0 && <div><strong>Produits:</strong> {products.length} souscription{products.length > 1 ? 's' : ''}</div>}
-                {comments && <div><strong>Commentaires:</strong> {comments.substring(0, 50)}{comments.length > 50 ? '...' : ''}</div>}
-              </>
-            )}
+            {contact.notes && <div><strong>Notes:</strong> {contact.notes.substring(0, 100)}{contact.notes.length > 100 ? '...' : ''}</div>}
           </div>
 
           <div className="space-y-4">
@@ -379,7 +368,7 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Dernier contact :</span>
                         <p className="font-medium text-blue-700">
-                          {new Date(parseInt(contact.date_dernier_contact) * 1000).toLocaleDateString('fr-FR')}
+                          {new Date(contact.date_dernier_contact * 1000).toLocaleDateString('fr-FR')}
                         </p>
                       </div>
                     </div>
@@ -390,7 +379,7 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Prochain suivi prévu le :</span>
                         <p className="font-medium text-orange-700">
-                          {new Date(parseInt(contact.date_prochain_suivi) * 1000).toLocaleDateString('fr-FR')}
+                          {new Date(contact.date_prochain_suivi * 1000).toLocaleDateString('fr-FR')}
                         </p>
                       </div>
                     </div>
@@ -417,7 +406,10 @@ export function ContactDetail({
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => setShowInvestissementForm(true)}
+                    onClick={() => {
+                      setSelectedInvestissement(null);
+                      setShowInvestissementForm(true);
+                    }}
                     className="gap-2"
                   >
                     <Plus className="h-4 w-4" />
@@ -442,33 +434,84 @@ export function ContactDetail({
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-2">
-                              <p className="font-semibold">{inv.nom_produit}</p>
-                              <Badge className={getTypeProduitColor(inv.type_produit)}>
-                                {inv.type_produit}
+                              <Badge 
+                                className={getTypeProduitColor(inv.type_produit) + " text-base px-3 py-1"}
+                                style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit) }}
+                              >
+                                {inv.nom_produit}
                               </Badge>
                             </div>
-                            <div className="text-sm text-muted-foreground flex gap-4">
+                            {getPartenaireNom(inv.partenaire_id) && (
+                              <p className="text-sm text-muted-foreground">
+                                📋 {getPartenaireNom(inv.partenaire_id)}
+                              </p>
+                            )}
+                            <div className="text-sm text-muted-foreground flex gap-4 flex-wrap">
                               <span className="font-medium text-primary">
-                                {formatEuro(inv.montant_initial)}
+                                💰 {formatEuro(inv.montant_initial)}
                               </span>
                               {inv.date_souscription && (
                                 <span>
-                                  {new Date(inv.date_souscription * 1000).toLocaleDateString("fr-FR")}
+                                  📅 {new Date(inv.date_souscription * 1000).toLocaleDateString("fr-FR")}
+                                </span>
+                              )}
+                              {inv.montant_versement_programme && inv.montant_versement_programme > 0 && (
+                                <span className="font-medium text-orange-600">
+                                  🔁 VP: {formatEuro(inv.montant_versement_programme)}
+                                  {inv.frequence_versement && ` (${inv.frequence_versement})`}
+                                </span>
+                              )}
+                              {inv.notes?.match(/Mode de détention:\s*([^\|]+)/i) && (
+                                <span className="font-medium text-slate-600">
+                                  🏷️ {inv.notes.match(/Mode de détention:\s*([^\|]+)/i)?.[1].trim()}
+                                </span>
+                              )}
+                              {inv.notes?.match(/Durée:\s*([^\|]+)/i) && (
+                                <span className="font-medium text-purple-600">
+                                  {(() => {
+                                    const dureeStr = inv.notes.match(/Durée:\s*([^\|]+)/i)?.[1].trim();
+                                    
+                                    if (dureeStr?.toLowerCase().includes('viager')) {
+                                      return "🔄 Viager";
+                                    } else if (dureeStr) {
+                                      const dureeMatch = dureeStr.match(/(\d+)\s*ans/i);
+                                      if (dureeMatch && dureeMatch[1] && inv.date_fin_demembrement) {
+                                        const duree = dureeMatch[1];
+                                        const dateFin = new Date(inv.date_fin_demembrement * 1000).toLocaleDateString("fr-FR");
+                                        return `🔄 ${duree} ans → 📅 ${dateFin}`;
+                                      }
+                                    }
+                                    return null;
+                                  })()}
+                                </span>
+                              )}
+                              {inv.reinvestissement_dividendes && (
+                                <span className="font-medium text-green-600">
+                                  📈 Réinv. {(() => {
+                                    const match = inv.notes?.match(/(\d+)%/);
+                                    return match && match[1] ? `${match[1]}%` : "100%";
+                                  })()}
                                 </span>
                               )}
                             </div>
-                            <div className="flex gap-2">
-                              {inv.versement_programme && (
-                                <Badge variant="outline" className="text-xs">
-                                  VP
-                                </Badge>
-                              )}
-                              {inv.reinvestissement_dividendes && (
-                                <Badge variant="outline" className="text-xs">
-                                  {inv.notes?.match(/Réinv\. (\d+)%/)?.[0] || "Réinv. 100%"}
-                                </Badge>
-                              )}
-                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditInvestissement(inv)}
+                              className="h-8 w-8"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteInvestissement(inv)}
+                              className="h-8 w-8 text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
                       </div>
@@ -478,131 +521,24 @@ export function ContactDetail({
               </CardContent>
             </Card>
 
-            {/* Produits souscrits */}
-            {products.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Produits souscrits ({products.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {products.map((product, index) => {
-                    // Déterminer le type de produit pour la couleur
-                    const produitStr = product.produit?.toUpperCase() || '';
-                    
-                    // Produits financiers : AV, SCPI, PER, FIP, FCPI, G3F
-                    const isFinancialProduct = 
-                      produitStr.includes('AV') ||
-                      produitStr.includes('SCPI') ||
-                      produitStr.includes('PER') ||
-                      produitStr.includes('FIP') ||
-                      produitStr.includes('FCPI') ||
-                      produitStr.includes('G3F') ||
-                      produitStr.includes('ASSURANCE');
-                    
-                    // Produits immobiliers : Pinel, Immobilier, Malraux, Denormandie, Deficit Foncier, Monument Historique, Colocation, LMNP, Nue
-                    const isRealEstateProduct = 
-                      produitStr.includes('PINEL') ||
-                      produitStr.includes('IMMOBILIER') ||
-                      produitStr.includes('MALRAUX') ||
-                      produitStr.includes('DENORMANDIE') ||
-                      produitStr.includes('DEFICIT') ||
-                      produitStr.includes('FONCIER') ||
-                      produitStr.includes('MONUMENT') ||
-                      produitStr.includes('HISTORIQUE') ||
-                      produitStr.includes('COLOCATION') ||
-                      produitStr.includes('LMNP') ||
-                      produitStr.includes('NUE');
-                    
-                    let borderColor, bgColor, textColor;
-                    
-                    if (isFinancialProduct) {
-                      // Couleur rose/magenta pour produits financiers
-                      borderColor = '#dc216e';
-                      bgColor = 'rgba(220, 33, 110, 0.1)';
-                      textColor = '#8b134e';
-                    } else if (isRealEstateProduct) {
-                      // Couleur verte pour produits immobiliers
-                      borderColor = '#85ad39';
-                      bgColor = 'rgba(133, 173, 57, 0.1)';
-                      textColor = '#5a7327';
-                    } else {
-                      // Couleur bleue par défaut
-                      borderColor = 'rgb(59, 130, 246)';
-                      bgColor = 'rgb(239, 246, 255)';
-                      textColor = 'rgb(30, 64, 175)';
-                    }
-                    
-                    return (
-                      <div 
-                        key={index} 
-                        className="pl-4 py-2 rounded-r"
-                        style={{ 
-                          borderLeft: `4px solid ${borderColor}`,
-                          backgroundColor: bgColor
-                        }}
-                      >
-                        <div className="grid grid-cols-2 gap-2 text-sm" style={{ color: textColor }}>
-                        {product.produit && (
-                          <div>
-                            <span className="text-xs opacity-70">Produit:</span>
-                            <p className="font-semibold">{product.produit}</p>
-                          </div>
-                        )}
-                        {product.partenaire && (
-                          <div>
-                            <span className="text-xs opacity-70">Partenaire:</span>
-                            <p className="font-semibold">{product.partenaire}</p>
-                          </div>
-                        )}
-                        {product.date && (
-                          <div>
-                            <span className="text-xs opacity-70">Date de souscription:</span>
-                            <p className="font-medium">{product.date}</p>
-                          </div>
-                        )}
-                        {product.montant && (
-                          <div>
-                            <span className="text-xs opacity-70">Montant souscrit:</span>
-                            <p className="font-medium" style={{ color: 'rgb(34, 139, 34)' }}>{product.montant}</p>
-                          </div>
-                        )}
-                        {product.montantVP && (
-                          <div>
-                            <span className="text-xs opacity-70">Montant VP:</span>
-                            <p className="font-medium" style={{ color: 'rgb(34, 139, 34)' }}>{product.montantVP}</p>
-                          </div>
-                        )}
-                        {product.modeDetention && (
-                          <div>
-                            <span className="text-xs opacity-70">Mode de détention:</span>
-                            <p className="font-medium">{product.modeDetention}</p>
-                          </div>
-                        )}
-                        {product.reinvestissement && (
-                          <div className="col-span-2">
-                            <span className="text-xs opacity-70">Réinvestissement dividendes:</span>
-                            <p className="font-medium">{product.reinvestissement}</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            )}
+            {/* Notes */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Notes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {contact.notes ? (
+                  <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans">
+                    {contact.notes}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">
+                    Aucune note pour ce contact
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-            {/* Commentaires / Notes */}
-            {comments && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Commentaires</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm whitespace-pre-wrap">{comments}</p>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Métadonnées */}
             <Card>
@@ -638,10 +574,10 @@ export function ContactDetail({
       {/* Formulaire d'ajout d'investissement */}
       <InvestissementForm
         open={showInvestissementForm}
-        onOpenChange={setShowInvestissementForm}
-        investissement={null}
+        onOpenChange={handleInvestissementFormClose}
+        investissement={selectedInvestissement}
         defaultContactId={contact?.id}
-        onSuccess={loadInvestissements}
+        onSuccess={handleInvestissementSuccess}
       />
     </>
   );
