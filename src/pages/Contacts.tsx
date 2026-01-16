@@ -10,11 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Mail, Phone, Filter, FileUp } from "lucide-react";
-import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
+import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users } from "lucide-react";
+import { getAllContacts, deleteContact, deleteAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
+import { ContactDeduplicate } from "@/components/contacts/ContactDeduplicate";
+import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 
 export function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -26,6 +28,7 @@ export function Contacts() {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showDeduplicate, setShowDeduplicate] = useState(false);
 
   useEffect(() => {
     loadContacts();
@@ -40,6 +43,37 @@ export function Contacts() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calcul de la priorité de suivi selon le prompt
+  const getPrioriteContact = (contact: Contact) => {
+    if (!contact.date_dernier_contact) {
+      // Pas de date de dernier contact = priorité selon catégorie
+      if (contact.categorie === "CLIENT") {
+        return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "⚠️ Client sans historique" };
+      }
+      if (contact.categorie.includes("SUSPECT")) {
+        return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "⚠️ Suspect sans historique" };
+      }
+      return { color: "", priorite: 3, label: "" };
+    }
+
+    const now = new Date();
+    const lastContact = new Date(contact.date_dernier_contact * 1000);
+    const diffMonths = (now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24 * 30);
+
+    // Rouge : Client sans contact depuis > 12 mois
+    if (contact.categorie === "CLIENT" && diffMonths > 12) {
+      return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "🔴 À recontacter d'urgence" };
+    }
+
+    // Orange : Suspect sans contact depuis > 6 mois
+    if (contact.categorie.includes("SUSPECT") && diffMonths > 6) {
+      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Relance recommandée" };
+    }
+
+    // Vert : Suivi à jour
+    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "🟢 Suivi à jour" };
   };
 
   const filteredContacts = contacts
@@ -99,40 +133,15 @@ export function Contacts() {
     }
   };
 
-  // Calcul de la priorité de suivi selon le prompt
-  const getPrioriteContact = (contact: Contact) => {
-    if (!contact.date_dernier_contact) {
-      // Pas de date de dernier contact = priorité selon catégorie
-      if (contact.categorie === "CLIENT") {
-        return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "⚠️ Client sans historique" };
-      }
-      if (contact.categorie.includes("SUSPECT")) {
-        return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "⚠️ Suspect sans historique" };
-      }
-      return { color: "", priorite: 3, label: "" };
-    }
-
-    const now = new Date();
-    const lastContact = new Date(contact.date_dernier_contact * 1000);
-    const diffMonths = (now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24 * 30);
-
-    // Rouge : Client sans contact depuis > 12 mois
-    if (contact.categorie === "CLIENT" && diffMonths > 12) {
-      return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "🔴 À recontacter d'urgence" };
-    }
-
-    // Orange : Suspect sans contact depuis > 6 mois
-    if (contact.categorie.includes("SUSPECT") && diffMonths > 6) {
-      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Relance recommandée" };
-    }
-
-    // Vert : Suivi à jour
-    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "🟢 Suivi à jour" };
-  };
-
   const handleViewContact = (contact: Contact) => {
+    console.log("Opening contact details for:", contact.id, contact.prenom, contact.nom);
+    // Fermer d'abord puis rouvrir pour forcer le rafraîchissement
+    setShowDetail(false);
     setSelectedContact(contact);
-    setShowDetail(true);
+    // Utiliser setTimeout pour s'assurer que le state est bien mis à jour
+    setTimeout(() => {
+      setShowDetail(true);
+    }, 10);
   };
 
   const handleDeleteContact = async (id: number) => {
@@ -142,6 +151,29 @@ export function Contacts() {
     } catch (error) {
       console.error("Error deleting contact:", error);
       alert("Erreur lors de la suppression: " + String(error));
+    }
+  };
+
+  const handleDeleteAllContacts = async () => {
+    const confirmed = window.confirm(
+      `⚠️ ATTENTION !\n\nÊtes-vous sûr de vouloir supprimer TOUS les contacts ?\n\nCette action supprimera définitivement ${contacts.length} contact(s) et ne peut pas être annulée.`
+    );
+    
+    if (!confirmed) return;
+
+    const doubleCheck = window.confirm(
+      `🚨 DERNIÈRE CONFIRMATION\n\nVous êtes sur le point de supprimer ${contacts.length} contact(s).\n\nCette action est IRRÉVERSIBLE.\n\nConfirmez-vous ?`
+    );
+
+    if (!doubleCheck) return;
+
+    try {
+      const deleted = await deleteAllContacts();
+      alert(`✅ ${deleted} contact(s) supprimé(s) avec succès`);
+      await loadContacts();
+    } catch (error) {
+      console.error("Error deleting all contacts:", error);
+      alert("❌ Erreur lors de la suppression: " + String(error));
     }
   };
 
@@ -157,6 +189,12 @@ export function Contacts() {
           </p>
         </div>
         <div className="flex gap-2">
+          {contacts.length > 0 && (
+            <Button variant="outline" className="gap-2" onClick={() => setShowDeduplicate(true)}>
+              <Users className="h-4 w-4" />
+              Dédupliquer
+            </Button>
+          )}
           <Button variant="outline" className="gap-2" onClick={() => setShowImport(true)}>
             <FileUp className="h-4 w-4" />
             Importer
@@ -178,6 +216,17 @@ export function Contacts() {
                   {filteredContacts.length} contact{filteredContacts.length > 1 ? "s" : ""} sur {contacts.length}
                 </CardDescription>
               </div>
+              {contacts.length > 0 && (
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  onClick={handleDeleteAllContacts}
+                  className="gap-2"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer tout
+                </Button>
+              )}
             </div>
 
             {/* Barre de recherche et filtres */}
@@ -240,7 +289,7 @@ export function Contacts() {
                 return (
                   <div
                     key={contact.id}
-                    className={`p-4 border border-border rounded-lg hover:bg-accent transition-colors cursor-pointer ${priorite.color}`}
+                    className={`p-4 border border-border rounded-lg hover:bg-accent transition-colors ${priorite.color}`}
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -285,7 +334,10 @@ export function Contacts() {
                       <Button 
                         variant="outline" 
                         size="sm"
-                        onClick={() => handleViewContact(contact)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewContact(contact);
+                        }}
                       >
                         Voir détails
                       </Button>
@@ -306,20 +358,32 @@ export function Contacts() {
       />
 
       {/* Import de contacts */}
-      <ContactImport
-        open={showImport}
-        onOpenChange={setShowImport}
+      <ErrorBoundary>
+        <ContactImport
+          open={showImport}
+          onOpenChange={setShowImport}
+          onSuccess={loadContacts}
+        />
+      </ErrorBoundary>
+
+      {/* Déduplication */}
+      <ContactDeduplicate
+        open={showDeduplicate}
+        onOpenChange={setShowDeduplicate}
         onSuccess={loadContacts}
       />
 
       {/* Fiche détaillée */}
-      <ContactDetail
-        open={showDetail}
-        onOpenChange={setShowDetail}
-        contact={selectedContact}
-        onDelete={handleDeleteContact}
-        onUpdate={loadContacts}
-      />
+      {selectedContact && (
+        <ContactDetail
+          key={selectedContact.id}
+          open={showDetail}
+          onOpenChange={setShowDetail}
+          contact={selectedContact}
+          onDelete={handleDeleteContact}
+          onUpdate={loadContacts}
+        />
+      )}
     </div>
   );
 }

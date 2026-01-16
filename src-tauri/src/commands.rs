@@ -1,6 +1,6 @@
 use tauri::State;
 use std::sync::Mutex;
-use crate::database::{Database, models::{Contact, NewContact, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte}};
+use crate::database::{Database, models::{Contact, NewContact, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats}};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -38,6 +38,15 @@ pub fn delete_contact(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     
     database.delete_contact(id)
         .map_err(|e| format!("Failed to delete contact: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_all_contacts(db: State<'_, DbState>) -> Result<usize, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.delete_all_contacts()
+        .map_err(|e| format!("Failed to delete all contacts: {}", e))
 }
 
 #[tauri::command]
@@ -300,4 +309,15 @@ pub fn generer_alertes_automatiques(db: State<'_, DbState>) -> Result<usize, Str
     
     database.generer_alertes_automatiques()
         .map_err(|e| format!("Failed to generate alertes: {}", e))
+}
+
+// ========== DASHBOARD ==========
+
+#[tauri::command]
+pub fn get_dashboard_stats(db: State<'_, DbState>) -> Result<DashboardStats, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_dashboard_stats()
+        .map_err(|e| format!("Failed to get dashboard stats: {}", e))
 }

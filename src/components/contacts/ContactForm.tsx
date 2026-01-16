@@ -29,6 +29,16 @@ interface ContactFormProps {
 
 export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactFormProps) {
   const [loading, setLoading] = useState(false);
+  
+  // Convertir les timestamps en dates pour les inputs
+  const timestampToDate = (timestamp: string | undefined) => {
+    if (!timestamp) return "";
+    const ts = parseInt(timestamp);
+    if (isNaN(ts)) return "";
+    const date = new Date(ts * 1000);
+    return date.toISOString().split('T')[0];
+  };
+  
   const [formData, setFormData] = useState<NewContact>({
     categorie: contact?.categorie || "SUSPECT_CLIENT",
     nom: contact?.nom || "",
@@ -40,6 +50,10 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
     ville: contact?.ville || "",
     date_naissance: contact?.date_naissance || "",
     profession: contact?.profession || "",
+    source_lead: contact?.source_lead || "",
+    profil_risque_sri: contact?.profil_risque_sri || undefined,
+    date_dernier_contact: timestampToDate(contact?.date_dernier_contact),
+    date_prochain_suivi: timestampToDate(contact?.date_prochain_suivi),
     statut_suivi: contact?.statut_suivi || "ACTIF",
     notes: contact?.notes || "",
   });
@@ -49,10 +63,23 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
     setLoading(true);
 
     try {
+      // Convertir les dates en timestamps Unix si elles sont fournies
+      const dataToSubmit = { ...formData };
+      
+      if (formData.date_dernier_contact) {
+        const timestamp = Math.floor(new Date(formData.date_dernier_contact + "T00:00:00").getTime() / 1000).toString();
+        dataToSubmit.date_dernier_contact = timestamp;
+      }
+      
+      if (formData.date_prochain_suivi) {
+        const timestamp = Math.floor(new Date(formData.date_prochain_suivi + "T00:00:00").getTime() / 1000).toString();
+        dataToSubmit.date_prochain_suivi = timestamp;
+      }
+      
       if (contact) {
-        await updateContact(contact.id, formData);
+        await updateContact(contact.id, dataToSubmit);
       } else {
-        await createContact(formData);
+        await createContact(dataToSubmit);
       }
       onSuccess();
       onOpenChange(false);
@@ -68,6 +95,10 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
         ville: "",
         date_naissance: "",
         profession: "",
+        source_lead: "",
+        profil_risque_sri: undefined,
+        date_dernier_contact: "",
+        date_prochain_suivi: "",
         statut_suivi: "ACTIF",
         notes: "",
       });
@@ -246,6 +277,62 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
                 value={formData.profession || ""}
                 onChange={(e) =>
                   setFormData({ ...formData, profession: e.target.value })
+                }
+              />
+            </div>
+          </div>
+
+          {/* Source / Lead et Profil risque */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="source_lead">Source / Lead</Label>
+              <Input
+                id="source_lead"
+                value={formData.source_lead || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, source_lead: e.target.value })
+                }
+                placeholder="Ex: Recommandation, Site web..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="profil_risque_sri">Profil investisseur (1-7)</Label>
+              <Input
+                id="profil_risque_sri"
+                type="number"
+                min="1"
+                max="7"
+                value={formData.profil_risque_sri || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, profil_risque_sri: e.target.value ? parseInt(e.target.value) : undefined })
+                }
+              />
+            </div>
+          </div>
+
+          {/* Dates de suivi */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="date_dernier_contact">Dernier contact</Label>
+              <Input
+                id="date_dernier_contact"
+                type="date"
+                value={formData.date_dernier_contact || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, date_dernier_contact: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="date_prochain_suivi">Prochain suivi</Label>
+              <Input
+                id="date_prochain_suivi"
+                type="date"
+                value={formData.date_prochain_suivi || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, date_prochain_suivi: e.target.value })
                 }
               />
             </div>

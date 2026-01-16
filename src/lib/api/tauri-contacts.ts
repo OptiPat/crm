@@ -63,6 +63,10 @@ export async function deleteContact(id: number): Promise<void> {
   return await invoke<void>("delete_contact", { id });
 }
 
+export async function deleteAllContacts(): Promise<number> {
+  return await invoke<number>("delete_all_contacts");
+}
+
 export async function updateContact(id: number, contact: NewContact): Promise<Contact> {
   return await invoke<Contact>("update_contact", { id, contact });
 }

@@ -123,6 +123,11 @@ impl Database {
         Ok(())
     }
 
+    pub fn delete_all_contacts(&self) -> Result<usize> {
+        let count = self.conn.execute("DELETE FROM contacts", [])?;
+        Ok(count)
+    }
+
     pub fn update_contact(&self, id: i64, contact: &NewContact) -> Result<Contact> {
         self.conn.execute(
             "UPDATE contacts SET 
@@ -136,10 +141,14 @@ impl Database {
                 ville = ?8,
                 date_naissance = ?9,
                 profession = ?10,
-                statut_suivi = ?11,
-                notes = ?12,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?13",
+                source_lead = ?11,
+                profil_risque_sri = ?12,
+                date_dernier_contact = ?13,
+                date_prochain_suivi = ?14,
+                statut_suivi = ?15,
+                notes = ?16,
+                updated_at = unixepoch()
+            WHERE id = ?17",
             params![
                 &contact.categorie,
                 &contact.nom,
@@ -151,6 +160,10 @@ impl Database {
                 &contact.ville,
                 &contact.date_naissance,
                 &contact.profession,
+                &contact.source_lead,
+                &contact.profil_risque_sri,
+                &contact.date_dernier_contact,
+                &contact.date_prochain_suivi,
                 &contact.statut_suivi,
                 &contact.notes,
                 id
@@ -252,7 +265,7 @@ impl Database {
                 situation_patrimoniale = ?6,
                 objectifs_patrimoniaux = ?7,
                 notes = ?8,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = unixepoch()
             WHERE id = ?9",
             params![
                 &foyer.nom,
@@ -388,7 +401,7 @@ impl Database {
                 zone_geo = ?11,
                 niveau_collaboration = ?12,
                 notes = ?13,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = unixepoch()
             WHERE id = ?14",
             params![
                 &partenaire.type_partenaire,
@@ -507,7 +520,7 @@ impl Database {
                 nom_fichier = ?4,
                 date_document = ?5,
                 notes = ?6,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = unixepoch()
             WHERE id = ?7",
             params![
                 &document.contact_id,
@@ -603,7 +616,7 @@ impl Database {
                 corps = ?3,
                 categorie = ?4,
                 variables = ?5,
-                updated_at = CURRENT_TIMESTAMP
+                updated_at = unixepoch()
             WHERE id = ?6",
             params![
                 &template.nom,
@@ -807,5 +820,48 @@ impl Database {
         }
 
         Ok(count)
+    }
+
+    // ========== DASHBOARD STATS ==========
+
+    pub fn get_dashboard_stats(&self) -> Result<super::models::DashboardStats> {
+        // Compter les clients
+        let total_clients: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie = 'CLIENT'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Compter les prospects (PROSPECT_CLIENT + PROSPECT_FILLEUL)
+        let total_prospects: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'PROSPECT%'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Compter les suspects (SUSPECT_CLIENT + SUSPECT_FILLEUL)
+        let total_suspects: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'SUSPECT%'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Encours total (pour l'instant 0, sera calculé quand la table investissements sera utilisée)
+        let encours_total: f64 = 0.0;
+
+        // Compter les alertes non traitées
+        let alertes_non_traitees: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM alertes WHERE traitee = 0",
+            [],
+            |row| row.get(0),
+        )?;
+
+        Ok(super::models::DashboardStats {
+            total_clients,
+            total_prospects,
+            total_suspects,
+            encours_total,
+            alertes_non_traitees,
+        })
     }
 }

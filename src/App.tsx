@@ -12,6 +12,7 @@ import { Interactions } from "@/pages/Interactions";
 import { Parametres } from "@/pages/Parametres";
 import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
+import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 
 function App() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -51,7 +52,11 @@ function App() {
       case "dashboard":
         return <Dashboard />;
       case "contacts":
-        return <Contacts />;
+        return (
+          <ErrorBoundary>
+            <Contacts />
+          </ErrorBoundary>
+        );
       case "foyers":
         return <Foyers />;
       case "partenaires":

@@ -1,41 +1,37 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Building2, UserPlus, TrendingUp } from "lucide-react";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { Users, Building2, UserPlus, TrendingUp, Bell } from "lucide-react";
+import { getDashboardStats, DashboardStats } from "@/lib/api/tauri-dashboard";
 
 export function Dashboard() {
-  const stats = [
-    {
-      title: "Contacts",
-      value: "0",
-      description: "Clients et prospects",
-      icon: Users,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-    },
-    {
-      title: "Foyers",
-      value: "0",
-      description: "Foyers fiscaux",
-      icon: Building2,
-      color: "text-green-600",
-      bgColor: "bg-green-50",
-    },
-    {
-      title: "Partenaires",
-      value: "0",
-      description: "Collaborateurs",
-      icon: UserPlus,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50",
-    },
-    {
-      title: "AUM Total",
-      value: "0 €",
-      description: "Assets Under Management",
-      icon: TrendingUp,
-      color: "text-amber-600",
-      bgColor: "bg-amber-50",
-    },
-  ];
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      setLoading(true);
+      const data = await getDashboardStats();
+      setStats(data);
+    } catch (error) {
+      console.error("Erreur lors du chargement des statistiques:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat("fr-FR", {
+      style: "currency",
+      currency: "EUR",
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(value);
+  };
 
   return (
     <div className="space-y-6">
@@ -49,28 +45,59 @@ export function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={stat.title}>
-              <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  {stat.title}
-                </CardTitle>
-                <div className={`p-2 rounded-lg ${stat.bgColor}`}>
-                  <Icon className={`h-4 w-4 ${stat.color}`} />
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stat.value}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {stat.description}
-                </p>
-              </CardContent>
-            </Card>
-          );
-        })}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        {loading ? (
+          <div className="col-span-full text-center py-8 text-muted-foreground">
+            Chargement...
+          </div>
+        ) : stats ? (
+          <>
+            <StatCard
+              title="Clients"
+              value={stats.total_clients}
+              description="Contacts actifs"
+              icon={Users}
+              iconColor="text-green-600"
+              iconBgColor="bg-green-50"
+            />
+            <StatCard
+              title="Prospects"
+              value={stats.total_prospects}
+              description="Clients potentiels"
+              icon={UserPlus}
+              iconColor="text-blue-600"
+              iconBgColor="bg-blue-50"
+            />
+            <StatCard
+              title="Suspects"
+              value={stats.total_suspects}
+              description="Leads à qualifier"
+              icon={Building2}
+              iconColor="text-orange-600"
+              iconBgColor="bg-orange-50"
+            />
+            <StatCard
+              title="Encours total"
+              value={formatCurrency(stats.encours_total)}
+              description="Assets Under Management"
+              icon={TrendingUp}
+              iconColor="text-amber-600"
+              iconBgColor="bg-amber-50"
+            />
+            <StatCard
+              title="À recontacter"
+              value={stats.alertes_non_traitees}
+              description="Alertes actives"
+              icon={Bell}
+              iconColor="text-red-600"
+              iconBgColor="bg-red-50"
+            />
+          </>
+        ) : (
+          <div className="col-span-full text-center py-8 text-muted-foreground">
+            Erreur lors du chargement des statistiques
+          </div>
+        )}
       </div>
 
       {/* Quick Actions */}

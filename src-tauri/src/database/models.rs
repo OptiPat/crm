@@ -182,3 +182,12 @@ pub struct NewAlerte {
     pub message: String,
     pub date_alerte: Option<i64>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DashboardStats {
+    pub total_clients: i64,
+    pub total_prospects: i64,
+    pub total_suspects: i64,
+    pub encours_total: f64,
+    pub alertes_non_traitees: i64,
+}
