@@ -1,6 +1,6 @@
 use tauri::State;
 use std::sync::Mutex;
-use crate::database::{Database, models::{Contact, NewContact, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats}};
+use crate::database::{Database, models::{Contact, NewContact, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact}};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -315,9 +315,111 @@ pub fn generer_alertes_automatiques(db: State<'_, DbState>) -> Result<usize, Str
 
 #[tauri::command]
 pub fn get_dashboard_stats(db: State<'_, DbState>) -> Result<DashboardStats, String> {
+    println!("🔍 [DEBUG] get_dashboard_stats called");
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     
-    database.get_dashboard_stats()
-        .map_err(|e| format!("Failed to get dashboard stats: {}", e))
+    match database.get_dashboard_stats() {
+        Ok(stats) => {
+            println!("✅ [DEBUG] get_dashboard_stats success: clients={}, prospects={}, suspects={}, alertes={}", 
+                stats.total_clients, stats.total_prospects, stats.total_suspects, stats.alertes_non_traitees);
+            Ok(stats)
+        },
+        Err(e) => {
+            println!("❌ [ERROR] get_dashboard_stats failed: {}", e);
+            Err(format!("Failed to get dashboard stats: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_category_stats(db: State<'_, DbState>) -> Result<CategoryStats, String> {
+    println!("🔍 [DEBUG] get_category_stats called");
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    match database.get_category_stats() {
+        Ok(stats) => {
+            println!("✅ [DEBUG] get_category_stats success: clients={}, prospect_client={}, prospect_filleul={}, suspect_client={}, suspect_filleul={}", 
+                stats.clients, stats.prospect_client, stats.prospect_filleul, stats.suspect_client, stats.suspect_filleul);
+            Ok(stats)
+        },
+        Err(e) => {
+            println!("❌ [ERROR] get_category_stats failed: {}", e);
+            Err(format!("Failed to get category stats: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_monthly_stats(db: State<'_, DbState>) -> Result<Vec<MonthlyStats>, String> {
+    println!("🔍 [DEBUG] get_monthly_stats called");
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    match database.get_monthly_stats() {
+        Ok(stats) => {
+            println!("✅ [DEBUG] get_monthly_stats success: {} months returned", stats.len());
+            Ok(stats)
+        },
+        Err(e) => {
+            println!("❌ [ERROR] get_monthly_stats failed: {}", e);
+            Err(format!("Failed to get monthly stats: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_product_stats(db: State<'_, DbState>) -> Result<Vec<ProductStats>, String> {
+    println!("🔍 [DEBUG] get_product_stats called");
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    match database.get_product_stats() {
+        Ok(stats) => {
+            println!("✅ [DEBUG] get_product_stats success: {} products returned", stats.len());
+            Ok(stats)
+        },
+        Err(e) => {
+            println!("❌ [ERROR] get_product_stats failed: {}", e);
+            Err(format!("Failed to get product stats: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_pipeline_stats(db: State<'_, DbState>) -> Result<PipelineStats, String> {
+    println!("🔍 [DEBUG] get_pipeline_stats called");
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    match database.get_pipeline_stats() {
+        Ok(stats) => {
+            println!("✅ [DEBUG] get_pipeline_stats success: suspects={}, prospects={}, clients={}", 
+                stats.suspects, stats.prospects, stats.clients);
+            Ok(stats)
+        },
+        Err(e) => {
+            println!("❌ [ERROR] get_pipeline_stats failed: {}", e);
+            Err(format!("Failed to get pipeline stats: {}", e))
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_alertes_with_contacts(db: State<'_, DbState>, limit: i64) -> Result<Vec<AlerteWithContact>, String> {
+    println!("🔍 [DEBUG] get_alertes_with_contacts called (limit: {})", limit);
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    match database.get_alertes_with_contacts(limit) {
+        Ok(alertes) => {
+            println!("✅ [DEBUG] get_alertes_with_contacts success: {} alertes returned", alertes.len());
+            Ok(alertes)
+        },
+        Err(e) => {
+            println!("❌ [ERROR] get_alertes_with_contacts failed: {}", e);
+            Err(format!("Failed to get alertes with contacts: {}", e))
+        }
+    }
 }

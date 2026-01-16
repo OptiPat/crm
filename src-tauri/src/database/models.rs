@@ -191,3 +191,44 @@ pub struct DashboardStats {
     pub encours_total: f64,
     pub alertes_non_traitees: i64,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CategoryStats {
+    pub clients: i64,
+    pub prospect_client: i64,
+    pub prospect_filleul: i64,
+    pub suspect_client: i64,
+    pub suspect_filleul: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MonthlyStats {
+    pub month: String,      // Format: "Jan 2026"
+    pub nouveaux: i64,      // Nombre de nouveaux contacts ce mois
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProductStats {
+    pub type_produit: String,   // Type de produit
+    pub montant: f64,           // Montant total en euros
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PipelineStats {
+    pub suspects: i64,    // Nombre total de suspects
+    pub prospects: i64,   // Nombre total de prospects
+    pub clients: i64,     // Nombre total de clients
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AlerteWithContact {
+    pub alerte_id: i64,
+    pub contact_id: i64,
+    pub contact_nom: String,
+    pub contact_prenom: String,
+    pub contact_categorie: String,
+    pub date_dernier_contact: Option<i64>,
+    pub type_alerte: String,
+    pub message: String,
+    pub date_alerte: i64,
+}

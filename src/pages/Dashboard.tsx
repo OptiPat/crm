@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
+import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
+import { MonthlyChart } from "@/components/dashboard/MonthlyChart";
+import { PipelineChart } from "@/components/dashboard/PipelineChart";
+import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { Users, Building2, UserPlus, TrendingUp, Bell } from "lucide-react";
 import { getDashboardStats, DashboardStats } from "@/lib/api/tauri-dashboard";
 
@@ -100,7 +105,23 @@ export function Dashboard() {
         )}
       </div>
 
-      {/* Quick Actions */}
+      {/* Graphiques - Ligne 1 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <CategoryPieChart />
+        <ProductPieChart />
+      </div>
+
+      {/* Graphiques - Ligne 2 */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <MonthlyChart />
+        <PipelineChart />
+      </div>
+
+      {/* Alertes et Actions rapides */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <AlertsPreview />
+        
+        {/* Quick Actions */}
       <Card>
         <CardHeader>
           <CardTitle>Actions rapides</CardTitle>
@@ -134,21 +155,7 @@ export function Dashboard() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Recent Activity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Activité récente</CardTitle>
-          <CardDescription>
-            Vos dernières interactions
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8 text-muted-foreground">
-            Aucune activité récente
-          </div>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }

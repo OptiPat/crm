@@ -849,12 +849,12 @@ impl Database {
         // Encours total (pour l'instant 0, sera calculé quand la table investissements sera utilisée)
         let encours_total: f64 = 0.0;
 
-        // Compter les alertes non traitées
+        // Compter les alertes non traitées (gérer si la table n'existe pas)
         let alertes_non_traitees: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM alertes WHERE traitee = 0",
             [],
             |row| row.get(0),
-        )?;
+        ).unwrap_or(0); // Si la table n'existe pas, retourner 0
 
         Ok(super::models::DashboardStats {
             total_clients,
@@ -863,5 +863,200 @@ impl Database {
             encours_total,
             alertes_non_traitees,
         })
+    }
+
+    pub fn get_category_stats(&self) -> Result<super::models::CategoryStats> {
+        // Compter chaque catégorie individuellement
+        let clients: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie = 'CLIENT'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let prospect_client: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie = 'PROSPECT_CLIENT'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let prospect_filleul: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie = 'PROSPECT_FILLEUL'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let suspect_client: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie = 'SUSPECT_CLIENT'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let suspect_filleul: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie = 'SUSPECT_FILLEUL'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        Ok(super::models::CategoryStats {
+            clients,
+            prospect_client,
+            prospect_filleul,
+            suspect_client,
+            suspect_filleul,
+        })
+    }
+
+    pub fn get_monthly_stats(&self) -> Result<Vec<super::models::MonthlyStats>> {
+        // Récupérer les 12 derniers mois
+        let mut stats = Vec::new();
+        
+        // Obtenir le timestamp actuel
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        
+        // Pour les 12 derniers mois
+        for i in (0..12).rev() {
+            // Calculer le début et la fin du mois
+            let month_start = now - (i * 30 * 24 * 60 * 60);
+            let month_end = now - ((i - 1) * 30 * 24 * 60 * 60);
+            
+            // Compter les contacts créés ce mois
+            let count: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM contacts WHERE created_at >= ?1 AND created_at < ?2",
+                params![month_start, month_end],
+                |row| row.get(0),
+            ).unwrap_or(0);
+            
+            // Formater le nom du mois
+            let month_name = Self::format_month(month_start);
+            
+            stats.push(super::models::MonthlyStats {
+                month: month_name,
+                nouveaux: count,
+            });
+        }
+        
+        Ok(stats)
+    }
+    
+    fn format_month(timestamp: i64) -> String {
+        use std::time::{UNIX_EPOCH, Duration};
+        
+        let datetime = UNIX_EPOCH + Duration::from_secs(timestamp as u64);
+        let datetime: chrono::DateTime<chrono::Utc> = datetime.into();
+        
+        // Format: "Jan 2026"
+        datetime.format("%b %Y").to_string()
+    }
+
+    pub fn get_product_stats(&self) -> Result<Vec<super::models::ProductStats>> {
+        // Vérifier si la table existe, sinon retourner un vecteur vide
+        let table_exists: Result<i64> = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='investissements'",
+            [],
+            |row| row.get(0),
+        );
+        
+        if table_exists.unwrap_or(0) == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT type_produit, SUM(montant_initial) as total 
+             FROM investissements 
+             GROUP BY type_produit 
+             HAVING total > 0
+             ORDER BY total DESC"
+        )?;
+
+        let stats = stmt.query_map([], |row| {
+            let montant_centimes: i64 = row.get(1)?;
+            let montant_euros = montant_centimes as f64 / 100.0; // Convertir centimes en euros
+            
+            Ok(super::models::ProductStats {
+                type_produit: row.get(0)?,
+                montant: montant_euros,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for stat in stats {
+            result.push(stat?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_pipeline_stats(&self) -> Result<super::models::PipelineStats> {
+        // Compter les suspects (SUSPECT_CLIENT + SUSPECT_FILLEUL)
+        let suspects: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'SUSPECT%'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Compter les prospects (PROSPECT_CLIENT + PROSPECT_FILLEUL)
+        let prospects: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'PROSPECT%'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        // Compter les clients
+        let clients: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE categorie = 'CLIENT'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        Ok(super::models::PipelineStats {
+            suspects,
+            prospects,
+            clients,
+        })
+    }
+
+    pub fn get_alertes_with_contacts(&self, limit: i64) -> Result<Vec<super::models::AlerteWithContact>> {
+        // Vérifier si la table alertes existe
+        let table_exists: Result<i64> = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='alertes'",
+            [],
+            |row| row.get(0),
+        );
+        
+        if table_exists.unwrap_or(0) == 0 {
+            return Ok(Vec::new());
+        }
+
+        let mut stmt = self.conn.prepare(
+            "SELECT a.id, a.contact_id, c.nom, c.prenom, c.categorie, c.date_dernier_contact,
+                    a.type_alerte, a.message, a.date_alerte
+             FROM alertes a
+             INNER JOIN contacts c ON a.contact_id = c.id
+             WHERE a.traitee = 0
+             ORDER BY a.date_alerte ASC
+             LIMIT ?1"
+        )?;
+
+        let alertes = stmt.query_map(params![limit], |row| {
+            Ok(super::models::AlerteWithContact {
+                alerte_id: row.get(0)?,
+                contact_id: row.get(1)?,
+                contact_nom: row.get(2)?,
+                contact_prenom: row.get(3)?,
+                contact_categorie: row.get(4)?,
+                date_dernier_contact: row.get(5)?,
+                type_alerte: row.get(6)?,
+                message: row.get(7)?,
+                date_alerte: row.get(8)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for alerte in alertes {
+            result.push(alerte?);
+        }
+        Ok(result)
     }
 }
