@@ -200,8 +200,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     { value: "profession", label: "Profession" },
     { value: "categorie", label: "Catégorie" },
     { value: "source_lead", label: "Source (Lead)" },
-    { value: "produit", label: "Produit (→ Notes)" },
-    { value: "partenaire", label: "Partenaire (→ Notes)" },
+    { value: "produit", label: "Type de produit (SCPI, AV, PER...)" },
+    { value: "nom_produit", label: "Nom du produit (Comète, Primovie...)" },
+    { value: "partenaire", label: "Partenaire (Alderan, Vie Plus...)" },
     { value: "profil_risque_sri", label: "Profil investisseur / Risque" },
     { value: "date_souscription", label: "Date de souscription (→ Notes)" },
     { value: "montant", label: "Montant souscrit (→ Notes)" },
@@ -234,7 +235,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         });
       }
       
-      if (colLower.includes("nom") && !colLower.includes("prenom") && !colLower.includes("prénom")) {
+      // IMPORTANT: Vérifier "nom produit" AVANT "nom" seul
+      if (colLower.includes("nom") && colLower.includes("produit")) {
+        // "Nom du produit" ou "Nom produit" → nom_produit (pas le nom du contact!)
+        detectedMapping[col] = "nom_produit";
+        console.log(`🏷️ DÉTECTÉ: "${col}" → nom_produit`);
+      } else if (colLower.includes("nom") && !colLower.includes("prenom") && !colLower.includes("prénom") && !colLower.includes("produit")) {
+        // "Nom" seul (sans "produit") → nom du contact
         detectedMapping[col] = "nom";
       } else if (colLower.includes("prenom") || colLower.includes("prénom")) {
         detectedMapping[col] = "prenom";
@@ -291,7 +298,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       ) {
         detectedMapping[col] = "commentaires";
         console.log(`🔴 COMMENTAIRE DÉTECTÉ ! Colonne "${col}" → commentaires`);
-      } else if (colLower.includes("produit")) {
+      } else if (colLower.includes("produit") && !colLower.includes("nom")) {
+        // "Produit" ou "Type de produit" → produit (type)
+        // Note: "Nom produit" est déjà géré plus haut
         detectedMapping[col] = "produit";
       } else if (colLower.includes("partenaire")) {
         detectedMapping[col] = "partenaire";
@@ -831,11 +840,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   const investissementNotes = notesArray.length > 0 ? notesArray.join(' | ') : undefined;
                   console.log(`📝 Notes investissement:`, investissementNotes);
                   
+                  // Nom du produit : utiliser "Nom du produit" si renseigné, sinon le type
+                  const nomProduit = row.data.nom_produit 
+                    ? String(row.data.nom_produit).trim() 
+                    : produitStr;
+                  
                   // Créer l'investissement
                   const newInvestissement: NewInvestissement = {
                     contact_id: existingContactId,
                     type_produit: typeProduit,
-                    nom_produit: produitStr,
+                    nom_produit: nomProduit,
                     partenaire_id: partenaireId || undefined,
                     montant_initial: montantInitial || undefined,
                     date_souscription: dateSouscription || undefined,
@@ -1300,11 +1314,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             const investissementNotes = notesArray.length > 0 ? notesArray.join(' | ') : undefined;
             console.log(`📝 Notes investissement:`, investissementNotes);
             
+            // Nom du produit : utiliser "Nom du produit" si renseigné, sinon le type
+            const nomProduit = row.data.nom_produit 
+              ? String(row.data.nom_produit).trim() 
+              : produitStr;
+            
             // Créer l'investissement
             const newInvestissement: NewInvestissement = {
               contact_id: createdContact.id,
               type_produit: typeProduit,
-              nom_produit: produitStr,
+              nom_produit: nomProduit,
               partenaire_id: partenaireId || undefined,
               montant_initial: montantInitial || undefined,
               date_souscription: dateSouscription || undefined,
