@@ -1,15 +1,23 @@
 # 💼 MODULE : Suivi des Investissements
 
-> **✅ MODULE TERMINÉ - 16 janvier 2026**
+> **✅ MODULE TERMINÉ - 17 janvier 2026**
 >
-> Toutes les fonctionnalités sont implémentées :
-> - Page Investissements avec tableau complet
-> - Formulaire d'ajout/modification (tous types de produits)
-> - Filtres par type, partenaire, recherche
-> - Badges colorés par type de produit
-> - Affichage des options (VP, réinvestissement, démembrement)
-> - CRUD complet côté backend Rust
-> - API TypeScript complète
+> **Fichiers créés :**
+> - `src/pages/Investissements.tsx`
+> - `src/components/investissements/InvestissementForm.tsx`
+> - `src/lib/api/tauri-investissements.ts`
+> - Backend Rust : `database/operations.rs`, `database/models.rs`
+>
+> **Fonctionnalités :**
+> - ✅ Page Investissements avec tableau complet
+> - ✅ Formulaire d'ajout/modification (tous types de produits)
+> - ✅ Filtres par type, partenaire, recherche
+> - ✅ Badges colorés par type de produit
+> - ✅ Affichage des options (VP, réinvestissement, démembrement)
+> - ✅ CRUD complet côté backend Rust
+> - ✅ API TypeScript complète
+> - ✅ Champ `origine` (MON_CONSEIL / EXISTANT_CLIENT)
+> - ✅ Badge gris pour investissements "À côté"
 >
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
@@ -183,8 +191,10 @@ const formatEuro = (centimes: number) =>
 
 ## ✅ Critères de validation
 
-- [ ] CRUD complet fonctionne
-- [ ] Les montants s'affichent correctement en €
-- [ ] Les investissements apparaissent dans la fiche contact
-- [ ] La vue foyer montre le total consolidé
-- [ ] Les alertes de fin de démembrement sont générées
+- [x] CRUD complet fonctionne
+- [x] Les montants s'affichent correctement en €
+- [x] Les investissements apparaissent dans la fiche contact
+- [x] La vue foyer montre le total consolidé
+- [x] Les alertes de fin de démembrement sont générées
+- [x] Champ `origine` (MON_CONSEIL / EXISTANT_CLIENT)
+- [x] Badge gris pour investissements "À côté"

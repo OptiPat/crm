@@ -22,7 +22,9 @@ import { Upload, File, X, FileText } from "lucide-react";
 import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
 import { extractTextFromPDFPath, parseAuto, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
-import { findContactByEmail, createContact, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
+import { PatrimoineTriDialog } from "./PatrimoineTriDialog";
+import { findContactByEmail, createContact, updateContact, getContactById, type NewContact } from "@/lib/api/tauri-contacts";
+import { createInvestissement, type NewInvestissement } from "@/lib/api/tauri-investissements";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -45,6 +47,12 @@ export function DocumentUpload({
   const [extractedText, setExtractedText] = useState<string>("");
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  
+  // États pour le dialogue de tri du patrimoine
+  const [showPatrimoineTri, setShowPatrimoineTri] = useState(false);
+  const [triContactId, setTriContactId] = useState<number | null>(null);
+  const [triExtractedData, setTriExtractedData] = useState<ExtractedData | null>(null);
+  
   const [uploadedFile, setUploadedFile] = useState<{
     path: string;
     name: string;
@@ -256,25 +264,50 @@ export function DocumentUpload({
         console.log("📄 Document enregistré");
       }
 
-      // 3. Afficher le succès
-      alert(successMessage + "\n\n📄 Document enregistré avec succès!");
+      // 3. Vérifier s'il y a du patrimoine à trier (RIO avec AV, PER, SCPI, immobilier...)
+      const hasPatrimoineToTri = Boolean(
+        data.assuranceVie || 
+        data.per || 
+        data.scpi || 
+        data.residencePrincipale?.valeur ||
+        data.residenceSecondaire?.valeur ||
+        data.immobilierLocatif?.valeur ||
+        data.livretA ||
+        data.ldd ||
+        data.compteCourant
+      );
 
-      // 4. Fermer et rafraîchir
-      setShowPreview(false);
-      setExtractedData(null);
-      onSuccess();
-      onOpenChange(false);
+      if (hasPatrimoineToTri && finalContactId) {
+        // Afficher le dialogue de tri du patrimoine
+        console.log("📊 Patrimoine détecté → affichage du dialogue de tri");
+        setShowPreview(false);
+        setTriContactId(finalContactId);
+        setTriExtractedData(data);
+        setShowPatrimoineTri(true);
+        
+        // Message intermédiaire
+        console.log(successMessage + " - En attente du tri du patrimoine...");
+      } else {
+        // Pas de patrimoine → terminer normalement
+        alert(successMessage + "\n\n📄 Document enregistré avec succès!");
+        
+        // 4. Fermer et rafraîchir
+        setShowPreview(false);
+        setExtractedData(null);
+        onSuccess();
+        onOpenChange(false);
 
-      // Réinitialiser
-      setUploadedFile(null);
-      setExtractedText("");
-      setFormData({
-        contact_id: contactId,
-        foyer_id: foyerId,
-        type_document: "AUTRE",
-        date_document: "",
-        notes: "",
-      });
+        // Réinitialiser
+        setUploadedFile(null);
+        setExtractedText("");
+        setFormData({
+          contact_id: contactId,
+          foyer_id: foyerId,
+          type_document: "AUTRE",
+          date_document: "",
+          notes: "",
+        });
+      }
 
     } catch (error) {
       console.error("❌ Erreur lors de l'application des données:", error);
@@ -297,6 +330,120 @@ export function DocumentUpload({
   const handleIgnoreData = () => {
     console.log("🚫 Données ignorées");
     setExtractedData(null);
+  };
+
+  /**
+   * Gère la validation du tri du patrimoine
+   */
+  const handlePatrimoineTriComplete = async (investissements: NewInvestissement[]) => {
+    console.log("📊 Création des investissements:", investissements);
+    setLoading(true);
+    
+    try {
+      // Créer chaque investissement
+      for (const inv of investissements) {
+        await createInvestissement(inv);
+        console.log(`✅ Investissement créé: ${inv.nom_produit} (${inv.origine})`);
+      }
+      
+      // Compter les investissements par origine
+      const avecMoi = investissements.filter(i => i.origine === "MON_CONSEIL").length;
+      const aCote = investissements.filter(i => i.origine === "EXISTANT_CLIENT").length;
+      
+      // Mise à jour de la catégorie du contact
+      // Si au moins 1 "avec moi" → CLIENT
+      // Sinon (RIO sans investissement "avec moi") → PROSPECT (car RIO = contact établi)
+      if (triContactId) {
+        try {
+          const existingContact = await getContactById(triContactId);
+          const newCategorie = avecMoi > 0 ? "CLIENT" : "PROSPECT_CLIENT";
+          
+          // Mettre à jour la catégorie si différente
+          if (existingContact.categorie !== newCategorie) {
+            console.log(`🏷️ Mise à jour catégorie: ${existingContact.categorie} → ${newCategorie}`);
+            
+            // Préparer les données de mise à jour
+            // Gérer la date de naissance avec prudence
+            let dateNaissanceISO: string | undefined = undefined;
+            if (existingContact.date_naissance && existingContact.date_naissance > 0) {
+              try {
+                const dateObj = new Date(existingContact.date_naissance * 1000);
+                if (!isNaN(dateObj.getTime())) {
+                  dateNaissanceISO = dateObj.toISOString();
+                }
+              } catch {
+                console.warn("⚠️ Date de naissance invalide:", existingContact.date_naissance);
+              }
+            }
+            
+            const updatedContact: NewContact = {
+              nom: existingContact.nom,
+              prenom: existingContact.prenom,
+              categorie: newCategorie,
+              statut_suivi: existingContact.statut_suivi,
+              civilite: existingContact.civilite,
+              email: existingContact.email,
+              telephone: existingContact.telephone,
+              adresse: existingContact.adresse,
+              code_postal: existingContact.code_postal,
+              ville: existingContact.ville,
+              date_naissance: dateNaissanceISO,
+              profession: existingContact.profession,
+              situation_familiale: existingContact.situation_familiale,
+              foyer_id: existingContact.foyer_id,
+              notes: existingContact.notes,
+              source_lead: existingContact.source_lead,
+              profil_risque_sri: existingContact.profil_risque_sri,
+            };
+            
+            await updateContact(triContactId, updatedContact);
+            console.log(`✅ Catégorie mise à jour: ${newCategorie}`);
+          }
+        } catch (e) {
+          console.warn("⚠️ Impossible de mettre à jour la catégorie:", e);
+        }
+      }
+      
+      alert(`✅ Import terminé!\n\n🎯 Avec moi: ${avecMoi} investissement(s)\n📋 À côté: ${aCote} investissement(s)`);
+      
+      // Réinitialiser et fermer
+      setShowPatrimoineTri(false);
+      setTriContactId(null);
+      setTriExtractedData(null);
+      setExtractedData(null);
+      setUploadedFile(null);
+      setExtractedText("");
+      setFormData({
+        contact_id: contactId,
+        foyer_id: foyerId,
+        type_document: "AUTRE",
+        date_document: "",
+        notes: "",
+      });
+      
+      onSuccess();
+      onOpenChange(false);
+      
+    } catch (error) {
+      console.error("❌ Erreur lors de la création des investissements:", error);
+      alert("❌ Erreur lors de la création des investissements:\n\n" + String(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Annule le tri du patrimoine
+   */
+  const handlePatrimoineTriCancel = () => {
+    console.log("🚫 Tri du patrimoine annulé");
+    setShowPatrimoineTri(false);
+    setTriContactId(null);
+    setTriExtractedData(null);
+    
+    // Fermer tout
+    onSuccess();
+    onOpenChange(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -377,6 +524,18 @@ export function DocumentUpload({
           extractedData={extractedData}
           onApply={handleApplyData}
           onIgnore={handleIgnoreData}
+        />
+      )}
+
+      {/* Dialog de tri du patrimoine */}
+      {triExtractedData && triContactId && (
+        <PatrimoineTriDialog
+          open={showPatrimoineTri}
+          onOpenChange={setShowPatrimoineTri}
+          extractedData={triExtractedData}
+          contactId={triContactId}
+          onComplete={handlePatrimoineTriComplete}
+          onCancel={handlePatrimoineTriCancel}
         />
       )}
 

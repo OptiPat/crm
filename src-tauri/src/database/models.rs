@@ -249,6 +249,7 @@ pub struct Investissement {
     pub frequence_versement: Option<String>,
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
+    pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -268,6 +269,7 @@ pub struct NewInvestissement {
     pub frequence_versement: Option<String>,
     pub reinvestissement_dividendes: Option<bool>,
     pub notes: Option<String>,
+    pub origine: Option<String>, // "MON_CONSEIL" (défaut) ou "EXISTANT_CLIENT"
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -290,6 +292,7 @@ pub struct InvestissementWithDetails {
     pub frequence_versement: Option<String>,
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
+    pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
     pub created_at: i64,
     pub updated_at: i64,
 }

@@ -1,5 +1,12 @@
 # ⚡ MODULE : Workflows Multi-étapes (Automatisation)
 
+> **❌ MODULE NON COMMENCÉ**
+>
+> **Priorité : 🔵 Future (Phase 4)**
+>
+> Ce module est le plus complexe. Il permettra d'automatiser les séquences de suivi client.
+> Prévoir 4-5 sessions de développement.
+>
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
 ---

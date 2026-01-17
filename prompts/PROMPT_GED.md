@@ -1,5 +1,22 @@
 # 📁 MODULE : Gestion Électronique des Documents (GED)
 
+> **⚠️ MODULE PARTIELLEMENT COMMENCÉ**
+>
+> **Ce qui existe :**
+> - ✅ Upload de documents basique (`DocumentUpload.tsx`)
+> - ✅ Table `documents` en base de données
+> - ✅ Liaison documents ↔ contacts
+>
+> **Ce qui reste à faire :**
+> - ❌ Arborescence automatique par client
+> - ❌ Navigation visuelle dans les dossiers
+> - ❌ Prévisualisation PDF intégrée
+> - ❌ Actions (renommer, déplacer, supprimer)
+> - ❌ Recherche dans les documents
+> - ❌ Hash SHA-256 pour intégrité
+>
+> **Priorité : 🟡 Basse**
+>
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
 ---
@@ -221,10 +238,10 @@ fn delete_document_file(document_id: i64) -> Result<(), String>
 
 ## ✅ Critères de validation
 
-- [ ] Les dossiers sont créés automatiquement
-- [ ] L'arborescence s'affiche correctement
-- [ ] L'upload fonctionne
-- [ ] Les fichiers sont bien stockés localement
-- [ ] La prévisualisation PDF fonctionne
-- [ ] Le téléchargement fonctionne
-- [ ] La suppression fonctionne avec confirmation
+- [ ] Les dossiers sont créés automatiquement ❌
+- [ ] L'arborescence s'affiche correctement ❌
+- [x] L'upload fonctionne (basique)
+- [x] Les fichiers sont bien stockés localement
+- [ ] La prévisualisation PDF fonctionne ❌
+- [ ] Le téléchargement fonctionne ❌
+- [ ] La suppression fonctionne avec confirmation ❌

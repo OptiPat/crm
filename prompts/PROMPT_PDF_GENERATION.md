@@ -1,5 +1,11 @@
 # 📝 MODULE : Génération de PDF Pré-remplis
 
+> **❌ MODULE NON COMMENCÉ**
+>
+> **Priorité : 🟠 Moyenne**
+>
+> Ce module permettra de générer des bulletins de souscription, lettres de mission, etc. pré-remplis avec les données clients.
+>
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
 ---

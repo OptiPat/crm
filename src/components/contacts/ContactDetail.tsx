@@ -125,7 +125,11 @@ export function ContactDetail({
   };
 
   // Couleurs des badges par type de produit
-  const getTypeProduitColor = (type: string) => {
+  const getTypeProduitColor = (type: string, origine?: string) => {
+    // Si "à côté" (existant client) → texte gris foncé sur fond gris
+    if (origine === "EXISTANT_CLIENT") {
+      return "text-gray-700";
+    }
     // Immobilier : #85ad39 (vert)
     if (type === "IMMOBILIER") {
       return "text-white";
@@ -134,7 +138,11 @@ export function ContactDetail({
     return "text-white";
   };
   
-  const getTypeProduitBgColor = (type: string) => {
+  const getTypeProduitBgColor = (type: string, origine?: string) => {
+    // Si "à côté" (existant client) → gris
+    if (origine === "EXISTANT_CLIENT") {
+      return "#9ca3af"; // gray-400
+    }
     // Immobilier : #85ad39 (vert)
     if (type === "IMMOBILIER") {
       return "#85ad39";
@@ -461,11 +469,14 @@ export function ContactDetail({
                           <div className="flex-1 space-y-1">
                             <div className="flex items-center gap-2">
                               <Badge 
-                                className={getTypeProduitColor(inv.type_produit) + " text-base px-3 py-1"}
-                                style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit) }}
+                                className={getTypeProduitColor(inv.type_produit, inv.origine) + " text-base px-3 py-1"}
+                                style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
                               >
                                 {formatNomProduit(inv.nom_produit)}
                               </Badge>
+                              {inv.origine === "EXISTANT_CLIENT" && (
+                                <span className="text-xs text-gray-500 italic">à côté</span>
+                              )}
                             </div>
                             {getPartenaireNom(inv.partenaire_id) && (
                               <p className="text-sm text-muted-foreground">

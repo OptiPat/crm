@@ -2,11 +2,15 @@
 
 > **✅ MODULE TERMINÉ - 16 janvier 2026**
 >
-> Toutes les fonctionnalités sont implémentées :
-> - 5 cartes KPIs
-> - 4 graphiques Recharts (camemberts, courbe, barres)
-> - Aperçu des alertes
-> - Actions rapides
+> **Fichiers créés :**
+> - `src/pages/Dashboard.tsx`
+> - `src/components/dashboard/StatCard.tsx`
+> - `src/components/dashboard/CategoryPieChart.tsx`
+> - `src/components/dashboard/ProductPieChart.tsx`
+> - `src/components/dashboard/MonthlyChart.tsx`
+> - `src/components/dashboard/PipelineChart.tsx`
+> - `src/components/dashboard/AlertsPreview.tsx`
+> - `src/lib/api/tauri-dashboard.ts`
 >
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
@@ -197,8 +201,8 @@ Afficher les 5 premiers contacts avec alerte non traitée :
 
 ## ✅ Critères de validation
 
-- [ ] Les 5 KPIs s'affichent avec les bonnes valeurs
-- [ ] Les graphiques sont interactifs (hover, tooltips)
-- [ ] Le design est cohérent avec le reste de l'app
-- [ ] Pas d'erreur console
-- [ ] Chargement rapide (< 1 seconde)
+- [x] Les 5 KPIs s'affichent avec les bonnes valeurs
+- [x] Les graphiques sont interactifs (hover, tooltips)
+- [x] Le design est cohérent avec le reste de l'app
+- [x] Pas d'erreur console
+- [x] Chargement rapide (< 1 seconde)

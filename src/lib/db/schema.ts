@@ -165,6 +165,11 @@ export const investissements = sqliteTable("investissements", {
   // Notes
   notes: text("notes"),
   
+  // Origine de l'investissement (pour distinguer mes conseils vs patrimoine existant)
+  origine: text("origine", {
+    enum: ["MON_CONSEIL", "EXISTANT_CLIENT"],
+  }).default("MON_CONSEIL").notNull(),
+  
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)

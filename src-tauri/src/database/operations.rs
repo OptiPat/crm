@@ -1136,7 +1136,7 @@ impl Database {
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                     montant_initial, date_souscription, date_fin_demembrement,
                     versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, created_at, updated_at
+                    reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
              ORDER BY date_souscription DESC"
         )?;
@@ -1157,8 +1157,9 @@ impl Database {
                 frequence_versement: row.get(11)?,
                 reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
                 notes: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
+                origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })?;
 
@@ -1174,7 +1175,7 @@ impl Database {
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                     montant_initial, date_souscription, date_fin_demembrement,
                     versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, created_at, updated_at
+                    reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
              WHERE contact_id = ?1
              ORDER BY date_souscription DESC"
@@ -1196,8 +1197,9 @@ impl Database {
                 frequence_versement: row.get(11)?,
                 reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
                 notes: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
+                origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })?;
 
@@ -1213,7 +1215,7 @@ impl Database {
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                     montant_initial, date_souscription, date_fin_demembrement,
                     versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, created_at, updated_at
+                    reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
              WHERE foyer_id = ?1
              ORDER BY date_souscription DESC"
@@ -1235,8 +1237,9 @@ impl Database {
                 frequence_versement: row.get(11)?,
                 reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
                 notes: row.get(13)?,
-                created_at: row.get(14)?,
-                updated_at: row.get(15)?,
+                origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
             })
         })?;
 
@@ -1253,7 +1256,7 @@ impl Database {
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
                     i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
-                    i.reinvestissement_dividendes, i.notes, i.created_at, i.updated_at
+                    i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at
              FROM investissements i
              INNER JOIN contacts c ON i.contact_id = c.id
              LEFT JOIN foyers f ON i.foyer_id = f.id
@@ -1281,8 +1284,9 @@ impl Database {
                 frequence_versement: row.get(15)?,
                 reinvestissement_dividendes: row.get::<_, i64>(16)? != 0,
                 notes: row.get(17)?,
-                created_at: row.get(18)?,
-                updated_at: row.get(19)?,
+                origine: row.get::<_, String>(18).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(19)?,
+                updated_at: row.get(20)?,
             })
         })?;
 
@@ -1312,12 +1316,15 @@ impl Database {
                 .map(|dt| dt.timestamp())
         });
 
+        // Origine par défaut : MON_CONSEIL
+        let origine = investissement.origine.unwrap_or_else(|| "MON_CONSEIL".to_string());
+
         self.conn.execute(
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                                          montant_initial, date_souscription, date_fin_demembrement,
                                          versement_programme, montant_versement_programme, frequence_versement,
-                                         reinvestissement_dividendes, notes) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                                         reinvestissement_dividendes, notes, origine) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -1332,6 +1339,7 @@ impl Database {
                 &investissement.frequence_versement,
                 reinvestissement_dividendes,
                 &investissement.notes,
+                &origine,
             ],
         )?;
 
@@ -1344,7 +1352,7 @@ impl Database {
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                     montant_initial, date_souscription, date_fin_demembrement,
                     versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, created_at, updated_at
+                    reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
              WHERE id = ?1",
             params![id],
@@ -1364,8 +1372,9 @@ impl Database {
                     frequence_versement: row.get(11)?,
                     reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
                     notes: row.get(13)?,
-                    created_at: row.get(14)?,
-                    updated_at: row.get(15)?,
+                    origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                    created_at: row.get(15)?,
+                    updated_at: row.get(16)?,
                 })
             },
         )

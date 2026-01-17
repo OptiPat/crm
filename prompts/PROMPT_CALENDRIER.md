@@ -1,5 +1,12 @@
 # 📅 MODULE : Intégration Calendrier (Google Agenda / Outlook)
 
+> **❌ MODULE NON COMMENCÉ**
+>
+> **Priorité : 🔵 Future (Phase 4)**
+>
+> Ce module nécessite la configuration d'OAuth2 avec Google et/ou Microsoft.
+> Prévoir 3-4 sessions de développement.
+>
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
 ---

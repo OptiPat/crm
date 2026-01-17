@@ -1,5 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export type OrigineInvestissement = "MON_CONSEIL" | "EXISTANT_CLIENT";
+
 export interface Investissement {
   id: number;
   contact_id: number;
@@ -15,6 +17,7 @@ export interface Investissement {
   frequence_versement?: string;
   reinvestissement_dividendes: boolean;
   notes?: string;
+  origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
   created_at: number;
   updated_at: number;
 }
@@ -33,6 +36,7 @@ export interface NewInvestissement {
   frequence_versement?: string;
   reinvestissement_dividendes?: boolean;
   notes?: string;
+  origine?: OrigineInvestissement; // Défaut: "MON_CONSEIL"
 }
 
 export interface InvestissementWithDetails {
@@ -54,6 +58,7 @@ export interface InvestissementWithDetails {
   frequence_versement?: string;
   reinvestissement_dividendes: boolean;
   notes?: string;
+  origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
   created_at: number;
   updated_at: number;
 }

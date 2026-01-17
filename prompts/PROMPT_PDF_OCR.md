@@ -1,5 +1,22 @@
 # 📄 MODULE : Import et Lecture de PDF avec OCR
 
+> **✅ MODULE PARTIELLEMENT TERMINÉ - 17 janvier 2026**
+>
+> **Ce qui est fait :**
+> - ✅ Extraction texte PDF natif (PDF.js)
+> - ✅ Parsers RIO (standard, advanced, patrimoine)
+> - ✅ Parser générique (email, téléphone, nom, adresse)
+> - ✅ Interface de prévisualisation des données extraites
+> - ✅ Tri patrimoine "Avec moi" / "À côté" (PatrimoineTriDialog)
+> - ✅ Champ `origine` (MON_CONSEIL / EXISTANT_CLIENT)
+> - ✅ Badge gris pour investissements "À côté"
+> - ✅ Mise à jour catégorie contact après import RIO
+>
+> **Ce qui reste à faire :**
+> - ⚠️ OCR Tesseract.js (PDF scannés)
+> - ⚠️ Détection doublons investissements
+> - ⚠️ Détection couples (multi-personnes)
+>
 > **Prérequis** : Lire `CONTEXTE_GLOBAL.md` avant de commencer
 
 ---
@@ -224,9 +241,12 @@ src/components/documents/
 
 ## ✅ Critères de validation
 
-- [ ] L'extraction de texte fonctionne sur PDF natifs
-- [ ] L'OCR fonctionne sur PDF scannés
-- [ ] Les données extraites sont correctes (>80% de précision)
-- [ ] L'interface de validation est fonctionnelle
-- [ ] La détection de couples fonctionne
-- [ ] Aucune donnée n'est envoyée sur Internet
+- [x] L'extraction de texte fonctionne sur PDF natifs
+- [ ] L'OCR fonctionne sur PDF scannés ⚠️ À FAIRE
+- [x] Les données extraites sont correctes (>80% de précision)
+- [x] L'interface de validation est fonctionnelle
+- [ ] La détection de couples fonctionne ⚠️ À FAIRE
+- [x] Aucune donnée n'est envoyée sur Internet
+- [x] Tri "Avec moi" / "À côté" fonctionne
+- [x] Badge gris pour investissements "À côté"
+- [ ] Détection doublons investissements ⚠️ À FAIRE

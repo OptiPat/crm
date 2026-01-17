@@ -1,6 +1,8 @@
 # 📋 CONTEXTE GLOBAL - Patrimoine CRM
 
 > **⚠️ DONNE CE FICHIER AU DÉBUT DE CHAQUE NOUVELLE DISCUSSION**
+>
+> **Dernière mise à jour : 17 janvier 2026**
 
 ---
 
@@ -22,11 +24,10 @@
 | Styling | **Tailwind CSS 3 + shadcn/ui** |
 | Base de données | **SQLite + Drizzle ORM** |
 | Icônes | **Lucide React** |
-| Graphiques | **Recharts** (à ajouter) |
-| État global | **Zustand** (à ajouter si besoin) |
-| Validation | **Zod** (à ajouter si besoin) |
+| Graphiques | **Recharts** ✅ |
+| PDF Lecture | **PDF.js (pdfjs-dist)** ✅ |
 | OCR | **Tesseract.js** (à ajouter) |
-| PDF | **pdf-lib** (à ajouter) |
+| PDF Génération | **pdf-lib** (à ajouter) |
 
 ---
 
@@ -50,12 +51,15 @@ patrimoine-crm/
 │   │   ├── contacts/       # ContactForm, ContactDetail, ContactImport
 │   │   ├── foyers/         # FoyerForm, FoyerDetail
 │   │   ├── partenaires/    # PartenaireForm, PartenaireDetail
-│   │   ├── documents/      # DocumentUpload
+│   │   ├── documents/      # DocumentUpload, PatrimoineTriDialog, ExtractedDataPreview
+│   │   ├── dashboard/      # StatCard, CategoryPieChart, ProductPieChart, etc.
+│   │   ├── investissements/ # InvestissementForm
 │   │   └── emails/         # SmtpConfigForm, TemplateEmailForm
-│   ├── pages/              # Dashboard, Contacts, Foyers, Documents, etc.
+│   ├── pages/              # Dashboard, Contacts, Foyers, Documents, Investissements, etc.
 │   ├── lib/
 │   │   ├── api/            # Appels Tauri (tauri-contacts.ts, tauri-alertes.ts...)
 │   │   ├── db/             # schema.ts (Drizzle), types
+│   │   ├── pdf/            # extractor.ts, parsers/ (RIO, generic)
 │   │   └── utils.ts
 │   ├── styles/globals.css  # Tailwind + custom
 │   ├── App.tsx             # Router + Auth flow
@@ -73,7 +77,7 @@ patrimoine-crm/
 | `foyers` | Groupes familiaux |
 | `contacts` | Personnes physiques (5 catégories) |
 | `partenaires` | Fournisseurs de produits financiers |
-| `investissements` | Produits souscrits par les clients |
+| `investissements` | Produits souscrits + champ `origine` (MON_CONSEIL / EXISTANT_CLIENT) |
 | `documents` | Fichiers attachés aux contacts |
 | `interactions` | Historique des échanges (emails, appels, RDV) |
 | `emails` | Emails envoyés |
@@ -90,11 +94,15 @@ patrimoine-crm/
 
 ### Types de produits
 - `IMMOBILIER`, `SCPI`, `SCPI_DEMEMBREMENT`, `ASSURANCE_VIE`
-- `FIP_FCPI`, `FCPR`, `PER`, `G3F`, `AUTRE`
+- `FIP_FCPI`, `FCPR`, `PER`, `PEA_CTO`, `LIVRET_EPARGNE`, `AUTRE`
+
+### Origine des investissements (nouveau)
+- `MON_CONSEIL` : Investissement placé par le CGP
+- `EXISTANT_CLIENT` : Patrimoine existant du client (détecté via RIO)
 
 ---
 
-## ✅ Ce qui est FAIT (60% du projet)
+## ✅ Ce qui est FAIT (75% du projet)
 
 ### Phase 1 - Fondations ✅
 | Fonctionnalité | Status |
@@ -105,46 +113,55 @@ patrimoine-crm/
 | CRUD Contacts avec catégorisation | ✅ |
 | Code couleur priorité (🔴🟠🟢) + tri | ✅ |
 | Import Excel/CSV avec mapping intelligent | ✅ |
+| Fuzzy matching partenaires (Levenshtein) | ✅ |
 | CRUD Foyers | ✅ |
-| CRUD Partenaires | ✅ |
+| CRUD Partenaires (simplifié) | ✅ |
 | Templates d'emails avec variables | ✅ |
 | Configuration SMTP + envoi emails | ✅ |
 | Alertes automatiques + page Suivi | ✅ |
 | Upload de documents (basique) | ✅ |
 
-### Phase 2/3 - Productivité ✅
+### Phase 2 - Productivité ✅
 | Fonctionnalité | Status |
 |----------------|--------|
 | Dashboard avec KPIs (5 cartes) | ✅ |
-| Graphiques (catégories, produits, pipeline, mensuel) | ✅ |
+| Graphiques Recharts (catégories, produits, pipeline, mensuel) | ✅ |
+| Aperçu alertes + actions rapides | ✅ |
 | Module Investissements (CRUD complet) | ✅ |
 | Filtres et recherche investissements | ✅ |
 
+### Phase 3 - Import RIO ✅
+| Fonctionnalité | Status |
+|----------------|--------|
+| Extraction texte PDF natif (PDF.js) | ✅ |
+| Parsers RIO (standard, advanced, patrimoine) | ✅ |
+| Parser générique (email, téléphone, nom) | ✅ |
+| Preview des données extraites | ✅ |
+| Tri patrimoine "Avec moi" / "À côté" | ✅ |
+| Champ `origine` investissements | ✅ |
+| Badge gris pour investissements "À côté" | ✅ |
+| Mise à jour catégorie contact après RIO | ✅ |
+
 ---
 
-## 🔄 Ce qui reste À FAIRE
+## 🔄 Ce qui reste À FAIRE (25%)
 
-### Phase 2 - Productivité
-| Fonctionnalité | Module |
-|----------------|--------|
-| Dashboard avec KPIs et graphiques | `PROMPT_DASHBOARD.md` |
-| Import/lecture PDF avec OCR | `PROMPT_PDF_OCR.md` |
-| Génération PDF pré-remplis | `PROMPT_PDF_GENERATION.md` |
+### Phase 3 - Compléments RIO
+| Fonctionnalité | Module | Priorité |
+|----------------|--------|----------|
+| Détection doublons investissements lors import RIO | `PROMPT_PDF_OCR.md` | 🔴 Haute |
+| OCR Tesseract.js pour PDF scannés | `PROMPT_PDF_OCR.md` | 🟠 Moyenne |
+| Détection couples dans RIO | `PROMPT_PDF_OCR.md` | 🟡 Basse |
 
-### Phase 3 - Approfondissement
-| Fonctionnalité | Module |
-|----------------|--------|
-| Suivi des investissements (UI) | `PROMPT_INVESTISSEMENTS.md` |
-| Gestion documentaire GED | `PROMPT_GED.md` |
+### Phase 4 - Fonctionnalités avancées
+| Fonctionnalité | Module | Priorité |
+|----------------|--------|----------|
+| Génération PDF pré-remplis | `PROMPT_PDF_GENERATION.md` | 🟠 Moyenne |
+| GED complète (arborescence, navigation) | `PROMPT_GED.md` | 🟡 Basse |
+| Workflows multi-étapes | `PROMPT_WORKFLOWS.md` | 🔵 Future |
+| Intégration calendrier OAuth2 | `PROMPT_CALENDRIER.md` | 🔵 Future |
 
-### Phase 4 - Automatisation
-| Fonctionnalité | Module |
-|----------------|--------|
-| Workflows multi-étapes | `PROMPT_WORKFLOWS.md` |
-| Intégration calendrier OAuth2 | `PROMPT_CALENDRIER.md` |
-| Comparaison RIO | `PROMPT_RIO.md` |
-
-### Améliorations diverses
+### Améliorations diverses (optionnelles)
 - Import IMAP (emails reçus)
 - Verrouillage auto après 15 min
 - Déverrouillage biométrique
@@ -175,16 +192,33 @@ patrimoine-crm/
 ## 🚀 Commandes utiles
 
 ```bash
-# Développement
-npm run tauri:dev
+# Développement (mode release pour éviter LNK1318)
+npm run tauri:dev -- --release
 
 # Build production
 npm run tauri:build
 
-# Si erreur LNK1318 (trop de symboles debug)
-# Utiliser mode release
-npm run tauri:dev -- --release
+# Si port 1420 déjà utilisé (PowerShell)
+$proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1; if ($proc) { taskkill /F /PID $proc }
+
+# Appliquer migration SQL
+node apply-migration-origine.cjs
 ```
+
+---
+
+## 📊 Résumé état du projet
+
+| Module | Status | Prompt |
+|--------|--------|--------|
+| Dashboard | ✅ 100% | `PROMPT_DASHBOARD.md` |
+| Investissements | ✅ 100% | `PROMPT_INVESTISSEMENTS.md` |
+| Import Excel | ✅ 100% | (intégré dans Contacts) |
+| Import RIO | ✅ 90% | `PROMPT_PDF_OCR.md` |
+| Génération PDF | ❌ 0% | `PROMPT_PDF_GENERATION.md` |
+| GED | ⚠️ 20% | `PROMPT_GED.md` |
+| Workflows | ❌ 0% | `PROMPT_WORKFLOWS.md` |
+| Calendrier | ❌ 0% | `PROMPT_CALENDRIER.md` |
 
 ---
 
