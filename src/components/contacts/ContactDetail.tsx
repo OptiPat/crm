@@ -98,6 +98,32 @@ export function ContactDetail({
     }).format(centimes / 100);
   };
 
+  // Formatage du nom de produit (transformer ASSURANCE_VIE en Assurance Vie)
+  const formatNomProduit = (nom: string) => {
+    // Map des types de produits vers leurs labels lisibles
+    const typeLabels: Record<string, string> = {
+      "SCPI": "SCPI",
+      "SCPI_DEMEMBREMENT": "SCPI Démembrement",
+      "ASSURANCE_VIE": "Assurance Vie",
+      "PER": "PER",
+      "IMMOBILIER": "Immobilier",
+      "FIP_FCPI": "FIP/FCPI",
+      "FCPR": "FCPR",
+      "G3F": "G3F",
+      "PINEL": "Pinel",
+      "AUTRE": "Autre",
+    };
+    // Si c'est un type connu, utiliser le label
+    if (typeLabels[nom]) {
+      return typeLabels[nom];
+    }
+    // Sinon, formater proprement (remplacer _ par espace et capitaliser)
+    return nom
+      .replace(/_/g, " ")
+      .toLowerCase()
+      .replace(/\b\w/g, c => c.toUpperCase());
+  };
+
   // Couleurs des badges par type de produit
   const getTypeProduitColor = (type: string) => {
     // Immobilier : #85ad39 (vert)
@@ -438,7 +464,7 @@ export function ContactDetail({
                                 className={getTypeProduitColor(inv.type_produit) + " text-base px-3 py-1"}
                                 style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit) }}
                               >
-                                {inv.nom_produit}
+                                {formatNomProduit(inv.nom_produit)}
                               </Badge>
                             </div>
                             {getPartenaireNom(inv.partenaire_id) && (

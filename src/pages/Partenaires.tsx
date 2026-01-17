@@ -2,10 +2,33 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Plus, Search, Building2, Shield, Home } from "lucide-react";
 import { getAllPartenaires, deletePartenaire, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { PartenaireForm } from "@/components/partenaires/PartenaireForm";
 import { PartenaireDetail } from "@/components/partenaires/PartenaireDetail";
+
+// Helper pour afficher le type de partenaire
+const getTypeInfo = (type: string) => {
+  switch (type) {
+    case "SOCIETE_GESTION_SCPI":
+    case "SOCIETE_GESTION": // Rétrocompatibilité
+      return { label: "Société de Gestion SCPI", icon: Building2, color: "bg-blue-100 text-blue-800" };
+    case "SOCIETE_GESTION_FIP":
+      return { label: "Société de Gestion FIP/FCPI/FCPR", icon: Building2, color: "bg-indigo-100 text-indigo-800" };
+    case "ASSUREUR":
+      return { label: "Assureur", icon: Shield, color: "bg-green-100 text-green-800" };
+    case "PROMOTEUR":
+      return { label: "Promoteur", icon: Home, color: "bg-orange-100 text-orange-800" };
+    default:
+      // Transformer les types inconnus proprement
+      const cleanLabel = type
+        .toLowerCase()
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, c => c.toUpperCase());
+      return { label: cleanLabel, icon: Building2, color: "bg-gray-100 text-gray-800" };
+  }
+};
 
 export function Partenaires() {
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
@@ -65,7 +88,7 @@ export function Partenaires() {
             Partenaires
           </h2>
           <p className="text-muted-foreground">
-            Gérez votre réseau de collaborateurs
+            Assureurs, sociétés de gestion et promoteurs
           </p>
         </div>
         <Button className="gap-2" onClick={() => setShowForm(true)}>
@@ -130,17 +153,29 @@ export function Partenaires() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredPartenaires.map((partenaire) => (
-                <div
-                  key={partenaire.id}
-                  className="p-3 border border-border rounded-lg hover:bg-accent transition-colors cursor-pointer"
-                  onClick={() => handleViewPartenaire(partenaire)}
-                >
-                  <h3 className="font-semibold text-lg">
-                    {partenaire.raison_sociale}
-                  </h3>
-                </div>
-              ))}
+              {filteredPartenaires.map((partenaire) => {
+                const typeInfo = getTypeInfo(partenaire.type_partenaire);
+                const TypeIcon = typeInfo.icon;
+                return (
+                  <div
+                    key={partenaire.id}
+                    className="p-4 border border-border rounded-lg hover:bg-accent transition-colors cursor-pointer flex items-center justify-between"
+                    onClick={() => handleViewPartenaire(partenaire)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`p-2 rounded-lg ${typeInfo.color}`}>
+                        <TypeIcon className="h-5 w-5" />
+                      </div>
+                      <h3 className="font-semibold text-lg">
+                        {partenaire.raison_sociale}
+                      </h3>
+                    </div>
+                    <Badge variant="outline" className={typeInfo.color}>
+                      {typeInfo.label}
+                    </Badge>
+                  </div>
+                );
+              })}
             </div>
           )}
         </CardContent>

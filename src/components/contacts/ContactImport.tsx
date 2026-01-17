@@ -24,6 +24,147 @@ import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenair
 import { Badge } from "@/components/ui/badge";
 import { invoke } from "@tauri-apps/api/core";
 
+// ============================================
+// FUZZY MATCHING POUR LES PARTENAIRES
+// ============================================
+
+// Normaliser une chaîne : lowercase, sans accents, sans espaces multiples
+const normalizeString = (str: string): string => {
+  return str
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Supprimer les accents
+    .replace(/[^a-z0-9]/g, " ")      // Remplacer les caractères spéciaux par des espaces
+    .replace(/\s+/g, " ")            // Supprimer les espaces multiples
+    .trim();
+};
+
+// Alias connus pour les partenaires (variations courantes)
+const PARTENAIRE_ALIASES: Record<string, string[]> = {
+  "vie plus": ["vie+", "vie +", "vieplus"],
+  "apicil": ["apcil", "apicill", "appicil"],
+  "primonial": ["primoniale", "primmonial"],
+  "praemia": ["praemie", "praémia", "premia"],
+  "generali": ["generalli", "générali"],
+  "suravenir": ["suravnir", "suravennir"],
+  "swiss life": ["swisslife", "swiss-life", "suisse life"],
+  "cardif": ["kardif", "carrdif"],
+  "spirica": ["spiricca", "sprica"],
+  "corum": ["corrum", "coorum"],
+  "sofidy": ["sofiddy", "soffidy"],
+  "perial": ["périal", "periall"],
+  "la francaise": ["la française", "lafrancaise"],
+  "epargne pierre": ["épargne pierre", "epargnepierre"],
+  "primovie": ["primo vie", "primo-vie"],
+  "ncap regions": ["n cap regions", "ncap régions", "n-cap regions"],
+};
+
+// Distance de Levenshtein (pour détecter les fautes de frappe)
+const levenshteinDistance = (a: string, b: string): number => {
+  const matrix: number[][] = [];
+  
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  
+  return matrix[b.length][a.length];
+};
+
+// Trouver le partenaire le plus proche (fuzzy matching)
+const findMatchingPartenaire = (searchName: string, partenaires: Partenaire[]): Partenaire | null => {
+  const normalizedSearch = normalizeString(searchName);
+  
+  // 1. Correspondance exacte (après normalisation)
+  for (const p of partenaires) {
+    if (normalizeString(p.raison_sociale) === normalizedSearch) {
+      console.log(`✅ Match exact: "${searchName}" → "${p.raison_sociale}"`);
+      return p;
+    }
+  }
+  
+  // 2. Vérifier les alias connus
+  for (const [canonical, aliases] of Object.entries(PARTENAIRE_ALIASES)) {
+    if (aliases.some(alias => normalizeString(alias) === normalizedSearch) || 
+        normalizeString(canonical) === normalizedSearch) {
+      for (const p of partenaires) {
+        const normalizedP = normalizeString(p.raison_sociale);
+        if (normalizedP === normalizeString(canonical) || 
+            aliases.some(alias => normalizeString(alias) === normalizedP)) {
+          console.log(`✅ Match alias: "${searchName}" → "${p.raison_sociale}"`);
+          return p;
+        }
+      }
+    }
+  }
+  
+  // 3. Correspondance partielle (contient)
+  for (const p of partenaires) {
+    const normalizedP = normalizeString(p.raison_sociale);
+    if (normalizedP.includes(normalizedSearch) || normalizedSearch.includes(normalizedP)) {
+      if (normalizedSearch.length >= 4 && normalizedP.length >= 4) {
+        console.log(`✅ Match partiel: "${searchName}" → "${p.raison_sociale}"`);
+        return p;
+      }
+    }
+  }
+  
+  // 4. Distance de Levenshtein (fautes de frappe)
+  let bestMatch: Partenaire | null = null;
+  let bestDistance = Infinity;
+  const maxDistance = Math.max(2, Math.floor(normalizedSearch.length * 0.3));
+  
+  for (const p of partenaires) {
+    const normalizedP = normalizeString(p.raison_sociale);
+    const distance = levenshteinDistance(normalizedSearch, normalizedP);
+    
+    if (distance < bestDistance && distance <= maxDistance) {
+      bestDistance = distance;
+      bestMatch = p;
+    }
+  }
+  
+  if (bestMatch) {
+    console.log(`✅ Match fuzzy (distance ${bestDistance}): "${searchName}" → "${bestMatch.raison_sociale}"`);
+    return bestMatch;
+  }
+  
+  console.log(`❌ Aucun match pour: "${searchName}" → Nouveau partenaire`);
+  return null;
+};
+
+// Déduire le type de partenaire depuis le type de produit
+const deduireTypePartenaire = (typeProduit: string): string => {
+  const t = typeProduit.toUpperCase();
+  if (t.includes("AV") || t.includes("ASSURANCE") || t.includes("VIE") || t.includes("PER")) {
+    return "ASSUREUR";
+  } else if (t.includes("PINEL") || t.includes("IMMOBILIER") || t.includes("MALRAUX")) {
+    return "PROMOTEUR";
+  } else if (t.includes("FIP") || t.includes("FCPI") || t.includes("FCPR") || t.includes("G3F")) {
+    return "SOCIETE_GESTION_FIP";
+  } else {
+    return "SOCIETE_GESTION_SCPI"; // Par défaut pour SCPI
+  }
+};
+
+// ============================================
+
 interface ContactImportProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -149,6 +290,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         col === "Commentaire" // Exact match pour le singulier
       ) {
         detectedMapping[col] = "commentaires";
+        console.log(`🔴 COMMENTAIRE DÉTECTÉ ! Colonne "${col}" → commentaires`);
       } else if (colLower.includes("produit")) {
         detectedMapping[col] = "produit";
       } else if (colLower.includes("partenaire")) {
@@ -204,8 +346,17 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       }
     });
     
+    console.log("🔵 TOUTES LES COLONNES EXCEL:", cols);
     console.log("✅ Mapping final détecté:", detectedMapping);
     console.log("📋 Nombre de colonnes mappées:", Object.keys(detectedMapping).length, "sur", cols.length);
+    
+    // Vérifier si "Commentaire" est dans les colonnes
+    const hasCommentaire = cols.some(c => c.toLowerCase().includes("commentaire"));
+    console.log(`🔴 Colonne Commentaire trouvée ? ${hasCommentaire ? "OUI" : "NON"}`);
+    if (hasCommentaire) {
+      const commentaireCol = cols.find(c => c.toLowerCase().includes("commentaire"));
+      console.log(`🔴 Nom exact de la colonne: "${commentaireCol}"`);
+    }
     
     return detectedMapping;
   };
@@ -308,15 +459,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         if (idx === 0) {
           console.log("🔍 Toutes les clés disponibles dans row[0]:", Object.keys(row));
           console.log("🔍 Valeur de row['Dernier RDV']:", row["Dernier RDV"]);
+          console.log("🔍 Valeur de row['Commentaire']:", row["Commentaire"]);
+          console.log("🔍 Valeur de row['2025 - Commentaire suivi']:", row["2025 - Commentaire suivi"]);
           console.log("🔍 Mapping à appliquer:", mapping);
+        }
+        
+        // Debug pour les 5 premières lignes : afficher les valeurs brutes des commentaires
+        if (idx < 5) {
+          console.log(`🟡 LIGNE ${idx+1} - Commentaire brut: "${row["Commentaire"]}" | 2025 suivi: "${row["2025 - Commentaire suivi"]}"`);
         }
         
         // Mapper les colonnes
         Object.entries(mapping).forEach(([sourceCol, targetField]) => {
           if (targetField && targetField !== "SKIP") {
-            // Utiliser la valeur de la colonne, même si undefined (pour permettre le traitement)
-            // row[sourceCol] peut être undefined si la cellule est vide dans Excel
-            contactData[targetField] = row[sourceCol] !== undefined ? row[sourceCol] : null;
+            const value = row[sourceCol] !== undefined ? row[sourceCol] : null;
+            
+            // Cas spécial : fusionner les colonnes de commentaires au lieu d'écraser
+            if (targetField === "commentaires") {
+              // Ne rien faire si la valeur est null/undefined/vide
+              if (value && String(value).trim() !== "") {
+                const existingValue = contactData[targetField];
+                if (existingValue && String(existingValue).trim() !== "") {
+                  // Fusionner avec l'existant
+                  contactData[targetField] = `${existingValue}\n---\n${value}`;
+                } else {
+                  contactData[targetField] = value;
+                }
+              }
+              // Si value est null/vide, on ne fait RIEN (on garde l'existant)
+            } else {
+              contactData[targetField] = value;
+            }
           }
         });
 
@@ -493,22 +666,23 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     typeProduit = "IMMOBILIER";
                   }
                   
-                  // Trouver ou créer le partenaire
+                  // Trouver ou créer le partenaire (avec fuzzy matching)
                   let partenaireId = null;
                   if (row.data.partenaire) {
                     const partenaireNom = String(row.data.partenaire).trim();
                     
-                    let partenaire = allPartenaires.find(p => 
-                      p.raison_sociale.toLowerCase() === partenaireNom.toLowerCase()
-                    );
+                    // Fuzzy matching pour trouver le partenaire
+                    let partenaire = findMatchingPartenaire(partenaireNom, allPartenaires);
                     
                     if (!partenaire) {
                       try {
+                        const typePartenaire = deduireTypePartenaire(typeProduit);
                         const newPartenaire: NewPartenaire = {
-                          type_partenaire: "FOURNISSEUR",
+                          type_partenaire: typePartenaire,
                           raison_sociale: partenaireNom,
                         };
                         partenaire = await createPartenaire(newPartenaire);
+                        console.log(`✅ Partenaire créé: ${partenaireNom} (type: ${typePartenaire})`);
                         allPartenaires.push(partenaire);
                         console.log(`✅ Partenaire créé: ${partenaireNom} (ID: ${partenaire.id})`);
                       } catch (partError) {
@@ -842,8 +1016,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         }
 
-        // Notes = UNIQUEMENT la colonne "Commentaire" de l'Excel
+        // Notes = colonnes de commentaires fusionnées (fait lors du mapping)
         const finalNotes = row.data.commentaires ? String(row.data.commentaires).trim() : undefined;
+        
+        // DEBUG: Afficher les notes pour chaque contact
+        console.log(`📝 [${i+1}] ${row.data.prenom} ${row.data.nom} → Notes: "${finalNotes || '(vide)'}" | Produit: "${row.data.produit || '(aucun)'}"`);
+
 
         // Déterminer automatiquement la catégorie selon la logique métier :
         // 1. CLIENT = A souscrit un produit
@@ -956,23 +1134,23 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               typeProduit = "IMMOBILIER";
             }
             
-            // Trouver ou créer le partenaire
+            // Trouver ou créer le partenaire (avec fuzzy matching)
             let partenaireId = null;
             if (row.data.partenaire) {
               const partenaireNom = String(row.data.partenaire).trim();
               
-              // Chercher le partenaire existant (case-insensitive)
-              let partenaire = allPartenaires.find(p => 
-                p.raison_sociale.toLowerCase() === partenaireNom.toLowerCase()
-              );
+              // Fuzzy matching pour trouver le partenaire
+              let partenaire = findMatchingPartenaire(partenaireNom, allPartenaires);
               
               // Si n'existe pas, créer
               if (!partenaire) {
                 try {
+                  const typePartenaire = deduireTypePartenaire(typeProduit);
                   const newPartenaire: NewPartenaire = {
-                    type_partenaire: "FOURNISSEUR",
+                    type_partenaire: typePartenaire,
                     raison_sociale: partenaireNom,
                   };
+                  console.log(`✅ Partenaire créé: ${partenaireNom} (type: ${typePartenaire})`);
                   partenaire = await createPartenaire(newPartenaire);
                   allPartenaires.push(partenaire); // Ajouter à la liste pour éviter doublons
                   console.log(`✅ Partenaire créé: ${partenaireNom} (ID: ${partenaire.id})`);

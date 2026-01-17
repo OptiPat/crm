@@ -108,6 +108,23 @@ export function FoyerDetail({
     }
   };
 
+  // Formatage du type de produit
+  const formatTypeProduit = (type: string) => {
+    const labels: Record<string, string> = {
+      "SCPI": "SCPI",
+      "SCPI_DEMEMBREMENT": "SCPI Démembrement",
+      "ASSURANCE_VIE": "Assurance Vie",
+      "PER": "PER",
+      "IMMOBILIER": "Immobilier",
+      "FIP_FCPI": "FIP/FCPI",
+      "FCPR": "FCPR",
+      "G3F": "G3F",
+      "PINEL": "Pinel",
+      "AUTRE": "Autre",
+    };
+    return labels[type] || type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  };
+
   if (!foyer) return null;
 
   const getTypeColor = (type: string) => {
@@ -334,7 +351,7 @@ export function FoyerDetail({
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <Badge className={getTypeProduitColor(inv.type_produit)}>
-                              {inv.type_produit.replace(/_/g, " ")}
+                              {formatTypeProduit(inv.type_produit)}
                             </Badge>
                             {inv.versement_programme && (
                               <Badge variant="outline" className="text-xs">

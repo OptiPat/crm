@@ -97,28 +97,24 @@ export function Investissements() {
 
   // Label lisible pour les types de produits
   const getTypeProduitLabel = (type: string) => {
-    switch (type) {
-      case "SCPI":
-        return "SCPI";
-      case "SCPI_DEMEMBREMENT":
-        return "SCPI Démembrement";
-      case "ASSURANCE_VIE":
-        return "Assurance Vie";
-      case "PER":
-        return "PER";
-      case "IMMOBILIER":
-        return "Immobilier";
-      case "FIP_FCPI":
-        return "FIP/FCPI";
-      case "FCPR":
-        return "FCPR";
-      case "G3F":
-        return "G3F";
-      case "AUTRE":
-        return "Autre";
-      default:
-        return type;
-    }
+    const labels: Record<string, string> = {
+      "SCPI": "SCPI",
+      "SCPI_DEMEMBREMENT": "SCPI Démembrement",
+      "ASSURANCE_VIE": "Assurance Vie",
+      "PER": "PER",
+      "IMMOBILIER": "Immobilier",
+      "FIP_FCPI": "FIP/FCPI",
+      "FCPR": "FCPR",
+      "G3F": "G3F",
+      "PINEL": "Pinel",
+      "AUTRE": "Autre",
+    };
+    return labels[type] || type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  };
+
+  // Formater le nom de produit (au cas où c'est un type comme ASSURANCE_VIE)
+  const formatNomProduit = (nom: string) => {
+    return getTypeProduitLabel(nom);
   };
 
   // Filtrage
@@ -252,7 +248,7 @@ export function Investissements() {
                     <div className="flex-1 space-y-2">
                       {/* Ligne 1 : Nom du produit + Type */}
                       <div className="flex items-center gap-3">
-                        <h3 className="font-semibold text-lg">{inv.nom_produit}</h3>
+                        <h3 className="font-semibold text-lg">{formatNomProduit(inv.nom_produit)}</h3>
                         <Badge className={getTypeProduitColor(inv.type_produit)}>
                           {getTypeProduitLabel(inv.type_produit)}
                         </Badge>

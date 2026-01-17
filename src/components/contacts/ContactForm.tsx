@@ -32,9 +32,14 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
   
   // Convertir les timestamps en dates pour les inputs
   const timestampToDate = (timestamp: number | undefined) => {
-    if (!timestamp) return "";
-    const date = new Date(timestamp * 1000);
-    return date.toISOString().split('T')[0];
+    if (!timestamp || isNaN(timestamp) || !isFinite(timestamp)) return "";
+    try {
+      const date = new Date(timestamp * 1000);
+      if (isNaN(date.getTime())) return "";
+      return date.toISOString().split('T')[0];
+    } catch {
+      return "";
+    }
   };
   
   const [formData, setFormData] = useState<NewContact>({
