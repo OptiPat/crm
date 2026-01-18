@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
 import * as XLSX from "xlsx";
-import { createContact, findContactByName, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
+import { createContact, findContactByName, type NewContact } from "@/lib/api/tauri-contacts";
 import { Badge } from "@/components/ui/badge";
 
 interface ContactImportFilleulsProps {
@@ -104,7 +104,6 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       }
     });
     
-    console.log("📋 Mapping détecté pour import filleuls:", detectedMapping);
     return detectedMapping;
   };
 
@@ -188,7 +187,6 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
 
         // Rechercher le parrain si nom/prénom fournis
         if (contactData.nom_parrain && contactData.prenom_parrain) {
-          console.log(`🔍 Recherche parrain: nom="${contactData.nom_parrain}", prenom="${contactData.prenom_parrain}"`);
           try {
             // D'abord, chercher le parrain dans TOUTE la base (tous types de contacts)
             let parrain = await findContactByName(
@@ -198,11 +196,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             
             if (parrain) {
               // Parrain trouvé (peu importe sa catégorie : CLIENT, PROSPECT, SUSPECT, FILLEUL, etc.)
-              console.log(`✅ Parrain trouvé: ID=${parrain.id}, ${parrain.prenom} ${parrain.nom} (${parrain.categorie})`);
               contactData.parrain_id = parrain.id;
             } else {
               // Parrain non trouvé → le créer automatiquement
-              console.log(`❌ Parrain NON trouvé, création automatique...`);
               try {
                 const newParrain: NewContact = {
                   nom: contactData.nom_parrain,
@@ -213,7 +209,6 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
                 
                 const createdParrain = await createContact(newParrain);
                 contactData.parrain_id = createdParrain.id;
-                console.log(`✅ Parrain créé: ID=${createdParrain.id}`);
                 warnings.push(`✅ Parrain créé automatiquement: ${contactData.prenom_parrain} ${contactData.nom_parrain}`);
               } catch (createError) {
                 console.error(`❌ Erreur création parrain:`, createError);

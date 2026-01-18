@@ -12,11 +12,9 @@ import { parseRIO, isRIO } from "./rio-parser";
 export function parseAuto(text: string): ExtractedData {
   // Détecter le type de document
   if (isRIO(text)) {
-    console.log("📄 Document détecté : RIO");
     return parseRIO(text);
   }
 
   // Par défaut, utiliser le parser générique
-  console.log("📄 Document détecté : Générique");
   return parseGeneric(text);
 }

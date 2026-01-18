@@ -445,8 +445,7 @@ export function ContactDetail({
                     <div 
                       className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
                       onClick={() => {
-                        // Ouvrir la fiche du parrain
-                        console.log("Open parrain details:", parrain.id);
+                        // TODO: Ouvrir la fiche du parrain
                       }}
                     >
                       <div className="flex items-center justify-between">
@@ -505,8 +504,7 @@ export function ContactDetail({
                           key={filleul.id}
                           className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
                           onClick={() => {
-                            // Ouvrir la fiche du filleul
-                            console.log("Open filleul details:", filleul.id);
+                            // TODO: Ouvrir la fiche du filleul
                           }}
                         >
                           <div className="flex items-center justify-between">

@@ -19,7 +19,7 @@
 
 | Agent | Module | Fichier | Priorité | Durée | Status |
 |-------|--------|---------|----------|-------|--------|
-| **NEW** | Contacts & Filleuls | `AGENT_CONTACTS_FILLEULS.md` | 🔴 **Haute** | 3-4 sessions | ❌ À faire |
+| ✅ | Contacts & Filleuls | `AGENT_CONTACTS_FILLEULS.md` | 🔴 Haute | 3-4 sessions | ✅ **Terminé** |
 
 ### Phase 1 : Finir les fonctionnalités
 
@@ -152,7 +152,7 @@ prompts/
 
 ## 💰 Checklist V1 commercialisable
 
-- [ ] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** 🔴
+- [x] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** ✅
 - [ ] Agent 1 : Détection doublons investissements RIO
 - [ ] Agent 1 : OCR PDF scannés (Tesseract)
 - [ ] Agent 2 : Génération PDF pré-remplis

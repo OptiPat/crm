@@ -213,10 +213,14 @@ node apply-migration-origine.cjs
 |--------|--------|--------|
 | Dashboard | ✅ 100% | `PROMPT_DASHBOARD.md` |
 | Investissements | ✅ 100% | `PROMPT_INVESTISSEMENTS.md` |
-| Import Excel | ✅ 100% | (intégré dans Contacts) |
+| Import Excel Clients | ✅ 100% | (intégré dans Contacts) |
+| **Contacts & Filleuls** | ✅ 100% | `AGENT_CONTACTS_FILLEULS.md` |
 | Import RIO | ✅ 90% | `PROMPT_PDF_OCR.md` |
 | Génération PDF | ❌ 0% | `PROMPT_PDF_GENERATION.md` |
 | GED | ⚠️ 20% | `PROMPT_GED.md` |
+| Sécurité & RGPD | ❌ 0% | `AGENT_6_SECURITE_RGPD.md` |
+| Backup | ❌ 0% | `AGENT_7_BACKUP.md` |
+| Licences | ❌ 0% | `AGENT_8_LICENCES.md` |
 | Workflows | ❌ 0% | `PROMPT_WORKFLOWS.md` |
 | Calendrier | ❌ 0% | `PROMPT_CALENDRIER.md` |
 

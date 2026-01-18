@@ -94,7 +94,6 @@ const findMatchingPartenaire = (searchName: string, partenaires: Partenaire[]): 
   // 1. Correspondance exacte (après normalisation)
   for (const p of partenaires) {
     if (normalizeString(p.raison_sociale) === normalizedSearch) {
-      console.log(`✅ Match exact: "${searchName}" → "${p.raison_sociale}"`);
       return p;
     }
   }
@@ -107,7 +106,6 @@ const findMatchingPartenaire = (searchName: string, partenaires: Partenaire[]): 
         const normalizedP = normalizeString(p.raison_sociale);
         if (normalizedP === normalizeString(canonical) || 
             aliases.some(alias => normalizeString(alias) === normalizedP)) {
-          console.log(`✅ Match alias: "${searchName}" → "${p.raison_sociale}"`);
           return p;
         }
       }
@@ -119,7 +117,6 @@ const findMatchingPartenaire = (searchName: string, partenaires: Partenaire[]): 
     const normalizedP = normalizeString(p.raison_sociale);
     if (normalizedP.includes(normalizedSearch) || normalizedSearch.includes(normalizedP)) {
       if (normalizedSearch.length >= 4 && normalizedP.length >= 4) {
-        console.log(`✅ Match partiel: "${searchName}" → "${p.raison_sociale}"`);
         return p;
       }
     }
@@ -141,11 +138,9 @@ const findMatchingPartenaire = (searchName: string, partenaires: Partenaire[]): 
   }
   
   if (bestMatch) {
-    console.log(`✅ Match fuzzy (distance ${bestDistance}): "${searchName}" → "${bestMatch.raison_sociale}"`);
     return bestMatch;
   }
   
-  console.log(`❌ Aucun match pour: "${searchName}" → Nouveau partenaire`);
   return null;
 };
 
@@ -219,27 +214,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
   const detectColumnMapping = (cols: string[]) => {
     const detectedMapping: Record<string, string> = {};
     
-    console.log("🔍 Colonnes à analyser pour le mapping:", cols);
-    
     cols.forEach(col => {
       const colLower = col.toLowerCase().trim();
-      
-      // Debug pour "Dernier RDV"
-      if (colLower.includes("dernier") || colLower.includes("rdv")) {
-        console.log(`🔍 Analyse colonne "${col}":`, {
-          original: col,
-          colLower: colLower,
-          includesRdv: colLower.includes("rdv"),
-          includesDernier: colLower.includes("dernier"),
-          strictMatch: colLower === "dernier rdv",
-        });
-      }
       
       // IMPORTANT: Vérifier "nom produit" AVANT "nom" seul
       if (colLower.includes("nom") && colLower.includes("produit")) {
         // "Nom du produit" ou "Nom produit" → nom_produit (pas le nom du contact!)
         detectedMapping[col] = "nom_produit";
-        console.log(`🏷️ DÉTECTÉ: "${col}" → nom_produit`);
       } else if (colLower.includes("nom") && !colLower.includes("prenom") && !colLower.includes("prénom") && !colLower.includes("produit")) {
         // "Nom" seul (sans "produit") → nom du contact
         detectedMapping[col] = "nom";
@@ -297,7 +278,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         col === "Commentaire" // Exact match pour le singulier
       ) {
         detectedMapping[col] = "commentaires";
-        console.log(`🔴 COMMENTAIRE DÉTECTÉ ! Colonne "${col}" → commentaires`);
       } else if (colLower.includes("produit") && !colLower.includes("nom")) {
         // "Produit" ou "Type de produit" → produit (type)
         // Note: "Nom produit" est déjà géré plus haut
@@ -355,29 +335,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       }
     });
     
-    console.log("🔵 TOUTES LES COLONNES EXCEL:", cols);
-    console.log("✅ Mapping final détecté:", detectedMapping);
-    console.log("📋 Nombre de colonnes mappées:", Object.keys(detectedMapping).length, "sur", cols.length);
-    
-    // Vérifier si "Commentaire" est dans les colonnes
-    const hasCommentaire = cols.some(c => c.toLowerCase().includes("commentaire"));
-    console.log(`🔴 Colonne Commentaire trouvée ? ${hasCommentaire ? "OUI" : "NON"}`);
-    if (hasCommentaire) {
-      const commentaireCol = cols.find(c => c.toLowerCase().includes("commentaire"));
-      console.log(`🔴 Nom exact de la colonne: "${commentaireCol}"`);
-    }
-    
     return detectedMapping;
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) {
-      console.log("No file selected");
       return;
     }
-
-    console.log("File selected:", selectedFile.name, selectedFile.size, "bytes");
     
     // Vérifier la taille du fichier (max 10MB)
     if (selectedFile.size > 10 * 1024 * 1024) {
@@ -388,12 +353,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     setFile(selectedFile);
     
     try {
-      console.log("Reading file...");
       const data = await selectedFile.arrayBuffer();
-      console.log("File read, parsing workbook...");
-      
       const workbook = XLSX.read(data);
-      console.log("Workbook parsed, sheets:", workbook.SheetNames);
       
       if (workbook.SheetNames.length === 0) {
         alert("Le fichier ne contient aucune feuille");
@@ -401,10 +362,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       }
       
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-      console.log("Converting to JSON...");
-      
       const jsonData = XLSX.utils.sheet_to_json(firstSheet);
-      console.log("JSON data:", jsonData.length, "rows");
       
       if (jsonData.length === 0) {
         alert("Le fichier est vide");
@@ -417,18 +375,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         Object.keys(row).forEach(col => allColumns.add(col));
       });
       const cols = Array.from(allColumns);
-      console.log("Columns detected (from all rows):", cols);
       
       setColumns(cols);
       setRows(jsonData);
       
       // Détection automatique du mapping
       const detectedMapping = detectColumnMapping(cols);
-      console.log("Mapping detected:", detectedMapping);
-      
       setMapping(detectedMapping);
-      
-      console.log("Moving to mapping step");
       setStep("mapping");
     } catch (error) {
       console.error("Error reading file:", error);
@@ -454,15 +407,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
 
     // Charger les contacts existants pour détecter les doublons
     try {
-      console.log("Loading existing contacts for duplicate detection...");
       let existingContacts: any[] = [];
       try {
         existingContacts = await getAllContacts();
-        console.log("Existing contacts loaded:", existingContacts.length);
       } catch (error) {
         // Si erreur d'initialisation de la base, continuer sans détection de doublons
         if (error instanceof Error && error.message.includes("Invalid column type")) {
-          console.log("⏳ Database still initializing, proceeding without duplicate detection");
           existingContacts = [];
         } else {
           throw error;
@@ -474,20 +424,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       
       const preparedRows: ImportRow[] = rows.map((row, idx) => {
         const contactData: Record<string, any> = {};
-        
-        // Debug pour voir les clés disponibles dans row
-        if (idx === 0) {
-          console.log("🔍 Toutes les clés disponibles dans row[0]:", Object.keys(row));
-          console.log("🔍 Valeur de row['Dernier RDV']:", row["Dernier RDV"]);
-          console.log("🔍 Valeur de row['Commentaire']:", row["Commentaire"]);
-          console.log("🔍 Valeur de row['2025 - Commentaire suivi']:", row["2025 - Commentaire suivi"]);
-          console.log("🔍 Mapping à appliquer:", mapping);
-        }
-        
-        // Debug pour les 5 premières lignes : afficher les valeurs brutes des commentaires
-        if (idx < 5) {
-          console.log(`🟡 LIGNE ${idx+1} - Commentaire brut: "${row["Commentaire"]}" | 2025 suivi: "${row["2025 - Commentaire suivi"]}"`);
-        }
         
         // Mapper les colonnes
         Object.entries(mapping).forEach(([sourceCol, targetField]) => {
@@ -529,7 +465,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           firstOccurrenceInExcel = seenInImport.get(contactKey)!;
           isDuplicate = true;
           duplicateSource = "excel";
-          console.log(`🔄 Doublon détecté dans Excel: ligne ${idx + 1} = ligne ${firstOccurrenceInExcel.rowIndex + 1}`);
         } else if (contactKey) {
           // Marquer ce contact comme vu dans l'Excel
           seenInImport.set(contactKey, { rowIndex: idx });
@@ -572,7 +507,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       });
 
       setImportRows(preparedRows);
-      console.log("Preview ready with", preparedRows.length, "rows");
       setStep("preview");
     } catch (error) {
       console.error("Error detecting duplicates:", error);
@@ -591,7 +525,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     let allPartenaires: Partenaire[] = [];
     try {
       allPartenaires = await getAllPartenaires();
-      console.log(`📋 ${allPartenaires.length} partenaires chargés`);
     } catch (error) {
       console.error("Erreur chargement partenaires:", error);
     }
@@ -615,7 +548,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             // Si c'est un doublon dans l'Excel, récupérer le contact créé précédemment
             if (row.data._duplicateSource === "excel" && row.data._firstOccurrenceRowIndex !== undefined) {
               existingContactId = createdContactsInImport.get(row.data._firstOccurrenceRowIndex);
-              console.log(`📎 Doublon Excel détecté: ligne ${i + 1} → utiliser contact créé à la ligne ${row.data._firstOccurrenceRowIndex + 1} (ID: ${existingContactId})`);
             }
             
             if (existingContactId) {
@@ -723,9 +655,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                           raison_sociale: partenaireNom,
                         };
                         partenaire = await createPartenaire(newPartenaire);
-                        console.log(`✅ Partenaire créé: ${partenaireNom} (type: ${typePartenaire})`);
                         allPartenaires.push(partenaire);
-                        console.log(`✅ Partenaire créé: ${partenaireNom} (ID: ${partenaire.id})`);
                       } catch (partError) {
                         console.error(`❌ Erreur création partenaire ${partenaireNom}:`, partError);
                       }
@@ -778,12 +708,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   
                   if (!isPP && row.data.duree_demembrement) {
                     const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
-                    console.log(`🔍 Mode détention: ${modeDetention}, isPP: ${isPP}, Durée brute: "${row.data.duree_demembrement}", Durée str: "${dureeStr}"`);
                     
                     if (dureeStr === 'VIAGER') {
                       isViager = true;
                       dureeDemembrement = 'viager';
-                      console.log(`✅ Viager détecté !`);
                     } else {
                       // Parser le nombre d'années
                       const dureeNum = parseInt(dureeStr);
@@ -793,7 +721,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                         const dateFin = new Date(dateSouscriptionDate);
                         dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
                         dateFinDemembrement = dateFin.toISOString();
-                        console.log(`📅 Démembrement: ${dureeNum} ans → Fin le ${dateFin.toLocaleDateString('fr-FR')}`);
                       }
                     }
                   }
@@ -803,7 +730,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   let reinvestissementPourcentage = null;
                   
                   if (row.data.reinvestissement) {
-                    console.log(`📊 Valeur brute réinvestissement:`, row.data.reinvestissement, `(type: ${typeof row.data.reinvestissement})`);
                     
                     // Si c'est un nombre (format Excel)
                     if (typeof row.data.reinvestissement === 'number') {
@@ -813,19 +739,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       if (num > 0 && num <= 1) {
                         reinvestissementPourcentage = Math.round(num * 100).toString();
                         reinvestissement = true;
-                        console.log(`✅ Pourcentage Excel (décimal): ${num} → ${reinvestissementPourcentage}%`);
                       } 
                       // Si c'est > 1, c'est déjà un pourcentage (ex: 100, 50)
                       else if (num > 1) {
                         reinvestissementPourcentage = Math.round(num).toString();
                         reinvestissement = true;
-                        console.log(`✅ Pourcentage Excel (entier): ${reinvestissementPourcentage}%`);
                       }
                     } 
                     // Si c'est une chaîne
                     else {
                       const reinvStr = String(row.data.reinvestissement).trim();
-                      console.log(`📊 Valeur string:`, reinvStr);
                       
                       // Nettoyer et extraire le nombre
                       const cleanStr = reinvStr.replace(/[\s,]/g, '').replace('%', '');
@@ -839,11 +762,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                           reinvestissementPourcentage = Math.round(num).toString();
                         }
                         reinvestissement = true;
-                        console.log(`✅ Pourcentage capturé: ${reinvestissementPourcentage}%`);
                       } else if (reinvStr.toUpperCase() === 'OUI') {
                         reinvestissement = true;
                         reinvestissementPourcentage = '100';
-                        console.log(`✅ Réinvestissement: OUI (100% par défaut)`);
                       }
                     }
                   }
@@ -858,10 +779,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   if (dureeDemembrement) {
                     if (isViager) {
                       notesArray.push(`Durée: viager`);
-                      console.log(`✅ Durée viager ajoutée aux notes`);
                     } else {
                       notesArray.push(`Durée: ${dureeDemembrement} ans`);
-                      console.log(`✅ Durée ${dureeDemembrement} ans ajoutée aux notes`);
                     }
                   }
                   
@@ -870,7 +789,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   }
                   
                   const investissementNotes = notesArray.length > 0 ? notesArray.join(' | ') : undefined;
-                  console.log(`📝 Notes investissement:`, investissementNotes);
                   
                   // Nom du produit : utiliser "Nom du produit" si renseigné, sinon le type
                   const nomProduit = row.data.nom_produit 
@@ -894,7 +812,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   
                   await createInvestissement(newInvestissement);
                   investissementCree = true;
-                  console.log(`✅ Investissement créé pour contact existant ${existingContactId}: ${produitStr}`);
                 } catch (invError) {
                   console.error(`❌ Erreur création investissement pour contact ${existingContactId}:`, invError);
                 }
@@ -946,15 +863,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           return String(val).trim();
         };
 
-        // Debug: log des premières lignes
-        if (i < 3) {
-          console.log(`🔍 Contact ${i + 1} AVANT nettoyage:`, {
-            email: row.data.email,
-            telephone: row.data.telephone,
-            profession: row.data.profession,
-          });
-        }
-
         // Convertir profil_risque_sri en nombre si présent
         let profilRisque: number | undefined = undefined;
         if (row.data.profil_risque_sri) {
@@ -966,18 +874,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
 
         // Parser la date du dernier RDV de suivi
         let dateDernierContact: Date | null = null;
-        let dernierRdvFormatted: string | null = null;
         
-        // Debug pour voir ce qui est lu depuis l'Excel (seulement si valeur présente)
+        // Parser la date depuis l'Excel
         if (row.data.dernier_rdv && row.data.dernier_rdv !== "-") {
           const dernierRdvStr = String(row.data.dernier_rdv).trim();
-          
-          // Debug SANS limite pour voir TOUS les contacts avec date
-          console.log(`📅 Date parsing pour contact ${i + 1} (${row.data.prenom} ${row.data.nom}):`, {
-            valeurBrute: row.data.dernier_rdv,
-            typeOf: typeof row.data.dernier_rdv,
-            valeurString: dernierRdvStr,
-          });
           
           // Essayer de parser comme date Excel (nombre)
           const excelDate = parseFloat(dernierRdvStr);
@@ -989,15 +889,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             // Vérifier que la date est valide et raisonnable (après 1950)
             if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
               dateDernierContact = jsDate;
-              dernierRdvFormatted = jsDate.toLocaleDateString('fr-FR');
-              
-              console.log(`✅ Date Excel parsée (contact ${i + 1}):`, {
-                excelDate,
-                jsDate: jsDate.toISOString(),
-                formatted: dernierRdvFormatted,
-              });
-            } else {
-              console.log(`❌ Date Excel invalide (contact ${i + 1}):`, jsDate);
             }
           } else {
             // Essayer de parser comme date texte (format FR ou ISO)
@@ -1029,13 +920,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 // Vérifier que la date est valide et raisonnable
                 if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1950) {
                   dateDernierContact = parsedDate;
-                  dernierRdvFormatted = parsedDate.toLocaleDateString('fr-FR');
-                  
-                  console.log(`✅ Date texte parsée (contact ${i + 1}):`, {
-                    pattern: pattern.source,
-                    parsedDate: parsedDate.toISOString(),
-                    formatted: dernierRdvFormatted,
-                  });
                   break;
                 }
               }
@@ -1046,17 +930,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               const parsedDate = new Date(dernierRdvStr);
               if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1950) {
                 dateDernierContact = parsedDate;
-                dernierRdvFormatted = parsedDate.toLocaleDateString('fr-FR');
-                
-                console.log(`✅ Date.parse réussie (contact ${i + 1}):`, {
-                  parsedDate: parsedDate.toISOString(),
-                  formatted: dernierRdvFormatted,
-                });
-              } else {
-                // Si échec de parsing, garder la valeur brute pour les notes
-                dernierRdvFormatted = dernierRdvStr;
-                
-                console.log(`❌ Échec parsing date (contact ${i + 1}), valeur brute conservée:`, dernierRdvStr);
               }
             }
           }
@@ -1064,10 +937,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
 
         // Notes = colonnes de commentaires fusionnées (fait lors du mapping)
         const finalNotes = row.data.commentaires ? String(row.data.commentaires).trim() : undefined;
-        
-        // DEBUG: Afficher les notes pour chaque contact
-        console.log(`📝 [${i+1}] ${row.data.prenom} ${row.data.nom} → Notes: "${finalNotes || '(vide)'}" | Produit: "${row.data.produit || '(aucun)'}"`);
-
 
         // Déterminer automatiquement la catégorie selon la logique métier :
         // 1. CLIENT = A souscrit un produit
@@ -1129,39 +998,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           notes: finalNotes,
         };
         
-        // Debug pour voir ce qui est envoyé
-        console.log(`📝 [${i + 1}/${rows.length}] Création contact: ${row.data.prenom} ${row.data.nom}`);
-        if (dateDernierContact) {
-          console.log(`📅 Date dernier contact:`, {
-            dateObject: dateDernierContact,
-            dateISO: dateDernierContactISO,
-            timestamp: Math.floor(dateDernierContact.getTime() / 1000),
-            formatted: dateDernierContact.toLocaleDateString('fr-FR')
-          });
-        } else {
-          console.log(`⚠️ Pas de date de dernier contact`);
-        }
-        
-        console.log(`📊 Données contact:`, {
-          categorie: newContact.categorie,
-          email: newContact.email,
-          telephone: newContact.telephone,
-          date_dernier_contact: newContact.date_dernier_contact
-        });
-
         const createdContact = await createContact(newContact);
-        
-        console.log(`✅ Contact créé avec succès:`, {
-          id: createdContact.id,
-          nom: createdContact.nom,
-          prenom: createdContact.prenom,
-          date_dernier_contact: createdContact.date_dernier_contact,
-          date_dernier_contact_type: typeof createdContact.date_dernier_contact
-        });
         
         // Sauvegarder le contact créé dans la map (pour gérer les doublons dans l'Excel)
         createdContactsInImport.set(i, createdContact.id);
-        console.log(`✅ Contact créé à la ligne ${i + 1} avec ID ${createdContact.id}`);
         
         // Créer un investissement si un produit est renseigné
         if (row.data.produit) {
@@ -1206,10 +1046,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     type_partenaire: typePartenaire,
                     raison_sociale: partenaireNom,
                   };
-                  console.log(`✅ Partenaire créé: ${partenaireNom} (type: ${typePartenaire})`);
                   partenaire = await createPartenaire(newPartenaire);
                   allPartenaires.push(partenaire); // Ajouter à la liste pour éviter doublons
-                  console.log(`✅ Partenaire créé: ${partenaireNom} (ID: ${partenaire.id})`);
                 } catch (partError) {
                   console.error(`❌ Erreur création partenaire ${partenaireNom}:`, partError);
                 }
@@ -1262,12 +1100,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             
             if (!isPP && row.data.duree_demembrement) {
               const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
-              console.log(`🔍 Mode détention: ${modeDetention}, isPP: ${isPP}, Durée brute: "${row.data.duree_demembrement}", Durée str: "${dureeStr}"`);
               
               if (dureeStr === 'VIAGER') {
                 isViager = true;
                 dureeDemembrement = 'viager';
-                console.log(`✅ Viager détecté !`);
               } else {
                 // Parser le nombre d'années
                 const dureeNum = parseInt(dureeStr);
@@ -1277,7 +1113,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   const dateFin = new Date(dateSouscriptionDate);
                   dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
                   dateFinDemembrement = dateFin.toISOString();
-                  console.log(`📅 Démembrement: ${dureeNum} ans → Fin le ${dateFin.toLocaleDateString('fr-FR')}`);
                 }
               }
             }
@@ -1287,8 +1122,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             let reinvestissementPourcentage = null;
             
             if (row.data.reinvestissement) {
-              console.log(`📊 Valeur brute réinvestissement:`, row.data.reinvestissement, `(type: ${typeof row.data.reinvestissement})`);
-              
               // Si c'est un nombre (format Excel)
               if (typeof row.data.reinvestissement === 'number') {
                 const num = row.data.reinvestissement;
@@ -1297,19 +1130,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 if (num > 0 && num <= 1) {
                   reinvestissementPourcentage = Math.round(num * 100).toString();
                   reinvestissement = true;
-                  console.log(`✅ Pourcentage Excel (décimal): ${num} → ${reinvestissementPourcentage}%`);
                 } 
                 // Si c'est > 1, c'est déjà un pourcentage (ex: 100, 50)
                 else if (num > 1) {
                   reinvestissementPourcentage = Math.round(num).toString();
                   reinvestissement = true;
-                  console.log(`✅ Pourcentage Excel (entier): ${reinvestissementPourcentage}%`);
                 }
               } 
               // Si c'est une chaîne
               else {
                 const reinvStr = String(row.data.reinvestissement).trim();
-                console.log(`📊 Valeur string:`, reinvStr);
                 
                 // Nettoyer et extraire le nombre
                 const cleanStr = reinvStr.replace(/[\s,]/g, '').replace('%', '');
@@ -1323,11 +1153,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     reinvestissementPourcentage = Math.round(num).toString();
                   }
                   reinvestissement = true;
-                  console.log(`✅ Pourcentage capturé: ${reinvestissementPourcentage}%`);
                 } else if (reinvStr.toUpperCase() === 'OUI') {
                   reinvestissement = true;
                   reinvestissementPourcentage = '100';
-                  console.log(`✅ Réinvestissement: OUI (100% par défaut)`);
                 }
               }
             }
@@ -1342,10 +1170,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             if (dureeDemembrement) {
               if (isViager) {
                 notesArray.push(`Durée: viager`);
-                console.log(`✅ Durée viager ajoutée aux notes`);
               } else {
                 notesArray.push(`Durée: ${dureeDemembrement} ans`);
-                console.log(`✅ Durée ${dureeDemembrement} ans ajoutée aux notes`);
               }
             }
             
@@ -1354,7 +1180,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             }
             
             const investissementNotes = notesArray.length > 0 ? notesArray.join(' | ') : undefined;
-            console.log(`📝 Notes investissement:`, investissementNotes);
             
             // Nom du produit : utiliser "Nom du produit" si renseigné, sinon le type
             const nomProduit = row.data.nom_produit 
@@ -1377,7 +1202,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             };
             
             await createInvestissement(newInvestissement);
-            console.log(`✅ Investissement créé pour ${row.data.prenom} ${row.data.nom}: ${produitStr}`);
           } catch (invError) {
             console.error(`❌ Erreur création investissement pour ${row.data.prenom} ${row.data.nom}:`, invError);
           }
@@ -1394,41 +1218,15 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
 
     setImporting(false);
     
-    // Résumé final avec stats
-    const finalSuccessCount = updatedRows.filter(r => r.status === "success").length;
-    const finalErrorCount = updatedRows.filter(r => r.status === "error").length;
-    const finalDuplicateCount = updatedRows.filter(r => r.status === "duplicate").length;
-    
-    console.log(`
-╔════════════════════════════════════════════╗
-║       RÉSUMÉ DE L'IMPORT                   ║
-╠════════════════════════════════════════════╣
-║ ✅ Succès      : ${String(finalSuccessCount).padStart(4)} contacts         ║
-║ ⚠️  Doublons    : ${String(finalDuplicateCount).padStart(4)} ignorés          ║
-║ ❌ Erreurs     : ${String(finalErrorCount).padStart(4)} échecs            ║
-║ 📊 Total lignes: ${String(updatedRows.length).padStart(4)}                    ║
-╚════════════════════════════════════════════╝
-    `.trim());
-    
-    if (finalErrorCount > 0) {
-      console.error(`⚠️ Erreurs détaillées:`);
-      updatedRows.filter(r => r.status === "error").forEach((row, idx) => {
-        console.error(`  ${idx + 1}. ${row.data.prenom} ${row.data.nom}: ${row.message}`);
-      });
-    }
-    
     // Attendre 2 secondes avant de fermer
     setTimeout(() => {
       try {
-        console.log("Import terminé, fermeture de la modale...");
         handleClose();
         
         // Recharger les contacts APRÈS la fermeture de la modale
         setTimeout(async () => {
           try {
-            console.log("Rechargement des contacts...");
             await onSuccess();
-            console.log("Contacts rechargés avec succès");
           } catch (error) {
             console.error("Error reloading contacts:", error);
           }

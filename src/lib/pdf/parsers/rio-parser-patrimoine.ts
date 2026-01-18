@@ -215,17 +215,6 @@ export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
     (per || 0) + 
     (scpi || 0);
 
-  // Debug
-  console.log("📊 Patrimoine extrait:", {
-    liquiditesTotal: liquidites.total,
-    livretA: liquidites.livretA,
-    compteCourant: liquidites.compteCourant,
-    ldd: liquidites.ldd,
-    assuranceVie,
-    per,
-    epargneTotal,
-  });
-
   return {
     // Adresse
     ...adresse,

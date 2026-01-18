@@ -9,8 +9,6 @@ export function runMigrations() {
     
     // Exécuter les migrations
     migrate(db, { migrationsFolder: "./drizzle" });
-    
-    console.log("✅ Migrations executed successfully!");
     sqlite.close();
     
     return { success: true };

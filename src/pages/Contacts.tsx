@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users } from "lucide-react";
+import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2 } from "lucide-react";
 import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
@@ -48,22 +48,17 @@ export function Contacts() {
   const loadContacts = async () => {
     try {
       const data = await getAllContacts();
-      console.log("🔍 DEBUG - Premier contact chargé:", data[0]);
-      console.log("🔍 DEBUG - date_dernier_contact:", data[0]?.date_dernier_contact, "Type:", typeof data[0]?.date_dernier_contact);
       setContacts(data);
+      setLoading(false);
       setIsInitialLoad(false);
     } catch (error) {
       // Si c'est le premier chargement et erreur de type de colonne, réessayer après un court délai
       if (isInitialLoad && error instanceof Error && error.message.includes("Invalid column type")) {
-        console.log("⏳ Database initializing, retrying in 500ms...");
         setTimeout(loadContacts, 500);
       } else {
         console.error("Error loading contacts:", error);
-        setIsInitialLoad(false);
-      }
-    } finally {
-      if (!isInitialLoad) {
         setLoading(false);
+        setIsInitialLoad(false);
       }
     }
   };
@@ -191,7 +186,6 @@ export function Contacts() {
   };
 
   const handleViewContact = (contact: Contact) => {
-    console.log("Opening contact details for:", contact.id, contact.prenom, contact.nom);
     // Fermer d'abord puis rouvrir pour forcer le rafraîchissement
     setShowDetail(false);
     setSelectedContact(contact);

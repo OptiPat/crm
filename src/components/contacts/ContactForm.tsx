@@ -152,51 +152,36 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
       // Convertir les dates en ISO strings si elles sont fournies
       const dataToSubmit: any = { ...formData };
       
-      console.log("📝 Données du formulaire AVANT conversion:", formData);
-      
       // Gérer les dates : convertir en ISO UTC ou undefined si vide
       if (formData.date_dernier_contact && formData.date_dernier_contact.trim() !== "") {
         const [year, month, day] = formData.date_dernier_contact.split('-').map(Number);
         const isoDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
-        console.log(`📅 date_dernier_contact: "${formData.date_dernier_contact}" → "${isoDate}"`);
         dataToSubmit.date_dernier_contact = isoDate;
       } else {
-        console.log(`⚠️ date_dernier_contact vide, sera undefined`);
         dataToSubmit.date_dernier_contact = undefined;
       }
       
       if (formData.date_prochain_suivi && formData.date_prochain_suivi.trim() !== "") {
         const [year, month, day] = formData.date_prochain_suivi.split('-').map(Number);
         const isoDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
-        console.log(`📅 date_prochain_suivi: "${formData.date_prochain_suivi}" → "${isoDate}"`);
         dataToSubmit.date_prochain_suivi = isoDate;
       } else {
-        console.log(`⚠️ date_prochain_suivi vide, sera undefined`);
         dataToSubmit.date_prochain_suivi = undefined;
       }
       
       if (formData.date_naissance && formData.date_naissance.trim() !== "") {
         const [year, month, day] = formData.date_naissance.split('-').map(Number);
         const isoDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
-        console.log(`📅 date_naissance: "${formData.date_naissance}" → "${isoDate}"`);
         dataToSubmit.date_naissance = isoDate;
       } else {
-        console.log(`⚠️ date_naissance vide, sera undefined`);
         dataToSubmit.date_naissance = undefined;
       }
       
-      console.log("📤 Données envoyées à Tauri:", dataToSubmit);
-      
       if (contact) {
-        console.log(`🔄 Mise à jour du contact ID ${contact.id}`);
-        const result = await updateContact(contact.id, dataToSubmit);
-        console.log(`✅ Contact mis à jour:`, result);
-        // Appeler onSuccess avec le contact mis à jour pour que ContactDetail le recharge
+        await updateContact(contact.id, dataToSubmit);
         onSuccess();
       } else {
-        console.log(`✨ Création d'un nouveau contact`);
-        const result = await createContact(dataToSubmit);
-        console.log(`✅ Contact créé:`, result);
+        await createContact(dataToSubmit);
         onSuccess();
       }
       onOpenChange(false);

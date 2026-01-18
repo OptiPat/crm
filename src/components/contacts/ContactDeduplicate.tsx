@@ -125,11 +125,6 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
                     contact_id: mainContact.id,
                   },
                 });
-                console.log(`✅ Investissement ${inv.id} transféré de contact ${duplicate.id} → ${mainContact.id}`);
-              }
-              
-              if (investissements.length > 0) {
-                console.log(`📦 ${investissements.length} investissement(s) transféré(s) de "${duplicate.prenom} ${duplicate.nom}" (ID: ${duplicate.id})`);
               }
             } catch (error) {
               console.error(`❌ Erreur transfert investissements du contact ${duplicate.id}:`, error);

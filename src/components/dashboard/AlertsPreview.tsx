@@ -52,9 +52,8 @@ export function AlertsPreview() {
     }).format(date);
   };
 
-  const handleViewContact = (contactId: number) => {
+  const handleViewContact = (_contactId: number) => {
     // TODO: Navigation vers la page de détail du contact
-    console.log("Voir contact:", contactId);
   };
 
   return (

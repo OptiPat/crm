@@ -93,22 +93,11 @@ export function DocumentUpload({
     setExtractedData(null);
 
     try {
-      console.log("🔍 Extraction du texte du PDF...");
       const result = await extractTextFromPDFPath(filePath);
-
-      console.log("✅ Extraction réussie!");
-      console.log(`📄 Pages: ${result.numPages}`);
-      console.log(`📊 Longueur du texte: ${result.text.length} caractères`);
-
       setExtractedText(result.text);
 
       // Parser les données
-      console.log("🔍 Parsing des données...");
       const parsedData = parseAuto(result.text);
-
-      console.log("✅ Données extraites:", parsedData);
-      console.log(`📊 Confiance: ${parsedData.confidence}%`);
-
       setExtractedData(parsedData);
 
       // Afficher l'interface de prévisualisation
@@ -203,7 +192,6 @@ export function DocumentUpload({
    * Applique les données extraites : crée ou met à jour le contact
    */
   const handleApplyData = async (data: ExtractedData) => {
-    console.log("📝 Données à appliquer:", data);
     setLoading(true);
 
     try {
@@ -216,7 +204,6 @@ export function DocumentUpload({
         
         if (existingContact) {
           // Contact existant → UPDATE (fusion des données)
-          console.log("✏️ Mise à jour du contact existant:", existingContact.id);
           const newData = mapExtractedDataToContact(data);
           const mergedData: NewContact = {
             ...newData, // Nouvelles données
@@ -231,7 +218,6 @@ export function DocumentUpload({
           successMessage = `✅ Contact mis à jour: ${data.prenom} ${data.nom}`;
         } else {
           // Contact inexistant → CREATE
-          console.log("➕ Création d'un nouveau contact");
           const contactData = mapExtractedDataToContact(data);
           const newContact = await createContact(contactData);
           finalContactId = newContact.id;
@@ -239,7 +225,6 @@ export function DocumentUpload({
         }
       } else {
         // Pas d'email → impossible de chercher, on crée forcément
-        console.log("⚠️ Pas d'email → création forcée");
         const contactData = mapExtractedDataToContact(data);
         const newContact = await createContact(contactData);
         finalContactId = newContact.id;
@@ -261,7 +246,6 @@ export function DocumentUpload({
         };
 
         await createDocument(newDoc);
-        console.log("📄 Document enregistré");
       }
 
       // 3. Vérifier s'il y a du patrimoine à trier (RIO avec AV, PER, SCPI, immobilier...)
@@ -279,14 +263,10 @@ export function DocumentUpload({
 
       if (hasPatrimoineToTri && finalContactId) {
         // Afficher le dialogue de tri du patrimoine
-        console.log("📊 Patrimoine détecté → affichage du dialogue de tri");
         setShowPreview(false);
         setTriContactId(finalContactId);
         setTriExtractedData(data);
         setShowPatrimoineTri(true);
-        
-        // Message intermédiaire
-        console.log(successMessage + " - En attente du tri du patrimoine...");
       } else {
         // Pas de patrimoine → terminer normalement
         alert(successMessage + "\n\n📄 Document enregistré avec succès!");
@@ -328,7 +308,6 @@ export function DocumentUpload({
   };
 
   const handleIgnoreData = () => {
-    console.log("🚫 Données ignorées");
     setExtractedData(null);
   };
 
@@ -336,14 +315,12 @@ export function DocumentUpload({
    * Gère la validation du tri du patrimoine
    */
   const handlePatrimoineTriComplete = async (investissements: NewInvestissement[]) => {
-    console.log("📊 Création des investissements:", investissements);
     setLoading(true);
     
     try {
       // Créer chaque investissement
       for (const inv of investissements) {
         await createInvestissement(inv);
-        console.log(`✅ Investissement créé: ${inv.nom_produit} (${inv.origine})`);
       }
       
       // Compter les investissements par origine
@@ -360,8 +337,6 @@ export function DocumentUpload({
           
           // Mettre à jour la catégorie si différente
           if (existingContact.categorie !== newCategorie) {
-            console.log(`🏷️ Mise à jour catégorie: ${existingContact.categorie} → ${newCategorie}`);
-            
             // Préparer les données de mise à jour
             // Gérer la date de naissance avec prudence
             let dateNaissanceISO: string | undefined = undefined;
@@ -372,7 +347,7 @@ export function DocumentUpload({
                   dateNaissanceISO = dateObj.toISOString();
                 }
               } catch {
-                console.warn("⚠️ Date de naissance invalide:", existingContact.date_naissance);
+                // Date de naissance invalide, ignorer
               }
             }
             
@@ -397,10 +372,9 @@ export function DocumentUpload({
             };
             
             await updateContact(triContactId, updatedContact);
-            console.log(`✅ Catégorie mise à jour: ${newCategorie}`);
           }
-        } catch (e) {
-          console.warn("⚠️ Impossible de mettre à jour la catégorie:", e);
+        } catch {
+          // Impossible de mettre à jour la catégorie, ignorer
         }
       }
       
@@ -436,7 +410,6 @@ export function DocumentUpload({
    * Annule le tri du patrimoine
    */
   const handlePatrimoineTriCancel = () => {
-    console.log("🚫 Tri du patrimoine annulé");
     setShowPatrimoineTri(false);
     setTriContactId(null);
     setTriExtractedData(null);
