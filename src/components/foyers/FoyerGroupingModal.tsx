@@ -1,0 +1,323 @@
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Users2, X } from "lucide-react";
+import { type Contact, updateContact } from "@/lib/api/tauri-contacts";
+import { createFoyer } from "@/lib/api/tauri-foyers";
+
+interface ContactWithRole {
+  contact: Contact;
+  role: string;
+}
+
+interface FamilyGroup {
+  familyName: string;
+  members: ContactWithRole[];
+  skip: boolean;
+}
+
+interface FoyerGroupingModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  importedContacts: Contact[];
+  onSuccess: () => void;
+}
+
+export function FoyerGroupingModal({
+  open,
+  onOpenChange,
+  importedContacts,
+  onSuccess,
+}: FoyerGroupingModalProps) {
+  const [groups, setGroups] = useState<FamilyGroup[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Grouper les contacts par nom de famille au montage
+  useEffect(() => {
+    console.log("👥 [FoyerGroupingModal] useEffect - open:", open, "contacts:", importedContacts.length);
+    
+    if (open && importedContacts.length > 0) {
+      console.log("👥 [FoyerGroupingModal] Détection des familles...");
+      const familyMap = new Map<string, Contact[]>();
+
+      importedContacts.forEach((contact) => {
+        const familyName = contact.nom.toUpperCase();
+        console.log(`👥 [FoyerGroupingModal]   → Contact: ID=${contact.id}, Nom="${contact.nom}", Prénom="${contact.prenom}"`);
+        if (!familyMap.has(familyName)) {
+          familyMap.set(familyName, []);
+        }
+        familyMap.get(familyName)!.push(contact);
+      });
+
+      console.log("👥 [FoyerGroupingModal] Familles détectées:", familyMap.size);
+      familyMap.forEach((members, name) => {
+        console.log(`👥 [FoyerGroupingModal]   - ${name}: ${members.length} membres`);
+      });
+
+      // Ne garder que les familles avec 2+ membres
+      const detectedGroups: FamilyGroup[] = [];
+      familyMap.forEach((members, familyName) => {
+        if (members.length >= 2) {
+          console.log(`👥 [FoyerGroupingModal] ✓ Famille ${familyName} conservée (${members.length} membres)`);
+          detectedGroups.push({
+            familyName,
+            members: members.map((contact, index) => ({
+              contact,
+              role: index === 0 ? "DECLARANT_1" : index === 1 ? "DECLARANT_2" : "ENFANT",
+            })),
+            skip: false,
+          });
+        }
+      });
+
+      console.log("👥 [FoyerGroupingModal] Total de groupes à afficher:", detectedGroups.length);
+      setGroups(detectedGroups);
+    }
+  }, [open, importedContacts]);
+
+  const handleRoleChange = (groupIndex: number, memberIndex: number, newRole: string) => {
+    const newGroups = [...groups];
+    newGroups[groupIndex].members[memberIndex].role = newRole;
+    setGroups(newGroups);
+  };
+
+  const handleSkipToggle = (groupIndex: number) => {
+    const newGroups = [...groups];
+    newGroups[groupIndex].skip = !newGroups[groupIndex].skip;
+    setGroups(newGroups);
+  };
+
+  const handleRemoveMember = (groupIndex: number, memberIndex: number) => {
+    console.log(`👥 [FoyerGroupingModal] Suppression du membre ${memberIndex} du groupe ${groupIndex}`);
+    const newGroups = [...groups];
+    newGroups[groupIndex].members.splice(memberIndex, 1);
+    
+    // Si le groupe n'a plus qu'1 membre, le supprimer complètement
+    if (newGroups[groupIndex].members.length < 2) {
+      console.log(`👥 [FoyerGroupingModal] Groupe ${groupIndex} supprimé (moins de 2 membres)`);
+      newGroups.splice(groupIndex, 1);
+    }
+    
+    setGroups(newGroups);
+  };
+
+  const handleValidate = async () => {
+    console.log("👥 [FoyerGroupingModal] handleValidate - Début");
+    console.log("👥 [FoyerGroupingModal] Nombre de groupes:", groups.length);
+    
+    setLoading(true);
+    try {
+      for (const group of groups) {
+        if (group.skip) {
+          console.log(`👥 [FoyerGroupingModal] ⏭️ Groupe ${group.familyName} ignoré (homonymes)`);
+          continue;
+        }
+
+        console.log(`👥 [FoyerGroupingModal] Traitement de la famille ${group.familyName} (${group.members.length} membres)`);
+        
+        // 🔥 Vérifier si les contacts ont déjà un foyer
+        const membersWithFoyer = group.members.filter(m => m.contact.foyer_id);
+        if (membersWithFoyer.length > 0) {
+          // Utiliser le foyer existant au lieu d'en créer un nouveau
+          const existingFoyerId = membersWithFoyer[0].contact.foyer_id!;
+          console.log(`👥 [FoyerGroupingModal] ⚠️ Foyer existant détecté (ID: ${existingFoyerId}) → Réutilisation`);
+          
+          // Rattacher les autres membres au foyer existant
+          for (const member of group.members) {
+            if (member.contact.foyer_id !== existingFoyerId) {
+              console.log(`👥 [FoyerGroupingModal]   - Rattachement de ${member.contact.prenom} au foyer existant ${existingFoyerId}`);
+              await updateContact(member.contact.id!, {
+                ...member.contact,
+                foyer_id: existingFoyerId,
+                role_foyer: member.role,
+                date_naissance: member.contact.date_naissance 
+                  ? new Date(member.contact.date_naissance * 1000).toISOString() 
+                  : undefined,
+                date_dernier_contact: member.contact.date_dernier_contact 
+                  ? new Date(member.contact.date_dernier_contact * 1000).toISOString() 
+                  : undefined,
+                date_prochain_suivi: member.contact.date_prochain_suivi 
+                  ? new Date(member.contact.date_prochain_suivi * 1000).toISOString() 
+                  : undefined,
+              });
+            }
+          }
+          continue; // Passer au groupe suivant
+        }
+        
+        // Créer un foyer pour cette famille (aucun membre n'a de foyer)
+        const foyer = await createFoyer({
+          nom: `Famille ${group.familyName}`,
+          type_foyer: "COUPLE",
+          notes: "Créé automatiquement lors de l'import",
+        });
+        console.log(`👥 [FoyerGroupingModal] ✓ Foyer créé, ID: ${foyer.id}`);
+
+        // Rattacher tous les membres au foyer
+        for (const member of group.members) {
+          console.log(`👥 [FoyerGroupingModal]   - Rattachement de ${member.contact.prenom} ${member.contact.nom} (ID: ${member.contact.id}) avec rôle ${member.role}`);
+          await updateContact(member.contact.id!, {
+            ...member.contact,
+            foyer_id: foyer.id,
+            role_foyer: member.role,
+            date_naissance: member.contact.date_naissance 
+              ? new Date(member.contact.date_naissance * 1000).toISOString() 
+              : undefined,
+            date_dernier_contact: member.contact.date_dernier_contact 
+              ? new Date(member.contact.date_dernier_contact * 1000).toISOString() 
+              : undefined,
+            date_prochain_suivi: member.contact.date_prochain_suivi 
+              ? new Date(member.contact.date_prochain_suivi * 1000).toISOString() 
+              : undefined,
+          });
+        }
+        console.log(`👥 [FoyerGroupingModal] ✓ Famille ${group.familyName} complète`);
+      }
+
+      console.log("👥 [FoyerGroupingModal] ✓ Tous les foyers créés");
+      console.log("👥 [FoyerGroupingModal] Appel de onSuccess()");
+      onSuccess();
+      console.log("👥 [FoyerGroupingModal] Fermeture de la modale");
+      onOpenChange(false);
+    } catch (error) {
+      console.error("👥 [FoyerGroupingModal] ❌ Erreur:", error);
+      alert("Erreur lors de la création des foyers: " + String(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleIgnoreAll = () => {
+    console.log("👥 [FoyerGroupingModal] handleIgnoreAll - Tous les groupes ignorés");
+    onSuccess();
+    onOpenChange(false);
+  };
+
+  if (groups.length === 0) {
+    return null;
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Users2 className="h-5 w-5" />
+            Foyers détectés
+          </DialogTitle>
+          <DialogDescription>
+            {groups.length} famille{groups.length > 1 ? "s" : ""} avec plusieurs membres détectée{groups.length > 1 ? "s" : ""}. 
+            Définissez le rôle de chaque personne ou ignorez si ce sont des homonymes.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-6 py-4">
+          {groups.map((group, groupIndex) => (
+            <div key={groupIndex} className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-lg">
+                  📁 Famille {group.familyName} ({group.members.length} personnes)
+                </h3>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id={`skip-${groupIndex}`}
+                    checked={group.skip}
+                    onCheckedChange={() => handleSkipToggle(groupIndex)}
+                  />
+                  <Label 
+                    htmlFor={`skip-${groupIndex}`}
+                    className="text-sm font-normal cursor-pointer"
+                  >
+                    Ce sont des homonymes
+                  </Label>
+                </div>
+              </div>
+
+              <div 
+                className={`space-y-2 rounded-lg border p-4 transition-opacity ${
+                  group.skip ? "opacity-50 bg-muted" : ""
+                }`}
+              >
+                {group.members.map((member, memberIndex) => (
+                  <div
+                    key={memberIndex}
+                    className="flex items-center justify-between p-3 border rounded-lg bg-background"
+                  >
+                    <span className="font-medium">
+                      {member.contact.prenom} {member.contact.nom}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Select
+                        value={member.role}
+                        onValueChange={(value) =>
+                          handleRoleChange(groupIndex, memberIndex, value)
+                        }
+                        disabled={group.skip}
+                      >
+                        <SelectTrigger className="w-[160px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="DECLARANT_1">Déclarant 1</SelectItem>
+                          <SelectItem value="DECLARANT_2">Déclarant 2</SelectItem>
+                          <SelectItem value="ENFANT">Enfant</SelectItem>
+                          <SelectItem value="AUTRE">Autre membre</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleRemoveMember(groupIndex, memberIndex)}
+                        disabled={group.skip}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        title="Retirer du foyer"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {groupIndex < groups.length - 1 && (
+                <div className="border-t pt-4" />
+              )}
+            </div>
+          ))}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            onClick={handleIgnoreAll}
+            disabled={loading}
+          >
+            Ignorer tout
+          </Button>
+          <Button
+            onClick={handleValidate}
+            disabled={loading}
+          >
+            {loading ? "Création en cours..." : "Valider les foyers"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

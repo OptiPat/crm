@@ -76,6 +76,7 @@ impl Database {
             "CREATE TABLE IF NOT EXISTS contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 foyer_id INTEGER,
+                role_foyer TEXT,
                 categorie TEXT NOT NULL,
                 parrain_id INTEGER,
                 civilite TEXT,
@@ -168,7 +169,7 @@ impl Database {
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
-                FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE SET NULL,
+                FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE CASCADE,
                 FOREIGN KEY (partenaire_id) REFERENCES partenaires(id) ON DELETE SET NULL
             )",
             [],
@@ -193,6 +194,87 @@ impl Database {
         )?;
         
         println!("✅ Database tables initialized");
+        
+        // Migration automatique : Rendre contact_id optionnel dans investissements
+        self.migrate_investissements_contact_id_optional()?;
+        
+        Ok(())
+    }
+    
+    /// Migration : Rendre contact_id optionnel pour les investissements de foyer
+    fn migrate_investissements_contact_id_optional(&self) -> Result<()> {
+        // Vérifier si la migration est nécessaire
+        // ⚠️ On utilise un bloc pour libérer le Statement avant de continuer
+        let contact_id_is_not_null = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(investissements)")?;
+            let mut rows = stmt.query([])?;
+            
+            let mut is_not_null = false;
+            while let Some(row) = rows.next()? {
+                let col_name: String = row.get(1)?;
+                let not_null: i64 = row.get(3)?;
+                
+                if col_name == "contact_id" && not_null == 1 {
+                    is_not_null = true;
+                    break;
+                }
+            }
+            is_not_null
+        }; // ← stmt et rows sont libérés ici, le lock SQLite est relâché
+        
+        if !contact_id_is_not_null {
+            println!("✅ Migration contact_id déjà appliquée");
+            return Ok(());
+        }
+        
+        println!("🔄 Migration : Rendre contact_id optionnel dans investissements...");
+        
+        // Supprimer la table temporaire si elle existe déjà (migration précédente interrompue)
+        self.conn.execute("DROP TABLE IF EXISTS investissements_new", [])?;
+        
+        // Créer table temporaire sans NOT NULL sur contact_id
+        self.conn.execute(
+            "CREATE TABLE investissements_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER,
+                foyer_id INTEGER,
+                type_produit TEXT NOT NULL,
+                nom_produit TEXT NOT NULL,
+                partenaire_id INTEGER,
+                montant_initial INTEGER,
+                date_souscription INTEGER,
+                date_fin_demembrement INTEGER,
+                versement_programme INTEGER NOT NULL DEFAULT 0,
+                montant_versement_programme INTEGER,
+                frequence_versement TEXT,
+                reinvestissement_dividendes INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
+                origine TEXT NOT NULL DEFAULT 'MON_CONSEIL',
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+                FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE CASCADE,
+                FOREIGN KEY (partenaire_id) REFERENCES partenaires(id) ON DELETE SET NULL
+            )",
+            [],
+        )?;
+        
+        // Copier les données
+        self.conn.execute(
+            "INSERT INTO investissements_new SELECT * FROM investissements",
+            [],
+        )?;
+        
+        // Supprimer l'ancienne table
+        self.conn.execute("DROP TABLE investissements", [])?;
+        
+        // Renommer la nouvelle table
+        self.conn.execute(
+            "ALTER TABLE investissements_new RENAME TO investissements",
+            [],
+        )?;
+        
+        println!("✅ Migration appliquée : contact_id est maintenant optionnel");
         
         Ok(())
     }

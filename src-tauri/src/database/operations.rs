@@ -4,7 +4,7 @@ use super::{Database, models::{Contact, NewContact}};
 impl Database {
     pub fn get_all_contacts(&self) -> Result<Vec<Contact>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, foyer_id, categorie, parrain_id, civilite, nom, prenom, email, telephone,
+            "SELECT id, foyer_id, role_foyer, categorie, parrain_id, civilite, nom, prenom, email, telephone,
                     adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                     source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                     statut_suivi, notes, created_at, updated_at
@@ -16,27 +16,28 @@ impl Database {
             Ok(Contact {
                 id: row.get(0)?,
                 foyer_id: row.get(1)?,
-                categorie: row.get(2)?,
-                parrain_id: row.get(3)?,
-                civilite: row.get(4)?,
-                nom: row.get(5)?,
-                prenom: row.get(6)?,
-                email: row.get(7)?,
-                telephone: row.get(8)?,
-                adresse: row.get(9)?,
-                code_postal: row.get(10)?,
-                ville: row.get(11)?,
-                date_naissance: row.get(12)?,
-                profession: row.get(13)?,
-                situation_familiale: row.get(14)?,
-                source_lead: row.get(15)?,
-                profil_risque_sri: row.get(16)?,
-                date_dernier_contact: row.get(17)?,
-                date_prochain_suivi: row.get(18)?,
-                statut_suivi: row.get(19)?,
-                notes: row.get(20)?,
-                created_at: row.get(21)?,
-                updated_at: row.get(22)?,
+                role_foyer: row.get(2)?,
+                categorie: row.get(3)?,
+                parrain_id: row.get(4)?,
+                civilite: row.get(5)?,
+                nom: row.get(6)?,
+                prenom: row.get(7)?,
+                email: row.get(8)?,
+                telephone: row.get(9)?,
+                adresse: row.get(10)?,
+                code_postal: row.get(11)?,
+                ville: row.get(12)?,
+                date_naissance: row.get(13)?,
+                profession: row.get(14)?,
+                situation_familiale: row.get(15)?,
+                source_lead: row.get(16)?,
+                profil_risque_sri: row.get(17)?,
+                date_dernier_contact: row.get(18)?,
+                date_prochain_suivi: row.get(19)?,
+                statut_suivi: row.get(20)?,
+                notes: row.get(21)?,
+                created_at: row.get(22)?,
+                updated_at: row.get(23)?,
             })
         })?;
         
@@ -69,13 +70,14 @@ impl Database {
         
         self.conn.execute(
             "INSERT INTO contacts (
-                foyer_id, categorie, parrain_id, civilite, nom, prenom, email, telephone,
+                foyer_id, role_foyer, categorie, parrain_id, civilite, nom, prenom, email, telephone,
                 adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                 source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                 statut_suivi, notes
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
             params![
                 new_contact.foyer_id,
+                new_contact.role_foyer,
                 new_contact.categorie,
                 new_contact.parrain_id,
                 new_contact.civilite,
@@ -106,7 +108,7 @@ impl Database {
     
     pub fn get_contact_by_id(&self, id: i64) -> Result<Contact> {
         self.conn.query_row(
-            "SELECT id, foyer_id, categorie, parrain_id, civilite, nom, prenom, email, telephone,
+            "SELECT id, foyer_id, role_foyer, categorie, parrain_id, civilite, nom, prenom, email, telephone,
                     adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                     source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                     statut_suivi, notes, created_at, updated_at
@@ -116,40 +118,67 @@ impl Database {
                 Ok(Contact {
                     id: row.get(0)?,
                     foyer_id: row.get(1)?,
-                    categorie: row.get(2)?,
-                    parrain_id: row.get(3)?,
-                    civilite: row.get(4)?,
-                    nom: row.get(5)?,
-                    prenom: row.get(6)?,
-                    email: row.get(7)?,
-                    telephone: row.get(8)?,
-                    adresse: row.get(9)?,
-                    code_postal: row.get(10)?,
-                    ville: row.get(11)?,
-                    date_naissance: row.get(12)?,
-                    profession: row.get(13)?,
-                    situation_familiale: row.get(14)?,
-                    source_lead: row.get(15)?,
-                    profil_risque_sri: row.get(16)?,
-                    date_dernier_contact: row.get(17)?,
-                    date_prochain_suivi: row.get(18)?,
-                    statut_suivi: row.get(19)?,
-                    notes: row.get(20)?,
-                    created_at: row.get(21)?,
-                    updated_at: row.get(22)?,
+                    role_foyer: row.get(2)?,
+                    categorie: row.get(3)?,
+                    parrain_id: row.get(4)?,
+                    civilite: row.get(5)?,
+                    nom: row.get(6)?,
+                    prenom: row.get(7)?,
+                    email: row.get(8)?,
+                    telephone: row.get(9)?,
+                    adresse: row.get(10)?,
+                    code_postal: row.get(11)?,
+                    ville: row.get(12)?,
+                    date_naissance: row.get(13)?,
+                    profession: row.get(14)?,
+                    situation_familiale: row.get(15)?,
+                    source_lead: row.get(16)?,
+                    profil_risque_sri: row.get(17)?,
+                    date_dernier_contact: row.get(18)?,
+                    date_prochain_suivi: row.get(19)?,
+                    statut_suivi: row.get(20)?,
+                    notes: row.get(21)?,
+                    created_at: row.get(22)?,
+                    updated_at: row.get(23)?,
                 })
             },
         )
     }
     
     pub fn delete_contact(&self, id: i64) -> Result<()> {
+        // 1. Récupérer le foyer_id du contact avant suppression
+        let foyer_id: Option<i64> = self.conn.query_row(
+            "SELECT foyer_id FROM contacts WHERE id = ?1",
+            params![id],
+            |row| row.get(0)
+        ).ok();
+        
+        // 2. Supprimer les investissements liés directement au contact
+        self.conn.execute("DELETE FROM investissements WHERE contact_id = ?1", params![id])?;
+        
+        // 3. Supprimer le contact
         self.conn.execute("DELETE FROM contacts WHERE id = ?1", params![id])?;
+        
+        // 4. Si le contact avait un foyer, vérifier s'il reste des membres
+        if let Some(fid) = foyer_id {
+            let remaining_members: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM contacts WHERE foyer_id = ?1",
+                params![fid],
+                |row| row.get(0)
+            ).unwrap_or(0);
+            
+            // Si plus aucun membre, supprimer le foyer (et ses investissements)
+            if remaining_members == 0 {
+                self.delete_foyer(fid)?;
+            }
+        }
+        
         Ok(())
     }
     
     pub fn find_contact_by_email(&self, email: &str) -> Result<Option<Contact>> {
         match self.conn.query_row(
-            "SELECT id, foyer_id, categorie, parrain_id, civilite, nom, prenom, email, telephone,
+            "SELECT id, foyer_id, role_foyer, categorie, parrain_id, civilite, nom, prenom, email, telephone,
                     adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                     source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                     statut_suivi, notes, created_at, updated_at
@@ -159,27 +188,28 @@ impl Database {
                 Ok(Contact {
                     id: row.get(0)?,
                     foyer_id: row.get(1)?,
-                    categorie: row.get(2)?,
-                    parrain_id: row.get(3)?,
-                    civilite: row.get(4)?,
-                    nom: row.get(5)?,
-                    prenom: row.get(6)?,
-                    email: row.get(7)?,
-                    telephone: row.get(8)?,
-                    adresse: row.get(9)?,
-                    code_postal: row.get(10)?,
-                    ville: row.get(11)?,
-                    date_naissance: row.get(12)?,
-                    profession: row.get(13)?,
-                    situation_familiale: row.get(14)?,
-                    source_lead: row.get(15)?,
-                    profil_risque_sri: row.get(16)?,
-                    date_dernier_contact: row.get(17)?,
-                    date_prochain_suivi: row.get(18)?,
-                    statut_suivi: row.get(19)?,
-                    notes: row.get(20)?,
-                    created_at: row.get(21)?,
-                    updated_at: row.get(22)?,
+                    role_foyer: row.get(2)?,
+                    categorie: row.get(3)?,
+                    parrain_id: row.get(4)?,
+                    civilite: row.get(5)?,
+                    nom: row.get(6)?,
+                    prenom: row.get(7)?,
+                    email: row.get(8)?,
+                    telephone: row.get(9)?,
+                    adresse: row.get(10)?,
+                    code_postal: row.get(11)?,
+                    ville: row.get(12)?,
+                    date_naissance: row.get(13)?,
+                    profession: row.get(14)?,
+                    situation_familiale: row.get(15)?,
+                    source_lead: row.get(16)?,
+                    profil_risque_sri: row.get(17)?,
+                    date_dernier_contact: row.get(18)?,
+                    date_prochain_suivi: row.get(19)?,
+                    statut_suivi: row.get(20)?,
+                    notes: row.get(21)?,
+                    created_at: row.get(22)?,
+                    updated_at: row.get(23)?,
                 })
             },
         ) {
@@ -190,6 +220,13 @@ impl Database {
     }
 
     pub fn delete_all_contacts(&self) -> Result<usize> {
+        // 1. Supprimer tous les investissements (liés aux contacts ET aux foyers)
+        self.conn.execute("DELETE FROM investissements", [])?;
+        
+        // 2. Supprimer tous les foyers
+        self.conn.execute("DELETE FROM foyers", [])?;
+        
+        // 3. Supprimer tous les contacts
         let count = self.conn.execute("DELETE FROM contacts", [])?;
         Ok(count)
     }
@@ -218,26 +255,29 @@ impl Database {
         
         self.conn.execute(
             "UPDATE contacts SET 
-                categorie = ?1,
-                parrain_id = ?2,
-                nom = ?3,
-                prenom = ?4,
-                email = ?5,
-                telephone = ?6,
-                adresse = ?7,
-                code_postal = ?8,
-                ville = ?9,
-                date_naissance = ?10,
-                profession = ?11,
-                source_lead = ?12,
-                profil_risque_sri = ?13,
-                date_dernier_contact = ?14,
-                date_prochain_suivi = ?15,
-                statut_suivi = ?16,
-                notes = ?17,
+                foyer_id = ?1,
+                categorie = ?2,
+                parrain_id = ?3,
+                nom = ?4,
+                prenom = ?5,
+                email = ?6,
+                telephone = ?7,
+                adresse = ?8,
+                code_postal = ?9,
+                ville = ?10,
+                date_naissance = ?11,
+                profession = ?12,
+                source_lead = ?13,
+                profil_risque_sri = ?14,
+                date_dernier_contact = ?15,
+                date_prochain_suivi = ?16,
+                statut_suivi = ?17,
+                notes = ?18,
+                role_foyer = ?19,
                 updated_at = unixepoch()
-            WHERE id = ?18",
+            WHERE id = ?20",
             params![
+                &contact.foyer_id,
                 &contact.categorie,
                 &contact.parrain_id,
                 &contact.nom,
@@ -255,6 +295,7 @@ impl Database {
                 date_prochain_suivi_timestamp,
                 &contact.statut_suivi,
                 &contact.notes,
+                &contact.role_foyer,
                 id
             ],
         )?;
@@ -373,6 +414,10 @@ impl Database {
     }
 
     pub fn delete_foyer(&self, id: i64) -> Result<()> {
+        // 🔥 FIX: Supprimer d'abord les investissements du foyer (car ON DELETE SET NULL ne les supprime pas)
+        self.conn.execute("DELETE FROM investissements WHERE foyer_id = ?1", params![id])?;
+        
+        // Puis supprimer le foyer
         self.conn.execute("DELETE FROM foyers WHERE id = ?1", params![id])?;
         Ok(())
     }
@@ -865,42 +910,56 @@ impl Database {
 
             let date_dernier_contact = contact.date_dernier_contact;
 
-            // Client sans contact depuis > 12 mois
+            // ========== CLIENTS ==========
             if contact.categorie == "CLIENT" {
-                let should_alert = if let Some(last_contact) = date_dernier_contact {
+                if let Some(last_contact) = date_dernier_contact {
                     let diff_seconds = now - last_contact;
                     let diff_months = diff_seconds / (30 * 24 * 60 * 60);
-                    diff_months > 12
+                    
+                    // 🔴 Suivi +1 an : Client non contacté depuis plus de 12 mois
+                    if diff_months > 12 {
+                        self.create_alerte(super::models::NewAlerte {
+                            contact_id: contact.id.unwrap(),
+                            type_alerte: "SUIVI_CLIENT_1AN".to_string(),
+                            message: format!("🔴 {} {} - Suivi +1 an", contact.prenom, contact.nom),
+                            date_alerte: Some(now),
+                        })?;
+                        count += 1;
+                    }
                 } else {
-                    true // Pas de date de dernier contact
-                };
-
-                if should_alert {
+                    // 🔴 Jamais suivi : Client sans historique de contact
                     self.create_alerte(super::models::NewAlerte {
                         contact_id: contact.id.unwrap(),
-                        type_alerte: "SUIVI_CLIENT_ANNUEL".to_string(),
-                        message: format!("{} {} - Client à recontacter (> 12 mois)", contact.prenom, contact.nom),
+                        type_alerte: "CLIENT_JAMAIS_SUIVI".to_string(),
+                        message: format!("🔴 {} {} - Jamais suivi", contact.prenom, contact.nom),
                         date_alerte: Some(now),
                     })?;
                     count += 1;
                 }
             }
 
-            // Suspect sans contact depuis > 6 mois
-            if contact.categorie.contains("SUSPECT") {
-                let should_alert = if let Some(last_contact) = date_dernier_contact {
+            // ========== PROSPECTS & SUSPECTS ==========
+            if contact.categorie.contains("SUSPECT") || contact.categorie.contains("PROSPECT") {
+                if let Some(last_contact) = date_dernier_contact {
                     let diff_seconds = now - last_contact;
                     let diff_months = diff_seconds / (30 * 24 * 60 * 60);
-                    diff_months > 6
+                    
+                    // 🟠 Suivi +6 mois : Lead non contacté depuis plus de 6 mois
+                    if diff_months > 6 {
+                        self.create_alerte(super::models::NewAlerte {
+                            contact_id: contact.id.unwrap(),
+                            type_alerte: "LEAD_SUIVI_6MOIS".to_string(),
+                            message: format!("🟠 {} {} - Suivi +6 mois", contact.prenom, contact.nom),
+                            date_alerte: Some(now),
+                        })?;
+                        count += 1;
+                    }
                 } else {
-                    false // Pour les suspects, on n'alerte pas s'il n'y a jamais eu de contact
-                };
-
-                if should_alert {
+                    // 🟠 Jamais contacté : Lead qui n'a jamais été contacté
                     self.create_alerte(super::models::NewAlerte {
                         contact_id: contact.id.unwrap(),
-                        type_alerte: "SUIVI_PROSPECT_6MOIS".to_string(),
-                        message: format!("{} {} - Suspect à relancer (> 6 mois)", contact.prenom, contact.nom),
+                        type_alerte: "LEAD_JAMAIS_CONTACTE".to_string(),
+                        message: format!("🟠 {} {} - Jamais contacté", contact.prenom, contact.nom),
                         date_alerte: Some(now),
                     })?;
                     count += 1;
@@ -1568,7 +1627,7 @@ impl Database {
     // Récupérer tous les filleuls d'un contact (parrain)
     pub fn get_filleuls_by_parrain(&self, parrain_id: i64) -> Result<Vec<Contact>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, foyer_id, categorie, parrain_id, civilite, nom, prenom, email, telephone,
+            "SELECT id, foyer_id, role_foyer, categorie, parrain_id, civilite, nom, prenom, email, telephone,
                     adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                     source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                     statut_suivi, notes, created_at, updated_at
@@ -1581,27 +1640,28 @@ impl Database {
             Ok(Contact {
                 id: row.get(0)?,
                 foyer_id: row.get(1)?,
-                categorie: row.get(2)?,
-                parrain_id: row.get(3)?,
-                civilite: row.get(4)?,
-                nom: row.get(5)?,
-                prenom: row.get(6)?,
-                email: row.get(7)?,
-                telephone: row.get(8)?,
-                adresse: row.get(9)?,
-                code_postal: row.get(10)?,
-                ville: row.get(11)?,
-                date_naissance: row.get(12)?,
-                profession: row.get(13)?,
-                situation_familiale: row.get(14)?,
-                source_lead: row.get(15)?,
-                profil_risque_sri: row.get(16)?,
-                date_dernier_contact: row.get(17)?,
-                date_prochain_suivi: row.get(18)?,
-                statut_suivi: row.get(19)?,
-                notes: row.get(20)?,
-                created_at: row.get(21)?,
-                updated_at: row.get(22)?,
+                role_foyer: row.get(2)?,
+                categorie: row.get(3)?,
+                parrain_id: row.get(4)?,
+                civilite: row.get(5)?,
+                nom: row.get(6)?,
+                prenom: row.get(7)?,
+                email: row.get(8)?,
+                telephone: row.get(9)?,
+                adresse: row.get(10)?,
+                code_postal: row.get(11)?,
+                ville: row.get(12)?,
+                date_naissance: row.get(13)?,
+                profession: row.get(14)?,
+                situation_familiale: row.get(15)?,
+                source_lead: row.get(16)?,
+                profil_risque_sri: row.get(17)?,
+                date_dernier_contact: row.get(18)?,
+                date_prochain_suivi: row.get(19)?,
+                statut_suivi: row.get(20)?,
+                notes: row.get(21)?,
+                created_at: row.get(22)?,
+                updated_at: row.get(23)?,
             })
         })?;
         
@@ -1611,7 +1671,7 @@ impl Database {
     // Rechercher un contact par nom et prénom
     pub fn find_contact_by_name(&self, nom: &str, prenom: &str) -> Result<Option<Contact>> {
         match self.conn.query_row(
-            "SELECT id, foyer_id, categorie, parrain_id, civilite, nom, prenom, email, telephone,
+            "SELECT id, foyer_id, role_foyer, categorie, parrain_id, civilite, nom, prenom, email, telephone,
                     adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                     source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                     statut_suivi, notes, created_at, updated_at
@@ -1623,27 +1683,28 @@ impl Database {
                 Ok(Contact {
                     id: row.get(0)?,
                     foyer_id: row.get(1)?,
-                    categorie: row.get(2)?,
-                    parrain_id: row.get(3)?,
-                    civilite: row.get(4)?,
-                    nom: row.get(5)?,
-                    prenom: row.get(6)?,
-                    email: row.get(7)?,
-                    telephone: row.get(8)?,
-                    adresse: row.get(9)?,
-                    code_postal: row.get(10)?,
-                    ville: row.get(11)?,
-                    date_naissance: row.get(12)?,
-                    profession: row.get(13)?,
-                    situation_familiale: row.get(14)?,
-                    source_lead: row.get(15)?,
-                    profil_risque_sri: row.get(16)?,
-                    date_dernier_contact: row.get(17)?,
-                    date_prochain_suivi: row.get(18)?,
-                    statut_suivi: row.get(19)?,
-                    notes: row.get(20)?,
-                    created_at: row.get(21)?,
-                    updated_at: row.get(22)?,
+                    role_foyer: row.get(2)?,
+                    categorie: row.get(3)?,
+                    parrain_id: row.get(4)?,
+                    civilite: row.get(5)?,
+                    nom: row.get(6)?,
+                    prenom: row.get(7)?,
+                    email: row.get(8)?,
+                    telephone: row.get(9)?,
+                    adresse: row.get(10)?,
+                    code_postal: row.get(11)?,
+                    ville: row.get(12)?,
+                    date_naissance: row.get(13)?,
+                    profession: row.get(14)?,
+                    situation_familiale: row.get(15)?,
+                    source_lead: row.get(16)?,
+                    profil_risque_sri: row.get(17)?,
+                    date_dernier_contact: row.get(18)?,
+                    date_prochain_suivi: row.get(19)?,
+                    statut_suivi: row.get(20)?,
+                    notes: row.get(21)?,
+                    created_at: row.get(22)?,
+                    updated_at: row.get(23)?,
                 })
             },
         ) {

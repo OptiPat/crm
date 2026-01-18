@@ -1,6 +1,6 @@
 # 📋 INDEX DES AGENTS - Patrimoine CRM
 
-> **Dernière mise à jour : 17 janvier 2026**
+> **Dernière mise à jour : 18 janvier 2026**
 
 ---
 
@@ -20,6 +20,7 @@
 | Agent | Module | Fichier | Priorité | Durée | Status |
 |-------|--------|---------|----------|-------|--------|
 | ✅ | Contacts & Filleuls | `AGENT_CONTACTS_FILLEULS.md` | 🔴 Haute | 3-4 sessions | ✅ **Terminé** |
+| 🏠 | Foyers & Familles | `AGENT_FOYERS_FAMILLES.md` | 🔴 Haute | 2-3 sessions | ⚠️ **90% fait** |
 
 ### Phase 1 : Finir les fonctionnalités
 
@@ -51,6 +52,9 @@
 ## 🚀 Ordre recommandé pour la V1
 
 ```
+ÉTAPE 0 - Refonte en cours
+└── Agent Foyers : Gestion familles   🔴 2-3 sessions
+
 ÉTAPE 1 - Finir les fonctionnalités
 ├── Agent 1 : OCR/RIO (finir)         🔴 1-2 sessions
 ├── Agent 2 : Génération PDF          🟠 2-3 sessions
@@ -104,7 +108,8 @@ prompts/
 ├── CONTEXTE_GLOBAL.md           ← Contexte général du projet
 │
 │── PHASE 0 : REFONTE DEMANDÉE
-├── AGENT_CONTACTS_FILLEULS.md   ← Onglets Clients/Filleuls + Import MLM
+├── AGENT_CONTACTS_FILLEULS.md   ← Onglets Clients/Filleuls + Import MLM ✅
+├── AGENT_FOYERS_FAMILLES.md     ← Foyers intégrés aux contacts
 │
 │── PHASE 1 : FONCTIONNALITÉS
 ├── AGENT_1_OCR_RIO.md           ← Compléter import RIO
@@ -143,7 +148,7 @@ prompts/
 | Import Excel | ✅ 100% |
 | Authentification | ✅ 100% |
 | Contacts CRUD | ✅ 100% |
-| Foyers CRUD | ✅ 100% |
+| Foyers CRUD | 🔄 Refonte en cours (voir `AGENT_FOYERS_FAMILLES.md`) |
 | Partenaires CRUD | ✅ 100% |
 | Templates email | ✅ 100% |
 | Alertes & Suivi | ✅ 100% |
@@ -153,6 +158,7 @@ prompts/
 ## 💰 Checklist V1 commercialisable
 
 - [x] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** ✅
+- [x] **Agent Foyers/Familles : Regroupement visuel + Détection import** ⚠️ 90%
 - [ ] Agent 1 : Détection doublons investissements RIO
 - [ ] Agent 1 : OCR PDF scannés (Tesseract)
 - [ ] Agent 2 : Génération PDF pré-remplis

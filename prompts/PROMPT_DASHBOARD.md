@@ -206,3 +206,20 @@ Afficher les 5 premiers contacts avec alerte non traitée :
 - [x] Le design est cohérent avec le reste de l'app
 - [x] Pas d'erreur console
 - [x] Chargement rapide (< 1 seconde)
+
+---
+
+## 🏷️ Labels d'alertes (mis à jour 18/01/2026)
+
+Les alertes utilisent maintenant des labels plus clairs :
+
+| Catégorie | Condition | Type Alerte | Label affiché |
+|-----------|-----------|-------------|---------------|
+| CLIENT | Jamais de date_dernier_contact | `CLIENT_JAMAIS_SUIVI` | 🔴 Jamais suivi |
+| CLIENT | date_dernier_contact > 12 mois | `SUIVI_CLIENT_1AN` | 🔴 Suivi +1 an |
+| PROSPECT/SUSPECT | Jamais de date_dernier_contact | `LEAD_JAMAIS_CONTACTE` | 🟠 Jamais contacté |
+| PROSPECT/SUSPECT | date_dernier_contact > 6 mois | `LEAD_SUIVI_6MOIS` | 🟠 Suivi +6 mois |
+
+**Logique métier** :
+- **CLIENT** = A souscrit un produit → Suivi tous les **12 mois** minimum
+- **PROSPECT/SUSPECT** = Lead à convertir → Relance tous les **6 mois** minimum

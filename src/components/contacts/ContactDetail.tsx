@@ -9,12 +9,15 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Phone, MapPin, Calendar, Briefcase, Edit, Trash2, User, Wallet, Plus, Users2 } from "lucide-react";
-import { type Contact, getContactById, getFilleulsByParrain } from "@/lib/api/tauri-contacts";
+import { Mail, Phone, MapPin, Calendar, Briefcase, Edit, Trash2, User, Wallet, Plus, Users2, Home } from "lucide-react";
+import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "./ContactForm";
-import { getInvestissementsByContact, deleteInvestissement, type Investissement } from "@/lib/api/tauri-investissements";
+import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
+import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
+import { FoyerCreateModal } from "@/components/foyers/FoyerCreateModal";
+import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
 
 interface ContactDetailProps {
   open: boolean;
@@ -22,6 +25,7 @@ interface ContactDetailProps {
   contact: Contact | null;
   onDelete: (id: number) => void;
   onUpdate: () => void;
+  onOpenContact?: (contact: Contact) => void; // Pour ouvrir la fiche d'un autre contact
 }
 
 export function ContactDetail({
@@ -30,6 +34,7 @@ export function ContactDetail({
   contact,
   onDelete,
   onUpdate,
+  onOpenContact,
 }: ContactDetailProps) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showInvestissementForm, setShowInvestissementForm] = useState(false);
@@ -41,6 +46,51 @@ export function ContactDetail({
   const [filleuls, setFilleuls] = useState<Contact[]>([]);
   const [loadingParrain, setLoadingParrain] = useState(false);
   const [loadingFilleuls, setLoadingFilleuls] = useState(false);
+  const [foyer, setFoyer] = useState<Foyer | null>(null);
+  const [foyerMembers, setFoyerMembers] = useState<Contact[]>([]);
+  const [loadingFoyer, setLoadingFoyer] = useState(false);
+  const [foyerPatrimoine, setFoyerPatrimoine] = useState(0);
+  const [showFoyerCreateModal, setShowFoyerCreateModal] = useState(false);
+  const [showFoyerLinkModal, setShowFoyerLinkModal] = useState(false);
+
+  const handleDissocierFoyer = async () => {
+    if (!contact?.id) return;
+    
+    console.log("🏠 [ContactDetail] Dissociation du foyer pour contact", contact.id);
+    const confirmMsg = `Voulez-vous vraiment dissocier ${contact.prenom} ${contact.nom} de ce foyer ?`;
+    
+    if (!confirm(confirmMsg)) return;
+    
+    try {
+      await updateContact(contact.id, {
+        ...contact,
+        foyer_id: null,
+        role_foyer: null,
+        date_naissance: contact.date_naissance 
+          ? new Date(contact.date_naissance * 1000).toISOString() 
+          : undefined,
+        date_dernier_contact: contact.date_dernier_contact 
+          ? new Date(contact.date_dernier_contact * 1000).toISOString() 
+          : undefined,
+        date_prochain_suivi: contact.date_prochain_suivi 
+          ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
+          : undefined,
+      });
+      
+      console.log("🏠 [ContactDetail] ✓ Contact dissocié");
+      onUpdate();
+    } catch (error) {
+      console.error("🏠 [ContactDetail] ❌ Erreur dissociation:", error);
+      alert("Erreur lors de la dissociation: " + String(error));
+    }
+  };
+
+  const handleOpenMemberDetail = (member: Contact) => {
+    console.log("🏠 [ContactDetail] Ouverture de la fiche de", member.prenom, member.nom);
+    if (onOpenContact) {
+      onOpenContact(member);
+    }
+  };
 
   // Charger les partenaires au montage
   useEffect(() => {
@@ -61,6 +111,7 @@ export function ContactDetail({
       loadInvestissements();
       loadParrain();
       loadFilleuls();
+      loadFoyer();
     }
   }, [contact?.id, open]);
 
@@ -69,8 +120,41 @@ export function ContactDetail({
     
     setLoadingInvestissements(true);
     try {
-      const data = await getInvestissementsByContact(contact.id);
-      setInvestissements(data);
+      // Si le contact a un foyer, charger TOUS les investissements du foyer
+      if (contact.foyer_id) {
+        console.log("💰 [ContactDetail] Chargement investissements du foyer", contact.foyer_id);
+        const [foyerInvs, allContacts] = await Promise.all([
+          getInvestissementsByFoyer(contact.foyer_id),
+          getAllContacts()
+        ]);
+        
+        // Récupérer les investissements individuels de chaque membre du foyer
+        const foyerContacts = allContacts.filter(c => c.foyer_id === contact.foyer_id);
+        const membersInvs = await Promise.all(
+          foyerContacts.map(async (member) => {
+            if (!member.id) return [];
+            const invs = await getInvestissementsByContact(member.id);
+            // Ajouter l'info du propriétaire
+            return invs.map(inv => ({
+              ...inv,
+              _proprietaire: `${member.prenom} ${member.nom}`,
+              _proprietaireId: member.id,
+            }));
+          })
+        );
+        
+        // Fusionner et ajouter l'info "Foyer" pour les investissements du foyer
+        const allInvs = [
+          ...foyerInvs.map(inv => ({ ...inv, _proprietaire: "Foyer", _proprietaireId: null })),
+          ...membersInvs.flat(),
+        ];
+        
+        setInvestissements(allInvs as any);
+      } else {
+        // Pas de foyer, juste les investissements du contact
+        const data = await getInvestissementsByContact(contact.id);
+        setInvestissements(data);
+      }
     } catch (error) {
       console.error("Error loading investissements:", error);
     } finally {
@@ -108,6 +192,66 @@ export function ContactDetail({
       setFilleuls([]);
     } finally {
       setLoadingFilleuls(false);
+    }
+  };
+
+  const loadFoyer = async () => {
+    console.log("🏠 [ContactDetail] loadFoyer - contact.foyer_id:", contact?.foyer_id);
+    
+    if (!contact?.foyer_id) {
+      console.log("🏠 [ContactDetail] Pas de foyer_id, affichage 'Aucun foyer'");
+      setFoyer(null);
+      setFoyerMembers([]);
+      setFoyerPatrimoine(0);
+      return;
+    }
+    
+    setLoadingFoyer(true);
+    try {
+      console.log("🏠 [ContactDetail] Chargement du foyer ID:", contact.foyer_id);
+      const [foyers, allContacts] = await Promise.all([
+        getAllFoyers(),
+        getAllContacts()
+      ]);
+      
+      const currentFoyer = foyers.find(f => f.id === contact.foyer_id);
+      console.log("🏠 [ContactDetail] Foyer trouvé:", currentFoyer);
+      setFoyer(currentFoyer || null);
+      
+      // Récupérer les autres membres du foyer (sauf le contact actuel)
+      const members = allContacts.filter(
+        c => c.foyer_id === contact.foyer_id && c.id !== contact.id
+      );
+      console.log("🏠 [ContactDetail] Membres du foyer:", members.length);
+      setFoyerMembers(members);
+      
+      // Calculer le patrimoine du foyer
+      if (currentFoyer) {
+        const investissementsFoyer = await getInvestissementsByFoyer(currentFoyer.id);
+        const totalFoyer = investissementsFoyer.reduce(
+          (sum, inv) => sum + (inv.montant_initial || 0), 
+          0
+        );
+        
+        // Ajouter les investissements individuels de chaque membre
+        const membersInvestissements = await Promise.all(
+          [contact, ...members].map(async (member) => {
+            if (!member.id) return 0;
+            const invs = await getInvestissementsByContact(member.id);
+            return invs.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+          })
+        );
+        
+        const totalMembers = membersInvestissements.reduce((a, b) => a + b, 0);
+        setFoyerPatrimoine((totalFoyer + totalMembers) / 100); // Convertir centimes en euros
+      }
+    } catch (error) {
+      console.error("Error loading foyer:", error);
+      setFoyer(null);
+      setFoyerMembers([]);
+      setFoyerPatrimoine(0);
+    } finally {
+      setLoadingFoyer(false);
     }
   };
 
@@ -426,6 +570,106 @@ export function ContactDetail({
               </CardContent>
             </Card>
 
+            {/* Section Foyer */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Home className="h-5 w-5" />
+                  Foyer
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingFoyer ? (
+                  <div className="text-sm text-muted-foreground">Chargement...</div>
+                ) : foyer ? (
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="font-semibold text-lg">{foyer.nom}</h3>
+                        {foyerPatrimoine > 0 && (
+                          <p className="text-sm text-primary font-medium">
+                            💰 Patrimoine cumulé : {foyerPatrimoine.toLocaleString("fr-FR")} €
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => setShowFoyerLinkModal(true)}
+                        >
+                          Modifier
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="ghost"
+                          onClick={handleDissocierFoyer}
+                        >
+                          Dissocier
+                        </Button>
+                      </div>
+                    </div>
+                    {foyerMembers.length > 0 && (
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">Autres membres :</h4>
+                        <div className="space-y-2">
+                          {foyerMembers.map((member) => (
+                            <div 
+                              key={member.id}
+                              className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                              onClick={() => handleOpenMemberDetail(member)}
+                            >
+                              <div className="flex items-center justify-between">
+                                <div>
+                                  <p className="font-medium">
+                                    {member.prenom} {member.nom}
+                                  </p>
+                                  {member.role_foyer && (
+                                    <p className="text-xs text-muted-foreground">
+                                      {member.role_foyer === "DECLARANT_1" ? "Déclarant 1" :
+                                       member.role_foyer === "DECLARANT_2" ? "Déclarant 2" :
+                                       member.role_foyer === "ENFANT" ? "Enfant" : "Autre membre"}
+                                    </p>
+                                  )}
+                                </div>
+                                <Badge className="bg-blue-50 text-blue-700">
+                                  {member.categorie}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Aucun foyer associé
+                    </p>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="gap-2"
+                        onClick={() => setShowFoyerLinkModal(true)}
+                      >
+                        🔗 Lier à un foyer existant
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        variant="default" 
+                        className="gap-2"
+                        onClick={() => setShowFoyerCreateModal(true)}
+                      >
+                        ➕ Créer un foyer
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Parrain (uniquement pour les catégories filleul) */}
             {(contact.categorie === "FILLEUL" || 
               contact.categorie === "PROSPECT_FILLEUL" || 
@@ -652,6 +896,24 @@ export function ContactDetail({
                               {inv.origine === "EXISTANT_CLIENT" && (
                                 <span className="text-xs text-gray-500 italic">à côté</span>
                               )}
+                              {/* @ts-ignore - Propriétaire ajouté dynamiquement */}
+                              {inv._proprietaire && (
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${
+                                    /* @ts-ignore */
+                                    inv._proprietaireId === contact?.id 
+                                      ? "bg-green-50 text-green-700 border-green-200" 
+                                      /* @ts-ignore */
+                                      : inv._proprietaire === "Foyer"
+                                      ? "bg-blue-50 text-blue-700 border-blue-200"
+                                      : "bg-gray-50 text-gray-700 border-gray-200"
+                                  }`}
+                                >
+                                  {/* @ts-ignore */}
+                                  👤 {inv._proprietaire}
+                                </Badge>
+                              )}
                             </div>
                             {getPartenaireNom(inv.partenaire_id) && (
                               <p className="text-sm text-muted-foreground">
@@ -794,6 +1056,46 @@ export function ContactDetail({
         defaultContactId={contact?.id}
         onSuccess={handleInvestissementSuccess}
       />
+
+      {/* Modales de gestion des foyers */}
+      {contact && (
+        <>
+          <FoyerCreateModal
+            open={showFoyerCreateModal}
+            onOpenChange={setShowFoyerCreateModal}
+            currentContact={contact}
+            onSuccess={async () => {
+              console.log("🏠 [ContactDetail] FoyerCreateModal onSuccess - Rechargement du contact");
+              // Recharger le contact pour avoir le nouveau foyer_id
+              try {
+                const updatedContact = await getContactById(contact.id!);
+                console.log("🏠 [ContactDetail] Contact rechargé, foyer_id:", updatedContact.foyer_id);
+                // Le composant parent va se mettre à jour
+                onUpdate();
+              } catch (error) {
+                console.error("🏠 [ContactDetail] Erreur rechargement contact:", error);
+              }
+            }}
+          />
+          <FoyerLinkModal
+            open={showFoyerLinkModal}
+            onOpenChange={setShowFoyerLinkModal}
+            currentContact={contact}
+            onSuccess={async () => {
+              console.log("🏠 [ContactDetail] FoyerLinkModal onSuccess - Rechargement du contact");
+              // Recharger le contact pour avoir le nouveau foyer_id
+              try {
+                const updatedContact = await getContactById(contact.id!);
+                console.log("🏠 [ContactDetail] Contact rechargé, foyer_id:", updatedContact.foyer_id);
+                // Le composant parent va se mettre à jour
+                onUpdate();
+              } catch (error) {
+                console.error("🏠 [ContactDetail] Erreur rechargement contact:", error);
+              }
+            }}
+          />
+        </>
+      )}
     </>
   );
 }

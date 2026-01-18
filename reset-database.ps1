@@ -22,14 +22,24 @@ if ($confirmation -ne "OUI") {
 Write-Host ""
 Write-Host "🔄 Démarrage de la procédure..." -ForegroundColor Cyan
 
-# 1. Arrêter l'application
+# 1. Arrêter TOUTES les instances de l'application
 Write-Host "1️⃣ Arrêt de l'application..." -ForegroundColor Yellow
+
+# Arrêter le processus Tauri (patrimoine-crm.exe)
+Get-Process -Name "patrimoine-crm" -ErrorAction SilentlyContinue | Stop-Process -Force
+Start-Sleep -Seconds 1
+
+# Arrêter aussi via le port 1420 (Vite dev server)
 $proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1
 if ($proc) {
     taskkill /F /PID $proc 2>$null
-    Start-Sleep -Seconds 3
-    Write-Host "   ✅ Application arrêtée" -ForegroundColor Green
 }
+
+# Arrêter cargo/rustc si en cours
+Get-Process -Name "cargo", "rustc" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+Start-Sleep -Seconds 3
+Write-Host "   ✅ Application arrêtée" -ForegroundColor Green
 
 # 2. Sauvegarder
 $dbPath = "$env:APPDATA\com.patrimoine-crm.app\patrimoine-crm.db"
@@ -39,10 +49,32 @@ if (Test-Path $dbPath) {
     Copy-Item $dbPath $backupPath
     Write-Host "   ✅ Sauvegarde : $backupPath" -ForegroundColor Green
     
-    # 3. Supprimer
+    # 3. Supprimer (avec retry)
     Write-Host "3️⃣ Suppression de la base actuelle..." -ForegroundColor Yellow
-    Remove-Item $dbPath -Force
-    Write-Host "   ✅ Base supprimée" -ForegroundColor Green
+    
+    $maxRetries = 5
+    $deleted = $false
+    
+    for ($i = 1; $i -le $maxRetries; $i++) {
+        try {
+            Remove-Item $dbPath -Force -ErrorAction Stop
+            $deleted = $true
+            Write-Host "   ✅ Base supprimée" -ForegroundColor Green
+            break
+        } catch {
+            Write-Host "   ⏳ Tentative $i/$maxRetries - fichier verrouillé, attente..." -ForegroundColor Yellow
+            
+            # Réessayer d'arrêter les processus
+            Get-Process -Name "patrimoine-crm" -ErrorAction SilentlyContinue | Stop-Process -Force
+            Start-Sleep -Seconds 2
+        }
+    }
+    
+    if (-not $deleted) {
+        Write-Host "   ❌ Impossible de supprimer la base. Fermez l'application manuellement." -ForegroundColor Red
+        Write-Host "   Puis relancez ce script." -ForegroundColor Yellow
+        exit 1
+    }
 }
 
 # 4. Relancer

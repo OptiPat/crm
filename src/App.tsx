@@ -5,7 +5,6 @@ import { UnlockScreen } from "@/pages/UnlockScreen";
 import { Layout } from "@/components/layout/Layout";
 import { Dashboard } from "@/pages/Dashboard";
 import { Contacts } from "@/pages/Contacts";
-import { Foyers } from "@/pages/Foyers";
 import { Partenaires } from "@/pages/Partenaires";
 import { Investissements } from "@/pages/Investissements";
 import { Documents } from "@/pages/Documents";
@@ -58,8 +57,6 @@ function App() {
             <Contacts />
           </ErrorBoundary>
         );
-      case "foyers":
-        return <Foyers />;
       case "partenaires":
         return <Partenaires />;
       case "investissements":

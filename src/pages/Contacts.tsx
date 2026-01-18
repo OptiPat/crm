@@ -11,8 +11,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2 } from "lucide-react";
+import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users2 } from "lucide-react";
 import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
+import { getInvestissementsByContact, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
@@ -26,6 +28,7 @@ type FilleulSubTab = "FILLEUL" | "PROSPECT_FILLEUL" | "SUSPECT_FILLEUL" | "FILLE
 
 export function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [foyers, setFoyers] = useState<Foyer[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("clients");
@@ -38,6 +41,7 @@ export function Contacts() {
   const [showImport, setShowImport] = useState(false);
   const [showImportFilleuls, setShowImportFilleuls] = useState(false);
   const [showDeduplicate, setShowDeduplicate] = useState(false);
+  const [groupByFoyer, setGroupByFoyer] = useState(false);
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -46,9 +50,17 @@ export function Contacts() {
   }, []);
 
   const loadContacts = async () => {
+    console.log("📋 [Contacts] loadContacts - Début");
     try {
-      const data = await getAllContacts();
-      setContacts(data);
+      const [dataContacts, dataFoyers] = await Promise.all([
+        getAllContacts(),
+        getAllFoyers(),
+      ]);
+      console.log("📋 [Contacts] Contacts chargés:", dataContacts.length);
+      console.log("📋 [Contacts] Foyers chargés:", dataFoyers.length);
+      console.log("📋 [Contacts] Contacts avec foyer_id:", dataContacts.filter(c => c.foyer_id).length);
+      setContacts(dataContacts);
+      setFoyers(dataFoyers);
       setLoading(false);
       setIsInitialLoad(false);
     } catch (error) {
@@ -66,12 +78,12 @@ export function Contacts() {
   // Calcul de la priorité de suivi selon le prompt
   const getPrioriteContact = (contact: Contact) => {
     if (!contact.date_dernier_contact) {
-      // Pas de date de dernier contact = priorité selon catégorie
+      // Pas de date de dernier contact
       if (contact.categorie === "CLIENT") {
-        return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "⚠️ Client sans historique" };
+        return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "🔴 Jamais suivi" };
       }
-      if (contact.categorie.includes("SUSPECT")) {
-        return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "⚠️ Suspect sans historique" };
+      if (contact.categorie.includes("SUSPECT") || contact.categorie.includes("PROSPECT")) {
+        return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Jamais contacté" };
       }
       return { color: "", priorite: 3, label: "" };
     }
@@ -80,18 +92,18 @@ export function Contacts() {
     const lastContact = new Date(contact.date_dernier_contact * 1000);
     const diffMonths = (now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24 * 30);
 
-    // Rouge : Client sans contact depuis > 12 mois
+    // 🔴 Suivi +1 an : Client sans contact depuis > 12 mois
     if (contact.categorie === "CLIENT" && diffMonths > 12) {
-      return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "🔴 À recontacter d'urgence" };
+      return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "🔴 Suivi +1 an" };
     }
 
-    // Orange : Suspect sans contact depuis > 6 mois
-    if (contact.categorie.includes("SUSPECT") && diffMonths > 6) {
-      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Relance recommandée" };
+    // 🟠 Suivi +6 mois : Prospect/Suspect sans contact depuis > 6 mois
+    if ((contact.categorie.includes("SUSPECT") || contact.categorie.includes("PROSPECT")) && diffMonths > 6) {
+      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Suivi +6 mois" };
     }
 
-    // Vert : Suivi à jour
-    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "🟢 Suivi à jour" };
+    // ✅ Suivi récent
+    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "✅ Suivi récent" };
   };
 
   // Calcul des compteurs par catégorie
@@ -137,6 +149,83 @@ export function Contacts() {
       const prioriteB = getPrioriteContact(b).priorite;
       return prioriteA - prioriteB;
     });
+
+  // Groupement par foyer
+  const contactsGroupedByFoyer = useMemo(() => {
+    console.log("📋 [Contacts] contactsGroupedByFoyer - groupByFoyer:", groupByFoyer);
+    
+    if (!groupByFoyer) return null;
+
+    console.log("📋 [Contacts] Groupement actif, contacts filtrés:", filteredContacts.length);
+    const grouped: Record<string, { foyer: Foyer | null; contacts: Contact[]; patrimoine: number }> = {};
+
+    filteredContacts.forEach((contact) => {
+      const key = contact.foyer_id ? `foyer_${contact.foyer_id}` : `no_foyer_${contact.id}`;
+
+      if (!grouped[key]) {
+        const foyer = contact.foyer_id ? foyers.find((f) => f.id === contact.foyer_id) || null : null;
+        grouped[key] = {
+          foyer,
+          contacts: [],
+          patrimoine: 0,
+        };
+      }
+
+      grouped[key].contacts.push(contact);
+    });
+
+    console.log("📋 [Contacts] Groupes créés:", Object.keys(grouped).length);
+    Object.entries(grouped).forEach(([key, group]) => {
+      console.log(`📋 [Contacts]   - ${key}: ${group.contacts.length} contacts, Foyer: ${group.foyer?.nom || "Aucun"}`);
+    });
+
+    // Calculer le patrimoine de chaque groupe (on va le faire en asynchrone après)
+    return Object.values(grouped).sort((a, b) => {
+      // Les foyers en premier, puis les contacts sans foyer
+      if (a.foyer && !b.foyer) return -1;
+      if (!a.foyer && b.foyer) return 1;
+      // Tri par nom de foyer
+      if (a.foyer && b.foyer) {
+        return a.foyer.nom.localeCompare(b.foyer.nom);
+      }
+      return 0;
+    });
+  }, [filteredContacts, foyers, groupByFoyer]);
+
+  // Calculer le patrimoine de chaque contact/foyer
+  const [patrimoines, setPatrimoines] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    const calculatePatrimoines = async () => {
+      const newPatrimoines: Record<string, number> = {};
+
+      for (const contact of contacts) {
+        try {
+          const investissements = await getInvestissementsByContact(contact.id!);
+          const total = investissements.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+          newPatrimoines[`contact_${contact.id}`] = total / 100; // Convertir centimes en euros
+        } catch (error) {
+          newPatrimoines[`contact_${contact.id}`] = 0;
+        }
+      }
+
+      for (const foyer of foyers) {
+        try {
+          const investissements = await getInvestissementsByFoyer(foyer.id);
+          const total = investissements.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+          newPatrimoines[`foyer_${foyer.id}`] = total / 100; // Convertir centimes en euros
+        } catch (error) {
+          newPatrimoines[`foyer_${foyer.id}`] = 0;
+        }
+      }
+
+      setPatrimoines(newPatrimoines);
+    };
+
+    if (contacts.length > 0) {
+      calculatePatrimoines();
+    }
+  }, [contacts, foyers]);
 
   const getCategorieColor = (categorie: string) => {
     switch (categorie) {
@@ -392,6 +481,15 @@ export function Contacts() {
                   <SelectItem value="ARCHIVE">Archivés</SelectItem>
                 </SelectContent>
               </Select>
+
+              <Button
+                variant={groupByFoyer ? "default" : "outline"}
+                onClick={() => setGroupByFoyer(!groupByFoyer)}
+                className="gap-2 whitespace-nowrap"
+              >
+                <Users2 className="h-4 w-4" />
+                {groupByFoyer ? "Vue normale" : "Afficher par foyer"}
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -405,6 +503,216 @@ export function Contacts() {
               {searchQuery
                 ? "Aucun contact trouvé"
                 : "Aucun contact. Commencez par en créer un !"}
+            </div>
+          ) : groupByFoyer && contactsGroupedByFoyer ? (
+            <div className="space-y-6">
+              {contactsGroupedByFoyer.map((group, groupIndex) => {
+                const foyerPatrimoine = group.foyer 
+                  ? patrimoines[`foyer_${group.foyer.id}`] || 0
+                  : 0;
+                const contactsPatrimoine = group.contacts.reduce(
+                  (sum, c) => sum + (patrimoines[`contact_${c.id}`] || 0), 
+                  0
+                );
+                const totalPatrimoine = foyerPatrimoine + contactsPatrimoine;
+
+                return (
+                  <div key={groupIndex} className="border border-border rounded-lg overflow-hidden">
+                    {group.foyer ? (
+                      <>
+                        {/* En-tête du foyer */}
+                        <div className="bg-muted/50 p-4 border-b border-border">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <Users2 className="h-5 w-5 text-primary" />
+                              <h3 className="font-semibold text-lg">{group.foyer.nom}</h3>
+                              <Badge variant="secondary">
+                                {group.contacts.length} membre{group.contacts.length > 1 ? "s" : ""}
+                              </Badge>
+                            </div>
+                            {totalPatrimoine > 0 && (
+                              <div className="text-sm font-medium text-primary">
+                                💰 {totalPatrimoine.toLocaleString("fr-FR")} €
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Membres du foyer */}
+                        <div className="divide-y divide-border">
+                          {group.contacts.map((contact) => {
+                            const priorite = getPrioriteContact(contact);
+                            const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
+                            return (
+                              <div
+                                key={contact.id}
+                                className={`p-4 hover:bg-accent transition-colors ${priorite.color}`}
+                              >
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                      <h4 className="font-semibold">
+                                        {contact.prenom} {contact.nom}
+                                      </h4>
+                                      {contact.role_foyer && (
+                                        <Badge variant="outline" className="text-xs">
+                                          {contact.role_foyer === "DECLARANT_1" ? "Déclarant 1" :
+                                           contact.role_foyer === "DECLARANT_2" ? "Déclarant 2" :
+                                           contact.role_foyer === "ENFANT" ? "Enfant" : "Autre"}
+                                        </Badge>
+                                      )}
+                                      <Badge className={getCategorieColor(contact.categorie)}>
+                                        {getCategorieLabel(contact.categorie)}
+                                      </Badge>
+                                      <Badge className={getStatutColor(contact.statut_suivi)}>
+                                        {contact.statut_suivi}
+                                      </Badge>
+                                      {priorite.label && (
+                                        <span className="text-xs font-medium">
+                                          {priorite.label}
+                                        </span>
+                                      )}
+                                      {contactPatrimoine > 0 && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {contactPatrimoine.toLocaleString("fr-FR")} €
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                      {contact.email && (
+                                        <div className="flex items-center gap-1">
+                                          <Mail className="h-4 w-4" />
+                                          {contact.email}
+                                        </div>
+                                      )}
+                                      {contact.telephone && (
+                                        <div className="flex items-center gap-1">
+                                          <Phone className="h-4 w-4" />
+                                          {contact.telephone}
+                                        </div>
+                                      )}
+                                      {contact.date_dernier_contact && (() => {
+                                        try {
+                                          const date = new Date(contact.date_dernier_contact * 1000);
+                                          if (!isNaN(date.getTime())) {
+                                            return (
+                                              <div className="flex items-center gap-1 text-xs">
+                                                <span>
+                                                  Dernier contact : {date.toLocaleDateString('fr-FR')}
+                                                </span>
+                                              </div>
+                                            );
+                                          }
+                                        } catch (e) {
+                                          return null;
+                                        }
+                                        return null;
+                                      })()}
+                                    </div>
+                                  </div>
+                                  <Button 
+                                    variant="outline" 
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleViewContact(contact);
+                                    }}
+                                  >
+                                    Voir détails
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      // Contact sans foyer
+                      <div className="p-4">
+                        {group.contacts.map((contact) => {
+                          const priorite = getPrioriteContact(contact);
+                          const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
+                          return (
+                            <div
+                              key={contact.id}
+                              className={`p-4 border border-border rounded-lg hover:bg-accent transition-colors ${priorite.color}`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-3 mb-2">
+                                    <h3 className="font-semibold text-lg">
+                                      {contact.prenom} {contact.nom}
+                                    </h3>
+                                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                                      Non rattaché
+                                    </Badge>
+                                    <Badge className={getCategorieColor(contact.categorie)}>
+                                      {getCategorieLabel(contact.categorie)}
+                                    </Badge>
+                                    <Badge className={getStatutColor(contact.statut_suivi)}>
+                                      {contact.statut_suivi}
+                                    </Badge>
+                                    {priorite.label && (
+                                      <span className="text-xs font-medium">
+                                        {priorite.label}
+                                      </span>
+                                    )}
+                                    {contactPatrimoine > 0 && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {contactPatrimoine.toLocaleString("fr-FR")} €
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                    {contact.email && (
+                                      <div className="flex items-center gap-1">
+                                        <Mail className="h-4 w-4" />
+                                        {contact.email}
+                                      </div>
+                                    )}
+                                    {contact.telephone && (
+                                      <div className="flex items-center gap-1">
+                                        <Phone className="h-4 w-4" />
+                                        {contact.telephone}
+                                      </div>
+                                    )}
+                                    {contact.date_dernier_contact && (() => {
+                                      try {
+                                        const date = new Date(contact.date_dernier_contact * 1000);
+                                        if (!isNaN(date.getTime())) {
+                                          return (
+                                            <div className="flex items-center gap-1 text-xs">
+                                              <span>
+                                                Dernier contact : {date.toLocaleDateString('fr-FR')}
+                                              </span>
+                                            </div>
+                                          );
+                                        }
+                                      } catch (e) {
+                                        return null;
+                                      }
+                                      return null;
+                                    })()}
+                                  </div>
+                                </div>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleViewContact(contact);
+                                  }}
+                                >
+                                  Voir détails
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="space-y-3">
@@ -525,6 +833,11 @@ export function Contacts() {
           contact={selectedContact}
           onDelete={handleDeleteContact}
           onUpdate={loadContacts}
+          onOpenContact={(contact) => {
+            console.log("📋 [Contacts] Ouverture du contact", contact.prenom, contact.nom);
+            setSelectedContact(contact);
+            setShowDetail(true);
+          }}
         />
       )}
     </div>

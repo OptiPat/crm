@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 pub struct Contact {
     pub id: Option<i64>,
     pub foyer_id: Option<i64>,
+    pub role_foyer: Option<String>,
     pub categorie: String,
     pub parrain_id: Option<i64>,
     pub civilite: Option<String>,
@@ -30,6 +31,7 @@ pub struct Contact {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewContact {
     pub foyer_id: Option<i64>,
+    pub role_foyer: Option<String>,
     pub categorie: String,
     pub parrain_id: Option<i64>,
     pub civilite: Option<String>,
@@ -239,7 +241,7 @@ pub struct AlerteWithContact {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Investissement {
     pub id: i64,
-    pub contact_id: i64,
+    pub contact_id: Option<i64>, // Optionnel pour les investissements de foyer
     pub foyer_id: Option<i64>,
     pub type_produit: String,
     pub partenaire_id: Option<i64>,
@@ -259,7 +261,7 @@ pub struct Investissement {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewInvestissement {
-    pub contact_id: i64,
+    pub contact_id: Option<i64>, // Optionnel pour les investissements de foyer
     pub foyer_id: Option<i64>,
     pub type_produit: String,
     pub partenaire_id: Option<i64>,
@@ -278,7 +280,7 @@ pub struct NewInvestissement {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct InvestissementWithDetails {
     pub id: i64,
-    pub contact_id: i64,
+    pub contact_id: Option<i64>, // Optionnel pour les investissements de foyer
     pub contact_nom: String,
     pub contact_prenom: String,
     pub foyer_id: Option<i64>,

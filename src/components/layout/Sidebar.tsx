@@ -1,7 +1,6 @@
 import { 
   Home, 
   Users, 
-  Building2, 
   UserPlus,
   Wallet,
   FileText, 
@@ -25,7 +24,6 @@ const menuItems = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
   { id: "contacts", label: "Contacts", icon: Users },
   { id: "suivi", label: "Suivi", icon: Bell },
-  { id: "foyers", label: "Foyers", icon: Building2 },
   { id: "partenaires", label: "Partenaires", icon: UserPlus },
   { id: "investissements", label: "Investissements", icon: Wallet },
   { id: "documents", label: "Documents", icon: FileText },

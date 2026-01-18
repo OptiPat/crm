@@ -4,7 +4,7 @@ export type OrigineInvestissement = "MON_CONSEIL" | "EXISTANT_CLIENT";
 
 export interface Investissement {
   id: number;
-  contact_id: number;
+  contact_id?: number; // Optionnel pour les investissements de foyer
   foyer_id?: number;
   type_produit: string;
   partenaire_id?: number;
@@ -23,7 +23,7 @@ export interface Investissement {
 }
 
 export interface NewInvestissement {
-  contact_id: number;
+  contact_id?: number; // Optionnel pour les investissements de foyer
   foyer_id?: number;
   type_produit: string;
   partenaire_id?: number;
@@ -41,7 +41,7 @@ export interface NewInvestissement {
 
 export interface InvestissementWithDetails {
   id: number;
-  contact_id: number;
+  contact_id?: number; // Optionnel pour les investissements de foyer
   contact_nom: string;
   contact_prenom: string;
   foyer_id?: number;

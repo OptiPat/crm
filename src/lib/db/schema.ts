@@ -25,6 +25,11 @@ export const contacts = sqliteTable("contacts", {
     onDelete: "set null",
   }),
   
+  // Rôle dans le foyer
+  roleFoyer: text("role_foyer", {
+    enum: ["DECLARANT_1", "DECLARANT_2", "ENFANT", "AUTRE"],
+  }),
+  
   // Catégorie et informations de base
   categorie: text("categorie", {
     enum: [
@@ -122,8 +127,7 @@ export const partenaires = sqliteTable("partenaires", {
 export const investissements = sqliteTable("investissements", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   contactId: integer("contact_id")
-    .references(() => contacts.id, { onDelete: "cascade" })
-    .notNull(),
+    .references(() => contacts.id, { onDelete: "cascade" }), // Plus de notNull() pour supporter les investissements de foyer
   foyerId: integer("foyer_id").references(() => foyers.id, {
     onDelete: "set null",
   }), // Pour investissements communs
