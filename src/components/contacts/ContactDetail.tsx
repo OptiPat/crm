@@ -9,19 +9,8 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
-  Briefcase,
-  Edit,
-  Trash2,
-  User,
-  Wallet,
-  Plus,
-} from "lucide-react";
-import { type Contact } from "@/lib/api/tauri-contacts";
+import { Mail, Phone, MapPin, Calendar, Briefcase, Edit, Trash2, User, Wallet, Plus, Users2 } from "lucide-react";
+import { type Contact, getContactById, getFilleulsByParrain } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "./ContactForm";
 import { getInvestissementsByContact, deleteInvestissement, type Investissement } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
@@ -48,6 +37,10 @@ export function ContactDetail({
   const [investissements, setInvestissements] = useState<Investissement[]>([]);
   const [loadingInvestissements, setLoadingInvestissements] = useState(false);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
+  const [parrain, setParrain] = useState<Contact | null>(null);
+  const [filleuls, setFilleuls] = useState<Contact[]>([]);
+  const [loadingParrain, setLoadingParrain] = useState(false);
+  const [loadingFilleuls, setLoadingFilleuls] = useState(false);
 
   // Charger les partenaires au montage
   useEffect(() => {
@@ -66,6 +59,8 @@ export function ContactDetail({
   useEffect(() => {
     if (contact?.id && open) {
       loadInvestissements();
+      loadParrain();
+      loadFilleuls();
     }
   }, [contact?.id, open]);
 
@@ -80,6 +75,39 @@ export function ContactDetail({
       console.error("Error loading investissements:", error);
     } finally {
       setLoadingInvestissements(false);
+    }
+  };
+
+  const loadParrain = async () => {
+    if (!contact?.parrain_id) {
+      setParrain(null);
+      return;
+    }
+    
+    setLoadingParrain(true);
+    try {
+      const data = await getContactById(contact.parrain_id);
+      setParrain(data);
+    } catch (error) {
+      console.error("Error loading parrain:", error);
+      setParrain(null);
+    } finally {
+      setLoadingParrain(false);
+    }
+  };
+
+  const loadFilleuls = async () => {
+    if (!contact?.id) return;
+    
+    setLoadingFilleuls(true);
+    try {
+      const data = await getFilleulsByParrain(contact.id);
+      setFilleuls(data);
+    } catch (error) {
+      console.error("Error loading filleuls:", error);
+      setFilleuls([]);
+    } finally {
+      setLoadingFilleuls(false);
     }
   };
 
@@ -158,8 +186,6 @@ export function ContactDetail({
   };
 
   if (!contact) return null;
-
-  console.log("ContactDetail rendering for:", contact.id, contact.prenom, contact.nom, contact.email, contact.telephone);
 
   const getCategorieColor = (categorie: string) => {
     switch (categorie) {
@@ -347,9 +373,20 @@ export function ContactDetail({
                       <span className="text-muted-foreground text-sm">
                         Date de naissance:{" "}
                       </span>
-                      {new Date(contact.date_naissance + "T00:00:00").toLocaleDateString(
-                        "fr-FR"
-                      )}
+                      {(() => {
+                        try {
+                          if (typeof contact.date_naissance === 'number') {
+                            const date = new Date(contact.date_naissance * 1000);
+                            // Utiliser UTC pour éviter décalage
+                            return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
+                          } else {
+                            const date = new Date(contact.date_naissance);
+                            return isNaN(date.getTime()) ? "Non renseignée" : date.toLocaleDateString("fr-FR");
+                          }
+                        } catch {
+                          return "Non renseignée";
+                        }
+                      })()}
                     </div>
                   </div>
                 )}
@@ -389,6 +426,132 @@ export function ContactDetail({
               </CardContent>
             </Card>
 
+            {/* Parrain (uniquement pour les catégories filleul) */}
+            {(contact.categorie === "FILLEUL" || 
+              contact.categorie === "PROSPECT_FILLEUL" || 
+              contact.categorie === "SUSPECT_FILLEUL" || 
+              contact.categorie === "FILLEUL_DESINSCRIT") && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users2 className="h-5 w-5" />
+                    Parrain
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loadingParrain ? (
+                    <div className="text-sm text-muted-foreground">Chargement...</div>
+                  ) : parrain ? (
+                    <div 
+                      className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                      onClick={() => {
+                        // Ouvrir la fiche du parrain
+                        console.log("Open parrain details:", parrain.id);
+                      }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">
+                            {parrain.prenom} {parrain.nom}
+                          </p>
+                          {parrain.email && (
+                            <p className="text-sm text-muted-foreground">{parrain.email}</p>
+                          )}
+                          {parrain.telephone && (
+                            <p className="text-sm text-muted-foreground">{parrain.telephone}</p>
+                          )}
+                        </div>
+                        <Badge className="bg-blue-50 text-blue-700">
+                          {parrain.categorie}
+                        </Badge>
+                      </div>
+                    </div>
+                  ) : contact.parrain_id ? (
+                    <div className="text-sm text-orange-600">
+                      ⚠️ Parrain introuvable (ID: {contact.parrain_id})
+                    </div>
+                  ) : (
+                    <div className="text-sm text-muted-foreground">
+                      Aucun parrain renseigné
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Mes filleuls */}
+            {filleuls.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Users2 className="h-5 w-5" />
+                      Mes filleuls ({filleuls.length})
+                    </CardTitle>
+                    <div className="text-sm text-muted-foreground">
+                      {filleuls.filter(f => f.categorie === "FILLEUL").length} actif{filleuls.filter(f => f.categorie === "FILLEUL").length > 1 ? 's' : ''} • {' '}
+                      {filleuls.filter(f => f.categorie === "PROSPECT_FILLEUL").length} prospect{filleuls.filter(f => f.categorie === "PROSPECT_FILLEUL").length > 1 ? 's' : ''} • {' '}
+                      {filleuls.filter(f => f.categorie === "FILLEUL_DESINSCRIT").length} désinscrit{filleuls.filter(f => f.categorie === "FILLEUL_DESINSCRIT").length > 1 ? 's' : ''}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {loadingFilleuls ? (
+                    <div className="text-sm text-muted-foreground">Chargement...</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filleuls.map((filleul) => (
+                        <div 
+                          key={filleul.id}
+                          className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                          onClick={() => {
+                            // Ouvrir la fiche du filleul
+                            console.log("Open filleul details:", filleul.id);
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">
+                                {filleul.prenom} {filleul.nom}
+                              </p>
+                              {filleul.date_dernier_contact && (() => {
+                                try {
+                                  const date = new Date(filleul.date_dernier_contact);
+                                  return !isNaN(date.getTime()) ? (
+                                    <p className="text-xs text-muted-foreground">
+                                      Dernier suivi : {date.toLocaleDateString('fr-FR')}
+                                    </p>
+                                  ) : null;
+                                } catch {
+                                  return null;
+                                }
+                              })()}
+                            </div>
+                            <Badge 
+                              className={
+                                filleul.categorie === "FILLEUL" 
+                                  ? "bg-purple-50 text-purple-700"
+                                  : filleul.categorie === "PROSPECT_FILLEUL"
+                                  ? "bg-cyan-50 text-cyan-700"
+                                  : filleul.categorie === "SUSPECT_FILLEUL"
+                                  ? "bg-orange-50 text-orange-700"
+                                  : "bg-gray-50 text-gray-700"
+                              }
+                            >
+                              {filleul.categorie === "FILLEUL" && "Filleul"}
+                              {filleul.categorie === "PROSPECT_FILLEUL" && "Prospect"}
+                              {filleul.categorie === "SUSPECT_FILLEUL" && "Suspect"}
+                              {filleul.categorie === "FILLEUL_DESINSCRIT" && "Désinscrit"}
+                            </Badge>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Suivi */}
             {(contact.date_dernier_contact || contact.date_prochain_suivi) && (
               <Card>
@@ -402,7 +565,14 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Dernier contact :</span>
                         <p className="font-medium text-blue-700">
-                          {new Date(contact.date_dernier_contact * 1000).toLocaleDateString('fr-FR')}
+                          {(() => {
+                            try {
+                              const date = new Date(contact.date_dernier_contact * 1000);
+                              return isNaN(date.getTime()) ? "Aucun" : date.toLocaleDateString('fr-FR');
+                            } catch {
+                              return "Aucun";
+                            }
+                          })()}
                         </p>
                       </div>
                     </div>
@@ -413,7 +583,14 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Prochain suivi prévu le :</span>
                         <p className="font-medium text-orange-700">
-                          {new Date(contact.date_prochain_suivi * 1000).toLocaleDateString('fr-FR')}
+                          {(() => {
+                            try {
+                              const date = new Date(contact.date_prochain_suivi * 1000);
+                              return isNaN(date.getTime()) ? "Aucune date" : date.toLocaleDateString('fr-FR');
+                            } catch {
+                              return "Aucune date";
+                            }
+                          })()}
                         </p>
                       </div>
                     </div>
@@ -602,9 +779,12 @@ export function ContactDetail({
         open={showEditForm}
         onOpenChange={setShowEditForm}
         contact={contact}
-        onSuccess={() => {
-          onUpdate();
+        onSuccess={async () => {
           setShowEditForm(false);
+          // Fermer le ContactDetail pour forcer un rechargement complet
+          onOpenChange(false);
+          // Recharger la liste des contacts
+          onUpdate();
         }}
       />
 

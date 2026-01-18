@@ -15,6 +15,12 @@
 
 ## 📊 Tableau récapitulatif
 
+### Phase 0 : Refonte demandée
+
+| Agent | Module | Fichier | Priorité | Durée | Status |
+|-------|--------|---------|----------|-------|--------|
+| **NEW** | Contacts & Filleuls | `AGENT_CONTACTS_FILLEULS.md` | 🔴 **Haute** | 3-4 sessions | ❌ À faire |
+
 ### Phase 1 : Finir les fonctionnalités
 
 | Agent | Module | Fichier | Priorité | Durée | Status |
@@ -97,6 +103,9 @@ prompts/
 ├── INDEX_AGENTS.md              ← CE FICHIER
 ├── CONTEXTE_GLOBAL.md           ← Contexte général du projet
 │
+│── PHASE 0 : REFONTE DEMANDÉE
+├── AGENT_CONTACTS_FILLEULS.md   ← Onglets Clients/Filleuls + Import MLM
+│
 │── PHASE 1 : FONCTIONNALITÉS
 ├── AGENT_1_OCR_RIO.md           ← Compléter import RIO
 ├── AGENT_2_PDF_GENERATION.md    ← Générer bulletins souscription
@@ -143,6 +152,7 @@ prompts/
 
 ## 💰 Checklist V1 commercialisable
 
+- [ ] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** 🔴
 - [ ] Agent 1 : Détection doublons investissements RIO
 - [ ] Agent 1 : OCR PDF scannés (Tesseract)
 - [ ] Agent 2 : Génération PDF pré-remplis

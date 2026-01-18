@@ -67,6 +67,26 @@ pub fn find_contact_by_email(db: State<'_, DbState>, email: String) -> Result<Op
         .map_err(|e| format!("Failed to find contact by email: {}", e))
 }
 
+// ========== FILLEULS ==========
+
+#[tauri::command]
+pub fn get_filleuls_by_parrain(db: State<'_, DbState>, parrain_id: i64) -> Result<Vec<Contact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_filleuls_by_parrain(parrain_id)
+        .map_err(|e| format!("Failed to get filleuls: {}", e))
+}
+
+#[tauri::command]
+pub fn find_contact_by_name(db: State<'_, DbState>, nom: String, prenom: String) -> Result<Option<Contact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.find_contact_by_name(&nom, &prenom)
+        .map_err(|e| format!("Failed to find contact by name: {}", e))
+}
+
 // ========== FOYERS ==========
 
 #[tauri::command]

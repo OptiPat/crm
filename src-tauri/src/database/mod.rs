@@ -77,6 +77,7 @@ impl Database {
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 foyer_id INTEGER,
                 categorie TEXT NOT NULL,
+                parrain_id INTEGER,
                 civilite TEXT,
                 nom TEXT NOT NULL,
                 prenom TEXT NOT NULL,
@@ -85,18 +86,19 @@ impl Database {
                 adresse TEXT,
                 code_postal TEXT,
                 ville TEXT,
-                date_naissance TEXT,
+                date_naissance INTEGER,
                 profession TEXT,
                 situation_familiale TEXT,
                 source_lead TEXT,
                 profil_risque_sri INTEGER,
-                date_dernier_contact TEXT,
-                date_prochain_suivi TEXT,
+                date_dernier_contact INTEGER,
+                date_prochain_suivi INTEGER,
                 statut_suivi TEXT NOT NULL DEFAULT 'ACTIF',
                 notes TEXT,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
-                FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE SET NULL
+                FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE SET NULL,
+                FOREIGN KEY (parrain_id) REFERENCES contacts(id) ON DELETE SET NULL
             )",
             [],
         )?;
@@ -141,6 +143,51 @@ impl Database {
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
                 FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        
+        // Table investissements
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS investissements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                foyer_id INTEGER,
+                type_produit TEXT NOT NULL,
+                nom_produit TEXT NOT NULL,
+                partenaire_id INTEGER,
+                montant_initial INTEGER,
+                date_souscription INTEGER,
+                date_fin_demembrement INTEGER,
+                versement_programme INTEGER NOT NULL DEFAULT 0,
+                montant_versement_programme INTEGER,
+                frequence_versement TEXT,
+                reinvestissement_dividendes INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
+                origine TEXT NOT NULL DEFAULT 'MON_CONSEIL',
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+                FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE SET NULL,
+                FOREIGN KEY (partenaire_id) REFERENCES partenaires(id) ON DELETE SET NULL
+            )",
+            [],
+        )?;
+        
+        // Table alertes
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS alertes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                type_alerte TEXT NOT NULL,
+                titre TEXT NOT NULL,
+                description TEXT,
+                date_echeance TEXT NOT NULL,
+                statut TEXT NOT NULL DEFAULT 'EN_ATTENTE',
+                priorite TEXT NOT NULL DEFAULT 'NORMALE',
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
             )",
             [],
         )?;

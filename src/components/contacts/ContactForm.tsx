@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createContact, updateContact, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
+import { createContact, updateContact, getAllContacts, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
 
 interface ContactFormProps {
   open: boolean;
@@ -29,37 +29,120 @@ interface ContactFormProps {
 
 export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactFormProps) {
   const [loading, setLoading] = useState(false);
+  const [allContacts, setAllContacts] = useState<Contact[]>([]);
+  const [searchParrain, setSearchParrain] = useState("");
+
+  // Charger tous les contacts pour la sélection du parrain
+  useEffect(() => {
+    let retryCount = 0;
+    const loadContacts = async () => {
+      try {
+        const contacts = await getAllContacts();
+        setAllContacts(contacts);
+      } catch (error) {
+        // Réessayer une fois si erreur d'initialisation de la base
+        if (retryCount === 0 && error instanceof Error && error.message.includes("Invalid column type")) {
+          retryCount++;
+          setTimeout(loadContacts, 500);
+        } else {
+          console.error("Error loading contacts:", error);
+        }
+      }
+    };
+    loadContacts();
+  }, []);
   
-  // Convertir les timestamps en dates pour les inputs
-  const timestampToDate = (timestamp: number | undefined) => {
-    if (!timestamp || isNaN(timestamp) || !isFinite(timestamp)) return "";
+  // Convertir les timestamps/ISO en dates pour les inputs
+  const toDateInput = (dateValue: any) => {
+    if (!dateValue) return "";
     try {
-      const date = new Date(timestamp * 1000);
-      if (isNaN(date.getTime())) return "";
-      return date.toISOString().split('T')[0];
+      // Si c'est un timestamp (number)
+      if (typeof dateValue === 'number') {
+        const date = new Date(dateValue * 1000);
+        if (isNaN(date.getTime())) return "";
+        // Utiliser UTC pour éviter les décalages de fuseau horaire
+        const year = date.getUTCFullYear();
+        const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(date.getUTCDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      }
+      // Si c'est déjà une string ISO
+      if (typeof dateValue === 'string') {
+        const date = new Date(dateValue);
+        if (isNaN(date.getTime())) return "";
+        return date.toISOString().split('T')[0];
+      }
+      return "";
     } catch {
       return "";
     }
   };
   
   const [formData, setFormData] = useState<NewContact>({
-    categorie: contact?.categorie || "SUSPECT_CLIENT",
-    nom: contact?.nom || "",
-    prenom: contact?.prenom || "",
-    email: contact?.email || "",
-    telephone: contact?.telephone || "",
-    adresse: contact?.adresse || "",
-    code_postal: contact?.code_postal || "",
-    ville: contact?.ville || "",
-    date_naissance: timestampToDate(contact?.date_naissance),
-    profession: contact?.profession || "",
-    source_lead: contact?.source_lead || "",
-    profil_risque_sri: contact?.profil_risque_sri || undefined,
-    date_dernier_contact: timestampToDate(contact?.date_dernier_contact),
-    date_prochain_suivi: timestampToDate(contact?.date_prochain_suivi),
-    statut_suivi: contact?.statut_suivi || "ACTIF",
-    notes: contact?.notes || "",
+    categorie: "SUSPECT_CLIENT",
+    nom: "",
+    prenom: "",
+    email: "",
+    telephone: "",
+    adresse: "",
+    code_postal: "",
+    ville: "",
+    date_naissance: "",
+    profession: "",
+    source_lead: "",
+    profil_risque_sri: undefined,
+    date_dernier_contact: "",
+    date_prochain_suivi: "",
+    statut_suivi: "ACTIF",
+    notes: "",
+    parrain_id: undefined,
   });
+
+  // Mettre à jour le formData quand le contact change
+  useEffect(() => {
+    if (contact) {
+      setFormData({
+        categorie: contact.categorie || "SUSPECT_CLIENT",
+        parrain_id: contact.parrain_id || undefined,
+        nom: contact.nom || "",
+        prenom: contact.prenom || "",
+        email: contact.email || "",
+        telephone: contact.telephone || "",
+        adresse: contact.adresse || "",
+        code_postal: contact.code_postal || "",
+        ville: contact.ville || "",
+        date_naissance: toDateInput(contact.date_naissance),
+        profession: contact.profession || "",
+        source_lead: contact.source_lead || "",
+        profil_risque_sri: contact.profil_risque_sri || undefined,
+        date_dernier_contact: toDateInput(contact.date_dernier_contact),
+        date_prochain_suivi: toDateInput(contact.date_prochain_suivi),
+        statut_suivi: contact.statut_suivi || "ACTIF",
+        notes: contact.notes || "",
+      });
+    } else {
+      // Réinitialiser pour création
+      setFormData({
+        categorie: "SUSPECT_CLIENT",
+        nom: "",
+        prenom: "",
+        email: "",
+        telephone: "",
+        adresse: "",
+        code_postal: "",
+        ville: "",
+        date_naissance: "",
+        profession: "",
+        source_lead: "",
+        profil_risque_sri: undefined,
+        date_dernier_contact: "",
+        date_prochain_suivi: "",
+        statut_suivi: "ACTIF",
+        notes: "",
+        parrain_id: undefined,
+      });
+    }
+  }, [contact, open]); // Réinitialiser quand le contact ou l'ouverture change
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -67,22 +150,55 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
 
     try {
       // Convertir les dates en ISO strings si elles sont fournies
-      const dataToSubmit = { ...formData };
+      const dataToSubmit: any = { ...formData };
       
-      if (formData.date_dernier_contact) {
-        dataToSubmit.date_dernier_contact = new Date(formData.date_dernier_contact + "T00:00:00").toISOString();
+      console.log("📝 Données du formulaire AVANT conversion:", formData);
+      
+      // Gérer les dates : convertir en ISO UTC ou undefined si vide
+      if (formData.date_dernier_contact && formData.date_dernier_contact.trim() !== "") {
+        const [year, month, day] = formData.date_dernier_contact.split('-').map(Number);
+        const isoDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
+        console.log(`📅 date_dernier_contact: "${formData.date_dernier_contact}" → "${isoDate}"`);
+        dataToSubmit.date_dernier_contact = isoDate;
+      } else {
+        console.log(`⚠️ date_dernier_contact vide, sera undefined`);
+        dataToSubmit.date_dernier_contact = undefined;
       }
       
-      if (formData.date_prochain_suivi) {
-        dataToSubmit.date_prochain_suivi = new Date(formData.date_prochain_suivi + "T00:00:00").toISOString();
+      if (formData.date_prochain_suivi && formData.date_prochain_suivi.trim() !== "") {
+        const [year, month, day] = formData.date_prochain_suivi.split('-').map(Number);
+        const isoDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
+        console.log(`📅 date_prochain_suivi: "${formData.date_prochain_suivi}" → "${isoDate}"`);
+        dataToSubmit.date_prochain_suivi = isoDate;
+      } else {
+        console.log(`⚠️ date_prochain_suivi vide, sera undefined`);
+        dataToSubmit.date_prochain_suivi = undefined;
       }
+      
+      if (formData.date_naissance && formData.date_naissance.trim() !== "") {
+        const [year, month, day] = formData.date_naissance.split('-').map(Number);
+        const isoDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
+        console.log(`📅 date_naissance: "${formData.date_naissance}" → "${isoDate}"`);
+        dataToSubmit.date_naissance = isoDate;
+      } else {
+        console.log(`⚠️ date_naissance vide, sera undefined`);
+        dataToSubmit.date_naissance = undefined;
+      }
+      
+      console.log("📤 Données envoyées à Tauri:", dataToSubmit);
       
       if (contact) {
-        await updateContact(contact.id, dataToSubmit);
+        console.log(`🔄 Mise à jour du contact ID ${contact.id}`);
+        const result = await updateContact(contact.id, dataToSubmit);
+        console.log(`✅ Contact mis à jour:`, result);
+        // Appeler onSuccess avec le contact mis à jour pour que ContactDetail le recharge
+        onSuccess();
       } else {
-        await createContact(dataToSubmit);
+        console.log(`✨ Création d'un nouveau contact`);
+        const result = await createContact(dataToSubmit);
+        console.log(`✅ Contact créé:`, result);
+        onSuccess();
       }
-      onSuccess();
       onOpenChange(false);
       // Réinitialiser le formulaire
       setFormData({
@@ -140,9 +256,11 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
                 <SelectContent>
                   <SelectItem value="CLIENT">Client</SelectItem>
                   <SelectItem value="PROSPECT_CLIENT">Prospect client</SelectItem>
-                  <SelectItem value="PROSPECT_FILLEUL">Prospect filleul</SelectItem>
                   <SelectItem value="SUSPECT_CLIENT">Suspect client</SelectItem>
+                  <SelectItem value="FILLEUL">Filleul</SelectItem>
+                  <SelectItem value="PROSPECT_FILLEUL">Prospect filleul</SelectItem>
                   <SelectItem value="SUSPECT_FILLEUL">Suspect filleul</SelectItem>
+                  <SelectItem value="FILLEUL_DESINSCRIT">Filleul désinscrit</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -166,6 +284,51 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
               </Select>
             </div>
           </div>
+
+          {/* Champ Parrain (uniquement pour les catégories filleul) */}
+          {(formData.categorie === "FILLEUL" || 
+            formData.categorie === "PROSPECT_FILLEUL" || 
+            formData.categorie === "SUSPECT_FILLEUL" || 
+            formData.categorie === "FILLEUL_DESINSCRIT") && (
+            <div className="space-y-2">
+              <Label htmlFor="parrain_id">Parrain (optionnel)</Label>
+              <div className="space-y-2">
+                <Input
+                  placeholder="Rechercher un parrain..."
+                  value={searchParrain}
+                  onChange={(e) => setSearchParrain(e.target.value)}
+                />
+                <Select
+                  value={formData.parrain_id?.toString() || "none"}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, parrain_id: value === "none" ? undefined : parseInt(value) })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionner un parrain..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Aucun parrain</SelectItem>
+                    {allContacts
+                      .filter((c) => {
+                        const search = searchParrain.toLowerCase();
+                        return (
+                          c.nom.toLowerCase().includes(search) ||
+                          c.prenom.toLowerCase().includes(search)
+                        );
+                      })
+                      .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`))
+                      .slice(0, 50)
+                      .map((c) => (
+                        <SelectItem key={c.id} value={c.id.toString()}>
+                          {c.prenom} {c.nom} ({c.categorie})
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
 
           {/* Nom et Prénom */}
           <div className="grid grid-cols-2 gap-4">

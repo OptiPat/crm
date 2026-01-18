@@ -455,8 +455,19 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     // Charger les contacts existants pour détecter les doublons
     try {
       console.log("Loading existing contacts for duplicate detection...");
-      const existingContacts = await getAllContacts();
-      console.log("Existing contacts loaded:", existingContacts.length);
+      let existingContacts: any[] = [];
+      try {
+        existingContacts = await getAllContacts();
+        console.log("Existing contacts loaded:", existingContacts.length);
+      } catch (error) {
+        // Si erreur d'initialisation de la base, continuer sans détection de doublons
+        if (error instanceof Error && error.message.includes("Invalid column type")) {
+          console.log("⏳ Database still initializing, proceeding without duplicate detection");
+          existingContacts = [];
+        } else {
+          throw error;
+        }
+      }
       
       // Map pour suivre les contacts déjà vus dans l'import en cours
       const seenInImport = new Map<string, { rowIndex: number }>();
@@ -639,12 +650,33 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               }
               
               // Mettre à jour le contact
+              // Convertir le contact existant (avec timestamps) en NewContact (avec ISO strings)
+              const contactToUpdate = {
+                foyer_id: existingContact.foyer_id,
+                categorie: updatedCategorie,
+                parrain_id: existingContact.parrain_id,
+                civilite: existingContact.civilite,
+                nom: existingContact.nom,
+                prenom: existingContact.prenom,
+                email: existingContact.email,
+                telephone: existingContact.telephone,
+                adresse: existingContact.adresse,
+                code_postal: existingContact.code_postal,
+                ville: existingContact.ville,
+                date_naissance: existingContact.date_naissance ? new Date(existingContact.date_naissance * 1000).toISOString() : undefined,
+                profession: existingContact.profession,
+                situation_familiale: existingContact.situation_familiale,
+                source_lead: existingContact.source_lead,
+                profil_risque_sri: existingContact.profil_risque_sri,
+                date_dernier_contact: existingContact.date_dernier_contact ? new Date(existingContact.date_dernier_contact * 1000).toISOString() : undefined,
+                date_prochain_suivi: existingContact.date_prochain_suivi ? new Date(existingContact.date_prochain_suivi * 1000).toISOString() : undefined,
+                statut_suivi: existingContact.statut_suivi,
+                notes: existingContact.notes,
+              };
+              
               await invoke("update_contact", { 
                 id: existingContactId, 
-                contact: { 
-                  ...existingContact,
-                  categorie: updatedCategorie
-                } 
+                contact: contactToUpdate
               });
               
               // Créer un investissement si un produit est renseigné dans cette ligne
@@ -1098,24 +1130,34 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         };
         
         // Debug pour voir ce qui est envoyé
+        console.log(`📝 [${i + 1}/${rows.length}] Création contact: ${row.data.prenom} ${row.data.nom}`);
         if (dateDernierContact) {
-          console.log(`🔍 Envoi date ISO pour ${row.data.prenom} ${row.data.nom}:`, {
+          console.log(`📅 Date dernier contact:`, {
             dateObject: dateDernierContact,
             dateISO: dateDernierContactISO,
             timestamp: Math.floor(dateDernierContact.getTime() / 1000),
+            formatted: dateDernierContact.toLocaleDateString('fr-FR')
           });
+        } else {
+          console.log(`⚠️ Pas de date de dernier contact`);
         }
-
-        // Debug: log après nettoyage
-        if (i < 3) {
-          console.log(`✅ Contact ${i + 1} APRÈS nettoyage:`, {
-            email: newContact.email,
-            telephone: newContact.telephone,
-            profession: newContact.profession,
-          });
-        }
+        
+        console.log(`📊 Données contact:`, {
+          categorie: newContact.categorie,
+          email: newContact.email,
+          telephone: newContact.telephone,
+          date_dernier_contact: newContact.date_dernier_contact
+        });
 
         const createdContact = await createContact(newContact);
+        
+        console.log(`✅ Contact créé avec succès:`, {
+          id: createdContact.id,
+          nom: createdContact.nom,
+          prenom: createdContact.prenom,
+          date_dernier_contact: createdContact.date_dernier_contact,
+          date_dernier_contact_type: typeof createdContact.date_dernier_contact
+        });
         
         // Sauvegarder le contact créé dans la map (pour gérer les doublons dans l'Excel)
         createdContactsInImport.set(i, createdContact.id);
@@ -1343,6 +1385,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         
         updatedRows[i] = { ...row, status: "success", message: "Importé avec succès" };
       } catch (error) {
+        console.error(`❌ [${i + 1}/${rows.length}] Erreur création contact ${row.data.prenom} ${row.data.nom}:`, error);
         updatedRows[i] = { ...row, status: "error", message: String(error) };
       }
 
@@ -1350,6 +1393,29 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     }
 
     setImporting(false);
+    
+    // Résumé final avec stats
+    const finalSuccessCount = updatedRows.filter(r => r.status === "success").length;
+    const finalErrorCount = updatedRows.filter(r => r.status === "error").length;
+    const finalDuplicateCount = updatedRows.filter(r => r.status === "duplicate").length;
+    
+    console.log(`
+╔════════════════════════════════════════════╗
+║       RÉSUMÉ DE L'IMPORT                   ║
+╠════════════════════════════════════════════╣
+║ ✅ Succès      : ${String(finalSuccessCount).padStart(4)} contacts         ║
+║ ⚠️  Doublons    : ${String(finalDuplicateCount).padStart(4)} ignorés          ║
+║ ❌ Erreurs     : ${String(finalErrorCount).padStart(4)} échecs            ║
+║ 📊 Total lignes: ${String(updatedRows.length).padStart(4)}                    ║
+╚════════════════════════════════════════════╝
+    `.trim());
+    
+    if (finalErrorCount > 0) {
+      console.error(`⚠️ Erreurs détaillées:`);
+      updatedRows.filter(r => r.status === "error").forEach((row, idx) => {
+        console.error(`  ${idx + 1}. ${row.data.prenom} ${row.data.nom}: ${row.message}`);
+      });
+    }
     
     // Attendre 2 secondes avant de fermer
     setTimeout(() => {

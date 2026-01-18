@@ -67,6 +67,8 @@ fn main() {
                         delete_all_contacts,
                         update_contact,
                         find_contact_by_email,
+                        get_filleuls_by_parrain,
+                        find_contact_by_name,
                         get_all_foyers,
                         create_foyer,
                         get_foyer_by_id,

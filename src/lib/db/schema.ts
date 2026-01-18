@@ -33,10 +33,18 @@ export const contacts = sqliteTable("contacts", {
       "PROSPECT_FILLEUL",
       "SUSPECT_CLIENT",
       "SUSPECT_FILLEUL",
+      "FILLEUL",
+      "FILLEUL_DESINSCRIT",
     ],
   })
     .notNull()
     .default("SUSPECT_CLIENT"),
+  
+  // Parrainage (pour les filleuls)
+  parrainId: integer("parrain_id").references((): any => contacts.id, {
+    onDelete: "set null",
+  }),
+  
   civilite: text("civilite", { enum: ["M", "MME", "AUTRE"] }),
   nom: text("nom").notNull(),
   prenom: text("prenom").notNull(),

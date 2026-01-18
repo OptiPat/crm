@@ -4,6 +4,7 @@ export interface Contact {
   id: number;
   foyer_id?: number;
   categorie: string;
+  parrain_id?: number;
   civilite?: string;
   nom: string;
   prenom: string;
@@ -28,6 +29,7 @@ export interface Contact {
 export interface NewContact {
   foyer_id?: number;
   categorie?: string;
+  parrain_id?: number;
   civilite?: string;
   nom: string;
   prenom: string;
@@ -69,4 +71,12 @@ export async function deleteContact(id: number): Promise<void> {
 
 export async function findContactByEmail(email: string): Promise<Contact | null> {
   return await invoke<Contact | null>("find_contact_by_email", { email });
+}
+
+export async function getFilleulsByParrain(parrainId: number): Promise<Contact[]> {
+  return await invoke<Contact[]>("get_filleuls_by_parrain", { parrainId });
+}
+
+export async function findContactByName(nom: string, prenom: string): Promise<Contact | null> {
+  return await invoke<Contact | null>("find_contact_by_name", { nom, prenom });
 }
