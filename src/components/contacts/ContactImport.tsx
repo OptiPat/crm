@@ -205,9 +205,6 @@ const findFoyerForCouple = async (
   prenom2: string,
   allContacts: Contact[]
 ): Promise<number | null> => {
-  console.log(`👫 [ContactImport] Recherche foyer pour ${prenom1} et ${prenom2} ${nom}`);
-  
-  // Chercher les 2 contacts avec ce nom de famille
   const contact1 = allContacts.find(c => 
     c.nom.toUpperCase() === nom.toUpperCase() && 
     c.prenom.toUpperCase() === prenom1.toUpperCase()
@@ -219,14 +216,11 @@ const findFoyerForCouple = async (
   );
   
   if (contact1 && contact2) {
-    // Si les 2 contacts ont le même foyer_id
     if (contact1.foyer_id && contact1.foyer_id === contact2.foyer_id) {
-      console.log(`👫 [ContactImport] ✓ Foyer trouvé: ${contact1.foyer_id}`);
       return contact1.foyer_id;
     }
   }
   
-  console.log(`👫 [ContactImport] ⚠️ Foyer non trouvé pour ${prenom1} et ${prenom2} ${nom}`);
   return null;
 };
 
@@ -246,24 +240,17 @@ const analyzeCoupleContact = async (
   nom: string,
   allContacts: Contact[]
 ): Promise<ImportResult> => {
-  // Vérifier si c'est un couple
   if (!isContactCouple(prenom, nom)) {
     return { shouldSkipContact: false, foyerId: null, contact1: null, contact2: null };
   }
   
-  console.log(`👫 [ContactImport] Détection d'un couple: ${prenom} ${nom}`);
-  
-  // Extraire les 2 prénoms
   const names = extractCoupleNames(prenom);
   if (!names) {
-    console.log(`👫 [ContactImport] ⚠️ Impossible d'extraire les prénoms`);
     return { shouldSkipContact: false, foyerId: null, contact1: null, contact2: null };
   }
   
   const { prenom1, prenom2 } = names;
-  console.log(`👫 [ContactImport] Prénoms extraits: "${prenom1}" et "${prenom2}"`);
   
-  // Chercher les contacts
   const contact1 = allContacts.find(c => 
     c.nom.toUpperCase() === nom.toUpperCase() && 
     c.prenom.toUpperCase() === prenom1.toUpperCase()
@@ -274,12 +261,10 @@ const analyzeCoupleContact = async (
     c.prenom.toUpperCase() === prenom2.toUpperCase()
   );
   
-  // Si les 2 contacts existent, chercher le foyer
   if (contact1 && contact2) {
     const foyerId = await findFoyerForCouple(nom, prenom1, prenom2, allContacts);
     
     if (foyerId) {
-      console.log(`👫 [ContactImport] ✓ Foyer existant trouvé: ${foyerId}`);
       return { 
         shouldSkipContact: true,
         foyerId,
@@ -289,7 +274,6 @@ const analyzeCoupleContact = async (
         prenom2
       };
     } else {
-      console.log(`👫 [ContactImport] ⚠️ Contacts trouvés mais pas de foyer commun → À créer`);
       return {
         shouldSkipContact: true,
         foyerId: null,
@@ -297,13 +281,10 @@ const analyzeCoupleContact = async (
         contact2,
         prenom1,
         prenom2,
-        shouldCreateContacts: false // Pas besoin de créer les contacts, juste le foyer
+        shouldCreateContacts: false
       };
     }
   }
-  
-  // Si les contacts n'existent pas, il faudra les créer + le foyer
-  console.log(`👫 [ContactImport] ⚠️ Contacts "${prenom1}" et/ou "${prenom2}" non trouvés → À créer`);
   return {
     shouldSkipContact: true,
     foyerId: null,
@@ -750,16 +731,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       );
       
       if (existing) {
-        console.log(`💰 [Investissement] ⚠️ Doublon détecté: ${newInv.nom_produit} → Mise à jour`);
         const updated = await updateInvestissement(existing.id, newInv);
-        // Mettre à jour le cache
         const idx = allInvestissementsCache.findIndex(i => i.id === existing.id);
         if (idx !== -1) {
           allInvestissementsCache[idx] = updated;
         }
         return { created: false, investissement: updated };
       } else {
-        console.log(`💰 [Investissement] ✅ Création: ${newInv.nom_produit}`);
         const created = await createInvestissement(newInv);
         allInvestissementsCache.push(created);
         return { created: true, investissement: created };
@@ -783,7 +761,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       
       // Si c'est un couple avec un produit, on l'envoie directement vers la logique couple
       if (isContactCouple(prenomCheck, nomCheck) && produitCheck) {
-        console.log(`👫 [ContactImport] Ligne ${i} détectée comme couple avec produit: "${prenomCheck}" "${nomCheck}" - "${produitCheck}"`);
         // Le traitement se fera dans le bloc couple plus bas, on ne fait PAS continue
         // On laisse le flux normal mais on s'assure que row.status ne bloque pas
         row.status = "pending"; // 🔥 Forcer le statut pending pour passer par la logique couple
@@ -1099,13 +1076,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         const produit = String(row.data.produit || "").trim();
         
         // 🔍 Log TOUTES les lignes pour détecter les couples
-        console.log(`👫 [ContactImport] Ligne ${i}: "${prenom}" "${nom}" - Produit: "${produit}"`);
         
         // 🔥 CAS SPECIAL : Ligne sans prénom MAIS avec un produit → Cellule fusionnée !
         if (!prenom && nom && produit && lastDetectedFoyerId) {
-          console.log(`👫 [ContactImport] ⚡ Ligne ${i} sans prénom détectée → Rattachement au foyer ${lastDetectedFoyerId}`);
           couplesLines.push({ rowIndex: i, row, foyerId: lastDetectedFoyerId });
-          console.log(`👫 [ContactImport] ✓ Ligne ${i} ajoutée à couplesLines (foyer ${lastDetectedFoyerId}, total: ${couplesLines.length})`);
           updatedRows[i] = { ...row, status: "success", message: "Investissement de foyer (suite)" };
           setImportRows([...updatedRows]);
           continue;
@@ -1118,13 +1092,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         );
 
         if (coupleAnalysis.shouldSkipContact) {
-          console.log(`👫 [ContactImport] ✅ Contact couple détecté → Ligne ${i}`);
           
           // CAS 1 : Foyer existant → Stocker l'investissement
           if (coupleAnalysis.foyerId && row.data.produit) {
             lastDetectedFoyerId = coupleAnalysis.foyerId; // 🔥 Mettre à jour le tracker
             couplesLines.push({ rowIndex: i, row, foyerId: coupleAnalysis.foyerId });
-            console.log(`👫 [ContactImport] ✓ Ligne ${i} ajoutée à couplesLines (foyer existant ${coupleAnalysis.foyerId}, total: ${couplesLines.length})`);
             updatedRows[i] = { ...row, status: "success", message: "Investissement de foyer" };
             setImportRows([...updatedRows]);
             continue;
@@ -1132,7 +1104,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           
           // CAS 2 : Contacts existent mais pas de foyer → Chercher ou créer le foyer
           if (coupleAnalysis.contact1 && coupleAnalysis.contact2 && !coupleAnalysis.foyerId) {
-            console.log(`👫 [ContactImport] Recherche/création d'un foyer pour ${coupleAnalysis.prenom1} et ${coupleAnalysis.prenom2}`);
             try {
               const nomFamilleCompose = extractCompositeName(row.data.nom || "");
               
@@ -1145,11 +1116,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               let foyerToUse: { id: number; nom: string };
               
               if (existingFoyer) {
-                console.log(`👫 [ContactImport] ✓ Foyer existant trouvé: ${existingFoyer.nom} (ID: ${existingFoyer.id})`);
                 foyerToUse = existingFoyer;
               } else {
                 const nomFoyer = `Foyer ${nomFamilleCompose}`;
-                console.log(`👫 [ContactImport] Création du foyer: ${nomFoyer}`);
                 const newFoyer = await createFoyer({ 
                   nom: nomFoyer,
                   type_foyer: "COUPLE"
@@ -1205,17 +1174,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               }
               
               const wasExisting = !!existingFoyer;
-              console.log(`👫 [ContactImport] ✓ Foyer ${foyerToUse.id} ${wasExisting ? 'réutilisé' : 'créé'}, contacts liés et cache mis à jour`);
               
               lastDetectedFoyerId = foyerToUse.id; // 🔥 Mettre à jour le tracker
               
               // Stocker l'investissement
               if (row.data.produit) {
                 couplesLines.push({ rowIndex: i, row, foyerId: foyerToUse.id });
-                console.log(`👫 [ContactImport] ✓ Ligne ${i} ajoutée à couplesLines (foyer ${foyerToUse.id}, total: ${couplesLines.length})`);
                 updatedRows[i] = { ...row, status: "success", message: wasExisting ? "Foyer existant + investissement" : "Foyer créé + investissement" };
               } else {
-                console.log(`👫 [ContactImport] ⚠️ Pas de produit dans la ligne ${i} (CAS 2)`);
                 updatedRows[i] = { ...row, status: "success", message: wasExisting ? "Lié au foyer existant" : "Foyer créé" };
               }
               
@@ -1230,12 +1196,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           
           // CAS 3 : Contacts n'existent pas → Créer contacts + foyer
           if (coupleAnalysis.shouldCreateContacts && coupleAnalysis.prenom1 && coupleAnalysis.prenom2) {
-            console.log(`👫 [ContactImport] Création des contacts ${coupleAnalysis.prenom1} et ${coupleAnalysis.prenom2} ${row.data.nom}`);
             try {
               // Extraire le nom de famille (gérer les noms composés)
               const nomFamille = row.data.nom || "";
               const nomFamilleCompose = extractCompositeName(nomFamille);
-              console.log(`👫 [ContactImport] Nom de famille extrait: "${nomFamilleCompose}" (original: "${nomFamille}")`);
               
               // Créer le foyer d'abord
               const nomFoyer = `Foyer ${nomFamilleCompose}`;
@@ -1243,7 +1207,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 nom: nomFoyer,
                 type_foyer: "COUPLE"
               });
-              console.log(`👫 [ContactImport] ✓ Foyer ${newFoyer.id} créé: ${nomFoyer}`);
               
               // Pour les noms composés "X et Y", utiliser le premier nom pour le premier contact
               const nomContact1 = nomFamille.includes(" et ") || nomFamille.includes(" & ")
@@ -1253,8 +1216,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               const nomContact2 = nomFamille.includes(" et ") || nomFamille.includes(" & ")
                 ? nomFamille.split(/ et | & /)[1].trim()
                 : nomFamille;
-              
-              console.log(`👫 [ContactImport] Noms contacts: "${nomContact1}" et "${nomContact2}"`);
               
               // Créer contact 1
               const newContact1: NewContact = {
@@ -1266,7 +1227,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 statut_suivi: "ACTIF",
               };
               const createdContact1 = await createContact(newContact1);
-              console.log(`👫 [ContactImport] ✓ Contact ${createdContact1.prenom} ${createdContact1.nom} créé (ID: ${createdContact1.id})`);
               
               // Créer contact 2
               const newContact2: NewContact = {
@@ -1278,7 +1238,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 statut_suivi: "ACTIF",
               };
               const createdContact2 = await createContact(newContact2);
-              console.log(`👫 [ContactImport] ✓ Contact ${createdContact2.prenom} ${createdContact2.nom} créé (ID: ${createdContact2.id})`);
               
               // Mettre à jour le cache
               allContactsCache.push(createdContact1, createdContact2);
@@ -1288,11 +1247,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               // Stocker l'investissement
               if (row.data.produit) {
                 couplesLines.push({ rowIndex: i, row, foyerId: newFoyer.id });
-                console.log(`👫 [ContactImport] ✓ Ligne ${i} ajoutée à couplesLines (total: ${couplesLines.length})`);
                 updatedRows[i] = { ...row, status: "success", message: `Contacts ${coupleAnalysis.prenom1} et ${coupleAnalysis.prenom2} créés + foyer + investissement` };
-                console.log(`👫 [ContactImport] ✓ Investissement ajouté à la file pour le foyer ${newFoyer.id}`);
               } else {
-                console.log(`👫 [ContactImport] ⚠️ Pas de produit dans la ligne ${i}, pas d'investissement`);
                 updatedRows[i] = { ...row, status: "success", message: `Contacts ${coupleAnalysis.prenom1} et ${coupleAnalysis.prenom2} créés + foyer` };
               }
               
@@ -1691,24 +1647,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       setImportRows([...updatedRows]);
     }
 
-    // 👫 TRAITER LES INVESTISSEMENTS DE FOYER (lignes couples)
-    console.log(`👫 [ContactImport] ========================================`);
-    console.log(`👫 [ContactImport] Traitement des investissements de foyer (${couplesLines.length} lignes)`);
-    console.log(`👫 [ContactImport] ========================================`);
-    
-    if (couplesLines.length === 0) {
-      console.log(`👫 [ContactImport] ⚠️ Aucune ligne couple détectée, passage à la suite`);
-    }
-    
+    // Traiter les investissements de foyer (lignes couples)
     for (const coupleLine of couplesLines) {
       try {
-        const { rowIndex, row, foyerId } = coupleLine;
-        console.log(`👫 [ContactImport] ----------------------------------------`);
-        console.log(`👫 [ContactImport] Ligne ${rowIndex}: ${row.data.prenom} ${row.data.nom}`);
-        console.log(`👫 [ContactImport] Foyer ID: ${foyerId}`);
-        console.log(`👫 [ContactImport] Produit: ${row.data.produit}`);
-        console.log(`👫 [ContactImport] Montant: ${row.data.montant}`);
-        console.log(`👫 [ContactImport] Partenaire: ${row.data.partenaire}`);
+        const { row, foyerId } = coupleLine;
         
         const produitStr = String(row.data.produit).trim();
         
@@ -1750,10 +1692,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             const created = await createPartenaire(newPartenaire);
             allPartenaires.push(created);
             partenaireId = created.id;
-            console.log(`👫 [ContactImport] ✓ Partenaire "${partenaireNom}" créé (ID: ${created.id})`);
           } else {
             partenaireId = partenaire.id;
-            console.log(`👫 [ContactImport] ✓ Partenaire "${partenaireNom}" trouvé (ID: ${partenaire.id})`);
           }
         }
         
@@ -1776,35 +1716,21 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           notes: `Investissement commun du couple`,
         };
         
-        const invResult = await createOrUpdateInvestissement(newInvestissement);
-        console.log(`👫 [ContactImport] ✅ Investissement de foyer ${foyerId} ${invResult.created ? 'créé' : 'mis à jour'} avec succès`);
-        console.log(`👫 [ContactImport]    Type: ${typeProduit}`);
-        console.log(`👫 [ContactImport]    Nom: ${produitStr}`);
-        console.log(`👫 [ContactImport]    Montant: ${montantInitial ? (montantInitial / 100).toFixed(2) : 'N/A'} €`);
-        
+        await createOrUpdateInvestissement(newInvestissement);
       } catch (error) {
-        console.error(`👫 [ContactImport] ❌ Erreur investissement foyer:`, error);
+        console.error("Erreur investissement foyer:", error);
       }
     }
-    
-    console.log(`👫 [ContactImport] ========================================`);
-    console.log(`👫 [ContactImport] Fin du traitement des investissements de foyer`);
-    console.log(`👫 [ContactImport] ========================================`);
 
     setImporting(false);
     
-    console.log("📥 [ContactImport] Import terminé, vérification des foyers...");
-    
     // Récupérer les contacts nouvellement créés pour la détection des foyers
     const successfulImports = updatedRows.filter(r => r.status === "success");
-    console.log("📥 [ContactImport] Imports réussis:", successfulImports.length);
     
     if (successfulImports.length > 0) {
       try {
         // Récupérer les contacts fraîchement créés
-        console.log("📥 [ContactImport] Récupération des contacts...");
         const allContacts = await getAllContacts();
-        console.log("📥 [ContactImport] Total contacts en base:", allContacts.length);
         
         const newContacts = successfulImports
           .map(row => {
@@ -1812,21 +1738,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               c.nom === row.data.nom && c.prenom === row.data.prenom
             );
             if (contact) {
-              console.log(`📥 [ContactImport] ✓ Contact trouvé: ${contact.prenom} ${contact.nom} (ID: ${contact.id})`);
             } else {
-              console.log(`📥 [ContactImport] ❌ Contact non trouvé: ${row.data.prenom} ${row.data.nom}`);
             }
             return contact;
           })
           .filter((c): c is Contact => c !== undefined);
 
-        console.log("📥 [ContactImport] Contacts importés identifiés (avec doublons):", newContacts.length);
-
         // 🎯 DÉDUPLICATION : Ne garder qu'une seule instance de chaque contact (par ID)
         const uniqueContacts = Array.from(
           new Map(newContacts.map(c => [c.id, c])).values()
         );
-        console.log("📥 [ContactImport] Contacts uniques après déduplication:", uniqueContacts.length);
 
         // Grouper par nom de famille pour détecter les familles
         const familyMap = new Map<string, Contact[]>();
@@ -1837,35 +1758,27 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
           familyMap.get(familyName)!.push(contact);
         });
-
-        console.log("📥 [ContactImport] Familles détectées:", familyMap.size);
         familyMap.forEach((members, name) => {
-          console.log(`📥 [ContactImport]   - ${name}: ${members.length} membres`);
         });
 
         // Vérifier s'il y a des familles avec 2+ membres
         const hasFamilies = Array.from(familyMap.values()).some(members => members.length >= 2);
-        console.log("📥 [ContactImport] Familles avec 2+ membres?", hasFamilies);
 
         if (hasFamilies) {
-          console.log("📥 [ContactImport] 🎯 Affichage de la modale de regroupement");
           // Afficher la modale de regroupement avec les contacts uniques
           setImportedContactsList(uniqueContacts);
           setShowFoyerGrouping(true);
           // Ne pas fermer la modale d'import pour l'instant
           return;
         } else {
-          console.log("📥 [ContactImport] Aucune famille détectée, fermeture normale");
         }
       } catch (error) {
         console.error("📥 [ContactImport] ❌ Erreur détection familles:", error);
       }
     } else {
-      console.log("📥 [ContactImport] Aucun import réussi");
     }
     
     // Si pas de familles détectées, fermer normalement après 2 secondes
-    console.log("📥 [ContactImport] Fermeture dans 2 secondes...");
     setTimeout(() => {
       try {
         handleClose();

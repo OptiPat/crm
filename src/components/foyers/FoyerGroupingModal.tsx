@@ -50,31 +50,21 @@ export function FoyerGroupingModal({
 
   // Grouper les contacts par nom de famille au montage
   useEffect(() => {
-    console.log("👥 [FoyerGroupingModal] useEffect - open:", open, "contacts:", importedContacts.length);
-    
     if (open && importedContacts.length > 0) {
-      console.log("👥 [FoyerGroupingModal] Détection des familles...");
       const familyMap = new Map<string, Contact[]>();
 
       importedContacts.forEach((contact) => {
         const familyName = contact.nom.toUpperCase();
-        console.log(`👥 [FoyerGroupingModal]   → Contact: ID=${contact.id}, Nom="${contact.nom}", Prénom="${contact.prenom}"`);
         if (!familyMap.has(familyName)) {
           familyMap.set(familyName, []);
         }
         familyMap.get(familyName)!.push(contact);
       });
 
-      console.log("👥 [FoyerGroupingModal] Familles détectées:", familyMap.size);
-      familyMap.forEach((members, name) => {
-        console.log(`👥 [FoyerGroupingModal]   - ${name}: ${members.length} membres`);
-      });
-
       // Ne garder que les familles avec 2+ membres
       const detectedGroups: FamilyGroup[] = [];
       familyMap.forEach((members, familyName) => {
         if (members.length >= 2) {
-          console.log(`👥 [FoyerGroupingModal] ✓ Famille ${familyName} conservée (${members.length} membres)`);
           detectedGroups.push({
             familyName,
             members: members.map((contact, index) => ({
@@ -86,7 +76,6 @@ export function FoyerGroupingModal({
         }
       });
 
-      console.log("👥 [FoyerGroupingModal] Total de groupes à afficher:", detectedGroups.length);
       setGroups(detectedGroups);
     }
   }, [open, importedContacts]);
@@ -104,13 +93,11 @@ export function FoyerGroupingModal({
   };
 
   const handleRemoveMember = (groupIndex: number, memberIndex: number) => {
-    console.log(`👥 [FoyerGroupingModal] Suppression du membre ${memberIndex} du groupe ${groupIndex}`);
     const newGroups = [...groups];
     newGroups[groupIndex].members.splice(memberIndex, 1);
     
     // Si le groupe n'a plus qu'1 membre, le supprimer complètement
     if (newGroups[groupIndex].members.length < 2) {
-      console.log(`👥 [FoyerGroupingModal] Groupe ${groupIndex} supprimé (moins de 2 membres)`);
       newGroups.splice(groupIndex, 1);
     }
     
@@ -118,30 +105,22 @@ export function FoyerGroupingModal({
   };
 
   const handleValidate = async () => {
-    console.log("👥 [FoyerGroupingModal] handleValidate - Début");
-    console.log("👥 [FoyerGroupingModal] Nombre de groupes:", groups.length);
-    
     setLoading(true);
     try {
       for (const group of groups) {
         if (group.skip) {
-          console.log(`👥 [FoyerGroupingModal] ⏭️ Groupe ${group.familyName} ignoré (homonymes)`);
           continue;
         }
 
-        console.log(`👥 [FoyerGroupingModal] Traitement de la famille ${group.familyName} (${group.members.length} membres)`);
-        
-        // 🔥 Vérifier si les contacts ont déjà un foyer
+        // Vérifier si les contacts ont déjà un foyer
         const membersWithFoyer = group.members.filter(m => m.contact.foyer_id);
         if (membersWithFoyer.length > 0) {
           // Utiliser le foyer existant au lieu d'en créer un nouveau
           const existingFoyerId = membersWithFoyer[0].contact.foyer_id!;
-          console.log(`👥 [FoyerGroupingModal] ⚠️ Foyer existant détecté (ID: ${existingFoyerId}) → Réutilisation`);
           
           // Rattacher les autres membres au foyer existant
           for (const member of group.members) {
             if (member.contact.foyer_id !== existingFoyerId) {
-              console.log(`👥 [FoyerGroupingModal]   - Rattachement de ${member.contact.prenom} au foyer existant ${existingFoyerId}`);
               await updateContact(member.contact.id!, {
                 ...member.contact,
                 foyer_id: existingFoyerId,
@@ -158,7 +137,7 @@ export function FoyerGroupingModal({
               });
             }
           }
-          continue; // Passer au groupe suivant
+          continue;
         }
         
         // Créer un foyer pour cette famille (aucun membre n'a de foyer)
@@ -167,11 +146,9 @@ export function FoyerGroupingModal({
           type_foyer: "COUPLE",
           notes: "Créé automatiquement lors de l'import",
         });
-        console.log(`👥 [FoyerGroupingModal] ✓ Foyer créé, ID: ${foyer.id}`);
 
         // Rattacher tous les membres au foyer
         for (const member of group.members) {
-          console.log(`👥 [FoyerGroupingModal]   - Rattachement de ${member.contact.prenom} ${member.contact.nom} (ID: ${member.contact.id}) avec rôle ${member.role}`);
           await updateContact(member.contact.id!, {
             ...member.contact,
             foyer_id: foyer.id,
@@ -187,16 +164,12 @@ export function FoyerGroupingModal({
               : undefined,
           });
         }
-        console.log(`👥 [FoyerGroupingModal] ✓ Famille ${group.familyName} complète`);
       }
 
-      console.log("👥 [FoyerGroupingModal] ✓ Tous les foyers créés");
-      console.log("👥 [FoyerGroupingModal] Appel de onSuccess()");
       onSuccess();
-      console.log("👥 [FoyerGroupingModal] Fermeture de la modale");
       onOpenChange(false);
     } catch (error) {
-      console.error("👥 [FoyerGroupingModal] ❌ Erreur:", error);
+      console.error("Erreur création foyers:", error);
       alert("Erreur lors de la création des foyers: " + String(error));
     } finally {
       setLoading(false);
@@ -204,7 +177,6 @@ export function FoyerGroupingModal({
   };
 
   const handleIgnoreAll = () => {
-    console.log("👥 [FoyerGroupingModal] handleIgnoreAll - Tous les groupes ignorés");
     onSuccess();
     onOpenChange(false);
   };

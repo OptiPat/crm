@@ -75,17 +75,10 @@ export function FoyerLinkModal({
   });
 
   const handleJoinFoyer = async (contact: Contact) => {
-    console.log("🔗 [FoyerLinkModal] handleJoinFoyer - Début");
-    console.log("🔗 [FoyerLinkModal] Contact sélectionné:", contact.prenom, contact.nom, "foyer_id:", contact.foyer_id);
-    console.log("🔗 [FoyerLinkModal] Contact actuel:", currentContact.prenom, currentContact.nom);
-    console.log("🔗 [FoyerLinkModal] Rôle sélectionné:", selectedRole);
-
     if (!contact.foyer_id) return;
 
     setLoading(true);
     try {
-      console.log("🔗 [FoyerLinkModal] Rattachement au foyer ID:", contact.foyer_id);
-      // Rejoindre le foyer du contact sélectionné
       await updateContact(currentContact.id!, {
         ...currentContact,
         foyer_id: contact.foyer_id,
@@ -101,13 +94,10 @@ export function FoyerLinkModal({
           : undefined,
       });
 
-      console.log("🔗 [FoyerLinkModal] ✓ Contact rattaché avec succès");
-      console.log("🔗 [FoyerLinkModal] Appel de onSuccess()");
       onSuccess();
-      console.log("🔗 [FoyerLinkModal] Fermeture de la modale");
       onOpenChange(false);
     } catch (error) {
-      console.error("🔗 [FoyerLinkModal] ❌ Erreur:", error);
+      console.error("Erreur rattachement foyer:", error);
       alert("Erreur lors du rattachement au foyer: " + String(error));
     } finally {
       setLoading(false);
@@ -115,24 +105,14 @@ export function FoyerLinkModal({
   };
 
   const handleCreateFoyerTogether = async (contact: Contact) => {
-    console.log("🔗 [FoyerLinkModal] handleCreateFoyerTogether - Début");
-    console.log("🔗 [FoyerLinkModal] Contact sélectionné:", contact.prenom, contact.nom);
-    console.log("🔗 [FoyerLinkModal] Contact actuel:", currentContact.prenom, currentContact.nom);
-    console.log("🔗 [FoyerLinkModal] Rôle sélectionné:", selectedRole);
-
     setLoading(true);
     try {
-      // Créer un nouveau foyer avec le nom du contact actuel
-      console.log("🔗 [FoyerLinkModal] Création du foyer 'Famille", currentContact.nom, "'");
       const newFoyer = await createFoyer({
         nom: `Famille ${currentContact.nom}`,
         type_foyer: "COUPLE",
         notes: `Créé depuis ${currentContact.prenom} ${currentContact.nom}`,
       });
-      console.log("🔗 [FoyerLinkModal] ✓ Foyer créé, ID:", newFoyer.id);
 
-      // Rattacher les deux contacts au nouveau foyer
-      console.log("🔗 [FoyerLinkModal] Rattachement des 2 contacts...");
       await Promise.all([
         updateContact(currentContact.id!, {
           ...currentContact,
@@ -163,14 +143,11 @@ export function FoyerLinkModal({
             : undefined,
         }),
       ]);
-      console.log("🔗 [FoyerLinkModal] ✓ Les 2 contacts ont été rattachés");
 
-      console.log("🔗 [FoyerLinkModal] Appel de onSuccess()");
       onSuccess();
-      console.log("🔗 [FoyerLinkModal] Fermeture de la modale");
       onOpenChange(false);
     } catch (error) {
-      console.error("🔗 [FoyerLinkModal] ❌ Erreur:", error);
+      console.error("Erreur création foyer:", error);
       alert("Erreur lors de la création du foyer: " + String(error));
     } finally {
       setLoading(false);

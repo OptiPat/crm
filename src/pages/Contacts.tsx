@@ -50,15 +50,11 @@ export function Contacts() {
   }, []);
 
   const loadContacts = async () => {
-    console.log("📋 [Contacts] loadContacts - Début");
     try {
       const [dataContacts, dataFoyers] = await Promise.all([
         getAllContacts(),
         getAllFoyers(),
       ]);
-      console.log("📋 [Contacts] Contacts chargés:", dataContacts.length);
-      console.log("📋 [Contacts] Foyers chargés:", dataFoyers.length);
-      console.log("📋 [Contacts] Contacts avec foyer_id:", dataContacts.filter(c => c.foyer_id).length);
       setContacts(dataContacts);
       setFoyers(dataFoyers);
       setLoading(false);
@@ -152,11 +148,8 @@ export function Contacts() {
 
   // Groupement par foyer
   const contactsGroupedByFoyer = useMemo(() => {
-    console.log("📋 [Contacts] contactsGroupedByFoyer - groupByFoyer:", groupByFoyer);
-    
     if (!groupByFoyer) return null;
 
-    console.log("📋 [Contacts] Groupement actif, contacts filtrés:", filteredContacts.length);
     const grouped: Record<string, { foyer: Foyer | null; contacts: Contact[]; patrimoine: number }> = {};
 
     filteredContacts.forEach((contact) => {
@@ -172,11 +165,6 @@ export function Contacts() {
       }
 
       grouped[key].contacts.push(contact);
-    });
-
-    console.log("📋 [Contacts] Groupes créés:", Object.keys(grouped).length);
-    Object.entries(grouped).forEach(([key, group]) => {
-      console.log(`📋 [Contacts]   - ${key}: ${group.contacts.length} contacts, Foyer: ${group.foyer?.nom || "Aucun"}`);
     });
 
     // Calculer le patrimoine de chaque groupe (on va le faire en asynchrone après)
@@ -834,7 +822,6 @@ export function Contacts() {
           onDelete={handleDeleteContact}
           onUpdate={loadContacts}
           onOpenContact={(contact) => {
-            console.log("📋 [Contacts] Ouverture du contact", contact.prenom, contact.nom);
             setSelectedContact(contact);
             setShowDetail(true);
           }}

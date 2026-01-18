@@ -56,7 +56,6 @@ export function ContactDetail({
   const handleDissocierFoyer = async () => {
     if (!contact?.id) return;
     
-    console.log("🏠 [ContactDetail] Dissociation du foyer pour contact", contact.id);
     const confirmMsg = `Voulez-vous vraiment dissocier ${contact.prenom} ${contact.nom} de ce foyer ?`;
     
     if (!confirm(confirmMsg)) return;
@@ -77,7 +76,6 @@ export function ContactDetail({
           : undefined,
       });
       
-      console.log("🏠 [ContactDetail] ✓ Contact dissocié");
       onUpdate();
     } catch (error) {
       console.error("🏠 [ContactDetail] ❌ Erreur dissociation:", error);
@@ -86,7 +84,6 @@ export function ContactDetail({
   };
 
   const handleOpenMemberDetail = (member: Contact) => {
-    console.log("🏠 [ContactDetail] Ouverture de la fiche de", member.prenom, member.nom);
     if (onOpenContact) {
       onOpenContact(member);
     }
@@ -122,7 +119,6 @@ export function ContactDetail({
     try {
       // Si le contact a un foyer, charger TOUS les investissements du foyer
       if (contact.foyer_id) {
-        console.log("💰 [ContactDetail] Chargement investissements du foyer", contact.foyer_id);
         const [foyerInvs, allContacts] = await Promise.all([
           getInvestissementsByFoyer(contact.foyer_id),
           getAllContacts()
@@ -196,10 +192,7 @@ export function ContactDetail({
   };
 
   const loadFoyer = async () => {
-    console.log("🏠 [ContactDetail] loadFoyer - contact.foyer_id:", contact?.foyer_id);
-    
     if (!contact?.foyer_id) {
-      console.log("🏠 [ContactDetail] Pas de foyer_id, affichage 'Aucun foyer'");
       setFoyer(null);
       setFoyerMembers([]);
       setFoyerPatrimoine(0);
@@ -208,21 +201,18 @@ export function ContactDetail({
     
     setLoadingFoyer(true);
     try {
-      console.log("🏠 [ContactDetail] Chargement du foyer ID:", contact.foyer_id);
       const [foyers, allContacts] = await Promise.all([
         getAllFoyers(),
         getAllContacts()
       ]);
       
       const currentFoyer = foyers.find(f => f.id === contact.foyer_id);
-      console.log("🏠 [ContactDetail] Foyer trouvé:", currentFoyer);
       setFoyer(currentFoyer || null);
       
       // Récupérer les autres membres du foyer (sauf le contact actuel)
       const members = allContacts.filter(
         c => c.foyer_id === contact.foyer_id && c.id !== contact.id
       );
-      console.log("🏠 [ContactDetail] Membres du foyer:", members.length);
       setFoyerMembers(members);
       
       // Calculer le patrimoine du foyer
@@ -1065,15 +1055,11 @@ export function ContactDetail({
             onOpenChange={setShowFoyerCreateModal}
             currentContact={contact}
             onSuccess={async () => {
-              console.log("🏠 [ContactDetail] FoyerCreateModal onSuccess - Rechargement du contact");
-              // Recharger le contact pour avoir le nouveau foyer_id
               try {
-                const updatedContact = await getContactById(contact.id!);
-                console.log("🏠 [ContactDetail] Contact rechargé, foyer_id:", updatedContact.foyer_id);
-                // Le composant parent va se mettre à jour
+                await getContactById(contact.id!);
                 onUpdate();
               } catch (error) {
-                console.error("🏠 [ContactDetail] Erreur rechargement contact:", error);
+                console.error("Erreur rechargement contact:", error);
               }
             }}
           />
@@ -1082,15 +1068,11 @@ export function ContactDetail({
             onOpenChange={setShowFoyerLinkModal}
             currentContact={contact}
             onSuccess={async () => {
-              console.log("🏠 [ContactDetail] FoyerLinkModal onSuccess - Rechargement du contact");
-              // Recharger le contact pour avoir le nouveau foyer_id
               try {
-                const updatedContact = await getContactById(contact.id!);
-                console.log("🏠 [ContactDetail] Contact rechargé, foyer_id:", updatedContact.foyer_id);
-                // Le composant parent va se mettre à jour
+                await getContactById(contact.id!);
                 onUpdate();
               } catch (error) {
-                console.error("🏠 [ContactDetail] Erreur rechargement contact:", error);
+                console.error("Erreur rechargement contact:", error);
               }
             }}
           />

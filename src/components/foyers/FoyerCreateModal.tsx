@@ -98,16 +98,6 @@ export function FoyerCreateModal({
   };
 
   const handleSubmit = async () => {
-    console.log("🏠 [FoyerCreateModal] handleSubmit - Début");
-    console.log("🏠 [FoyerCreateModal] Nom du foyer:", foyerName);
-    console.log("🏠 [FoyerCreateModal] Nombre de membres:", members.length);
-    console.log("🏠 [FoyerCreateModal] Membres:", members.map(m => ({ 
-      id: m.contact.id, 
-      nom: m.contact.nom, 
-      prenom: m.contact.prenom, 
-      role: m.role 
-    })));
-
     if (!foyerName.trim()) {
       alert("Veuillez saisir un nom de foyer");
       return;
@@ -115,19 +105,13 @@ export function FoyerCreateModal({
 
     setLoading(true);
     try {
-      // Créer le foyer
-      console.log("🏠 [FoyerCreateModal] Création du foyer...");
       const newFoyer = await createFoyer({
         nom: foyerName,
-        type_foyer: "COUPLE", // Valeur par défaut
+        type_foyer: "COUPLE",
         notes: `Créé depuis le contact ${currentContact.prenom} ${currentContact.nom}`,
       });
-      console.log("🏠 [FoyerCreateModal] Foyer créé avec succès, ID:", newFoyer.id);
 
-      // Mettre à jour tous les membres avec leur foyer_id et role_foyer
-      console.log("🏠 [FoyerCreateModal] Mise à jour des membres...");
       for (const member of members) {
-        console.log(`🏠 [FoyerCreateModal] Mise à jour de ${member.contact.prenom} ${member.contact.nom} avec rôle ${member.role}`);
         await updateContact(member.contact.id!, {
           ...member.contact,
           foyer_id: newFoyer.id,
@@ -142,13 +126,9 @@ export function FoyerCreateModal({
             ? new Date(member.contact.date_prochain_suivi * 1000).toISOString() 
             : undefined,
         });
-        console.log(`🏠 [FoyerCreateModal] ✓ ${member.contact.prenom} ${member.contact.nom} mis à jour`);
       }
 
-      console.log("🏠 [FoyerCreateModal] ✓ Tous les membres mis à jour");
-      console.log("🏠 [FoyerCreateModal] Appel de onSuccess()");
       onSuccess();
-      console.log("🏠 [FoyerCreateModal] Fermeture de la modale");
       onOpenChange(false);
       
       // Reset
