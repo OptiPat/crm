@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 export interface Contact {
   id: number;
   foyer_id?: number;
+  role_foyer?: string;
   categorie: string;
   parrain_id?: number;
   civilite?: string;
@@ -27,7 +28,8 @@ export interface Contact {
 }
 
 export interface NewContact {
-  foyer_id?: number;
+  foyer_id?: number | null;
+  role_foyer?: string | null;
   categorie?: string;
   parrain_id?: number;
   civilite?: string;
@@ -38,13 +40,13 @@ export interface NewContact {
   adresse?: string;
   code_postal?: string;
   ville?: string;
-  date_naissance?: string; // ISO string ou timestamp
+  date_naissance?: string;
   profession?: string;
   situation_familiale?: string;
   source_lead?: string;
   profil_risque_sri?: number;
-  date_dernier_contact?: string; // ISO string ou timestamp
-  date_prochain_suivi?: string; // ISO string ou timestamp
+  date_dernier_contact?: string;
+  date_prochain_suivi?: string;
   statut_suivi?: string;
   notes?: string;
 }

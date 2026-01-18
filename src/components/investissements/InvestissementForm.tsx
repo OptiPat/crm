@@ -90,7 +90,7 @@ export function InvestissementForm({
       loadData();
       if (investissement) {
         // Pré-remplir le formulaire pour modification
-        setContactId(investissement.contact_id.toString());
+        setContactId(investissement.contact_id?.toString() || "");
         setInvestissementCommun(!!investissement.foyer_id);
         setFoyerId(investissement.foyer_id?.toString() || "");
         setTypeProduit(investissement.type_produit);

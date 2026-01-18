@@ -177,7 +177,7 @@ const extractCompositeName = (nom: string): string => {
 };
 
 // Détecter si un nom/prénom est un couple (ex: "Marie et Pierre")
-const isContactCouple = (prenom: string, nom: string): boolean => {
+const isContactCouple = (prenom: string, _nom: string): boolean => {
   const prenomLower = prenom.toLowerCase();
   return prenomLower.includes(" et ") || prenomLower.includes(" & ");
 };
@@ -1758,9 +1758,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
           familyMap.get(familyName)!.push(contact);
         });
-        familyMap.forEach((members, name) => {
-        });
-
         // Vérifier s'il y a des familles avec 2+ membres
         const hasFamilies = Array.from(familyMap.values()).some(members => members.length >= 2);
 

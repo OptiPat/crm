@@ -143,16 +143,6 @@ export function FoyerCreateModal({
     }
   };
 
-  const getRoleLabel = (role: string) => {
-    switch (role) {
-      case "DECLARANT_1": return "Déclarant 1";
-      case "DECLARANT_2": return "Déclarant 2";
-      case "ENFANT": return "Enfant";
-      case "AUTRE": return "Autre membre";
-      default: return role;
-    }
-  };
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">

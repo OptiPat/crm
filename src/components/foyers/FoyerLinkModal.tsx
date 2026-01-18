@@ -38,7 +38,7 @@ export function FoyerLinkModal({
   const [searchQuery, setSearchQuery] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [foyers, setFoyers] = useState<Foyer[]>([]);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [, setSelectedContact] = useState<Contact | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>("DECLARANT_2");
   const [loading, setLoading] = useState(false);
 
