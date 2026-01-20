@@ -4,7 +4,7 @@
 
 ---
 
-## ✅ STATUT : 90% TERMINÉ
+## ✅ STATUT : 100% TERMINÉ
 
 ### Ce qui est fait ✅
 - [x] Champ `role_foyer` ajouté aux contacts (schema + Rust)
@@ -17,12 +17,9 @@
 - [x] Consolidation des investissements (même contact avec plusieurs lignes Excel)
 - [x] Suppression en cascade : supprimer un contact → supprime le foyer si vide → supprime les investissements
 - [x] Labels d'alertes corrigés (🔴 Jamais suivi, 🔴 Suivi +1 an, 🟠 Jamais contacté, 🟠 Suivi +6 mois)
-
-### Ce qui reste à faire ⏳
-- [ ] Supprimer l'onglet Foyers de la navigation (optionnel)
-- [ ] Modale "Créer un foyer" depuis la fiche contact
-- [ ] Modale "Modifier le foyer" (changer les rôles)
-- [ ] Bouton "Dissocier du foyer"
+- [x] Onglet "Foyers" supprimé de la navigation (tout géré depuis Contacts)
+- [x] Nettoyage complet des console.log pour la production
+- [x] Build de production réussi et testé
 
 ---
 

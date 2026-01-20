@@ -2,7 +2,7 @@
 
 > **⚠️ DONNE CE FICHIER AU DÉBUT DE CHAQUE NOUVELLE DISCUSSION**
 >
-> **Dernière mise à jour : 17 janvier 2026**
+> **Dernière mise à jour : 18 janvier 2026**
 
 ---
 
@@ -207,6 +207,54 @@ node apply-migration-origine.cjs
 
 ---
 
+## ⚠️ LEÇONS CRITIQUES - À CONNAÎTRE POUR TOUS LES AGENTS
+
+### 🔥 Gestion des doublons d'investissements
+**Contexte** : Importer plusieurs fois les mêmes données créait des doublons, faussant l'encours total.
+
+**Solution implémentée** (`ContactImport.tsx` lignes 677-745) :
+- **Fonction `findExistingInvestissement()`** : Compare contact/foyer, type, nom produit, partenaire, et montant (tolérance 1€)
+- **Fonction `createOrUpdateInvestissement()`** : Mise à jour si doublon, sinon création
+- **Cache local** : Évite les doublons dans un même import
+
+**À réutiliser** : Import RIO, Import GED, toute fonctionnalité créant des investissements.
+
+### 🔥 Suppression en cascade
+**Contexte** : Supprimer un contact laissait des investissements orphelins, causant un encours fantôme.
+
+**Solution** (`src-tauri/src/database/operations.rs`) :
+```rust
+// Dans delete_contact() :
+1. Récupérer le foyer_id avant suppression
+2. Supprimer les investissements du contact
+3. Supprimer le contact
+4. Si le foyer n'a plus de membres → Supprimer le foyer + ses investissements
+```
+
+**Règle** : `ON DELETE CASCADE` sur `foyer_id` dans la table `investissements`.
+
+### 🔥 Consolidation de contacts multiples
+**Contexte** : Un contact avec plusieurs lignes Excel (plusieurs investissements) créait des doublons.
+
+**Solution** (`ContactImport.tsx`) :
+- Détecter les doublons AVANT traitement
+- Mode "consolidate" : ajouter investissements au contact existant
+- Mise à jour du **cache local** après chaque création de contact
+
+**Règle** : Toujours mettre à jour `allContactsCache` après `createContact()`.
+
+### 🔥 Détection des couples
+**Contexte** : Les lignes "Marie et Pierre" avec plusieurs SCPIs ne créaient qu'un seul investissement.
+
+**Solution** (`ContactImport.tsx`) :
+- Détecter les couples **AVANT** le traitement des doublons
+- Forcer le statut à "pending" pour passer par la logique couple
+- Créer un tableau `couplesLines` pour traiter tous les investissements après
+
+**Règle** : Priorité de détection = Couples > Doublons > Contacts simples.
+
+---
+
 ## 📊 Résumé état du projet
 
 | Module | Status | Prompt |
@@ -215,6 +263,8 @@ node apply-migration-origine.cjs
 | Investissements | ✅ 100% | `PROMPT_INVESTISSEMENTS.md` |
 | Import Excel Clients | ✅ 100% | (intégré dans Contacts) |
 | **Contacts & Filleuls** | ✅ 100% | `AGENT_CONTACTS_FILLEULS.md` |
+| **Foyers & Familles** | ✅ 100% | `AGENT_FOYERS_FAMILLES.md` |
+| Historique Patrimoine | ❌ 0% | `AGENT_11_HISTORIQUE_PATRIMOINE.md` |
 | Import RIO | ✅ 90% | `PROMPT_PDF_OCR.md` |
 | Génération PDF | ❌ 0% | `PROMPT_PDF_GENERATION.md` |
 | GED | ⚠️ 20% | `PROMPT_GED.md` |

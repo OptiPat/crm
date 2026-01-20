@@ -34,6 +34,36 @@ Patrimoine CRM est un logiciel desktop Tauri pour CGP (Conseillers en Gestion de
 2. **OCR Tesseract.js** : Pour les PDF scannés (images), ajouter l'OCR avec Tesseract.js
 3. **Détection couples** : Détecter si le RIO contient 2 personnes (M. et Mme) et proposer de créer/lier les 2 contacts
 
+## 🔥 LEÇONS CRITIQUES (issues de l'import Excel)
+
+### ⚠️ Détection des doublons d'investissements
+**Contexte** : L'import Excel a révélé des bugs majeurs de duplication.
+
+**Solution implémentée dans `ContactImport.tsx`** (lignes 677-745) :
+- Fonction `findExistingInvestissement()` qui compare :
+  - Contact/Foyer propriétaire
+  - Type de produit (exact)
+  - Nom du produit (normalisé en majuscules)
+  - Partenaire (si renseigné)
+  - **Montant avec tolérance de 1€** (pour éviter les faux négatifs)
+- Fonction `createOrUpdateInvestissement()` qui :
+  - Si doublon détecté → **met à jour** l'existant
+  - Sinon → crée un nouveau
+  - **Met à jour le cache local** pour éviter les doublons dans le même import
+
+**À réutiliser pour le RIO** : Cette logique DOIT être adaptée pour éviter de créer des doublons lors de l'import RIO annuel.
+
+### ⚠️ Suppression en cascade
+**Problème** : Supprimer un contact ne supprimait pas ses investissements, causant un encours fantôme.
+
+**Solution** : Modifier `delete_contact()` dans `src-tauri/src/database/operations.rs` :
+1. Récupérer le `foyer_id` avant suppression
+2. Supprimer les investissements du contact
+3. Supprimer le contact
+4. Vérifier si le foyer est vide → Si oui, supprimer le foyer + ses investissements
+
+**Impact RIO** : S'assurer que toute suppression de données via RIO respecte cette cascade.
+
 ## Règles OBLIGATOIRES
 
 ### Commande de lancement

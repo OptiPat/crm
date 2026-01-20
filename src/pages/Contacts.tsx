@@ -551,9 +551,6 @@ export function Contacts() {
                                       <Badge className={getCategorieColor(contact.categorie)}>
                                         {getCategorieLabel(contact.categorie)}
                                       </Badge>
-                                      <Badge className={getStatutColor(contact.statut_suivi)}>
-                                        {contact.statut_suivi}
-                                      </Badge>
                                       {priorite.label && (
                                         <span className="text-xs font-medium">
                                           {priorite.label}
@@ -636,9 +633,6 @@ export function Contacts() {
                                     <Badge className={getCategorieColor(contact.categorie)}>
                                       {getCategorieLabel(contact.categorie)}
                                     </Badge>
-                                    <Badge className={getStatutColor(contact.statut_suivi)}>
-                                      {contact.statut_suivi}
-                                    </Badge>
                                     {priorite.label && (
                                       <span className="text-xs font-medium">
                                         {priorite.label}
@@ -706,6 +700,7 @@ export function Contacts() {
             <div className="space-y-3">
               {filteredContacts.map((contact) => {
                 const priorite = getPrioriteContact(contact);
+                const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                 return (
                   <div
                     key={contact.id}
@@ -720,12 +715,14 @@ export function Contacts() {
                           <Badge className={getCategorieColor(contact.categorie)}>
                             {getCategorieLabel(contact.categorie)}
                           </Badge>
-                          <Badge className={getStatutColor(contact.statut_suivi)}>
-                            {contact.statut_suivi}
-                          </Badge>
                           {priorite.label && (
                             <span className="text-xs font-medium">
                               {priorite.label}
+                            </span>
+                          )}
+                          {contactPatrimoine > 0 && (
+                            <span className="text-sm font-medium text-primary">
+                              💰 {contactPatrimoine.toLocaleString("fr-FR")} €
                             </span>
                           )}
                         </div>

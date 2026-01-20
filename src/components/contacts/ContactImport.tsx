@@ -330,6 +330,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     { value: "adresse", label: "Adresse" },
     { value: "code_postal", label: "Code postal" },
     { value: "ville", label: "Ville" },
+    { value: "date_naissance", label: "Date de naissance" },
     { value: "profession", label: "Profession" },
     { value: "categorie", label: "Catégorie" },
     { value: "source_lead", label: "Source (Lead)" },
@@ -402,6 +403,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         detectedMapping[col] = "code_postal";
       } else if (colLower.includes("ville") || colLower.includes("city")) {
         detectedMapping[col] = "ville";
+      } else if (colLower.includes("date") && colLower.includes("naissance")) {
+        detectedMapping[col] = "date_naissance";
       } else if (colLower.includes("profession") || colLower.includes("metier") || colLower.includes("métier")) {
         // Ne mapper "profil" vers profession que si ce n'est PAS "profil investisseur" ou "profil risque"
         if (!colLower.includes("investisseur") && !colLower.includes("risque")) {
@@ -814,6 +817,27 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               
               // Mettre à jour le contact
               // Convertir le contact existant (avec timestamps) en NewContact (avec ISO strings)
+              
+              // Parser la date de naissance de la ligne actuelle (si présente)
+              let rowDateNaissance: string | undefined;
+              if (row.data.date_naissance) {
+                const dateStr = String(row.data.date_naissance).trim();
+                if (dateStr) {
+                  const excelDate = parseFloat(dateStr);
+                  if (!isNaN(excelDate) && excelDate > 1) {
+                    const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                    if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1900 && jsDate.getFullYear() < 2100) {
+                      rowDateNaissance = jsDate.toISOString();
+                    }
+                  }
+                }
+              }
+              
+              // Utiliser la date de naissance de la ligne si le contact n'en a pas
+              const finalDateNaissance = existingContact.date_naissance 
+                ? new Date(existingContact.date_naissance * 1000).toISOString() 
+                : rowDateNaissance;
+              
               const contactToUpdate = {
                 foyer_id: existingContact.foyer_id,
                 categorie: updatedCategorie,
@@ -826,7 +850,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 adresse: existingContact.adresse,
                 code_postal: existingContact.code_postal,
                 ville: existingContact.ville,
-                date_naissance: existingContact.date_naissance ? new Date(existingContact.date_naissance * 1000).toISOString() : undefined,
+                date_naissance: finalDateNaissance,
                 profession: existingContact.profession,
                 situation_familiale: existingContact.situation_familiale,
                 source_lead: existingContact.source_lead,
@@ -1409,6 +1433,22 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           ? dateDernierContact.toISOString() 
           : undefined;
 
+        // Parser la date de naissance (format Excel ou texte)
+        let dateNaissance: string | undefined;
+        if (row.data.date_naissance) {
+          const dateStr = String(row.data.date_naissance).trim();
+          if (dateStr) {
+            const excelDate = parseFloat(dateStr);
+            if (!isNaN(excelDate) && excelDate > 1) {
+              // Format Excel (nombre de jours depuis 1900)
+              const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+              if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1900 && jsDate.getFullYear() < 2100) {
+                dateNaissance = jsDate.toISOString();
+              }
+            }
+          }
+        }
+
         const newContact: NewContact = {
           nom: row.data.nom || "",
           prenom: row.data.prenom || "",
@@ -1417,6 +1457,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           adresse: cleanString(row.data.adresse),
           code_postal: cleanString(row.data.code_postal),
           ville: cleanString(row.data.ville),
+          date_naissance: dateNaissance,
           profession: cleanString(row.data.profession),
           source_lead: cleanString(row.data.source_lead),
           profil_risque_sri: profilRisque,

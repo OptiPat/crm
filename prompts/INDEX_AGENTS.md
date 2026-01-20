@@ -20,7 +20,7 @@
 | Agent | Module | Fichier | Priorité | Durée | Status |
 |-------|--------|---------|----------|-------|--------|
 | ✅ | Contacts & Filleuls | `AGENT_CONTACTS_FILLEULS.md` | 🔴 Haute | 3-4 sessions | ✅ **Terminé** |
-| 🏠 | Foyers & Familles | `AGENT_FOYERS_FAMILLES.md` | 🔴 Haute | 2-3 sessions | ⚠️ **90% fait** |
+| ✅ | Foyers & Familles | `AGENT_FOYERS_FAMILLES.md` | 🔴 Haute | 2-3 sessions | ✅ **Terminé** |
 
 ### Phase 1 : Finir les fonctionnalités
 
@@ -34,6 +34,7 @@
 
 | Agent | Module | Fichier | Priorité | Durée | Status |
 |-------|--------|---------|----------|-------|--------|
+| 11 | Historique Patrimoine | `AGENT_11_HISTORIQUE_PATRIMOINE.md` | 🔴 **Haute** | 2-3 sessions | ❌ À faire |
 | 6 | Sécurité & RGPD | `AGENT_6_SECURITE_RGPD.md` | 🔴 **Critique** | 2-3 sessions | ❌ À faire |
 | 7 | Backup & Restauration | `AGENT_7_BACKUP.md` | 🔴 **Critique** | 1-2 sessions | ❌ À faire |
 | 8 | Licences & Packaging | `AGENT_8_LICENCES.md` | 🔴 **Critique** | 2-3 sessions | ❌ À faire |
@@ -53,10 +54,11 @@
 
 ```
 ÉTAPE 0 - Refonte en cours
-└── Agent Foyers : Gestion familles   🔴 2-3 sessions
+└── ✅ TERMINÉ
 
 ÉTAPE 1 - Finir les fonctionnalités
 ├── Agent 1 : OCR/RIO (finir)         🔴 1-2 sessions
+├── Agent 11 : Historique Patrimoine  🔴 2-3 sessions (NOUVEAU)
 ├── Agent 2 : Génération PDF          🟠 2-3 sessions
 └── Agent 3 : GED                     🟡 3-4 sessions
 
@@ -71,7 +73,7 @@
 ├── Agent 9 : Onboarding              🟠 1-2 sessions
 └── Agent 10 : Rapports               🟠 2 sessions
 
-TOTAL ESTIMÉ : 15-22 sessions pour V1 commercialisable
+TOTAL ESTIMÉ : 17-25 sessions pour V1 commercialisable
 ```
 
 ---
@@ -113,6 +115,7 @@ prompts/
 │
 │── PHASE 1 : FONCTIONNALITÉS
 ├── AGENT_1_OCR_RIO.md           ← Compléter import RIO
+├── AGENT_11_HISTORIQUE_PATRIMOINE.md ← Évolution patrimoniale année/année
 ├── AGENT_2_PDF_GENERATION.md    ← Générer bulletins souscription
 ├── AGENT_3_GED.md               ← Organisation documents
 │
@@ -148,7 +151,7 @@ prompts/
 | Import Excel | ✅ 100% |
 | Authentification | ✅ 100% |
 | Contacts CRUD | ✅ 100% |
-| Foyers CRUD | 🔄 Refonte en cours (voir `AGENT_FOYERS_FAMILLES.md`) |
+| Foyers CRUD | ✅ 100% (intégré dans Contacts) |
 | Partenaires CRUD | ✅ 100% |
 | Templates email | ✅ 100% |
 | Alertes & Suivi | ✅ 100% |
@@ -157,8 +160,9 @@ prompts/
 
 ## 💰 Checklist V1 commercialisable
 
-- [x] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** ✅
-- [x] **Agent Foyers/Familles : Regroupement visuel + Détection import** ⚠️ 90%
+- [x] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** ✅ Terminé
+- [x] **Agent Foyers/Familles : Regroupement visuel + Détection import** ✅ Terminé
+- [ ] Agent 11 : Historique patrimonial année après année
 - [ ] Agent 1 : Détection doublons investissements RIO
 - [ ] Agent 1 : OCR PDF scannés (Tesseract)
 - [ ] Agent 2 : Génération PDF pré-remplis

@@ -39,6 +39,75 @@ interface FoyerGroupingModalProps {
   onSuccess: () => void;
 }
 
+// 🧠 Fonction intelligente pour calculer l'âge à partir de la date de naissance
+const calculateAge = (dateNaissance: number | undefined): number | null => {
+  if (!dateNaissance) return null;
+  const birthDate = new Date(dateNaissance * 1000);
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age--;
+  }
+  return age;
+};
+
+// 🧠 Fonction intelligente pour assigner les rôles basée sur les âges
+const assignRolesIntelligently = (members: Contact[]): ContactWithRole[] => {
+  // Calculer l'âge de chaque membre
+  const membersWithAge = members.map(contact => ({
+    contact,
+    age: calculateAge(contact.date_naissance),
+  }));
+
+  // Séparer ceux avec et sans date de naissance
+  const withAge = membersWithAge.filter(m => m.age !== null);
+  const withoutAge = membersWithAge.filter(m => m.age === null);
+
+  // Si personne n'a de date de naissance, fallback sur l'ordre d'origine
+  if (withAge.length === 0) {
+    return members.map((contact, index) => ({
+      contact,
+      role: index === 0 ? "DECLARANT_1" : index === 1 ? "DECLARANT_2" : "ENFANT",
+    }));
+  }
+
+  // Trier par âge décroissant (plus vieux en premier)
+  withAge.sort((a, b) => (b.age as number) - (a.age as number));
+
+  const result: ContactWithRole[] = [];
+  
+  // Le plus vieux = Déclarant 1
+  if (withAge.length >= 1) {
+    result.push({ contact: withAge[0].contact, role: "DECLARANT_1" });
+  }
+
+  // Logique pour les autres membres
+  for (let i = 1; i < withAge.length; i++) {
+    const currentAge = withAge[i].age as number;
+    const oldestAge = withAge[0].age as number;
+    const ageDifference = oldestAge - currentAge;
+
+    // Si écart d'âge > 18 ans avec le plus vieux → Enfant
+    // Sinon, si c'est le 2ème et écart < 18 ans → Déclarant 2
+    if (ageDifference > 18) {
+      result.push({ contact: withAge[i].contact, role: "ENFANT" });
+    } else if (i === 1) {
+      result.push({ contact: withAge[i].contact, role: "DECLARANT_2" });
+    } else {
+      // 3ème personne avec écart < 18 ans (ex: frère/sœur du conjoint) → Autre
+      result.push({ contact: withAge[i].contact, role: "AUTRE" });
+    }
+  }
+
+  // Ajouter ceux sans date de naissance à la fin comme "AUTRE" (à vérifier manuellement)
+  for (const member of withoutAge) {
+    result.push({ contact: member.contact, role: "AUTRE" });
+  }
+
+  return result;
+};
+
 export function FoyerGroupingModal({
   open,
   onOpenChange,
@@ -65,12 +134,12 @@ export function FoyerGroupingModal({
       const detectedGroups: FamilyGroup[] = [];
       familyMap.forEach((members, familyName) => {
         if (members.length >= 2) {
+          // 🧠 Utiliser la détection intelligente des rôles
+          const membersWithRoles = assignRolesIntelligently(members);
+          
           detectedGroups.push({
             familyName,
-            members: members.map((contact, index) => ({
-              contact,
-              role: index === 0 ? "DECLARANT_1" : index === 1 ? "DECLARANT_2" : "ENFANT",
-            })),
+            members: membersWithRoles,
             skip: false,
           });
         }
