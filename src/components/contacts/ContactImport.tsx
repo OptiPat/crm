@@ -198,6 +198,17 @@ const extractCoupleNames = (prenomCouple: string): { prenom1: string; prenom2: s
   return null;
 };
 
+// Extraire les noms individuels d'un nom composé (ex: "NOM1 et Aurel" → ["NOM1", "NOM2"])
+const extractIndividualNames = (nom: string): { nom1: string; nom2: string } | null => {
+  if (nom.includes(" et ") || nom.includes(" & ")) {
+    const parts = nom.split(/ et | & /).map(p => p.trim().toUpperCase());
+    if (parts.length >= 2) {
+      return { nom1: parts[0], nom2: parts[1] };
+    }
+  }
+  return null;
+};
+
 // Trouver le foyer correspondant à un couple
 const findFoyerForCouple = async (
   nom: string,
@@ -205,14 +216,25 @@ const findFoyerForCouple = async (
   prenom2: string,
   allContacts: Contact[]
 ): Promise<number | null> => {
+  const nomUpper = nom.toUpperCase();
+  const prenom1Upper = prenom1.toUpperCase();
+  const prenom2Upper = prenom2.toUpperCase();
+  
+  // 🔥 FIX: Extraire les noms individuels si c'est un nom composé
+  const individualNames = extractIndividualNames(nom);
+  const nom1 = individualNames?.nom1 || nomUpper;
+  const nom2 = individualNames?.nom2 || nomUpper;
+  
+  // Chercher contact1: nom = nom1 (ou nom complet) ET prenom = prenom1
   const contact1 = allContacts.find(c => 
-    c.nom.toUpperCase() === nom.toUpperCase() && 
-    c.prenom.toUpperCase() === prenom1.toUpperCase()
+    (c.nom.toUpperCase() === nom1 || c.nom.toUpperCase() === nomUpper) && 
+    c.prenom.toUpperCase() === prenom1Upper
   );
   
+  // Chercher contact2: nom = nom2 (ou nom complet) ET prenom = prenom2
   const contact2 = allContacts.find(c => 
-    c.nom.toUpperCase() === nom.toUpperCase() && 
-    c.prenom.toUpperCase() === prenom2.toUpperCase()
+    (c.nom.toUpperCase() === nom2 || c.nom.toUpperCase() === nomUpper) && 
+    c.prenom.toUpperCase() === prenom2Upper
   );
   
   if (contact1 && contact2) {
@@ -231,7 +253,11 @@ interface ImportResult {
   contact2: Contact | null;
   prenom1?: string;
   prenom2?: string;
-  shouldCreateContacts?: boolean; // Si true, il faut créer les contacts
+  nom1?: string; // Nom individuel du contact 1
+  nom2?: string; // Nom individuel du contact 2
+  shouldCreateContacts?: boolean; // Si true, il faut créer LES DEUX contacts
+  shouldCreateContact1?: boolean; // Si true, il faut créer seulement contact1
+  shouldCreateContact2?: boolean; // Si true, il faut créer seulement contact2
 }
 
 // Analyser si c'est un contact couple et trouver/créer le foyer
@@ -250,17 +276,28 @@ const analyzeCoupleContact = async (
   }
   
   const { prenom1, prenom2 } = names;
+  const nomUpper = nom.toUpperCase();
+  const prenom1Upper = prenom1.toUpperCase();
+  const prenom2Upper = prenom2.toUpperCase();
   
+  // 🔥 FIX: Extraire les noms individuels si c'est un nom composé (ex: "NOM1 et Aurel")
+  const individualNames = extractIndividualNames(nom);
+  const nom1 = individualNames?.nom1 || nomUpper;
+  const nom2 = individualNames?.nom2 || nomUpper;
+  
+  // Chercher contact1: nom = nom1 (ou nom complet) ET prenom = prenom1
   const contact1 = allContacts.find(c => 
-    c.nom.toUpperCase() === nom.toUpperCase() && 
-    c.prenom.toUpperCase() === prenom1.toUpperCase()
+    (c.nom.toUpperCase() === nom1 || c.nom.toUpperCase() === nomUpper) && 
+    c.prenom.toUpperCase() === prenom1Upper
   );
   
+  // Chercher contact2: nom = nom2 (ou nom complet) ET prenom = prenom2
   const contact2 = allContacts.find(c => 
-    c.nom.toUpperCase() === nom.toUpperCase() && 
-    c.prenom.toUpperCase() === prenom2.toUpperCase()
+    (c.nom.toUpperCase() === nom2 || c.nom.toUpperCase() === nomUpper) && 
+    c.prenom.toUpperCase() === prenom2Upper
   );
   
+  // CAS 1: Les deux contacts existent
   if (contact1 && contact2) {
     const foyerId = await findFoyerForCouple(nom, prenom1, prenom2, allContacts);
     
@@ -271,7 +308,9 @@ const analyzeCoupleContact = async (
         contact1,
         contact2,
         prenom1,
-        prenom2
+        prenom2,
+        nom1,
+        nom2
       };
     } else {
       return {
@@ -281,10 +320,43 @@ const analyzeCoupleContact = async (
         contact2,
         prenom1,
         prenom2,
+        nom1,
+        nom2,
         shouldCreateContacts: false
       };
     }
   }
+  
+  // 🔥 CAS 2.5: UN SEUL contact existe → créer seulement le manquant
+  if (contact1 && !contact2) {
+    return {
+      shouldSkipContact: true,
+      foyerId: contact1.foyer_id || null,
+      contact1,
+      contact2: null,
+      prenom1,
+      prenom2,
+      nom1,
+      nom2,
+      shouldCreateContact2: true // Créer seulement contact2
+    };
+  }
+  
+  if (!contact1 && contact2) {
+    return {
+      shouldSkipContact: true,
+      foyerId: contact2.foyer_id || null,
+      contact1: null,
+      contact2,
+      prenom1,
+      prenom2,
+      nom1,
+      nom2,
+      shouldCreateContact1: true // Créer seulement contact1
+    };
+  }
+  
+  // CAS 3: Aucun contact n'existe → créer les deux
   return {
     shouldSkipContact: true,
     foyerId: null,
@@ -292,6 +364,8 @@ const analyzeCoupleContact = async (
     contact2: null,
     prenom1,
     prenom2,
+    nom1,
+    nom2,
     shouldCreateContacts: true
   };
 };
@@ -1218,6 +1292,119 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             continue;
           }
           
+          // 🔥 CAS 2.5 : UN contact existe, l'autre non → Créer le manquant + foyer
+          if ((coupleAnalysis.shouldCreateContact1 || coupleAnalysis.shouldCreateContact2) && 
+              coupleAnalysis.prenom1 && coupleAnalysis.prenom2) {
+            try {
+              const nomFamilleCompose = extractCompositeName(row.data.nom || "");
+              const nom1 = coupleAnalysis.nom1 || nomFamilleCompose;
+              const nom2 = coupleAnalysis.nom2 || nomFamilleCompose;
+              
+              // Chercher ou créer le foyer
+              const existingFoyer = allFoyersCache.find(f => 
+                f.nom.toUpperCase().includes(nomFamilleCompose.toUpperCase()) ||
+                nomFamilleCompose.toUpperCase().includes(f.nom.replace(/^(Foyer|Famille)\s+/i, "").toUpperCase())
+              );
+              
+              let foyerToUse: { id: number; nom: string };
+              
+              if (existingFoyer) {
+                foyerToUse = existingFoyer;
+              } else {
+                const nomFoyer = `Foyer ${nomFamilleCompose}`;
+                const newFoyer = await createFoyer({ 
+                  nom: nomFoyer,
+                  type_foyer: "COUPLE"
+                });
+                foyerToUse = newFoyer;
+                allFoyersCache.push(newFoyer);
+              }
+              
+              // Créer le contact manquant
+              if (coupleAnalysis.shouldCreateContact1 && coupleAnalysis.contact2) {
+                // Contact1 n'existe pas, Contact2 existe
+                const newContact1: NewContact = {
+                  nom: nom1,
+                  prenom: coupleAnalysis.prenom1,
+                  foyer_id: foyerToUse.id,
+                  role_foyer: "DECLARANT_1",
+                  categorie: "CLIENT",
+                  statut_suivi: "ACTIF",
+                };
+                const createdContact1 = await createContact(newContact1);
+                allContactsCache.push(createdContact1);
+                
+                // Mettre à jour contact2 pour le rattacher au foyer
+                if (coupleAnalysis.contact2.foyer_id !== foyerToUse.id) {
+                  await updateContact(coupleAnalysis.contact2.id, {
+                    ...coupleAnalysis.contact2,
+                    foyer_id: foyerToUse.id,
+                    role_foyer: "DECLARANT_2",
+                    date_naissance: coupleAnalysis.contact2.date_naissance 
+                      ? new Date(coupleAnalysis.contact2.date_naissance * 1000).toISOString() 
+                      : undefined,
+                    date_dernier_contact: coupleAnalysis.contact2.date_dernier_contact 
+                      ? new Date(coupleAnalysis.contact2.date_dernier_contact * 1000).toISOString() 
+                      : undefined,
+                  });
+                  const idx2 = allContactsCache.findIndex(c => c.id === coupleAnalysis.contact2!.id);
+                  if (idx2 !== -1) {
+                    allContactsCache[idx2] = { ...allContactsCache[idx2], foyer_id: foyerToUse.id };
+                  }
+                }
+              }
+              
+              if (coupleAnalysis.shouldCreateContact2 && coupleAnalysis.contact1) {
+                // Contact2 n'existe pas, Contact1 existe
+                const newContact2: NewContact = {
+                  nom: nom2,
+                  prenom: coupleAnalysis.prenom2,
+                  foyer_id: foyerToUse.id,
+                  role_foyer: "DECLARANT_2",
+                  categorie: "CLIENT",
+                  statut_suivi: "ACTIF",
+                };
+                const createdContact2 = await createContact(newContact2);
+                allContactsCache.push(createdContact2);
+                
+                // Mettre à jour contact1 pour le rattacher au foyer
+                if (coupleAnalysis.contact1.foyer_id !== foyerToUse.id) {
+                  await updateContact(coupleAnalysis.contact1.id, {
+                    ...coupleAnalysis.contact1,
+                    foyer_id: foyerToUse.id,
+                    role_foyer: "DECLARANT_1",
+                    date_naissance: coupleAnalysis.contact1.date_naissance 
+                      ? new Date(coupleAnalysis.contact1.date_naissance * 1000).toISOString() 
+                      : undefined,
+                    date_dernier_contact: coupleAnalysis.contact1.date_dernier_contact 
+                      ? new Date(coupleAnalysis.contact1.date_dernier_contact * 1000).toISOString() 
+                      : undefined,
+                  });
+                  const idx1 = allContactsCache.findIndex(c => c.id === coupleAnalysis.contact1!.id);
+                  if (idx1 !== -1) {
+                    allContactsCache[idx1] = { ...allContactsCache[idx1], foyer_id: foyerToUse.id };
+                  }
+                }
+              }
+              
+              lastDetectedFoyerId = foyerToUse.id;
+              
+              // Stocker l'investissement
+              if (row.data.produit) {
+                couplesLines.push({ rowIndex: i, row, foyerId: foyerToUse.id });
+                updatedRows[i] = { ...row, status: "success", message: "Contact manquant créé + foyer + investissement" };
+              } else {
+                updatedRows[i] = { ...row, status: "success", message: "Contact manquant créé + foyer" };
+              }
+              
+            } catch (error) {
+              updatedRows[i] = { ...row, status: "error", message: `Erreur CAS 2.5: ${error}` };
+            }
+            
+            setImportRows([...updatedRows]);
+            continue;
+          }
+          
           // CAS 3 : Contacts n'existent pas → Créer contacts + foyer
           if (coupleAnalysis.shouldCreateContacts && coupleAnalysis.prenom1 && coupleAnalysis.prenom2) {
             try {
@@ -1449,6 +1636,229 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         }
 
+        // 🔥 FIX: Vérifier si ce contact existe déjà dans le cache (créé pendant cet import)
+        const nomLower = (row.data.nom || "").toLowerCase();
+        const prenomLower = (row.data.prenom || "").toLowerCase();
+        const existingInCache = allContactsCache.find(c => 
+          c.nom.toLowerCase() === nomLower && 
+          c.prenom.toLowerCase() === prenomLower
+        );
+        
+        if (existingInCache) {
+          // Contact déjà créé pendant cet import (ex: par une ligne couple)
+          // → Mettre à jour TOUTES les infos du contact + ajouter les investissements
+          try {
+            // 🔥 FIX: Mettre à jour le contact avec les infos de la ligne Excel
+            const updateData: any = {
+              foyer_id: existingInCache.foyer_id, // Garder le foyer
+              role_foyer: existingInCache.role_foyer, // Garder le rôle
+              nom: row.data.nom || existingInCache.nom,
+              prenom: row.data.prenom || existingInCache.prenom,
+              email: cleanString(row.data.email) || existingInCache.email,
+              telephone: cleanString(row.data.telephone) || existingInCache.telephone,
+              adresse: cleanString(row.data.adresse) || existingInCache.adresse,
+              code_postal: cleanString(row.data.code_postal) || existingInCache.code_postal,
+              ville: cleanString(row.data.ville) || existingInCache.ville,
+              profession: cleanString(row.data.profession) || existingInCache.profession,
+              source_lead: cleanString(row.data.source_lead) || existingInCache.source_lead,
+              profil_risque_sri: profilRisque || existingInCache.profil_risque_sri,
+              categorie: categorie, // Recalculer la catégorie
+              statut_suivi: existingInCache.statut_suivi || "ACTIF",
+              notes: finalNotes || existingInCache.notes,
+              date_naissance: dateNaissance || (existingInCache.date_naissance 
+                ? new Date(existingInCache.date_naissance * 1000).toISOString() 
+                : undefined),
+              date_dernier_contact: dateDernierContactISO || (existingInCache.date_dernier_contact 
+                ? new Date(existingInCache.date_dernier_contact * 1000).toISOString() 
+                : undefined),
+            };
+            
+            await updateContact(existingInCache.id, updateData);
+            
+            // Mettre à jour le cache aussi
+            const cacheIdx = allContactsCache.findIndex(c => c.id === existingInCache.id);
+            if (cacheIdx !== -1) {
+              allContactsCache[cacheIdx] = { ...allContactsCache[cacheIdx], ...updateData };
+            }
+            
+            // Créer l'investissement pour ce contact existant (avec TOUS les champs)
+            if (row.data.produit) {
+              const produitStr = String(row.data.produit).trim();
+              let typeProduit = "AUTRE";
+              const produitUpper = produitStr.toUpperCase();
+              
+              if (produitUpper.includes('SCPI') && produitUpper.includes('DEMEMBR')) {
+                typeProduit = "SCPI_DEMEMBREMENT";
+              } else if (produitUpper.includes('SCPI')) {
+                typeProduit = "SCPI";
+              } else if (produitUpper.includes('AV') || produitUpper.includes('ASSURANCE') || produitUpper.includes('VIE')) {
+                typeProduit = "ASSURANCE_VIE";
+              } else if (produitUpper.includes('PER')) {
+                typeProduit = "PER";
+              } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
+                typeProduit = "FIP_FCPI";
+              } else if (produitUpper.includes('FCPR')) {
+                typeProduit = "FCPR";
+              } else if (produitUpper.includes('G3F')) {
+                typeProduit = "G3F";
+              } else if (produitUpper.includes('IMMOBILIER') || produitUpper.includes('PINEL') || produitUpper.includes('MALRAUX')) {
+                typeProduit = "IMMOBILIER";
+              }
+              
+              const nomProduit = row.data.nom_produit 
+                ? String(row.data.nom_produit).trim() 
+                : produitStr;
+              
+              // Trouver le partenaire
+              let partenaireId = null;
+              if (row.data.partenaire) {
+                const partenaireNom = String(row.data.partenaire).trim().toUpperCase();
+                const matchingPartenaire = findMatchingPartenaire(partenaireNom, allPartenaires);
+                if (matchingPartenaire) {
+                  partenaireId = matchingPartenaire.id;
+                }
+              }
+              
+              // Parser le montant
+              let montantInitial: number | undefined;
+              if (row.data.montant) {
+                const montantStr = String(row.data.montant).replace(/[^\d.,]/g, '').replace(',', '.');
+                const montantNum = parseFloat(montantStr);
+                if (!isNaN(montantNum) && montantNum > 0) {
+                  montantInitial = Math.round(montantNum * 100);
+                }
+              }
+              
+              // 🔥 Parser le montant VP (versement programmé)
+              let montantVP: number | undefined;
+              if (row.data.montant_vp) {
+                const vpStr = String(row.data.montant_vp).replace(/[^\d.,]/g, '').replace(',', '.');
+                const montantVPEuros = parseFloat(vpStr);
+                if (!isNaN(montantVPEuros)) {
+                  montantVP = Math.round(montantVPEuros * 100);
+                }
+              }
+              
+              // 🔥 Parser la date de souscription
+              let dateSouscription = null;
+              let dateSouscriptionDate = null;
+              if (row.data.date_souscription) {
+                const excelDate = parseFloat(String(row.data.date_souscription));
+                if (!isNaN(excelDate) && excelDate > 1) {
+                  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                  dateSouscription = jsDate.toISOString();
+                  dateSouscriptionDate = jsDate;
+                }
+              }
+              
+              // 🔥 Calculer la date de fin de démembrement
+              let dateFinDemembrement = null;
+              let dureeDemembrement: number | string | null = null;
+              let isViager = false;
+              
+              const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
+              const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+              
+              if (!isPP && row.data.duree_demembrement) {
+                const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
+                
+                if (dureeStr === 'VIAGER') {
+                  isViager = true;
+                  dureeDemembrement = 'viager';
+                } else {
+                  const dureeNum = parseInt(dureeStr);
+                  if (!isNaN(dureeNum) && dureeNum > 0 && dateSouscriptionDate) {
+                    dureeDemembrement = dureeNum;
+                    const dateFin = new Date(dateSouscriptionDate);
+                    dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
+                    dateFinDemembrement = dateFin.toISOString();
+                  }
+                }
+              }
+              
+              // 🔥 Réinvestissement dividendes
+              let reinvestissement = false;
+              let reinvestissementPourcentage: string | null = null;
+              
+              if (row.data.reinvestissement) {
+                if (typeof row.data.reinvestissement === 'number') {
+                  const num = row.data.reinvestissement;
+                  if (num > 0 && num <= 1) {
+                    reinvestissementPourcentage = Math.round(num * 100).toString();
+                    reinvestissement = true;
+                  } else if (num > 1) {
+                    reinvestissementPourcentage = Math.round(num).toString();
+                    reinvestissement = true;
+                  }
+                } else {
+                  const reinvStr = String(row.data.reinvestissement).trim();
+                  const cleanStr = reinvStr.replace(/[\s,]/g, '').replace('%', '');
+                  const num = parseFloat(cleanStr);
+                  
+                  if (!isNaN(num)) {
+                    if (num > 0 && num <= 1) {
+                      reinvestissementPourcentage = Math.round(num * 100).toString();
+                    } else {
+                      reinvestissementPourcentage = Math.round(num).toString();
+                    }
+                    reinvestissement = true;
+                  } else if (reinvStr.toUpperCase() === 'OUI') {
+                    reinvestissement = true;
+                    reinvestissementPourcentage = '100';
+                  }
+                }
+              }
+              
+              // 🔥 Notes de l'investissement
+              let notesArray: string[] = [];
+              if (row.data.mode_detention) {
+                notesArray.push(`Mode de détention: ${row.data.mode_detention}`);
+              }
+              if (dureeDemembrement) {
+                if (isViager) {
+                  notesArray.push(`Durée: viager`);
+                } else {
+                  notesArray.push(`Durée: ${dureeDemembrement} ans`);
+                }
+              }
+              if (reinvestissementPourcentage) {
+                notesArray.push(`Réinv. ${reinvestissementPourcentage}%`);
+              }
+              const investissementNotes = notesArray.length > 0 ? notesArray.join(' | ') : undefined;
+              
+              // Créer l'investissement attaché au CONTACT (pas au foyer)
+              const newInvestissement: NewInvestissement = {
+                contact_id: existingInCache.id,
+                type_produit: typeProduit,
+                nom_produit: nomProduit,
+                partenaire_id: partenaireId || undefined,
+                montant_initial: montantInitial || undefined,
+                date_souscription: dateSouscription || undefined,
+                date_fin_demembrement: dateFinDemembrement || undefined,
+                versement_programme: montantVP ? true : false,
+                montant_versement_programme: montantVP || undefined,
+                reinvestissement_dividendes: reinvestissement,
+                notes: investissementNotes || undefined,
+              };
+              
+              await createOrUpdateInvestissement(newInvestissement);
+              updatedRows[i] = { ...row, status: "success", message: `${existingInCache.prenom} mis à jour + investissement` };
+            } else {
+              updatedRows[i] = { ...row, status: "success", message: `${existingInCache.prenom} mis à jour` };
+            }
+            
+            // 🔥 FIX: Sauvegarder l'ID pour que les lignes "doublon" suivantes puissent le trouver
+            createdContactsInImport.set(i, existingInCache.id);
+            
+          } catch (cacheError) {
+            console.error(`❌ [ContactImport] Erreur mise à jour ${existingInCache.prenom} ${existingInCache.nom}:`, cacheError);
+            updatedRows[i] = { ...row, status: "error", message: `Erreur mise à jour ${existingInCache.prenom}: ${cacheError}` };
+          }
+          
+          setImportRows([...updatedRows]);
+          continue;
+        }
+        
         const newContact: NewContact = {
           nom: row.data.nom || "",
           prenom: row.data.prenom || "",
