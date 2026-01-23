@@ -22,6 +22,7 @@ import { createContact, getAllContacts, updateContact, type NewContact, type Con
 import { createInvestissement, updateInvestissement, getAllInvestissements, type NewInvestissement, type Investissement } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenaire } from "@/lib/api/tauri-partenaires";
 import { createFoyer, getAllFoyers } from "@/lib/api/tauri-foyers";
+// famille_id n'est plus utilisé - les familles sont groupées dynamiquement par nom
 import { Badge } from "@/components/ui/badge";
 import { invoke } from "@tauri-apps/api/core";
 import { FoyerGroupingModal } from "@/components/foyers/FoyerGroupingModal";
@@ -1428,7 +1429,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 ? nomFamille.split(/ et | & /)[1].trim()
                 : nomFamille;
               
-              // Créer contact 1
+              // Créer contact 1 (famille_id n'est plus utilisé - groupement dynamique par nom)
               const newContact1: NewContact = {
                 nom: nomContact1,
                 prenom: coupleAnalysis.prenom1,
@@ -1648,7 +1649,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           // Contact déjà créé pendant cet import (ex: par une ligne couple)
           // → Mettre à jour TOUTES les infos du contact + ajouter les investissements
           try {
-            // 🔥 FIX: Mettre à jour le contact avec les infos de la ligne Excel
+            // Mettre à jour le contact avec les infos de la ligne Excel
             const updateData: any = {
               foyer_id: existingInCache.foyer_id, // Garder le foyer
               role_foyer: existingInCache.role_foyer, // Garder le rôle
@@ -1859,6 +1860,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           continue;
         }
         
+        // Créer le contact (famille_id n'est plus utilisé - groupement dynamique par nom)
         const newContact: NewContact = {
           nom: row.data.nom || "",
           prenom: row.data.prenom || "",
@@ -2212,13 +2214,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         // Vérifier s'il y a des familles avec 2+ membres
         const hasFamilies = Array.from(familyMap.values()).some(members => members.length >= 2);
 
+        // Afficher la modale de composition des FOYERS (unités fiscales)
+        // Les familles sont créées automatiquement par nom
+        // Les foyers doivent être composés manuellement (qui déclare ensemble)
         if (hasFamilies) {
-          // Afficher la modale de regroupement avec les contacts uniques
           setImportedContactsList(uniqueContacts);
           setShowFoyerGrouping(true);
-          // Ne pas fermer la modale d'import pour l'instant
           return;
-        } else {
         }
       } catch (error) {
         console.error("📥 [ContactImport] ❌ Erreur détection familles:", error);

@@ -209,11 +209,11 @@ export function FoyerGroupingModal({
           continue;
         }
         
-        // Créer un foyer pour cette famille (aucun membre n'a de foyer)
+        // Créer un foyer pour ce groupe (aucun membre n'a de foyer)
         const foyer = await createFoyer({
-          nom: `Famille ${group.familyName}`,
+          nom: `Foyer ${group.familyName}`,
           type_foyer: "COUPLE",
-          notes: "Créé automatiquement lors de l'import",
+          notes: "Créé lors de l'import",
         });
 
         // Rattacher tous les membres au foyer
@@ -260,11 +260,14 @@ export function FoyerGroupingModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users2 className="h-5 w-5" />
-            Foyers détectés
+            🏠 Composition des foyers fiscaux
           </DialogTitle>
           <DialogDescription>
-            {groups.length} famille{groups.length > 1 ? "s" : ""} avec plusieurs membres détectée{groups.length > 1 ? "s" : ""}. 
-            Définissez le rôle de chaque personne ou ignorez si ce sont des homonymes.
+            <strong>Qui déclare ses impôts ensemble ?</strong>
+            <br />
+            {groups.length} groupe{groups.length > 1 ? "s" : ""} de personnes avec le même nom détecté{groups.length > 1 ? "s" : ""}. 
+            <br />
+            <span className="text-amber-600">⚠️ Cochez "Ne pas regrouper" si ces personnes ne vivent PAS ensemble (foyers séparés).</span>
           </DialogDescription>
         </DialogHeader>
 
@@ -273,7 +276,7 @@ export function FoyerGroupingModal({
             <div key={groupIndex} className="space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="font-semibold text-lg">
-                  📁 Famille {group.familyName} ({group.members.length} personnes)
+                  🏠 Foyer {group.familyName} ({group.members.length} personnes)
                 </h3>
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -283,9 +286,9 @@ export function FoyerGroupingModal({
                   />
                   <Label 
                     htmlFor={`skip-${groupIndex}`}
-                    className="text-sm font-normal cursor-pointer"
+                    className="text-sm font-normal cursor-pointer text-amber-600"
                   >
-                    Ce sont des homonymes
+                    ❌ Ne pas regrouper (foyers séparés)
                   </Label>
                 </div>
               </div>

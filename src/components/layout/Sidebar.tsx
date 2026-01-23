@@ -1,6 +1,7 @@
 import { 
   Home, 
   Users, 
+  Users2,
   UserPlus,
   Wallet,
   FileText, 
@@ -23,6 +24,7 @@ interface SidebarProps {
 const menuItems = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
   { id: "contacts", label: "Contacts", icon: Users },
+  { id: "familles", label: "Familles", icon: Users2 },
   { id: "suivi", label: "Suivi", icon: Bell },
   { id: "partenaires", label: "Partenaires", icon: UserPlus },
   { id: "investissements", label: "Investissements", icon: Wallet },

@@ -2,8 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface Contact {
   id: number;
+  famille_id?: number | null;
   foyer_id?: number;
   role_foyer?: string;
+  role_famille?: string;
   categorie: string;
   parrain_id?: number;
   civilite?: string;
@@ -28,8 +30,10 @@ export interface Contact {
 }
 
 export interface NewContact {
+  famille_id?: number | null;
   foyer_id?: number | null;
   role_foyer?: string | null;
+  role_famille?: string | null;
   categorie?: string;
   parrain_id?: number;
   civilite?: string;

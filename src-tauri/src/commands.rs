@@ -1,6 +1,6 @@
 use tauri::State;
 use std::sync::Mutex;
-use crate::database::{Database, models::{Contact, NewContact, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact, Investissement, NewInvestissement, InvestissementWithDetails}};
+use crate::database::{Database, models::{Contact, NewContact, Famille, NewFamille, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact, Investissement, NewInvestissement, InvestissementWithDetails}};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -85,6 +85,64 @@ pub fn find_contact_by_name(db: State<'_, DbState>, nom: String, prenom: String)
     
     database.find_contact_by_name(&nom, &prenom)
         .map_err(|e| format!("Failed to find contact by name: {}", e))
+}
+
+// ========== FOYERS ==========
+
+// ========== FAMILLES ==========
+
+#[tauri::command]
+pub fn get_all_familles(db: State<'_, DbState>) -> Result<Vec<Famille>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_all_familles()
+        .map_err(|e| format!("Failed to get familles: {}", e))
+}
+
+#[tauri::command]
+pub fn create_famille(db: State<'_, DbState>, new_famille: NewFamille) -> Result<Famille, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.create_famille(new_famille)
+        .map_err(|e| format!("Failed to create famille: {}", e))
+}
+
+#[tauri::command]
+pub fn get_famille_by_id(db: State<'_, DbState>, id: i64) -> Result<Famille, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_famille_by_id(id)
+        .map_err(|e| format!("Failed to get famille: {}", e))
+}
+
+#[tauri::command]
+pub fn update_famille(db: State<'_, DbState>, id: i64, famille: NewFamille) -> Result<Famille, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.update_famille(id, &famille)
+        .map_err(|e| format!("Failed to update famille: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_famille(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.delete_famille(id)
+        .map_err(|e| format!("Failed to delete famille: {}", e))
+}
+
+#[tauri::command]
+pub fn get_or_create_famille(db: State<'_, DbState>, nom: String) -> Result<Famille, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_or_create_famille(&nom)
+        .map_err(|e| format!("Failed to get or create famille: {}", e))
 }
 
 // ========== FOYERS ==========

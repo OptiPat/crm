@@ -1,6 +1,6 @@
 # 📋 INDEX DES AGENTS - Patrimoine CRM
 
-> **Dernière mise à jour : 18 janvier 2026**
+> **Dernière mise à jour : 23 janvier 2026**
 
 ---
 
@@ -29,6 +29,7 @@
 | 1 | OCR & RIO | `AGENT_1_OCR_RIO.md` | 🔴 Haute | 1-2 sessions | ⚠️ 90% fait |
 | 2 | Génération PDF | `AGENT_2_PDF_GENERATION.md` | 🟠 Moyenne | 2-3 sessions | ❌ À faire |
 | 3 | GED | `AGENT_3_GED.md` | 🟡 Basse | 3-4 sessions | ⚠️ 20% fait |
+| **12** | **Familles & Foyers v2** | `AGENT_12_FAMILLES_FOYERS.md` | 🟠 Important | 2-3 sessions | ❌ À faire |
 
 ### Phase 2 : Préparer la commercialisation
 
@@ -116,6 +117,7 @@ prompts/
 │── PHASE 1 : FONCTIONNALITÉS
 ├── AGENT_1_OCR_RIO.md           ← Compléter import RIO
 ├── AGENT_11_HISTORIQUE_PATRIMOINE.md ← Évolution patrimoniale année/année
+├── AGENT_12_FAMILLES_FOYERS.md  ← Hiérarchie Famille → Foyers (NOUVEAU)
 ├── AGENT_2_PDF_GENERATION.md    ← Générer bulletins souscription
 ├── AGENT_3_GED.md               ← Organisation documents
 │

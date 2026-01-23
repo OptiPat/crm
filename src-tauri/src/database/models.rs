@@ -3,8 +3,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Contact {
     pub id: Option<i64>,
+    pub famille_id: Option<i64>,
     pub foyer_id: Option<i64>,
     pub role_foyer: Option<String>,
+    pub role_famille: Option<String>,
     pub categorie: String,
     pub parrain_id: Option<i64>,
     pub civilite: Option<String>,
@@ -30,8 +32,10 @@ pub struct Contact {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewContact {
+    pub famille_id: Option<i64>,
     pub foyer_id: Option<i64>,
     pub role_foyer: Option<String>,
+    pub role_famille: Option<String>,
     pub categorie: String,
     pub parrain_id: Option<i64>,
     pub civilite: Option<String>,
@@ -50,6 +54,21 @@ pub struct NewContact {
     pub date_dernier_contact: Option<String>,
     pub date_prochain_suivi: Option<String>,
     pub statut_suivi: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Famille {
+    pub id: i64,
+    pub nom: String,
+    pub notes: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewFamille {
+    pub nom: String,
     pub notes: Option<String>,
 }
 

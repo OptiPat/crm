@@ -53,7 +53,19 @@ impl Database {
     }
     
     fn init_tables(&self) -> Result<()> {
-        // Table foyers
+        // Table familles (lien de sang/parenté)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS familles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                notes TEXT,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            )",
+            [],
+        )?;
+        
+        // Table foyers (unité fiscale)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS foyers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,8 +87,10 @@ impl Database {
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                famille_id INTEGER,
                 foyer_id INTEGER,
                 role_foyer TEXT,
+                role_famille TEXT,
                 categorie TEXT NOT NULL,
                 parrain_id INTEGER,
                 civilite TEXT,
@@ -98,6 +112,7 @@ impl Database {
                 notes TEXT,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (famille_id) REFERENCES familles(id) ON DELETE SET NULL,
                 FOREIGN KEY (foyer_id) REFERENCES foyers(id) ON DELETE SET NULL,
                 FOREIGN KEY (parrain_id) REFERENCES contacts(id) ON DELETE SET NULL
             )",
@@ -197,6 +212,82 @@ impl Database {
         
         // Migration automatique : Rendre contact_id optionnel dans investissements
         self.migrate_investissements_contact_id_optional()?;
+        
+        // Migration automatique : Ajouter famille_id aux contacts
+        self.migrate_add_famille_id()?;
+        
+        // Migration automatique : Ajouter role_famille aux contacts
+        self.migrate_add_role_famille()?;
+        
+        Ok(())
+    }
+    
+    /// Migration : Ajouter role_famille aux contacts existants
+    fn migrate_add_role_famille(&self) -> Result<()> {
+        // Vérifier si la colonne role_famille existe déjà
+        let has_role_famille = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(contacts)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let col_name: String = row.get(1)?;
+                if col_name == "role_famille" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        
+        if has_role_famille {
+            println!("✅ Migration role_famille déjà appliquée");
+            return Ok(());
+        }
+        
+        println!("🔄 Migration : Ajout de role_famille aux contacts...");
+        
+        // Ajouter la colonne role_famille
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN role_famille TEXT",
+            [],
+        )?;
+        
+        println!("✅ Migration role_famille appliquée");
+        
+        Ok(())
+    }
+    
+    /// Migration : Ajouter famille_id aux contacts existants
+    fn migrate_add_famille_id(&self) -> Result<()> {
+        // Vérifier si la colonne famille_id existe déjà
+        let has_famille_id = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(contacts)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let col_name: String = row.get(1)?;
+                if col_name == "famille_id" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        
+        if has_famille_id {
+            println!("✅ Migration famille_id déjà appliquée");
+            return Ok(());
+        }
+        
+        println!("🔄 Migration : Ajout de famille_id aux contacts...");
+        
+        // Ajouter la colonne famille_id
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN famille_id INTEGER REFERENCES familles(id) ON DELETE SET NULL",
+            [],
+        )?;
+        
+        println!("✅ Migration famille_id appliquée");
         
         Ok(())
     }
