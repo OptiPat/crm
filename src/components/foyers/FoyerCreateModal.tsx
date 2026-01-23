@@ -46,10 +46,10 @@ export function FoyerCreateModal({
   const [selectedContactId, setSelectedContactId] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
-  // Initialiser le nom du foyer avec "Famille + nom du contact"
+  // Initialiser le nom du foyer avec "Foyer + nom du contact"
   useEffect(() => {
     if (open && currentContact) {
-      setFoyerName(`Famille ${currentContact.nom}`);
+      setFoyerName(`Foyer ${currentContact.nom}`);
       // Le contact actuel est automatiquement Déclarant 1
       setMembers([{
         contact: currentContact,
@@ -59,13 +59,33 @@ export function FoyerCreateModal({
     }
   }, [open, currentContact]);
 
+  // 🔥 Auto-update du nom du foyer quand les membres changent
+  useEffect(() => {
+    if (members.length > 0) {
+      // Extraire les noms uniques
+      const uniqueNoms = [...new Set(members.map(m => m.contact.nom.toUpperCase()))];
+      uniqueNoms.sort(); // Trier alphabétiquement
+      
+      if (uniqueNoms.length === 1) {
+        setFoyerName(`Foyer ${uniqueNoms[0]}`);
+      } else {
+        setFoyerName(`Foyer ${uniqueNoms.join(" - ")}`);
+      }
+    }
+  }, [members]);
+
   const loadAvailableContacts = async () => {
     try {
       const allContacts = await getAllContacts();
       // Exclure les contacts qui ont déjà un foyer et le contact actuel
-      const available = allContacts.filter(
-        c => !c.foyer_id && c.id !== currentContact.id
-      );
+      const available = allContacts
+        .filter(c => !c.foyer_id && c.id !== currentContact.id)
+        // 🔥 Trier par ordre alphabétique (nom puis prénom)
+        .sort((a, b) => {
+          const nomCompare = a.nom.localeCompare(b.nom);
+          if (nomCompare !== 0) return nomCompare;
+          return a.prenom.localeCompare(b.prenom);
+        });
       setAvailableContacts(available);
     } catch (error) {
       console.error("Error loading contacts:", error);
@@ -161,7 +181,7 @@ export function FoyerCreateModal({
               id="foyerName"
               value={foyerName}
               onChange={(e) => setFoyerName(e.target.value)}
-              placeholder="Famille DUPONT"
+              placeholder="Foyer DUPONT"
             />
           </div>
 

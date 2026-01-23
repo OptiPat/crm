@@ -42,6 +42,33 @@ const normalizeString = (str: string): string => {
     .trim();
 };
 
+// 🔥 Helper: Prendre la date la plus récente entre deux dates (pour consolidation multi-lignes)
+const getMostRecentDate = (
+  newDateISO: string | undefined, 
+  existingTimestamp: number | undefined
+): string | undefined => {
+  // Si aucune date, retourner undefined
+  if (!newDateISO && !existingTimestamp) return undefined;
+  
+  // Si une seule date existe, la retourner
+  if (!newDateISO && existingTimestamp) {
+    return new Date(existingTimestamp * 1000).toISOString();
+  }
+  if (newDateISO && !existingTimestamp) {
+    return newDateISO;
+  }
+  
+  // Comparer les deux dates et retourner la plus récente
+  const newDate = new Date(newDateISO!);
+  const existingDate = new Date(existingTimestamp! * 1000);
+  
+  if (newDate > existingDate) {
+    return newDateISO;
+  } else {
+    return existingDate.toISOString();
+  }
+};
+
 // Alias connus pour les partenaires (variations courantes)
 const PARTENAIRE_ALIASES: Record<string, string[]> = {
   "vie plus": ["vie+", "vie +", "vieplus"],
@@ -908,10 +935,26 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 }
               }
               
+              // 🔥 Parser la date de suivi de la ligne actuelle (si présente)
+              let rowDateDernierContact: string | undefined;
+              if (row.data.dernier_rdv && row.data.dernier_rdv !== "-") {
+                const dernierRdvStr = String(row.data.dernier_rdv).trim();
+                const excelDate = parseFloat(dernierRdvStr);
+                if (!isNaN(excelDate) && excelDate > 1) {
+                  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                  if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
+                    rowDateDernierContact = jsDate.toISOString();
+                  }
+                }
+              }
+              
               // Utiliser la date de naissance de la ligne si le contact n'en a pas
               const finalDateNaissance = existingContact.date_naissance 
                 ? new Date(existingContact.date_naissance * 1000).toISOString() 
                 : rowDateNaissance;
+              
+              // 🔥 Prendre la date de suivi la plus RÉCENTE (consolidation multi-lignes)
+              const finalDateDernierContact = getMostRecentDate(rowDateDernierContact, existingContact.date_dernier_contact);
               
               const contactToUpdate = {
                 foyer_id: existingContact.foyer_id,
@@ -930,7 +973,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 situation_familiale: existingContact.situation_familiale,
                 source_lead: existingContact.source_lead,
                 profil_risque_sri: existingContact.profil_risque_sri,
-                date_dernier_contact: existingContact.date_dernier_contact ? new Date(existingContact.date_dernier_contact * 1000).toISOString() : undefined,
+                date_dernier_contact: finalDateDernierContact, // 🔥 Date la plus récente
                 date_prochain_suivi: existingContact.date_prochain_suivi ? new Date(existingContact.date_prochain_suivi * 1000).toISOString() : undefined,
                 statut_suivi: existingContact.statut_suivi,
                 notes: existingContact.notes,
@@ -1669,9 +1712,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               date_naissance: dateNaissance || (existingInCache.date_naissance 
                 ? new Date(existingInCache.date_naissance * 1000).toISOString() 
                 : undefined),
-              date_dernier_contact: dateDernierContactISO || (existingInCache.date_dernier_contact 
-                ? new Date(existingInCache.date_dernier_contact * 1000).toISOString() 
-                : undefined),
+              // 🔥 Prendre la date de suivi la plus RÉCENTE (consolidation multi-lignes)
+              date_dernier_contact: getMostRecentDate(dateDernierContactISO, existingInCache.date_dernier_contact),
             };
             
             await updateContact(existingInCache.id, updateData);

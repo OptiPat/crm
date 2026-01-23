@@ -1,12 +1,11 @@
 import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Users, ChevronDown, ChevronUp, Home } from "lucide-react";
+import { Search, Users, ChevronDown, ChevronUp, Home, Briefcase } from "lucide-react";
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
-import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
+import { getInvestissementsByContact, getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
 import {
   Select,
   SelectContent,
@@ -17,18 +16,18 @@ import {
 
 // Rôles familiaux disponibles
 const ROLES_FAMILLE = [
-  { value: "PERE", label: "👨 Père", icon: "👨" },
-  { value: "MERE", label: "👩 Mère", icon: "👩" },
-  { value: "FILS", label: "👦 Fils", icon: "👦" },
-  { value: "FILLE", label: "👧 Fille", icon: "👧" },
-  { value: "CONJOINT", label: "💑 Conjoint(e)", icon: "💑" },
-  { value: "FRERE", label: "👨 Frère", icon: "👨" },
-  { value: "SOEUR", label: "👩 Sœur", icon: "👩" },
-  { value: "GRAND_PERE", label: "👴 Grand-père", icon: "👴" },
-  { value: "GRAND_MERE", label: "👵 Grand-mère", icon: "👵" },
-  { value: "PETIT_FILS", label: "👦 NOM3-fils", icon: "👦" },
-  { value: "PETITE_FILLE", label: "👧 NOM3e-fille", icon: "👧" },
-  { value: "AUTRE", label: "👤 Autre", icon: "👤" },
+  { value: "PERE", label: "👨 Père", icon: "👨", priority: 1 },
+  { value: "MERE", label: "👩 Mère", icon: "👩", priority: 2 },
+  { value: "CONJOINT", label: "💑 Conjoint(e)", icon: "💑", priority: 3 },
+  { value: "FILS", label: "👦 Fils", icon: "👦", priority: 4 },
+  { value: "FILLE", label: "👧 Fille", icon: "👧", priority: 5 },
+  { value: "FRERE", label: "👨 Frère", icon: "👨", priority: 6 },
+  { value: "SOEUR", label: "👩 Sœur", icon: "👩", priority: 7 },
+  { value: "GRAND_PERE", label: "👴 Grand-père", icon: "👴", priority: 0 },
+  { value: "GRAND_MERE", label: "👵 Grand-mère", icon: "👵", priority: 0 },
+  { value: "PETIT_FILS", label: "👦 NOM3-fils", icon: "👦", priority: 8 },
+  { value: "PETITE_FILLE", label: "👧 NOM3e-fille", icon: "👧", priority: 8 },
+  { value: "AUTRE", label: "👤 Autre", icon: "👤", priority: 10 },
 ];
 
 const getRoleFamilleIcon = (role?: string): string => {
@@ -37,9 +36,37 @@ const getRoleFamilleIcon = (role?: string): string => {
   return found ? found.icon : "👤";
 };
 
+const getRolePriority = (role?: string): number => {
+  if (!role) return 99;
+  const found = ROLES_FAMILLE.find(r => r.value === role);
+  return found ? found.priority : 99;
+};
+
+// 🎨 Couleurs des investissements (mêmes que ContactDetail)
+const getTypeProduitBgColor = (type: string, origine?: string): string => {
+  // Si "à côté" (existant client) → gris
+  if (origine === "EXISTANT_CLIENT") {
+    return "#9ca3af"; // gray-400
+  }
+  // Immobilier : vert
+  if (type === "IMMOBILIER") {
+    return "#85ad39";
+  }
+  // Placements financiers : rose foncé
+  return "#dc216e";
+};
+
+interface MemberWithInvestments {
+  contact: Contact;
+  investissements: Investissement[];
+  patrimoine: number;
+  isSpouse: boolean; // true si c'est un conjoint d'une autre famille
+  spouseOf?: string; // "Conjoint de X"
+}
+
 interface FamilleGroup {
   nom: string;
-  membres: Contact[];
+  membres: MemberWithInvestments[];
   foyers: Foyer[];
   patrimoineTotal: number;
 }
@@ -47,7 +74,8 @@ interface FamilleGroup {
 export function Familles() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [foyers, setFoyers] = useState<Foyer[]>([]);
-  const [patrimoineByContact, setPatrimoineByContact] = useState<Record<number, number>>({});
+  const [investissementsByContact, setInvestissementsByContact] = useState<Record<number, Investissement[]>>({});
+  const [investissementsByFoyer, setInvestissementsByFoyer] = useState<Record<number, Investissement[]>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedFamilles, setExpandedFamilles] = useState<Set<string>>(new Set());
@@ -65,19 +93,36 @@ export function Familles() {
       setContacts(dataContacts);
       setFoyers(dataFoyers);
 
-      // Charger le patrimoine de chaque contact
-      const patrimoineMap: Record<number, number> = {};
+      // 🔥 FIX: Charger les investissements par CONTACT et par FOYER
+      const investsByContact: Record<number, Investissement[]> = {};
+      const investsByFoyer: Record<number, Investissement[]> = {};
+
+      // Charger les investissements par contact
       await Promise.all(
         dataContacts.map(async (contact) => {
           try {
             const invests = await getInvestissementsByContact(contact.id);
-            patrimoineMap[contact.id] = invests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+            investsByContact[contact.id] = invests;
           } catch {
-            patrimoineMap[contact.id] = 0;
+            investsByContact[contact.id] = [];
           }
         })
       );
-      setPatrimoineByContact(patrimoineMap);
+
+      // Charger les investissements par foyer
+      await Promise.all(
+        dataFoyers.map(async (foyer) => {
+          try {
+            const invests = await getInvestissementsByFoyer(foyer.id);
+            investsByFoyer[foyer.id] = invests;
+          } catch {
+            investsByFoyer[foyer.id] = [];
+          }
+        })
+      );
+
+      setInvestissementsByContact(investsByContact);
+      setInvestissementsByFoyer(investsByFoyer);
       setLoading(false);
     } catch (error) {
       console.error("Erreur chargement contacts:", error);
@@ -85,12 +130,29 @@ export function Familles() {
     }
   };
 
-  // 🔥 GROUPEMENT DYNAMIQUE PAR NOM DE FAMILLE
-  // Plus besoin de famille_id en base - on groupe simplement par contact.nom
+  // Calculer le patrimoine d'un contact (ses investissements + sa part du foyer)
+  const getContactPatrimoine = (contact: Contact): { investissements: Investissement[], total: number } => {
+    const contactInvests = investissementsByContact[contact.id] || [];
+    
+    // Si le contact a un foyer, récupérer aussi les investissements du foyer qui n'ont pas de contact_id
+    let foyerInvests: Investissement[] = [];
+    if (contact.foyer_id) {
+      const allFoyerInvests = investissementsByFoyer[contact.foyer_id] || [];
+      // Investissements du foyer sans contact_id spécifique
+      foyerInvests = allFoyerInvests.filter(inv => !inv.contact_id);
+    }
+
+    const allInvests = [...contactInvests, ...foyerInvests];
+    const total = allInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+
+    return { investissements: allInvests, total };
+  };
+
+  // 🔥 GROUPEMENT DYNAMIQUE PAR NOM DE FAMILLE + CONJOINTS
   const familleGroups = useMemo<FamilleGroup[]>(() => {
     const groupMap = new Map<string, Contact[]>();
     
-    // Grouper les contacts par nom de famille (en majuscules pour éviter les doublons)
+    // Grouper les contacts par nom de famille
     contacts.forEach(contact => {
       const nomNormalized = contact.nom.trim().toUpperCase();
       if (!groupMap.has(nomNormalized)) {
@@ -99,7 +161,7 @@ export function Familles() {
       groupMap.get(nomNormalized)!.push(contact);
     });
 
-    // Convertir en array et enrichir avec les données
+    // Convertir en array avec membres enrichis
     const groups: FamilleGroup[] = [];
     groupMap.forEach((membres, nom) => {
       // Ne garder que les familles avec 2+ membres
@@ -108,12 +170,54 @@ export function Familles() {
         const foyerIds = new Set(membres.map(m => m.foyer_id).filter(Boolean));
         const famillesFoyers = foyers.filter(f => foyerIds.has(f.id));
         
+        // D'abord trier les membres par rôle
+        const membresSorted = [...membres].sort((a, b) => 
+          getRolePriority(a.role_famille) - getRolePriority(b.role_famille)
+        );
+
+        // Construire la liste avec conjoints JUSTE APRÈS leur partenaire
+        const membresWithInvests: MemberWithInvestments[] = [];
+        const spousesAdded = new Set<number>(); // Pour éviter les doublons
+
+        membresSorted.forEach(membre => {
+          const { investissements, total } = getContactPatrimoine(membre);
+          membresWithInvests.push({
+            contact: membre,
+            investissements,
+            patrimoine: total,
+            isSpouse: false,
+          });
+
+          // 🔥 Ajouter le conjoint JUSTE APRÈS ce membre s'il a un nom différent
+          if (membre.foyer_id) {
+            const foyerMembers = contacts.filter(
+              c => c.foyer_id === membre.foyer_id && c.id !== membre.id
+            );
+            foyerMembers.forEach(spouse => {
+              // Si le conjoint a un nom différent et n'a pas encore été ajouté
+              if (spouse.nom.toUpperCase() !== nom && !spousesAdded.has(spouse.id)) {
+                spousesAdded.add(spouse.id);
+                const { investissements: spouseInvests, total: spouseTotal } = getContactPatrimoine(spouse);
+                membresWithInvests.push({
+                  contact: spouse,
+                  investissements: spouseInvests,
+                  patrimoine: spouseTotal,
+                  isSpouse: true,
+                  spouseOf: `Conjoint de ${membre.prenom}`,
+                });
+              }
+            });
+          }
+        });
+
+        // Plus besoin de trier ici - les conjoints sont déjà placés après leur partenaire
+
         // Calculer le patrimoine total
-        const patrimoineTotal = membres.reduce((sum, m) => sum + (patrimoineByContact[m.id] || 0), 0);
+        const patrimoineTotal = membresWithInvests.reduce((sum, m) => sum + m.patrimoine, 0);
 
         groups.push({
           nom,
-          membres,
+          membres: membresWithInvests,
           foyers: famillesFoyers,
           patrimoineTotal,
         });
@@ -124,7 +228,7 @@ export function Familles() {
     groups.sort((a, b) => a.nom.localeCompare(b.nom));
     
     return groups;
-  }, [contacts, foyers, patrimoineByContact]);
+  }, [contacts, foyers, investissementsByContact, investissementsByFoyer]);
 
   // Filtrage
   const filteredFamilles = useMemo(() => {
@@ -133,7 +237,7 @@ export function Familles() {
     return familleGroups.filter(
       (f) =>
         f.nom.toLowerCase().includes(query) ||
-        f.membres.some((m) => `${m.prenom} ${m.nom}`.toLowerCase().includes(query))
+        f.membres.some((m) => `${m.contact.prenom} ${m.contact.nom}`.toLowerCase().includes(query))
     );
   }, [familleGroups, searchQuery]);
 
@@ -173,16 +277,21 @@ export function Familles() {
     }
   };
 
-  // Obtenir les autres membres du foyer
-  const getFoyerMembers = (contact: Contact): Contact[] => {
-    if (!contact.foyer_id) return [];
-    return contacts.filter(c => c.foyer_id === contact.foyer_id && c.id !== contact.id);
-  };
-
   // Trouver le foyer d'un membre
   const getFoyerForMember = (contact: Contact): Foyer | undefined => {
     if (!contact.foyer_id) return undefined;
     return foyers.find(f => f.id === contact.foyer_id);
+  };
+
+  // Formater le montant
+  const formatEuro = (centimes: number): string => {
+    return (centimes / 100).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €";
+  };
+
+  // Formater la date
+  const formatDate = (timestamp?: number): string => {
+    if (!timestamp) return "";
+    return new Date(timestamp * 1000).toLocaleDateString("fr-FR");
   };
 
   if (loading) {
@@ -265,7 +374,7 @@ export function Familles() {
                   <div>
                     <CardTitle className="text-lg flex items-center gap-2">
                       Famille {famille.nom}
-                      <Badge variant="secondary">{famille.membres.length} membre{famille.membres.length > 1 ? "s" : ""}</Badge>
+                      <Badge variant="secondary">{famille.membres.filter(m => !m.isSpouse).length} membre{famille.membres.filter(m => !m.isSpouse).length > 1 ? "s" : ""}</Badge>
                       {famille.foyers.length > 0 && (
                         <Badge variant="outline">
                           <Home className="h-3 w-3 mr-1" />
@@ -274,15 +383,15 @@ export function Familles() {
                       )}
                     </CardTitle>
                     <CardDescription>
-                      {famille.membres.slice(0, 4).map((m) => `${getRoleFamilleIcon(m.role_famille)} ${m.prenom}`).join(", ")}
-                      {famille.membres.length > 4 && ` +${famille.membres.length - 4}`}
+                      {famille.membres.filter(m => !m.isSpouse).slice(0, 4).map((m) => `${getRoleFamilleIcon(m.contact.role_famille)} ${m.contact.prenom}`).join(", ")}
+                      {famille.membres.filter(m => !m.isSpouse).length > 4 && ` +${famille.membres.filter(m => !m.isSpouse).length - 4}`}
                     </CardDescription>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <div className="text-lg font-semibold text-green-600">
-                      💰 {(famille.patrimoineTotal / 100).toLocaleString("fr-FR")} €
+                      💰 {formatEuro(famille.patrimoineTotal)}
                     </div>
                     <div className="text-xs text-muted-foreground">Patrimoine famille</div>
                   </div>
@@ -298,79 +407,138 @@ export function Familles() {
             {expandedFamilles.has(famille.nom) && (
               <CardContent className="border-t bg-muted/20 pt-4">
                 {/* Arborescence des membres */}
-                <div className="space-y-3">
-                  <h4 className="font-medium text-sm text-muted-foreground mb-3">
-                    🌳 Membres de la famille {famille.nom}
+                <div className="space-y-1">
+                  <h4 className="font-medium text-sm text-muted-foreground mb-4">
+                    🌳 Arborescence famille {famille.nom}
                   </h4>
                   
                   {famille.membres.map((membre, index) => {
-                    const foyer = getFoyerForMember(membre);
-                    const foyerMembers = getFoyerMembers(membre);
-                    const patrimoine = patrimoineByContact[membre.id] || 0;
+                    const foyer = getFoyerForMember(membre.contact);
+                    const isLast = index === famille.membres.length - 1;
+                    const isSpouseAndPreviousWasSpouseOf = membre.isSpouse && index > 0 && 
+                      famille.membres[index - 1].contact.foyer_id === membre.contact.foyer_id;
                     
                     return (
-                      <div
-                        key={membre.id}
-                        className="flex items-center gap-4 p-3 bg-background rounded-lg border"
-                      >
-                        {/* Ligne de connexion visuelle */}
-                        <div className="flex items-center gap-2 w-8 text-muted-foreground font-mono">
-                          {index === 0 ? "┌" : index === famille.membres.length - 1 ? "└" : "├"}
-                        </div>
-                        
-                        {/* Icône du rôle */}
-                        <div className="text-2xl w-8 text-center">
-                          {getRoleFamilleIcon(membre.role_famille)}
-                        </div>
-                        
-                        {/* Infos du membre */}
-                        <div className="flex-1">
-                          <div className="font-medium">
-                            {membre.prenom} {membre.nom}
+                      <div key={membre.contact.id} className="relative">
+                        {/* Membre principal */}
+                        <div className={`flex items-start gap-2 ${membre.isSpouse ? 'ml-8' : ''}`}>
+                          {/* Ligne de connexion visuelle */}
+                          <div className="flex flex-col items-center w-6 text-muted-foreground font-mono text-lg select-none">
+                            {membre.isSpouse ? (
+                              isSpouseAndPreviousWasSpouseOf ? "│" : "└─"
+                            ) : (
+                              index === 0 ? "┌" : isLast ? "└" : "├"
+                            )}
                           </div>
-                          {foyer && (
-                            <div className="text-sm text-muted-foreground flex items-center gap-1">
-                              <Home className="h-3 w-3" />
-                              {foyer.nom}
-                              {foyerMembers.length > 0 && (
-                                <span className="text-xs">
-                                  (avec {foyerMembers.map(m => m.prenom).join(", ")})
-                                </span>
-                              )}
+                          
+                          {/* Carte du membre */}
+                          <div className={`flex-1 rounded-lg border ${membre.isSpouse ? 'bg-blue-50 border-blue-200' : 'bg-background'} p-3`}>
+                            {/* En-tête du membre */}
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-3">
+                                <div className="text-2xl">
+                                  {/* Pour les conjoints externes : toujours 💑, sinon le rôle stocké */}
+                                  {membre.isSpouse ? "💑" : getRoleFamilleIcon(membre.contact.role_famille)}
+                                </div>
+                                <div>
+                                  <div className="font-semibold flex items-center gap-2">
+                                    {membre.contact.prenom} {membre.contact.nom}
+                                    {membre.isSpouse && (
+                                      <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
+                                        💑 {membre.spouseOf}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                                    {foyer ? (
+                                      <>
+                                        <Home className="h-3 w-3" />
+                                        <span>{foyer.nom}</span>
+                                      </>
+                                    ) : (
+                                      <span className="text-orange-500">Sans foyer</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-3">
+                                {/* Sélecteur de rôle : uniquement pour les membres de la famille (pas les conjoints externes) */}
+                                {!membre.isSpouse ? (
+                                  <Select
+                                    value={membre.contact.role_famille || ""}
+                                    onValueChange={(value) => handleRoleFamilleChange(membre.contact, value)}
+                                  >
+                                    <SelectTrigger className="h-8 text-sm w-36">
+                                      <SelectValue placeholder="Définir rôle..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {ROLES_FAMILLE.map((role) => (
+                                        <SelectItem key={role.value} value={role.value}>
+                                          {role.label}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                ) : (
+                                  <Badge variant="outline" className="h-8 px-3 text-blue-600 border-blue-300">
+                                    💑 Conjoint(e)
+                                  </Badge>
+                                )}
+                                
+                                {/* Patrimoine total */}
+                                <Badge className="bg-green-100 text-green-700 border-green-300 font-semibold">
+                                  {formatEuro(membre.patrimoine)}
+                                </Badge>
+                              </div>
                             </div>
-                          )}
-                          {!foyer && (
-                            <div className="text-sm text-muted-foreground">
-                              Sans foyer
-                            </div>
-                          )}
+                            
+                            {/* Liste des investissements */}
+                            {membre.investissements.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-dashed">
+                                <div className="grid gap-1">
+                                  {membre.investissements.map((inv) => (
+                                    <div 
+                                      key={inv.id} 
+                                      className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-muted/30"
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <Badge 
+                                          className="text-xs text-white px-2 py-0.5"
+                                          style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
+                                        >
+                                          {inv.type_produit.replace(/_/g, " ")}
+                                        </Badge>
+                                        <span className="font-medium">{inv.nom_produit}</span>
+                                        {inv.date_souscription && (
+                                          <span className="text-muted-foreground text-xs">
+                                            {formatDate(inv.date_souscription)}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="font-semibold" style={{ color: getTypeProduitBgColor(inv.type_produit, inv.origine) }}>
+                                        {formatEuro(inv.montant_initial || 0)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {membre.investissements.length === 0 && (
+                              <div className="mt-2 pt-2 border-t border-dashed">
+                                <div className="text-sm text-muted-foreground italic">
+                                  Aucun investissement
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                         
-                        {/* Sélecteur de rôle */}
-                        <div className="w-44">
-                          <Select
-                            value={membre.role_famille || ""}
-                            onValueChange={(value) => handleRoleFamilleChange(membre, value)}
-                          >
-                            <SelectTrigger className="h-8 text-sm">
-                              <SelectValue placeholder="Définir rôle..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {ROLES_FAMILLE.map((role) => (
-                                <SelectItem key={role.value} value={role.value}>
-                                  {role.label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        
-                        {/* Patrimoine */}
-                        <div className="text-right w-28">
-                          <Badge variant="outline" className="text-green-600">
-                            {(patrimoine / 100).toLocaleString("fr-FR")} €
-                          </Badge>
-                        </div>
+                        {/* Ligne verticale de connexion */}
+                        {!isLast && !membre.isSpouse && (
+                          <div className="absolute left-3 top-full h-1 w-px bg-muted-foreground/30"></div>
+                        )}
                       </div>
                     );
                   })}
