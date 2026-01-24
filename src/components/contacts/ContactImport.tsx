@@ -2200,6 +2200,92 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           ? String(row.data.nom_produit).trim() 
           : produitStr; // Fallback sur le type si pas de nom
         
+        // 🔥 FIX: Parser les mêmes champs que les investissements individuels
+        // Date de souscription
+        let dateSouscription: string | undefined;
+        if (row.data.date_souscription) {
+          const dateStr = String(row.data.date_souscription).trim();
+          const excelDate = parseFloat(dateStr);
+          if (!isNaN(excelDate) && excelDate > 1) {
+            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
+              dateSouscription = jsDate.toISOString();
+            }
+          }
+        }
+        
+        // Montant VP
+        const montantVP = row.data.montant_vp ? Math.round(parseFloat(String(row.data.montant_vp)) * 100) : undefined;
+        
+        // Réinvestissement
+        let reinvestissement = false;
+        let reinvestissementPourcentage: number | undefined;
+        if (row.data.reinvestissement) {
+          const reinvStr = String(row.data.reinvestissement).trim().toUpperCase();
+          reinvestissement = reinvStr === 'OUI' || reinvStr === 'YES' || reinvStr === 'TRUE' || reinvStr === '1';
+          if (!reinvestissement) {
+            const reinvNum = parseInt(reinvStr.replace(/[^0-9]/g, ''));
+            if (!isNaN(reinvNum) && reinvNum > 0) {
+              reinvestissement = true;
+              reinvestissementPourcentage = reinvNum;
+            }
+          }
+        }
+        
+        // Durée démembrement
+        let dureeDemembrement: string | undefined;
+        let dateFinDemembrement: string | undefined;
+        let isViager = false;
+        
+        const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
+        const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+        
+        if (!isPP && row.data.duree_demembrement) {
+          const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
+          
+          if (dureeStr === 'VIAGER') {
+            isViager = true;
+            dureeDemembrement = 'viager';
+          } else {
+            const dureeNum = parseInt(dureeStr);
+            if (!isNaN(dureeNum) && dureeNum > 0) {
+              dureeDemembrement = String(dureeNum);
+              // Calculer la date de fin
+              if (dateSouscription) {
+                const dateDebut = new Date(dateSouscription);
+                dateDebut.setFullYear(dateDebut.getFullYear() + dureeNum);
+                dateFinDemembrement = dateDebut.toISOString();
+              }
+            }
+          }
+        }
+        
+        // 🔥 Construire les notes avec mode_detention, durée, réinvestissement
+        const notesArray: string[] = [];
+        notesArray.push("Commun"); // Indicateur que c'est un investissement de couple
+        
+        if (row.data.mode_detention) {
+          notesArray.push(`Mode de détention: ${row.data.mode_detention}`);
+        }
+        
+        if (dureeDemembrement) {
+          if (isViager) {
+            notesArray.push(`Durée: viager`);
+          } else {
+            notesArray.push(`Durée: ${dureeDemembrement} ans`);
+          }
+        }
+        
+        if (reinvestissementPourcentage) {
+          notesArray.push(`Réinv. ${reinvestissementPourcentage}%`);
+        }
+        
+        if (row.data.commentaires) {
+          notesArray.push(String(row.data.commentaires).trim());
+        }
+        
+        const investissementNotes = notesArray.join(' | ');
+        
         // Créer l'investissement rattaché au FOYER (via foyer_id, pas contact_id)
         const newInvestissement: NewInvestissement = {
           foyer_id: foyerId,
@@ -2208,7 +2294,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           nom_produit: nomProduit,
           partenaire_id: partenaireId || undefined,
           montant_initial: montantInitial || undefined,
-          notes: `Investissement commun du couple`,
+          date_souscription: dateSouscription,
+          date_fin_demembrement: dateFinDemembrement,
+          versement_programme: montantVP ? true : false,
+          montant_versement_programme: montantVP,
+          reinvestissement_dividendes: reinvestissement,
+          notes: investissementNotes,
         };
         
         await createOrUpdateInvestissement(newInvestissement);
