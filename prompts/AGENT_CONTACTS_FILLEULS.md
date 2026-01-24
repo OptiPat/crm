@@ -49,11 +49,18 @@
 - [x] Migration automatique dans `mod.rs`
 - [x] Dropdown "Prescripteur" dans `ContactForm.tsx` (pour tous les contacts)
 - [x] Bouton "+ Nouveau" pour créer un prescripteur inline
-- [x] Catégorie `AUCUN` pour prescripteur-only (ni client, ni filleul)
+- [x] Catégorie `PRESCRIPTEUR` pour prescripteur-only (ni client, ni filleul)
 - [x] **Page Prescripteurs** (`src/pages/Prescripteurs.tsx`)
   - Arbre généalogique récursif des recommandations
   - Patrimoine personnel + patrimoine apporté affiché
   - Stats globales (prescripteurs actifs, clients recommandés, total apporté)
+  - **Mode compact** : Investissements cachés par défaut, bouton 👁️ pour afficher
+  - **Stats par branche** : "📈 Branche : X clients • Y€ apporté"
+  - **Couleurs par niveau** : Bleu (racine) → Ciel → Gris → Clair
+  - **Foyers consolidés** : "🏠 Foyer B (Didier + Sylvie)"
+  - **Investissements foyer** : Badge 👤 Prénom pour perso, 🏠 Commun pour partagés
+  - **Recherche par foyer** : Match sur nom de famille et prénoms des membres
+  - **Option B** : Un seul prescripteur_id par foyer (évite doublons dans l'arbre)
 - [x] Onglet "Prescripteurs" dans sidebar
 
 ### Étape 9 : Dates de suivi séparées ✅ (24/01/2026)
@@ -124,12 +131,17 @@ Page Contacts
 
 Page Prescripteurs
 ├── Stats globales (prescripteurs, clients recommandés, patrimoine apporté)
+├── 🔍 Recherche (par nom, prénom, OU nom de foyer)
 └── Liste des prescripteurs racines
     └── 🌳 Arbre récursif par prescripteur
-        ├── Prescripteur (patrimoine personnel + apporté)
-        │   ├── Client recommandé 1 (patrimoine)
-        │   │   └── Sous-client recommandé (patrimoine)
-        │   └── Client recommandé 2 (patrimoine)
+        ├── 👤 Prescripteur (patrimoine personnel + apporté) 👁️ 5
+        │   📈 Branche : X clients • Y€ apporté
+        │   ├── 🏠 Foyer B (Didier + Sylvie) 💰 150k€
+        │   │   ├─ SCPI 👤 Didier Épargne Pierre 25k€
+        │   │   ├─ AV 👤 Sylvie Assurance-vie 30k€
+        │   │   └─ SCPI 🏠 Commun Primovie 50k€
+        │   └── 👤 Client solo (patrimoine)
+        │       └── Sous-clients recommandés...
         └── ...
 ```
 

@@ -14,6 +14,17 @@ const getTypeProduitBgColor = (type: string, origine?: string): string => {
   return "#dc216e"; // rose foncé
 };
 
+// 🏷️ Formater la catégorie filleul pour affichage
+const formatFilleulCategorie = (categorie: string): string => {
+  switch (categorie) {
+    case "FILLEUL": return "Filleul";
+    case "PROSPECT_FILLEUL": return "Prospect filleul";
+    case "SUSPECT_FILLEUL": return "Suspect filleul";
+    case "FILLEUL_DESINSCRIT": return "Filleul désinscrit";
+    default: return categorie.replace(/_/g, " ").toLowerCase();
+  }
+};
+
 // 🎨 Couleurs par niveau de l'arbre
 const getNiveauStyles = (niveau: number): { bg: string; border: string; text: string } => {
   switch (niveau) {
@@ -476,7 +487,7 @@ export function Prescripteurs() {
               )}
               {node.contact.filleul_categorie && (
                 <Badge className="bg-amber-100 text-amber-700 text-xs">
-                  Filleul {node.contact.filleul_categorie}
+                  {formatFilleulCategorie(node.contact.filleul_categorie)}
                 </Badge>
               )}
             </div>
@@ -701,7 +712,7 @@ export function Prescripteurs() {
                           )}
                           {prescripteur.contact.filleul_categorie && (
                             <Badge className="bg-amber-100 text-amber-700 text-xs">
-                              Filleul {prescripteur.contact.filleul_categorie}
+                              {formatFilleulCategorie(prescripteur.contact.filleul_categorie)}
                             </Badge>
                           )}
                         </CardTitle>
