@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
 import * as XLSX from "xlsx";
-import { createContact, findContactByName, type NewContact } from "@/lib/api/tauri-contacts";
+import { createContact, findContactByName, getAllContacts, updateContact, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
 import { Badge } from "@/components/ui/badge";
 
 interface ContactImportFilleulsProps {
@@ -173,7 +173,11 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     }
 
     try {
-      const preparedRows: ImportRow[] = await Promise.all(rows.map(async (row) => {
+      // 🔥 FIX: NE PAS créer les parrains ici - juste préparer les données
+      // Les parrains seront liés APRÈS l'import de tous les contacts
+      const preparedRows: ImportRow[] = [];
+      
+      for (const row of rows) {
         const contactData: Record<string, any> = {};
         const warnings: string[] = [];
         
@@ -185,48 +189,18 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           }
         });
 
-        // Rechercher le parrain si nom/prénom fournis
+        // 🔥 NE PAS chercher/créer le parrain ici - on le fera après l'import
+        // Juste noter le nom/prénom du parrain pour plus tard
         if (contactData.nom_parrain && contactData.prenom_parrain) {
-          try {
-            // D'abord, chercher le parrain dans TOUTE la base (tous types de contacts)
-            let parrain = await findContactByName(
-              contactData.nom_parrain,
-              contactData.prenom_parrain
-            );
-            
-            if (parrain) {
-              // Parrain trouvé (peu importe sa catégorie : CLIENT, PROSPECT, SUSPECT, FILLEUL, etc.)
-              contactData.parrain_id = parrain.id;
-            } else {
-              // Parrain non trouvé → le créer automatiquement
-              try {
-                const newParrain: NewContact = {
-                  nom: contactData.nom_parrain,
-                  prenom: contactData.prenom_parrain,
-                  categorie: "SUSPECT_CLIENT", // Par défaut, on considère qu'un parrain est côté client
-                  statut_suivi: "ACTIF",
-                };
-                
-                const createdParrain = await createContact(newParrain);
-                contactData.parrain_id = createdParrain.id;
-                warnings.push(`✅ Parrain créé automatiquement: ${contactData.prenom_parrain} ${contactData.nom_parrain}`);
-              } catch (createError) {
-                console.error(`❌ Erreur création parrain:`, createError);
-                warnings.push(`❌ Impossible de créer le parrain: ${contactData.prenom_parrain} ${contactData.nom_parrain}`);
-              }
-            }
-          } catch (error) {
-            console.error(`⚠️ Erreur recherche parrain:`, error);
-            warnings.push(`⚠️ Erreur recherche parrain: ${error}`);
-          }
+          warnings.push(`Parrain: ${contactData.prenom_parrain} ${contactData.nom_parrain} (sera lié après import)`);
         }
 
-        return {
+        preparedRows.push({
           data: contactData,
           status: "pending" as const,
           warnings: warnings.length > 0 ? warnings : undefined,
-        };
-      }));
+        });
+      }
 
       setImportRows(preparedRows);
       setStep("preview");
@@ -242,36 +216,73 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     setStep("importing");
 
     const updatedRows = [...importRows];
+    
+    // 🔥 STRUCTURE EN 2 PASSES :
+    // 1. Créer les contacts QUI N'EXISTENT PAS DÉJÀ (sans parrain_id)
+    // 2. Lier les parrains après que tous les contacts existent
 
+    // Charger tous les contacts existants AVANT l'import
+    const existingContacts = await getAllContacts();
+    
+    // Map pour stocker les contacts (existants + créés) : clé = "NOM|PRENOM", valeur = id
+    const contactsMap = new Map<string, number>();
+    
+    // Remplir la map avec les contacts existants
+    existingContacts.forEach(c => {
+      const key = `${c.nom.trim().toUpperCase()}|${c.prenom.trim().toUpperCase()}`;
+      contactsMap.set(key, c.id!);
+    });
+
+    // === PASSE 1 : Créer les contacts qui n'existent pas ===
     for (let i = 0; i < updatedRows.length; i++) {
       const row = updatedRows[i];
       
       try {
-        // Mapper la catégorie depuis l'Excel
-        let categorie: string;
+        const nom = (row.data.nom || "").trim();
+        const prenom = (row.data.prenom || "").trim();
+        const contactKey = `${nom.toUpperCase()}|${prenom.toUpperCase()}`;
+        
+        // 🔥 VÉRIFIER SI LE CONTACT EXISTE DÉJÀ
+        if (contactsMap.has(contactKey)) {
+          // Contact existe déjà (probablement un CLIENT) → ne pas créer de doublon
+          const existingId = contactsMap.get(contactKey)!;
+          (row as any)._createdId = existingId;
+          (row as any)._alreadyExists = true;
+          
+          updatedRows[i] = { 
+            ...row, 
+            status: "success",
+            message: `✓ Déjà existant (ID: ${existingId})`
+          };
+          setImportRows([...updatedRows]);
+          continue; // Passer au suivant
+        }
+        
+        // 🔥 Mapper la catégorie FILLEUL depuis l'Excel (indépendante de la catégorie client)
+        let filleulCategorie: string;
         const catStr = String(row.data.categorie || "").trim().toUpperCase();
         
         switch (catStr) {
           case "FILLEUL":
           case "FILLEUL ACTIF":
-            categorie = "FILLEUL";
+            filleulCategorie = "FILLEUL";
             break;
           case "PROSPECT":
           case "PROSPECT FILLEUL":
-            categorie = "PROSPECT_FILLEUL";
+            filleulCategorie = "PROSPECT_FILLEUL";
             break;
           case "SUSPECT":
           case "SUSPECT FILLEUL":
-            categorie = "SUSPECT_FILLEUL";
+            filleulCategorie = "SUSPECT_FILLEUL";
             break;
           case "DESINSCRIT":
           case "DÉSINSCRIT":
           case "FILLEUL DESINSCRIT":
           case "FILLEUL DÉSINSCRIT":
-            categorie = "FILLEUL_DESINSCRIT";
+            filleulCategorie = "FILLEUL_DESINSCRIT";
             break;
           default:
-            categorie = "SUSPECT_FILLEUL"; // Par défaut
+            filleulCategorie = "SUSPECT_FILLEUL"; // Par défaut
         }
 
         // Parser la date de dernier suivi
@@ -314,36 +325,236 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             : `Date inscription: ${dateInscription}`;
         }
 
+        // 🔥 Créer le contact (il n'existe pas encore)
+        // categorie = "AUCUN" → PAS un client, n'apparaît PAS dans l'onglet CLIENTS
+        // filleul_categorie = statut dans le réseau filleul
         const newContact: NewContact = {
-          nom: row.data.nom || "",
-          prenom: row.data.prenom || "",
+          nom: nom,
+          prenom: prenom,
           email: row.data.email ? String(row.data.email).trim() : undefined,
           telephone: row.data.telephone ? String(row.data.telephone).trim() : undefined,
           date_naissance: dateNaissance,
-          categorie: categorie,
-          parrain_id: row.data.parrain_id,
-          date_dernier_contact: dateDernierContact,
+          categorie: "AUCUN", // 🔥 PAS un client → n'apparaît pas dans CLIENTS
+          filleul_categorie: filleulCategorie, // 🔥 Catégorie FILLEUL indépendante
+          // parrain_id: undefined - sera lié en passe 2
+          // 🔥 date_dernier_contact_filleul = date de suivi FILLEUL (indépendant de client)
+          date_dernier_contact_filleul: dateDernierContact,
           statut_suivi: "ACTIF",
           notes: notes,
         };
 
-        await createContact(newContact);
+        const createdContact = await createContact(newContact);
         
-        let message = "Importé avec succès";
-        if (row.warnings && row.warnings.length > 0) {
-          message += ` (${row.warnings.join(", ")})`;
-        }
+        // Stocker dans la map pour éviter les doublons dans le même import
+        contactsMap.set(contactKey, createdContact.id!);
+        
+        // Stocker les infos pour la passe 2
+        (row as any)._createdId = createdContact.id;
         
         updatedRows[i] = { 
           ...row, 
-          status: row.warnings && row.warnings.length > 0 ? "warning" : "success",
-          message 
+          status: "success",
+          message: "Créé (liaison parrain en cours...)"
         };
       } catch (error) {
         updatedRows[i] = { ...row, status: "error", message: String(error) };
       }
 
       setImportRows([...updatedRows]);
+    }
+
+    // === PASSE 2 : Lier les parrains ET mettre à jour filleul_categorie ===
+    // 🔥 FIX: Traiter TOUS les contacts, pas seulement ceux avec parrain
+    // Les Prospects et Suspects n'ont pas de parrain mais doivent avoir leur filleul_categorie mis à jour
+    const allContacts = await getAllContacts();
+    
+    // 🔥 Créer une map des catégories ORIGINALES pour les protéger
+    const originalCategories = new Map<number, string>();
+    existingContacts.forEach(c => {
+      if (c.id) originalCategories.set(c.id, c.categorie);
+    });
+    
+    for (let i = 0; i < updatedRows.length; i++) {
+      const row = updatedRows[i];
+      
+      if (row.status !== "success") continue; // Skip les erreurs
+      
+      const contactId = (row as any)._createdId;
+      const alreadyExists = (row as any)._alreadyExists;
+      if (!contactId) continue;
+      
+      const contact = allContacts.find(c => c.id === contactId);
+      if (!contact) continue;
+      
+      // 🔥 PROTECTION CRITIQUE : Si le contact existait déjà, GARDER sa catégorie originale
+      const categorieToUse = alreadyExists && originalCategories.has(contactId)
+        ? originalCategories.get(contactId)!
+        : contact.categorie;
+      
+      // 🔥 Mapper la catégorie FILLEUL depuis l'Excel pour ce contact
+      const catStr = String(row.data.categorie || "").trim().toUpperCase();
+      let filleulCategorieForContact: string;
+      switch (catStr) {
+        case "FILLEUL":
+        case "FILLEUL ACTIF":
+          filleulCategorieForContact = "FILLEUL";
+          break;
+        case "PROSPECT":
+        case "PROSPECT FILLEUL":
+          filleulCategorieForContact = "PROSPECT_FILLEUL";
+          break;
+        case "SUSPECT":
+        case "SUSPECT FILLEUL":
+          filleulCategorieForContact = "SUSPECT_FILLEUL";
+          break;
+        case "DESINSCRIT":
+        case "DÉSINSCRIT":
+        case "FILLEUL DESINSCRIT":
+        case "FILLEUL DÉSINSCRIT":
+          filleulCategorieForContact = "FILLEUL_DESINSCRIT";
+          break;
+        default:
+          filleulCategorieForContact = "SUSPECT_FILLEUL";
+      }
+      
+      // 🔥 Parser la date de dernier suivi FILLEUL depuis l'Excel
+      let dateDernierContactFilleul: string | undefined;
+      if (row.data.date_dernier_suivi) {
+        const dateStr = String(row.data.date_dernier_suivi).trim();
+        const excelDate = parseFloat(dateStr);
+        
+        if (!isNaN(excelDate) && excelDate > 1) {
+          const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+          if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
+            dateDernierContactFilleul = jsDate.toISOString();
+          }
+        }
+      }
+      
+      // Chercher le parrain si nom/prénom fournis
+      let parrainId: number | undefined = contact.parrain_id;
+      let parrainInfo = "";
+      
+      if (row.data.nom_parrain && row.data.prenom_parrain) {
+        const nomParrain = String(row.data.nom_parrain).trim().toUpperCase();
+        const prenomParrain = String(row.data.prenom_parrain).trim().toUpperCase();
+        
+        // Chercher le parrain dans tous les contacts (existants + créés)
+        const parrain = allContacts.find(c => 
+          c.nom.trim().toUpperCase() === nomParrain &&
+          c.prenom.trim().toUpperCase() === prenomParrain
+        );
+        
+        if (parrain) {
+          parrainId = parrain.id;
+          parrainInfo = ` | Parrain: ${prenomParrain} ${nomParrain}`;
+        } else {
+          parrainInfo = ` | ⚠️ Parrain non trouvé: ${prenomParrain} ${nomParrain}`;
+        }
+      }
+      
+      try {
+        // 🔥 Toujours mettre à jour filleul_categorie (avec ou sans parrain)
+        await updateContact(contactId, {
+          ...contact,
+          categorie: categorieToUse, // 🔥 Garder la catégorie CLIENT originale
+          filleul_categorie: filleulCategorieForContact, // 🔥 Ajouter la catégorie filleul
+          parrain_id: parrainId,
+          date_naissance: contact.date_naissance 
+            ? new Date(contact.date_naissance * 1000).toISOString() 
+            : undefined,
+          // 🔥 Garder la date de suivi CLIENT intacte
+          date_dernier_contact: contact.date_dernier_contact 
+            ? new Date(contact.date_dernier_contact * 1000).toISOString() 
+            : undefined,
+          date_prochain_suivi: contact.date_prochain_suivi 
+            ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
+            : undefined,
+          // 🔥 Mettre à jour la date de suivi FILLEUL (indépendante)
+          date_dernier_contact_filleul: dateDernierContactFilleul || (
+            contact.date_dernier_contact_filleul 
+              ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
+              : undefined
+          ),
+          date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
+            ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
+            : undefined,
+        });
+        
+        const prefix = alreadyExists ? "✓ Existant" : "✓ Créé";
+        const categorieLabel = filleulCategorieForContact === "FILLEUL" ? "Filleul" 
+          : filleulCategorieForContact === "PROSPECT_FILLEUL" ? "Prospect"
+          : filleulCategorieForContact === "SUSPECT_FILLEUL" ? "Suspect"
+          : "Désinscrit";
+        
+        updatedRows[i] = { 
+          ...row, 
+          status: parrainInfo.includes("non trouvé") ? "warning" : "success",
+          message: `${prefix} (${categorieLabel})${parrainInfo}`
+        };
+      } catch (updateError) {
+        updatedRows[i] = { 
+          ...row, 
+          status: "warning",
+          message: `Erreur mise à jour: ${updateError}`
+        };
+      }
+      
+      setImportRows([...updatedRows]);
+    }
+
+    // === PASSE 3 : Upgrader les parrains en FILLEUL actif ===
+    // Un parrain est forcément un filleul actif (il parraine quelqu'un)
+    // 🔥 On met à jour filleul_categorie, PAS categorie (qui reste indépendante)
+    try {
+      const refreshedContacts = await getAllContacts();
+      
+      // Trouver tous les contacts qui sont parrains (ont des filleuls)
+      const parrainIds = new Set<number>();
+      refreshedContacts.forEach(contact => {
+        if (contact.parrain_id) {
+          parrainIds.add(contact.parrain_id);
+        }
+      });
+      
+      // Upgrader filleul_categorie vers FILLEUL pour les parrains
+      for (const parrainId of parrainIds) {
+        const parrain = refreshedContacts.find(c => c.id === parrainId);
+        if (parrain) {
+          // Si le parrain n'a pas de filleul_categorie OU est PROSPECT/SUSPECT
+          // → Upgrader vers FILLEUL actif
+          const currentFilleulCat = parrain.filleul_categorie;
+          if (!currentFilleulCat || 
+              currentFilleulCat === "PROSPECT_FILLEUL" || 
+              currentFilleulCat === "SUSPECT_FILLEUL") {
+            await updateContact(parrainId, {
+              ...parrain,
+              // 🔥 NE PAS toucher à categorie - elle reste indépendante
+              filleul_categorie: "FILLEUL", // Upgrade vers FILLEUL actif
+              date_naissance: parrain.date_naissance 
+                ? new Date(parrain.date_naissance * 1000).toISOString() 
+                : undefined,
+              // 🔥 Garder les dates CLIENT intactes
+              date_dernier_contact: parrain.date_dernier_contact 
+                ? new Date(parrain.date_dernier_contact * 1000).toISOString() 
+                : undefined,
+              date_prochain_suivi: parrain.date_prochain_suivi 
+                ? new Date(parrain.date_prochain_suivi * 1000).toISOString() 
+                : undefined,
+              // 🔥 Garder les dates FILLEUL intactes
+              date_dernier_contact_filleul: parrain.date_dernier_contact_filleul 
+                ? new Date(parrain.date_dernier_contact_filleul * 1000).toISOString() 
+                : undefined,
+              date_prochain_suivi_filleul: parrain.date_prochain_suivi_filleul 
+                ? new Date(parrain.date_prochain_suivi_filleul * 1000).toISOString() 
+                : undefined,
+            });
+          }
+          // Si FILLEUL ou FILLEUL_DESINSCRIT → on ne change rien
+        }
+      }
+    } catch (upgradeError) {
+      console.error("Erreur upgrade parrains:", upgradeError);
     }
 
     setImporting(false);

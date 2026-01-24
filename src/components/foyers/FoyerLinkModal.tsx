@@ -86,11 +86,19 @@ export function FoyerLinkModal({
         date_naissance: currentContact.date_naissance 
           ? new Date(currentContact.date_naissance * 1000).toISOString() 
           : undefined,
+        // Dates CLIENT
         date_dernier_contact: currentContact.date_dernier_contact 
           ? new Date(currentContact.date_dernier_contact * 1000).toISOString() 
           : undefined,
         date_prochain_suivi: currentContact.date_prochain_suivi 
           ? new Date(currentContact.date_prochain_suivi * 1000).toISOString() 
+          : undefined,
+        // Dates FILLEUL
+        date_dernier_contact_filleul: currentContact.date_dernier_contact_filleul 
+          ? new Date(currentContact.date_dernier_contact_filleul * 1000).toISOString() 
+          : undefined,
+        date_prochain_suivi_filleul: currentContact.date_prochain_suivi_filleul 
+          ? new Date(currentContact.date_prochain_suivi_filleul * 1000).toISOString() 
           : undefined,
       });
 
@@ -121,11 +129,19 @@ export function FoyerLinkModal({
           date_naissance: currentContact.date_naissance 
             ? new Date(currentContact.date_naissance * 1000).toISOString() 
             : undefined,
+          // Dates CLIENT
           date_dernier_contact: currentContact.date_dernier_contact 
             ? new Date(currentContact.date_dernier_contact * 1000).toISOString() 
             : undefined,
           date_prochain_suivi: currentContact.date_prochain_suivi 
             ? new Date(currentContact.date_prochain_suivi * 1000).toISOString() 
+            : undefined,
+          // Dates FILLEUL
+          date_dernier_contact_filleul: currentContact.date_dernier_contact_filleul 
+            ? new Date(currentContact.date_dernier_contact_filleul * 1000).toISOString() 
+            : undefined,
+          date_prochain_suivi_filleul: currentContact.date_prochain_suivi_filleul 
+            ? new Date(currentContact.date_prochain_suivi_filleul * 1000).toISOString() 
             : undefined,
         }),
         updateContact(contact.id!, {
@@ -135,11 +151,19 @@ export function FoyerLinkModal({
           date_naissance: contact.date_naissance 
             ? new Date(contact.date_naissance * 1000).toISOString() 
             : undefined,
+          // Dates CLIENT
           date_dernier_contact: contact.date_dernier_contact 
             ? new Date(contact.date_dernier_contact * 1000).toISOString() 
             : undefined,
           date_prochain_suivi: contact.date_prochain_suivi 
             ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
+            : undefined,
+          // Dates FILLEUL
+          date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
+            ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
+            : undefined,
+          date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
+            ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
             : undefined,
         }),
       ]);

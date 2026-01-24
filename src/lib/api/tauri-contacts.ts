@@ -7,6 +7,7 @@ export interface Contact {
   role_foyer?: string;
   role_famille?: string;
   categorie: string;
+  filleul_categorie?: string | null; // 🔥 Catégorie filleul indépendante
   parrain_id?: number;
   civilite?: string;
   nom: string;
@@ -21,8 +22,12 @@ export interface Contact {
   situation_familiale?: string;
   source_lead?: string;
   profil_risque_sri?: number;
+  // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
   date_dernier_contact?: number;
   date_prochain_suivi?: number;
+  // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
+  date_dernier_contact_filleul?: number;
+  date_prochain_suivi_filleul?: number;
   statut_suivi: string;
   notes?: string;
   created_at: number;
@@ -35,6 +40,7 @@ export interface NewContact {
   role_foyer?: string | null;
   role_famille?: string | null;
   categorie?: string;
+  filleul_categorie?: string | null; // 🔥 Catégorie filleul indépendante
   parrain_id?: number;
   civilite?: string;
   nom: string;
@@ -49,8 +55,12 @@ export interface NewContact {
   situation_familiale?: string;
   source_lead?: string;
   profil_risque_sri?: number;
+  // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
   date_dernier_contact?: string;
   date_prochain_suivi?: string;
+  // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
+  date_dernier_contact_filleul?: string;
+  date_prochain_suivi_filleul?: string;
   statut_suivi?: string;
   notes?: string;
 }

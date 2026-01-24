@@ -139,11 +139,19 @@ export function FoyerCreateModal({
           date_naissance: member.contact.date_naissance 
             ? new Date(member.contact.date_naissance * 1000).toISOString() 
             : undefined,
+          // Dates CLIENT
           date_dernier_contact: member.contact.date_dernier_contact 
             ? new Date(member.contact.date_dernier_contact * 1000).toISOString() 
             : undefined,
           date_prochain_suivi: member.contact.date_prochain_suivi 
             ? new Date(member.contact.date_prochain_suivi * 1000).toISOString() 
+            : undefined,
+          // Dates FILLEUL
+          date_dernier_contact_filleul: member.contact.date_dernier_contact_filleul 
+            ? new Date(member.contact.date_dernier_contact_filleul * 1000).toISOString() 
+            : undefined,
+          date_prochain_suivi_filleul: member.contact.date_prochain_suivi_filleul 
+            ? new Date(member.contact.date_prochain_suivi_filleul * 1000).toISOString() 
             : undefined,
         });
       }

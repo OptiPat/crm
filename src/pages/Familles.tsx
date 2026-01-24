@@ -56,10 +56,17 @@ const getTypeProduitBgColor = (type: string, origine?: string): string => {
   return "#dc216e";
 };
 
+// 🔥 Interface étendue pour tracker les investissements communs
+interface InvestWithCommun extends Investissement {
+  isCommun?: boolean; // true si c'est un investissement partagé du foyer
+}
+
 interface MemberWithInvestments {
   contact: Contact;
-  investissements: Investissement[];
+  investissements: InvestWithCommun[];
   patrimoine: number;
+  patrimoinePerso: number; // 🔥 Patrimoine personnel (sans les communs)
+  patrimoineCommun: number; // 🔥 Patrimoine commun du foyer
   isSpouse: boolean; // true si c'est un conjoint d'une autre famille
   spouseOf?: string; // "Conjoint de X"
 }
@@ -130,22 +137,34 @@ export function Familles() {
     }
   };
 
-  // Calculer le patrimoine d'un contact (ses investissements + sa part du foyer)
-  const getContactPatrimoine = (contact: Contact): { investissements: Investissement[], total: number } => {
-    const contactInvests = investissementsByContact[contact.id] || [];
+  // 🔥 Calculer le patrimoine d'un contact avec distinction perso/commun
+  // Tous les investissements sont affichés, mais les communs sont marqués
+  const getContactPatrimoine = (contact: Contact): { 
+    investissements: InvestWithCommun[], 
+    patrimoinePerso: number, 
+    patrimoineCommun: number,
+    total: number 
+  } => {
+    // Investissements personnels (liés directement au contact)
+    const contactInvests: InvestWithCommun[] = (investissementsByContact[contact.id] || [])
+      .map(inv => ({ ...inv, isCommun: false }));
     
-    // Si le contact a un foyer, récupérer aussi les investissements du foyer qui n'ont pas de contact_id
-    let foyerInvests: Investissement[] = [];
+    // Investissements communs du foyer (sans contact_id spécifique)
+    let foyerInvests: InvestWithCommun[] = [];
     if (contact.foyer_id) {
       const allFoyerInvests = investissementsByFoyer[contact.foyer_id] || [];
-      // Investissements du foyer sans contact_id spécifique
-      foyerInvests = allFoyerInvests.filter(inv => !inv.contact_id);
+      // Investissements du foyer sans contact_id spécifique (= communs au couple)
+      foyerInvests = allFoyerInvests
+        .filter(inv => !inv.contact_id)
+        .map(inv => ({ ...inv, isCommun: true })); // 🏠 Marqué comme commun
     }
 
     const allInvests = [...contactInvests, ...foyerInvests];
-    const total = allInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+    const patrimoinePerso = contactInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+    const patrimoineCommun = foyerInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+    const total = patrimoinePerso + patrimoineCommun;
 
-    return { investissements: allInvests, total };
+    return { investissements: allInvests, patrimoinePerso, patrimoineCommun, total };
   };
 
   // 🔥 GROUPEMENT DYNAMIQUE PAR NOM DE FAMILLE + CONJOINTS
@@ -178,13 +197,17 @@ export function Familles() {
         // Construire la liste avec conjoints JUSTE APRÈS leur partenaire
         const membresWithInvests: MemberWithInvestments[] = [];
         const spousesAdded = new Set<number>(); // Pour éviter les doublons
+        const foyersCommunsCounted = new Set<number>(); // 🔥 Pour compter les communs UNE SEULE fois
 
         membresSorted.forEach(membre => {
-          const { investissements, total } = getContactPatrimoine(membre);
+          const { investissements, patrimoinePerso, patrimoineCommun, total } = getContactPatrimoine(membre);
+          
           membresWithInvests.push({
             contact: membre,
             investissements,
             patrimoine: total,
+            patrimoinePerso,
+            patrimoineCommun,
             isSpouse: false,
           });
 
@@ -197,11 +220,13 @@ export function Familles() {
               // Si le conjoint a un nom différent et n'a pas encore été ajouté
               if (spouse.nom.toUpperCase() !== nom && !spousesAdded.has(spouse.id)) {
                 spousesAdded.add(spouse.id);
-                const { investissements: spouseInvests, total: spouseTotal } = getContactPatrimoine(spouse);
+                const spouseData = getContactPatrimoine(spouse);
                 membresWithInvests.push({
                   contact: spouse,
-                  investissements: spouseInvests,
-                  patrimoine: spouseTotal,
+                  investissements: spouseData.investissements,
+                  patrimoine: spouseData.total,
+                  patrimoinePerso: spouseData.patrimoinePerso,
+                  patrimoineCommun: spouseData.patrimoineCommun,
                   isSpouse: true,
                   spouseOf: `Conjoint de ${membre.prenom}`,
                 });
@@ -210,10 +235,20 @@ export function Familles() {
           }
         });
 
-        // Plus besoin de trier ici - les conjoints sont déjà placés après leur partenaire
-
-        // Calculer le patrimoine total
-        const patrimoineTotal = membresWithInvests.reduce((sum, m) => sum + m.patrimoine, 0);
+        // 🔥 Calculer le patrimoine total SANS doubler les communs
+        // Pour chaque membre : on compte le perso + le commun (mais commun 1 seule fois par foyer)
+        let patrimoineTotal = 0;
+        membresWithInvests.forEach(m => {
+          // Toujours ajouter le patrimoine personnel
+          patrimoineTotal += m.patrimoinePerso;
+          // Ajouter le patrimoine commun SEULEMENT si ce foyer n'a pas encore été compté
+          if (m.contact.foyer_id && !foyersCommunsCounted.has(m.contact.foyer_id)) {
+            patrimoineTotal += m.patrimoineCommun;
+            foyersCommunsCounted.add(m.contact.foyer_id);
+          } else if (!m.contact.foyer_id) {
+            // Pas de foyer, donc le "commun" est en fait perso (déjà compté via patrimoinePerso)
+          }
+        });
 
         groups.push({
           nom,
@@ -260,11 +295,19 @@ export function Familles() {
         date_naissance: contact.date_naissance 
           ? new Date(contact.date_naissance * 1000).toISOString() 
           : undefined,
+        // Dates CLIENT
         date_dernier_contact: contact.date_dernier_contact 
           ? new Date(contact.date_dernier_contact * 1000).toISOString() 
           : undefined,
         date_prochain_suivi: contact.date_prochain_suivi 
           ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
+          : undefined,
+        // Dates FILLEUL
+        date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
+          ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
+          : undefined,
+        date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
+          ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
           : undefined,
       });
       
@@ -500,7 +543,9 @@ export function Familles() {
                                   {membre.investissements.map((inv) => (
                                     <div 
                                       key={inv.id} 
-                                      className="flex items-center justify-between text-sm py-1.5 px-2 rounded bg-muted/30"
+                                      className={`flex items-center justify-between text-sm py-1.5 px-2 rounded ${
+                                        inv.isCommun ? 'bg-blue-50 border border-blue-200' : 'bg-muted/30'
+                                      }`}
                                     >
                                       <div className="flex items-center gap-2">
                                         <Badge 
@@ -510,6 +555,12 @@ export function Familles() {
                                           {inv.type_produit.replace(/_/g, " ")}
                                         </Badge>
                                         <span className="font-medium">{inv.nom_produit}</span>
+                                        {/* 🏠 Badge "Commun" pour les investissements partagés */}
+                                        {inv.isCommun && (
+                                          <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
+                                            🏠 Commun
+                                          </Badge>
+                                        )}
                                         {inv.date_souscription && (
                                           <span className="text-muted-foreground text-xs">
                                             {formatDate(inv.date_souscription)}

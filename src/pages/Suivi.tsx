@@ -96,8 +96,16 @@ export function Suivi() {
         statut_suivi: contact.statut_suivi,
         notes: contact.notes,
         foyer_id: contact.foyer_id,
+        // Dates CLIENT
         date_prochain_suivi: nextDateTimestamp,
         date_dernier_contact: Math.floor(now.getTime() / 1000).toString(),
+        // Préserver les dates FILLEUL
+        date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
+          ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
+          : undefined,
+        date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
+          ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
+          : undefined,
       });
 
       // Marquer l'alerte comme traitée

@@ -68,11 +68,19 @@ export function ContactDetail({
         date_naissance: contact.date_naissance 
           ? new Date(contact.date_naissance * 1000).toISOString() 
           : undefined,
+        // Dates CLIENT
         date_dernier_contact: contact.date_dernier_contact 
           ? new Date(contact.date_dernier_contact * 1000).toISOString() 
           : undefined,
         date_prochain_suivi: contact.date_prochain_suivi 
           ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
+          : undefined,
+        // Dates FILLEUL
+        date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
+          ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
+          : undefined,
+        date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
+          ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
           : undefined,
       });
       
@@ -661,10 +669,12 @@ export function ContactDetail({
             </Card>
 
             {/* Parrain (uniquement pour les catégories filleul) */}
-            {(contact.categorie === "FILLEUL" || 
-              contact.categorie === "PROSPECT_FILLEUL" || 
-              contact.categorie === "SUSPECT_FILLEUL" || 
-              contact.categorie === "FILLEUL_DESINSCRIT") && (
+            {/* 🔥 FIX: Vérifier filleul_categorie OU parrain_id (indépendant de categorie) */}
+            {(contact.filleul_categorie === "FILLEUL" || 
+              contact.filleul_categorie === "PROSPECT_FILLEUL" || 
+              contact.filleul_categorie === "SUSPECT_FILLEUL" || 
+              contact.filleul_categorie === "FILLEUL_DESINSCRIT" ||
+              contact.parrain_id) && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg flex items-center gap-2">
@@ -694,9 +704,26 @@ export function ContactDetail({
                             <p className="text-sm text-muted-foreground">{parrain.telephone}</p>
                           )}
                         </div>
-                        <Badge className="bg-blue-50 text-blue-700">
-                          {parrain.categorie}
-                        </Badge>
+                        {/* 🔥 Affichage intelligent du statut du parrain */}
+                        {/* categorie = statut commercial, filleul_categorie = statut réseau */}
+                        <div className="flex flex-col gap-1 items-end">
+                          {/* Badge Client si applicable (basé sur categorie) */}
+                          {parrain.categorie === "CLIENT" && (
+                            <Badge className="bg-green-100 text-green-800">
+                              💼 Client
+                            </Badge>
+                          )}
+                          {/* Badge Filleul (basé sur filleul_categorie - INDÉPENDANT) */}
+                          {parrain.filleul_categorie === "FILLEUL_DESINSCRIT" ? (
+                            <Badge className="bg-red-50 text-red-700">
+                              ❌ Filleul désinscrit
+                            </Badge>
+                          ) : parrain.filleul_categorie ? (
+                            <Badge className="bg-emerald-50 text-emerald-700">
+                              ✅ Filleul inscrit
+                            </Badge>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   ) : contact.parrain_id ? (
@@ -722,9 +749,9 @@ export function ContactDetail({
                       Mes filleuls ({filleuls.length})
                     </CardTitle>
                     <div className="text-sm text-muted-foreground">
-                      {filleuls.filter(f => f.categorie === "FILLEUL").length} actif{filleuls.filter(f => f.categorie === "FILLEUL").length > 1 ? 's' : ''} • {' '}
-                      {filleuls.filter(f => f.categorie === "PROSPECT_FILLEUL").length} prospect{filleuls.filter(f => f.categorie === "PROSPECT_FILLEUL").length > 1 ? 's' : ''} • {' '}
-                      {filleuls.filter(f => f.categorie === "FILLEUL_DESINSCRIT").length} désinscrit{filleuls.filter(f => f.categorie === "FILLEUL_DESINSCRIT").length > 1 ? 's' : ''}
+                      {filleuls.filter(f => f.filleul_categorie === "FILLEUL").length} actif{filleuls.filter(f => f.filleul_categorie === "FILLEUL").length > 1 ? 's' : ''} • {' '}
+                      {filleuls.filter(f => f.filleul_categorie === "PROSPECT_FILLEUL").length} prospect{filleuls.filter(f => f.filleul_categorie === "PROSPECT_FILLEUL").length > 1 ? 's' : ''} • {' '}
+                      {filleuls.filter(f => f.filleul_categorie === "FILLEUL_DESINSCRIT").length} désinscrit{filleuls.filter(f => f.filleul_categorie === "FILLEUL_DESINSCRIT").length > 1 ? 's' : ''}
                     </div>
                   </div>
                 </CardHeader>
@@ -761,19 +788,19 @@ export function ContactDetail({
                             </div>
                             <Badge 
                               className={
-                                filleul.categorie === "FILLEUL" 
+                                filleul.filleul_categorie === "FILLEUL" 
                                   ? "bg-purple-50 text-purple-700"
-                                  : filleul.categorie === "PROSPECT_FILLEUL"
+                                  : filleul.filleul_categorie === "PROSPECT_FILLEUL"
                                   ? "bg-cyan-50 text-cyan-700"
-                                  : filleul.categorie === "SUSPECT_FILLEUL"
+                                  : filleul.filleul_categorie === "SUSPECT_FILLEUL"
                                   ? "bg-orange-50 text-orange-700"
                                   : "bg-gray-50 text-gray-700"
                               }
                             >
-                              {filleul.categorie === "FILLEUL" && "Filleul"}
-                              {filleul.categorie === "PROSPECT_FILLEUL" && "Prospect"}
-                              {filleul.categorie === "SUSPECT_FILLEUL" && "Suspect"}
-                              {filleul.categorie === "FILLEUL_DESINSCRIT" && "Désinscrit"}
+                              {filleul.filleul_categorie === "FILLEUL" && "Filleul"}
+                              {filleul.filleul_categorie === "PROSPECT_FILLEUL" && "Prospect"}
+                              {filleul.filleul_categorie === "SUSPECT_FILLEUL" && "Suspect"}
+                              {filleul.filleul_categorie === "FILLEUL_DESINSCRIT" && "Désinscrit"}
                             </Badge>
                           </div>
                         </div>

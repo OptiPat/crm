@@ -8,6 +8,7 @@ pub struct Contact {
     pub role_foyer: Option<String>,
     pub role_famille: Option<String>,
     pub categorie: String,
+    pub filleul_categorie: Option<String>, // 🔥 Catégorie filleul indépendante
     pub parrain_id: Option<i64>,
     pub civilite: Option<String>,
     pub nom: String,
@@ -22,8 +23,12 @@ pub struct Contact {
     pub situation_familiale: Option<String>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
+    // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
     pub date_dernier_contact: Option<i64>,
     pub date_prochain_suivi: Option<i64>,
+    // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
+    pub date_dernier_contact_filleul: Option<i64>,
+    pub date_prochain_suivi_filleul: Option<i64>,
     pub statut_suivi: String,
     pub notes: Option<String>,
     pub created_at: Option<i64>,
@@ -37,6 +42,7 @@ pub struct NewContact {
     pub role_foyer: Option<String>,
     pub role_famille: Option<String>,
     pub categorie: String,
+    pub filleul_categorie: Option<String>, // 🔥 Catégorie filleul indépendante
     pub parrain_id: Option<i64>,
     pub civilite: Option<String>,
     pub nom: String,
@@ -51,8 +57,12 @@ pub struct NewContact {
     pub situation_familiale: Option<String>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
+    // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
     pub date_dernier_contact: Option<String>,
     pub date_prochain_suivi: Option<String>,
+    // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
+    pub date_dernier_contact_filleul: Option<String>,
+    pub date_prochain_suivi_filleul: Option<String>,
     pub statut_suivi: Option<String>,
     pub notes: Option<String>,
 }

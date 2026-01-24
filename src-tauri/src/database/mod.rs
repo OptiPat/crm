@@ -219,6 +219,52 @@ impl Database {
         // Migration automatique : Ajouter role_famille aux contacts
         self.migrate_add_role_famille()?;
         
+        // Migration automatique : Ajouter filleul_categorie aux contacts
+        self.migrate_add_filleul_categorie()?;
+        
+        // Migration automatique : Ajouter dates de suivi filleul aux contacts
+        self.migrate_add_filleul_dates()?;
+        
+        Ok(())
+    }
+    
+    /// Migration : Ajouter les champs date_dernier_contact_filleul et date_prochain_suivi_filleul
+    fn migrate_add_filleul_dates(&self) -> Result<()> {
+        // Vérifier si les colonnes existent déjà
+        let has_date_dernier_contact_filleul = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(contacts)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let col_name: String = row.get(1)?;
+                if col_name == "date_dernier_contact_filleul" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        
+        if has_date_dernier_contact_filleul {
+            println!("✅ Migration filleul_dates déjà appliquée");
+            return Ok(());
+        }
+        
+        println!("🔄 Migration : Ajout des dates de suivi filleul...");
+        
+        // Ajouter les colonnes
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN date_dernier_contact_filleul INTEGER",
+            [],
+        )?;
+        
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN date_prochain_suivi_filleul INTEGER",
+            [],
+        )?;
+        
+        println!("✅ Migration filleul_dates appliquée");
+        
         Ok(())
     }
     
@@ -253,6 +299,41 @@ impl Database {
         )?;
         
         println!("✅ Migration role_famille appliquée");
+        
+        Ok(())
+    }
+    
+    /// Migration : Ajouter filleul_categorie aux contacts existants
+    fn migrate_add_filleul_categorie(&self) -> Result<()> {
+        // Vérifier si la colonne filleul_categorie existe déjà
+        let has_filleul_categorie = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(contacts)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let col_name: String = row.get(1)?;
+                if col_name == "filleul_categorie" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        
+        if has_filleul_categorie {
+            println!("✅ Migration filleul_categorie déjà appliquée");
+            return Ok(());
+        }
+        
+        println!("🔄 Migration : Ajout de filleul_categorie aux contacts...");
+        
+        // Ajouter la colonne filleul_categorie
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN filleul_categorie TEXT",
+            [],
+        )?;
+        
+        println!("✅ Migration filleul_categorie appliquée");
         
         Ok(())
     }

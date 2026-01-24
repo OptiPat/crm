@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users2 } from "lucide-react";
-import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import { getInvestissementsByContact, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
 import { ContactForm } from "@/components/contacts/ContactForm";
@@ -72,6 +72,7 @@ export function Contacts() {
   };
 
   // Calcul de la priorité de suivi selon le prompt
+  // 🔥 Priorité pour les CLIENTS (basée sur date_dernier_contact)
   const getPrioriteContact = (contact: Contact) => {
     if (!contact.date_dernier_contact) {
       // Pas de date de dernier contact
@@ -101,24 +102,52 @@ export function Contacts() {
     // ✅ Suivi récent
     return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "✅ Suivi récent" };
   };
+  
+  // 🔥 Priorité pour les FILLEULS (basée sur date_dernier_contact_filleul - INDÉPENDANT)
+  const getPrioriteFilleul = (contact: Contact) => {
+    if (!contact.date_dernier_contact_filleul) {
+      // Pas de date de dernier contact filleul
+      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Jamais contacté" };
+    }
 
-  // Calcul des compteurs par catégorie
+    const now = new Date();
+    const lastContact = new Date(contact.date_dernier_contact_filleul * 1000);
+    const diffMonths = (now.getTime() - lastContact.getTime()) / (1000 * 60 * 60 * 24 * 30);
+
+    // 🔴 Suivi +6 mois : Filleul sans contact depuis > 6 mois
+    if (diffMonths > 6) {
+      return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "🔴 Suivi +6 mois" };
+    }
+
+    // 🟠 Suivi +3 mois : Filleul sans contact depuis > 3 mois
+    if (diffMonths > 3) {
+      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 À recontacter" };
+    }
+
+    // ✅ Suivi récent
+    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "✅ Suivi récent" };
+  };
+
+  // 🔥 Calcul des compteurs par catégorie
+  // categorie = statut commercial (CLIENT, PROSPECT_CLIENT, SUSPECT_CLIENT)
+  // filleul_categorie = statut réseau filleul (FILLEUL, PROSPECT_FILLEUL, etc.) - INDÉPENDANT
   const categoryCounts = useMemo(() => {
     return {
-      // Clients
+      // Clients - basé sur categorie
       CLIENT: contacts.filter(c => c.categorie === "CLIENT").length,
       PROSPECT_CLIENT: contacts.filter(c => c.categorie === "PROSPECT_CLIENT").length,
       SUSPECT_CLIENT: contacts.filter(c => c.categorie === "SUSPECT_CLIENT").length,
-      // Filleuls
-      FILLEUL: contacts.filter(c => c.categorie === "FILLEUL").length,
-      PROSPECT_FILLEUL: contacts.filter(c => c.categorie === "PROSPECT_FILLEUL").length,
-      SUSPECT_FILLEUL: contacts.filter(c => c.categorie === "SUSPECT_FILLEUL").length,
-      FILLEUL_DESINSCRIT: contacts.filter(c => c.categorie === "FILLEUL_DESINSCRIT").length,
+      // Filleuls - basé sur filleul_categorie (INDÉPENDANT de categorie)
+      FILLEUL: contacts.filter(c => c.filleul_categorie === "FILLEUL").length,
+      PROSPECT_FILLEUL: contacts.filter(c => c.filleul_categorie === "PROSPECT_FILLEUL").length,
+      SUSPECT_FILLEUL: contacts.filter(c => c.filleul_categorie === "SUSPECT_FILLEUL").length,
+      FILLEUL_DESINSCRIT: contacts.filter(c => c.filleul_categorie === "FILLEUL_DESINSCRIT").length,
     };
   }, [contacts]);
 
   // Déterminer la catégorie active selon l'onglet sélectionné
   const currentCategorie = mainTab === "clients" ? clientSubTab : filleulSubTab;
+  const isFilleulTab = mainTab === "filleuls";
 
   const filteredContacts = contacts
     .filter((contact) => {
@@ -130,8 +159,15 @@ export function Contacts() {
         contact.email?.toLowerCase().includes(search) ||
         contact.telephone?.toLowerCase().includes(search);
 
-      // Filtre par catégorie active
-      const matchesCategorie = contact.categorie === currentCategorie;
+      // 🔥 Filtre par catégorie - LOGIQUE INDÉPENDANTE
+      let matchesCategorie = false;
+      if (isFilleulTab) {
+        // Onglet FILLEULS → filtrer par filleul_categorie
+        matchesCategorie = contact.filleul_categorie === currentCategorie;
+      } else {
+        // Onglet CLIENTS → filtrer par categorie
+        matchesCategorie = contact.categorie === currentCategorie;
+      }
 
       // Filtre par statut
       const matchesStatut =
@@ -141,8 +177,9 @@ export function Contacts() {
     })
     .sort((a, b) => {
       // Tri par priorité : rouge (1) > orange (2) > vert (3)
-      const prioriteA = getPrioriteContact(a).priorite;
-      const prioriteB = getPrioriteContact(b).priorite;
+      // 🔥 Utiliser la bonne fonction selon l'onglet
+      const prioriteA = isFilleulTab ? getPrioriteFilleul(a).priorite : getPrioriteContact(a).priorite;
+      const prioriteB = isFilleulTab ? getPrioriteFilleul(b).priorite : getPrioriteContact(b).priorite;
       return prioriteA - prioriteB;
     });
 
@@ -224,13 +261,11 @@ export function Contacts() {
       case "SUSPECT_CLIENT":
         return "bg-yellow-100 text-yellow-800";
       case "FILLEUL":
-        return "bg-purple-100 text-purple-800";
       case "PROSPECT_FILLEUL":
-        return "bg-cyan-100 text-cyan-800";
       case "SUSPECT_FILLEUL":
-        return "bg-orange-100 text-orange-800";
+        return "bg-emerald-100 text-emerald-800"; // Filleul inscrit = vert
       case "FILLEUL_DESINSCRIT":
-        return "bg-gray-100 text-gray-800";
+        return "bg-red-100 text-red-800"; // Filleul désinscrit = rouge
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -239,12 +274,13 @@ export function Contacts() {
   const getCategorieLabel = (categorie: string) => {
     switch (categorie) {
       case "CLIENT": return "Client";
-      case "PROSPECT_CLIENT": return "Prospect Client";
-      case "SUSPECT_CLIENT": return "Suspect Client";
-      case "FILLEUL": return "Filleul";
-      case "PROSPECT_FILLEUL": return "Prospect Filleul";
-      case "SUSPECT_FILLEUL": return "Suspect Filleul";
-      case "FILLEUL_DESINSCRIT": return "Désinscrit";
+      case "PROSPECT_CLIENT": return "Prospect";
+      case "SUSPECT_CLIENT": return "Suspect";
+      case "FILLEUL": return "Filleul inscrit";
+      case "PROSPECT_FILLEUL": return "Filleul inscrit";
+      case "SUSPECT_FILLEUL": return "Filleul inscrit";
+      case "FILLEUL_DESINSCRIT": return "Filleul désinscrit";
+      case "AUCUN": return null; // 🔥 Pas de label pour "AUCUN"
       default: return categorie;
     }
   };
@@ -300,11 +336,83 @@ export function Contacts() {
     if (!confirmed) return;
 
     try {
-      // Supprimer les contacts un par un
-      for (const contact of contactsToDelete) {
-        await deleteContact(contact.id!);
+      let deleted = 0;
+      let cleared = 0;
+
+      if (isClients) {
+        // 🔥 Suppression des CLIENTS : logique spéciale pour protéger les filleuls
+        for (const contact of contactsToDelete) {
+          if (contact.filleul_categorie) {
+            // Ce contact est aussi un filleul → juste effacer categorie (mettre AUCUN)
+            await updateContact(contact.id!, {
+              ...contact,
+              categorie: "AUCUN", // Effacer le statut client
+              // Convertir les dates timestamp en ISO - FILLEUL (garder)
+              date_naissance: contact.date_naissance 
+                ? new Date(contact.date_naissance * 1000).toISOString() 
+                : undefined,
+              date_dernier_contact: undefined, // Effacer les dates CLIENT
+              date_prochain_suivi: undefined,
+              date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
+                ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
+                : undefined,
+              date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
+                ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
+                : undefined,
+            });
+            cleared++;
+          } else {
+            // Ce contact n'est PAS un filleul → supprimer le contact
+            await deleteContact(contact.id!);
+            deleted++;
+          }
+        }
+        const message = cleared > 0 
+          ? `✅ ${deleted} ${typeLabel} supprimé(s), ${cleared} conservé(s) (aussi filleuls)`
+          : `✅ ${deleted} ${typeLabel} supprimé(s) avec succès`;
+        alert(message);
+      } else {
+        // 🔥 Suppression des FILLEULS : logique spéciale pour protéger les clients
+        for (const contact of contactsToDelete) {
+          if (contact.categorie === "CLIENT" || 
+              contact.categorie === "PROSPECT_CLIENT" || 
+              contact.categorie === "SUSPECT_CLIENT") {
+            // Ce contact est aussi un client → juste effacer filleul_categorie + dates filleul
+            await updateContact(contact.id!, {
+              ...contact,
+              filleul_categorie: null, // Effacer le statut filleul
+              parrain_id: undefined, // Effacer le lien parrain
+              // Convertir les dates timestamp en ISO - CLIENT (garder)
+              date_naissance: contact.date_naissance 
+                ? new Date(contact.date_naissance * 1000).toISOString() 
+                : undefined,
+              date_dernier_contact: contact.date_dernier_contact 
+                ? new Date(contact.date_dernier_contact * 1000).toISOString() 
+                : undefined,
+              date_prochain_suivi: contact.date_prochain_suivi 
+                ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
+                : undefined,
+              // 🔥 Effacer les dates FILLEUL
+              date_dernier_contact_filleul: undefined,
+              date_prochain_suivi_filleul: undefined,
+            });
+            cleared++;
+          } else {
+            // Ce contact n'est PAS un client → supprimer le contact
+            await deleteContact(contact.id!);
+            deleted++;
+          }
+        }
+        
+        if (cleared > 0 && deleted > 0) {
+          alert(`✅ ${deleted} filleul(s) supprimé(s), ${cleared} client(s) conservé(s) (statut filleul effacé)`);
+        } else if (cleared > 0) {
+          alert(`✅ ${cleared} client(s) conservé(s) (statut filleul effacé)`);
+        } else {
+          alert(`✅ ${deleted} filleul(s) supprimé(s)`);
+        }
       }
-      alert(`✅ ${contactsToDelete.length} ${typeLabel} supprimé(s) avec succès`);
+      
       await loadContacts();
     } catch (error) {
       console.error("Error deleting contacts:", error);
@@ -518,7 +626,8 @@ export function Contacts() {
                                 {group.contacts.length} membre{group.contacts.length > 1 ? "s" : ""}
                               </Badge>
                             </div>
-                            {totalPatrimoine > 0 && (
+                            {/* 🔥 Masquer patrimoine dans l'onglet Filleuls */}
+                            {!isFilleulTab && totalPatrimoine > 0 && (
                               <div className="text-sm font-medium text-primary">
                                 💰 {totalPatrimoine.toLocaleString("fr-FR")} €
                               </div>
@@ -528,7 +637,8 @@ export function Contacts() {
                         {/* Membres du foyer */}
                         <div className="divide-y divide-border">
                           {group.contacts.map((contact) => {
-                            const priorite = getPrioriteContact(contact);
+                            // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
+                            const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
                             const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                             return (
                               <div
@@ -548,15 +658,32 @@ export function Contacts() {
                                            contact.role_foyer === "ENFANT" ? "Enfant" : "Autre"}
                                         </Badge>
                                       )}
-                                      <Badge className={getCategorieColor(contact.categorie)}>
-                                        {getCategorieLabel(contact.categorie)}
-                                      </Badge>
+                                      {/* 🔥 Badge categorie seulement si pas "AUCUN" ET pas dans l'onglet Filleuls */}
+                                      {!isFilleulTab && contact.categorie !== "AUCUN" && (
+                                        <Badge className={getCategorieColor(contact.categorie)}>
+                                          {getCategorieLabel(contact.categorie)}
+                                        </Badge>
+                                      )}
+                                      {/* 🔥 Badge filleul_categorie si présent ET dans l'onglet Filleuls */}
+                                      {isFilleulTab && contact.filleul_categorie && (
+                                        <Badge className={
+                                          contact.filleul_categorie === "FILLEUL_DESINSCRIT" 
+                                            ? "bg-red-100 text-red-800" 
+                                            : "bg-emerald-100 text-emerald-800"
+                                        }>
+                                          {contact.filleul_categorie === "FILLEUL" && "✅ Filleul inscrit"}
+                                          {contact.filleul_categorie === "PROSPECT_FILLEUL" && "🟡 Prospect filleul"}
+                                          {contact.filleul_categorie === "SUSPECT_FILLEUL" && "🟠 Suspect filleul"}
+                                          {contact.filleul_categorie === "FILLEUL_DESINSCRIT" && "❌ Filleul désinscrit"}
+                                        </Badge>
+                                      )}
                                       {priorite.label && (
                                         <span className="text-xs font-medium">
                                           {priorite.label}
                                         </span>
                                       )}
-                                      {contactPatrimoine > 0 && (
+                                      {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
+                                      {!isFilleulTab && contactPatrimoine > 0 && (
                                         <span className="text-xs text-muted-foreground">
                                           {contactPatrimoine.toLocaleString("fr-FR")} €
                                         </span>
@@ -575,9 +702,14 @@ export function Contacts() {
                                           {contact.telephone}
                                         </div>
                                       )}
-                                      {contact.date_dernier_contact && (() => {
+                                      {/* 🔥 Afficher la bonne date selon l'onglet */}
+                                      {(() => {
+                                        const dateToUse = isFilleulTab 
+                                          ? contact.date_dernier_contact_filleul 
+                                          : contact.date_dernier_contact;
+                                        if (!dateToUse) return null;
                                         try {
-                                          const date = new Date(contact.date_dernier_contact * 1000);
+                                          const date = new Date(dateToUse * 1000);
                                           if (!isNaN(date.getTime())) {
                                             return (
                                               <div className="flex items-center gap-1 text-xs">
@@ -614,7 +746,8 @@ export function Contacts() {
                       // Contact sans foyer
                       <div className="p-4">
                         {group.contacts.map((contact) => {
-                          const priorite = getPrioriteContact(contact);
+                          // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
+                          const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
                           const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                           return (
                             <div
@@ -630,15 +763,32 @@ export function Contacts() {
                                     <Badge variant="outline" className="text-xs text-muted-foreground">
                                       Non rattaché
                                     </Badge>
-                                    <Badge className={getCategorieColor(contact.categorie)}>
-                                      {getCategorieLabel(contact.categorie)}
-                                    </Badge>
+                                    {/* 🔥 Badge categorie seulement si pas "AUCUN" ET pas dans l'onglet Filleuls */}
+                                    {!isFilleulTab && contact.categorie !== "AUCUN" && (
+                                      <Badge className={getCategorieColor(contact.categorie)}>
+                                        {getCategorieLabel(contact.categorie)}
+                                      </Badge>
+                                    )}
+                                    {/* 🔥 Badge filleul_categorie si présent ET dans l'onglet Filleuls */}
+                                    {isFilleulTab && contact.filleul_categorie && (
+                                      <Badge className={
+                                        contact.filleul_categorie === "FILLEUL_DESINSCRIT" 
+                                          ? "bg-red-100 text-red-800" 
+                                          : "bg-emerald-100 text-emerald-800"
+                                      }>
+                                        {contact.filleul_categorie === "FILLEUL" && "✅ Filleul inscrit"}
+                                        {contact.filleul_categorie === "PROSPECT_FILLEUL" && "🟡 Prospect filleul"}
+                                        {contact.filleul_categorie === "SUSPECT_FILLEUL" && "🟠 Suspect filleul"}
+                                        {contact.filleul_categorie === "FILLEUL_DESINSCRIT" && "❌ Filleul désinscrit"}
+                                      </Badge>
+                                    )}
                                     {priorite.label && (
                                       <span className="text-xs font-medium">
                                         {priorite.label}
                                       </span>
                                     )}
-                                    {contactPatrimoine > 0 && (
+                                    {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
+                                    {!isFilleulTab && contactPatrimoine > 0 && (
                                       <span className="text-xs text-muted-foreground">
                                         {contactPatrimoine.toLocaleString("fr-FR")} €
                                       </span>
@@ -657,9 +807,14 @@ export function Contacts() {
                                         {contact.telephone}
                                       </div>
                                     )}
-                                    {contact.date_dernier_contact && (() => {
+                                    {/* 🔥 Afficher la bonne date selon l'onglet */}
+                                    {(() => {
+                                      const dateToUse = isFilleulTab 
+                                        ? contact.date_dernier_contact_filleul 
+                                        : contact.date_dernier_contact;
+                                      if (!dateToUse) return null;
                                       try {
-                                        const date = new Date(contact.date_dernier_contact * 1000);
+                                        const date = new Date(dateToUse * 1000);
                                         if (!isNaN(date.getTime())) {
                                           return (
                                             <div className="flex items-center gap-1 text-xs">
@@ -699,7 +854,8 @@ export function Contacts() {
           ) : (
             <div className="space-y-3">
               {filteredContacts.map((contact) => {
-                const priorite = getPrioriteContact(contact);
+                // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
+                const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
                 const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                 return (
                   <div
@@ -712,15 +868,32 @@ export function Contacts() {
                           <h3 className="font-semibold text-lg">
                             {contact.prenom} {contact.nom}
                           </h3>
-                          <Badge className={getCategorieColor(contact.categorie)}>
-                            {getCategorieLabel(contact.categorie)}
-                          </Badge>
+                          {/* 🔥 Badge categorie seulement si pas "AUCUN" ET pas dans l'onglet Filleuls */}
+                          {!isFilleulTab && contact.categorie !== "AUCUN" && (
+                            <Badge className={getCategorieColor(contact.categorie)}>
+                              {getCategorieLabel(contact.categorie)}
+                            </Badge>
+                          )}
+                          {/* 🔥 Badge filleul_categorie si présent ET dans l'onglet Filleuls */}
+                          {isFilleulTab && contact.filleul_categorie && (
+                            <Badge className={
+                              contact.filleul_categorie === "FILLEUL_DESINSCRIT" 
+                                ? "bg-red-100 text-red-800" 
+                                : "bg-emerald-100 text-emerald-800"
+                            }>
+                              {contact.filleul_categorie === "FILLEUL" && "✅ Filleul inscrit"}
+                              {contact.filleul_categorie === "PROSPECT_FILLEUL" && "🟡 Prospect filleul"}
+                              {contact.filleul_categorie === "SUSPECT_FILLEUL" && "🟠 Suspect filleul"}
+                              {contact.filleul_categorie === "FILLEUL_DESINSCRIT" && "❌ Filleul désinscrit"}
+                            </Badge>
+                          )}
                           {priorite.label && (
                             <span className="text-xs font-medium">
                               {priorite.label}
                             </span>
                           )}
-                          {contactPatrimoine > 0 && (
+                          {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
+                          {!isFilleulTab && contactPatrimoine > 0 && (
                             <span className="text-sm font-medium text-primary">
                               💰 {contactPatrimoine.toLocaleString("fr-FR")} €
                             </span>
@@ -739,9 +912,14 @@ export function Contacts() {
                               {contact.telephone}
                             </div>
                           )}
-                          {contact.date_dernier_contact && (() => {
+                          {/* 🔥 Afficher la bonne date selon l'onglet */}
+                          {(() => {
+                            const dateToUse = isFilleulTab 
+                              ? contact.date_dernier_contact_filleul 
+                              : contact.date_dernier_contact;
+                            if (!dateToUse) return null;
                             try {
-                              const date = new Date(contact.date_dernier_contact * 1000);
+                              const date = new Date(dateToUse * 1000);
                               if (!isNaN(date.getTime())) {
                                 return (
                                   <div className="flex items-center gap-1 text-xs">
