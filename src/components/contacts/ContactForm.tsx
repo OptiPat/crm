@@ -35,6 +35,10 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
   const [showNewPrescripteurModal, setShowNewPrescripteurModal] = useState(false);
   const [newPrescripteurNom, setNewPrescripteurNom] = useState("");
   const [newPrescripteurPrenom, setNewPrescripteurPrenom] = useState("");
+  // 🔥 Modal création parrain
+  const [showNewParrainModal, setShowNewParrainModal] = useState(false);
+  const [newParrainNom, setNewParrainNom] = useState("");
+  const [newParrainPrenom, setNewParrainPrenom] = useState("");
 
   // Charger tous les contacts pour la sélection du parrain
   useEffect(() => {
@@ -106,8 +110,17 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
   // Mettre à jour le formData quand le contact change
   useEffect(() => {
     if (contact) {
+      // 🔥 Déterminer la bonne catégorie à afficher
+      // Si le contact a une filleul_categorie, utiliser ça comme catégorie principale dans le dropdown
+      // Sinon, utiliser la categorie standard
+      let categorieToShow = contact.categorie || "SUSPECT_CLIENT";
+      if (contact.filleul_categorie && (!contact.categorie || contact.categorie === "AUCUN")) {
+        // Le contact est principalement un filleul
+        categorieToShow = contact.filleul_categorie;
+      }
+      
       setFormData({
-        categorie: contact.categorie || "SUSPECT_CLIENT",
+        categorie: categorieToShow,
         parrain_id: contact.parrain_id || undefined,
         prescripteur_id: contact.prescripteur_id || undefined,
         // 🔥 Préserver les liens foyer/famille
@@ -160,6 +173,30 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
       });
     }
   }, [contact, open]); // Réinitialiser quand le contact ou l'ouverture change
+
+  // 🔥 Créer un nouveau parrain s'il n'existe pas
+  const handleCreateParrain = async () => {
+    if (!newParrainNom.trim() || !newParrainPrenom.trim()) {
+      alert("Veuillez remplir le nom et le prénom");
+      return;
+    }
+    try {
+      const newParrain = await createContact({
+        nom: newParrainNom.trim(),
+        prenom: newParrainPrenom.trim(),
+        categorie: "AUCUN", // Pas forcément client
+        filleul_categorie: "FILLEUL", // Mais fait partie du réseau filleuls
+      });
+      setAllContacts([...allContacts, newParrain]);
+      setFormData({ ...formData, parrain_id: newParrain.id });
+      setShowNewParrainModal(false);
+      setNewParrainNom("");
+      setNewParrainPrenom("");
+    } catch (error) {
+      console.error("Erreur création parrain:", error);
+      alert("Erreur lors de la création du parrain");
+    }
+  };
 
   // Créer un nouveau prescripteur s'il n'existe pas
   const handleCreatePrescripteur = async () => {
@@ -316,47 +353,128 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
             </div>
           </div>
 
-          {/* Champ Parrain (uniquement pour les catégories filleul) */}
+          {/* Champ Parrain (uniquement pour les catégories filleul) - Combobox intelligent */}
           {(formData.categorie === "FILLEUL" || 
             formData.categorie === "PROSPECT_FILLEUL" || 
             formData.categorie === "SUSPECT_FILLEUL" || 
             formData.categorie === "FILLEUL_DESINSCRIT") && (
             <div className="space-y-2">
               <Label htmlFor="parrain_id">Parrain (optionnel)</Label>
-              <div className="space-y-2">
-                <Input
-                  placeholder="Rechercher un parrain..."
-                  value={searchParrain}
-                  onChange={(e) => setSearchParrain(e.target.value)}
-                />
-                <Select
-                  value={formData.parrain_id?.toString() || "none"}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, parrain_id: value === "none" ? undefined : parseInt(value) })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Sélectionner un parrain..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Aucun parrain</SelectItem>
-                    {allContacts
-                      .filter((c) => {
-                        const search = searchParrain.toLowerCase();
-                        return (
-                          c.nom.toLowerCase().includes(search) ||
-                          c.prenom.toLowerCase().includes(search)
-                        );
-                      })
-                      .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`))
-                      .slice(0, 200)
-                      .map((c) => (
-                        <SelectItem key={c.id} value={c.id.toString()}>
-                          {c.prenom} {c.nom} ({c.categorie})
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
+              <div className="relative">
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <Input
+                      placeholder="🔍 Taper pour rechercher un parrain..."
+                      value={searchParrain}
+                      onChange={(e) => setSearchParrain(e.target.value)}
+                      onFocus={() => setSearchParrain(searchParrain || "")}
+                    />
+                    
+                    {/* Afficher le parrain sélectionné */}
+                    {formData.parrain_id && !searchParrain && (
+                      <div className="absolute inset-0 flex items-center px-3 pointer-events-none bg-white rounded-md border">
+                        <span className="text-sm">
+                          ✓ {allContacts.find(c => c.id === formData.parrain_id)?.prenom}{" "}
+                          {allContacts.find(c => c.id === formData.parrain_id)?.nom}
+                        </span>
+                        <button
+                          type="button"
+                          className="ml-auto pointer-events-auto text-muted-foreground hover:text-foreground"
+                          onClick={() => setFormData({ ...formData, parrain_id: undefined })}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                    
+                    {/* Liste déroulante des résultats de recherche */}
+                    {searchParrain && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                        <div
+                          className="px-3 py-2 hover:bg-muted cursor-pointer text-sm border-b"
+                          onClick={() => {
+                            setFormData({ ...formData, parrain_id: undefined });
+                            setSearchParrain("");
+                          }}
+                        >
+                          ❌ Aucun parrain
+                        </div>
+                        {allContacts
+                          .filter((c) => {
+                            const search = searchParrain.toLowerCase();
+                            return (
+                              c.nom.toLowerCase().includes(search) ||
+                              c.prenom.toLowerCase().includes(search)
+                            );
+                          })
+                          .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`))
+                          .slice(0, 20)
+                          .map((c) => (
+                            <div
+                              key={c.id}
+                              className="px-3 py-2 hover:bg-muted cursor-pointer text-sm flex items-center justify-between"
+                              onClick={() => {
+                                setFormData({ ...formData, parrain_id: c.id });
+                                setSearchParrain("");
+                              }}
+                            >
+                              <span>👤 {c.prenom} {c.nom}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {c.filleul_categorie || c.categorie}
+                              </span>
+                            </div>
+                          ))}
+                        {allContacts.filter((c) => {
+                          const search = searchParrain.toLowerCase();
+                          return c.nom.toLowerCase().includes(search) || c.prenom.toLowerCase().includes(search);
+                        }).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-muted-foreground">
+                            Aucun résultat pour "{searchParrain}"
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => setShowNewParrainModal(true)}
+                  >
+                    + Nouveau
+                  </Button>
+                </div>
+                
+                {/* Mini-modal création parrain */}
+                {showNewParrainModal && (
+                  <div className="p-4 border rounded-lg bg-muted/50 space-y-3 mt-2">
+                    <div className="font-medium">Créer un nouveau parrain</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Nom"
+                        value={newParrainNom}
+                        onChange={(e) => setNewParrainNom(e.target.value)}
+                      />
+                      <Input
+                        placeholder="Prénom"
+                        value={newParrainPrenom}
+                        onChange={(e) => setNewParrainPrenom(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button type="button" size="sm" onClick={handleCreateParrain}>
+                        Créer
+                      </Button>
+                      <Button 
+                        type="button" 
+                        size="sm" 
+                        variant="ghost" 
+                        onClick={() => setShowNewParrainModal(false)}
+                      >
+                        Annuler
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

@@ -1364,6 +1364,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 allFoyersCache.push(newFoyer);
               }
               
+              // 🔥 Déterminer la catégorie selon la logique métier (produit = CLIENT, contact = PROSPECT, sinon SUSPECT)
+              const categorieCouple = row.data.produit 
+                ? "CLIENT" 
+                : row.data.dernier_rdv 
+                  ? "PROSPECT_CLIENT" 
+                  : "SUSPECT_CLIENT";
+              
               // Créer le contact manquant
               if (coupleAnalysis.shouldCreateContact1 && coupleAnalysis.contact2) {
                 // Contact1 n'existe pas, Contact2 existe
@@ -1372,7 +1379,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   prenom: coupleAnalysis.prenom1,
                   foyer_id: foyerToUse.id,
                   role_foyer: "DECLARANT_1",
-                  categorie: "CLIENT",
+                  categorie: categorieCouple,
                   statut_suivi: "ACTIF",
                 };
                 const createdContact1 = await createContact(newContact1);
@@ -1405,7 +1412,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   prenom: coupleAnalysis.prenom2,
                   foyer_id: foyerToUse.id,
                   role_foyer: "DECLARANT_2",
-                  categorie: "CLIENT",
+                  categorie: categorieCouple,
                   statut_suivi: "ACTIF",
                 };
                 const createdContact2 = await createContact(newContact2);
@@ -1472,13 +1479,20 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 ? nomFamille.split(/ et | & /)[1].trim()
                 : nomFamille;
               
+              // 🔥 Déterminer la catégorie selon la logique métier (produit = CLIENT, contact = PROSPECT, sinon SUSPECT)
+              const categorieCoupleNew = row.data.produit 
+                ? "CLIENT" 
+                : row.data.dernier_rdv 
+                  ? "PROSPECT_CLIENT" 
+                  : "SUSPECT_CLIENT";
+              
               // Créer contact 1 (famille_id n'est plus utilisé - groupement dynamique par nom)
               const newContact1: NewContact = {
                 nom: nomContact1,
                 prenom: coupleAnalysis.prenom1,
                 foyer_id: newFoyer.id,
                 role_foyer: "DECLARANT_1",
-                categorie: "CLIENT", // Couple avec investissements
+                categorie: categorieCoupleNew,
                 statut_suivi: "ACTIF",
               };
               const createdContact1 = await createContact(newContact1);
@@ -1489,7 +1503,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 prenom: coupleAnalysis.prenom2,
                 foyer_id: newFoyer.id,
                 role_foyer: "DECLARANT_2",
-                categorie: "CLIENT",
+                categorie: categorieCoupleNew,
                 statut_suivi: "ACTIF",
               };
               const createdContact2 = await createContact(newContact2);

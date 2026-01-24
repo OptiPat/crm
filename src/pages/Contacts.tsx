@@ -99,12 +99,17 @@ export function Contacts() {
       return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Suivi +6 mois" };
     }
 
-    // ✅ Suivi récent
-    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "✅ Suivi récent" };
+    // ✅ Suivi < 1 an
+    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "✅ Suivi < 1 an" };
   };
   
   // 🔥 Priorité pour les FILLEULS (basée sur date_dernier_contact_filleul - INDÉPENDANT)
   const getPrioriteFilleul = (contact: Contact) => {
+    // ⚫ Filleul désinscrit : pas d'alerte, juste gris
+    if (contact.filleul_categorie === "FILLEUL_DESINSCRIT") {
+      return { color: "bg-gray-50 border-l-4 border-gray-400", priorite: 99, label: "" };
+    }
+
     if (!contact.date_dernier_contact_filleul) {
       // Pas de date de dernier contact filleul
       return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Jamais contacté" };
@@ -119,13 +124,13 @@ export function Contacts() {
       return { color: "bg-red-50 border-l-4 border-red-500", priorite: 1, label: "🔴 Suivi +6 mois" };
     }
 
-    // 🟠 Suivi +3 mois : Filleul sans contact depuis > 3 mois
+    // 🟠 Suivi > 3 mois : Filleul sans contact depuis > 3 mois
     if (diffMonths > 3) {
-      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 À recontacter" };
+      return { color: "bg-orange-50 border-l-4 border-orange-500", priorite: 2, label: "🟠 Suivi > 3 mois" };
     }
 
-    // ✅ Suivi récent
-    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "✅ Suivi récent" };
+    // ✅ Suivi < 3 mois
+    return { color: "bg-green-50 border-l-4 border-green-500", priorite: 3, label: "✅ Suivi < 3 mois" };
   };
 
   // 🔥 Calcul des compteurs par catégorie
@@ -344,10 +349,21 @@ export function Contacts() {
         for (const contact of contactsToDelete) {
           if (contact.filleul_categorie) {
             // Ce contact est aussi un filleul → juste effacer categorie (mettre AUCUN)
+            // 🔥 Ne pas spreader ...contact pour éviter les FK invalides
             await updateContact(contact.id!, {
-              ...contact,
+              nom: contact.nom,
+              prenom: contact.prenom,
+              email: contact.email || undefined,
+              telephone: contact.telephone || undefined,
+              adresse: contact.adresse || undefined,
+              code_postal: contact.code_postal || undefined,
+              ville: contact.ville || undefined,
+              profession: contact.profession || undefined,
               categorie: "AUCUN", // Effacer le statut client
-              // Convertir les dates timestamp en ISO - FILLEUL (garder)
+              statut_suivi: contact.statut_suivi || "ACTIF", // 🔥 Champ NOT NULL requis
+              filleul_categorie: contact.filleul_categorie,
+              parrain_id: contact.parrain_id || undefined,
+              prescripteur_id: contact.prescripteur_id || undefined,
               date_naissance: contact.date_naissance 
                 ? new Date(contact.date_naissance * 1000).toISOString() 
                 : undefined,
@@ -378,11 +394,21 @@ export function Contacts() {
               contact.categorie === "PROSPECT_CLIENT" || 
               contact.categorie === "SUSPECT_CLIENT") {
             // Ce contact est aussi un client → juste effacer filleul_categorie + dates filleul
+            // 🔥 Ne pas spreader ...contact pour éviter les FK invalides
             await updateContact(contact.id!, {
-              ...contact,
-              filleul_categorie: null, // Effacer le statut filleul
+              nom: contact.nom,
+              prenom: contact.prenom,
+              email: contact.email || undefined,
+              telephone: contact.telephone || undefined,
+              adresse: contact.adresse || undefined,
+              code_postal: contact.code_postal || undefined,
+              ville: contact.ville || undefined,
+              profession: contact.profession || undefined,
+              categorie: contact.categorie,
+              statut_suivi: contact.statut_suivi || "ACTIF", // 🔥 Champ NOT NULL requis
+              filleul_categorie: undefined, // Effacer le statut filleul
               parrain_id: undefined, // Effacer le lien parrain
-              // Convertir les dates timestamp en ISO - CLIENT (garder)
+              prescripteur_id: contact.prescripteur_id || undefined,
               date_naissance: contact.date_naissance 
                 ? new Date(contact.date_naissance * 1000).toISOString() 
                 : undefined,
@@ -392,7 +418,6 @@ export function Contacts() {
               date_prochain_suivi: contact.date_prochain_suivi 
                 ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
                 : undefined,
-              // 🔥 Effacer les dates FILLEUL
               date_dernier_contact_filleul: undefined,
               date_prochain_suivi_filleul: undefined,
             });

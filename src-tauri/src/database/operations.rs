@@ -190,10 +190,16 @@ impl Database {
         // 2. Supprimer les investissements liés directement au contact
         self.conn.execute("DELETE FROM investissements WHERE contact_id = ?1", params![id])?;
         
-        // 3. Supprimer le contact
+        // 3. 🔥 Nettoyer les références prescripteur_id (mettre à NULL)
+        self.conn.execute("UPDATE contacts SET prescripteur_id = NULL WHERE prescripteur_id = ?1", params![id])?;
+        
+        // 4. 🔥 Nettoyer les références parrain_id (mettre à NULL)
+        self.conn.execute("UPDATE contacts SET parrain_id = NULL WHERE parrain_id = ?1", params![id])?;
+        
+        // 5. Supprimer le contact
         self.conn.execute("DELETE FROM contacts WHERE id = ?1", params![id])?;
         
-        // 4. Si le contact avait un foyer, vérifier s'il reste des membres
+        // 6. Si le contact avait un foyer, vérifier s'il reste des membres
         if let Some(fid) = foyer_id {
             let remaining_members: i64 = self.conn.query_row(
                 "SELECT COUNT(*) FROM contacts WHERE foyer_id = ?1",
@@ -350,6 +356,9 @@ impl Database {
                 .map(|dt| dt.timestamp())
         });
         
+        // 🔥 statut_suivi est NOT NULL, donc on met une valeur par défaut
+        let statut_suivi = contact.statut_suivi.clone().unwrap_or_else(|| "ACTIF".to_string());
+        
         let date_naissance_timestamp = contact.date_naissance.as_ref().and_then(|date_str| {
             DateTime::parse_from_rfc3339(date_str)
                 .ok()
@@ -407,7 +416,7 @@ impl Database {
                 date_prochain_suivi_timestamp,
                 date_dernier_contact_filleul_timestamp,
                 date_prochain_suivi_filleul_timestamp,
-                &contact.statut_suivi,
+                &statut_suivi,
                 &contact.notes,
                 &contact.role_foyer,
                 &contact.role_famille,
