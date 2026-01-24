@@ -225,6 +225,37 @@ impl Database {
         // Migration automatique : Ajouter dates de suivi filleul aux contacts
         self.migrate_add_filleul_dates()?;
         
+        // Migration automatique : Ajouter prescripteur_id aux contacts
+        self.migrate_add_prescripteur_id()?;
+        
+        Ok(())
+    }
+    
+    /// Migration : Ajouter prescripteur_id aux contacts existants
+    fn migrate_add_prescripteur_id(&self) -> Result<()> {
+        // Vérifier si la colonne prescripteur_id existe déjà
+        let has_prescripteur_id = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(contacts)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let col_name: String = row.get(1)?;
+                if col_name == "prescripteur_id" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        
+        if has_prescripteur_id {
+            println!("✅ Migration prescripteur_id déjà appliquée");
+            return Ok(());
+        }
+        
+        println!("🔄 Migration : Ajout de prescripteur_id aux contacts...");
+        self.conn.execute("ALTER TABLE contacts ADD COLUMN prescripteur_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL", [])?;
+        println!("✅ Migration prescripteur_id appliquée");
         Ok(())
     }
     

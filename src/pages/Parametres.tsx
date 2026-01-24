@@ -2,12 +2,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Database, Bell, User, Mail } from "lucide-react";
+import { Lock, Database, Bell, User, Mail, Trash2 } from "lucide-react";
 import { SmtpConfigForm } from "@/components/emails/SmtpConfigForm";
 import { useState } from "react";
+import { cleanupOrphanedData } from "@/lib/api/tauri-contacts";
 
 export function Parametres() {
   const [showSmtpConfig, setShowSmtpConfig] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
+
+  const handleCleanupOrphaned = async () => {
+    if (!confirm("⚠️ Voulez-vous nettoyer les données orphelines ?\n\nCeci supprimera :\n- Les foyers sans membres\n- Les investissements sans contact ni foyer valide")) {
+      return;
+    }
+    
+    setCleaningUp(true);
+    try {
+      const [foyersDeleted, investmentsDeleted] = await cleanupOrphanedData();
+      alert(`✅ Nettoyage terminé !\n\n🏠 ${foyersDeleted} foyer(s) orphelin(s) supprimé(s)\n💰 ${investmentsDeleted} investissement(s) orphelin(s) supprimé(s)`);
+    } catch (error) {
+      console.error("Erreur nettoyage:", error);
+      alert("❌ Erreur lors du nettoyage : " + error);
+    } finally {
+      setCleaningUp(false);
+    }
+  };
   
   return (
     <div className="space-y-6">
@@ -95,6 +114,22 @@ export function Parametres() {
             </Button>
             <Button variant="outline">
               Importer des données
+            </Button>
+          </div>
+          
+          {/* 🔥 Nettoyage des données orphelines */}
+          <div className="border-t pt-4 mt-4">
+            <div className="text-sm font-medium mb-2">🧹 Maintenance</div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Supprimer les données orphelines (foyers sans membres, investissements sans contact)
+            </p>
+            <Button 
+              variant="destructive" 
+              onClick={handleCleanupOrphaned}
+              disabled={cleaningUp}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {cleaningUp ? "Nettoyage en cours..." : "Nettoyer les données orphelines"}
             </Button>
           </div>
         </CardContent>

@@ -10,6 +10,7 @@ pub struct Contact {
     pub categorie: String,
     pub filleul_categorie: Option<String>, // 🔥 Catégorie filleul indépendante
     pub parrain_id: Option<i64>,
+    pub prescripteur_id: Option<i64>, // 🔥 Qui a recommandé ce client
     pub civilite: Option<String>,
     pub nom: String,
     pub prenom: String,
@@ -44,6 +45,7 @@ pub struct NewContact {
     pub categorie: String,
     pub filleul_categorie: Option<String>, // 🔥 Catégorie filleul indépendante
     pub parrain_id: Option<i64>,
+    pub prescripteur_id: Option<i64>, // 🔥 Qui a recommandé ce client
     pub civilite: Option<String>,
     pub nom: String,
     pub prenom: String,

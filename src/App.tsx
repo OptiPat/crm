@@ -6,6 +6,7 @@ import { Layout } from "@/components/layout/Layout";
 import { Dashboard } from "@/pages/Dashboard";
 import { Contacts } from "@/pages/Contacts";
 import { Familles } from "@/pages/Familles";
+import { Prescripteurs } from "@/pages/Prescripteurs";
 import { Partenaires } from "@/pages/Partenaires";
 import { Investissements } from "@/pages/Investissements";
 import { Documents } from "@/pages/Documents";
@@ -60,6 +61,8 @@ function App() {
         );
       case "familles":
         return <Familles />;
+      case "prescripteurs":
+        return <Prescripteurs />;
       case "partenaires":
         return <Partenaires />;
       case "investissements":

@@ -10,7 +10,8 @@ import {
   Bell,
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Share2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const menuItems = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
   { id: "contacts", label: "Contacts", icon: Users },
   { id: "familles", label: "Familles", icon: Users2 },
+  { id: "prescripteurs", label: "Prescripteurs", icon: Share2 },
   { id: "suivi", label: "Suivi", icon: Bell },
   { id: "partenaires", label: "Partenaires", icon: UserPlus },
   { id: "investissements", label: "Investissements", icon: Wallet },

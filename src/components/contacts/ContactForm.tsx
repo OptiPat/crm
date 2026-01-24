@@ -31,6 +31,10 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
   const [loading, setLoading] = useState(false);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
   const [searchParrain, setSearchParrain] = useState("");
+  const [searchPrescripteur, setSearchPrescripteur] = useState("");
+  const [showNewPrescripteurModal, setShowNewPrescripteurModal] = useState(false);
+  const [newPrescripteurNom, setNewPrescripteurNom] = useState("");
+  const [newPrescripteurPrenom, setNewPrescripteurPrenom] = useState("");
 
   // Charger tous les contacts pour la sélection du parrain
   useEffect(() => {
@@ -96,6 +100,7 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
     statut_suivi: "ACTIF",
     notes: "",
     parrain_id: undefined,
+    prescripteur_id: undefined,
   });
 
   // Mettre à jour le formData quand le contact change
@@ -104,6 +109,17 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
       setFormData({
         categorie: contact.categorie || "SUSPECT_CLIENT",
         parrain_id: contact.parrain_id || undefined,
+        prescripteur_id: contact.prescripteur_id || undefined,
+        // 🔥 Préserver les liens foyer/famille
+        foyer_id: contact.foyer_id || undefined,
+        famille_id: contact.famille_id || undefined,
+        role_foyer: contact.role_foyer || undefined,
+        role_famille: contact.role_famille || undefined,
+        // 🔥 Préserver filleul_categorie
+        filleul_categorie: contact.filleul_categorie || undefined,
+        // 🔥 Préserver dates filleul
+        date_dernier_contact_filleul: toDateInput(contact.date_dernier_contact_filleul),
+        date_prochain_suivi_filleul: toDateInput(contact.date_prochain_suivi_filleul),
         nom: contact.nom || "",
         prenom: contact.prenom || "",
         email: contact.email || "",
@@ -140,9 +156,39 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
         statut_suivi: "ACTIF",
         notes: "",
         parrain_id: undefined,
+        prescripteur_id: undefined,
       });
     }
   }, [contact, open]); // Réinitialiser quand le contact ou l'ouverture change
+
+  // Créer un nouveau prescripteur s'il n'existe pas
+  const handleCreatePrescripteur = async () => {
+    if (!newPrescripteurNom.trim() || !newPrescripteurPrenom.trim()) {
+      alert("Veuillez remplir le nom et le prénom");
+      return;
+    }
+    
+    try {
+      // Créer le prescripteur avec catégorie "PRESCRIPTEUR" (n'apparaît pas dans Clients/Filleuls)
+      const newPrescripteur = await createContact({
+        nom: newPrescripteurNom.trim(),
+        prenom: newPrescripteurPrenom.trim(),
+        categorie: "PRESCRIPTEUR", // Catégorie spéciale, visible uniquement dans l'onglet Prescripteurs
+      });
+      
+      // Ajouter à la liste et le sélectionner
+      setAllContacts([...allContacts, newPrescripteur]);
+      setFormData({ ...formData, prescripteur_id: newPrescripteur.id });
+      
+      // Fermer le modal
+      setShowNewPrescripteurModal(false);
+      setNewPrescripteurNom("");
+      setNewPrescripteurPrenom("");
+    } catch (error) {
+      console.error("Erreur création prescripteur:", error);
+      alert("Erreur lors de la création du prescripteur");
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -303,7 +349,7 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
                         );
                       })
                       .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`))
-                      .slice(0, 50)
+                      .slice(0, 200)
                       .map((c) => (
                         <SelectItem key={c.id} value={c.id.toString()}>
                           {c.prenom} {c.nom} ({c.categorie})
@@ -314,6 +360,125 @@ export function ContactForm({ open, onOpenChange, contact, onSuccess }: ContactF
               </div>
             </div>
           )}
+
+          {/* Champ Prescripteur (pour tous les contacts - qui a recommandé ce client) */}
+          <div className="space-y-2">
+            <Label htmlFor="prescripteur_id">Prescripteur (qui a recommandé ce contact)</Label>
+            <div className="relative">
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Input
+                    placeholder="🔍 Taper pour rechercher un prescripteur..."
+                    value={searchPrescripteur}
+                    onChange={(e) => setSearchPrescripteur(e.target.value)}
+                    onFocus={() => setSearchPrescripteur(searchPrescripteur || "")}
+                  />
+                  
+                  {/* Afficher le prescripteur sélectionné */}
+                  {formData.prescripteur_id && !searchPrescripteur && (
+                    <div className="absolute inset-0 flex items-center px-3 pointer-events-none bg-white rounded-md border">
+                      <span className="text-sm">
+                        ✓ {allContacts.find(c => c.id === formData.prescripteur_id)?.prenom}{" "}
+                        {allContacts.find(c => c.id === formData.prescripteur_id)?.nom}
+                      </span>
+                      <button
+                        type="button"
+                        className="ml-auto pointer-events-auto text-muted-foreground hover:text-foreground"
+                        onClick={() => setFormData({ ...formData, prescripteur_id: undefined })}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                  
+                  {/* Liste déroulante des résultats de recherche */}
+                  {searchPrescripteur && (
+                    <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg max-h-60 overflow-auto">
+                      <div
+                        className="px-3 py-2 hover:bg-muted cursor-pointer text-sm border-b"
+                        onClick={() => {
+                          setFormData({ ...formData, prescripteur_id: undefined });
+                          setSearchPrescripteur("");
+                        }}
+                      >
+                        ❌ Aucun prescripteur (contact direct)
+                      </div>
+                      {allContacts
+                        .filter((c) => {
+                          const search = searchPrescripteur.toLowerCase();
+                          return (
+                            c.nom.toLowerCase().includes(search) ||
+                            c.prenom.toLowerCase().includes(search)
+                          );
+                        })
+                        .sort((a, b) => `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`))
+                        .slice(0, 20)
+                        .map((c) => (
+                          <div
+                            key={c.id}
+                            className="px-3 py-2 hover:bg-muted cursor-pointer text-sm flex items-center justify-between"
+                            onClick={() => {
+                              setFormData({ ...formData, prescripteur_id: c.id });
+                              setSearchPrescripteur("");
+                            }}
+                          >
+                            <span>👤 {c.prenom} {c.nom}</span>
+                            <span className="text-xs text-muted-foreground">{c.categorie}</span>
+                          </div>
+                        ))}
+                      {allContacts.filter((c) => {
+                        const search = searchPrescripteur.toLowerCase();
+                        return c.nom.toLowerCase().includes(search) || c.prenom.toLowerCase().includes(search);
+                      }).length === 0 && (
+                        <div className="px-3 py-2 text-sm text-muted-foreground">
+                          Aucun résultat pour "{searchPrescripteur}"
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setShowNewPrescripteurModal(true)}
+                >
+                  + Nouveau
+                </Button>
+              </div>
+              
+              {/* Mini-modal création prescripteur */}
+              {showNewPrescripteurModal && (
+                <div className="p-4 border rounded-lg bg-muted/50 space-y-3 mt-2">
+                  <div className="font-medium">Créer un nouveau prescripteur</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      placeholder="Nom"
+                      value={newPrescripteurNom}
+                      onChange={(e) => setNewPrescripteurNom(e.target.value)}
+                    />
+                    <Input
+                      placeholder="Prénom"
+                      value={newPrescripteurPrenom}
+                      onChange={(e) => setNewPrescripteurPrenom(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" onClick={handleCreatePrescripteur}>
+                      Créer
+                    </Button>
+                    <Button 
+                      type="button" 
+                      size="sm" 
+                      variant="ghost" 
+                      onClick={() => setShowNewPrescripteurModal(false)}
+                    >
+                      Annuler
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Nom et Prénom */}
           <div className="grid grid-cols-2 gap-4">

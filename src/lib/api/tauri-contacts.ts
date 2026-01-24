@@ -9,6 +9,7 @@ export interface Contact {
   categorie: string;
   filleul_categorie?: string | null; // 🔥 Catégorie filleul indépendante
   parrain_id?: number;
+  prescripteur_id?: number; // 🔥 Qui a recommandé ce client
   civilite?: string;
   nom: string;
   prenom: string;
@@ -42,6 +43,7 @@ export interface NewContact {
   categorie?: string;
   filleul_categorie?: string | null; // 🔥 Catégorie filleul indépendante
   parrain_id?: number;
+  prescripteur_id?: number; // 🔥 Qui a recommandé ce client
   civilite?: string;
   nom: string;
   prenom: string;
@@ -95,4 +97,14 @@ export async function getFilleulsByParrain(parrainId: number): Promise<Contact[]
 
 export async function findContactByName(nom: string, prenom: string): Promise<Contact | null> {
   return await invoke<Contact | null>("find_contact_by_name", { nom, prenom });
+}
+
+// 🔥 Récupérer tous les clients recommandés par un prescripteur
+export async function getClientsByPrescripteur(prescripteurId: number): Promise<Contact[]> {
+  return await invoke<Contact[]>("get_clients_by_prescripteur", { prescripteurId });
+}
+
+// 🔥 Nettoyer les données orphelines (foyers sans membres, investissements sans contact/foyer)
+export async function cleanupOrphanedData(): Promise<[number, number]> {
+  return await invoke<[number, number]>("cleanup_orphaned_data");
 }

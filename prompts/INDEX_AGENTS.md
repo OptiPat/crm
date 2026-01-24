@@ -1,6 +1,6 @@
 # 📋 INDEX DES AGENTS - Patrimoine CRM
 
-> **Dernière mise à jour : 23 janvier 2026**
+> **Dernière mise à jour : 24 janvier 2026**
 
 ---
 
@@ -157,6 +157,9 @@ prompts/
 | Partenaires CRUD | ✅ 100% |
 | Templates email | ✅ 100% |
 | Alertes & Suivi | ✅ 100% |
+| **Prescripteurs** | ✅ 100% (arbre généalogique recommandations) |
+| **Dates suivi indépendantes** | ✅ 100% (client vs filleul) |
+| **Nettoyage données orphelines** | ✅ 100% (dans Paramètres) |
 
 ---
 
@@ -164,6 +167,9 @@ prompts/
 
 - [x] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** ✅ Terminé
 - [x] **Agent Foyers/Familles : Regroupement visuel + Détection import** ✅ Terminé
+- [x] **Prescripteurs : Arbre des recommandations + Patrimoine apporté** ✅ Terminé (24/01/2026)
+- [x] **Dates de suivi indépendantes : Client vs Filleul** ✅ Terminé (24/01/2026)
+- [x] **Nettoyage données orphelines** ✅ Terminé (24/01/2026)
 - [ ] Agent 11 : Historique patrimonial année après année
 - [ ] Agent 1 : Détection doublons investissements RIO
 - [ ] Agent 1 : OCR PDF scannés (Tesseract)

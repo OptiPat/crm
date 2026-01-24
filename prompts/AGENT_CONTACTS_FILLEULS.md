@@ -1,8 +1,8 @@
 # 🤖 Agent : Refonte Contacts & Filleuls
 
-> **✅ MODULE TERMINÉ - 18 janvier 2026**
+> **✅ MODULE TERMINÉ - 24 janvier 2026**
 >
-> Toutes les fonctionnalités ont été implémentées.
+> Toutes les fonctionnalités ont été implémentées, y compris Prescripteurs et dates de suivi séparées.
 
 ---
 
@@ -44,28 +44,72 @@
 - [x] Champ "Parrain" affiché si catégorie filleul
 - [x] Select avec recherche de contacts
 
+### Étape 8 : Prescripteurs ✅ (24/01/2026)
+- [x] Champ `prescripteur_id` ajouté au modèle Contact
+- [x] Migration automatique dans `mod.rs`
+- [x] Dropdown "Prescripteur" dans `ContactForm.tsx` (pour tous les contacts)
+- [x] Bouton "+ Nouveau" pour créer un prescripteur inline
+- [x] Catégorie `AUCUN` pour prescripteur-only (ni client, ni filleul)
+- [x] **Page Prescripteurs** (`src/pages/Prescripteurs.tsx`)
+  - Arbre généalogique récursif des recommandations
+  - Patrimoine personnel + patrimoine apporté affiché
+  - Stats globales (prescripteurs actifs, clients recommandés, total apporté)
+- [x] Onglet "Prescripteurs" dans sidebar
+
+### Étape 9 : Dates de suivi séparées ✅ (24/01/2026)
+- [x] Champs `date_dernier_contact_filleul` / `date_prochain_suivi_filleul`
+- [x] Page Suivi affiche dates correctes selon onglet (Client vs Filleul)
+- [x] Un contact peut être Client ET Filleul avec dates indépendantes
+- [x] Suppression d'un client préserve son statut filleul (catégorie → AUCUN)
+
+### Étape 10 : Nettoyage données orphelines ✅ (24/01/2026)
+- [x] Dashboard ne compte que les investissements liés à contacts/foyers existants
+- [x] Fonction `cleanup_all_orphaned_data()` dans Rust
+- [x] Bouton "Nettoyer les données orphelines" dans Paramètres
+- [x] Supprime foyers sans membres + investissements sans contact/foyer
+
 ---
 
 ## 📁 Fichiers créés/modifiés
 
 | Fichier | Modification |
 |---------|-------------|
-| `src/lib/db/schema.ts` | Catégories + parrain_id |
-| `src/pages/Contacts.tsx` | Onglets CLIENTS/FILLEULS |
+| `src/lib/db/schema.ts` | Catégories + parrain_id + prescripteur_id |
+| `src/pages/Contacts.tsx` | Onglets CLIENTS/FILLEULS, suppression préserve filleuls |
+| `src/pages/Prescripteurs.tsx` | **NOUVEAU** - Arbre des recommandations |
+| `src/pages/Parametres.tsx` | Bouton nettoyage données orphelines |
 | `src/components/contacts/ContactImportFilleuls.tsx` | **NOUVEAU** |
 | `src/components/contacts/ContactDetail.tsx` | Parrain + Mes filleuls |
-| `src/components/contacts/ContactForm.tsx` | Champ Parrain |
-| `src/lib/api/tauri-contacts.ts` | parrain_id |
-| `src-tauri/src/database/models.rs` | parrain_id |
-| `src-tauri/src/database/operations.rs` | get_filleuls_by_parrain |
-| `src-tauri/src/commands.rs` | get_filleuls_by_parrain |
-| `drizzle/0004_add_filleul_categories_and_parrain.sql` | Migration |
+| `src/components/contacts/ContactForm.tsx` | Parrain + Prescripteur (+ Nouveau) |
+| `src/components/layout/Sidebar.tsx` | Onglet Prescripteurs ajouté |
+| `src/lib/api/tauri-contacts.ts` | prescripteur_id, getClientsByPrescripteur, cleanupOrphanedData |
+| `src-tauri/src/database/models.rs` | prescripteur_id, dates filleul |
+| `src-tauri/src/database/operations.rs` | get_clients_by_prescripteur, cleanup_orphaned_* |
+| `src-tauri/src/database/mod.rs` | Migrations prescripteur_id, dates filleul |
+| `src-tauri/src/commands.rs` | get_clients_by_prescripteur, cleanup_orphaned_data |
+| `src-tauri/src/main.rs` | Nouvelles commandes enregistrées |
 
 ---
 
 ## 📊 Structure finale
 
 ```
+Sidebar
+├── Tableau de bord
+├── Contacts
+│   ├── 🏦 CLIENTS (avec sous-onglets)
+│   └── 👥 FILLEULS (avec sous-onglets)
+├── Familles
+├── 🔗 Prescripteurs          ← NOUVEAU
+├── Suivi
+├── Partenaires
+├── Investissements
+├── Documents
+├── Interactions
+├── Templates Email
+└── Paramètres
+    └── 🧹 Nettoyer données orphelines  ← NOUVEAU
+
 Page Contacts
 ├── 🏦 CLIENTS
 │   ├── Clients (CLIENT)
@@ -77,6 +121,16 @@ Page Contacts
     ├── Prospects (PROSPECT_FILLEUL)
     ├── Suspects (SUSPECT_FILLEUL)
     └── Désinscrits (FILLEUL_DESINSCRIT)
+
+Page Prescripteurs
+├── Stats globales (prescripteurs, clients recommandés, patrimoine apporté)
+└── Liste des prescripteurs racines
+    └── 🌳 Arbre récursif par prescripteur
+        ├── Prescripteur (patrimoine personnel + apporté)
+        │   ├── Client recommandé 1 (patrimoine)
+        │   │   └── Sous-client recommandé (patrimoine)
+        │   └── Client recommandé 2 (patrimoine)
+        └── ...
 ```
 
 ---
@@ -97,3 +151,61 @@ Colonnes :
 - Date inscription
 - Date dernier suivi
 - Commentaire
+
+---
+
+## 🔗 Différence Parrain vs Prescripteur
+
+| Concept | Parrain | Prescripteur |
+|---------|---------|--------------|
+| **Champ** | `parrain_id` | `prescripteur_id` |
+| **Usage** | MLM / Réseau filleuls | Apport d'affaires clients |
+| **Contexte** | Catégories FILLEUL | Tous les contacts |
+| **Affiché** | Fiche contact (section Parrain) | Fiche contact + Page Prescripteurs |
+| **Arbre** | Non | Oui (récursif avec patrimoine) |
+
+### Exemple concret
+
+```
+Pauline (démarchée directement, prescripteur_id = NULL)
+├── Parents de Pauline (prescripteur_id = Pauline)
+│   ├── Fils des parents (prescripteur_id = Parents)
+│   └── Amis des parents (prescripteur_id = Parents)
+│       └── Fils des amis (prescripteur_id = Amis)
+│           └── Amis du fils (prescripteur_id = Fils)
+```
+
+La page Prescripteurs affiche :
+- **Pauline** : Patrimoine personnel 50k€, Patrimoine apporté 250k€ (total arbre)
+  - Arbre dépliant avec tous les niveaux
+
+---
+
+## 🔀 Contact multi-rôles
+
+Un contact peut maintenant avoir plusieurs rôles simultanés :
+
+| Rôle | Champ | Exemple |
+|------|-------|---------|
+| **Client** | `categorie = CLIENT` | Client avec patrimoine |
+| **Filleul** | `filleul_categorie = FILLEUL` | Inscrit au réseau MLM |
+| **Prescripteur** | Quelqu'un a son ID en `prescripteur_id` | A recommandé des clients |
+
+### Suppression intelligente
+
+- **Supprimer client** qui est aussi filleul → `categorie = AUCUN`, garde `filleul_categorie`
+- **Supprimer filleul** qui est aussi client → `filleul_categorie = NULL`, garde `categorie`
+- Les dates de suivi sont indépendantes (client vs filleul)
+
+---
+
+## 🧹 Maintenance des données
+
+Bouton dans **Paramètres > Base de données** :
+
+**"Nettoyer les données orphelines"** supprime :
+- Foyers sans membres
+- Investissements dont le contact n'existe plus
+- Investissements dont le foyer n'existe plus
+
+Le Dashboard calcule l'encours uniquement sur les investissements valides.

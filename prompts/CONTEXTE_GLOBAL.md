@@ -2,7 +2,7 @@
 
 > **⚠️ DONNE CE FICHIER AU DÉBUT DE CHAQUE NOUVELLE DISCUSSION**
 >
-> **Dernière mise à jour : 18 janvier 2026**
+> **Dernière mise à jour : 24 janvier 2026**
 
 ---
 
@@ -75,7 +75,7 @@ patrimoine-crm/
 | Table | Description |
 |-------|-------------|
 | `foyers` | Groupes familiaux |
-| `contacts` | Personnes physiques (5 catégories) |
+| `contacts` | Personnes physiques (avec `parrain_id`, `prescripteur_id`, dates suivi séparées) |
 | `partenaires` | Fournisseurs de produits financiers |
 | `investissements` | Produits souscrits + champ `origine` (MON_CONSEIL / EXISTANT_CLIENT) |
 | `documents` | Fichiers attachés aux contacts |
@@ -86,11 +86,16 @@ patrimoine-crm/
 | `parametres` | Configuration (SMTP, etc.) |
 
 ### Catégories de contacts
-- `CLIENT`
-- `PROSPECT_CLIENT`
-- `PROSPECT_FILLEUL`
-- `SUSPECT_CLIENT`
-- `SUSPECT_FILLEUL`
+- `CLIENT`, `PROSPECT_CLIENT`, `SUSPECT_CLIENT` (côté client)
+- `FILLEUL`, `PROSPECT_FILLEUL`, `SUSPECT_FILLEUL`, `FILLEUL_DESINSCRIT` (côté filleul)
+- `AUCUN` (prescripteur uniquement, ni client ni filleul)
+
+### Champs spéciaux contacts
+- `parrain_id` : FK vers contact (parrain MLM)
+- `prescripteur_id` : FK vers contact (qui a recommandé ce client)
+- `filleul_categorie` : Catégorie filleul indépendante de la catégorie client
+- `date_dernier_contact` / `date_prochain_suivi` : Dates suivi CLIENT
+- `date_dernier_contact_filleul` / `date_prochain_suivi_filleul` : Dates suivi FILLEUL
 
 ### Types de produits
 - `IMMOBILIER`, `SCPI`, `SCPI_DEMEMBREMENT`, `ASSURANCE_VIE`
@@ -129,6 +134,19 @@ patrimoine-crm/
 | Aperçu alertes + actions rapides | ✅ |
 | Module Investissements (CRUD complet) | ✅ |
 | Filtres et recherche investissements | ✅ |
+
+### Phase 2.5 - Prescripteurs & Suivi avancé ✅ (24/01/2026)
+| Fonctionnalité | Status |
+|----------------|--------|
+| Onglet Prescripteurs dans sidebar | ✅ |
+| Arbre généalogique des recommandations | ✅ |
+| Patrimoine apporté par prescripteur | ✅ |
+| Création prescripteur inline (+ Nouveau) | ✅ |
+| Dates de suivi séparées Client / Filleul | ✅ |
+| Contact peut être Client ET Filleul | ✅ |
+| Suppression clients préserve filleuls | ✅ |
+| Nettoyage données orphelines (Paramètres) | ✅ |
+| Dashboard n'affiche que encours valides | ✅ |
 
 ### Phase 3 - Import RIO ✅
 | Fonctionnalité | Status |
@@ -253,6 +271,35 @@ node apply-migration-origine.cjs
 
 **Règle** : Priorité de détection = Couples > Doublons > Contacts simples.
 
+### 🔥 Prescripteurs vs Parrains (24/01/2026)
+**Contexte** : Besoin de tracer qui a recommandé chaque client (apport d'affaires) différent du parrainage MLM.
+
+**Solution** :
+- `parrain_id` = MLM (qui m'a parrainé dans le réseau filleuls)
+- `prescripteur_id` = Apport d'affaires (qui a recommandé ce client)
+- Un contact peut être CLIENT ET FILLEUL avec dates de suivi séparées
+- Page Prescripteurs avec arbre généalogique + patrimoine apporté
+
+**Règle** : Les deux systèmes sont indépendants et peuvent coexister.
+
+### 🔥 Suppression préserve les multi-rôles (24/01/2026)
+**Contexte** : Supprimer un client qui était aussi filleul le supprimait complètement.
+
+**Solution** (`Contacts.tsx` > `handleDeleteAllContacts`) :
+- Si contact a `filleul_categorie` → `categorie = AUCUN`, garde le reste
+- Sinon → suppression complète
+
+**Règle** : Toujours vérifier les rôles multiples avant suppression.
+
+### 🔥 Données orphelines (24/01/2026)
+**Contexte** : L'encours affichait des montants pour des investissements dont le contact/foyer avait été supprimé.
+
+**Solution** :
+- Dashboard : requête SQL filtre `EXISTS (SELECT 1 FROM contacts...)`
+- Paramètres : bouton "Nettoyer données orphelines" qui supprime foyers sans membres + investissements orphelins
+
+**Règle** : Le Dashboard ne compte que les données "vivantes".
+
 ---
 
 ## 📊 Résumé état du projet
@@ -264,6 +311,9 @@ node apply-migration-origine.cjs
 | Import Excel Clients | ✅ 100% | (intégré dans Contacts) |
 | **Contacts & Filleuls** | ✅ 100% | `AGENT_CONTACTS_FILLEULS.md` |
 | **Foyers & Familles** | ✅ 100% | `AGENT_FOYERS_FAMILLES.md` |
+| **Prescripteurs** | ✅ 100% | (intégré, arbre recommandations) |
+| **Dates suivi séparées** | ✅ 100% | (client vs filleul) |
+| **Nettoyage orphelins** | ✅ 100% | (dans Paramètres) |
 | Historique Patrimoine | ❌ 0% | `AGENT_11_HISTORIQUE_PATRIMOINE.md` |
 | Import RIO | ✅ 90% | `PROMPT_PDF_OCR.md` |
 | Génération PDF | ❌ 0% | `PROMPT_PDF_GENERATION.md` |
