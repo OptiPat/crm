@@ -3,8 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Users, ChevronDown, ChevronUp, ChevronRight, TrendingUp, Eye, EyeOff } from "lucide-react";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { Search, Users, ChevronDown, ChevronUp, ChevronRight, TrendingUp, Eye, EyeOff, Trash2 } from "lucide-react";
+import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getInvestissementsByContact, getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
 
 // 🎨 Couleurs des investissements (mêmes que Familles)
@@ -414,6 +414,30 @@ export function Prescripteurs() {
     });
   };
 
+  // 🗑️ Supprimer un prescripteur
+  const handleDeletePrescripteur = async (contact: Contact, e: React.MouseEvent) => {
+    e.stopPropagation(); // Ne pas propager le clic
+    
+    // Vérifier s'il a des clients recommandés
+    const clientsRecommandes = contacts.filter(c => c.prescripteur_id === contact.id);
+    
+    let confirmMessage = `Supprimer ${contact.prenom} ${contact.nom} ?`;
+    if (clientsRecommandes.length > 0) {
+      confirmMessage += `\n\n⚠️ Attention : ${clientsRecommandes.length} client(s) recommandé(s) par ce prescripteur perdront leur lien.`;
+    }
+    
+    if (!confirm(confirmMessage)) return;
+    
+    try {
+      await deleteContact(contact.id);
+      // Recharger les données
+      await loadData();
+    } catch (error) {
+      console.error("Erreur suppression prescripteur:", error);
+      alert("Erreur lors de la suppression");
+    }
+  };
+
   const formatEuro = (cents: number): string => {
     return new Intl.NumberFormat("fr-FR", {
       style: "currency",
@@ -513,6 +537,17 @@ export function Prescripteurs() {
                 <span className="text-xs">{node.investissements.length}</span>
               </Button>
             )}
+            
+            {/* 🗑️ Bouton supprimer (seulement si prescripteur-only ou sans investissements) */}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-red-500 hover:text-red-700 hover:bg-red-50"
+              onClick={(e) => handleDeletePrescripteur(node.contact, e)}
+              title="Supprimer ce contact"
+            >
+              <Trash2 className="h-3 w-3" />
+            </Button>
           </div>
           
           {/* 📈 Stats de la branche (si a des enfants) */}
