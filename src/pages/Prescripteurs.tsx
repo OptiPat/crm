@@ -10,8 +10,11 @@ import { getInvestissementsByContact, getInvestissementsByFoyer, type Investisse
 // 🎨 Couleurs des investissements (mêmes que Familles)
 const getTypeProduitBgColor = (type: string, origine?: string): string => {
   if (origine === "EXISTANT_CLIENT") return "#9ca3af"; // gray-400
-  if (type === "IMMOBILIER") return "#85ad39"; // vert
-  return "#dc216e"; // rose foncé
+  // 🏠 Immobilier et dérivés : vert
+  const immobilierTypes = ["IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", "COLOCATION", "MONOLOCATION", "SCI"];
+  if (immobilierTypes.includes(type)) return "#85ad39";
+  // Tout le reste : rose foncé
+  return "#dc216e";
 };
 
 // 🏷️ Formater la catégorie filleul pour affichage
@@ -114,12 +117,9 @@ export function Prescripteurs() {
 
   // Helper pour obtenir le displayName d'un contact (foyer ou individuel)
   const getContactDisplayName = (contact: Contact): string => {
+    // 🏠 Si le contact fait partie d'un foyer, toujours afficher le nom du foyer
     if (contact.foyer_id && foyersInfo[contact.foyer_id]) {
-      const foyer = foyersInfo[contact.foyer_id];
-      // Si c'est le premier membre du foyer, afficher le nom du foyer
-      if (foyer.membres[0]?.id === contact.id) {
-        return foyer.displayName;
-      }
+      return foyersInfo[contact.foyer_id].displayName;
     }
     return `👤 ${contact.prenom} ${contact.nom}`;
   };
@@ -290,12 +290,29 @@ export function Prescripteurs() {
       foyersProcessed.add(prescripteur.foyer_id);
     }
     
-    // Trouver tous les contacts recommandés par ce prescripteur
+    // Trouver tous les contacts recommandés par ce prescripteur OU par un membre de son foyer
+    // 🏠 Inclure les recommandations de TOUS les membres du foyer
+    const prescripteurIds = prescripteur.foyer_id && foyersInfo[prescripteur.foyer_id]
+      ? foyersInfo[prescripteur.foyer_id].membres.map(m => m.id)
+      : [prescripteur.id];
+    
     // 🏠 Option B: Exclure les membres du même foyer déjà présents dans l'arbre
-    const clientsRecommandes = contacts.filter(c => 
-      c.prescripteur_id === prescripteur.id && 
+    const clientsRecommandesAll = contacts.filter(c => 
+      prescripteurIds.includes(c.prescripteur_id!) && 
       !newFoyerMembersInTree.has(c.id) // Exclure si déjà dans l'arbre via le foyer
     );
+    
+    // 🏠 Consolider les foyers dans les clients recommandés (éviter doublons Sylvie + Didier)
+    const foyersClientsVus = new Set<number>();
+    const clientsRecommandes = clientsRecommandesAll.filter(c => {
+      if (c.foyer_id) {
+        if (foyersClientsVus.has(c.foyer_id)) {
+          return false;
+        }
+        foyersClientsVus.add(c.foyer_id);
+      }
+      return true;
+    });
     
     return {
       contact: prescripteur,
@@ -340,12 +357,37 @@ export function Prescripteurs() {
         .map(c => c.prescripteur_id!)
     );
     
-    const racines = contacts.filter(c => 
-      // Soit il a recommandé quelqu'un et n'a pas été recommandé lui-même
-      (prescripteurIds.has(c.id) && !c.prescripteur_id) ||
+    // 🏠 Helper: vérifier si un membre du foyer a un prescripteur
+    const foyerHasPrescripteur = (foyerId: number): boolean => {
+      if (!foyerId || !foyersInfo[foyerId]) return false;
+      return foyersInfo[foyerId].membres.some(m => m.prescripteur_id);
+    };
+    
+    const racinesAll = contacts.filter(c => {
+      // Vérifier si ce contact (ou son foyer) a un prescripteur
+      const hasPrescripteur = c.prescripteur_id || (c.foyer_id && foyerHasPrescripteur(c.foyer_id));
+      
+      // Soit il a recommandé quelqu'un et n'a pas été recommandé lui-même (ni son foyer)
+      if (prescripteurIds.has(c.id) && !hasPrescripteur) return true;
+      
       // Soit c'est un prescripteur créé manuellement (catégorie PRESCRIPTEUR)
-      (c.categorie === "PRESCRIPTEUR" && !c.prescripteur_id)
-    );
+      if (c.categorie === "PRESCRIPTEUR" && !hasPrescripteur) return true;
+      
+      return false;
+    });
+    
+    // 🏠 Consolider les foyers : si plusieurs membres du même foyer sont prescripteurs,
+    // garder seulement le premier pour éviter les doublons
+    const foyersVus = new Set<number>();
+    const racines = racinesAll.filter(c => {
+      if (c.foyer_id) {
+        if (foyersVus.has(c.foyer_id)) {
+          return false; // Foyer déjà représenté, on ignore ce membre
+        }
+        foyersVus.add(c.foyer_id);
+      }
+      return true;
+    });
     
     return racines.map(prescripteur => {
       // Créer un nouveau Set pour chaque arbre (ne pas réutiliser entre prescripteurs)
@@ -586,7 +628,12 @@ export function Prescripteurs() {
                         👤 {inv.ownerName}
                       </Badge>
                     )}
-                    <span className="font-medium">{inv.nom_produit}</span>
+                    {/* Nom du produit seulement s'il est différent du type */}
+                    {inv.nom_produit && 
+                     inv.nom_produit.trim() !== "" && 
+                     inv.nom_produit.toUpperCase().replace(/[- ]/g, "") !== inv.type_produit?.toUpperCase().replace(/_/g, "") && (
+                      <span className="font-medium">{inv.nom_produit}</span>
+                    )}
                     {inv.date_souscription && (
                       <span className="text-muted-foreground text-xs">
                         📅 {formatDate(inv.date_souscription)}

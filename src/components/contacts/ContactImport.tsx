@@ -1008,7 +1008,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     typeProduit = "FCPR";
                   } else if (produitUpper.includes('G3F')) {
                     typeProduit = "G3F";
-                  } else if (produitUpper.includes('IMMOBILIER') || produitUpper.includes('PINEL') || produitUpper.includes('MALRAUX')) {
+                  } else if (produitUpper.includes('LMNP')) {
+                    typeProduit = "LMNP";
+                  } else if (produitUpper.includes('LMP')) {
+                    typeProduit = "LMP";
+                  } else if (produitUpper.includes('PINEL')) {
+                    typeProduit = "PINEL";
+                  } else if (produitUpper.includes('MALRAUX')) {
+                    typeProduit = "MALRAUX";
+                  } else if (produitUpper.includes('DENORMANDIE')) {
+                    typeProduit = "DENORMANDIE";
+                  } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
+                    typeProduit = "RP";
+                  } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
+                    typeProduit = "RS";
+                  } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
+                    typeProduit = "DEFICIT_FONCIER";
+                  } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
+                    typeProduit = "MONUMENT_HISTORIQUE";
+                  } else if (produitUpper.includes('LOCATIF')) {
+                    typeProduit = "LOCATIF";
+                  } else if (produitUpper.includes('COLOCATION')) {
+                    typeProduit = "COLOCATION";
+                  } else if (produitUpper.includes('MONOLOCATION')) {
+                    typeProduit = "MONOLOCATION";
+                  } else if (produitUpper.includes('SCI')) {
+                    typeProduit = "SCI";
+                  } else if (
+                    produitUpper.includes('IMMOBILIER') ||
+                    produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
+                    produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
+                  ) {
                     typeProduit = "IMMOBILIER";
                   }
                   
@@ -1758,7 +1788,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 typeProduit = "FCPR";
               } else if (produitUpper.includes('G3F')) {
                 typeProduit = "G3F";
-              } else if (produitUpper.includes('IMMOBILIER') || produitUpper.includes('PINEL') || produitUpper.includes('MALRAUX')) {
+              } else if (produitUpper.includes('LMNP')) {
+                typeProduit = "LMNP";
+              } else if (produitUpper.includes('LMP')) {
+                typeProduit = "LMP";
+              } else if (produitUpper.includes('PINEL')) {
+                typeProduit = "PINEL";
+              } else if (produitUpper.includes('MALRAUX')) {
+                typeProduit = "MALRAUX";
+              } else if (produitUpper.includes('DENORMANDIE')) {
+                typeProduit = "DENORMANDIE";
+              } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
+                typeProduit = "RP";
+              } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
+                typeProduit = "RS";
+              } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
+                typeProduit = "DEFICIT_FONCIER";
+              } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
+                typeProduit = "MONUMENT_HISTORIQUE";
+              } else if (produitUpper.includes('LOCATIF')) {
+                typeProduit = "LOCATIF";
+              } else if (produitUpper.includes('COLOCATION')) {
+                typeProduit = "COLOCATION";
+              } else if (produitUpper.includes('MONOLOCATION')) {
+                typeProduit = "MONOLOCATION";
+              } else if (produitUpper.includes('SCI')) {
+                typeProduit = "SCI";
+              } else if (
+                produitUpper.includes('IMMOBILIER') ||
+                produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
+                produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
+              ) {
                 typeProduit = "IMMOBILIER";
               }
               
@@ -1966,7 +2026,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               typeProduit = "FCPR";
             } else if (produitUpper.includes('G3F')) {
               typeProduit = "G3F";
-            } else if (produitUpper.includes('IMMOBILIER') || produitUpper.includes('PINEL') || produitUpper.includes('MALRAUX')) {
+            } else if (produitUpper.includes('LMNP')) {
+              typeProduit = "LMNP";
+            } else if (produitUpper.includes('LMP')) {
+              typeProduit = "LMP";
+            } else if (produitUpper.includes('PINEL')) {
+              typeProduit = "PINEL";
+            } else if (produitUpper.includes('MALRAUX')) {
+              typeProduit = "MALRAUX";
+            } else if (produitUpper.includes('DENORMANDIE')) {
+              typeProduit = "DENORMANDIE";
+            } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
+              typeProduit = "RP";
+            } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
+              typeProduit = "RS";
+            } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
+              typeProduit = "DEFICIT_FONCIER";
+            } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
+              typeProduit = "MONUMENT_HISTORIQUE";
+            } else if (produitUpper.includes('LOCATIF')) {
+              typeProduit = "LOCATIF";
+            } else if (produitUpper.includes('COLOCATION')) {
+              typeProduit = "COLOCATION";
+            } else if (produitUpper.includes('MONOLOCATION')) {
+              typeProduit = "MONOLOCATION";
+            } else if (produitUpper.includes('SCI')) {
+              typeProduit = "SCI";
+            } else if (
+              produitUpper.includes('IMMOBILIER') ||
+              produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
+              produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
+            ) {
               typeProduit = "IMMOBILIER";
             }
             
@@ -2181,7 +2271,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           typeProduit = "FCPR";
         } else if (produitUpper.includes('G3F')) {
           typeProduit = "G3F";
-        } else if (produitUpper.includes('IMMOBILIER') || produitUpper.includes('PINEL') || produitUpper.includes('MALRAUX')) {
+        } else if (produitUpper.includes('LMNP')) {
+          typeProduit = "LMNP";
+        } else if (produitUpper.includes('LMP')) {
+          typeProduit = "LMP";
+        } else if (produitUpper.includes('PINEL')) {
+          typeProduit = "PINEL";
+        } else if (produitUpper.includes('MALRAUX')) {
+          typeProduit = "MALRAUX";
+        } else if (produitUpper.includes('DENORMANDIE')) {
+          typeProduit = "DENORMANDIE";
+        } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
+          typeProduit = "RP";
+        } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
+          typeProduit = "RS";
+        } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
+          typeProduit = "DEFICIT_FONCIER";
+        } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
+          typeProduit = "MONUMENT_HISTORIQUE";
+        } else if (produitUpper.includes('LOCATIF')) {
+          typeProduit = "LOCATIF";
+        } else if (produitUpper.includes('COLOCATION')) {
+          typeProduit = "COLOCATION";
+        } else if (produitUpper.includes('MONOLOCATION')) {
+          typeProduit = "MONOLOCATION";
+        } else if (produitUpper.includes('SCI')) {
+          typeProduit = "SCI";
+        } else if (
+          produitUpper.includes('IMMOBILIER') ||
+          produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
+          produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
+        ) {
           typeProduit = "IMMOBILIER";
         }
         

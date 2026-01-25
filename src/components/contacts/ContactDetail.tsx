@@ -313,11 +313,12 @@ export function ContactDetail({
     if (origine === "EXISTANT_CLIENT") {
       return "#9ca3af"; // gray-400
     }
-    // Immobilier : #85ad39 (vert)
-    if (type === "IMMOBILIER") {
+    // 🏠 Immobilier et dérivés : vert
+    const immobilierTypes = ["IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", "COLOCATION", "MONOLOCATION", "SCI"];
+    if (immobilierTypes.includes(type)) {
       return "#85ad39";
     }
-    // Placements financiers : #dc216e (rose foncé)
+    // Tout le reste : rose foncé
     return "#dc216e";
   };
 
@@ -903,12 +904,13 @@ export function ContactDetail({
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 space-y-1">
-                            <div className="flex items-center gap-2">
+                            {/* Ligne 1 : Badge type + badges annexes */}
+                            <div className="flex items-center gap-2 flex-wrap">
                               <Badge 
                                 className={getTypeProduitColor(inv.type_produit, inv.origine) + " text-base px-3 py-1"}
                                 style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
                               >
-                                {formatNomProduit(inv.nom_produit)}
+                                {inv.type_produit?.replace(/_/g, " ") || "AUTRE"}
                               </Badge>
                               {inv.origine === "EXISTANT_CLIENT" && (
                                 <span className="text-xs text-gray-500 italic">à côté</span>
@@ -932,6 +934,15 @@ export function ContactDetail({
                                 </Badge>
                               )}
                             </div>
+                            {/* Ligne 2 : Nom du produit (si différent du type) */}
+                            {inv.nom_produit && 
+                             inv.nom_produit.trim() !== "" && 
+                             inv.nom_produit.toUpperCase().replace(/[- ]/g, "") !== inv.type_produit?.toUpperCase().replace(/_/g, "") && (
+                              <p className="font-medium text-foreground">
+                                {formatNomProduit(inv.nom_produit)}
+                              </p>
+                            )}
+                            {/* Ligne 3 : Partenaire (si renseigné) */}
                             {getPartenaireNom(inv.partenaire_id) && (
                               <p className="text-sm text-muted-foreground">
                                 📋 {getPartenaireNom(inv.partenaire_id)}

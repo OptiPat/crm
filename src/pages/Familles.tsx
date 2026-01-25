@@ -48,11 +48,10 @@ const getTypeProduitBgColor = (type: string, origine?: string): string => {
   if (origine === "EXISTANT_CLIENT") {
     return "#9ca3af"; // gray-400
   }
-  // Immobilier : vert
-  if (type === "IMMOBILIER") {
-    return "#85ad39";
-  }
-  // Placements financiers : rose foncé
+  // 🏠 Immobilier et dérivés : vert
+  const immobilierTypes = ["IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", "COLOCATION", "MONOLOCATION", "SCI"];
+  if (immobilierTypes.includes(type)) return "#85ad39";
+  // Tout le reste : rose foncé
   return "#dc216e";
 };
 
@@ -547,14 +546,19 @@ export function Familles() {
                                         inv.isCommun ? 'bg-blue-50 border border-blue-200' : 'bg-muted/30'
                                       }`}
                                     >
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
                                         <Badge 
                                           className="text-xs text-white px-2 py-0.5"
                                           style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
                                         >
                                           {inv.type_produit.replace(/_/g, " ")}
                                         </Badge>
-                                        <span className="font-medium">{inv.nom_produit}</span>
+                                        {/* Nom du produit seulement s'il est différent du type */}
+                                        {inv.nom_produit && 
+                                         inv.nom_produit.trim() !== "" && 
+                                         inv.nom_produit.toUpperCase().replace(/[- ]/g, "") !== inv.type_produit?.toUpperCase().replace(/_/g, "") && (
+                                          <span className="font-medium">{inv.nom_produit}</span>
+                                        )}
                                         {/* 🏠 Badge "Commun" pour les investissements partagés */}
                                         {inv.isCommun && (
                                           <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
