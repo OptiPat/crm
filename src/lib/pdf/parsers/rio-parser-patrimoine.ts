@@ -2,6 +2,79 @@
 import type { ExtractedData, BienImmobilier } from "../types";
 
 /**
+ * Liste des noms de SCPI connus pour la détection automatique
+ * (même quand le mot "SCPI" n'apparaît pas dans le RIO)
+ */
+const KNOWN_SCPI_NAMES = [
+  // SCPI Corum
+  "corum origin", "corum xl", "corum eurion",
+  // SCPI Primonial
+  "primovie", "primopierre", "patrimmo commerce", "patrimmo croissance",
+  // SCPI Sofidy
+  "immorente", "efimmo", "sofidy europe invest",
+  // SCPI Paref
+  "novapierre", "interpierre", "atlantique pierre",
+  // SCPI Perial
+  "pfo2", "pf grand paris", "pf hospitalite europe",
+  // SCPI Amundi
+  "opcimmo", "rivoli avenir patrimoine",
+  // SCPI La Française
+  "epargne fonciere", "lf europimmo", "lf grand paris patrimoine",
+  // SCPI Arkea
+  "transitions europe", "transitions europeennes",
+  // SCPI Alderan
+  "activimmo",
+  // SCPI Sogenial
+  "comete", "coeur de regions", "coeur de ville",
+  // SCPI Voisin
+  "epargne pierre", "epargne pierre europe",
+  // SCPI Atland
+  "fonciere des praticiens",
+  // SCPI AEW
+  "laffitte pierre", "fructipierre", "fructiregions",
+  // SCPI BNP Paribas
+  "accimmo pierre",
+  // SCPI Advenis
+  "eurovalys",
+  // SCPI Fiducial
+  "fiducial gerance",
+  // SCPI Iroko
+  "iroko zen",
+  // SCPI Remake
+  "remake live",
+  // SCPI Altarea
+  "alta convictions", "altaconvictions",
+  // Autres SCPI courantes
+  "pierval sante", "kyaneos pierre", "vendome regions", "cap foncières", "cristal rente",
+];
+
+/**
+ * Vérifie si un nom correspond à une SCPI connue
+ */
+function isKnownSCPI(nom: string): boolean {
+  const nomNormalized = nom
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim();
+  
+  // Vérifier si le mot "SCPI" est présent
+  if (/scpi/i.test(nom)) return true;
+  
+  // Vérifier si le nom correspond à une SCPI connue
+  return KNOWN_SCPI_NAMES.some(scpiName => {
+    const scpiNormalized = scpiName
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9\s]/g, "")
+      .trim();
+    return nomNormalized.includes(scpiNormalized) || scpiNormalized.includes(nomNormalized);
+  });
+}
+
+/**
  * Extrait un montant en euros du texte
  * Gère les formats : "23 406 €", "23406", "23 406,00 €", "268 043,00 €"
  */
@@ -157,11 +230,33 @@ export function extractPER(text: string): number | undefined {
 }
 
 /**
- * Extrait les SCPI
+ * Extrait les SCPI (épargne, pas les charges/dépenses)
  */
 export function extractSCPI(text: string): number | undefined {
-  // Pattern : capturer uniquement le PREMIER montant
-  return extractMontant(/\bSCPI\s+([\d\s,]+)\s*€/i, text);
+  // Pattern : capturer SCPI avec montant, mais EXCLURE les lignes de charges/dépenses
+  // "Autre dépense SCPI 7 919 €" ne doit PAS être capturé
+  const scpiPattern = /\bSCPI\s+([\d\s,]+)\s*€/gi;
+  let match;
+  
+  while ((match = scpiPattern.exec(text)) !== null) {
+    // Vérifier le contexte (50 caractères avant)
+    const contextBefore = text.substring(Math.max(0, match.index - 50), match.index).toLowerCase();
+    
+    // Exclure si c'est une dépense ou une charge
+    if (contextBefore.includes("dépense") || 
+        contextBefore.includes("depense") ||
+        contextBefore.includes("charge") ||
+        contextBefore.includes("crédit") ||
+        contextBefore.includes("credit")) {
+      continue; // Ignorer ce match
+    }
+    
+    // C'est une vraie épargne SCPI
+    const montant = match[1].replace(/[\s,]/g, "");
+    return parseInt(montant, 10);
+  }
+  
+  return undefined;
 }
 
 /**
@@ -259,26 +354,46 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
     };
     
     // Chercher le crédit associé à la RP
-    const rpNomNormalized = normalizeNom(rpNom);
-    const creditPattern = new RegExp(
-      `Crédit\\s+immobilier\\s*[-–—]\\s*([^\\n]+?)\\s+(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
+    // Le nom "Primo MTP" apparaît 2 fois : dans ACTIFS et dans PASSIFS
+    // On doit trouver TOUS les matchs et prendre celui qui est dans la section PASSIFS/Crédit
+    
+    const rpNomOriginal = rpMatch[1].trim();
+    const rpNomEscaped = rpNomOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Pattern avec flag 'g' pour trouver TOUS les matchs
+    // Format: "Primo MTP Nicolas P. 9 454 € 169 072 € 01/11/2046"
+    // On veut capturer les 2 montants COMPLETS
+    const creditPatternGlobal = new RegExp(
+      `${rpNomEscaped}[^€]*?(\\d[\\d\\s,.]+)\\s*€[^€]*?(\\d[\\d\\s,.]+)\\s*€(?:[^€]*(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
       "gi"
     );
     
-    let creditMatch;
-    while ((creditMatch = creditPattern.exec(text)) !== null) {
-      const creditNom = creditMatch[1].trim();
-      if (normalizeNom(creditNom).includes(rpNomNormalized) || 
-          rpNomNormalized.includes(normalizeNom(creditNom))) {
-        const echeanceAnnuelle = parseInt(creditMatch[2].replace(/[\s,]/g, ""), 10);
-        const crd = parseInt(creditMatch[3].replace(/[\s,]/g, ""), 10);
-        const dateEcheance = creditMatch[4];
+    let creditMatchAll;
+    while ((creditMatchAll = creditPatternGlobal.exec(text)) !== null) {
+      // Vérifier le contexte : doit être dans une section "Crédit" ou "Passif"
+      const matchIndex = creditMatchAll.index;
+      const contextBefore = text.substring(Math.max(0, matchIndex - 150), matchIndex).toLowerCase();
+      
+      // Accepter si on est dans une section crédit/passif (pas dans "Résidence principale")
+      const isInCreditSection = contextBefore.includes("crédit") || 
+                                 contextBefore.includes("credit") || 
+                                 contextBefore.includes("passif") || 
+                                 contextBefore.includes("crd") ||
+                                 contextBefore.includes("échéance");
+      const isInActifsSection = contextBefore.includes("résidence") || 
+                                 contextBefore.includes("residence") ||
+                                 contextBefore.includes("jouissance");
+      
+      if (isInCreditSection && !isInActifsSection) {
+        const echeanceAnnuelle = parseInt(creditMatchAll[1].replace(/[\s,.]/g, ""), 10);
+        const crd = parseInt(creditMatchAll[2].replace(/[\s,.]/g, ""), 10);
+        const dateEcheance = creditMatchAll[3];
         
         rp.echeanceAnnuelle = echeanceAnnuelle;
         rp.creditCRD = crd;
         rp.mensualiteCredit = Math.round(echeanceAnnuelle / 12);
         rp.dateFinCredit = dateEcheance;
-        break;
+        break; // Trouvé, on arrête
       }
     }
     
@@ -295,34 +410,69 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
   for (const pattern of locatifPatterns) {
     let match;
     while ((match = pattern.exec(text)) !== null) {
-      const typeMatch = text.substring(match.index - 50, match.index).match(/(Classique|LMNP|LMP|Pinel|Denormandie|Malraux|Monument\s+Historique|Déficit\s+foncier)/i);
-      const typeBien = formatNom(typeMatch ? typeMatch[1] : "Locatif");
+      // Extraire le type réel du bien (Pinel, LMNP, Classique, etc.)
+      const fullMatch = match[0];
+      const typeRealMatch = fullMatch.match(/^(Classique|LMNP|LMP|Pinel|Denormandie|Malraux|Monument\s+Historique|Déficit\s+foncier)/i);
+      const typeReel = typeRealMatch ? typeRealMatch[1].toUpperCase() : "LOCATIF";
+      const typeBien = formatNom(typeRealMatch ? typeRealMatch[1] : "Locatif");
       const nomBien = formatNom(match[1].trim());
       const valeur = parseInt(match[2].replace(/[\s,]/g, ""), 10);
       
+      // ⚠️ Détecter si c'est une SCPI (par mot-clé ou par nom connu)
+      const isSCPI = isKnownSCPI(nomBien);
+      
+      // Déterminer le type final
+      let typeFinal: string;
+      if (isSCPI) {
+        typeFinal = "SCPI";
+      } else if (typeReel === "PINEL") {
+        typeFinal = "PINEL";
+      } else if (typeReel === "LMNP") {
+        typeFinal = "LMNP";
+      } else if (typeReel === "LMP") {
+        typeFinal = "LMP";
+      } else {
+        typeFinal = "LOCATIF";
+      }
+      
       // Éviter les doublons
-      const id = `locatif-${normalizeNom(typeBien)}-${normalizeNom(nomBien)}`;
+      const id = isSCPI 
+        ? `scpi-${normalizeNom(nomBien)}` 
+        : `locatif-${normalizeNom(typeBien)}-${normalizeNom(nomBien)}`;
       if (biens.some(b => b.id === id)) continue;
       
       const bien: BienImmobilier = {
         id,
-        type: "LOCATIF",
-        nom: `${typeBien} - ${nomBien}`,
+        type: typeFinal,
+        nom: isSCPI ? `SCPI - ${nomBien}` : `${typeBien} - ${nomBien}`,
         valeur,
       };
       
-      // Chercher le crédit associé
+      // Chercher le crédit associé (sauf crédit SCPI générique, traité après)
+      // Format RIO: "Crédit immobilier - Pinel sète Nicolas P. 8 306 € 143 128 € 01/12/2046"
       const nomNormalized = normalizeNom(nomBien);
       const creditPattern2 = new RegExp(
-        `Crédit\\s+immobilier\\s*[-–—]\\s*([^\\n]+?)\\s+(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
+        `Crédit\\s+immobilier\\s*[-–—]\\s*([^€]+?)\\s+(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
         "gi"
       );
       
       let creditMatch;
       while ((creditMatch = creditPattern2.exec(text)) !== null) {
-        const creditNom = creditMatch[1].trim();
-        if (normalizeNom(creditNom).includes(nomNormalized) || 
-            nomNormalized.includes(normalizeNom(creditNom))) {
+        const creditNomFull = creditMatch[1].trim();
+        const creditNomNormalized = normalizeNom(creditNomFull);
+        
+        // IGNORER le crédit SCPI générique ici (sera traité après avec matching par valeur)
+        if (/^scpi\s/i.test(creditNomFull)) {
+          continue;
+        }
+        
+        // Matcher si le nom du bien est inclus dans le nom du crédit
+        // ou si le type + nom partiel correspond (ex: "Pinel sète" pour "Sète")
+        const typeNomNormalized = normalizeNom(`${typeBien} ${nomBien}`);
+        
+        if (creditNomNormalized.includes(nomNormalized) || 
+            nomNormalized.includes(creditNomNormalized.substring(0, Math.min(nomNormalized.length, 6))) ||
+            creditNomNormalized.includes(typeNomNormalized.substring(0, 10))) {
           const echeanceAnnuelle = parseInt(creditMatch[2].replace(/[\s,]/g, ""), 10);
           const crd = parseInt(creditMatch[3].replace(/[\s,]/g, ""), 10);
           const dateEcheance = creditMatch[4];
@@ -367,6 +517,42 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
       }
       
       biens.push(bien);
+    }
+  }
+  
+  // === POST-TRAITEMENT : Crédit SCPI générique ===
+  // Chercher le crédit "SCPI" générique et l'assigner à la SCPI avec la valeur la plus proche du CRD
+  const scpiBiens = biens.filter(b => b.type === "SCPI" && !b.creditCRD);
+  
+  if (scpiBiens.length > 0) {
+    // Chercher le crédit SCPI générique
+    const creditSCPIPattern = /Crédit\s+immobilier\s*[-–—]\s*SCPI\s+[^€]*?(\d[\d\s,]*)\s*€\s+(\d[\d\s,]*)\s*€(?:\s+(\d{2}\/\d{2}\/\d{4}))?/gi;
+    const creditMatch = creditSCPIPattern.exec(text);
+    
+    if (creditMatch) {
+      const echeanceAnnuelle = parseInt(creditMatch[1].replace(/[\s,]/g, ""), 10);
+      const crd = parseInt(creditMatch[2].replace(/[\s,]/g, ""), 10);
+      const dateEcheance = creditMatch[3];
+      
+      // Trouver la SCPI avec la valeur la plus proche du CRD
+      let bestMatch: BienImmobilier | null = null;
+      let smallestDiff = Infinity;
+      
+      for (const scpi of scpiBiens) {
+        const diff = Math.abs(scpi.valeur - crd);
+        if (diff < smallestDiff) {
+          smallestDiff = diff;
+          bestMatch = scpi;
+        }
+      }
+      
+      // Assigner le crédit si on a trouvé une SCPI proche (différence < 20% de la valeur)
+      if (bestMatch && smallestDiff < bestMatch.valeur * 0.2) {
+        bestMatch.echeanceAnnuelle = echeanceAnnuelle;
+        bestMatch.creditCRD = crd;
+        bestMatch.mensualiteCredit = Math.round(echeanceAnnuelle / 12);
+        bestMatch.dateFinCredit = dateEcheance;
+      }
     }
   }
   

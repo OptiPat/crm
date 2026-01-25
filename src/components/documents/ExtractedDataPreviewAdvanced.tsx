@@ -644,7 +644,13 @@ export function ExtractedDataPreviewAdvanced({
                           </span>
                           <span className="font-medium">{bien.nom}</span>
                           <span className="text-muted-foreground text-sm">
-                            ({bien.type === "RESIDENCE_PRINCIPALE" ? "RP" : bien.type === "RESIDENCE_SECONDAIRE" ? "RS" : "Locatif"})
+                            ({bien.type === "RESIDENCE_PRINCIPALE" ? "RP" : 
+                              bien.type === "RESIDENCE_SECONDAIRE" ? "RS" : 
+                              bien.type === "SCPI" ? "SCPI" :
+                              bien.type === "PINEL" ? "Pinel" :
+                              bien.type === "LMNP" ? "LMNP" :
+                              bien.type === "LMP" ? "LMP" :
+                              "Locatif"})
                           </span>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">

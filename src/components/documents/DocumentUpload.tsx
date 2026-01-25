@@ -23,8 +23,9 @@ import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/taur
 import { extractTextFromPDFPath, parseAuto, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { PatrimoineTriDialog } from "./PatrimoineTriDialog";
+import { RioUpdateComparisonDialog } from "./RioUpdateComparisonDialog";
 import { findContactByEmail, createContact, updateContact, getContactById, type NewContact } from "@/lib/api/tauri-contacts";
-import { createInvestissement, type NewInvestissement } from "@/lib/api/tauri-investissements";
+import { createInvestissement, getInvestissementsByContact, type NewInvestissement } from "@/lib/api/tauri-investissements";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -52,6 +53,10 @@ export function DocumentUpload({
   const [showPatrimoineTri, setShowPatrimoineTri] = useState(false);
   const [triContactId, setTriContactId] = useState<number | null>(null);
   const [triExtractedData, setTriExtractedData] = useState<ExtractedData | null>(null);
+  
+  // États pour le dialogue de mise à jour (comparaison)
+  const [showRioUpdate, setShowRioUpdate] = useState(false);
+  const [updateContactNom, setUpdateContactNom] = useState<string>("");
   
   const [uploadedFile, setUploadedFile] = useState<{
     path: string;
@@ -199,6 +204,8 @@ export function DocumentUpload({
     try {
       let finalContactId = contactId;
       let successMessage = "";
+      let isExistingContactWithInvestments = false;
+      let existingContactNom = "";
       
       // 1. Chercher un contact existant par email
       if (data.email) {
@@ -210,6 +217,7 @@ export function DocumentUpload({
           const mergedData: NewContact = {
             ...newData, // Nouvelles données
             foyer_id: existingContact.foyer_id,
+            categorie: existingContact.categorie, // PRÉSERVER la catégorie existante !
             statut_suivi: existingContact.statut_suivi, // Préserver le statut actuel
             notes: existingContact.notes,
             source_lead: existingContact.source_lead,
@@ -218,6 +226,15 @@ export function DocumentUpload({
           await updateContact(existingContact.id, mergedData);
           finalContactId = existingContact.id;
           successMessage = `✅ Contact mis à jour: ${data.prenom} ${data.nom}`;
+          existingContactNom = `${existingContact.prenom} ${existingContact.nom}`;
+          
+          // Vérifier si le contact a déjà des investissements
+          try {
+            const existingInvestissements = await getInvestissementsByContact(existingContact.id);
+            isExistingContactWithInvestments = existingInvestissements.length > 0;
+          } catch {
+            isExistingContactWithInvestments = false;
+          }
         } else {
           // Contact inexistant → CREATE
           const contactData = mapExtractedDataToContact(data);
@@ -258,17 +275,25 @@ export function DocumentUpload({
         data.residencePrincipale?.valeur ||
         data.residenceSecondaire?.valeur ||
         data.immobilierLocatif?.valeur ||
+        (data.biensImmobiliers && data.biensImmobiliers.length > 0) ||
         data.livretA ||
         data.ldd ||
         data.compteCourant
       );
 
       if (hasPatrimoineToTri && finalContactId) {
-        // Afficher le dialogue de tri du patrimoine
         setShowPreview(false);
         setTriContactId(finalContactId);
         setTriExtractedData(data);
-        setShowPatrimoineTri(true);
+        
+        if (isExistingContactWithInvestments) {
+          // Contact existant avec investissements → Afficher le dialogue de COMPARAISON
+          setUpdateContactNom(existingContactNom || `${data.prenom} ${data.nom}`);
+          setShowRioUpdate(true);
+        } else {
+          // Nouveau contact ou contact sans investissements → Afficher le dialogue de TRI classique
+          setShowPatrimoineTri(true);
+        }
       } else {
         // Pas de patrimoine → terminer normalement
         alert(successMessage + "\n\n📄 Document enregistré avec succès!");
@@ -421,6 +446,44 @@ export function DocumentUpload({
     onOpenChange(false);
   };
 
+  /**
+   * Gère la validation de la mise à jour RIO (comparaison)
+   */
+  const handleRioUpdateComplete = () => {
+    setShowRioUpdate(false);
+    setTriContactId(null);
+    setTriExtractedData(null);
+    setUpdateContactNom("");
+    
+    // Réinitialiser
+    setUploadedFile(null);
+    setExtractedText("");
+    setFormData({
+      contact_id: contactId,
+      foyer_id: foyerId,
+      type_document: "AUTRE",
+      date_document: "",
+      notes: "",
+    });
+    
+    onSuccess();
+    onOpenChange(false);
+  };
+
+  /**
+   * Annule la mise à jour RIO
+   */
+  const handleRioUpdateCancel = () => {
+    setShowRioUpdate(false);
+    setTriContactId(null);
+    setTriExtractedData(null);
+    setUpdateContactNom("");
+    
+    // Fermer tout
+    onSuccess();
+    onOpenChange(false);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -502,7 +565,7 @@ export function DocumentUpload({
         />
       )}
 
-      {/* Dialog de tri du patrimoine */}
+      {/* Dialog de tri du patrimoine (nouveau contact) */}
       {triExtractedData && triContactId && (
         <PatrimoineTriDialog
           open={showPatrimoineTri}
@@ -511,6 +574,19 @@ export function DocumentUpload({
           contactId={triContactId}
           onComplete={handlePatrimoineTriComplete}
           onCancel={handlePatrimoineTriCancel}
+        />
+      )}
+      
+      {/* Dialog de comparaison RIO (mise à jour contact existant) */}
+      {triExtractedData && triContactId && (
+        <RioUpdateComparisonDialog
+          open={showRioUpdate}
+          onOpenChange={setShowRioUpdate}
+          extractedData={triExtractedData}
+          contactId={triContactId}
+          contactNom={updateContactNom}
+          onComplete={handleRioUpdateComplete}
+          onCancel={handleRioUpdateCancel}
         />
       )}
 
