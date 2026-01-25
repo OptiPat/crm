@@ -195,6 +195,7 @@ export function Prescripteurs() {
 
   // Calculer le patrimoine et investissements d'un contact
   // foyersProcessed: Set pour tracker les foyers dont les investissements ont déjà été attribués
+  // 🔥 Dans Prescripteurs: On ne compte QUE les investissements "MON_CONSEIL" (avec moi)
   const getContactPatrimoineWithInvests = (
     contact: Contact, 
     foyersProcessed: Set<number>
@@ -208,8 +209,10 @@ export function Prescripteurs() {
       const foyer = foyersInfo[contact.foyer_id];
       
       // 🏠 Ajouter les investissements personnels de TOUS les membres du foyer
+      // 🔥 Filtrer pour ne garder que MON_CONSEIL
       foyer.membres.forEach(membre => {
-        const membreInvests = investissementsByContact[membre.id] || [];
+        const membreInvests = (investissementsByContact[membre.id] || [])
+          .filter(inv => inv.origine === "MON_CONSEIL");
         const membreTotal = membreInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
         total += membreTotal;
         
@@ -224,9 +227,9 @@ export function Prescripteurs() {
         ];
       });
       
-      // Ajouter les investissements communs du foyer
+      // Ajouter les investissements communs du foyer (🔥 MON_CONSEIL uniquement)
       const foyerInvests = investissementsByFoyer[contact.foyer_id] || [];
-      const foyerOnlyInvests = foyerInvests.filter(inv => !inv.contact_id);
+      const foyerOnlyInvests = foyerInvests.filter(inv => !inv.contact_id && inv.origine === "MON_CONSEIL");
       const foyerTotal = foyerOnlyInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
       total += foyerTotal;
       
@@ -239,7 +242,9 @@ export function Prescripteurs() {
       foyerAdded = true;
     } else {
       // Contact individuel (pas de foyer ou foyer déjà traité)
-      const contactInvests = investissementsByContact[contact.id] || [];
+      // 🔥 Filtrer pour ne garder que MON_CONSEIL
+      const contactInvests = (investissementsByContact[contact.id] || [])
+        .filter(inv => inv.origine === "MON_CONSEIL");
       total = contactInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
       allInvests = contactInvests.map(inv => ({ ...inv, isCommun: false }));
     }
@@ -731,7 +736,7 @@ export function Prescripteurs() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Patrimoine apporté
+              Patrimoine apporté (avec moi)
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -809,11 +814,11 @@ export function Prescripteurs() {
                     
                     <div className="flex items-center gap-4 text-right">
                       <div>
-                        <div className="text-sm text-muted-foreground">Patrimoine personnel</div>
+                        <div className="text-sm text-muted-foreground">Patrimoine (avec moi)</div>
                         <div className="font-semibold">{formatEuro(prescripteur.patrimoinePersonnel)}</div>
                       </div>
                       <div>
-                        <div className="text-sm text-muted-foreground">Patrimoine apporté</div>
+                        <div className="text-sm text-muted-foreground">Patrimoine apporté (avec moi)</div>
                         <div className="font-semibold text-emerald-600">
                           {formatEuro(prescripteur.patrimoineApporteTotal)}
                         </div>

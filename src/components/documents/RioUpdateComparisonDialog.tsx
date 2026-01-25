@@ -810,7 +810,8 @@ export function RioUpdateComparisonDialog({
                   </div>
                 </div>
                 
-                {/* Options avancées conditionnelles selon le type */}
+                {/* Options avancées conditionnelles selon le type (sauf épargne bancaire hors PEL) */}
+                {!["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL"].includes(comp.editedType) && (
                 <div className="pt-2 border-t border-green-200">
                   <div className="text-xs font-medium text-green-700 mb-2">Options avancées</div>
                   
@@ -1008,6 +1009,161 @@ export function RioUpdateComparisonDialog({
                     </div>
                   )}
                 </div>
+                )}
+              </div>
+            )}
+            
+            {/* Options avancées pour les MISES À JOUR d'existants */}
+            {comp.linkedToExistingId !== null && !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL"].includes(comp.editedType) && (
+              <div className="p-3 bg-blue-50/50 border border-blue-200 rounded-lg space-y-2 mt-2">
+                <div className="text-xs font-medium text-blue-700">Options (valeurs actuelles pré-remplies)</div>
+                
+                {/* === OPTIONS IMMOBILIER === */}
+                {["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(comp.editedType) && (
+                  <div className="grid grid-cols-4 gap-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Mensualité crédit</label>
+                      <Input
+                        type="number"
+                        placeholder="€/mois"
+                        value={comp.mensualiteCredit || ""}
+                        onChange={(e) => handleChangeMensualiteCredit(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">CRD (Capital)</label>
+                      <Input
+                        type="number"
+                        placeholder="€"
+                        value={comp.creditCRD || ""}
+                        onChange={(e) => handleChangeCreditCRD(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    {comp.editedType !== "RP" && (
+                      <div>
+                        <label className="text-xs text-muted-foreground">Loyer mensuel</label>
+                        <Input
+                          type="number"
+                          placeholder="€/mois"
+                          value={comp.loyerMensuel || ""}
+                          onChange={(e) => handleChangeLoyerMensuel(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* === OPTIONS SCPI === */}
+                {["SCPI", "SCPI_DEMEMBREMENT"].includes(comp.editedType) && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`vp-upd-${comp.id}`}
+                          checked={comp.versementProgramme}
+                          onCheckedChange={(checked) => handleChangeVersementProgramme(comp.id, !!checked)}
+                        />
+                        <label htmlFor={`vp-upd-${comp.id}`} className="text-xs">
+                          Versement prog.
+                          {comp.existingInvestissement?.versement_programme && !comp.versementProgramme && (
+                            <span className="text-orange-600 ml-1">(actif)</span>
+                          )}
+                        </label>
+                      </div>
+                      {comp.versementProgramme && (
+                        <div className="flex gap-1 items-center">
+                          <Input
+                            type="number"
+                            placeholder="Montant"
+                            value={comp.montantVersement || ""}
+                            onChange={(e) => handleChangeMontantVersement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-7 text-xs w-20"
+                          />
+                          <span className="text-xs">€</span>
+                          <select
+                            value={comp.frequenceVersement}
+                            onChange={(e) => handleChangeFrequenceVersement(comp.id, e.target.value)}
+                            className="h-7 text-xs border rounded px-1"
+                          >
+                            {FREQUENCES_VERSEMENT.map(f => (
+                              <option key={f.value} value={f.value}>{f.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`reinv-upd-${comp.id}`}
+                          checked={comp.reinvestissementDividendes}
+                          onCheckedChange={(checked) => handleChangeReinvestissement(comp.id, !!checked)}
+                        />
+                        <label htmlFor={`reinv-upd-${comp.id}`} className="text-xs">
+                          Réinvestissement dividendes
+                          {comp.existingInvestissement?.reinvestissement_dividendes && !comp.reinvestissementDividendes && (
+                            <span className="text-orange-600 ml-1">(actif)</span>
+                          )}
+                        </label>
+                      </div>
+                      {comp.reinvestissementDividendes && (
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            placeholder="%"
+                            value={comp.pourcentageReinvestissement || ""}
+                            onChange={(e) => handleChangePourcentageReinvestissement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-7 text-xs w-16"
+                          />
+                          <span className="text-xs">%</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+                
+                {/* === OPTIONS ASSURANCE-VIE / PER / PEA === */}
+                {["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(comp.editedType) && (
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id={`vp-upd2-${comp.id}`}
+                        checked={comp.versementProgramme}
+                        onCheckedChange={(checked) => handleChangeVersementProgramme(comp.id, !!checked)}
+                      />
+                      <label htmlFor={`vp-upd2-${comp.id}`} className="text-xs">
+                        Versement prog.
+                        {comp.existingInvestissement?.versement_programme && !comp.versementProgramme && (
+                          <span className="text-orange-600 ml-1">(actif)</span>
+                        )}
+                      </label>
+                    </div>
+                    {comp.versementProgramme && (
+                      <div className="flex gap-1 items-center">
+                        <Input
+                          type="number"
+                          placeholder="Montant"
+                          value={comp.montantVersement || ""}
+                          onChange={(e) => handleChangeMontantVersement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                          className="h-7 text-xs w-20"
+                        />
+                        <span className="text-xs">€</span>
+                        <select
+                          value={comp.frequenceVersement}
+                          onChange={(e) => handleChangeFrequenceVersement(comp.id, e.target.value)}
+                          className="h-7 text-xs border rounded px-1"
+                        >
+                          {FREQUENCES_VERSEMENT.map(f => (
+                            <option key={f.value} value={f.value}>{f.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>

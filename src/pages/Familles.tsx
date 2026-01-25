@@ -66,6 +66,9 @@ interface MemberWithInvestments {
   patrimoine: number;
   patrimoinePerso: number; // 🔥 Patrimoine personnel (sans les communs)
   patrimoineCommun: number; // 🔥 Patrimoine commun du foyer
+  avecMoiPerso: number; // 🔥 Patrimoine personnel "avec moi"
+  avecMoiCommun: number; // 🔥 Patrimoine commun "avec moi"
+  avecMoiTotal: number; // 🔥 Total "avec moi"
   isSpouse: boolean; // true si c'est un conjoint d'une autre famille
   spouseOf?: string; // "Conjoint de X"
 }
@@ -75,6 +78,7 @@ interface FamilleGroup {
   membres: MemberWithInvestments[];
   foyers: Foyer[];
   patrimoineTotal: number;
+  patrimoineAvecMoi: number; // 🔥 Patrimoine "avec moi" uniquement
 }
 
 export function Familles() {
@@ -136,13 +140,16 @@ export function Familles() {
     }
   };
 
-  // 🔥 Calculer le patrimoine d'un contact avec distinction perso/commun
+  // 🔥 Calculer le patrimoine d'un contact avec distinction perso/commun et avec moi/total
   // Tous les investissements sont affichés, mais les communs sont marqués
   const getContactPatrimoine = (contact: Contact): { 
     investissements: InvestWithCommun[], 
     patrimoinePerso: number, 
     patrimoineCommun: number,
-    total: number 
+    total: number,
+    avecMoiPerso: number, // 🔥 Patrimoine personnel "avec moi"
+    avecMoiCommun: number, // 🔥 Patrimoine commun "avec moi"
+    avecMoiTotal: number // 🔥 Total "avec moi"
   } => {
     // Investissements personnels (liés directement au contact)
     const contactInvests: InvestWithCommun[] = (investissementsByContact[contact.id] || [])
@@ -162,8 +169,17 @@ export function Familles() {
     const patrimoinePerso = contactInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
     const patrimoineCommun = foyerInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
     const total = patrimoinePerso + patrimoineCommun;
+    
+    // 🔥 Calcul "avec moi" (origine === MON_CONSEIL)
+    const avecMoiPerso = contactInvests
+      .filter(inv => inv.origine === "MON_CONSEIL")
+      .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+    const avecMoiCommun = foyerInvests
+      .filter(inv => inv.origine === "MON_CONSEIL")
+      .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+    const avecMoiTotal = avecMoiPerso + avecMoiCommun;
 
-    return { investissements: allInvests, patrimoinePerso, patrimoineCommun, total };
+    return { investissements: allInvests, patrimoinePerso, patrimoineCommun, total, avecMoiPerso, avecMoiCommun, avecMoiTotal };
   };
 
   // 🔥 GROUPEMENT DYNAMIQUE PAR NOM DE FAMILLE + CONJOINTS
@@ -199,7 +215,7 @@ export function Familles() {
         const foyersCommunsCounted = new Set<number>(); // 🔥 Pour compter les communs UNE SEULE fois
 
         membresSorted.forEach(membre => {
-          const { investissements, patrimoinePerso, patrimoineCommun, total } = getContactPatrimoine(membre);
+          const { investissements, patrimoinePerso, patrimoineCommun, total, avecMoiPerso, avecMoiCommun, avecMoiTotal } = getContactPatrimoine(membre);
           
           membresWithInvests.push({
             contact: membre,
@@ -207,6 +223,9 @@ export function Familles() {
             patrimoine: total,
             patrimoinePerso,
             patrimoineCommun,
+            avecMoiPerso,
+            avecMoiCommun,
+            avecMoiTotal,
             isSpouse: false,
           });
 
@@ -226,6 +245,9 @@ export function Familles() {
                   patrimoine: spouseData.total,
                   patrimoinePerso: spouseData.patrimoinePerso,
                   patrimoineCommun: spouseData.patrimoineCommun,
+                  avecMoiPerso: spouseData.avecMoiPerso,
+                  avecMoiCommun: spouseData.avecMoiCommun,
+                  avecMoiTotal: spouseData.avecMoiTotal,
                   isSpouse: true,
                   spouseOf: `Conjoint de ${membre.prenom}`,
                 });
@@ -237,15 +259,24 @@ export function Familles() {
         // 🔥 Calculer le patrimoine total SANS doubler les communs
         // Pour chaque membre : on compte le perso + le commun (mais commun 1 seule fois par foyer)
         let patrimoineTotal = 0;
+        let patrimoineAvecMoi = 0;
+        const foyersAvecMoiCounted = new Set<number>(); // Pour compter avecMoi communs UNE SEULE fois
+        
         membresWithInvests.forEach(m => {
           // Toujours ajouter le patrimoine personnel
           patrimoineTotal += m.patrimoinePerso;
+          patrimoineAvecMoi += m.avecMoiPerso;
+          
           // Ajouter le patrimoine commun SEULEMENT si ce foyer n'a pas encore été compté
           if (m.contact.foyer_id && !foyersCommunsCounted.has(m.contact.foyer_id)) {
             patrimoineTotal += m.patrimoineCommun;
             foyersCommunsCounted.add(m.contact.foyer_id);
-          } else if (!m.contact.foyer_id) {
-            // Pas de foyer, donc le "commun" est en fait perso (déjà compté via patrimoinePerso)
+          }
+          
+          // 🔥 Patrimoine "avec moi" commun (compter 1 fois par foyer)
+          if (m.contact.foyer_id && !foyersAvecMoiCounted.has(m.contact.foyer_id)) {
+            patrimoineAvecMoi += m.avecMoiCommun;
+            foyersAvecMoiCounted.add(m.contact.foyer_id);
           }
         });
 
@@ -254,6 +285,7 @@ export function Familles() {
           membres: membresWithInvests,
           foyers: famillesFoyers,
           patrimoineTotal,
+          patrimoineAvecMoi,
         });
       }
     });
@@ -433,8 +465,13 @@ export function Familles() {
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <div className="text-lg font-semibold text-green-600">
-                      💰 {formatEuro(famille.patrimoineTotal)}
+                      💰 {formatEuro(famille.patrimoineAvecMoi)} avec moi
                     </div>
+                    {famille.patrimoineTotal > famille.patrimoineAvecMoi && (
+                      <div className="text-sm text-gray-400">
+                        ({formatEuro(famille.patrimoineTotal)} total)
+                      </div>
+                    )}
                     <div className="text-xs text-muted-foreground">Patrimoine famille</div>
                   </div>
                   {expandedFamilles.has(famille.nom) ? (
@@ -528,10 +565,17 @@ export function Familles() {
                                   </Badge>
                                 )}
                                 
-                                {/* Patrimoine total */}
-                                <Badge className="bg-green-100 text-green-700 border-green-300 font-semibold">
-                                  {formatEuro(membre.patrimoine)}
-                                </Badge>
+                                {/* Patrimoine avec moi + total */}
+                                <div className="flex items-center gap-2">
+                                  <Badge className="bg-green-100 text-green-700 border-green-300 font-semibold">
+                                    💰 {formatEuro(membre.avecMoiTotal)}
+                                  </Badge>
+                                  {membre.patrimoine > membre.avecMoiTotal && (
+                                    <span className="text-xs text-gray-400">
+                                      ({formatEuro(membre.patrimoine)} total)
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             

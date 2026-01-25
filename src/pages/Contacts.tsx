@@ -222,20 +222,27 @@ export function Contacts() {
     });
   }, [filteredContacts, foyers, groupByFoyer]);
 
-  // Calculer le patrimoine de chaque contact/foyer
+  // Calculer le patrimoine de chaque contact/foyer (total + avec moi)
   const [patrimoines, setPatrimoines] = useState<Record<string, number>>({});
+  const [patrimoinesAvecMoi, setPatrimoinesAvecMoi] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const calculatePatrimoines = async () => {
       const newPatrimoines: Record<string, number> = {};
+      const newPatrimoinesAvecMoi: Record<string, number> = {};
 
       for (const contact of contacts) {
         try {
           const investissements = await getInvestissementsByContact(contact.id!);
           const total = investissements.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-          newPatrimoines[`contact_${contact.id}`] = total / 100; // Convertir centimes en euros
+          const avecMoi = investissements
+            .filter(inv => inv.origine === "MON_CONSEIL")
+            .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+          newPatrimoines[`contact_${contact.id}`] = total / 100;
+          newPatrimoinesAvecMoi[`contact_${contact.id}`] = avecMoi / 100;
         } catch (error) {
           newPatrimoines[`contact_${contact.id}`] = 0;
+          newPatrimoinesAvecMoi[`contact_${contact.id}`] = 0;
         }
       }
 
@@ -243,13 +250,19 @@ export function Contacts() {
         try {
           const investissements = await getInvestissementsByFoyer(foyer.id);
           const total = investissements.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-          newPatrimoines[`foyer_${foyer.id}`] = total / 100; // Convertir centimes en euros
+          const avecMoi = investissements
+            .filter(inv => inv.origine === "MON_CONSEIL")
+            .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+          newPatrimoines[`foyer_${foyer.id}`] = total / 100;
+          newPatrimoinesAvecMoi[`foyer_${foyer.id}`] = avecMoi / 100;
         } catch (error) {
           newPatrimoines[`foyer_${foyer.id}`] = 0;
+          newPatrimoinesAvecMoi[`foyer_${foyer.id}`] = 0;
         }
       }
 
       setPatrimoines(newPatrimoines);
+      setPatrimoinesAvecMoi(newPatrimoinesAvecMoi);
     };
 
     if (contacts.length > 0) {
@@ -665,6 +678,7 @@ export function Contacts() {
                             // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
                             const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
                             const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
+                            const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
                             return (
                               <div
                                 key={contact.id}
@@ -710,7 +724,12 @@ export function Contacts() {
                                       {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                                       {!isFilleulTab && contactPatrimoine > 0 && (
                                         <span className="text-xs text-muted-foreground">
-                                          {contactPatrimoine.toLocaleString("fr-FR")} €
+                                          💰 {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
+                                          {contactPatrimoine > contactPatrimoineAvecMoi && (
+                                            <span className="text-gray-400 ml-1">
+                                              ({contactPatrimoine.toLocaleString("fr-FR")} € total)
+                                            </span>
+                                          )}
                                         </span>
                                       )}
                                     </div>
@@ -774,6 +793,7 @@ export function Contacts() {
                           // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
                           const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
                           const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
+                          const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
                           return (
                             <div
                               key={contact.id}
@@ -815,7 +835,12 @@ export function Contacts() {
                                     {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                                     {!isFilleulTab && contactPatrimoine > 0 && (
                                       <span className="text-xs text-muted-foreground">
-                                        {contactPatrimoine.toLocaleString("fr-FR")} €
+                                        💰 {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
+                                        {contactPatrimoine > contactPatrimoineAvecMoi && (
+                                          <span className="text-gray-400 ml-1">
+                                            ({contactPatrimoine.toLocaleString("fr-FR")} € total)
+                                          </span>
+                                        )}
                                       </span>
                                     )}
                                   </div>
@@ -882,6 +907,7 @@ export function Contacts() {
                 // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
                 const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
                 const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
+                const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
                 return (
                   <div
                     key={contact.id}
@@ -920,7 +946,12 @@ export function Contacts() {
                           {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                           {!isFilleulTab && contactPatrimoine > 0 && (
                             <span className="text-sm font-medium text-primary">
-                              💰 {contactPatrimoine.toLocaleString("fr-FR")} €
+                              💰 {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
+                              {contactPatrimoine > contactPatrimoineAvecMoi && (
+                                <span className="text-gray-400 ml-1 font-normal">
+                                  ({contactPatrimoine.toLocaleString("fr-FR")} € total)
+                                </span>
+                              )}
                             </span>
                           )}
                         </div>

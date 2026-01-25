@@ -258,6 +258,11 @@ export function ContactDetail({
     (total, inv) => total + (inv.montant_initial || 0),
     0
   );
+  
+  // Calculer le total "avec moi" (MON_CONSEIL uniquement)
+  const totalEncoursAvecMoi = investissements
+    .filter(inv => inv.origine === "MON_CONSEIL")
+    .reduce((total, inv) => total + (inv.montant_initial || 0), 0);
 
   // Formatage des montants
   const formatEuro = (centimes?: number) => {
@@ -869,9 +874,16 @@ export function ContactDetail({
                       Investissements ({investissements.length})
                     </CardTitle>
                     {totalEncours > 0 && (
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Total encours : <span className="font-semibold text-primary">{formatEuro(totalEncours)}</span>
-                      </p>
+                      <div className="text-sm text-muted-foreground mt-1">
+                        <p>
+                          💰 Avec moi : <span className="font-semibold text-primary">{formatEuro(totalEncoursAvecMoi)}</span>
+                          {totalEncours > totalEncoursAvecMoi && (
+                            <span className="text-gray-400 ml-2">
+                              (Total: {formatEuro(totalEncours)})
+                            </span>
+                          )}
+                        </p>
+                      </div>
                     )}
                   </div>
                   <Button
