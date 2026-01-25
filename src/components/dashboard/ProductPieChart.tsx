@@ -4,25 +4,57 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recha
 import { getProductStats } from "@/lib/api/tauri-dashboard";
 
 const COLORS: Record<string, string> = {
-  IMMOBILIER: "#1E3A5F",        // Bleu profond
+  // Immobilier - nuances de vert/bleu
+  IMMOBILIER: "#1E3A5F",        // Bleu profond (legacy)
+  PINEL: "#059669",             // Vert émeraude
+  DENORMANDIE: "#10B981",       // Vert
+  MALRAUX: "#047857",           // Vert foncé
+  MONUMENT_HISTORIQUE: "#065F46", // Vert très foncé
+  DEFICIT_FONCIER: "#34D399",   // Vert clair
+  LMNP: "#6EE7B7",              // Vert menthe
+  LMP: "#A7F3D0",               // Vert pâle
+  NUE_PROPRIETE: "#14B8A6",     // Teal
+  RESIDENCE_PRINCIPALE: "#0D9488", // Teal foncé
+  LOCATIF_CLASSIQUE: "#2DD4BF", // Teal clair
+  // SCPI
   SCPI: "#C9A227",              // Or
   SCPI_DEMEMBREMENT: "#B8860B", // Or foncé
-  ASSURANCE_VIE: "#10B981",     // Vert
+  SCPI_FISCALE: "#D4A017",      // Or clair
+  // Placements
+  ASSURANCE_VIE: "#F43F5E",     // Rose
+  CONTRAT_CAPITALISATION: "#E11D48", // Rose foncé
+  PER: "#8B5CF6",               // Violet
+  EPARGNE_SALARIALE: "#A855F7", // Violet clair
   FIP_FCPI: "#3B82F6",          // Bleu
   FCPR: "#06B6D4",              // Cyan
-  PER: "#8B5CF6",               // Violet
   G3F: "#F59E0B",               // Ambre
   AUTRE: "#6B7280",             // Gris
 };
 
 const LABELS: Record<string, string> = {
+  // Immobilier
   IMMOBILIER: "Immobilier",
+  PINEL: "Pinel",
+  DENORMANDIE: "Denormandie",
+  MALRAUX: "Malraux",
+  MONUMENT_HISTORIQUE: "Monument Historique",
+  DEFICIT_FONCIER: "Déficit Foncier",
+  LMNP: "LMNP",
+  LMP: "LMP",
+  NUE_PROPRIETE: "Nue-Propriété",
+  RESIDENCE_PRINCIPALE: "Résidence Principale",
+  LOCATIF_CLASSIQUE: "Locatif Classique",
+  // SCPI
   SCPI: "SCPI",
   SCPI_DEMEMBREMENT: "SCPI Démembrement",
+  SCPI_FISCALE: "SCPI Fiscale",
+  // Placements
   ASSURANCE_VIE: "Assurance-vie",
+  CONTRAT_CAPITALISATION: "Contrat Capitalisation",
+  PER: "PER",
+  EPARGNE_SALARIALE: "Épargne Salariale",
   FIP_FCPI: "FIP/FCPI",
   FCPR: "FCPR",
-  PER: "PER",
   G3F: "G3F",
   AUTRE: "Autre",
 };

@@ -13,7 +13,9 @@ import {
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -67,10 +69,16 @@ export function InvestissementForm({
   const [notes, setNotes] = useState("");
 
   // Produits acceptant le versement programmé
-  const accepteVersementProgramme = ["ASSURANCE_VIE", "PER", "SCPI"].includes(typeProduit);
+  const accepteVersementProgramme = [
+    "ASSURANCE_VIE", 
+    "CONTRAT_CAPITALISATION",
+    "PER", 
+    "EPARGNE_SALARIALE",
+    "SCPI"
+  ].includes(typeProduit);
   
   // SCPI accepte le réinvestissement des dividendes
-  const accepteReinvestissement = typeProduit === "SCPI";
+  const accepteReinvestissement = ["SCPI", "SCPI_FISCALE"].includes(typeProduit);
 
   // Réinitialiser les champs incompatibles quand on change de type de produit
   useEffect(() => {
@@ -279,15 +287,40 @@ export function InvestissementForm({
                 <SelectValue placeholder="Sélectionnez un type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="SCPI">SCPI</SelectItem>
-                <SelectItem value="SCPI_DEMEMBREMENT">SCPI Démembrement</SelectItem>
-                <SelectItem value="ASSURANCE_VIE">Assurance Vie</SelectItem>
-                <SelectItem value="PER">PER</SelectItem>
-                <SelectItem value="IMMOBILIER">Immobilier</SelectItem>
-                <SelectItem value="FIP_FCPI">FIP/FCPI</SelectItem>
-                <SelectItem value="FCPR">FCPR</SelectItem>
-                <SelectItem value="G3F">G3F</SelectItem>
-                <SelectItem value="AUTRE">Autre</SelectItem>
+                <SelectGroup>
+                  <SelectLabel className="text-xs font-semibold text-muted-foreground">Immobilier</SelectLabel>
+                  <SelectItem value="PINEL">Pinel</SelectItem>
+                  <SelectItem value="DENORMANDIE">Denormandie</SelectItem>
+                  <SelectItem value="MALRAUX">Malraux</SelectItem>
+                  <SelectItem value="MONUMENT_HISTORIQUE">Monument Historique</SelectItem>
+                  <SelectItem value="DEFICIT_FONCIER">Déficit Foncier</SelectItem>
+                  <SelectItem value="LMNP">LMNP</SelectItem>
+                  <SelectItem value="LMP">LMP</SelectItem>
+                  <SelectItem value="NUE_PROPRIETE">Nue-Propriété</SelectItem>
+                  <SelectItem value="RESIDENCE_PRINCIPALE">Résidence Principale</SelectItem>
+                  <SelectItem value="LOCATIF_CLASSIQUE">Locatif Classique</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className="text-xs font-semibold text-muted-foreground">SCPI</SelectLabel>
+                  <SelectItem value="SCPI">SCPI</SelectItem>
+                  <SelectItem value="SCPI_DEMEMBREMENT">SCPI Démembrement</SelectItem>
+                  <SelectItem value="SCPI_FISCALE">SCPI Fiscale</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className="text-xs font-semibold text-muted-foreground">Placements</SelectLabel>
+                  <SelectItem value="ASSURANCE_VIE">Assurance Vie</SelectItem>
+                  <SelectItem value="CONTRAT_CAPITALISATION">Contrat de Capitalisation</SelectItem>
+                  <SelectItem value="PER">PER</SelectItem>
+                  <SelectItem value="EPARGNE_SALARIALE">Épargne Salariale</SelectItem>
+                  <SelectItem value="FIP_FCPI">FIP/FCPI</SelectItem>
+                  <SelectItem value="FCPR">FCPR</SelectItem>
+                  <SelectItem value="G3F">G3F</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className="text-xs font-semibold text-muted-foreground">Autre</SelectLabel>
+                  <SelectItem value="AUTRE">Autre</SelectItem>
+                  <SelectItem value="IMMOBILIER">Immobilier (ancien)</SelectItem>
+                </SelectGroup>
               </SelectContent>
             </Select>
           </div>

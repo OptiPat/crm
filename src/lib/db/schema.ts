@@ -101,13 +101,29 @@ export const partenaires = sqliteTable("partenaires", {
   nom: text("nom").notNull(),
   typeProduit: text("type_produit", {
     enum: [
-      "IMMOBILIER",
+      // Immobilier - détaillé
+      "PINEL",
+      "DENORMANDIE",
+      "MALRAUX",
+      "MONUMENT_HISTORIQUE",
+      "DEFICIT_FONCIER",
+      "LMNP",
+      "LMP",
+      "NUE_PROPRIETE",
+      "RESIDENCE_PRINCIPALE",
+      "LOCATIF_CLASSIQUE",
+      "IMMOBILIER", // Legacy - à migrer
+      // SCPI
       "SCPI",
       "SCPI_DEMEMBREMENT",
+      "SCPI_FISCALE",
+      // Placements
       "ASSURANCE_VIE",
+      "CONTRAT_CAPITALISATION",
+      "PER",
+      "EPARGNE_SALARIALE",
       "FIP_FCPI",
       "FCPR",
-      "PER",
       "G3F",
       "AUTRE",
     ],
@@ -135,13 +151,29 @@ export const investissements = sqliteTable("investissements", {
   // Produit
   typeProduit: text("type_produit", {
     enum: [
-      "IMMOBILIER",
+      // Immobilier - détaillé
+      "PINEL",
+      "DENORMANDIE",
+      "MALRAUX",
+      "MONUMENT_HISTORIQUE",
+      "DEFICIT_FONCIER",
+      "LMNP",
+      "LMP",
+      "NUE_PROPRIETE",
+      "RESIDENCE_PRINCIPALE",
+      "LOCATIF_CLASSIQUE",
+      "IMMOBILIER", // Legacy - à migrer
+      // SCPI
       "SCPI",
       "SCPI_DEMEMBREMENT",
+      "SCPI_FISCALE",
+      // Placements
       "ASSURANCE_VIE",
+      "CONTRAT_CAPITALISATION",
+      "PER",
+      "EPARGNE_SALARIALE",
       "FIP_FCPI",
       "FCPR",
-      "PER",
       "G3F",
       "AUTRE",
     ],

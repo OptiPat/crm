@@ -382,9 +382,6 @@ export function extractProductAmount(text: string, productType: ProductType): nu
  */
 export function detectImmobilierType(text: string): 
   'RP' | 'RS' | 'PINEL' | 'DENORMANDIE' | 'MALRAUX' | 'MH' | 'DF' | 'LMNP' | 'LMP' | 'SCPI' | 'LOCATIF' | null {
-  
-  const normalizedText = normalizeForMatching(text);
-  
   // Ordre de priorité pour la détection
   if (matchesProductType(text, 'RESIDENCE_PRINCIPALE')) return 'RP';
   if (matchesProductType(text, 'RESIDENCE_SECONDAIRE')) return 'RS';

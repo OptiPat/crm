@@ -1,12 +1,6 @@
 // Parser spécialisé pour extraire le patrimoine détaillé des RIO
 import type { ExtractedData, BienImmobilier } from "../types";
-import { 
-  KNOWN_SCPI_NAMES, 
-  normalizeForMatching, 
-  isKnownSCPI,
-  detectImmobilierType,
-  type ProductType 
-} from "./product-synonyms";
+import { KNOWN_SCPI_NAMES } from "./product-synonyms";
 
 /**
  * Vérifie si un nom correspond à une SCPI connue

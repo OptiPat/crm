@@ -11,7 +11,12 @@ import { getInvestissementsByContact, getInvestissementsByFoyer, type Investisse
 const getTypeProduitBgColor = (type: string, origine?: string): string => {
   if (origine === "EXISTANT_CLIENT") return "#9ca3af"; // gray-400
   // 🏠 Immobilier et dérivés : vert
-  const immobilierTypes = ["IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", "COLOCATION", "MONOLOCATION", "SCI"];
+  const immobilierTypes = [
+    "IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", 
+    "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", 
+    "LOCATIF_CLASSIQUE", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE",
+    "COLOCATION", "MONOLOCATION", "SCI"
+  ];
   if (immobilierTypes.includes(type)) return "#85ad39";
   // Tout le reste : rose foncé
   return "#dc216e";
