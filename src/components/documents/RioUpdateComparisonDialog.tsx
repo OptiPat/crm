@@ -669,9 +669,19 @@ export function RioUpdateComparisonDialog({
             ? `${newNote}\n\n---\n\n${existingNotes}`
             : newNote;
           
-          // Construire un objet NewContact propre (sans id, created_at, updated_at)
+          // Construire un objet NewContact propre avec TOUS les champs (sans id, created_at, updated_at)
           await updateContact(contactId, {
+            // Relations
+            famille_id: contact.famille_id,
+            foyer_id: contact.foyer_id,
+            role_foyer: contact.role_foyer,
+            role_famille: contact.role_famille,
+            filleul_categorie: contact.filleul_categorie,
+            parrain_id: contact.parrain_id,
+            prescripteur_id: contact.prescripteur_id,
+            // Identité
             categorie: contact.categorie,
+            civilite: contact.civilite,
             nom: contact.nom,
             prenom: contact.prenom,
             email: contact.email,
@@ -684,9 +694,14 @@ export function RioUpdateComparisonDialog({
             situation_familiale: contact.situation_familiale,
             source_lead: contact.source_lead,
             profil_risque_sri: contact.profil_risque_sri,
+            // Dates de suivi CLIENT
             date_dernier_contact: contact.date_dernier_contact ? new Date(contact.date_dernier_contact * 1000).toISOString() : undefined,
             date_prochain_suivi: contact.date_prochain_suivi ? new Date(contact.date_prochain_suivi * 1000).toISOString() : undefined,
+            // Dates de suivi FILLEUL
+            date_dernier_contact_filleul: contact.date_dernier_contact_filleul ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() : undefined,
+            date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() : undefined,
             statut_suivi: contact.statut_suivi,
+            // Notes mises à jour
             notes: updatedNotes,
           });
         } catch (noteError) {
