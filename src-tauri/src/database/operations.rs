@@ -1200,44 +1200,87 @@ impl Database {
             |row| row.get(0),
         )?;
 
-        // Compter les prospects (PROSPECT_CLIENT + PROSPECT_FILLEUL)
-        let total_prospects: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'PROSPECT%'",
-            [],
-            |row| row.get(0),
-        )?;
-
-        // Compter les suspects (SUSPECT_CLIENT + SUSPECT_FILLEUL)
-        let total_suspects: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'SUSPECT%'",
-            [],
-            |row| row.get(0),
-        )?;
-
-        // Encours total (somme des investissements UNIQUEMENT liés à des contacts/foyers existants)
-        let encours_total: f64 = self.conn.query_row(
+        // Encours placements (AV, PER, Contrat capi, Épargne salariale - SANS SCPI)
+        let encours_placements: f64 = self.conn.query_row(
             "SELECT COALESCE(SUM(i.montant_initial), 0) FROM investissements i
-             WHERE (i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
-                OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id))",
+             WHERE i.type_produit IN ('ASSURANCE_VIE', 'PER', 'CONTRAT_CAPITALISATION', 'EPARGNE_SALARIALE', 'FIP_FCPI', 'FCPR')
+               AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
+                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
             [],
             |row| {
                 let centimes: i64 = row.get(0)?;
-                Ok(centimes as f64 / 100.0) // Convertir centimes en euros
+                Ok(centimes as f64 / 100.0)
             },
         ).unwrap_or(0.0);
 
-        // Compter les alertes non traitées (gérer si la table n'existe pas)
+        // Versements programmés annuels (convertir selon fréquence)
+        // MENSUEL x12, TRIMESTRIEL x4, SEMESTRIEL x2, ANNUEL x1
+        // Inclut TOUS les investissements avec versement programmé activé
+        let versements_programmes_annuels: f64 = self.conn.query_row(
+            "SELECT COALESCE(SUM(
+                CASE 
+                    WHEN frequence_versement = 'MENSUEL' THEN montant_versement_programme * 12
+                    WHEN frequence_versement = 'TRIMESTRIEL' THEN montant_versement_programme * 4
+                    WHEN frequence_versement = 'SEMESTRIEL' THEN montant_versement_programme * 2
+                    WHEN frequence_versement = 'ANNUEL' THEN montant_versement_programme
+                    ELSE montant_versement_programme * 12
+                END
+            ), 0) FROM investissements 
+             WHERE versement_programme = 1
+               AND montant_versement_programme IS NOT NULL
+               AND montant_versement_programme > 0
+               AND ((contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = contact_id))
+                    OR (foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = foyer_id)))",
+            [],
+            |row| {
+                let centimes: i64 = row.get(0)?;
+                Ok(centimes as f64 / 100.0)
+            },
+        ).unwrap_or(0.0);
+
+        // Nombre de biens immobiliers
+        let nombre_biens_immobiliers: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM investissements i
+             WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE')
+               AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
+                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
+            [],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        // Panier moyen = Total investissements "avec moi" / Nombre de clients
+        // Uniquement les investissements avec origine = MON_CONSEIL
+        let total_invests_avec_moi: f64 = self.conn.query_row(
+            "SELECT COALESCE(SUM(i.montant_initial), 0) FROM investissements i
+             WHERE i.origine = 'MON_CONSEIL'
+               AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
+                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
+            [],
+            |row| {
+                let centimes: i64 = row.get(0)?;
+                Ok(centimes as f64 / 100.0)
+            },
+        ).unwrap_or(0.0);
+
+        let panier_moyen = if total_clients > 0 {
+            total_invests_avec_moi / total_clients as f64
+        } else {
+            0.0
+        };
+
+        // Compter les alertes non traitées
         let alertes_non_traitees: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM alertes WHERE traitee = 0",
             [],
             |row| row.get(0),
-        ).unwrap_or(0); // Si la table n'existe pas, retourner 0
+        ).unwrap_or(0);
 
         Ok(super::models::DashboardStats {
             total_clients,
-            total_prospects,
-            total_suspects,
-            encours_total,
+            encours_placements,
+            versements_programmes_annuels,
+            nombre_biens_immobiliers,
+            panier_moyen,
             alertes_non_traitees,
         })
     }

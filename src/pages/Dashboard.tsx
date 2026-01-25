@@ -6,7 +6,7 @@ import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
 import { MonthlyChart } from "@/components/dashboard/MonthlyChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
-import { Users, Building2, UserPlus, TrendingUp, Bell } from "lucide-react";
+import { Users, Home, TrendingUp, Bell, CalendarClock, Building2, UserPlus, ShoppingCart } from "lucide-react";
 import { getDashboardStats, DashboardStats } from "@/lib/api/tauri-dashboard";
 
 export function Dashboard() {
@@ -50,7 +50,7 @@ export function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         {loading ? (
           <div className="col-span-full text-center py-8 text-muted-foreground">
             Chargement...
@@ -66,28 +66,36 @@ export function Dashboard() {
               iconBgColor="bg-green-50"
             />
             <StatCard
-              title="Prospects"
-              value={stats.total_prospects}
-              description="Clients potentiels"
-              icon={UserPlus}
+              title="Encours placements"
+              value={formatCurrency(stats.encours_placements)}
+              description="AV, PER, FIP/FCPI..."
+              icon={TrendingUp}
+              iconColor="text-amber-600"
+              iconBgColor="bg-amber-50"
+            />
+            <StatCard
+              title="Versements programmés"
+              value={formatCurrency(stats.versements_programmes_annuels)}
+              description="Montant annuel"
+              icon={CalendarClock}
               iconColor="text-blue-600"
               iconBgColor="bg-blue-50"
             />
             <StatCard
-              title="Suspects"
-              value={stats.total_suspects}
-              description="Leads à qualifier"
-              icon={Building2}
-              iconColor="text-orange-600"
-              iconBgColor="bg-orange-50"
+              title="Biens immobiliers"
+              value={stats.nombre_biens_immobiliers}
+              description="Nombre de biens"
+              icon={Home}
+              iconColor="text-emerald-600"
+              iconBgColor="bg-emerald-50"
             />
             <StatCard
-              title="Encours total"
-              value={formatCurrency(stats.encours_total)}
-              description="Assets Under Management"
-              icon={TrendingUp}
-              iconColor="text-amber-600"
-              iconBgColor="bg-amber-50"
+              title="Panier moyen"
+              value={formatCurrency(stats.panier_moyen)}
+              description="Investissement / client"
+              icon={ShoppingCart}
+              iconColor="text-purple-600"
+              iconBgColor="bg-purple-50"
             />
             <StatCard
               title="À recontacter"

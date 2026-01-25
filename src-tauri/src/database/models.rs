@@ -221,9 +221,10 @@ pub struct NewAlerte {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DashboardStats {
     pub total_clients: i64,
-    pub total_prospects: i64,
-    pub total_suspects: i64,
-    pub encours_total: f64,
+    pub encours_placements: f64,
+    pub versements_programmes_annuels: f64,
+    pub nombre_biens_immobiliers: i64,
+    pub panier_moyen: f64,
     pub alertes_non_traitees: i64,
 }
 

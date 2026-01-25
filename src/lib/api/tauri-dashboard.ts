@@ -2,9 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 
 export interface DashboardStats {
   total_clients: number;
-  total_prospects: number;
-  total_suspects: number;
-  encours_total: number;
+  encours_placements: number;
+  versements_programmes_annuels: number;
+  nombre_biens_immobiliers: number;
+  panier_moyen: number;
   alertes_non_traitees: number;
 }
 
