@@ -20,6 +20,7 @@ import {
   Plus,
   AlertCircle,
   CheckCircle2,
+  Wallet,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import type { Investissement, NewInvestissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
@@ -429,7 +430,23 @@ export function RioUpdateComparisonDialog({
     const toAdd = comparisons.filter(c => c.isNew && c.selectedForUpdate);
     const unchanged = comparisons.filter(c => !c.isNew && !c.isChanged);
     const avecMoi = comparisons.filter(c => c.existingInvestissement?.origine === "MON_CONSEIL");
-    return { toUpdate, toAdd, unchanged, avecMoi };
+    
+    // Calcul patrimoine avant/après
+    const patrimoineAvant = comparisons.reduce((sum, c) => sum + (c.oldMontant || 0), 0);
+    const patrimoineApres = comparisons.reduce((sum, c) => sum + c.editedMontant, 0);
+    const difference = patrimoineApres - patrimoineAvant;
+    const pourcentage = patrimoineAvant > 0 ? ((difference / patrimoineAvant) * 100) : 0;
+    
+    // Catégorisation par type
+    const byCategory = {
+      immobilier: comparisons.filter(c => ["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(c.editedType)),
+      scpi: comparisons.filter(c => ["SCPI", "SCPI_DEMEMBREMENT"].includes(c.editedType)),
+      assuranceViePer: comparisons.filter(c => ["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(c.editedType)),
+      epargne: comparisons.filter(c => ["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(c.editedType)),
+      autres: comparisons.filter(c => !["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP", "SCPI", "SCPI_DEMEMBREMENT", "ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE", "EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(c.editedType)),
+    };
+    
+    return { toUpdate, toAdd, unchanged, avecMoi, patrimoineAvant, patrimoineApres, difference, pourcentage, byCategory };
   }, [comparisons]);
 
   const handleToggleUpdate = (id: string) => {
@@ -627,6 +644,378 @@ export function RioUpdateComparisonDialog({
     }
   };
 
+  // Fonction de rendu d'un item d'investissement (pour éviter la duplication)
+  const renderInvestissementItem = (comp: InvestissementComparison) => (
+    <div 
+      key={comp.id}
+      className={`p-3 border rounded-lg ${
+        !comp.selectedForUpdate 
+          ? "bg-gray-50 border-gray-200 opacity-60"
+          : comp.linkedToExistingId === null
+          ? "bg-green-50 border-green-200" 
+          : "bg-blue-50 border-blue-200"
+      }`}
+    >
+      <div className="space-y-2">
+        {/* Ligne 1 : Checkbox + Label + Montant + Différence */}
+        <div className="flex items-center gap-3">
+          <Checkbox
+            checked={comp.selectedForUpdate}
+            onCheckedChange={() => handleToggleUpdate(comp.id)}
+          />
+          <div className="flex-1 flex items-center gap-2 flex-wrap">
+            {getTypeIcon(comp.type)}
+            <span className="font-medium text-sm">{comp.label}</span>
+            
+            {/* Affichage avant → après avec différence */}
+            {comp.oldMontant != null && comp.oldMontant > 0 ? (
+              <>
+                <span className="text-sm text-muted-foreground">{formatEuro(comp.oldMontant)}</span>
+                <span className="text-muted-foreground">→</span>
+                <Input
+                  type="number"
+                  value={comp.editedMontant}
+                  onChange={(e) => handleChangeMontant(comp.id, parseFloat(e.target.value) || 0)}
+                  className="h-8 text-sm text-right w-28"
+                  disabled={!comp.selectedForUpdate}
+                />
+                <span className="text-sm text-muted-foreground">€</span>
+                {/* Badge différence */}
+                {(() => {
+                  const diff = comp.editedMontant - comp.oldMontant;
+                  const pct = comp.oldMontant > 0 ? (diff / comp.oldMontant) * 100 : 0;
+                  if (Math.abs(diff) < 1) return <span className="text-xs text-gray-400 px-2 py-0.5 bg-gray-100 rounded">Inchangé</span>;
+                  return (
+                    <span className={`text-xs font-medium px-2 py-0.5 rounded ${
+                      diff >= 0 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                    }`}>
+                      {diff >= 0 ? "+" : ""}{formatEuro(diff)} ({pct >= 0 ? "+" : ""}{pct.toFixed(1)}%)
+                    </span>
+                  );
+                })()}
+              </>
+            ) : (
+              <>
+                <span className="text-muted-foreground">→</span>
+                <Input
+                  type="number"
+                  value={comp.editedMontant}
+                  onChange={(e) => handleChangeMontant(comp.id, parseFloat(e.target.value) || 0)}
+                  className="h-8 text-sm text-right w-28"
+                  disabled={!comp.selectedForUpdate}
+                />
+                <span className="text-sm text-muted-foreground">€</span>
+                <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-100 text-green-700">Nouveau</span>
+              </>
+            )}
+          </div>
+        </div>
+        
+        {/* Ligne 2 : Dropdown associer à */}
+        {comp.selectedForUpdate && (
+          <div className="ml-8 space-y-2">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground w-20">Associer à :</span>
+              <select
+                value={comp.linkedToExistingId === null ? "new" : comp.linkedToExistingId.toString()}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  handleChangeLinkToExisting(comp.id, val === "new" ? null : parseInt(val));
+                }}
+                className="text-sm border rounded px-2 py-1 flex-1"
+              >
+                <option value="new">🆕 Créer nouvel investissement</option>
+                {comp.compatibleExisting.length > 0 && (
+                  <optgroup label="Investissements existants">
+                    {comp.compatibleExisting.map(existing => {
+                      const partenaireNom = existing.partenaire_id 
+                        ? partenaires.find(p => p.id === existing.partenaire_id)?.raison_sociale 
+                        : null;
+                      const dateStr = existing.date_souscription 
+                        ? new Date(existing.date_souscription * 1000).toLocaleDateString("fr-FR")
+                        : null;
+                      return (
+                        <option key={existing.id} value={existing.id.toString()}>
+                          {existing.type_produit} - {existing.nom_produit} ({formatEuro(existing.montant_initial ? existing.montant_initial / 100 : 0)})
+                          {partenaireNom ? ` | ${partenaireNom}` : ""}
+                          {dateStr ? ` | ${dateStr}` : ""}
+                          {existing.origine === "MON_CONSEIL" ? " 🎯" : " 📋"}
+                        </option>
+                      );
+                    })}
+                  </optgroup>
+                )}
+              </select>
+              
+              {/* Badge */}
+              {comp.linkedToExistingId === null ? (
+                <Badge className="bg-green-600 text-xs">Nouveau</Badge>
+              ) : (
+                <Badge variant="outline" className="text-xs">
+                  MAJ {comp.oldMontant ? `(${formatEuro(comp.oldMontant)} → ${formatEuro(comp.editedMontant)})` : ""}
+                </Badge>
+              )}
+            </div>
+            
+            {/* Détails du nouvel investissement */}
+            {comp.linkedToExistingId === null && (
+              <div className="p-3 bg-green-50/50 border border-green-200 rounded-lg space-y-3">
+                <div className="text-xs font-medium text-green-700">Détails du nouvel investissement</div>
+                
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <label className="text-xs text-muted-foreground">Nom</label>
+                    <Input
+                      value={comp.editedLabel}
+                      onChange={(e) => handleChangeLabel(comp.id, e.target.value)}
+                      className="h-8 text-sm"
+                      placeholder="Nom du produit"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Type</label>
+                    <select
+                      value={comp.editedType}
+                      onChange={(e) => handleChangeType(comp.id, e.target.value)}
+                      className="w-full h-8 text-sm border rounded px-2"
+                    >
+                      {PRODUCT_TYPES.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Partenaire</label>
+                    <select
+                      value={comp.selectedPartenaireId?.toString() || ""}
+                      onChange={(e) => handleChangePartenaire(comp.id, e.target.value ? parseInt(e.target.value) : null)}
+                      className="w-full h-8 text-sm border rounded px-2"
+                    >
+                      <option value="">Aucun</option>
+                      {partenaires.map(p => (
+                        <option key={p.id} value={p.id.toString()}>{p.raison_sociale}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">Origine</label>
+                    <select
+                      value={comp.selectedOrigine}
+                      onChange={(e) => handleChangeOrigine(comp.id, e.target.value as OrigineInvestissement)}
+                      className="w-full h-8 text-sm border rounded px-2"
+                    >
+                      <option value="EXISTANT_CLIENT">À côté</option>
+                      <option value="MON_CONSEIL">Avec moi</option>
+                    </select>
+                  </div>
+                </div>
+                
+                {/* Options avancées conditionnelles selon le type */}
+                <div className="pt-2 border-t border-green-200">
+                  <div className="text-xs font-medium text-green-700 mb-2">Options avancées</div>
+                  
+                  {/* === OPTIONS IMMOBILIER === */}
+                  {["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(comp.editedType) && (
+                    <div className="grid grid-cols-4 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Date d'achat</label>
+                        <Input
+                          type="date"
+                          value={comp.dateSouscription || ""}
+                          onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Mensualité crédit</label>
+                        <Input
+                          type="number"
+                          placeholder="€/mois"
+                          value={comp.mensualiteCredit || ""}
+                          onChange={(e) => handleChangeMensualiteCredit(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">CRD (Capital)</label>
+                        <Input
+                          type="number"
+                          placeholder="€"
+                          value={comp.creditCRD || ""}
+                          onChange={(e) => handleChangeCreditCRD(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      {comp.editedType !== "RP" && (
+                        <div>
+                          <label className="text-xs text-muted-foreground">Loyer mensuel</label>
+                          <Input
+                            type="number"
+                            placeholder="€/mois"
+                            value={comp.loyerMensuel || ""}
+                            onChange={(e) => handleChangeLoyerMensuel(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* === OPTIONS SCPI === */}
+                  {["SCPI", "SCPI_DEMEMBREMENT"].includes(comp.editedType) && (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Date souscription</label>
+                          <Input
+                            type="date"
+                            value={comp.dateSouscription || ""}
+                            onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
+                            className="h-7 text-xs"
+                          />
+                        </div>
+                        <div className="flex items-end gap-2">
+                          <Checkbox
+                            id={`vp-${comp.id}`}
+                            checked={comp.versementProgramme}
+                            onCheckedChange={(checked) => handleChangeVersementProgramme(comp.id, !!checked)}
+                          />
+                          <label htmlFor={`vp-${comp.id}`} className="text-xs">Versement prog.</label>
+                        </div>
+                        {comp.versementProgramme && (
+                          <div className="flex gap-1">
+                            <Input
+                              type="number"
+                              placeholder="Montant"
+                              value={comp.montantVersement || ""}
+                              onChange={(e) => handleChangeMontantVersement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                              className="h-7 text-xs w-20"
+                            />
+                            <select
+                              value={comp.frequenceVersement}
+                              onChange={(e) => handleChangeFrequenceVersement(comp.id, e.target.value)}
+                              className="h-7 text-xs border rounded px-1"
+                            >
+                              {FREQUENCES_VERSEMENT.map(f => (
+                                <option key={f.value} value={f.value}>{f.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          id={`reinv-${comp.id}`}
+                          checked={comp.reinvestissementDividendes}
+                          onCheckedChange={(checked) => handleChangeReinvestissement(comp.id, !!checked)}
+                        />
+                        <label htmlFor={`reinv-${comp.id}`} className="text-xs">Réinvestissement dividendes</label>
+                        {comp.reinvestissementDividendes && (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              placeholder="%"
+                              value={comp.pourcentageReinvestissement || ""}
+                              onChange={(e) => handleChangePourcentageReinvestissement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                              className="h-7 text-xs w-16"
+                            />
+                            <span className="text-xs">%</span>
+                          </div>
+                        )}
+                      </div>
+                      {(comp.creditCRD || comp.mensualiteCredit) && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-xs text-muted-foreground">Mensualité crédit</label>
+                            <Input
+                              type="number"
+                              placeholder="€/mois"
+                              value={comp.mensualiteCredit || ""}
+                              onChange={(e) => handleChangeMensualiteCredit(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-xs text-muted-foreground">CRD (Capital)</label>
+                            <Input
+                              type="number"
+                              placeholder="€"
+                              value={comp.creditCRD || ""}
+                              onChange={(e) => handleChangeCreditCRD(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                              className="h-7 text-xs"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* === OPTIONS ASSURANCE-VIE / PER / PEA === */}
+                  {["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(comp.editedType) && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Date souscription</label>
+                        <Input
+                          type="date"
+                          value={comp.dateSouscription || ""}
+                          onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <Checkbox
+                          id={`vp2-${comp.id}`}
+                          checked={comp.versementProgramme}
+                          onCheckedChange={(checked) => handleChangeVersementProgramme(comp.id, !!checked)}
+                        />
+                        <label htmlFor={`vp2-${comp.id}`} className="text-xs">Versement prog.</label>
+                      </div>
+                      {comp.versementProgramme && (
+                        <div className="flex gap-1">
+                          <Input
+                            type="number"
+                            placeholder="Montant"
+                            value={comp.montantVersement || ""}
+                            onChange={(e) => handleChangeMontantVersement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
+                            className="h-7 text-xs w-20"
+                          />
+                          <select
+                            value={comp.frequenceVersement}
+                            onChange={(e) => handleChangeFrequenceVersement(comp.id, e.target.value)}
+                            className="h-7 text-xs border rounded px-1"
+                          >
+                            {FREQUENCES_VERSEMENT.map(f => (
+                              <option key={f.value} value={f.value}>{f.label}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* === OPTIONS PEL UNIQUEMENT === */}
+                  {comp.editedType === "PEL" && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Date d'ouverture</label>
+                        <Input
+                          type="date"
+                          value={comp.dateSouscription || ""}
+                          onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
@@ -649,379 +1038,127 @@ export function RioUpdateComparisonDialog({
             </div>
           ) : (
             <>
-              {/* Stats résumé */}
-              <div className="grid grid-cols-4 gap-2 text-sm">
-                <div className="p-2 bg-blue-50 rounded text-center">
-                  <div className="font-bold text-blue-700">{stats.toUpdate.length}</div>
-                  <div className="text-blue-600">À mettre à jour</div>
+              {/* Résumé patrimoine */}
+              <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-semibold text-blue-800">Résumé des changements</h3>
+                  <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                    stats.difference >= 0 
+                      ? "bg-green-100 text-green-700" 
+                      : "bg-red-100 text-red-700"
+                  }`}>
+                    {stats.difference >= 0 ? "+" : ""}{formatEuro(stats.difference)} ({stats.pourcentage >= 0 ? "+" : ""}{stats.pourcentage.toFixed(1)}%)
+                  </div>
                 </div>
-                <div className="p-2 bg-green-50 rounded text-center">
-                  <div className="font-bold text-green-700">{stats.toAdd.length}</div>
-                  <div className="text-green-600">Nouveaux</div>
+                
+                <div className="grid grid-cols-2 gap-4 mb-3">
+                  <div className="text-center p-2 bg-white/50 rounded">
+                    <div className="text-xs text-muted-foreground">Patrimoine avant</div>
+                    <div className="font-bold text-lg">{formatEuro(stats.patrimoineAvant)}</div>
+                  </div>
+                  <div className="text-center p-2 bg-white/50 rounded">
+                    <div className="text-xs text-muted-foreground">Patrimoine après</div>
+                    <div className="font-bold text-lg text-blue-700">{formatEuro(stats.patrimoineApres)}</div>
+                  </div>
                 </div>
-                <div className="p-2 bg-gray-50 rounded text-center">
-                  <div className="font-bold text-gray-700">{stats.unchanged.length}</div>
-                  <div className="text-gray-600">Inchangés</div>
-                </div>
-                <div className="p-2 bg-purple-50 rounded text-center">
-                  <div className="font-bold text-purple-700">{stats.avecMoi.length}</div>
-                  <div className="text-purple-600">Avec moi</div>
+                
+                {/* Compteurs */}
+                <div className="grid grid-cols-4 gap-2 text-xs">
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                    <span>{stats.toUpdate.length} MAJ</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    <span>{stats.toAdd.length} nouveaux</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                    <span>{stats.unchanged.length} inchangés</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+                    <span>{stats.avecMoi.length} avec moi</span>
+                  </div>
                 </div>
               </div>
 
-              {/* Tous les investissements détectés */}
+              {/* Investissements par catégorie */}
               {comparisons.length > 0 && (
-                <div className="space-y-2">
-                  <h3 className="font-medium flex items-center gap-2">
-                    <Plus className="h-4 w-4 text-green-600" />
-                    Investissements détectés dans le RIO
-                  </h3>
+                <div className="space-y-4">
                   <p className="text-xs text-muted-foreground">
                     Pour chaque élément, choisissez s'il s'agit d'un nouvel investissement ou s'il correspond à un existant.
                   </p>
-                  <div className="space-y-2">
-                    {comparisons.map(comp => (
-                      <div 
-                        key={comp.id}
-                        className={`p-3 border rounded-lg ${
-                          !comp.selectedForUpdate 
-                            ? "bg-gray-50 border-gray-200 opacity-60"
-                            : comp.linkedToExistingId === null
-                            ? "bg-green-50 border-green-200" 
-                            : "bg-blue-50 border-blue-200"
-                        }`}
-                      >
-                        <div className="space-y-2">
-                          {/* Ligne 1 : Checkbox + Label + Montant */}
-                          <div className="flex items-center gap-3">
-                            <Checkbox
-                              checked={comp.selectedForUpdate}
-                              onCheckedChange={() => handleToggleUpdate(comp.id)}
-                            />
-                            <div className="flex-1 flex items-center gap-2">
-                              {getTypeIcon(comp.type)}
-                              <span className="font-medium text-sm">{comp.label}</span>
-                              <span className="text-muted-foreground">→</span>
-                              <Input
-                                type="number"
-                                value={comp.editedMontant}
-                                onChange={(e) => handleChangeMontant(comp.id, parseFloat(e.target.value) || 0)}
-                                className="h-8 text-sm text-right w-32"
-                                disabled={!comp.selectedForUpdate}
-                              />
-                              <span className="text-sm text-muted-foreground">€</span>
-                            </div>
-                          </div>
-                          
-                          {/* Ligne 2 : Dropdown associer à */}
-                          {comp.selectedForUpdate && (
-                            <div className="ml-8 space-y-2">
-                              <div className="flex items-center gap-3">
-                                <span className="text-xs text-muted-foreground w-20">Associer à :</span>
-                                <select
-                                  value={comp.linkedToExistingId === null ? "new" : comp.linkedToExistingId.toString()}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    handleChangeLinkToExisting(comp.id, val === "new" ? null : parseInt(val));
-                                  }}
-                                  className="text-sm border rounded px-2 py-1 flex-1"
-                                >
-                                  <option value="new">🆕 Créer nouvel investissement</option>
-                                  {comp.compatibleExisting.length > 0 && (
-                                    <optgroup label="Investissements existants">
-                                      {comp.compatibleExisting.map(existing => {
-                                        const partenaireNom = existing.partenaire_id 
-                                          ? partenaires.find(p => p.id === existing.partenaire_id)?.raison_sociale 
-                                          : null;
-                                        const dateStr = existing.date_souscription 
-                                          ? new Date(existing.date_souscription * 1000).toLocaleDateString("fr-FR")
-                                          : null;
-                                        return (
-                                          <option key={existing.id} value={existing.id.toString()}>
-                                            {existing.type_produit} - {existing.nom_produit} ({formatEuro(existing.montant_initial ? existing.montant_initial / 100 : 0)})
-                                            {partenaireNom ? ` | ${partenaireNom}` : ""}
-                                            {dateStr ? ` | ${dateStr}` : ""}
-                                            {existing.origine === "MON_CONSEIL" ? " 🎯" : " 📋"}
-                                          </option>
-                                        );
-                                      })}
-                                    </optgroup>
-                                  )}
-                                </select>
-                                
-                                {/* Badge */}
-                                {comp.linkedToExistingId === null ? (
-                                  <Badge className="bg-green-600 text-xs">Nouveau</Badge>
-                                ) : (
-                                  <Badge variant="outline" className="text-xs">
-                                    MAJ {comp.oldMontant ? `(${formatEuro(comp.oldMontant)} → ${formatEuro(comp.editedMontant)})` : ""}
-                                  </Badge>
-                                )}
-                              </div>
-                              
-                              {/* Détails du nouvel investissement */}
-                              {comp.linkedToExistingId === null && (
-                                <div className="p-3 bg-green-50/50 border border-green-200 rounded-lg space-y-3">
-                                  <div className="text-xs font-medium text-green-700">Détails du nouvel investissement</div>
-                                  
-                                  <div className="grid grid-cols-4 gap-2">
-                                    <div>
-                                      <label className="text-xs text-muted-foreground">Nom</label>
-                                      <Input
-                                        value={comp.editedLabel}
-                                        onChange={(e) => handleChangeLabel(comp.id, e.target.value)}
-                                        className="h-8 text-sm"
-                                        placeholder="Nom du produit"
-                                      />
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-muted-foreground">Type</label>
-                                      <select
-                                        value={comp.editedType}
-                                        onChange={(e) => handleChangeType(comp.id, e.target.value)}
-                                        className="w-full h-8 text-sm border rounded px-2"
-                                      >
-                                        {PRODUCT_TYPES.map(t => (
-                                          <option key={t.value} value={t.value}>{t.label}</option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-muted-foreground">Partenaire</label>
-                                      <select
-                                        value={comp.selectedPartenaireId?.toString() || ""}
-                                        onChange={(e) => handleChangePartenaire(comp.id, e.target.value ? parseInt(e.target.value) : null)}
-                                        className="w-full h-8 text-sm border rounded px-2"
-                                      >
-                                        <option value="">Aucun</option>
-                                        {partenaires.map(p => (
-                                          <option key={p.id} value={p.id.toString()}>{p.raison_sociale}</option>
-                                        ))}
-                                      </select>
-                                    </div>
-                                    <div>
-                                      <label className="text-xs text-muted-foreground">Origine</label>
-                                      <select
-                                        value={comp.selectedOrigine}
-                                        onChange={(e) => handleChangeOrigine(comp.id, e.target.value as OrigineInvestissement)}
-                                        className="w-full h-8 text-sm border rounded px-2"
-                                      >
-                                        <option value="EXISTANT_CLIENT">À côté</option>
-                                        <option value="MON_CONSEIL">Avec moi</option>
-                                      </select>
-                                    </div>
-                                  </div>
-                                  
-                                  {/* Options avancées conditionnelles selon le type */}
-                                  <div className="pt-2 border-t border-green-200">
-                                    <div className="text-xs font-medium text-green-700 mb-2">Options avancées</div>
-                                    
-                                    {/* === OPTIONS IMMOBILIER === */}
-                                    {["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(comp.editedType) && (
-                                      <div className="grid grid-cols-4 gap-2">
-                                        <div>
-                                          <label className="text-xs text-muted-foreground">Date d'achat</label>
-                                          <Input
-                                            type="date"
-                                            value={comp.dateSouscription || ""}
-                                            onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
-                                            className="h-7 text-xs"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="text-xs text-muted-foreground">Mensualité crédit</label>
-                                          <Input
-                                            type="number"
-                                            placeholder="€/mois"
-                                            value={comp.mensualiteCredit || ""}
-                                            onChange={(e) => handleChangeMensualiteCredit(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                            className="h-7 text-xs"
-                                          />
-                                        </div>
-                                        <div>
-                                          <label className="text-xs text-muted-foreground">CRD (Capital)</label>
-                                          <Input
-                                            type="number"
-                                            placeholder="€"
-                                            value={comp.creditCRD || ""}
-                                            onChange={(e) => handleChangeCreditCRD(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                            className="h-7 text-xs"
-                                          />
-                                        </div>
-                                        {/* Loyer mensuel (sauf RP) */}
-                                        {comp.editedType !== "RP" && (
-                                          <div>
-                                            <label className="text-xs text-muted-foreground">Loyer mensuel</label>
-                                            <Input
-                                              type="number"
-                                              placeholder="€/mois"
-                                              value={comp.loyerMensuel || ""}
-                                              onChange={(e) => handleChangeLoyerMensuel(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                              className="h-7 text-xs"
-                                            />
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                    
-                                    {/* === OPTIONS SCPI === */}
-                                    {["SCPI", "SCPI_DEMEMBREMENT"].includes(comp.editedType) && (
-                                      <div className="space-y-2">
-                                        <div className="grid grid-cols-3 gap-2">
-                                          <div>
-                                            <label className="text-xs text-muted-foreground">Date souscription</label>
-                                            <Input
-                                              type="date"
-                                              value={comp.dateSouscription || ""}
-                                              onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
-                                              className="h-7 text-xs"
-                                            />
-                                          </div>
-                                          <div className="flex items-end gap-2">
-                                            <Checkbox
-                                              id={`vp-${comp.id}`}
-                                              checked={comp.versementProgramme}
-                                              onCheckedChange={(checked) => handleChangeVersementProgramme(comp.id, !!checked)}
-                                            />
-                                            <label htmlFor={`vp-${comp.id}`} className="text-xs">Versement prog.</label>
-                                          </div>
-                                          {comp.versementProgramme && (
-                                            <div className="flex gap-1">
-                                              <Input
-                                                type="number"
-                                                placeholder="Montant"
-                                                value={comp.montantVersement || ""}
-                                                onChange={(e) => handleChangeMontantVersement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="h-7 text-xs w-20"
-                                              />
-                                              <select
-                                                value={comp.frequenceVersement}
-                                                onChange={(e) => handleChangeFrequenceVersement(comp.id, e.target.value)}
-                                                className="h-7 text-xs border rounded px-1"
-                                              >
-                                                {FREQUENCES_VERSEMENT.map(f => (
-                                                  <option key={f.value} value={f.value}>{f.label}</option>
-                                                ))}
-                                              </select>
-                                            </div>
-                                          )}
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                          <Checkbox
-                                            id={`reinv-${comp.id}`}
-                                            checked={comp.reinvestissementDividendes}
-                                            onCheckedChange={(checked) => handleChangeReinvestissement(comp.id, !!checked)}
-                                          />
-                                          <label htmlFor={`reinv-${comp.id}`} className="text-xs">Réinvestissement dividendes</label>
-                                          {comp.reinvestissementDividendes && (
-                                            <div className="flex items-center gap-1">
-                                              <Input
-                                                type="number"
-                                                placeholder="%"
-                                                value={comp.pourcentageReinvestissement || ""}
-                                                onChange={(e) => handleChangePourcentageReinvestissement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="h-7 text-xs w-16"
-                                              />
-                                              <span className="text-xs">%</span>
-                                            </div>
-                                          )}
-                                        </div>
-                                        {/* Crédit SCPI si CRD ou mensualité pré-rempli */}
-                                        {(comp.creditCRD || comp.mensualiteCredit) && (
-                                          <div className="grid grid-cols-2 gap-2">
-                                            <div>
-                                              <label className="text-xs text-muted-foreground">Mensualité crédit</label>
-                                              <Input
-                                                type="number"
-                                                placeholder="€/mois"
-                                                value={comp.mensualiteCredit || ""}
-                                                onChange={(e) => handleChangeMensualiteCredit(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="h-7 text-xs"
-                                              />
-                                            </div>
-                                            <div>
-                                              <label className="text-xs text-muted-foreground">CRD (Capital)</label>
-                                              <Input
-                                                type="number"
-                                                placeholder="€"
-                                                value={comp.creditCRD || ""}
-                                                onChange={(e) => handleChangeCreditCRD(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                                className="h-7 text-xs"
-                                              />
-                                            </div>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                    
-                                    {/* === OPTIONS ASSURANCE-VIE / PER / PEA === */}
-                                    {["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(comp.editedType) && (
-                                      <div className="grid grid-cols-3 gap-2">
-                                        <div>
-                                          <label className="text-xs text-muted-foreground">Date souscription</label>
-                                          <Input
-                                            type="date"
-                                            value={comp.dateSouscription || ""}
-                                            onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
-                                            className="h-7 text-xs"
-                                          />
-                                        </div>
-                                        <div className="flex items-end gap-2">
-                                          <Checkbox
-                                            id={`vp2-${comp.id}`}
-                                            checked={comp.versementProgramme}
-                                            onCheckedChange={(checked) => handleChangeVersementProgramme(comp.id, !!checked)}
-                                          />
-                                          <label htmlFor={`vp2-${comp.id}`} className="text-xs">Versement prog.</label>
-                                        </div>
-                                        {comp.versementProgramme && (
-                                          <div className="flex gap-1">
-                                            <Input
-                                              type="number"
-                                              placeholder="Montant"
-                                              value={comp.montantVersement || ""}
-                                              onChange={(e) => handleChangeMontantVersement(comp.id, e.target.value ? parseFloat(e.target.value) : undefined)}
-                                              className="h-7 text-xs w-20"
-                                            />
-                                            <select
-                                              value={comp.frequenceVersement}
-                                              onChange={(e) => handleChangeFrequenceVersement(comp.id, e.target.value)}
-                                              className="h-7 text-xs border rounded px-1"
-                                            >
-                                              {FREQUENCES_VERSEMENT.map(f => (
-                                                <option key={f.value} value={f.value}>{f.label}</option>
-                                              ))}
-                                            </select>
-                                          </div>
-                                        )}
-                                      </div>
-                                    )}
-                                    
-                                    {/* === OPTIONS PEL UNIQUEMENT === */}
-                                    {comp.editedType === "PEL" && (
-                                      <div className="grid grid-cols-3 gap-2">
-                                        <div>
-                                          <label className="text-xs text-muted-foreground">Date d'ouverture</label>
-                                          <Input
-                                            type="date"
-                                            value={comp.dateSouscription || ""}
-                                            onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
-                                            className="h-7 text-xs"
-                                          />
-                                        </div>
-                                      </div>
-                                    )}
-                                    
-                                    {/* FIP, FCPI, GFF : pas d'options avancées */}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                  
+                  {/* Catégorie : Immobilier */}
+                  {stats.byCategory.immobilier.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-amber-200">
+                        <Home className="h-4 w-4 text-amber-600" />
+                        <span className="font-medium text-amber-800">Immobilier</span>
+                        <Badge variant="outline" className="text-xs">{stats.byCategory.immobilier.length}</Badge>
                       </div>
-                    ))}
-                  </div>
+                      <div className="space-y-2">
+                        {stats.byCategory.immobilier.map(comp => renderInvestissementItem(comp))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Catégorie : SCPI */}
+                  {stats.byCategory.scpi.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-blue-200">
+                        <Building2 className="h-4 w-4 text-blue-600" />
+                        <span className="font-medium text-blue-800">SCPI</span>
+                        <Badge variant="outline" className="text-xs">{stats.byCategory.scpi.length}</Badge>
+                      </div>
+                      <div className="space-y-2">
+                        {stats.byCategory.scpi.map(comp => renderInvestissementItem(comp))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Catégorie : Assurance-vie / PER */}
+                  {stats.byCategory.assuranceViePer.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-purple-200">
+                        <TrendingUp className="h-4 w-4 text-purple-600" />
+                        <span className="font-medium text-purple-800">Assurance-vie / PER</span>
+                        <Badge variant="outline" className="text-xs">{stats.byCategory.assuranceViePer.length}</Badge>
+                      </div>
+                      <div className="space-y-2">
+                        {stats.byCategory.assuranceViePer.map(comp => renderInvestissementItem(comp))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Catégorie : Épargne bancaire */}
+                  {stats.byCategory.epargne.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-green-200">
+                        <PiggyBank className="h-4 w-4 text-green-600" />
+                        <span className="font-medium text-green-800">Épargne bancaire</span>
+                        <Badge variant="outline" className="text-xs">{stats.byCategory.epargne.length}</Badge>
+                      </div>
+                      <div className="space-y-2">
+                        {stats.byCategory.epargne.map(comp => renderInvestissementItem(comp))}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Catégorie : Autres */}
+                  {stats.byCategory.autres.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 pb-1 border-b border-gray-200">
+                        <Wallet className="h-4 w-4 text-gray-600" />
+                        <span className="font-medium text-gray-800">Autres</span>
+                        <Badge variant="outline" className="text-xs">{stats.byCategory.autres.length}</Badge>
+                      </div>
+                      <div className="space-y-2">
+                        {stats.byCategory.autres.map(comp => renderInvestissementItem(comp))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
