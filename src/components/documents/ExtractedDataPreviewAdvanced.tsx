@@ -630,8 +630,59 @@ export function ExtractedDataPreviewAdvanced({
                   </>
                 )}
 
-                {/* Immobilier */}
-                {formData.residencePrincipale && (
+                {/* Immobilier - Nouvelle structure avec biens individuels */}
+                {formData.biensImmobiliers && formData.biensImmobiliers.length > 0 ? (
+                  <>
+                    <div className="md:col-span-2 mt-4">
+                      <h4 className="font-medium text-sm mb-3">🏠 Immobilier ({formData.biensImmobiliers.length} bien{formData.biensImmobiliers.length > 1 ? 's' : ''})</h4>
+                    </div>
+                    {formData.biensImmobiliers.map((bien, index) => (
+                      <div key={bien.id} className="md:col-span-2 p-3 border rounded-lg space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">
+                            {bien.type === "RESIDENCE_PRINCIPALE" ? "🏠" : bien.type === "RESIDENCE_SECONDAIRE" ? "🏡" : "🏢"}
+                          </span>
+                          <span className="font-medium">{bien.nom}</span>
+                          <span className="text-muted-foreground text-sm">
+                            ({bien.type === "RESIDENCE_PRINCIPALE" ? "RP" : bien.type === "RESIDENCE_SECONDAIRE" ? "RS" : "Locatif"})
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                          {bien.valeur != null && bien.valeur > 0 && (
+                            <div>
+                              <span className="text-muted-foreground">Valeur:</span>{" "}
+                              <span className="font-medium">{bien.valeur.toLocaleString("fr-FR")} €</span>
+                            </div>
+                          )}
+                          {bien.creditCRD != null && bien.creditCRD > 0 && (
+                            <div>
+                              <span className="text-muted-foreground">Crédit CRD:</span>{" "}
+                              <span className="font-medium">{bien.creditCRD.toLocaleString("fr-FR")} €</span>
+                            </div>
+                          )}
+                          {bien.mensualiteCredit != null && bien.mensualiteCredit > 0 && (
+                            <div>
+                              <span className="text-muted-foreground">Mensualité:</span>{" "}
+                              <span className="font-medium">{bien.mensualiteCredit.toLocaleString("fr-FR")} €</span>
+                            </div>
+                          )}
+                          {bien.loyersAnnuels != null && bien.loyersAnnuels > 0 && (
+                            <div>
+                              <span className="text-muted-foreground">Loyers/an:</span>{" "}
+                              <span className="font-medium">{bien.loyersAnnuels.toLocaleString("fr-FR")} €</span>
+                            </div>
+                          )}
+                          {bien.dateFinCredit && (
+                            <div>
+                              <span className="text-muted-foreground">Fin crédit:</span>{" "}
+                              <span className="font-medium">{bien.dateFinCredit}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </>
+                ) : formData.residencePrincipale && (
                   <>
                     <div className="md:col-span-2 mt-4">
                       <h4 className="font-medium text-sm mb-3">🏠 Immobilier</h4>

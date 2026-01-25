@@ -111,7 +111,8 @@ export function DocumentUpload({
   };
 
   /**
-   * Convertit une date française (jj/mm/aaaa) en timestamp
+   * Convertit une date française (jj/mm/aaaa) en Date
+   * Utilise Date.UTC pour éviter les problèmes de timezone
    */
   const parseFrenchDate = (dateStr?: string): Date | undefined => {
     if (!dateStr) return undefined;
@@ -121,7 +122,8 @@ export function DocumentUpload({
     if (!match) return undefined;
     
     const [, day, month, year] = match;
-    return new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    // Utiliser Date.UTC avec heure à midi pour éviter le décalage de timezone
+    return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0));
   };
 
   /**

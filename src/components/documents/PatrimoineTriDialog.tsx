@@ -87,31 +87,46 @@ function extractPatrimoineItems(data: ExtractedData): PatrimoineItem[] {
   }
 
   // === IMMOBILIER (à trier) ===
-  if (data.residencePrincipale?.valeur && data.residencePrincipale.valeur > 0) {
-    items.push({
-      id: "residence-principale",
-      type: "IMMOBILIER",
-      label: "Résidence principale",
-      montant: data.residencePrincipale.valeur,
-    });
-  }
-  
-  if (data.residenceSecondaire?.valeur && data.residenceSecondaire.valeur > 0) {
-    items.push({
-      id: "residence-secondaire",
-      type: "IMMOBILIER",
-      label: "Résidence secondaire",
-      montant: data.residenceSecondaire.valeur,
-    });
-  }
-  
-  if (data.immobilierLocatif?.valeur && data.immobilierLocatif.valeur > 0) {
-    items.push({
-      id: "immobilier-locatif",
-      type: "IMMOBILIER",
-      label: "Immobilier locatif",
-      montant: data.immobilierLocatif.valeur,
-    });
+  // Nouvelle structure : utiliser biensImmobiliers si disponible
+  if (data.biensImmobiliers && data.biensImmobiliers.length > 0) {
+    for (const bien of data.biensImmobiliers) {
+      if (bien.valeur && bien.valeur > 0) {
+        items.push({
+          id: bien.id,
+          type: "IMMOBILIER",
+          label: bien.nom,
+          montant: bien.valeur,
+        });
+      }
+    }
+  } else {
+    // Fallback : ancienne structure
+    if (data.residencePrincipale?.valeur && data.residencePrincipale.valeur > 0) {
+      items.push({
+        id: "residence-principale",
+        type: "IMMOBILIER",
+        label: "Résidence principale",
+        montant: data.residencePrincipale.valeur,
+      });
+    }
+    
+    if (data.residenceSecondaire?.valeur && data.residenceSecondaire.valeur > 0) {
+      items.push({
+        id: "residence-secondaire",
+        type: "IMMOBILIER",
+        label: "Résidence secondaire",
+        montant: data.residenceSecondaire.valeur,
+      });
+    }
+    
+    if (data.immobilierLocatif?.valeur && data.immobilierLocatif.valeur > 0) {
+      items.push({
+        id: "immobilier-locatif",
+        type: "IMMOBILIER",
+        label: "Immobilier locatif",
+        montant: data.immobilierLocatif.valeur,
+      });
+    }
   }
 
   // === ASSURANCE-VIE (à trier) ===

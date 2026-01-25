@@ -1,5 +1,5 @@
 // Parser spécialisé pour extraire le patrimoine détaillé des RIO
-import type { ExtractedData } from "../types";
+import type { ExtractedData, BienImmobilier } from "../types";
 
 /**
  * Extrait un montant en euros du texte
@@ -120,9 +120,15 @@ export function extractLiquidites(text: string): {
  */
 export function extractAssuranceVie(text: string): number | undefined {
   // Pattern 1 : "Assurance-vie - AV 30 237 €"
-  let av = extractMontant(/Assurance-vie\s*-\s*AV\s+([\d\s,]+)\s*€/i, text);
+  let av = extractMontant(/Assurance-vie\s*[-–—]\s*AV\s+([\d\s,]+)\s*€/i, text);
   
-  // Pattern 2 : Si pas trouvé, chercher dans "Long terme"
+  // Pattern 2 : Format Stellium "Assurance - vie   -   Cristalliance Avenir   15 372 €"
+  // Note: "Assurance - vie" avec espace dans le PDF extrait
+  if (!av) {
+    av = extractMontant(/Assurance\s*[-–—]?\s*vie\s*[-–—]\s*[^\d]+([\d\s,]+)\s*€/i, text);
+  }
+  
+  // Pattern 3 : Si pas trouvé, chercher dans "Long terme"
   if (!av) {
     av = extractMontant(/Long\s+terme\s+([\d\s,]+)\s*€/i, text);
   }
@@ -134,8 +140,20 @@ export function extractAssuranceVie(text: string): number | undefined {
  * Extrait le PER
  */
 export function extractPER(text: string): number | undefined {
-  // Pattern : capturer uniquement le PREMIER montant après "PER"
-  return extractMontant(/\bPER\s+([\d\s,]+)\s*€/i, text);
+  // Pattern 1 : "PER 1 120 €"
+  let per = extractMontant(/\bPER\s+([\d\s,]+)\s*€/i, text);
+  
+  // Pattern 2 : Format Stellium "PER   -   Pertinence Retraite   1 120 €   1 120 €"
+  if (!per) {
+    per = extractMontant(/\bPER\s*[-–—]\s*[^\d]+([\d\s,]+)\s*€/i, text);
+  }
+  
+  // Pattern 3 : Section "Retraite et Salariale" avec montant
+  if (!per) {
+    per = extractMontant(/Retraite\s+et\s+Salariale\s+([\d\s,]+)\s*€/i, text);
+  }
+  
+  return per;
 }
 
 /**
@@ -194,6 +212,168 @@ export function extractDateMariage(text: string): string | undefined {
 }
 
 /**
+ * Normalise un nom pour la comparaison (enlève accents, minuscules, espaces)
+ */
+function normalizeNom(nom: string): string {
+  return nom
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Enlever les accents
+    .replace(/\s+/g, "")
+    .trim();
+}
+
+/**
+ * Formate un nom proprement (Title Case)
+ * "SETE AIRBNB" -> "Sete Airbnb"
+ * "sète" -> "Sète"
+ */
+function formatNom(nom: string): string {
+  return nom
+    .toLowerCase()
+    .split(/\s+/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+/**
+ * Extrait tous les biens immobiliers du RIO avec leurs crédits et loyers associés
+ */
+export function extractBiensImmobiliers(text: string): BienImmobilier[] {
+  const biens: BienImmobilier[] = [];
+  
+  // === 1. RÉSIDENCE PRINCIPALE ===
+  // Format: "Résidence principale   -   Primo MTP   340 000 €   340 000 €"
+  const rpPattern = /Résidence\s+principale\s*[-–—]\s*([^\d]+?)\s+([\d\s,]+)\s*€/i;
+  const rpMatch = text.match(rpPattern);
+  
+  if (rpMatch) {
+    const rpNom = formatNom(rpMatch[1].trim());
+    const rpValeur = parseInt(rpMatch[2].replace(/[\s,]/g, ""), 10);
+    
+    const rp: BienImmobilier = {
+      id: `rp-${normalizeNom(rpNom)}`,
+      type: "RESIDENCE_PRINCIPALE",
+      nom: rpNom,
+      valeur: rpValeur,
+    };
+    
+    // Chercher le crédit associé à la RP
+    const rpNomNormalized = normalizeNom(rpNom);
+    const creditPattern = new RegExp(
+      `Crédit\\s+immobilier\\s*[-–—]\\s*([^\\n]+?)\\s+(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
+      "gi"
+    );
+    
+    let creditMatch;
+    while ((creditMatch = creditPattern.exec(text)) !== null) {
+      const creditNom = creditMatch[1].trim();
+      if (normalizeNom(creditNom).includes(rpNomNormalized) || 
+          rpNomNormalized.includes(normalizeNom(creditNom))) {
+        const echeanceAnnuelle = parseInt(creditMatch[2].replace(/[\s,]/g, ""), 10);
+        const crd = parseInt(creditMatch[3].replace(/[\s,]/g, ""), 10);
+        const dateEcheance = creditMatch[4];
+        
+        rp.echeanceAnnuelle = echeanceAnnuelle;
+        rp.creditCRD = crd;
+        rp.mensualiteCredit = Math.round(echeanceAnnuelle / 12);
+        rp.dateFinCredit = dateEcheance;
+        break;
+      }
+    }
+    
+    biens.push(rp);
+  }
+  
+  // === 2. BIENS LOCATIFS ===
+  // Format: "Classique   -   Sete AIRBNB   72 500 €   72 500 €"
+  // Format: "Pinel   -   Sète   180 000 €   180 000 €"
+  const locatifPatterns = [
+    /(?:Classique|LMNP|LMP|Pinel|Denormandie|Malraux|Monument\s+Historique|Déficit\s+foncier)\s*[-–—]\s*([^\d]+?)\s+([\d\s,]+)\s*€/gi,
+  ];
+  
+  for (const pattern of locatifPatterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const typeMatch = text.substring(match.index - 50, match.index).match(/(Classique|LMNP|LMP|Pinel|Denormandie|Malraux|Monument\s+Historique|Déficit\s+foncier)/i);
+      const typeBien = formatNom(typeMatch ? typeMatch[1] : "Locatif");
+      const nomBien = formatNom(match[1].trim());
+      const valeur = parseInt(match[2].replace(/[\s,]/g, ""), 10);
+      
+      // Éviter les doublons
+      const id = `locatif-${normalizeNom(typeBien)}-${normalizeNom(nomBien)}`;
+      if (biens.some(b => b.id === id)) continue;
+      
+      const bien: BienImmobilier = {
+        id,
+        type: "LOCATIF",
+        nom: `${typeBien} - ${nomBien}`,
+        valeur,
+      };
+      
+      // Chercher le crédit associé
+      const nomNormalized = normalizeNom(nomBien);
+      const creditPattern2 = new RegExp(
+        `Crédit\\s+immobilier\\s*[-–—]\\s*([^\\n]+?)\\s+(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
+        "gi"
+      );
+      
+      let creditMatch;
+      while ((creditMatch = creditPattern2.exec(text)) !== null) {
+        const creditNom = creditMatch[1].trim();
+        if (normalizeNom(creditNom).includes(nomNormalized) || 
+            nomNormalized.includes(normalizeNom(creditNom))) {
+          const echeanceAnnuelle = parseInt(creditMatch[2].replace(/[\s,]/g, ""), 10);
+          const crd = parseInt(creditMatch[3].replace(/[\s,]/g, ""), 10);
+          const dateEcheance = creditMatch[4];
+          
+          bien.echeanceAnnuelle = echeanceAnnuelle;
+          bien.creditCRD = crd;
+          bien.mensualiteCredit = Math.round(echeanceAnnuelle / 12);
+          bien.dateFinCredit = dateEcheance;
+          break;
+        }
+      }
+      
+      // Chercher les loyers associés
+      // Pattern 1: "Revenus fonciers - Sete AIRBNB  10 500 €"
+      // Pattern 2: "Revenus fonciers  Sète  6 180 €"  
+      // Pattern 3: Section avec nom du bien et montant
+      const nomBienOriginal = match[1].trim(); // Nom non formaté pour matching plus précis
+      const loyerPatterns = [
+        // Pattern avec le nom original (non formaté)
+        new RegExp(
+          `Revenus?\\s+fonciers?\\s*[-–—]?\\s*${nomBienOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(\\d[\\d\\s,]*)\\s*€`,
+          "i"
+        ),
+        // Pattern avec le nom formaté
+        new RegExp(
+          `Revenus?\\s+fonciers?\\s*[-–—]?\\s*${nomBien.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(\\d[\\d\\s,]*)\\s*€`,
+          "i"
+        ),
+        // Pattern avec les 4 premières lettres normalisées
+        new RegExp(
+          `Revenus?\\s+fonciers?[^\\n]*${normalizeNom(nomBien).substring(0, 4)}[^\\n]*(\\d[\\d\\s,]*)\\s*€`,
+          "i"
+        ),
+      ];
+      
+      for (const loyerPattern of loyerPatterns) {
+        const loyerMatch = text.match(loyerPattern);
+        if (loyerMatch) {
+          bien.loyersAnnuels = parseInt(loyerMatch[1].replace(/[\s,]/g, ""), 10);
+          break;
+        }
+      }
+      
+      biens.push(bien);
+    }
+  }
+  
+  return biens;
+}
+
+/**
  * Parse tout le patrimoine du RIO
  */
 export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
@@ -207,6 +387,9 @@ export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
   const chargesTotal = extractChargesTotal(text);
   const profession = extractProfessionExacte(text);
   const dateRegime = extractDateMariage(text);
+  
+  // Nouvelle extraction : liste des biens immobiliers
+  const biensImmobiliers = extractBiensImmobiliers(text);
 
   // Calculer la somme totale de l'épargne
   const epargneTotal = 
@@ -222,12 +405,15 @@ export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
     // Profession
     profession,
 
-    // Patrimoine immobilier
+    // Patrimoine immobilier (ancienne structure pour compatibilité)
     residencePrincipale: {
       valeur: rp.valeur,
       pret: rp.pret,
       mensualite: rp.mensualite,
     },
+    
+    // Nouvelle structure : liste des biens
+    biensImmobiliers,
 
     // Patrimoine financier - Total épargne + détails
     epargneTotal,

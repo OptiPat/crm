@@ -1,5 +1,20 @@
 // Types pour l'extraction de données depuis les PDF
 
+/**
+ * Représente un bien immobilier individuel avec ses détails
+ */
+export interface BienImmobilier {
+  id: string; // Identifiant unique (ex: "rp-primo-mtp", "locatif-pinel-sete")
+  type: "RESIDENCE_PRINCIPALE" | "RESIDENCE_SECONDAIRE" | "LOCATIF";
+  nom: string; // Nom du bien (ex: "Primo Mtp", "Pinel - Sète")
+  valeur?: number; // Valeur du bien
+  creditCRD?: number; // Capital Restant Dû
+  mensualiteCredit?: number; // Mensualité du crédit
+  echeanceAnnuelle?: number; // Échéance annuelle du crédit
+  dateFinCredit?: string; // Date de fin du crédit
+  loyersAnnuels?: number; // Loyers annuels (pour locatif)
+}
+
 export interface ExtractedText {
   text: string;
   numPages: number;
@@ -81,6 +96,9 @@ export interface ExtractedData {
     pret?: number;
     loyersAnnuels?: number;
   };
+  
+  // === BIENS IMMOBILIERS DÉTAILLÉS ===
+  biensImmobiliers?: BienImmobilier[];
   
   // === PATRIMOINE FINANCIER ===
   epargneTotal?: number; // Somme de toute l'épargne

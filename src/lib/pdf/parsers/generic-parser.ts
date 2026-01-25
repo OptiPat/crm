@@ -58,17 +58,30 @@ export function extractPostalCodes(text: string): string[] {
  * Extrait la civilité
  */
 export function extractCivilite(text: string): string | undefined {
-  const normalizedText = text.toLowerCase();
-
-  if (normalizedText.includes("madame") || normalizedText.includes("mme")) {
-    return "MME";
+  // Pattern 1 : Chercher précisément après "Civilité : *"
+  // Format RIO : "Civilité : *   Monsieur" ou "Civilité : *   Madame"
+  const civilitePattern = /Civilit[ée]\s*:\s*\*?\s*(Monsieur|Madame|M\.|Mme|M |Mme\.)/i;
+  const match = text.match(civilitePattern);
+  
+  if (match) {
+    const civiliteText = match[1].toLowerCase();
+    if (civiliteText.includes("madame") || civiliteText.includes("mme")) {
+      return "MME";
+    }
+    if (civiliteText.includes("monsieur") || civiliteText.startsWith("m")) {
+      return "M";
+    }
   }
-  if (
-    normalizedText.includes("monsieur") ||
-    normalizedText.includes("m.") ||
-    /\bm\s/.test(normalizedText)
-  ) {
+  
+  // Fallback : recherche dans les premières lignes du document seulement
+  const firstPart = text.substring(0, 2000).toLowerCase();
+  
+  // Éviter les faux positifs en cherchant le mot seul
+  if (/\bmonsieur\b/.test(firstPart) && !/\bmadame\b/.test(firstPart)) {
     return "M";
+  }
+  if (/\bmadame\b/.test(firstPart) && !/\bmonsieur\b/.test(firstPart)) {
+    return "MME";
   }
 
   return undefined;
