@@ -26,6 +26,7 @@ import type { ExtractedData } from "@/lib/pdf";
 import type { Investissement, NewInvestissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
 import { getInvestissementsByContact, updateInvestissement, createInvestissement } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
+import { getContactById, updateContact } from "@/lib/api/tauri-contacts";
 
 interface RioUpdateComparisonDialogProps {
   open: boolean;
@@ -330,6 +331,7 @@ export function RioUpdateComparisonDialog({
   const [existingInvestissements, setExistingInvestissements] = useState<Investissement[]>([]);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [comparisons, setComparisons] = useState<InvestissementComparison[]>([]);
+  const [notesRio, setNotesRio] = useState<string>("");
 
   useEffect(() => {
     if (open && contactId) {
@@ -545,6 +547,7 @@ export function RioUpdateComparisonDialog({
       if (c.id !== id) return c;
       
       if (existingId === null) {
+        // Nouveau investissement : réinitialiser les champs
         return {
           ...c,
           linkedToExistingId: null,
@@ -552,6 +555,11 @@ export function RioUpdateComparisonDialog({
           isNew: true,
           isChanged: false,
           oldMontant: undefined,
+          dateSouscription: undefined,
+          versementProgramme: false,
+          montantVersement: undefined,
+          frequenceVersement: "MENSUEL",
+          reinvestissementDividendes: false,
         };
       } else {
         const existing = existingInvestissements.find(inv => inv.id === existingId);
@@ -560,6 +568,7 @@ export function RioUpdateComparisonDialog({
         const oldMontant = existing.montant_initial ? existing.montant_initial / 100 : 0;
         const isChanged = Math.abs(oldMontant - c.editedMontant) > 1;
         
+        // Mettre à jour TOUS les champs avec les valeurs de l'investissement existant
         return {
           ...c,
           linkedToExistingId: existingId,
@@ -568,6 +577,16 @@ export function RioUpdateComparisonDialog({
           isChanged,
           oldMontant,
           selectedOrigine: existing.origine,
+          // Pré-remplir avec les valeurs de l'investissement sélectionné
+          dateSouscription: existing.date_souscription 
+            ? new Date(existing.date_souscription * 1000).toISOString().split("T")[0] 
+            : undefined,
+          versementProgramme: existing.versement_programme || false,
+          montantVersement: existing.montant_versement_programme 
+            ? existing.montant_versement_programme / 100 
+            : undefined,
+          frequenceVersement: existing.frequence_versement || "MENSUEL",
+          reinvestissementDividendes: existing.reinvestissement_dividendes || false,
         };
       }
     }));
@@ -608,7 +627,8 @@ export function RioUpdateComparisonDialog({
             montant_versement_programme: comp.montantVersement ? Math.round(comp.montantVersement * 100) : undefined,
             frequence_versement: comp.versementProgramme ? comp.frequenceVersement : undefined,
             reinvestissement_dividendes: comp.reinvestissementDividendes,
-            date_souscription: comp.dateSouscription || undefined,
+            // Format RFC3339 requis par le backend Rust
+            date_souscription: comp.dateSouscription ? `${comp.dateSouscription}T00:00:00Z` : undefined,
           };
           await createInvestissement(newInv);
           added++;
@@ -628,14 +648,53 @@ export function RioUpdateComparisonDialog({
             montant_versement_programme: comp.montantVersement ? Math.round(comp.montantVersement * 100) : existing.montant_versement_programme,
             frequence_versement: comp.frequenceVersement || existing.frequence_versement,
             reinvestissement_dividendes: comp.reinvestissementDividendes,
-            date_souscription: comp.dateSouscription || (existing.date_souscription ? new Date(existing.date_souscription * 1000).toISOString().split("T")[0] : undefined),
+            // Format RFC3339 : utiliser la date éditée ou préserver l'existante
+            date_souscription: comp.dateSouscription 
+              ? `${comp.dateSouscription}T00:00:00Z` 
+              : (existing.date_souscription ? new Date(existing.date_souscription * 1000).toISOString() : undefined),
           };
           await updateInvestissement(existing.id, updatedInv);
           updated++;
         }
       }
 
-      alert(`✅ Mise à jour terminée !\n\n• ${updated} investissement(s) mis à jour\n• ${added} investissement(s) ajouté(s)`);
+      // Ajouter les notes au contact si renseignées
+      if (notesRio.trim()) {
+        try {
+          const contact = await getContactById(contactId);
+          const dateNow = new Date().toLocaleDateString("fr-FR");
+          const newNote = `[Mise à jour RIO - ${dateNow}]\n${notesRio.trim()}`;
+          const existingNotes = contact.notes || "";
+          const updatedNotes = existingNotes 
+            ? `${newNote}\n\n---\n\n${existingNotes}`
+            : newNote;
+          
+          // Construire un objet NewContact propre (sans id, created_at, updated_at)
+          await updateContact(contactId, {
+            categorie: contact.categorie,
+            nom: contact.nom,
+            prenom: contact.prenom,
+            email: contact.email,
+            telephone: contact.telephone,
+            adresse: contact.adresse,
+            code_postal: contact.code_postal,
+            ville: contact.ville,
+            date_naissance: contact.date_naissance ? new Date(contact.date_naissance * 1000).toISOString() : undefined,
+            profession: contact.profession,
+            situation_familiale: contact.situation_familiale,
+            source_lead: contact.source_lead,
+            profil_risque_sri: contact.profil_risque_sri,
+            date_dernier_contact: contact.date_dernier_contact ? new Date(contact.date_dernier_contact * 1000).toISOString() : undefined,
+            date_prochain_suivi: contact.date_prochain_suivi ? new Date(contact.date_prochain_suivi * 1000).toISOString() : undefined,
+            statut_suivi: contact.statut_suivi,
+            notes: updatedNotes,
+          });
+        } catch (noteError) {
+          console.error("Erreur ajout notes:", noteError);
+        }
+      }
+
+      alert(`✅ Mise à jour terminée !\n\n• ${updated} investissement(s) mis à jour\n• ${added} investissement(s) ajouté(s)${notesRio.trim() ? "\n• Notes ajoutées au contact" : ""}`);
       onComplete();
     } catch (error) {
       console.error("Erreur lors de la mise à jour:", error);
@@ -1023,6 +1082,15 @@ export function RioUpdateComparisonDialog({
                 {["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(comp.editedType) && (
                   <div className="grid grid-cols-4 gap-2">
                     <div>
+                      <label className="text-xs text-muted-foreground">Date d'achat</label>
+                      <Input
+                        type="date"
+                        value={comp.dateSouscription || ""}
+                        onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    <div>
                       <label className="text-xs text-muted-foreground">Mensualité crédit</label>
                       <Input
                         type="number"
@@ -1061,6 +1129,15 @@ export function RioUpdateComparisonDialog({
                 {["SCPI", "SCPI_DEMEMBREMENT"].includes(comp.editedType) && (
                   <div className="space-y-2">
                     <div className="flex items-center gap-4 flex-wrap">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Date souscription</label>
+                        <Input
+                          type="date"
+                          value={comp.dateSouscription || ""}
+                          onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
                       <div className="flex items-center gap-2">
                         <Checkbox
                           id={`vp-upd-${comp.id}`}
@@ -1129,6 +1206,15 @@ export function RioUpdateComparisonDialog({
                 {/* === OPTIONS ASSURANCE-VIE / PER / PEA === */}
                 {["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(comp.editedType) && (
                   <div className="flex items-center gap-4 flex-wrap">
+                    <div>
+                      <label className="text-xs text-muted-foreground">Date souscription</label>
+                      <Input
+                        type="date"
+                        value={comp.dateSouscription || ""}
+                        onChange={(e) => handleChangeDateSouscription(comp.id, e.target.value || undefined)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
                     <div className="flex items-center gap-2">
                       <Checkbox
                         id={`vp-upd2-${comp.id}`}
@@ -1328,6 +1414,19 @@ export function RioUpdateComparisonDialog({
               )}
             </>
           )}
+        </div>
+
+        {/* Section Notes / Commentaires */}
+        <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+          <label className="text-sm font-medium text-slate-700 mb-2 block">
+            📝 Notes / Commentaires (mise à jour RIO)
+          </label>
+          <textarea
+            value={notesRio}
+            onChange={(e) => setNotesRio(e.target.value)}
+            placeholder="Ajoutez des notes sur cette mise à jour annuelle..."
+            className="w-full h-20 p-2 text-sm border border-slate-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
         </div>
 
         <DialogFooter className="border-t pt-4">
