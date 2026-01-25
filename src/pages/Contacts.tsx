@@ -303,19 +303,6 @@ export function Contacts() {
     }
   };
 
-  const getStatutColor = (statut: string) => {
-    switch (statut) {
-      case "ACTIF":
-        return "bg-green-100 text-green-800";
-      case "EN_PAUSE":
-        return "bg-yellow-100 text-yellow-800";
-      case "ARCHIVE":
-        return "bg-gray-100 text-gray-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
   const handleViewContact = (contact: Contact) => {
     // Fermer d'abord puis rouvrir pour forcer le rafraîchissement
     setShowDetail(false);

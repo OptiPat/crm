@@ -17,7 +17,6 @@ import {
   Building2,
   PiggyBank,
   RefreshCw,
-  Plus,
   AlertCircle,
   CheckCircle2,
   Wallet,

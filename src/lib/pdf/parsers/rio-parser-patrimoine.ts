@@ -1,52 +1,12 @@
 // Parser spécialisé pour extraire le patrimoine détaillé des RIO
 import type { ExtractedData, BienImmobilier } from "../types";
-
-/**
- * Liste des noms de SCPI connus pour la détection automatique
- * (même quand le mot "SCPI" n'apparaît pas dans le RIO)
- */
-const KNOWN_SCPI_NAMES = [
-  // SCPI Corum
-  "corum origin", "corum xl", "corum eurion",
-  // SCPI Primonial
-  "primovie", "primopierre", "patrimmo commerce", "patrimmo croissance",
-  // SCPI Sofidy
-  "immorente", "efimmo", "sofidy europe invest",
-  // SCPI Paref
-  "novapierre", "interpierre", "atlantique pierre",
-  // SCPI Perial
-  "pfo2", "pf grand paris", "pf hospitalite europe",
-  // SCPI Amundi
-  "opcimmo", "rivoli avenir patrimoine",
-  // SCPI La Française
-  "epargne fonciere", "lf europimmo", "lf grand paris patrimoine",
-  // SCPI Arkea
-  "transitions europe", "transitions europeennes",
-  // SCPI Alderan
-  "activimmo",
-  // SCPI Sogenial
-  "comete", "coeur de regions", "coeur de ville",
-  // SCPI Voisin
-  "epargne pierre", "epargne pierre europe",
-  // SCPI Atland
-  "fonciere des praticiens",
-  // SCPI AEW
-  "laffitte pierre", "fructipierre", "fructiregions",
-  // SCPI BNP Paribas
-  "accimmo pierre",
-  // SCPI Advenis
-  "eurovalys",
-  // SCPI Fiducial
-  "fiducial gerance",
-  // SCPI Iroko
-  "iroko zen",
-  // SCPI Remake
-  "remake live",
-  // SCPI Altarea
-  "alta convictions", "altaconvictions",
-  // Autres SCPI courantes
-  "pierval sante", "kyaneos pierre", "vendome regions", "cap foncières", "cristal rente",
-];
+import { 
+  KNOWN_SCPI_NAMES, 
+  normalizeForMatching, 
+  isKnownSCPI,
+  detectImmobilierType,
+  type ProductType 
+} from "./product-synonyms";
 
 /**
  * Vérifie si un nom correspond à une SCPI connue
@@ -161,85 +121,234 @@ export function extractResidencePrincipale(text: string): {
 }
 
 /**
- * Extrait les liquidités (Livrets + comptes)
+ * Interface pour les résultats d'extraction des liquidités
  */
-export function extractLiquidites(text: string): {
+export interface LiquiditesResult {
   livretA?: number;
   compteCourant?: number;
   ldd?: number;
+  lep?: number;
+  pel?: number;
+  cel?: number;
+  csl?: number;
+  livretJeune?: number;
+  partsSociales?: number;
   total?: number;
-} {
-  // Pattern : capturer uniquement le PREMIER montant
-  const livretA = extractMontant(/Livret\s+A\s*-\s*LA\s+([\d\s,]+)\s*€/i, text);
-  const compteCourant = extractMontant(/Compte\s+courant\s*-\s*CC\s+([\d\s,]+)\s*€/i, text);
-  const ldd = extractMontant(
-    /Livret\s+de\s+Développement\s+Durable[^\n]*?LDD\s+([\d\s,]+)\s*€/i,
-    text
-  );
+}
 
-  // Court terme total : capturer le PREMIER montant
+/**
+ * Extrait les liquidités (Livrets + comptes) avec support de toutes les variantes
+ */
+export function extractLiquidites(text: string): LiquiditesResult {
+  // ==========================================================================
+  // LIVRET A (inclut Livret Bleu)
+  // ==========================================================================
+  const livretA = extractMontant(/Livret\s+A\s*(?:[-–—]\s*LA)?\s+([\d\s,]+)\s*€/i, text) ||
+                  extractMontant(/Livret\s+Bleu[^€]*?([\d\s,]+)\s*€/i, text) ||
+                  extractMontant(/\bLA\s+([\d\s,]+)\s*€/i, text);
+  
+  // ==========================================================================
+  // COMPTE COURANT (CC, compte chèque, compte joint, DAV, etc.)
+  // ==========================================================================
+  const compteCourant = extractMontant(/Compte\s+courant\s*(?:[-–—]\s*CC)?\s+([\d\s,]+)\s*€/i, text) ||
+                        extractMontant(/Compte\s+ch[eè]que[^€]*?([\d\s,]+)\s*€/i, text) ||
+                        extractMontant(/Compte\s+(?:joint|commun)[^€]*?([\d\s,]+)\s*€/i, text) ||
+                        extractMontant(/Compte\s+[àa]\s+vue[^€]*?([\d\s,]+)\s*€/i, text) ||
+                        extractMontant(/\b(?:DAV|CC)\s+([\d\s,]+)\s*€/i, text);
+  
+  // ==========================================================================
+  // LDD / LDDS (Livret de Développement Durable et Solidaire)
+  // ==========================================================================
+  const ldd = extractMontant(/Livret\s+de\s+D[ée]veloppement\s+Durable[^€]*?([\d\s,]+)\s*€/i, text) ||
+              extractMontant(/LDD[sS]?\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
+  
+  // ==========================================================================
+  // LEP (Livret d'Épargne Populaire)
+  // ==========================================================================
+  const lep = extractMontant(/Livret\s+d['']?[EÉeé]pargne\s+Populaire[^€]*?([\d\s,]+)\s*€/i, text) ||
+              extractMontant(/\bLEP\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
+
+  // ==========================================================================
+  // PEL (Plan Épargne Logement)
+  // ==========================================================================
+  const pel = extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Logement[^€]*?([\d\s,]+)\s*€/i, text) ||
+              extractMontant(/\bPEL\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
+
+  // ==========================================================================
+  // CEL (Compte Épargne Logement)
+  // ==========================================================================
+  const cel = extractMontant(/Compte\s+(?:d[''])?[EÉeé]pargne\s+Logement[^€]*?([\d\s,]+)\s*€/i, text) ||
+              extractMontant(/\bCEL\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
+
+  // ==========================================================================
+  // CSL (Compte Sur Livret / Super Livret)
+  // ==========================================================================
+  const csl = extractMontant(/Compte\s+sur\s+Livret[^€]*?([\d\s,]+)\s*€/i, text) ||
+              extractMontant(/Super\s+Livret[^€]*?([\d\s,]+)\s*€/i, text) ||
+              extractMontant(/Livret\s+bancaire[^€]*?([\d\s,]+)\s*€/i, text) ||
+              extractMontant(/\bCSL\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
+
+  // ==========================================================================
+  // LIVRET JEUNE
+  // ==========================================================================
+  const livretJeune = extractMontant(/Livret\s+Jeune[^€]*?([\d\s,]+)\s*€/i, text) ||
+                      extractMontant(/\bLJ\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
+
+  // ==========================================================================
+  // PARTS SOCIALES
+  // ==========================================================================
+  const partsSociales = extractMontant(/Parts?\s+Sociales?[^€]*?([\d\s,]+)\s*€/i, text) ||
+                        extractMontant(/Soci[ée]tariat[^€]*?([\d\s,]+)\s*€/i, text) ||
+                        extractMontant(/\bPS\s+([\d\s,]+)\s*€/i, text);
+
+  // ==========================================================================
+  // TOTAL COURT TERME
+  // ==========================================================================
   const courtTerme = extractMontant(/Court\s+terme\s+([\d\s,]+)\s*€/i, text);
 
   return {
     livretA,
     compteCourant,
     ldd,
+    lep,
+    pel,
+    cel,
+    csl,
+    livretJeune,
+    partsSociales,
     total: courtTerme,
   };
 }
 
 /**
- * Extrait l'assurance vie
+ * Interface pour l'épargne long terme
  */
-export function extractAssuranceVie(text: string): number | undefined {
-  // Pattern 1 : "Assurance-vie - AV 30 237 €"
-  let av = extractMontant(/Assurance-vie\s*[-–—]\s*AV\s+([\d\s,]+)\s*€/i, text);
-  
-  // Pattern 2 : Format Stellium "Assurance - vie   -   Cristalliance Avenir   15 372 €"
-  // Note: "Assurance - vie" avec espace dans le PDF extrait
-  if (!av) {
-    av = extractMontant(/Assurance\s*[-–—]?\s*vie\s*[-–—]\s*[^\d]+([\d\s,]+)\s*€/i, text);
-  }
-  
-  // Pattern 3 : Si pas trouvé, chercher dans "Long terme"
-  if (!av) {
-    av = extractMontant(/Long\s+terme\s+([\d\s,]+)\s*€/i, text);
-  }
-  
-  return av;
+export interface EpargneLongTermeResult {
+  assuranceVie?: number;
+  per?: number;
+  perp?: number;
+  madelin?: number;
+  article83?: number;
+  pea?: number;
+  compteTitres?: number;
+  pee?: number;
+  perco?: number;
+  contratCapi?: number;
+  fcpiFip?: number;
+  scpiEpargne?: number;
+  opci?: number;
 }
 
 /**
- * Extrait le PER
+ * Extrait l'assurance vie avec toutes les variantes
+ */
+export function extractAssuranceVie(text: string): number | undefined {
+  // Patterns multiples pour assurance-vie
+  return extractMontant(/Assurance[-\s]vie\s*[-–—]\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/\b(?:AV|A-V)\s*[-–—]\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Ass(?:urance)?[-\s]vie[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Contrat\s+(?:AV|vie)[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Multisupport[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Fonds\s+euros?[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Long\s+terme\s+([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait le PER avec toutes les variantes
  */
 export function extractPER(text: string): number | undefined {
-  // Pattern 1 : "PER 1 120 €"
-  let per = extractMontant(/\bPER\s+([\d\s,]+)\s*€/i, text);
-  
-  // Pattern 2 : Format Stellium "PER   -   Pertinence Retraite   1 120 €   1 120 €"
-  if (!per) {
-    per = extractMontant(/\bPER\s*[-–—]\s*[^\d]+([\d\s,]+)\s*€/i, text);
-  }
-  
-  // Pattern 3 : Section "Retraite et Salariale" avec montant
-  if (!per) {
-    per = extractMontant(/Retraite\s+et\s+Salariale\s+([\d\s,]+)\s*€/i, text);
-  }
-  
-  return per;
+  // Exclure PERP (traité séparément)
+  return extractMontant(/\bPER(?:IN)?\s*[-–—]\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/\bPER\s+(?:individuel\s+)?[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Retraite(?!\s+Populaire)[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Retraite\s+et\s+Salariale\s+([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait le PERP (ancien produit)
+ */
+export function extractPERP(text: string): number | undefined {
+  return extractMontant(/\bPERP\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Retraite\s+Populaire[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait les contrats Madelin
+ */
+export function extractMadelin(text: string): number | undefined {
+  return extractMontant(/Madelin[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Contrat\s+Madelin[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Retraite\s+Madelin[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait les Article 83
+ */
+export function extractArticle83(text: string): number | undefined {
+  return extractMontant(/Article\s*83[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Art\.?\s*83[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait le PEA
+ */
+export function extractPEA(text: string): number | undefined {
+  return extractMontant(/\bPEA(?:[-\s]PME)?\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+(?:en\s+)?Actions[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait le compte-titres
+ * Note: "CT" seul est trop ambigu (peut matcher "Court terme"), on utilise "CTO" uniquement
+ */
+export function extractCompteTitres(text: string): number | undefined {
+  return extractMontant(/Compte[-\s]titres?\s*(?:ordinaire)?\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/\bCTO\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Portefeuille\s+titres[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait le PEE (épargne salariale)
+ */
+export function extractPEE(text: string): number | undefined {
+  return extractMontant(/\bPEE\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Entreprise[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/[EÉeé]pargne\s+salariale[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait le PERCO/PERCOL
+ */
+export function extractPERCO(text: string): number | undefined {
+  return extractMontant(/\bPERC?OL?\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Retraite\s+Collectif[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/PER\s+collectif[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait les contrats de capitalisation
+ */
+export function extractContratCapi(text: string): number | undefined {
+  return extractMontant(/Contrat\s+(?:de\s+)?capi(?:talisation)?[^€]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Capitalisation[^€]*([\d\s,]+)\s*€/i, text);
+}
+
+/**
+ * Extrait les FCPI/FIP
+ */
+export function extractFCPIFIP(text: string): number | undefined {
+  return extractMontant(/\b(?:FCPI|FIP)\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
+         extractMontant(/Fonds\s+(?:d[''])?innovation[^€]*([\d\s,]+)\s*€/i, text);
 }
 
 /**
  * Extrait les SCPI (épargne, pas les charges/dépenses)
  */
 export function extractSCPI(text: string): number | undefined {
-  // Pattern : capturer SCPI avec montant, mais EXCLURE les lignes de charges/dépenses
-  // "Autre dépense SCPI 7 919 €" ne doit PAS être capturé
   const scpiPattern = /\bSCPI\s+([\d\s,]+)\s*€/gi;
   let match;
   
   while ((match = scpiPattern.exec(text)) !== null) {
-    // Vérifier le contexte (50 caractères avant)
     const contextBefore = text.substring(Math.max(0, match.index - 50), match.index).toLowerCase();
     
     // Exclure si c'est une dépense ou une charge
@@ -248,15 +357,34 @@ export function extractSCPI(text: string): number | undefined {
         contextBefore.includes("charge") ||
         contextBefore.includes("crédit") ||
         contextBefore.includes("credit")) {
-      continue; // Ignorer ce match
+      continue;
     }
     
-    // C'est une vraie épargne SCPI
     const montant = match[1].replace(/[\s,]/g, "");
     return parseInt(montant, 10);
   }
   
   return undefined;
+}
+
+/**
+ * Extrait toute l'épargne long terme
+ */
+export function extractEpargneLongTerme(text: string): EpargneLongTermeResult {
+  return {
+    assuranceVie: extractAssuranceVie(text),
+    per: extractPER(text),
+    perp: extractPERP(text),
+    madelin: extractMadelin(text),
+    article83: extractArticle83(text),
+    pea: extractPEA(text),
+    compteTitres: extractCompteTitres(text),
+    pee: extractPEE(text),
+    perco: extractPERCO(text),
+    contratCapi: extractContratCapi(text),
+    fcpiFip: extractFCPIFIP(text),
+    scpiEpargne: extractSCPI(text),
+  };
 }
 
 /**
@@ -339,12 +467,44 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
   
   // === 1. RÉSIDENCE PRINCIPALE ===
   // Format: "Résidence principale   -   Primo MTP   340 000 €   340 000 €"
-  const rpPattern = /Résidence\s+principale\s*[-–—]\s*([^\d]+?)\s+([\d\s,]+)\s*€/i;
-  const rpMatch = text.match(rpPattern);
+  // Format alternatif: "Résidence principale - Appartement Sète T3 125 000 € 125 000 €"
+  // Le pattern doit gérer les espaces multiples (PDF.js extrait souvent avec beaucoup d'espaces)
+  const rpPatterns = [
+    // Pattern 1: avec tiret et nom du bien contenant uniquement des lettres/espaces
+    // Ex: "Résidence principale   -   Appartement Sète T3   125 000 €"
+    /Résidence\s+principale\s*[-–—]\s*([A-Za-zÀ-ÿ\s\-']+?)\s{2,}(\d[\d\s,]*)\s*€/i,
+    // Pattern 2: avec tiret, nom capturé plus largement
+    /Résidence\s+principale\s*[-–—]\s*(.+?)\s{2,}(\d[\d\s,]*)\s*€/i,
+    // Pattern 3: sans tiret (juste des espaces multiples entre les éléments)
+    /Résidence\s+principale\s{3,}([A-Za-zÀ-ÿ\s\-']+?)\s{2,}(\d[\d\s,]*)\s*€/i,
+    // Pattern 4: avec "RP" comme nom (sans nom de bien)
+    /Résidence\s+principale\s*[-–—]?\s*RP\s+(\d[\d\s,]*)\s*€/i,
+  ];
+  
+  let rpMatch: RegExpMatchArray | null = null;
+  let patternIndex = 0;
+  for (let i = 0; i < rpPatterns.length; i++) {
+    rpMatch = text.match(rpPatterns[i]);
+    if (rpMatch) {
+      patternIndex = i;
+      break;
+    }
+  }
   
   if (rpMatch) {
-    const rpNom = formatNom(rpMatch[1].trim());
-    const rpValeur = parseInt(rpMatch[2].replace(/[\s,]/g, ""), 10);
+    // Pattern 4 (index 3) "RP" n'a qu'un groupe de capture (montant), les autres ont 2 (nom, montant)
+    let rpNom: string;
+    let rpValeur: number;
+    
+    if (patternIndex === 3) {
+      // Pattern "RP" - un seul groupe (montant)
+      rpNom = "RP";
+      rpValeur = parseInt(rpMatch[1].replace(/[\s,]/g, ""), 10);
+    } else {
+      // Patterns 0, 1, 2 - deux groupes (nom, montant)
+      rpNom = formatNom(rpMatch[1].trim());
+      rpValeur = parseInt(rpMatch[2].replace(/[\s,]/g, ""), 10);
+    }
     
     const rp: BienImmobilier = {
       id: `rp-${normalizeNom(rpNom)}`,
@@ -357,7 +517,7 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
     // Le nom "Primo MTP" apparaît 2 fois : dans ACTIFS et dans PASSIFS
     // On doit trouver TOUS les matchs et prendre celui qui est dans la section PASSIFS/Crédit
     
-    const rpNomOriginal = rpMatch[1].trim();
+    const rpNomOriginal = rpNom;
     const rpNomEscaped = rpNomOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     // Pattern avec flag 'g' pour trouver TOUS les matchs
@@ -403,8 +563,9 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
   // === 2. BIENS LOCATIFS ===
   // Format: "Classique   -   Sete AIRBNB   72 500 €   72 500 €"
   // Format: "Pinel   -   Sète   180 000 €   180 000 €"
+  // Supporte: Classique, LMNP, LMP, Pinel, Denormandie, Malraux, Monument Historique, Déficit Foncier, etc.
   const locatifPatterns = [
-    /(?:Classique|LMNP|LMP|Pinel|Denormandie|Malraux|Monument\s+Historique|Déficit\s+foncier)\s*[-–—]\s*([^\d]+?)\s+([\d\s,]+)\s*€/gi,
+    /(?:Classique|LMNP|LMP|Pinel|Denormandie|Malraux|MH|Monument\s+Historique|DF|D[ée]ficit\s+[Ff]oncier|Locatif)\s*[-–—]\s*([^\d]+?)\s+([\d\s,]+)\s*€/gi,
   ];
   
   for (const pattern of locatifPatterns) {
@@ -412,7 +573,7 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
     while ((match = pattern.exec(text)) !== null) {
       // Extraire le type réel du bien (Pinel, LMNP, Classique, etc.)
       const fullMatch = match[0];
-      const typeRealMatch = fullMatch.match(/^(Classique|LMNP|LMP|Pinel|Denormandie|Malraux|Monument\s+Historique|Déficit\s+foncier)/i);
+      const typeRealMatch = fullMatch.match(/^(Classique|LMNP|LMP|Pinel|Denormandie|Malraux|MH|Monument\s+Historique|DF|D[ée]ficit\s+[Ff]oncier|Locatif)/i);
       const typeReel = typeRealMatch ? typeRealMatch[1].toUpperCase() : "LOCATIF";
       const typeBien = formatNom(typeRealMatch ? typeRealMatch[1] : "Locatif");
       const nomBien = formatNom(match[1].trim());
@@ -427,6 +588,14 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
         typeFinal = "SCPI";
       } else if (typeReel === "PINEL") {
         typeFinal = "PINEL";
+      } else if (typeReel === "DENORMANDIE") {
+        typeFinal = "DENORMANDIE";
+      } else if (typeReel === "MALRAUX") {
+        typeFinal = "MALRAUX";
+      } else if (typeReel.includes("MONUMENT") || typeReel === "MH") {
+        typeFinal = "MH";
+      } else if (typeReel.includes("DEFICIT") || typeReel.includes("DÉFICIT") || typeReel === "DF") {
+        typeFinal = "DF";
       } else if (typeReel === "LMNP") {
         typeFinal = "LMNP";
       } else if (typeReel === "LMP") {
@@ -451,10 +620,11 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
       // Chercher le crédit associé (sauf crédit SCPI générique, traité après)
       // Format RIO: "Crédit immobilier - Pinel sète Nicolas P. 8 306 € 143 128 € 01/12/2046"
       // Le matching doit être intelligent car les noms peuvent différer entre ACTIFS et PASSIFS
+      // Note: PDF.js peut insérer des espaces ("Cré dit" au lieu de "Crédit")
       const nomNormalized = normalizeNom(nomBien);
       const typeNormalized = normalizeNom(typeBien); // "pinel", "lmnp", "classique", etc.
       const creditPattern2 = new RegExp(
-        `Crédit\\s+immobilier\\s*[-–—]\\s*([^€]+?)\\s+(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
+        `Cr[ée]\\s*dit\\s+immobilier\\s*[-–—]\\s*([^€]+?)\\s{2,}(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
         "gi"
       );
       
@@ -575,6 +745,7 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
       let smallestDiff = Infinity;
       
       for (const scpi of scpiBiens) {
+        if (scpi.valeur === undefined) continue;
         const diff = Math.abs(scpi.valeur - crd);
         if (diff < smallestDiff) {
           smallestDiff = diff;
@@ -583,11 +754,168 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
       }
       
       // Assigner le crédit si on a trouvé une SCPI proche (différence < 20% de la valeur)
-      if (bestMatch && smallestDiff < bestMatch.valeur * 0.2) {
+      if (bestMatch && bestMatch.valeur && smallestDiff < bestMatch.valeur * 0.2) {
         bestMatch.echeanceAnnuelle = echeanceAnnuelle;
         bestMatch.creditCRD = crd;
         bestMatch.mensualiteCredit = Math.round(echeanceAnnuelle / 12);
         bestMatch.dateFinCredit = dateEcheance;
+      }
+    }
+  }
+  
+  // === POST-TRAITEMENT : Crédits orphelins (matching intelligent) ===
+  // Pour les biens sans crédit, essayer d'associer des crédits non encore matchés
+  
+  // 1. Collecter TOUS les crédits immobiliers du document
+  interface CreditInfo {
+    nom: string;
+    echeanceAnnuelle: number;
+    crd: number;
+    dateEcheance?: string;
+    matched: boolean;
+  }
+  const allCredits: CreditInfo[] = [];
+  
+  // Pattern amélioré pour gérer les espaces multiples ET les espaces insérés dans les mots
+  // Format: "Crédit immobilier   -   Crédit   Helena V.   6 878 €   86 100 €   01/04/2044"
+  // Note: PDF.js peut insérer des espaces dans les mots ("Cré dit" au lieu de "Crédit")
+  const allCreditsPattern = /Cr[ée]\s*dit\s+immobilier\s*[-–—]\s*(.+?)\s{2,}(\d[\d\s,]*)\s*€\s+(\d[\d\s,]*)\s*€(?:\s+(\d{2}\/\d{2}\/\d{4}))?/gi;
+  let creditMatch;
+  while ((creditMatch = allCreditsPattern.exec(text)) !== null) {
+    const nomCredit = creditMatch[1].trim();
+    // Ignorer les lignes de total ("Crédit immobilier 25 680 € 410 225 €")
+    if (nomCredit.length < 2 || /^\d/.test(nomCredit)) continue;
+    
+    allCredits.push({
+      nom: nomCredit,
+      echeanceAnnuelle: parseInt(creditMatch[2].replace(/[\s,]/g, ""), 10),
+      crd: parseInt(creditMatch[3].replace(/[\s,]/g, ""), 10),
+      dateEcheance: creditMatch[4],
+      matched: false,
+    });
+  }
+  
+  // 2. Marquer les crédits déjà associés
+  for (const bien of biens) {
+    if (bien.creditCRD) {
+      // Trouver le crédit correspondant et le marquer
+      for (const credit of allCredits) {
+        if (!credit.matched && credit.crd === bien.creditCRD) {
+          credit.matched = true;
+          break;
+        }
+      }
+    }
+  }
+  
+  // 3. Pour les biens sans crédit, essayer d'associer des crédits orphelins
+  const biensWithoutCredit = biens.filter(b => !b.creditCRD && b.valeur);
+  const orphanCredits = allCredits.filter(c => !c.matched);
+  
+  if (biensWithoutCredit.length > 0 && orphanCredits.length > 0) {
+    for (const bien of biensWithoutCredit) {
+      if (!bien.valeur) continue;
+      
+      let bestCredit: CreditInfo | null = null;
+      let bestScore = 0;
+      
+      for (const credit of orphanCredits) {
+        if (credit.matched) continue;
+        
+        let score = 0;
+        const creditNomNormalized = normalizeNom(credit.nom);
+        const bienNomNormalized = normalizeNom(bien.nom);
+        
+        // Stratégie 1: Match par type (RP, Pinel, etc.)
+        if (bien.type === "RP" && (creditNomNormalized.includes("rp") || 
+            creditNomNormalized.includes("residence") || 
+            creditNomNormalized.includes("principale") ||
+            /^credit\s*1$/i.test(credit.nom) ||  // "Credit 1" souvent = RP
+            /^pret\s*1$/i.test(credit.nom))) {
+          score += 50;
+        }
+        
+        if (bien.type === "PINEL" && creditNomNormalized.includes("pinel")) {
+          score += 50;
+        }
+        
+        if (bien.type === "DENORMANDIE" && creditNomNormalized.includes("denormandie")) {
+          score += 50;
+        }
+        
+        if (bien.type === "MALRAUX" && creditNomNormalized.includes("malraux")) {
+          score += 50;
+        }
+        
+        if (bien.type === "MH" && (creditNomNormalized.includes("monument") || creditNomNormalized.includes("mh"))) {
+          score += 50;
+        }
+        
+        if (bien.type === "DF" && (creditNomNormalized.includes("deficit") || creditNomNormalized.includes("df"))) {
+          score += 50;
+        }
+        
+        if (bien.type === "LMNP" && creditNomNormalized.includes("lmnp")) {
+          score += 50;
+        }
+        
+        if (bien.type === "LMP" && creditNomNormalized.includes("lmp")) {
+          score += 50;
+        }
+        
+        // Stratégie 2: Match par proximité de montant (CRD vs valeur du bien)
+        // Un CRD est généralement entre 30% et 95% de la valeur du bien
+        const ratio = credit.crd / bien.valeur;
+        if (ratio > 0.2 && ratio < 1.0) {
+          // Plus le ratio est proche de 0.5-0.7, plus c'est plausible
+          const optimalRatio = 0.6;
+          const ratioDiff = Math.abs(ratio - optimalRatio);
+          score += Math.max(0, 30 - ratioDiff * 50);
+        }
+        
+        // Stratégie 3: Si un seul bien de ce type sans crédit et un seul crédit orphelin
+        if (biensWithoutCredit.filter(b => b.type === bien.type).length === 1 &&
+            orphanCredits.filter(c => !c.matched).length === 1) {
+          score += 20;
+        }
+        
+        // Stratégie 3b: Si UN SEUL bien immobilier total sans crédit et UN SEUL crédit orphelin
+        // Dans ce cas, c'est quasi certain que le crédit correspond au bien
+        if (biensWithoutCredit.length === 1 && orphanCredits.filter(c => !c.matched).length === 1) {
+          score += 40; // Score élevé car très probable
+        }
+        
+        // Stratégie 3c: Le crédit contient juste "Crédit" ou le nom d'une personne (très générique)
+        // Si c'est une RP et le seul bien de type RP, on augmente le score
+        if (bien.type === "RP" || bien.type === "RESIDENCE_PRINCIPALE") {
+          const isGenericCreditName = /^cr[ée]dit$/i.test(creditNomNormalized) || 
+                                       creditNomNormalized.length <= 15;
+          if (isGenericCreditName && biensWithoutCredit.filter(b => 
+              b.type === "RP" || b.type === "RESIDENCE_PRINCIPALE").length === 1) {
+            score += 30;
+          }
+        }
+        
+        // Stratégie 4: Match partiel sur le nom
+        if (bienNomNormalized.length >= 3 && 
+            (creditNomNormalized.includes(bienNomNormalized.substring(0, 3)) ||
+             bienNomNormalized.includes(creditNomNormalized.substring(0, 3)))) {
+          score += 15;
+        }
+        
+        if (score > bestScore) {
+          bestScore = score;
+          bestCredit = credit;
+        }
+      }
+      
+      // Associer si le score est suffisant (au moins 40 points)
+      if (bestCredit && bestScore >= 40) {
+        bien.echeanceAnnuelle = bestCredit.echeanceAnnuelle;
+        bien.creditCRD = bestCredit.crd;
+        bien.mensualiteCredit = Math.round(bestCredit.echeanceAnnuelle / 12);
+        bien.dateFinCredit = bestCredit.dateEcheance;
+        bestCredit.matched = true;
       }
     }
   }
@@ -602,9 +930,7 @@ export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
   const adresse = extractAdresseComplete(text);
   const rp = extractResidencePrincipale(text);
   const liquidites = extractLiquidites(text);
-  const assuranceVie = extractAssuranceVie(text);
-  const per = extractPER(text);
-  const scpi = extractSCPI(text);
+  const epargneLongTerme = extractEpargneLongTerme(text);
   const { patrimoineTotal, patrimoineNet } = extractPatrimoineTotal(text);
   const chargesTotal = extractChargesTotal(text);
   const profession = extractProfessionExacte(text);
@@ -613,12 +939,21 @@ export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
   // Nouvelle extraction : liste des biens immobiliers
   const biensImmobiliers = extractBiensImmobiliers(text);
 
-  // Calculer la somme totale de l'épargne
+  // Calculer la somme totale de l'épargne (court terme + long terme)
   const epargneTotal = 
     (liquidites.total || 0) + 
-    (assuranceVie || 0) + 
-    (per || 0) + 
-    (scpi || 0);
+    (epargneLongTerme.assuranceVie || 0) + 
+    (epargneLongTerme.per || 0) + 
+    (epargneLongTerme.perp || 0) +
+    (epargneLongTerme.madelin || 0) +
+    (epargneLongTerme.article83 || 0) +
+    (epargneLongTerme.pea || 0) +
+    (epargneLongTerme.compteTitres || 0) +
+    (epargneLongTerme.pee || 0) +
+    (epargneLongTerme.perco || 0) +
+    (epargneLongTerme.contratCapi || 0) +
+    (epargneLongTerme.fcpiFip || 0) +
+    (epargneLongTerme.scpiEpargne || 0);
 
   return {
     // Adresse
@@ -637,15 +972,34 @@ export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
     // Nouvelle structure : liste des biens
     biensImmobiliers,
 
-    // Patrimoine financier - Total épargne + détails
+    // Patrimoine financier - Total épargne
     epargneTotal,
+    
+    // Court terme
     liquidites: liquidites.total,
     livretA: liquidites.livretA,
     compteCourant: liquidites.compteCourant,
     ldd: liquidites.ldd,
-    assuranceVie,
-    per,
-    scpi,
+    lep: liquidites.lep,
+    pel: liquidites.pel,
+    cel: liquidites.cel,
+    csl: liquidites.csl,
+    livretJeune: liquidites.livretJeune,
+    partsSociales: liquidites.partsSociales,
+    
+    // Long terme
+    assuranceVie: epargneLongTerme.assuranceVie,
+    per: epargneLongTerme.per,
+    perp: epargneLongTerme.perp,
+    madelin: epargneLongTerme.madelin,
+    article83: epargneLongTerme.article83,
+    pea: epargneLongTerme.pea,
+    compteTitres: epargneLongTerme.compteTitres,
+    pee: epargneLongTerme.pee,
+    perco: epargneLongTerme.perco,
+    contratCapi: epargneLongTerme.contratCapi,
+    fcpiFip: epargneLongTerme.fcpiFip,
+    scpi: epargneLongTerme.scpiEpargne,
 
     // Totaux
     patrimoineTotal,

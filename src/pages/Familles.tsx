@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Search, Users, ChevronDown, ChevronUp, Home, Briefcase } from "lucide-react";
+import { Search, Users, ChevronDown, ChevronUp, Home } from "lucide-react";
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import { getInvestissementsByContact, getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";

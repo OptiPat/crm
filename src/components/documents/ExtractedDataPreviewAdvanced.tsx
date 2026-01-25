@@ -635,7 +635,7 @@ export function ExtractedDataPreviewAdvanced({
                     <div className="md:col-span-2 mt-4">
                       <h4 className="font-medium text-sm mb-3">🏠 Immobilier ({formData.biensImmobiliers.length} bien{formData.biensImmobiliers.length > 1 ? 's' : ''})</h4>
                     </div>
-                    {formData.biensImmobiliers.map((bien, index) => (
+                    {formData.biensImmobiliers.map((bien, _index) => (
                       <div key={bien.id} className="md:col-span-2 p-3 border rounded-lg space-y-2">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">
@@ -643,10 +643,14 @@ export function ExtractedDataPreviewAdvanced({
                           </span>
                           <span className="font-medium">{bien.nom}</span>
                           <span className="text-muted-foreground text-sm">
-                            ({bien.type === "RESIDENCE_PRINCIPALE" ? "RP" : 
-                              bien.type === "RESIDENCE_SECONDAIRE" ? "RS" : 
+                            ({bien.type === "RESIDENCE_PRINCIPALE" || bien.type === "RP" ? "RP" : 
+                              bien.type === "RESIDENCE_SECONDAIRE" || bien.type === "RS" ? "RS" : 
                               bien.type === "SCPI" ? "SCPI" :
                               bien.type === "PINEL" ? "Pinel" :
+                              bien.type === "DENORMANDIE" ? "Denormandie" :
+                              bien.type === "MALRAUX" ? "Malraux" :
+                              bien.type === "MH" ? "Monuments Hist." :
+                              bien.type === "DF" ? "Déficit Foncier" :
                               bien.type === "LMNP" ? "LMNP" :
                               bien.type === "LMP" ? "LMP" :
                               "Locatif"})
@@ -755,8 +759,23 @@ export function ExtractedDataPreviewAdvanced({
                   formData.livretA,
                   formData.compteCourant,
                   formData.ldd,
+                  formData.lep,
+                  formData.pel,
+                  formData.cel,
+                  formData.csl,
+                  formData.livretJeune,
+                  formData.partsSociales,
                   formData.assuranceVie,
                   formData.per,
+                  formData.perp,
+                  formData.madelin,
+                  formData.article83,
+                  formData.pea,
+                  formData.compteTitres,
+                  formData.pee,
+                  formData.perco,
+                  formData.contratCapi,
+                  formData.fcpiFip,
                   formData.scpi,
                 ]) && (
                   <>
@@ -787,6 +806,12 @@ export function ExtractedDataPreviewAdvanced({
                       formData.livretA,
                       formData.compteCourant,
                       formData.ldd,
+                      formData.lep,
+                      formData.pel,
+                      formData.cel,
+                      formData.csl,
+                      formData.livretJeune,
+                      formData.partsSociales,
                     ]) && (
                       <>
 
@@ -824,7 +849,7 @@ export function ExtractedDataPreviewAdvanced({
 
                         {formData.ldd !== undefined && (
                           <div className="space-y-2">
-                            <Label>LDD</Label>
+                            <Label>LDD/LDDS</Label>
                             <Input
                               type="number"
                               value={formData.ldd || ""}
@@ -837,56 +862,313 @@ export function ExtractedDataPreviewAdvanced({
                             />
                           </div>
                         )}
+
+                        {formData.lep !== undefined && (
+                          <div className="space-y-2">
+                            <Label>LEP</Label>
+                            <Input
+                              type="number"
+                              value={formData.lep || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  lep: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.pel !== undefined && (
+                          <div className="space-y-2">
+                            <Label>PEL</Label>
+                            <Input
+                              type="number"
+                              value={formData.pel || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  pel: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.cel !== undefined && (
+                          <div className="space-y-2">
+                            <Label>CEL</Label>
+                            <Input
+                              type="number"
+                              value={formData.cel || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  cel: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.csl !== undefined && (
+                          <div className="space-y-2">
+                            <Label>CSL</Label>
+                            <Input
+                              type="number"
+                              value={formData.csl || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  csl: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.livretJeune !== undefined && (
+                          <div className="space-y-2">
+                            <Label>Livret Jeune</Label>
+                            <Input
+                              type="number"
+                              value={formData.livretJeune || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  livretJeune: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.partsSociales !== undefined && (
+                          <div className="space-y-2">
+                            <Label>Parts sociales</Label>
+                            <Input
+                              type="number"
+                              value={formData.partsSociales || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  partsSociales: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
                       </>
                     )}
 
                     {/* Long terme */}
-                    {formData.assuranceVie !== undefined && (
-                      <div className="space-y-2 md:col-span-2 mt-2">
-                        <Label>Assurance vie</Label>
-                        <Input
-                          type="number"
-                          value={formData.assuranceVie || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              assuranceVie: parseInt(e.target.value) || undefined,
-                            })
-                          }
-                        />
-                      </div>
-                    )}
+                    {hasData([
+                      formData.assuranceVie,
+                      formData.per,
+                      formData.perp,
+                      formData.madelin,
+                      formData.article83,
+                      formData.pea,
+                      formData.compteTitres,
+                      formData.pee,
+                      formData.perco,
+                      formData.contratCapi,
+                      formData.fcpiFip,
+                      formData.scpi,
+                    ]) && (
+                      <>
+                        {formData.assuranceVie !== undefined && (
+                          <div className="space-y-2">
+                            <Label>Assurance-vie</Label>
+                            <Input
+                              type="number"
+                              value={formData.assuranceVie || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  assuranceVie: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
 
-                    {formData.per !== undefined && (
-                      <div className="space-y-2">
-                        <Label>PER</Label>
-                        <Input
-                          type="number"
-                          value={formData.per || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              per: parseInt(e.target.value) || undefined,
-                            })
-                          }
-                        />
-                      </div>
-                    )}
+                        {formData.per !== undefined && (
+                          <div className="space-y-2">
+                            <Label>PER</Label>
+                            <Input
+                              type="number"
+                              value={formData.per || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  per: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
 
-                    {formData.scpi !== undefined && (
-                      <div className="space-y-2">
-                        <Label>SCPI</Label>
-                        <Input
-                          type="number"
-                          value={formData.scpi || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              scpi: parseInt(e.target.value) || undefined,
-                            })
-                          }
-                        />
-                      </div>
+                        {formData.perp !== undefined && (
+                          <div className="space-y-2">
+                            <Label>PERP</Label>
+                            <Input
+                              type="number"
+                              value={formData.perp || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  perp: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.madelin !== undefined && (
+                          <div className="space-y-2">
+                            <Label>Madelin</Label>
+                            <Input
+                              type="number"
+                              value={formData.madelin || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  madelin: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.article83 !== undefined && (
+                          <div className="space-y-2">
+                            <Label>Article 83</Label>
+                            <Input
+                              type="number"
+                              value={formData.article83 || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  article83: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.pea !== undefined && (
+                          <div className="space-y-2">
+                            <Label>PEA</Label>
+                            <Input
+                              type="number"
+                              value={formData.pea || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  pea: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.compteTitres !== undefined && (
+                          <div className="space-y-2">
+                            <Label>Compte-titres</Label>
+                            <Input
+                              type="number"
+                              value={formData.compteTitres || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  compteTitres: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.pee !== undefined && (
+                          <div className="space-y-2">
+                            <Label>PEE</Label>
+                            <Input
+                              type="number"
+                              value={formData.pee || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  pee: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.perco !== undefined && (
+                          <div className="space-y-2">
+                            <Label>PERCO</Label>
+                            <Input
+                              type="number"
+                              value={formData.perco || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  perco: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.contratCapi !== undefined && (
+                          <div className="space-y-2">
+                            <Label>Contrat de capitalisation</Label>
+                            <Input
+                              type="number"
+                              value={formData.contratCapi || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  contratCapi: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.fcpiFip !== undefined && (
+                          <div className="space-y-2">
+                            <Label>FCPI/FIP</Label>
+                            <Input
+                              type="number"
+                              value={formData.fcpiFip || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  fcpiFip: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+
+                        {formData.scpi !== undefined && (
+                          <div className="space-y-2">
+                            <Label>SCPI</Label>
+                            <Input
+                              type="number"
+                              value={formData.scpi || ""}
+                              onChange={(e) =>
+                                setFormData({
+                                  ...formData,
+                                  scpi: parseInt(e.target.value) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 )}

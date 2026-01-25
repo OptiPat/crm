@@ -1302,35 +1302,73 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               
               // Associer les 2 contacts au foyer (s'ils ne le sont pas déjà)
               if (coupleAnalysis.contact1.foyer_id !== foyerToUse.id) {
-                await updateContact(coupleAnalysis.contact1.id, {
-                  ...coupleAnalysis.contact1,
+                const c1 = coupleAnalysis.contact1;
+                await updateContact(c1.id, {
+                  nom: c1.nom,
+                  prenom: c1.prenom,
+                  email: c1.email || undefined,
+                  telephone: c1.telephone || undefined,
+                  adresse: c1.adresse || undefined,
+                  code_postal: c1.code_postal || undefined,
+                  ville: c1.ville || undefined,
+                  profession: c1.profession || undefined,
+                  categorie: c1.categorie,
+                  statut_suivi: c1.statut_suivi || "ACTIF",
+                  filleul_categorie: c1.filleul_categorie || undefined,
+                  parrain_id: c1.parrain_id || undefined,
+                  prescripteur_id: c1.prescripteur_id || undefined,
                   foyer_id: foyerToUse.id,
                   role_foyer: "DECLARANT_1",
-                  date_naissance: coupleAnalysis.contact1.date_naissance 
-                    ? new Date(coupleAnalysis.contact1.date_naissance * 1000).toISOString() 
+                  date_naissance: c1.date_naissance 
+                    ? new Date(c1.date_naissance * 1000).toISOString() 
                     : undefined,
-                  date_dernier_contact: coupleAnalysis.contact1.date_dernier_contact 
-                    ? new Date(coupleAnalysis.contact1.date_dernier_contact * 1000).toISOString() 
+                  date_dernier_contact: c1.date_dernier_contact 
+                    ? new Date(c1.date_dernier_contact * 1000).toISOString() 
                     : undefined,
-                  date_prochain_suivi: coupleAnalysis.contact1.date_prochain_suivi 
-                    ? new Date(coupleAnalysis.contact1.date_prochain_suivi * 1000).toISOString() 
+                  date_prochain_suivi: c1.date_prochain_suivi 
+                    ? new Date(c1.date_prochain_suivi * 1000).toISOString() 
+                    : undefined,
+                  date_dernier_contact_filleul: c1.date_dernier_contact_filleul 
+                    ? new Date(c1.date_dernier_contact_filleul * 1000).toISOString() 
+                    : undefined,
+                  date_prochain_suivi_filleul: c1.date_prochain_suivi_filleul 
+                    ? new Date(c1.date_prochain_suivi_filleul * 1000).toISOString() 
                     : undefined,
                 });
               }
               
               if (coupleAnalysis.contact2.foyer_id !== foyerToUse.id) {
-                await updateContact(coupleAnalysis.contact2.id, {
-                  ...coupleAnalysis.contact2,
+                const c2 = coupleAnalysis.contact2;
+                await updateContact(c2.id, {
+                  nom: c2.nom,
+                  prenom: c2.prenom,
+                  email: c2.email || undefined,
+                  telephone: c2.telephone || undefined,
+                  adresse: c2.adresse || undefined,
+                  code_postal: c2.code_postal || undefined,
+                  ville: c2.ville || undefined,
+                  profession: c2.profession || undefined,
+                  categorie: c2.categorie,
+                  statut_suivi: c2.statut_suivi || "ACTIF",
+                  filleul_categorie: c2.filleul_categorie || undefined,
+                  parrain_id: c2.parrain_id || undefined,
+                  prescripteur_id: c2.prescripteur_id || undefined,
                   foyer_id: foyerToUse.id,
                   role_foyer: "DECLARANT_2",
-                  date_naissance: coupleAnalysis.contact2.date_naissance 
-                    ? new Date(coupleAnalysis.contact2.date_naissance * 1000).toISOString() 
+                  date_naissance: c2.date_naissance 
+                    ? new Date(c2.date_naissance * 1000).toISOString() 
                     : undefined,
-                  date_dernier_contact: coupleAnalysis.contact2.date_dernier_contact 
-                    ? new Date(coupleAnalysis.contact2.date_dernier_contact * 1000).toISOString() 
+                  date_dernier_contact: c2.date_dernier_contact 
+                    ? new Date(c2.date_dernier_contact * 1000).toISOString() 
                     : undefined,
-                  date_prochain_suivi: coupleAnalysis.contact2.date_prochain_suivi 
-                    ? new Date(coupleAnalysis.contact2.date_prochain_suivi * 1000).toISOString() 
+                  date_prochain_suivi: c2.date_prochain_suivi 
+                    ? new Date(c2.date_prochain_suivi * 1000).toISOString() 
+                    : undefined,
+                  date_dernier_contact_filleul: c2.date_dernier_contact_filleul 
+                    ? new Date(c2.date_dernier_contact_filleul * 1000).toISOString() 
+                    : undefined,
+                  date_prochain_suivi_filleul: c2.date_prochain_suivi_filleul 
+                    ? new Date(c2.date_prochain_suivi_filleul * 1000).toISOString() 
                     : undefined,
                 });
               }
@@ -1417,15 +1455,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 
                 // Mettre à jour contact2 pour le rattacher au foyer
                 if (coupleAnalysis.contact2.foyer_id !== foyerToUse.id) {
-                  await updateContact(coupleAnalysis.contact2.id, {
-                    ...coupleAnalysis.contact2,
+                  const c2 = coupleAnalysis.contact2;
+                  await updateContact(c2.id, {
+                    nom: c2.nom,
+                    prenom: c2.prenom,
+                    email: c2.email || undefined,
+                    telephone: c2.telephone || undefined,
+                    adresse: c2.adresse || undefined,
+                    code_postal: c2.code_postal || undefined,
+                    ville: c2.ville || undefined,
+                    profession: c2.profession || undefined,
+                    categorie: c2.categorie,
+                    statut_suivi: c2.statut_suivi || "ACTIF",
+                    filleul_categorie: c2.filleul_categorie || undefined,
+                    parrain_id: c2.parrain_id || undefined,
+                    prescripteur_id: c2.prescripteur_id || undefined,
                     foyer_id: foyerToUse.id,
                     role_foyer: "DECLARANT_2",
-                    date_naissance: coupleAnalysis.contact2.date_naissance 
-                      ? new Date(coupleAnalysis.contact2.date_naissance * 1000).toISOString() 
+                    date_naissance: c2.date_naissance 
+                      ? new Date(c2.date_naissance * 1000).toISOString() 
                       : undefined,
-                    date_dernier_contact: coupleAnalysis.contact2.date_dernier_contact 
-                      ? new Date(coupleAnalysis.contact2.date_dernier_contact * 1000).toISOString() 
+                    date_dernier_contact: c2.date_dernier_contact 
+                      ? new Date(c2.date_dernier_contact * 1000).toISOString() 
+                      : undefined,
+                    date_prochain_suivi: c2.date_prochain_suivi 
+                      ? new Date(c2.date_prochain_suivi * 1000).toISOString() 
+                      : undefined,
+                    date_dernier_contact_filleul: c2.date_dernier_contact_filleul 
+                      ? new Date(c2.date_dernier_contact_filleul * 1000).toISOString() 
+                      : undefined,
+                    date_prochain_suivi_filleul: c2.date_prochain_suivi_filleul 
+                      ? new Date(c2.date_prochain_suivi_filleul * 1000).toISOString() 
                       : undefined,
                   });
                   const idx2 = allContactsCache.findIndex(c => c.id === coupleAnalysis.contact2!.id);
@@ -1450,15 +1510,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 
                 // Mettre à jour contact1 pour le rattacher au foyer
                 if (coupleAnalysis.contact1.foyer_id !== foyerToUse.id) {
-                  await updateContact(coupleAnalysis.contact1.id, {
-                    ...coupleAnalysis.contact1,
+                  const c1 = coupleAnalysis.contact1;
+                  await updateContact(c1.id, {
+                    nom: c1.nom,
+                    prenom: c1.prenom,
+                    email: c1.email || undefined,
+                    telephone: c1.telephone || undefined,
+                    adresse: c1.adresse || undefined,
+                    code_postal: c1.code_postal || undefined,
+                    ville: c1.ville || undefined,
+                    profession: c1.profession || undefined,
+                    categorie: c1.categorie,
+                    statut_suivi: c1.statut_suivi || "ACTIF",
+                    filleul_categorie: c1.filleul_categorie || undefined,
+                    parrain_id: c1.parrain_id || undefined,
+                    prescripteur_id: c1.prescripteur_id || undefined,
                     foyer_id: foyerToUse.id,
                     role_foyer: "DECLARANT_1",
-                    date_naissance: coupleAnalysis.contact1.date_naissance 
-                      ? new Date(coupleAnalysis.contact1.date_naissance * 1000).toISOString() 
+                    date_naissance: c1.date_naissance 
+                      ? new Date(c1.date_naissance * 1000).toISOString() 
                       : undefined,
-                    date_dernier_contact: coupleAnalysis.contact1.date_dernier_contact 
-                      ? new Date(coupleAnalysis.contact1.date_dernier_contact * 1000).toISOString() 
+                    date_dernier_contact: c1.date_dernier_contact 
+                      ? new Date(c1.date_dernier_contact * 1000).toISOString() 
+                      : undefined,
+                    date_prochain_suivi: c1.date_prochain_suivi 
+                      ? new Date(c1.date_prochain_suivi * 1000).toISOString() 
+                      : undefined,
+                    date_dernier_contact_filleul: c1.date_dernier_contact_filleul 
+                      ? new Date(c1.date_dernier_contact_filleul * 1000).toISOString() 
+                      : undefined,
+                    date_prochain_suivi_filleul: c1.date_prochain_suivi_filleul 
+                      ? new Date(c1.date_prochain_suivi_filleul * 1000).toISOString() 
                       : undefined,
                   });
                   const idx1 = allContactsCache.findIndex(c => c.id === coupleAnalysis.contact1!.id);

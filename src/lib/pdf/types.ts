@@ -5,7 +5,7 @@
  */
 export interface BienImmobilier {
   id: string; // Identifiant unique (ex: "rp-primo-mtp", "locatif-pinel-sete")
-  type: "RESIDENCE_PRINCIPALE" | "RESIDENCE_SECONDAIRE" | "LOCATIF";
+  type: "RESIDENCE_PRINCIPALE" | "RESIDENCE_SECONDAIRE" | "LOCATIF" | "SCPI" | "PINEL" | "LMNP" | "LMP" | "RP" | string;
   nom: string; // Nom du bien (ex: "Primo Mtp", "Pinel - Sète")
   valeur?: number; // Valeur du bien
   creditCRD?: number; // Capital Restant Dû
@@ -102,14 +102,36 @@ export interface ExtractedData {
   
   // === PATRIMOINE FINANCIER ===
   epargneTotal?: number; // Somme de toute l'épargne
+  
+  // --- Court terme ---
   liquidites?: number; // Total court terme
   livretA?: number;
   livretEpargne?: number;
-  ldd?: number; // Livret Développement Durable
+  ldd?: number; // Livret Développement Durable et Solidaire
+  lep?: number; // Livret d'Épargne Populaire
+  pel?: number; // Plan Épargne Logement
+  cel?: number; // Compte Épargne Logement
+  csl?: number; // Compte Sur Livret
+  livretJeune?: number;
+  partsSociales?: number;
   compteCourant?: number;
+  
+  // --- Long terme ---
   assuranceVie?: number;
-  per?: number;
+  per?: number; // Plan Épargne Retraite (nouveau)
+  perp?: number; // Plan Épargne Retraite Populaire (ancien)
+  madelin?: number; // Contrat Madelin (TNS)
+  article83?: number; // Article 83 (retraite entreprise)
+  pea?: number; // Plan Épargne en Actions
+  compteTitres?: number; // Compte-titres ordinaire
+  pee?: number; // Plan Épargne Entreprise
+  perco?: number; // Plan Épargne Retraite Collectif
+  contratCapi?: number; // Contrat de capitalisation
+  fcpiFip?: number; // FCPI / FIP
   scpi?: number;
+  opci?: number;
+  
+  // --- Autres ---
   actionsObligations?: number;
   autresPlacementFinanciers?: number;
   

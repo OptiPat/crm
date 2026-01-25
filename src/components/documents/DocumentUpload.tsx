@@ -634,12 +634,17 @@ export function DocumentUpload({
                   </div>
                 )}
 
-                {/* Texte extrait (succès) */}
+                {/* Texte extrait (succès) - cliquable pour voir le contenu */}
                 {!extracting && extractedText && (
-                  <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                    <FileText className="h-4 w-4" />
-                    Texte extrait ({extractedText.length} caractères)
-                  </div>
+                  <details className="p-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                    <summary className="flex items-center gap-2 cursor-pointer">
+                      <FileText className="h-4 w-4" />
+                      Texte extrait ({extractedText.length} caractères) - cliquer pour voir
+                    </summary>
+                    <div className="mt-2 p-2 bg-white border rounded text-xs text-gray-700 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
+                      {extractedText}
+                    </div>
+                  </details>
                 )}
               </div>
             ) : (

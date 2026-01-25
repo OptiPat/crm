@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
 import * as XLSX from "xlsx";
-import { createContact, findContactByName, getAllContacts, updateContact, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
+import { createContact, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
 import { Badge } from "@/components/ui/badge";
 
 interface ContactImportFilleulsProps {
