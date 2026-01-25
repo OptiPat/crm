@@ -384,9 +384,10 @@ export function RioUpdateComparisonDialog({
             reinvestissementDividendes: match.reinvestissement_dividendes || false,
             pourcentageReinvestissement: undefined,
             dateSouscription: match.date_souscription ? new Date(match.date_souscription * 1000).toISOString().split("T")[0] : undefined,
-            loyerMensuel: undefined,
-            mensualiteCredit: undefined,
-            creditCRD: undefined,
+            // Pré-remplir avec les valeurs du RIO (priorité) ou existantes
+            loyerMensuel: ext.loyerAnnuel ? Math.round(ext.loyerAnnuel / 12) : undefined,
+            mensualiteCredit: ext.mensualiteCredit,
+            creditCRD: ext.creditCRD,
           });
         } else {
           newComparisons.push({

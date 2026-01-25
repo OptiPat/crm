@@ -366,22 +366,21 @@ export function ExtractedDataPreviewAdvanced({
                   </div>
                 )}
 
-                {formData.nombreEnfants !== undefined && (
-                  <div className="space-y-2">
-                    <Label>Nombre d'enfants</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      value={formData.nombreEnfants ?? ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          nombreEnfants: parseInt(e.target.value) || 0,
-                        })
-                      }
-                    />
-                  </div>
-                )}
+                <div className="space-y-2">
+                  <Label>Nombre d'enfants</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={formData.nombreEnfants ?? ""}
+                    placeholder="0"
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        nombreEnfants: e.target.value ? parseInt(e.target.value) : undefined,
+                      })
+                    }
+                  />
+                </div>
                 
                 {/* TODO: Ajouter formulaire pour les enfants (nom, prénom, date de naissance) */}
                 {formData.enfants && formData.enfants.length > 0 && (

@@ -47,25 +47,137 @@ function extractRegimeMatrimonial(text: string): string | undefined {
 }
 
 /**
- * Extrait le nombre d'enfants
+ * Extrait le nombre d'enfants (plusieurs méthodes)
  */
 function extractNombreEnfants(text: string): number | undefined {
-  // Chercher "Enfants" dans la section "Personnes rattachées"
-  // Si la section existe mais est vide, considérer 0 enfants
-  const hasEnfantsSection = /Personnes\s+rattachées\s+Enfants/i.test(text);
+  // Méthode 1 : Chercher "Nombre d'enfants : X"
+  const nombreExplicite = /Nombre\s+d['']enfants?\s*:\s*\*?\s*(\d+)/i;
+  const matchNombre = text.match(nombreExplicite);
+  if (matchNombre) {
+    return parseInt(matchNombre[1], 10);
+  }
+  
+  // Méthode 2 : Chercher les enfants listés DIRECTEMENT dans tout le texte
+  // Format RIO : "Prénom NOM (JJ/MM/AAAA)" - apparaît après "Enfants" et avant "SITUATION PROFESSIONNELLE"
+  
+  // D'abord, chercher si la section "Enfants" existe
+  const hasEnfantsSection = /Enfants/i.test(text);
   
   if (hasEnfantsSection) {
-    // Chercher un nombre explicite
-    const pattern = /Nombre\s+d['']enfants?\s*:\s*\*?\s*(\d+)/i;
-    const match = text.match(pattern);
-    if (match) {
-      return parseInt(match[1], 10);
+    // Chercher tous les patterns d'enfants dans le texte entier
+    // (on filtre par contexte après)
+    const enfantsPatterns = [
+      // Format: "Junior A (05/05/2020)" ou "Prénom NOM (date)"
+      /\b([A-ZÀ-Ü][a-zà-ü]+)\s+([A-ZÀ-Ü]{2,})\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
+      // Format: "A Junior (05/05/2020)"
+      /\b([A-ZÀ-Ü]{2,})\s+([A-ZÀ-Ü][a-zà-ü]+)\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
+    ];
+    
+    const enfantsDetectes = new Set<string>();
+    
+    for (const pattern of enfantsPatterns) {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        // Vérifier le contexte : doit être proche de "Enfants" et pas dans d'autres sections
+        const matchIndex = match.index;
+        const contextBefore = text.substring(Math.max(0, matchIndex - 200), matchIndex).toLowerCase();
+        
+        // Accepter si on est dans la section enfants (après "enfants" mais pas après "situation professionnelle")
+        const isAfterEnfants = contextBefore.includes("enfants");
+        const isAfterProfession = contextBefore.includes("profession") || contextBefore.includes("professionnelle");
+        
+        if (isAfterEnfants && !isAfterProfession) {
+          // Vérifier que c'est bien un enfant (pas un nom de société, etc.)
+          const fullMatch = match[0];
+          const date = match[3];
+          
+          // Vérifier que la date est dans le passé (année < année courante + 25 ans)
+          const annee = parseInt(date.split("/")[2], 10);
+          const anneeActuelle = new Date().getFullYear();
+          
+          if (annee >= anneeActuelle - 30 && annee <= anneeActuelle) {
+            const key = fullMatch.toLowerCase();
+            if (!enfantsDetectes.has(key)) {
+              enfantsDetectes.add(key);
+            }
+          }
+        }
+      }
     }
-    // Si section présente mais pas de nombre, retourner 0
-    return 0;
+    
+    if (enfantsDetectes.size > 0) {
+      return enfantsDetectes.size;
+    }
+    
+    // Si "Enfants" existe mais rien trouvé après, et "SITUATION PROFESSIONNELLE" suit directement
+    const enfantsVide = /Enfants\s*(?:SITUATION|Profession|$)/i.test(text);
+    if (enfantsVide) {
+      return 0;
+    }
   }
   
   return undefined;
+}
+
+/**
+ * Extrait les détails des enfants (nom, prénom, date de naissance)
+ */
+function extractEnfantsDetails(text: string): Array<{ nom?: string; prenom?: string; dateNaissance?: string }> {
+  const enfants: Array<{ nom?: string; prenom?: string; dateNaissance?: string }> = [];
+  
+  // Patterns pour détecter les enfants
+  const enfantsPatterns = [
+    // Format: "Junior A (05/05/2020)" - Prénom en minuscules, NOM en majuscules
+    {
+      regex: /\b([A-ZÀ-Ü][a-zà-ü]+)\s+([A-ZÀ-Ü]{2,})\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
+      groups: { prenom: 1, nom: 2, date: 3 }
+    },
+    // Format: "A Junior (05/05/2020)" - NOM en majuscules, Prénom en minuscules
+    {
+      regex: /\b([A-ZÀ-Ü]{2,})\s+([A-ZÀ-Ü][a-zà-ü]+)\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
+      groups: { nom: 1, prenom: 2, date: 3 }
+    },
+  ];
+  
+  const enfantsDetectes = new Set<string>();
+  
+  for (const { regex, groups } of enfantsPatterns) {
+    let match;
+    while ((match = regex.exec(text)) !== null) {
+      // Vérifier le contexte
+      const matchIndex = match.index;
+      const contextBefore = text.substring(Math.max(0, matchIndex - 200), matchIndex).toLowerCase();
+      
+      const isAfterEnfants = contextBefore.includes("enfants");
+      const isAfterProfession = contextBefore.includes("profession") || contextBefore.includes("professionnelle");
+      
+      if (isAfterEnfants && !isAfterProfession) {
+        const dateStr = match[groups.date];
+        const annee = parseInt(dateStr.split("/")[2], 10);
+        const anneeActuelle = new Date().getFullYear();
+        
+        // Vérifier que c'est une date de naissance plausible (enfant < 30 ans)
+        if (annee >= anneeActuelle - 30 && annee <= anneeActuelle) {
+          const key = match[0].toLowerCase();
+          if (!enfantsDetectes.has(key)) {
+            enfantsDetectes.add(key);
+            
+            // Formater le nom et prénom
+            const nom = match[groups.nom].toUpperCase();
+            const prenom = match[groups.prenom].charAt(0).toUpperCase() + match[groups.prenom].slice(1).toLowerCase();
+            
+            enfants.push({
+              nom,
+              prenom,
+              dateNaissance: dateStr
+            });
+          }
+        }
+      }
+    }
+  }
+  
+  return enfants;
 }
 
 /**
@@ -249,6 +361,14 @@ function extractObjectifs(text: string): string[] {
     { pattern: /D[ée]fiscaliser/i, label: "Défiscalisation" },
     { pattern: /Constituer\s+une\s+[ée]pargne/i, label: "Constituer une épargne" },
     { pattern: /Financer\s+un\s+projet/i, label: "Financer un projet" },
+    { pattern: /Compl[ée]ter\s+(?:vos|mes)\s+revenus/i, label: "Compléter les revenus" },
+    { pattern: /Se\s+constituer\s+un\s+patrimoine/i, label: "Constituer un patrimoine" },
+    { pattern: /Anticiper\s+(?:votre|ma)\s+succession/i, label: "Anticiper la succession" },
+    { pattern: /R[ée]duire\s+(?:vos|mes)\s+imp[ôo]ts/i, label: "Réduire les impôts" },
+    { pattern: /Valoriser\s+(?:votre|mon)\s+patrimoine/i, label: "Valoriser le patrimoine" },
+    { pattern: /Acqu[ée]rir\s+(?:votre|ma)\s+r[ée]sidence/i, label: "Acquérir une résidence" },
+    { pattern: /Pr[ée]voir\s+(?:l'avenir|des\s+impr[ée]vus)/i, label: "Prévoir l'avenir" },
+    { pattern: /Investir\s+dans\s+l'immobilier/i, label: "Investir dans l'immobilier" },
   ];
 
   objectifsPatterns.forEach(({ pattern, label }) => {
@@ -350,6 +470,7 @@ export function parseRIOAdvanced(text: string): Partial<ExtractedData> {
     // Situation familiale
     regimeMatrimonial: extractRegimeMatrimonial(text),
     nombreEnfants: extractNombreEnfants(text),
+    enfants: extractEnfantsDetails(text),
 
     // Situation professionnelle
     statutProfessionnel: extractStatutProfessionnel(text),

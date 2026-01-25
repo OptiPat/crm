@@ -450,7 +450,9 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
       
       // Chercher le crédit associé (sauf crédit SCPI générique, traité après)
       // Format RIO: "Crédit immobilier - Pinel sète Nicolas P. 8 306 € 143 128 € 01/12/2046"
+      // Le matching doit être intelligent car les noms peuvent différer entre ACTIFS et PASSIFS
       const nomNormalized = normalizeNom(nomBien);
+      const typeNormalized = normalizeNom(typeBien); // "pinel", "lmnp", "classique", etc.
       const creditPattern2 = new RegExp(
         `Crédit\\s+immobilier\\s*[-–—]\\s*([^€]+?)\\s+(\\d[\\d\\s,]*)\\s*€\\s+(\\d[\\d\\s,]*)\\s*€(?:\\s+(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
         "gi"
@@ -466,13 +468,47 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
           continue;
         }
         
-        // Matcher si le nom du bien est inclus dans le nom du crédit
-        // ou si le type + nom partiel correspond (ex: "Pinel sète" pour "Sète")
-        const typeNomNormalized = normalizeNom(`${typeBien} ${nomBien}`);
+        // === MATCHING INTELLIGENT ===
+        let isMatch = false;
         
+        // 1. Match exact ou partiel sur le nom du bien
         if (creditNomNormalized.includes(nomNormalized) || 
-            nomNormalized.includes(creditNomNormalized.substring(0, Math.min(nomNormalized.length, 6))) ||
-            creditNomNormalized.includes(typeNomNormalized.substring(0, 10))) {
+            nomNormalized.includes(creditNomNormalized)) {
+          isMatch = true;
+        }
+        
+        // 2. Match sur le type de bien (Pinel, LMNP, LMP, etc.)
+        // Ex: ACTIFS = "Pinel - Cap Azur Sete", PASSIFS = "Crédit immobilier - Pinel"
+        if (!isMatch && typeNormalized !== "classique" && typeNormalized !== "locatif") {
+          // Si le type n'est pas générique, chercher le type dans le nom du crédit
+          if (creditNomNormalized.includes(typeNormalized) || 
+              typeNormalized.includes(creditNomNormalized)) {
+            isMatch = true;
+          }
+        }
+        
+        // 3. Match sur les 4+ premières lettres du nom (pour les variations)
+        // Ex: "Sète" vs "sete", "Cap Azur" vs "CapAzur"
+        if (!isMatch && nomNormalized.length >= 4) {
+          const shortNom = nomNormalized.substring(0, Math.min(nomNormalized.length, 6));
+          const shortCredit = creditNomNormalized.substring(0, Math.min(creditNomNormalized.length, 6));
+          if (creditNomNormalized.includes(shortNom) || nomNormalized.includes(shortCredit)) {
+            isMatch = true;
+          }
+        }
+        
+        // 4. Match sur des mots individuels significatifs (au moins 4 caractères)
+        if (!isMatch) {
+          const nomWords = nomBien.split(/[\s\-]+/).filter(w => w.length >= 4).map(w => normalizeNom(w));
+          for (const word of nomWords) {
+            if (creditNomNormalized.includes(word)) {
+              isMatch = true;
+              break;
+            }
+          }
+        }
+        
+        if (isMatch) {
           const echeanceAnnuelle = parseInt(creditMatch[2].replace(/[\s,]/g, ""), 10);
           const crd = parseInt(creditMatch[3].replace(/[\s,]/g, ""), 10);
           const dateEcheance = creditMatch[4];
