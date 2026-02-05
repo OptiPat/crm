@@ -1486,7 +1486,7 @@ impl Database {
     pub fn get_all_investissements(&self) -> Result<Vec<super::models::Investissement>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement,
+                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
                     versement_programme, montant_versement_programme, frequence_versement,
                     reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
@@ -1504,14 +1504,15 @@ impl Database {
                 montant_initial: row.get(6)?,
                 date_souscription: row.get(7)?,
                 date_fin_demembrement: row.get(8)?,
-                versement_programme: row.get::<_, i64>(9)? != 0,
-                montant_versement_programme: row.get(10)?,
-                frequence_versement: row.get(11)?,
-                reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
-                notes: row.get(13)?,
-                origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(15)?,
-                updated_at: row.get(16)?,
+                date_fin_pret: row.get(9)?,
+                versement_programme: row.get::<_, i64>(10)? != 0,
+                montant_versement_programme: row.get(11)?,
+                frequence_versement: row.get(12)?,
+                reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
+                notes: row.get(14)?,
+                origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(16)?,
+                updated_at: row.get(17)?,
             })
         })?;
 
@@ -1525,7 +1526,7 @@ impl Database {
     pub fn get_investissements_by_contact(&self, contact_id: i64) -> Result<Vec<super::models::Investissement>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement,
+                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
                     versement_programme, montant_versement_programme, frequence_versement,
                     reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
@@ -1544,14 +1545,15 @@ impl Database {
                 montant_initial: row.get(6)?,
                 date_souscription: row.get(7)?,
                 date_fin_demembrement: row.get(8)?,
-                versement_programme: row.get::<_, i64>(9)? != 0,
-                montant_versement_programme: row.get(10)?,
-                frequence_versement: row.get(11)?,
-                reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
-                notes: row.get(13)?,
-                origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(15)?,
-                updated_at: row.get(16)?,
+                date_fin_pret: row.get(9)?,
+                versement_programme: row.get::<_, i64>(10)? != 0,
+                montant_versement_programme: row.get(11)?,
+                frequence_versement: row.get(12)?,
+                reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
+                notes: row.get(14)?,
+                origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(16)?,
+                updated_at: row.get(17)?,
             })
         })?;
 
@@ -1565,7 +1567,7 @@ impl Database {
     pub fn get_investissements_by_foyer(&self, foyer_id: i64) -> Result<Vec<super::models::Investissement>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement,
+                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
                     versement_programme, montant_versement_programme, frequence_versement,
                     reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
@@ -1584,14 +1586,15 @@ impl Database {
                 montant_initial: row.get(6)?,
                 date_souscription: row.get(7)?,
                 date_fin_demembrement: row.get(8)?,
-                versement_programme: row.get::<_, i64>(9)? != 0,
-                montant_versement_programme: row.get(10)?,
-                frequence_versement: row.get(11)?,
-                reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
-                notes: row.get(13)?,
-                origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(15)?,
-                updated_at: row.get(16)?,
+                date_fin_pret: row.get(9)?,
+                versement_programme: row.get::<_, i64>(10)? != 0,
+                montant_versement_programme: row.get(11)?,
+                frequence_versement: row.get(12)?,
+                reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
+                notes: row.get(14)?,
+                origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(16)?,
+                updated_at: row.get(17)?,
             })
         })?;
 
@@ -1606,7 +1609,7 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT i.id, i.contact_id, c.nom, c.prenom, i.foyer_id, f.nom as foyer_nom,
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
-                    i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement,
+                    i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at
              FROM investissements i
@@ -1631,14 +1634,15 @@ impl Database {
                 montant_initial: row.get(10)?,
                 date_souscription: row.get(11)?,
                 date_fin_demembrement: row.get(12)?,
-                versement_programme: row.get::<_, i64>(13)? != 0,
-                montant_versement_programme: row.get(14)?,
-                frequence_versement: row.get(15)?,
-                reinvestissement_dividendes: row.get::<_, i64>(16)? != 0,
-                notes: row.get(17)?,
-                origine: row.get::<_, String>(18).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(19)?,
-                updated_at: row.get(20)?,
+                date_fin_pret: row.get(13)?,
+                versement_programme: row.get::<_, i64>(14)? != 0,
+                montant_versement_programme: row.get(15)?,
+                frequence_versement: row.get(16)?,
+                reinvestissement_dividendes: row.get::<_, i64>(17)? != 0,
+                notes: row.get(18)?,
+                origine: row.get::<_, String>(19).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                created_at: row.get(20)?,
+                updated_at: row.get(21)?,
             })
         })?;
 
@@ -1668,15 +1672,21 @@ impl Database {
                 .map(|dt| dt.timestamp())
         });
 
+        let date_fin_pret_timestamp = investissement.date_fin_pret.and_then(|date_str| {
+            DateTime::parse_from_rfc3339(&date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
+
         // Origine par défaut : MON_CONSEIL
         let origine = investissement.origine.unwrap_or_else(|| "MON_CONSEIL".to_string());
 
         self.conn.execute(
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                                         montant_initial, date_souscription, date_fin_demembrement,
+                                         montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
                                          versement_programme, montant_versement_programme, frequence_versement,
                                          reinvestissement_dividendes, notes, origine) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -1686,6 +1696,7 @@ impl Database {
                 &investissement.montant_initial,
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
+                date_fin_pret_timestamp,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,
@@ -1702,7 +1713,7 @@ impl Database {
     pub fn get_investissement_by_id(&self, id: i64) -> Result<super::models::Investissement> {
         self.conn.query_row(
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement,
+                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
                     versement_programme, montant_versement_programme, frequence_versement,
                     reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
@@ -1719,14 +1730,15 @@ impl Database {
                     montant_initial: row.get(6)?,
                     date_souscription: row.get(7)?,
                     date_fin_demembrement: row.get(8)?,
-                    versement_programme: row.get::<_, i64>(9)? != 0,
-                    montant_versement_programme: row.get(10)?,
-                    frequence_versement: row.get(11)?,
-                    reinvestissement_dividendes: row.get::<_, i64>(12)? != 0,
-                    notes: row.get(13)?,
-                    origine: row.get::<_, String>(14).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                    created_at: row.get(15)?,
-                    updated_at: row.get(16)?,
+                    date_fin_pret: row.get(9)?,
+                    versement_programme: row.get::<_, i64>(10)? != 0,
+                    montant_versement_programme: row.get(11)?,
+                    frequence_versement: row.get(12)?,
+                    reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
+                    notes: row.get(14)?,
+                    origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                    created_at: row.get(16)?,
+                    updated_at: row.get(17)?,
                 })
             },
         )
@@ -1751,6 +1763,12 @@ impl Database {
                 .map(|dt| dt.timestamp())
         });
 
+        let date_fin_pret_timestamp = investissement.date_fin_pret.as_ref().and_then(|date_str| {
+            DateTime::parse_from_rfc3339(date_str)
+                .ok()
+                .map(|dt| dt.timestamp())
+        });
+
         self.conn.execute(
             "UPDATE investissements SET 
                 contact_id = ?1,
@@ -1761,13 +1779,14 @@ impl Database {
                 montant_initial = ?6,
                 date_souscription = ?7,
                 date_fin_demembrement = ?8,
-                versement_programme = ?9,
-                montant_versement_programme = ?10,
-                frequence_versement = ?11,
-                reinvestissement_dividendes = ?12,
-                notes = ?13,
+                date_fin_pret = ?9,
+                versement_programme = ?10,
+                montant_versement_programme = ?11,
+                frequence_versement = ?12,
+                reinvestissement_dividendes = ?13,
+                notes = ?14,
                 updated_at = unixepoch()
-            WHERE id = ?14",
+            WHERE id = ?15",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -1777,6 +1796,7 @@ impl Database {
                 &investissement.montant_initial,
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
+                date_fin_pret_timestamp,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,
@@ -2443,9 +2463,9 @@ impl Database {
             couleur: Some("#3B82F6".to_string()),
             icone: Some("🏠".to_string()),
             description: Some("Fin de démembrement dans moins de 6 mois".to_string()),
-            priorite: Some(80),
-            auto_condition_type: Some("DATE_APPROCHE".to_string()),
-            auto_condition_config: Some(r#"{"champ": "date_fin_demembrement", "jours_avant": 180}"#.to_string()),
+            priorite: Some(85),
+            auto_condition_type: Some("DATE_APPROCHE_INVESTISSEMENT".to_string()),
+            auto_condition_config: Some(r#"{"champ": "date_fin_demembrement", "jours_avant": 180, "types_produit": ["SCPI_DEMEMBREMENT"]}"#.to_string()),
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
@@ -2454,7 +2474,41 @@ impl Database {
         })?;
         created += 1;
 
-        // 4. Déclaration IR (violet)
+        // 4. Fin de prêt (cyan)
+        self.create_etiquette(NewEtiquette {
+            nom: "Fin de prêt".to_string(),
+            couleur: Some("#06B6D4".to_string()),
+            icone: Some("💰".to_string()),
+            description: Some("Fin de prêt immobilier/SCPI dans moins d'un an".to_string()),
+            priorite: Some(80),
+            auto_condition_type: Some("DATE_APPROCHE_INVESTISSEMENT".to_string()),
+            auto_condition_config: Some(r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        // 5. Alerte 69 ans (rose)
+        self.create_etiquette(NewEtiquette {
+            nom: "Alerte 69 ans".to_string(),
+            couleur: Some("#EC4899".to_string()),
+            icone: Some("🎂".to_string()),
+            description: Some("Client approchant 69 ans (assurance-vie)".to_string()),
+            priorite: Some(75),
+            auto_condition_type: Some("AGE_APPROCHE".to_string()),
+            auto_condition_config: Some(r#"{"age": 69, "jours_avant": 30}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        // 7. Déclaration IR (violet)
         self.create_etiquette(NewEtiquette {
             nom: "Déclaration IR".to_string(),
             couleur: Some("#8B5CF6".to_string()),
@@ -2471,7 +2525,7 @@ impl Database {
         })?;
         created += 1;
 
-        // 5. RDV fin d'année (vert)
+        // 8. RDV fin d'année (vert)
         self.create_etiquette(NewEtiquette {
             nom: "RDV fin d'année".to_string(),
             couleur: Some("#10B981".to_string()),
@@ -2488,7 +2542,7 @@ impl Database {
         })?;
         created += 1;
 
-        // 6. Suivi > 6 mois (orange) - Pour les prospects non contactés depuis plus de 6 mois
+        // 9. Suivi > 6 mois (orange) - Pour les prospects non contactés depuis plus de 6 mois
         self.create_etiquette(NewEtiquette {
             nom: "Suivi > 6 mois".to_string(),
             couleur: Some("#F97316".to_string()),
@@ -2529,7 +2583,9 @@ impl Database {
             ("Suivi > 1 an", "#EF4444", "🔴", "Client non contacté depuis plus d'un an", 100, "DELAI_SANS_CONTACT", r#"{"jours": 365}"#, r#"["CLIENT"]"#),
             ("Suivi > 6 mois", "#F97316", "🟠", "Prospect/Suspect non contacté depuis plus de 6 mois", 95, "DELAI_SANS_CONTACT", r#"{"jours": 180}"#, r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#),
             ("Suivi à planifier", "#F97316", "📅", "Date de prochain suivi dans moins de 30 jours", 90, "DATE_APPROCHE", r#"{"champ": "date_prochain_suivi", "jours_avant": 30}"#, r#"["CLIENT", "PROSPECT_CLIENT"]"#),
-            ("Fin démembrement", "#3B82F6", "🏠", "Fin de démembrement dans moins de 6 mois", 80, "DATE_APPROCHE", r#"{"champ": "date_fin_demembrement", "jours_avant": 180}"#, r#"["CLIENT"]"#),
+            ("Fin démembrement", "#3B82F6", "🏠", "Fin de démembrement dans moins de 6 mois", 85, "DATE_APPROCHE_INVESTISSEMENT", r#"{"champ": "date_fin_demembrement", "jours_avant": 180, "types_produit": ["SCPI_DEMEMBREMENT"]}"#, r#"["CLIENT"]"#),
+            ("Fin de prêt", "#06B6D4", "💰", "Fin de prêt immobilier/SCPI dans moins d'un an", 80, "DATE_APPROCHE_INVESTISSEMENT", r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#, r#"["CLIENT"]"#),
+            ("Alerte 69 ans", "#EC4899", "🎂", "Client approchant 69 ans (assurance-vie)", 75, "AGE_APPROCHE", r#"{"age": 69, "jours_avant": 30}"#, r#"["CLIENT"]"#),
             ("Déclaration IR", "#8B5CF6", "📋", "Période de déclaration d'impôts (avril-mai)", 70, "PERIODE_ANNEE", r#"{"mois_debut": 4, "mois_fin": 5}"#, r#"["CLIENT"]"#),
             ("RDV fin d'année", "#10B981", "🎯", "Période de souscription fin d'année (oct-nov)", 60, "PERIODE_ANNEE", r#"{"mois_debut": 10, "mois_fin": 11}"#, r#"["CLIENT", "PROSPECT_CLIENT"]"#),
         ];
@@ -2734,6 +2790,99 @@ impl Database {
                                     ).unwrap_or(0);
                                     
                                     has_product > 0
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    "DATE_APPROCHE_INVESTISSEMENT" => {
+                        // Vérifier si le contact a un investissement avec une date approchant
+                        if let Some(config_str) = config {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                                let champ = parsed["champ"].as_str().unwrap_or("");
+                                let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(180);
+                                let types_produit: Vec<String> = parsed["types_produit"]
+                                    .as_array()
+                                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                    .unwrap_or_default();
+                                
+                                // Construire la requête SQL pour chercher les investissements avec date approchant
+                                let type_filter = if types_produit.is_empty() {
+                                    String::new()
+                                } else {
+                                    let types_str = types_produit.iter()
+                                        .map(|t| format!("'{}'", t))
+                                        .collect::<Vec<_>>()
+                                        .join(",");
+                                    format!(" AND type_produit IN ({})", types_str)
+                                };
+                                
+                                let threshold = now + (jours_avant * 24 * 60 * 60);
+                                
+                                let query = format!(
+                                    "SELECT COUNT(*) FROM investissements 
+                                     WHERE contact_id = ?1 
+                                     AND {} IS NOT NULL 
+                                     AND {} > ?2 
+                                     AND {} <= ?3{}",
+                                    champ, champ, champ, type_filter
+                                );
+                                
+                                let has_approaching: i64 = self.conn.query_row(
+                                    &query,
+                                    params![contact_id, now, threshold],
+                                    |row| row.get(0),
+                                ).unwrap_or(0);
+                                
+                                has_approaching > 0
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    "AGE_APPROCHE" => {
+                        // Vérifier si le contact atteint un âge spécifique dans X jours
+                        if let Some(config_str) = config {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                                let age_cible = parsed["age"].as_i64().unwrap_or(69);
+                                let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(30);
+                                
+                                if let Some(date_naissance) = contact.date_naissance {
+                                    // Calculer la date d'anniversaire pour l'âge cible
+                                    use chrono::{DateTime, Utc, Datelike};
+                                    let birth = DateTime::<Utc>::from_timestamp(date_naissance, 0);
+                                    
+                                    if let Some(birth_dt) = birth {
+                                        let now_dt = Utc::now();
+                                        let current_year = now_dt.year();
+                                        let birth_year = birth_dt.year();
+                                        
+                                        // Année de l'anniversaire cible
+                                        let target_year = birth_year + age_cible as i32;
+                                        
+                                        // Date de l'anniversaire cible
+                                        if let Some(target_birthday) = birth_dt
+                                            .with_year(target_year)
+                                            .map(|d| d.timestamp())
+                                        {
+                                            // L'anniversaire doit être dans le futur et dans les X jours
+                                            let diff_seconds = target_birthday - now;
+                                            let diff_days = diff_seconds / (24 * 60 * 60);
+                                            
+                                            diff_days >= 0 && diff_days <= jours_avant
+                                        } else {
+                                            false
+                                        }
+                                    } else {
+                                        false
+                                    }
+                                } else {
+                                    false
                                 }
                             } else {
                                 false

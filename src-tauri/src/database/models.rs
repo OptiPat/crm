@@ -281,6 +281,7 @@ pub struct Investissement {
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,
+    pub date_fin_pret: Option<i64>,
     pub versement_programme: bool,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,
@@ -301,6 +302,7 @@ pub struct NewInvestissement {
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<String>, // ISO string
     pub date_fin_demembrement: Option<String>, // ISO string
+    pub date_fin_pret: Option<String>, // ISO string
     pub versement_programme: Option<bool>,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,
@@ -324,6 +326,7 @@ pub struct InvestissementWithDetails {
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,
+    pub date_fin_pret: Option<i64>,
     pub versement_programme: bool,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,

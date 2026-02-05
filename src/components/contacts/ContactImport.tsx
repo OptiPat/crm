@@ -445,6 +445,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     { value: "montant_vp", label: "Montant VP (→ Notes, si SCPI/AV/PER)" },
     { value: "mode_detention", label: "Mode de détention SCPI (→ Notes)" },
     { value: "duree_demembrement", label: "Durée démembrement (en années ou 'viager')" },
+    { value: "date_fin_pret", label: "Date fin de prêt (si financement par crédit)" },
     { value: "reinvestissement", label: "Réinvestissement dividendes (→ Notes, si SCPI)" },
     { value: "dernier_rdv", label: "Dernier RDV (→ Notes)" },
     { value: "prospect_filleul", label: "Prospect Filleul (OUI/NON)" },
@@ -575,6 +576,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         (col.toLowerCase().includes("démembrement") || col.toLowerCase().includes("demembrement"))
       ) {
         detectedMapping[col] = "duree_demembrement";
+      } else if (
+        (col.toLowerCase().includes("date") || col.toLowerCase().includes("fin")) &&
+        (col.toLowerCase().includes("prêt") || col.toLowerCase().includes("pret") || col.toLowerCase().includes("crédit") || col.toLowerCase().includes("credit"))
+      ) {
+        detectedMapping[col] = "date_fin_pret";
       }
     });
     
@@ -1108,6 +1114,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   
                   const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
                   const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+                  const isNP = modeDetention === 'NP' || modeDetention === 'NUE-PROPRIÉTÉ' || modeDetention === 'NUE-PROPRIETE' || modeDetention === 'NUE PROPRIÉTÉ' || modeDetention === 'NUE PROPRIETE';
+                  const isUS = modeDetention === 'US' || modeDetention === 'USUFRUIT' || modeDetention === 'USU';
                   
                   if (!isPP && row.data.duree_demembrement) {
                     const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
@@ -1125,6 +1133,53 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                         dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
                         dateFinDemembrement = dateFin.toISOString();
                       }
+                    }
+                  }
+                  
+                  // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
+                  if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
+                    typeProduit = 'SCPI_DEMEMBREMENT';
+                    console.log(`🏷️ Auto-détection: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
+                  }
+                  
+                  // 🔥 Parser la date de fin de prêt
+                  let dateFinPret: string | null = null;
+                  if (row.data.date_fin_pret) {
+                    const dateStr = String(row.data.date_fin_pret).trim();
+                    // Essayer d'abord le format numérique Excel
+                    const excelDate = parseFloat(dateStr);
+                    if (!isNaN(excelDate) && excelDate > 1000) {
+                      // Utiliser UTC pour éviter les décalages de fuseau horaire
+                      const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                      const year = jsDate.getUTCFullYear();
+                      const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+                      const day = String(jsDate.getUTCDate()).padStart(2, '0');
+                      if (year > 1950) {
+                        dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
+                      }
+                    } else {
+                      // Essayer le format texte DD/MM/YYYY ou YYYY-MM-DD
+                      const parts = dateStr.split(/[\/\-\.]/);
+                      if (parts.length === 3) {
+                        let year: number, month: number, day: number;
+                        if (parts[0].length === 4) {
+                          // Format YYYY-MM-DD
+                          year = parseInt(parts[0]);
+                          month = parseInt(parts[1]);
+                          day = parseInt(parts[2]);
+                        } else {
+                          // Format DD/MM/YYYY
+                          day = parseInt(parts[0]);
+                          month = parseInt(parts[1]);
+                          year = parseInt(parts[2]);
+                        }
+                        if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                          dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+                        }
+                      }
+                    }
+                    if (dateFinPret) {
+                      console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
                     }
                   }
                   
@@ -1207,6 +1262,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     montant_initial: montantInitial || undefined,
                     date_souscription: dateSouscription || undefined,
                     date_fin_demembrement: dateFinDemembrement || undefined,
+                    date_fin_pret: dateFinPret || undefined,
                     versement_programme: montantVP ? true : false,
                     montant_versement_programme: montantVP || undefined,
                     reinvestissement_dividendes: reinvestissement,
@@ -1957,6 +2013,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               
               const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
               const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+              const isNP = modeDetention === 'NP' || modeDetention === 'NUE-PROPRIÉTÉ' || modeDetention === 'NUE-PROPRIETE' || modeDetention === 'NUE PROPRIÉTÉ' || modeDetention === 'NUE PROPRIETE';
+              const isUS = modeDetention === 'US' || modeDetention === 'USUFRUIT' || modeDetention === 'USU';
               
               if (!isPP && row.data.duree_demembrement) {
                 const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
@@ -1972,6 +2030,48 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
                     dateFinDemembrement = dateFin.toISOString();
                   }
+                }
+              }
+              
+              // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
+              if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
+                typeProduit = 'SCPI_DEMEMBREMENT';
+                console.log(`🏷️ Auto-détection: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
+              }
+              
+              // 🔥 Parser la date de fin de prêt
+              let dateFinPret: string | null = null;
+              if (row.data.date_fin_pret) {
+                const dateStr = String(row.data.date_fin_pret).trim();
+                const excelDate = parseFloat(dateStr);
+                if (!isNaN(excelDate) && excelDate > 1000) {
+                  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                  const year = jsDate.getUTCFullYear();
+                  const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+                  const day = String(jsDate.getUTCDate()).padStart(2, '0');
+                  if (year > 1950) {
+                    dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
+                  }
+                } else {
+                  const parts = dateStr.split(/[\/\-\.]/);
+                  if (parts.length === 3) {
+                    let year: number, month: number, day: number;
+                    if (parts[0].length === 4) {
+                      year = parseInt(parts[0]);
+                      month = parseInt(parts[1]);
+                      day = parseInt(parts[2]);
+                    } else {
+                      day = parseInt(parts[0]);
+                      month = parseInt(parts[1]);
+                      year = parseInt(parts[2]);
+                    }
+                    if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                      dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+                    }
+                  }
+                }
+                if (dateFinPret) {
+                  console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
                 }
               }
               
@@ -2034,6 +2134,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 montant_initial: montantInitial || undefined,
                 date_souscription: dateSouscription || undefined,
                 date_fin_demembrement: dateFinDemembrement || undefined,
+                date_fin_pret: dateFinPret || undefined,
                 versement_programme: montantVP ? true : false,
                 montant_versement_programme: montantVP || undefined,
                 reinvestissement_dividendes: reinvestissement,
@@ -2209,6 +2310,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             
             const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
             const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+            const isNP = modeDetention === 'NP' || modeDetention === 'NUE-PROPRIÉTÉ' || modeDetention === 'NUE-PROPRIETE' || modeDetention === 'NUE PROPRIÉTÉ' || modeDetention === 'NUE PROPRIETE';
+            const isUS = modeDetention === 'US' || modeDetention === 'USUFRUIT' || modeDetention === 'USU';
             
             if (!isPP && row.data.duree_demembrement) {
               const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
@@ -2226,6 +2329,48 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   dateFin.setFullYear(dateFin.getFullYear() + dureeNum);
                   dateFinDemembrement = dateFin.toISOString();
                 }
+              }
+            }
+            
+            // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
+            if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
+              typeProduit = 'SCPI_DEMEMBREMENT';
+              console.log(`🏷️ Auto-détection: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
+            }
+            
+            // 🔥 Parser la date de fin de prêt
+            let dateFinPret: string | null = null;
+            if (row.data.date_fin_pret) {
+              const dateStr = String(row.data.date_fin_pret).trim();
+              const excelDate = parseFloat(dateStr);
+              if (!isNaN(excelDate) && excelDate > 1000) {
+                const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+                const year = jsDate.getUTCFullYear();
+                const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(jsDate.getUTCDate()).padStart(2, '0');
+                if (year > 1950) {
+                  dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
+                }
+              } else {
+                const parts = dateStr.split(/[\/\-\.]/);
+                if (parts.length === 3) {
+                  let year: number, month: number, day: number;
+                  if (parts[0].length === 4) {
+                    year = parseInt(parts[0]);
+                    month = parseInt(parts[1]);
+                    day = parseInt(parts[2]);
+                  } else {
+                    day = parseInt(parts[0]);
+                    month = parseInt(parts[1]);
+                    year = parseInt(parts[2]);
+                  }
+                  if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                    dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+                  }
+                }
+              }
+              if (dateFinPret) {
+                console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
               }
             }
             
@@ -2307,6 +2452,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               montant_initial: montantInitial || undefined,
               date_souscription: dateSouscription || undefined,
               date_fin_demembrement: dateFinDemembrement || undefined,
+              date_fin_pret: dateFinPret || undefined,
               versement_programme: montantVP ? true : false,
               montant_versement_programme: montantVP || undefined,
               reinvestissement_dividendes: reinvestissement,
@@ -2455,6 +2601,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         
         const modeDetention = row.data.mode_detention ? String(row.data.mode_detention).trim().toUpperCase() : '';
         const isPP = modeDetention === 'PP' || modeDetention === 'PLEINE PROPRIÉTÉ' || modeDetention === 'PLEINE PROPRIETE';
+        const isNP = modeDetention === 'NP' || modeDetention === 'NUE-PROPRIÉTÉ' || modeDetention === 'NUE-PROPRIETE' || modeDetention === 'NUE PROPRIÉTÉ' || modeDetention === 'NUE PROPRIETE';
+        const isUS = modeDetention === 'US' || modeDetention === 'USUFRUIT' || modeDetention === 'USU';
         
         if (!isPP && row.data.duree_demembrement) {
           const dureeStr = String(row.data.duree_demembrement).trim().toUpperCase();
@@ -2473,6 +2621,48 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 dateFinDemembrement = dateDebut.toISOString();
               }
             }
+          }
+        }
+        
+        // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
+        if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
+          typeProduit = 'SCPI_DEMEMBREMENT';
+          console.log(`🏷️ Auto-détection FOYER: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
+        }
+        
+        // 🔥 Parser la date de fin de prêt
+        let dateFinPret: string | undefined;
+        if (row.data.date_fin_pret) {
+          const dateStr = String(row.data.date_fin_pret).trim();
+          const excelDate = parseFloat(dateStr);
+          if (!isNaN(excelDate) && excelDate > 1000) {
+            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
+            const year = jsDate.getUTCFullYear();
+            const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(jsDate.getUTCDate()).padStart(2, '0');
+            if (year > 1950) {
+              dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
+            }
+          } else {
+            const parts = dateStr.split(/[\/\-\.]/);
+            if (parts.length === 3) {
+              let year: number, month: number, day: number;
+              if (parts[0].length === 4) {
+                year = parseInt(parts[0]);
+                month = parseInt(parts[1]);
+                day = parseInt(parts[2]);
+              } else {
+                day = parseInt(parts[0]);
+                month = parseInt(parts[1]);
+                year = parseInt(parts[2]);
+              }
+              if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
+              }
+            }
+          }
+          if (dateFinPret) {
+            console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
           }
         }
         
@@ -2512,6 +2702,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           montant_initial: montantInitial || undefined,
           date_souscription: dateSouscription,
           date_fin_demembrement: dateFinDemembrement,
+          date_fin_pret: dateFinPret,
           versement_programme: montantVP ? true : false,
           montant_versement_programme: montantVP,
           reinvestissement_dividendes: reinvestissement,

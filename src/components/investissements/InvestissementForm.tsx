@@ -61,6 +61,7 @@ export function InvestissementForm({
   const [montantInitial, setMontantInitial] = useState("");
   const [dateSouscription, setDateSouscription] = useState("");
   const [dateFinDemembrement, setDateFinDemembrement] = useState("");
+  const [dateFinPret, setDateFinPret] = useState("");
   const [versementProgramme, setVersementProgramme] = useState(false);
   const [montantVersementProgramme, setMontantVersementProgramme] = useState("");
   const [frequenceVersement, setFrequenceVersement] = useState<string>("");
@@ -93,9 +94,20 @@ export function InvestissementForm({
     }
   }, [typeProduit, accepteVersementProgramme, accepteReinvestissement]);
 
+  const [dataLoaded, setDataLoaded] = useState(false);
+
+  // Charger les données quand le dialog s'ouvre
   useEffect(() => {
     if (open) {
       loadData();
+    } else {
+      setDataLoaded(false);
+    }
+  }, [open]);
+
+  // Pré-remplir le formulaire APRÈS que les données sont chargées
+  useEffect(() => {
+    if (open && dataLoaded) {
       if (investissement) {
         // Pré-remplir le formulaire pour modification
         setContactId(investissement.contact_id?.toString() || "");
@@ -107,6 +119,7 @@ export function InvestissementForm({
         setMontantInitial(investissement.montant_initial ? (investissement.montant_initial / 100).toString() : "");
         setDateSouscription(investissement.date_souscription ? new Date(investissement.date_souscription * 1000).toISOString().split('T')[0] : "");
         setDateFinDemembrement(investissement.date_fin_demembrement ? new Date(investissement.date_fin_demembrement * 1000).toISOString().split('T')[0] : "");
+        setDateFinPret(investissement.date_fin_pret ? new Date(investissement.date_fin_pret * 1000).toISOString().split('T')[0] : "");
         setVersementProgramme(investissement.versement_programme);
         setMontantVersementProgramme(investissement.montant_versement_programme ? (investissement.montant_versement_programme / 100).toString() : "");
         setFrequenceVersement(investissement.frequence_versement || "");
@@ -126,7 +139,7 @@ export function InvestissementForm({
         }
       }
     }
-  }, [open, investissement, defaultContactId, defaultFoyerId]);
+  }, [open, dataLoaded, investissement, defaultContactId, defaultFoyerId]);
 
   const loadData = async () => {
     try {
@@ -138,6 +151,7 @@ export function InvestissementForm({
       setContacts(contactsData);
       setFoyers(foyersData);
       setPartenaires(partenairesData);
+      setDataLoaded(true);
     } catch (error) {
       console.error("Error loading data:", error);
     }
@@ -153,6 +167,7 @@ export function InvestissementForm({
     setMontantInitial("");
     setDateSouscription("");
     setDateFinDemembrement("");
+    setDateFinPret("");
     setVersementProgramme(false);
     setMontantVersementProgramme("");
     setFrequenceVersement("");
@@ -164,7 +179,9 @@ export function InvestissementForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!contactId || !typeProduit || !nomProduit) {
+    // Pour un investissement de foyer, contactId n'est pas obligatoire
+    const hasOwner = investissementCommun ? !!foyerId : !!contactId;
+    if (!hasOwner || !typeProduit || !nomProduit) {
       alert("Veuillez remplir tous les champs obligatoires");
       return;
     }
@@ -180,7 +197,7 @@ export function InvestissementForm({
       }
 
       const newInvestissement: NewInvestissement = {
-        contact_id: parseInt(contactId),
+        contact_id: contactId ? parseInt(contactId) : undefined,
         foyer_id: investissementCommun && foyerId ? parseInt(foyerId) : undefined,
         type_produit: typeProduit,
         partenaire_id: partenaireId ? parseInt(partenaireId) : undefined,
@@ -188,6 +205,7 @@ export function InvestissementForm({
         montant_initial: montantInitial ? Math.round(parseFloat(montantInitial) * 100) : undefined,
         date_souscription: dateSouscription ? new Date(dateSouscription).toISOString() : undefined,
         date_fin_demembrement: dateFinDemembrement ? new Date(dateFinDemembrement).toISOString() : undefined,
+        date_fin_pret: dateFinPret ? new Date(dateFinPret).toISOString() : undefined,
         versement_programme: accepteVersementProgramme ? versementProgramme : false,
         montant_versement_programme: montantVersementProgramme ? Math.round(parseFloat(montantVersementProgramme) * 100) : undefined,
         frequence_versement: frequenceVersement || undefined,
@@ -227,24 +245,26 @@ export function InvestissementForm({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Client */}
-          <div className="space-y-2">
-            <Label htmlFor="contact">
-              Client <span className="text-red-500">*</span>
-            </Label>
-            <Select value={contactId} onValueChange={setContactId} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionnez un client" />
-              </SelectTrigger>
-              <SelectContent>
-                {contacts.map((contact) => (
-                  <SelectItem key={contact.id} value={contact.id!.toString()}>
-                    {contact.prenom} {contact.nom}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {/* Client (non obligatoire si investissement de foyer) */}
+          {!investissementCommun && (
+            <div className="space-y-2">
+              <Label htmlFor="contact">
+                Client <span className="text-red-500">*</span>
+              </Label>
+              <Select value={contactId} onValueChange={setContactId} required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sélectionnez un client" />
+                </SelectTrigger>
+                <SelectContent>
+                  {contacts.map((contact) => (
+                    <SelectItem key={contact.id} value={contact.id!.toString()}>
+                      {contact.prenom} {contact.nom}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Investissement commun */}
           <div className="flex items-center space-x-2">
@@ -389,6 +409,19 @@ export function InvestissementForm({
                 type="date"
                 value={dateFinDemembrement}
                 onChange={(e) => setDateFinDemembrement(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Date fin de prêt (si SCPI ou IMMOBILIER) */}
+          {["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"].includes(typeProduit) && (
+            <div className="space-y-2">
+              <Label htmlFor="date-fin-pret">Date de fin de prêt (si financement par crédit)</Label>
+              <Input
+                id="date-fin-pret"
+                type="date"
+                value={dateFinPret}
+                onChange={(e) => setDateFinPret(e.target.value)}
               />
             </div>
           )}

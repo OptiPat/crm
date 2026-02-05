@@ -175,6 +175,7 @@ impl Database {
                 montant_initial INTEGER,
                 date_souscription INTEGER,
                 date_fin_demembrement INTEGER,
+                date_fin_pret INTEGER,
                 versement_programme INTEGER NOT NULL DEFAULT 0,
                 montant_versement_programme INTEGER,
                 frequence_versement TEXT,
@@ -227,6 +228,37 @@ impl Database {
         
         // Migration automatique : Ajouter prescripteur_id aux contacts
         self.migrate_add_prescripteur_id()?;
+        
+        // Migration automatique : Ajouter date_fin_pret aux investissements
+        self.migrate_add_date_fin_pret()?;
+        
+        Ok(())
+    }
+    
+    /// Migration : Ajouter date_fin_pret aux investissements existants
+    fn migrate_add_date_fin_pret(&self) -> Result<()> {
+        // Vérifier si la colonne date_fin_pret existe déjà
+        let has_date_fin_pret = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(investissements)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let name: String = row.get(1)?;
+                if name == "date_fin_pret" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        
+        if !has_date_fin_pret {
+            self.conn.execute(
+                "ALTER TABLE investissements ADD COLUMN date_fin_pret INTEGER",
+                [],
+            )?;
+            println!("✅ Migration appliquée : colonne date_fin_pret ajoutée aux investissements");
+        }
         
         Ok(())
     }
@@ -447,6 +479,7 @@ impl Database {
                 montant_initial INTEGER,
                 date_souscription INTEGER,
                 date_fin_demembrement INTEGER,
+                date_fin_pret INTEGER,
                 versement_programme INTEGER NOT NULL DEFAULT 0,
                 montant_versement_programme INTEGER,
                 frequence_versement TEXT,

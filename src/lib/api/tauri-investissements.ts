@@ -12,6 +12,7 @@ export interface Investissement {
   montant_initial?: number;
   date_souscription?: number;
   date_fin_demembrement?: number;
+  date_fin_pret?: number;
   versement_programme: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;
@@ -31,6 +32,7 @@ export interface NewInvestissement {
   montant_initial?: number;
   date_souscription?: string; // ISO string ou timestamp
   date_fin_demembrement?: string; // ISO string ou timestamp
+  date_fin_pret?: string; // ISO string ou timestamp
   versement_programme?: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;
@@ -53,6 +55,7 @@ export interface InvestissementWithDetails {
   montant_initial?: number;
   date_souscription?: number;
   date_fin_demembrement?: number;
+  date_fin_pret?: number;
   versement_programme: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;
