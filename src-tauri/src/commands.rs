@@ -1,6 +1,6 @@
 use tauri::State;
 use std::sync::Mutex;
-use crate::database::{Database, models::{Contact, NewContact, Famille, NewFamille, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact, Investissement, NewInvestissement, InvestissementWithDetails}};
+use crate::database::{Database, models::{Contact, NewContact, Famille, NewFamille, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact, Investissement, NewInvestissement, InvestissementWithDetails, Etiquette, NewEtiquette, ContactEtiquette, EtiquetteWithCount, ContactEtiquetteDetails}};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -563,4 +563,132 @@ pub fn read_pdf_file(file_path: String) -> Result<Vec<u8>, String> {
     
     fs::read(&file_path)
         .map_err(|e| format!("Failed to read file: {}", e))
+}
+
+// ========== ETIQUETTES ==========
+
+#[tauri::command]
+pub fn get_all_etiquettes(db: State<'_, DbState>) -> Result<Vec<Etiquette>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_all_etiquettes()
+        .map_err(|e| format!("Failed to get etiquettes: {}", e))
+}
+
+#[tauri::command]
+pub fn get_all_etiquettes_with_count(db: State<'_, DbState>) -> Result<Vec<EtiquetteWithCount>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_all_etiquettes_with_count()
+        .map_err(|e| format!("Failed to get etiquettes with count: {}", e))
+}
+
+#[tauri::command]
+pub fn get_etiquette_by_id(db: State<'_, DbState>, id: i64) -> Result<Etiquette, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_etiquette_by_id(id)
+        .map_err(|e| format!("Failed to get etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn create_etiquette(db: State<'_, DbState>, new_etiquette: NewEtiquette) -> Result<Etiquette, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.create_etiquette(new_etiquette)
+        .map_err(|e| format!("Failed to create etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn update_etiquette(db: State<'_, DbState>, id: i64, etiquette: NewEtiquette) -> Result<Etiquette, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.update_etiquette(id, &etiquette)
+        .map_err(|e| format!("Failed to update etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_etiquette(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.delete_etiquette(id)
+        .map_err(|e| format!("Failed to delete etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn get_etiquettes_by_contact(db: State<'_, DbState>, contact_id: i64) -> Result<Vec<ContactEtiquetteDetails>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_etiquettes_by_contact(contact_id)
+        .map_err(|e| format!("Failed to get contact etiquettes: {}", e))
+}
+
+#[tauri::command]
+pub fn attribuer_etiquette(db: State<'_, DbState>, contact_id: i64, etiquette_id: i64, attribue_par: Option<String>) -> Result<ContactEtiquette, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.attribuer_etiquette(contact_id, etiquette_id, attribue_par)
+        .map_err(|e| format!("Failed to assign etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn retirer_etiquette(db: State<'_, DbState>, contact_id: i64, etiquette_id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.retirer_etiquette(contact_id, etiquette_id)
+        .map_err(|e| format!("Failed to remove etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn get_contacts_by_etiquette(db: State<'_, DbState>, etiquette_id: i64) -> Result<Vec<Contact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_contacts_by_etiquette(etiquette_id)
+        .map_err(|e| format!("Failed to get contacts by etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn seed_default_etiquettes(db: State<'_, DbState>) -> Result<usize, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.seed_default_etiquettes()
+        .map_err(|e| format!("Failed to seed default etiquettes: {}", e))
+}
+
+#[tauri::command]
+pub fn check_and_apply_auto_etiquettes(db: State<'_, DbState>) -> Result<usize, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.check_and_apply_auto_etiquettes()
+        .map_err(|e| format!("Failed to apply auto etiquettes: {}", e))
+}
+
+#[tauri::command]
+pub fn get_pending_etiquette_emails(db: State<'_, DbState>) -> Result<Vec<(i64, i64, i64, String, String)>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_pending_etiquette_emails()
+        .map_err(|e| format!("Failed to get pending emails: {}", e))
+}
+
+#[tauri::command]
+pub fn mark_etiquette_email_sent(db: State<'_, DbState>, contact_etiquette_id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.mark_etiquette_email_sent(contact_etiquette_id)
+        .map_err(|e| format!("Failed to mark email sent: {}", e))
 }

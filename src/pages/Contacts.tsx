@@ -15,6 +15,7 @@ import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users2 } from "lucid
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import { getInvestissementsByContact, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
+import { getEtiquettesByContact, getAllEtiquettes, getContrastColor, checkAndApplyAutoEtiquettes, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
@@ -35,6 +36,8 @@ export function Contacts() {
   const [clientSubTab, setClientSubTab] = useState<ClientSubTab>("CLIENT");
   const [filleulSubTab, setFilleulSubTab] = useState<FilleulSubTab>("FILLEUL");
   const [statutFilter, setStatutFilter] = useState<string>("ALL");
+  const [etiquetteFilter, setEtiquetteFilter] = useState<string>("ALL");
+  const [etiquettesDisponibles, setEtiquettesDisponibles] = useState<Etiquette[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showDetail, setShowDetail] = useState(false);
@@ -42,6 +45,7 @@ export function Contacts() {
   const [showImportFilleuls, setShowImportFilleuls] = useState(false);
   const [showDeduplicate, setShowDeduplicate] = useState(false);
   const [groupByFoyer, setGroupByFoyer] = useState(false);
+  const [etiquettesParContact, setEtiquettesParContact] = useState<Record<number, ContactEtiquetteDetails[]>>({});
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
 
@@ -51,6 +55,13 @@ export function Contacts() {
 
   const loadContacts = async () => {
     try {
+      // 🏷️ Synchroniser les étiquettes automatiques avant de charger les contacts
+      try {
+        await checkAndApplyAutoEtiquettes();
+      } catch (error) {
+        console.log("Erreur synchro étiquettes (ignorée):", error);
+      }
+      
       const [dataContacts, dataFoyers] = await Promise.all([
         getAllContacts(),
         getAllFoyers(),
@@ -178,7 +189,13 @@ export function Contacts() {
       const matchesStatut =
         statutFilter === "ALL" || contact.statut_suivi === statutFilter;
 
-      return matchesSearch && matchesCategorie && matchesStatut;
+      // Filtre par étiquette
+      const matchesEtiquette = etiquetteFilter === "ALL" || (
+        contact.id && 
+        etiquettesParContact[contact.id]?.some(e => e.etiquette_id.toString() === etiquetteFilter)
+      );
+
+      return matchesSearch && matchesCategorie && matchesStatut && matchesEtiquette;
     })
     .sort((a, b) => {
       // Tri par priorité : rouge (1) > orange (2) > vert (3)
@@ -269,6 +286,45 @@ export function Contacts() {
       calculatePatrimoines();
     }
   }, [contacts, foyers]);
+
+  // Charger les étiquettes disponibles (pour le filtre)
+  useEffect(() => {
+    const loadEtiquettesDisponibles = async () => {
+      try {
+        const etiquettes = await getAllEtiquettes();
+        setEtiquettesDisponibles(etiquettes);
+      } catch (error) {
+        console.log("Erreur chargement étiquettes:", error);
+      }
+    };
+    loadEtiquettesDisponibles();
+  }, []);
+
+  // Charger les étiquettes pour tous les contacts
+  useEffect(() => {
+    const loadEtiquettes = async () => {
+      const etiquettesMap: Record<number, ContactEtiquetteDetails[]> = {};
+      
+      for (const contact of contacts) {
+        if (contact.id) {
+          try {
+            const etiquettes = await getEtiquettesByContact(contact.id);
+            if (etiquettes.length > 0) {
+              etiquettesMap[contact.id] = etiquettes;
+            }
+          } catch (error) {
+            // Ignorer les erreurs silencieusement
+          }
+        }
+      }
+      
+      setEtiquettesParContact(etiquettesMap);
+    };
+
+    if (contacts.length > 0) {
+      loadEtiquettes();
+    }
+  }, [contacts]);
 
   const getCategorieColor = (categorie: string) => {
     switch (categorie) {
@@ -603,6 +659,27 @@ export function Contacts() {
                 </SelectContent>
               </Select>
 
+              <Select value={etiquetteFilter} onValueChange={setEtiquetteFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <span className="mr-2">🏷️</span>
+                  <SelectValue placeholder="Étiquette" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ALL">Toutes étiquettes</SelectItem>
+                  {etiquettesDisponibles.map((etiquette) => (
+                    <SelectItem key={etiquette.id} value={etiquette.id.toString()}>
+                      <span className="flex items-center gap-2">
+                        <span 
+                          className="w-3 h-3 rounded-full" 
+                          style={{ backgroundColor: etiquette.couleur }}
+                        />
+                        {etiquette.nom}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Button
                 variant={groupByFoyer ? "default" : "outline"}
                 onClick={() => setGroupByFoyer(!groupByFoyer)}
@@ -662,14 +739,13 @@ export function Contacts() {
                         {/* Membres du foyer */}
                         <div className="divide-y divide-border">
                           {group.contacts.map((contact) => {
-                            // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
-                            const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
+                            // 🔥 Priorité gérée par étiquettes - plus d'affichage visuel ici
                             const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                             const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
                             return (
                               <div
                                 key={contact.id}
-                                className={`p-4 hover:bg-accent transition-colors ${priorite.color}`}
+                                className="p-4 hover:bg-accent transition-colors"
                               >
                                 <div className="flex items-start justify-between">
                                   <div className="flex-1">
@@ -703,11 +779,6 @@ export function Contacts() {
                                           {contact.filleul_categorie === "FILLEUL_DESINSCRIT" && "❌ Filleul désinscrit"}
                                         </Badge>
                                       )}
-                                      {priorite.label && (
-                                        <span className="text-xs font-medium">
-                                          {priorite.label}
-                                        </span>
-                                      )}
                                       {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                                       {!isFilleulTab && contactPatrimoine > 0 && (
                                         <span className="text-xs text-muted-foreground">
@@ -717,9 +788,42 @@ export function Contacts() {
                                               ({contactPatrimoine.toLocaleString("fr-FR")} € total)
                                             </span>
                                           )}
+                                          {/* 🏠 si aussi du patrimoine commun */}
+                                          {contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                                            <span className="text-blue-600 ml-1" title="Patrimoine commun dans le foyer">🏠</span>
+                                          )}
+                                        </span>
+                                      )}
+                                      {/* 🏠 Patrimoine foyer si pas de perso */}
+                                      {!isFilleulTab && contactPatrimoine === 0 && contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                                        <span className="text-xs text-blue-600" title="Patrimoine commun dans le foyer">
+                                          🏠 {(patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0).toLocaleString("fr-FR")} € <span className="text-blue-400">(foyer)</span>
                                         </span>
                                       )}
                                     </div>
+                                    {/* 🏷️ Étiquettes du contact */}
+                                    {contact.id && etiquettesParContact[contact.id]?.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {etiquettesParContact[contact.id].slice(0, 3).map((etiq) => (
+                                          <span
+                                            key={etiq.etiquette_id}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                                            style={{
+                                              backgroundColor: etiq.etiquette_couleur,
+                                              color: getContrastColor(etiq.etiquette_couleur)
+                                            }}
+                                          >
+                                            {etiq.etiquette_icone && <span>{etiq.etiquette_icone}</span>}
+                                            <span>{etiq.etiquette_nom}</span>
+                                          </span>
+                                        ))}
+                                        {etiquettesParContact[contact.id].length > 3 && (
+                                          <span className="text-xs text-muted-foreground">
+                                            +{etiquettesParContact[contact.id].length - 3}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
                                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                       {contact.email && (
                                         <div className="flex items-center gap-1">
@@ -777,14 +881,13 @@ export function Contacts() {
                       // Contact sans foyer
                       <div className="p-4">
                         {group.contacts.map((contact) => {
-                          // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
-                          const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
+                          // 🔥 Priorité gérée par étiquettes - plus d'affichage visuel ici
                           const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                           const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
                           return (
                             <div
                               key={contact.id}
-                              className={`p-4 border border-border rounded-lg hover:bg-accent transition-colors ${priorite.color}`}
+                              className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
                             >
                               <div className="flex items-start justify-between">
                                 <div className="flex-1">
@@ -814,11 +917,6 @@ export function Contacts() {
                                         {contact.filleul_categorie === "FILLEUL_DESINSCRIT" && "❌ Filleul désinscrit"}
                                       </Badge>
                                     )}
-                                    {priorite.label && (
-                                      <span className="text-xs font-medium">
-                                        {priorite.label}
-                                      </span>
-                                    )}
                                     {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                                     {!isFilleulTab && contactPatrimoine > 0 && (
                                       <span className="text-xs text-muted-foreground">
@@ -828,9 +926,42 @@ export function Contacts() {
                                             ({contactPatrimoine.toLocaleString("fr-FR")} € total)
                                           </span>
                                         )}
+                                        {/* 🏠 si aussi du patrimoine commun */}
+                                        {contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                                          <span className="text-blue-600 ml-1" title="Patrimoine commun dans le foyer">🏠</span>
+                                        )}
+                                      </span>
+                                    )}
+                                    {/* 🏠 Patrimoine foyer si pas de perso */}
+                                    {!isFilleulTab && contactPatrimoine === 0 && contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                                      <span className="text-xs text-blue-600" title="Patrimoine commun dans le foyer">
+                                        🏠 {(patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0).toLocaleString("fr-FR")} € <span className="text-blue-400">(foyer)</span>
                                       </span>
                                     )}
                                   </div>
+                                  {/* 🏷️ Étiquettes du contact */}
+                                  {contact.id && etiquettesParContact[contact.id]?.length > 0 && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {etiquettesParContact[contact.id].slice(0, 3).map((etiq) => (
+                                        <span
+                                          key={etiq.etiquette_id}
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                                          style={{
+                                            backgroundColor: etiq.etiquette_couleur,
+                                            color: getContrastColor(etiq.etiquette_couleur)
+                                          }}
+                                        >
+                                          {etiq.etiquette_icone && <span>{etiq.etiquette_icone}</span>}
+                                          <span>{etiq.etiquette_nom}</span>
+                                        </span>
+                                      ))}
+                                      {etiquettesParContact[contact.id].length > 3 && (
+                                        <span className="text-xs text-muted-foreground">
+                                          +{etiquettesParContact[contact.id].length - 3}
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
                                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                                     {contact.email && (
                                       <div className="flex items-center gap-1">
@@ -891,14 +1022,13 @@ export function Contacts() {
           ) : (
             <div className="space-y-3">
               {filteredContacts.map((contact) => {
-                // 🔥 Utiliser la bonne fonction de priorité selon l'onglet
-                const priorite = isFilleulTab ? getPrioriteFilleul(contact) : getPrioriteContact(contact);
+                // 🔥 Calcul priorité pour le tri (mais plus d'affichage visuel - géré par étiquettes)
                 const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                 const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
                 return (
                   <div
                     key={contact.id}
-                    className={`p-4 border border-border rounded-lg hover:bg-accent transition-colors ${priorite.color}`}
+                    className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -925,11 +1055,6 @@ export function Contacts() {
                               {contact.filleul_categorie === "FILLEUL_DESINSCRIT" && "❌ Filleul désinscrit"}
                             </Badge>
                           )}
-                          {priorite.label && (
-                            <span className="text-xs font-medium">
-                              {priorite.label}
-                            </span>
-                          )}
                           {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                           {!isFilleulTab && contactPatrimoine > 0 && (
                             <span className="text-sm font-medium text-primary">
@@ -939,9 +1064,42 @@ export function Contacts() {
                                   ({contactPatrimoine.toLocaleString("fr-FR")} € total)
                                 </span>
                               )}
+                              {/* 🏠 si aussi du patrimoine commun */}
+                              {contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                                <span className="text-blue-600 ml-1" title="Patrimoine commun dans le foyer">🏠</span>
+                              )}
+                            </span>
+                          )}
+                          {/* 🏠 Patrimoine foyer si pas de perso */}
+                          {!isFilleulTab && contactPatrimoine === 0 && contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                            <span className="text-sm text-blue-600" title="Patrimoine commun dans le foyer">
+                              🏠 {(patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0).toLocaleString("fr-FR")} € <span className="text-blue-400">(foyer)</span>
                             </span>
                           )}
                         </div>
+                        {/* 🏷️ Étiquettes du contact */}
+                        {contact.id && etiquettesParContact[contact.id]?.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {etiquettesParContact[contact.id].slice(0, 3).map((etiq) => (
+                              <span
+                                key={etiq.etiquette_id}
+                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                                style={{
+                                  backgroundColor: etiq.etiquette_couleur,
+                                  color: getContrastColor(etiq.etiquette_couleur)
+                                }}
+                              >
+                                {etiq.etiquette_icone && <span>{etiq.etiquette_icone}</span>}
+                                <span>{etiq.etiquette_nom}</span>
+                              </span>
+                            ))}
+                            {etiquettesParContact[contact.id].length > 3 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{etiquettesParContact[contact.id].length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           {contact.email && (
                             <div className="flex items-center gap-1">

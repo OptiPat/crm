@@ -1,5 +1,5 @@
 use rusqlite::{params, Result};
-use super::{Database, models::{Contact, NewContact, Famille, NewFamille}};
+use super::{Database, models::{Contact, NewContact, Famille, NewFamille, Etiquette, NewEtiquette, ContactEtiquette, NewContactEtiquette, EtiquetteWithCount, ContactEtiquetteDetails}};
 
 impl Database {
     pub fn get_all_contacts(&self) -> Result<Vec<Contact>> {
@@ -2042,5 +2042,791 @@ impl Database {
         })?;
         
         clients.collect()
+    }
+
+    // ==================== ETIQUETTES ====================
+
+    /// Récupérer toutes les étiquettes
+    pub fn get_all_etiquettes(&self) -> Result<Vec<Etiquette>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nom, couleur, icone, description, priorite,
+                    auto_condition_type, auto_condition_config, auto_categories,
+                    email_template_id, email_delai_jours, email_actif,
+                    is_default, created_at, updated_at
+             FROM etiquettes 
+             ORDER BY priorite DESC, nom ASC"
+        )?;
+
+        let etiquettes = stmt.query_map([], |row| {
+            Ok(Etiquette {
+                id: row.get(0)?,
+                nom: row.get(1)?,
+                couleur: row.get(2)?,
+                icone: row.get(3)?,
+                description: row.get(4)?,
+                priorite: row.get(5)?,
+                auto_condition_type: row.get(6)?,
+                auto_condition_config: row.get(7)?,
+                auto_categories: row.get(8)?,
+                email_template_id: row.get(9)?,
+                email_delai_jours: row.get(10)?,
+                email_actif: row.get::<_, i64>(11)? != 0,
+                is_default: row.get::<_, i64>(12)? != 0,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
+            })
+        })?;
+
+        etiquettes.collect()
+    }
+
+    /// Récupérer toutes les étiquettes avec le compteur de contacts
+    pub fn get_all_etiquettes_with_count(&self) -> Result<Vec<EtiquetteWithCount>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.id, e.nom, e.couleur, e.icone, e.description, e.priorite,
+                    e.auto_condition_type, e.auto_condition_config, e.auto_categories,
+                    e.email_template_id, e.email_delai_jours, e.email_actif,
+                    e.is_default, e.created_at, e.updated_at,
+                    COALESCE((SELECT COUNT(*) FROM contact_etiquettes ce WHERE ce.etiquette_id = e.id), 0) as contact_count
+             FROM etiquettes e
+             ORDER BY e.priorite DESC, e.nom ASC"
+        )?;
+
+        let etiquettes = stmt.query_map([], |row| {
+            Ok(EtiquetteWithCount {
+                id: row.get(0)?,
+                nom: row.get(1)?,
+                couleur: row.get(2)?,
+                icone: row.get(3)?,
+                description: row.get(4)?,
+                priorite: row.get(5)?,
+                auto_condition_type: row.get(6)?,
+                auto_condition_config: row.get(7)?,
+                auto_categories: row.get(8)?,
+                email_template_id: row.get(9)?,
+                email_delai_jours: row.get(10)?,
+                email_actif: row.get::<_, i64>(11)? != 0,
+                is_default: row.get::<_, i64>(12)? != 0,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
+                contact_count: row.get(15)?,
+            })
+        })?;
+
+        etiquettes.collect()
+    }
+
+    /// Récupérer une étiquette par son ID
+    pub fn get_etiquette_by_id(&self, id: i64) -> Result<Etiquette> {
+        self.conn.query_row(
+            "SELECT id, nom, couleur, icone, description, priorite,
+                    auto_condition_type, auto_condition_config, auto_categories,
+                    email_template_id, email_delai_jours, email_actif,
+                    is_default, created_at, updated_at
+             FROM etiquettes 
+             WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(Etiquette {
+                    id: row.get(0)?,
+                    nom: row.get(1)?,
+                    couleur: row.get(2)?,
+                    icone: row.get(3)?,
+                    description: row.get(4)?,
+                    priorite: row.get(5)?,
+                    auto_condition_type: row.get(6)?,
+                    auto_condition_config: row.get(7)?,
+                    auto_categories: row.get(8)?,
+                    email_template_id: row.get(9)?,
+                    email_delai_jours: row.get(10)?,
+                    email_actif: row.get::<_, i64>(11)? != 0,
+                    is_default: row.get::<_, i64>(12)? != 0,
+                    created_at: row.get(13)?,
+                    updated_at: row.get(14)?,
+                })
+            },
+        )
+    }
+
+    /// Créer une nouvelle étiquette
+    pub fn create_etiquette(&self, etiquette: NewEtiquette) -> Result<Etiquette> {
+        let couleur = etiquette.couleur.unwrap_or_else(|| "#3B82F6".to_string());
+        let priorite = etiquette.priorite.unwrap_or(0);
+        let email_delai_jours = etiquette.email_delai_jours.unwrap_or(0);
+        let email_actif = if etiquette.email_actif.unwrap_or(false) { 1 } else { 0 };
+        let is_default = if etiquette.is_default.unwrap_or(false) { 1 } else { 0 };
+
+        self.conn.execute(
+            "INSERT INTO etiquettes (nom, couleur, icone, description, priorite,
+                                    auto_condition_type, auto_condition_config, auto_categories,
+                                    email_template_id, email_delai_jours, email_actif, is_default) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+            params![
+                &etiquette.nom,
+                &couleur,
+                &etiquette.icone,
+                &etiquette.description,
+                priorite,
+                &etiquette.auto_condition_type,
+                &etiquette.auto_condition_config,
+                &etiquette.auto_categories,
+                &etiquette.email_template_id,
+                email_delai_jours,
+                email_actif,
+                is_default,
+            ],
+        )?;
+
+        let id = self.conn.last_insert_rowid();
+        self.get_etiquette_by_id(id)
+    }
+
+    /// Mettre à jour une étiquette
+    pub fn update_etiquette(&self, id: i64, etiquette: &NewEtiquette) -> Result<Etiquette> {
+        let couleur = etiquette.couleur.clone().unwrap_or_else(|| "#3B82F6".to_string());
+        let priorite = etiquette.priorite.unwrap_or(0);
+        let email_delai_jours = etiquette.email_delai_jours.unwrap_or(0);
+        let email_actif = if etiquette.email_actif.unwrap_or(false) { 1 } else { 0 };
+        let is_default = if etiquette.is_default.unwrap_or(false) { 1 } else { 0 };
+
+        self.conn.execute(
+            "UPDATE etiquettes SET 
+                nom = ?1,
+                couleur = ?2,
+                icone = ?3,
+                description = ?4,
+                priorite = ?5,
+                auto_condition_type = ?6,
+                auto_condition_config = ?7,
+                auto_categories = ?8,
+                email_template_id = ?9,
+                email_delai_jours = ?10,
+                email_actif = ?11,
+                is_default = ?12,
+                updated_at = unixepoch()
+            WHERE id = ?13",
+            params![
+                &etiquette.nom,
+                &couleur,
+                &etiquette.icone,
+                &etiquette.description,
+                priorite,
+                &etiquette.auto_condition_type,
+                &etiquette.auto_condition_config,
+                &etiquette.auto_categories,
+                &etiquette.email_template_id,
+                email_delai_jours,
+                email_actif,
+                is_default,
+                id
+            ],
+        )?;
+
+        self.get_etiquette_by_id(id)
+    }
+
+    /// Supprimer une étiquette
+    pub fn delete_etiquette(&self, id: i64) -> Result<()> {
+        // Les liaisons contact_etiquettes seront supprimées par CASCADE
+        self.conn.execute("DELETE FROM etiquettes WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Récupérer les étiquettes d'un contact
+    pub fn get_etiquettes_by_contact(&self, contact_id: i64) -> Result<Vec<ContactEtiquetteDetails>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ce.id, ce.contact_id, ce.etiquette_id, 
+                    e.nom, e.couleur, e.icone,
+                    ce.date_attribution, ce.attribue_par, ce.email_envoye,
+                    ce.email_date_prevue, ce.notes
+             FROM contact_etiquettes ce
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             WHERE ce.contact_id = ?1
+             ORDER BY e.priorite DESC, e.nom ASC"
+        )?;
+
+        let etiquettes = stmt.query_map(params![contact_id], |row| {
+            Ok(ContactEtiquetteDetails {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                etiquette_id: row.get(2)?,
+                etiquette_nom: row.get(3)?,
+                etiquette_couleur: row.get(4)?,
+                etiquette_icone: row.get(5)?,
+                date_attribution: row.get(6)?,
+                attribue_par: row.get(7)?,
+                email_envoye: row.get::<_, i64>(8)? != 0,
+                email_date_prevue: row.get(9)?,
+                notes: row.get(10)?,
+            })
+        })?;
+
+        etiquettes.collect()
+    }
+
+    /// Attribuer une étiquette à un contact
+    pub fn attribuer_etiquette(&self, contact_id: i64, etiquette_id: i64, attribue_par: Option<String>) -> Result<ContactEtiquette> {
+        let attribue_par = attribue_par.unwrap_or_else(|| "MANUEL".to_string());
+        
+        // Vérifier si l'étiquette a un email actif pour calculer la date prévue
+        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
+        let email_date_prevue: Option<i64> = if etiquette.email_actif && etiquette.email_delai_jours > 0 {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            Some(now + (etiquette.email_delai_jours * 24 * 60 * 60))
+        } else {
+            None
+        };
+
+        self.conn.execute(
+            "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_date_prevue) 
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(contact_id, etiquette_id) DO UPDATE SET
+                attribue_par = excluded.attribue_par,
+                date_attribution = unixepoch()",
+            params![contact_id, etiquette_id, &attribue_par, email_date_prevue],
+        )?;
+
+        // Récupérer la liaison créée ou mise à jour
+        self.conn.query_row(
+            "SELECT id, contact_id, etiquette_id, date_attribution, attribue_par,
+                    email_envoye, email_date_prevue, email_date_envoi, notes
+             FROM contact_etiquettes 
+             WHERE contact_id = ?1 AND etiquette_id = ?2",
+            params![contact_id, etiquette_id],
+            |row| {
+                Ok(ContactEtiquette {
+                    id: row.get(0)?,
+                    contact_id: row.get(1)?,
+                    etiquette_id: row.get(2)?,
+                    date_attribution: row.get(3)?,
+                    attribue_par: row.get(4)?,
+                    email_envoye: row.get::<_, i64>(5)? != 0,
+                    email_date_prevue: row.get(6)?,
+                    email_date_envoi: row.get(7)?,
+                    notes: row.get(8)?,
+                })
+            },
+        )
+    }
+
+    /// Retirer une étiquette d'un contact
+    pub fn retirer_etiquette(&self, contact_id: i64, etiquette_id: i64) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+            params![contact_id, etiquette_id],
+        )?;
+        Ok(())
+    }
+
+    /// Récupérer tous les contacts ayant une étiquette spécifique
+    pub fn get_contacts_by_etiquette(&self, etiquette_id: i64) -> Result<Vec<Contact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT c.id, c.famille_id, c.foyer_id, c.role_foyer, c.role_famille, c.categorie, c.filleul_categorie, c.parrain_id, c.prescripteur_id, c.civilite, c.nom, c.prenom, c.email, c.telephone,
+                    c.adresse, c.code_postal, c.ville, c.date_naissance, c.profession, c.situation_familiale,
+                    c.source_lead, c.profil_risque_sri, c.date_dernier_contact, c.date_prochain_suivi,
+                    c.date_dernier_contact_filleul, c.date_prochain_suivi_filleul,
+                    c.statut_suivi, c.notes, c.created_at, c.updated_at
+             FROM contacts c
+             INNER JOIN contact_etiquettes ce ON c.id = ce.contact_id
+             WHERE ce.etiquette_id = ?1
+             ORDER BY c.nom, c.prenom"
+        )?;
+        
+        let contacts = stmt.query_map(params![etiquette_id], |row| {
+            Ok(Contact {
+                id: row.get(0)?,
+                famille_id: row.get(1)?,
+                foyer_id: row.get(2)?,
+                role_foyer: row.get(3)?,
+                role_famille: row.get(4)?,
+                categorie: row.get(5)?,
+                filleul_categorie: row.get(6)?,
+                parrain_id: row.get(7)?,
+                prescripteur_id: row.get(8)?,
+                civilite: row.get(9)?,
+                nom: row.get(10)?,
+                prenom: row.get(11)?,
+                email: row.get(12)?,
+                telephone: row.get(13)?,
+                adresse: row.get(14)?,
+                code_postal: row.get(15)?,
+                ville: row.get(16)?,
+                date_naissance: row.get(17)?,
+                profession: row.get(18)?,
+                situation_familiale: row.get(19)?,
+                source_lead: row.get(20)?,
+                profil_risque_sri: row.get(21)?,
+                date_dernier_contact: row.get(22)?,
+                date_prochain_suivi: row.get(23)?,
+                date_dernier_contact_filleul: row.get(24)?,
+                date_prochain_suivi_filleul: row.get(25)?,
+                statut_suivi: row.get(26)?,
+                notes: row.get(27)?,
+                created_at: row.get(28)?,
+                updated_at: row.get(29)?,
+            })
+        })?;
+        
+        contacts.collect()
+    }
+
+    /// Compter les étiquettes (pour vérifier si la table est vide au premier lancement)
+    pub fn count_etiquettes(&self) -> Result<i64> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM etiquettes",
+            [],
+            |row| row.get(0),
+        )
+    }
+
+    /// Créer les étiquettes par défaut (seed initial)
+    pub fn seed_default_etiquettes(&self) -> Result<usize> {
+        // Vérifier si la table existe
+        let table_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
+            [],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        if table_exists == 0 {
+            return Ok(0);
+        }
+
+        // Vérifier si des étiquettes existent déjà
+        let count = self.count_etiquettes().unwrap_or(0);
+        if count > 0 {
+            return Ok(0); // Des étiquettes existent déjà, ne rien faire
+        }
+
+        let mut created = 0;
+
+        // 1. Suivi > 1 an (rouge)
+        self.create_etiquette(NewEtiquette {
+            nom: "Suivi > 1 an".to_string(),
+            couleur: Some("#EF4444".to_string()),
+            icone: Some("🔴".to_string()),
+            description: Some("Client non contacté depuis plus d'un an".to_string()),
+            priorite: Some(100),
+            auto_condition_type: Some("DELAI_SANS_CONTACT".to_string()),
+            auto_condition_config: Some(r#"{"jours": 365}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        // 2. Suivi à planifier (orange)
+        self.create_etiquette(NewEtiquette {
+            nom: "Suivi à planifier".to_string(),
+            couleur: Some("#F97316".to_string()),
+            icone: Some("📅".to_string()),
+            description: Some("Date de prochain suivi dans moins de 30 jours".to_string()),
+            priorite: Some(90),
+            auto_condition_type: Some("DATE_APPROCHE".to_string()),
+            auto_condition_config: Some(r#"{"champ": "date_prochain_suivi", "jours_avant": 30}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT", "PROSPECT_CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        // 3. Fin démembrement (bleu)
+        self.create_etiquette(NewEtiquette {
+            nom: "Fin démembrement".to_string(),
+            couleur: Some("#3B82F6".to_string()),
+            icone: Some("🏠".to_string()),
+            description: Some("Fin de démembrement dans moins de 6 mois".to_string()),
+            priorite: Some(80),
+            auto_condition_type: Some("DATE_APPROCHE".to_string()),
+            auto_condition_config: Some(r#"{"champ": "date_fin_demembrement", "jours_avant": 180}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        // 4. Déclaration IR (violet)
+        self.create_etiquette(NewEtiquette {
+            nom: "Déclaration IR".to_string(),
+            couleur: Some("#8B5CF6".to_string()),
+            icone: Some("📋".to_string()),
+            description: Some("Période de déclaration d'impôts (avril-mai)".to_string()),
+            priorite: Some(70),
+            auto_condition_type: Some("PERIODE_ANNEE".to_string()),
+            auto_condition_config: Some(r#"{"mois_debut": 4, "mois_fin": 5}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        // 5. RDV fin d'année (vert)
+        self.create_etiquette(NewEtiquette {
+            nom: "RDV fin d'année".to_string(),
+            couleur: Some("#10B981".to_string()),
+            icone: Some("🎯".to_string()),
+            description: Some("Période de souscription fin d'année (oct-nov)".to_string()),
+            priorite: Some(60),
+            auto_condition_type: Some("PERIODE_ANNEE".to_string()),
+            auto_condition_config: Some(r#"{"mois_debut": 10, "mois_fin": 11}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT", "PROSPECT_CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        // 6. Suivi > 6 mois (orange) - Pour les prospects non contactés depuis plus de 6 mois
+        self.create_etiquette(NewEtiquette {
+            nom: "Suivi > 6 mois".to_string(),
+            couleur: Some("#F97316".to_string()),
+            icone: Some("🟠".to_string()),
+            description: Some("Prospect/Suspect non contacté depuis plus de 6 mois".to_string()),
+            priorite: Some(95),
+            auto_condition_type: Some("DELAI_SANS_CONTACT".to_string()),
+            auto_condition_config: Some(r#"{"jours": 180}"#.to_string()),
+            auto_categories: Some(r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_actif: Some(false),
+            is_default: Some(true),
+        })?;
+        created += 1;
+
+        Ok(created)
+    }
+
+    /// Vérifie et crée les étiquettes par défaut manquantes (migration pour bases existantes)
+    /// Retourne le nombre d'étiquettes créées
+    pub fn ensure_default_etiquettes(&self) -> Result<usize> {
+        // Vérifier si la table existe
+        let table_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
+            [],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        if table_exists == 0 {
+            return Ok(0);
+        }
+
+        let mut created = 0;
+
+        // Liste des étiquettes par défaut à vérifier/créer
+        let default_etiquettes = vec![
+            ("Suivi > 1 an", "#EF4444", "🔴", "Client non contacté depuis plus d'un an", 100, "DELAI_SANS_CONTACT", r#"{"jours": 365}"#, r#"["CLIENT"]"#),
+            ("Suivi > 6 mois", "#F97316", "🟠", "Prospect/Suspect non contacté depuis plus de 6 mois", 95, "DELAI_SANS_CONTACT", r#"{"jours": 180}"#, r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#),
+            ("Suivi à planifier", "#F97316", "📅", "Date de prochain suivi dans moins de 30 jours", 90, "DATE_APPROCHE", r#"{"champ": "date_prochain_suivi", "jours_avant": 30}"#, r#"["CLIENT", "PROSPECT_CLIENT"]"#),
+            ("Fin démembrement", "#3B82F6", "🏠", "Fin de démembrement dans moins de 6 mois", 80, "DATE_APPROCHE", r#"{"champ": "date_fin_demembrement", "jours_avant": 180}"#, r#"["CLIENT"]"#),
+            ("Déclaration IR", "#8B5CF6", "📋", "Période de déclaration d'impôts (avril-mai)", 70, "PERIODE_ANNEE", r#"{"mois_debut": 4, "mois_fin": 5}"#, r#"["CLIENT"]"#),
+            ("RDV fin d'année", "#10B981", "🎯", "Période de souscription fin d'année (oct-nov)", 60, "PERIODE_ANNEE", r#"{"mois_debut": 10, "mois_fin": 11}"#, r#"["CLIENT", "PROSPECT_CLIENT"]"#),
+        ];
+
+        for (nom, couleur, icone, description, priorite, condition_type, condition_config, categories) in default_etiquettes {
+            // Vérifier si l'étiquette existe déjà (par nom)
+            let exists: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM etiquettes WHERE nom = ?1",
+                params![nom],
+                |row| row.get(0),
+            ).unwrap_or(0);
+
+            if exists == 0 {
+                // Créer l'étiquette manquante
+                if self.create_etiquette(NewEtiquette {
+                    nom: nom.to_string(),
+                    couleur: Some(couleur.to_string()),
+                    icone: Some(icone.to_string()),
+                    description: Some(description.to_string()),
+                    priorite: Some(priorite),
+                    auto_condition_type: Some(condition_type.to_string()),
+                    auto_condition_config: Some(condition_config.to_string()),
+                    auto_categories: Some(categories.to_string()),
+                    email_template_id: None,
+                    email_delai_jours: Some(0),
+                    email_actif: Some(false),
+                    is_default: Some(true),
+                }).is_ok() {
+                    created += 1;
+                    println!("🏷️ Étiquette par défaut '{}' créée", nom);
+                }
+            }
+        }
+
+        if created > 0 {
+            println!("🏷️ Migration: {} étiquettes par défaut créées", created);
+        }
+
+        Ok(created)
+    }
+
+    // ==================== MOTEUR AUTOMATIQUE ETIQUETTES ====================
+
+    /// Vérifie et applique automatiquement les étiquettes selon leurs conditions
+    /// Retourne le nombre d'étiquettes attribuées
+    pub fn check_and_apply_auto_etiquettes(&self) -> Result<usize> {
+        // Vérifier si la table existe
+        let table_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
+            [],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        if table_exists == 0 {
+            return Ok(0);
+        }
+
+        // 🏷️ S'assurer que toutes les étiquettes par défaut existent (migration)
+        let _ = self.ensure_default_etiquettes();
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        // Récupérer le mois actuel (1-12)
+        let current_month = {
+            let datetime = chrono::DateTime::from_timestamp(now, 0)
+                .unwrap_or_else(|| chrono::Utc::now());
+            datetime.format("%m").to_string().parse::<i32>().unwrap_or(1)
+        };
+
+        let mut total_assigned = 0;
+
+        // Récupérer toutes les étiquettes automatiques
+        let etiquettes = self.get_all_etiquettes()?;
+        let auto_etiquettes: Vec<_> = etiquettes
+            .into_iter()
+            .filter(|e| e.auto_condition_type.is_some())
+            .collect();
+
+        // Récupérer tous les contacts
+        let contacts = self.get_all_contacts()?;
+
+        for etiquette in auto_etiquettes {
+            let condition_type = etiquette.auto_condition_type.as_ref().unwrap();
+            let config = etiquette.auto_condition_config.as_ref();
+            let categories: Vec<String> = etiquette.auto_categories.as_ref()
+                .and_then(|c| serde_json::from_str(c).ok())
+                .unwrap_or_default();
+
+            for contact in &contacts {
+                let contact_id = match contact.id {
+                    Some(id) => id,
+                    None => continue,
+                };
+
+                // Vérifier si la catégorie du contact correspond
+                if !categories.is_empty() && !categories.contains(&contact.categorie) {
+                    continue;
+                }
+
+                // Vérifier si l'étiquette est déjà attribuée (et si c'est automatique)
+                let assignment_info: Option<(i64, String)> = self.conn.query_row(
+                    "SELECT id, COALESCE(source, '') FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                    params![contact_id, etiquette.id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                ).ok();
+
+                // Évaluer la condition
+                let should_assign = match condition_type.as_str() {
+                    "DELAI_SANS_CONTACT" => {
+                        if let Some(config_str) = config {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                                let jours = parsed["jours"].as_i64().unwrap_or(365);
+                                if let Some(last_contact) = contact.date_dernier_contact {
+                                    let diff_days = (now - last_contact) / (24 * 60 * 60);
+                                    diff_days >= jours
+                                } else {
+                                    true // Jamais contacté = condition remplie
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    "DATE_APPROCHE" => {
+                        if let Some(config_str) = config {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                                let champ = parsed["champ"].as_str().unwrap_or("");
+                                let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(30);
+                                
+                                let date_value = match champ {
+                                    "date_prochain_suivi" => contact.date_prochain_suivi,
+                                    "date_naissance" => contact.date_naissance,
+                                    _ => None,
+                                };
+
+                                // Pour date_fin_demembrement, il faudrait chercher dans les investissements
+                                // (simplifié ici)
+
+                                if let Some(target_date) = date_value {
+                                    let diff_seconds = target_date - now;
+                                    let diff_days = diff_seconds / (24 * 60 * 60);
+                                    diff_days >= 0 && diff_days <= jours_avant
+                                } else {
+                                    false
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    "PERIODE_ANNEE" => {
+                        if let Some(config_str) = config {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                                let mois_debut = parsed["mois_debut"].as_i64().unwrap_or(1) as i32;
+                                let mois_fin = parsed["mois_fin"].as_i64().unwrap_or(12) as i32;
+                                
+                                if mois_debut <= mois_fin {
+                                    current_month >= mois_debut && current_month <= mois_fin
+                                } else {
+                                    // Cas où la période chevauche l'année (ex: nov-fév)
+                                    current_month >= mois_debut || current_month <= mois_fin
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    "TYPE_PRODUIT" => {
+                        // Vérifier si le contact a un investissement du type demandé
+                        if let Some(config_str) = config {
+                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                                let types: Vec<String> = parsed["types"]
+                                    .as_array()
+                                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                    .unwrap_or_default();
+                                
+                                if types.is_empty() {
+                                    false
+                                } else {
+                                    let types_str = types.iter()
+                                        .map(|t| format!("'{}'", t))
+                                        .collect::<Vec<_>>()
+                                        .join(",");
+                                    
+                                    let has_product: i64 = self.conn.query_row(
+                                        &format!(
+                                            "SELECT COUNT(*) FROM investissements 
+                                             WHERE contact_id = ?1 AND type_produit IN ({})",
+                                            types_str
+                                        ),
+                                        params![contact_id],
+                                        |row| row.get(0),
+                                    ).unwrap_or(0);
+                                    
+                                    has_product > 0
+                                }
+                            } else {
+                                false
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    _ => false,
+                };
+
+                match (should_assign, assignment_info) {
+                    // Condition remplie et pas encore attribuée -> attribuer
+                    (true, None) => {
+                        if self.attribuer_etiquette(contact_id, etiquette.id, Some("AUTO".to_string())).is_ok() {
+                            total_assigned += 1;
+                            println!("🏷️ Étiquette '{}' attribuée automatiquement à {} {}", 
+                                etiquette.nom, contact.prenom, contact.nom);
+                        }
+                    }
+                    // Condition non remplie et étiquette AUTO attribuée -> retirer
+                    (false, Some((assignment_id, source))) if source == "AUTO" => {
+                        if self.conn.execute(
+                            "DELETE FROM contact_etiquettes WHERE id = ?1",
+                            params![assignment_id],
+                        ).is_ok() {
+                            println!("🏷️ Étiquette '{}' retirée automatiquement de {} {} (condition non remplie)", 
+                                etiquette.nom, contact.prenom, contact.nom);
+                        }
+                    }
+                    // Autres cas: pas d'action nécessaire
+                    _ => {}
+                }
+            }
+        }
+
+        println!("🏷️ Moteur automatique: {} étiquettes attribuées", total_assigned);
+        Ok(total_assigned)
+    }
+
+    /// Envoie les emails programmés pour les étiquettes
+    /// Retourne le nombre d'emails envoyés
+    pub fn get_pending_etiquette_emails(&self) -> Result<Vec<(i64, i64, i64, String, String)>> {
+        // Récupérer les emails en attente (email_envoye = 0 ET email_date_prevue <= now)
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT ce.id, ce.contact_id, e.email_template_id, c.email, c.prenom
+             FROM contact_etiquettes ce
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             WHERE ce.email_envoye = 0 
+               AND ce.email_date_prevue IS NOT NULL 
+               AND ce.email_date_prevue <= ?1
+               AND e.email_actif = 1
+               AND e.email_template_id IS NOT NULL
+               AND c.email IS NOT NULL
+               AND c.email != ''"
+        )?;
+
+        let results = stmt.query_map(params![now], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,      // contact_etiquette.id
+                row.get::<_, i64>(1)?,      // contact_id
+                row.get::<_, i64>(2)?,      // template_id
+                row.get::<_, String>(3)?,   // email
+                row.get::<_, String>(4)?,   // prenom
+            ))
+        })?;
+
+        let mut pending = Vec::new();
+        for result in results {
+            if let Ok(item) = result {
+                pending.push(item);
+            }
+        }
+        Ok(pending)
+    }
+
+    /// Marquer un email d'étiquette comme envoyé
+    pub fn mark_etiquette_email_sent(&self, contact_etiquette_id: i64) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        self.conn.execute(
+            "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1 WHERE id = ?2",
+            params![now, contact_etiquette_id],
+        )?;
+        Ok(())
     }
 }

@@ -18,6 +18,10 @@ import { InvestissementForm } from "@/components/investissements/InvestissementF
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import { FoyerCreateModal } from "@/components/foyers/FoyerCreateModal";
 import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
+import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
+import { EtiquetteSelector } from "@/components/etiquettes/EtiquetteSelector";
+import { getEtiquettesByContact, attribuerEtiquette, retirerEtiquette, type ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
+import { toast } from "sonner";
 
 interface ContactDetailProps {
   open: boolean;
@@ -52,6 +56,7 @@ export function ContactDetail({
   const [foyerPatrimoine, setFoyerPatrimoine] = useState(0);
   const [showFoyerCreateModal, setShowFoyerCreateModal] = useState(false);
   const [showFoyerLinkModal, setShowFoyerLinkModal] = useState(false);
+  const [etiquettes, setEtiquettes] = useState<ContactEtiquetteDetails[]>([]);
 
   const handleDissocierFoyer = async () => {
     if (!contact?.id) return;
@@ -117,8 +122,43 @@ export function ContactDetail({
       loadParrain();
       loadFilleuls();
       loadFoyer();
+      loadEtiquettes();
     }
   }, [contact?.id, open]);
+
+  const loadEtiquettes = async () => {
+    if (!contact?.id) return;
+    try {
+      const data = await getEtiquettesByContact(contact.id);
+      setEtiquettes(data);
+    } catch (error) {
+      console.error("Error loading etiquettes:", error);
+    }
+  };
+
+  const handleAddEtiquette = async (etiquetteId: number) => {
+    if (!contact?.id) return;
+    try {
+      await attribuerEtiquette(contact.id, etiquetteId, "MANUEL");
+      await loadEtiquettes();
+      toast.success("Étiquette ajoutée");
+    } catch (error) {
+      console.error("Error adding etiquette:", error);
+      toast.error("Erreur lors de l'ajout de l'étiquette");
+    }
+  };
+
+  const handleRemoveEtiquette = async (etiquetteId: number) => {
+    if (!contact?.id) return;
+    try {
+      await retirerEtiquette(contact.id, etiquetteId);
+      await loadEtiquettes();
+      toast.success("Étiquette retirée");
+    } catch (error) {
+      console.error("Error removing etiquette:", error);
+      toast.error("Erreur lors du retrait de l'étiquette");
+    }
+  };
 
   const loadInvestissements = async () => {
     if (!contact?.id) return;
@@ -428,6 +468,25 @@ export function ContactDetail({
                   <Badge className={getStatutColor(contact.statut_suivi)}>
                     {contact.statut_suivi}
                   </Badge>
+                </div>
+                
+                {/* Étiquettes du contact */}
+                <div className="flex items-center gap-2 mt-3">
+                  <EtiquetteList
+                    etiquettes={etiquettes.map(e => ({
+                      id: e.etiquette_id,
+                      nom: e.etiquette_nom,
+                      couleur: e.etiquette_couleur,
+                      icone: e.etiquette_icone,
+                    }))}
+                    onRemove={handleRemoveEtiquette}
+                    size="sm"
+                  />
+                  <EtiquetteSelector
+                    selectedIds={etiquettes.map(e => e.etiquette_id)}
+                    onAdd={handleAddEtiquette}
+                    onRemove={handleRemoveEtiquette}
+                  />
                 </div>
               </div>
               <div className="flex gap-2">

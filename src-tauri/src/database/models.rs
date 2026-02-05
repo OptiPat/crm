@@ -333,3 +333,106 @@ pub struct InvestissementWithDetails {
     pub created_at: i64,
     pub updated_at: i64,
 }
+
+// ==================== ETIQUETTES ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Etiquette {
+    pub id: i64,
+    pub nom: String,
+    pub couleur: String,
+    pub icone: Option<String>,
+    pub description: Option<String>,
+    pub priorite: i64,
+    // Attribution automatique
+    pub auto_condition_type: Option<String>,    // DELAI_SANS_CONTACT, DATE_APPROCHE, PERIODE_ANNEE, TYPE_PRODUIT
+    pub auto_condition_config: Option<String>,  // JSON avec les paramètres
+    pub auto_categories: Option<String>,        // JSON array des catégories concernées
+    // Action email
+    pub email_template_id: Option<i64>,
+    pub email_delai_jours: i64,
+    pub email_actif: bool,
+    // Système
+    pub is_default: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewEtiquette {
+    pub nom: String,
+    pub couleur: Option<String>,        // Défaut: #3B82F6
+    pub icone: Option<String>,
+    pub description: Option<String>,
+    pub priorite: Option<i64>,          // Défaut: 0
+    // Attribution automatique
+    pub auto_condition_type: Option<String>,
+    pub auto_condition_config: Option<String>,
+    pub auto_categories: Option<String>,
+    // Action email
+    pub email_template_id: Option<i64>,
+    pub email_delai_jours: Option<i64>, // Défaut: 0
+    pub email_actif: Option<bool>,      // Défaut: false
+    // Système
+    pub is_default: Option<bool>,       // Défaut: false
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContactEtiquette {
+    pub id: i64,
+    pub contact_id: i64,
+    pub etiquette_id: i64,
+    pub date_attribution: i64,
+    pub attribue_par: String,           // "AUTO" ou "MANUEL"
+    // Suivi email
+    pub email_envoye: bool,
+    pub email_date_prevue: Option<i64>,
+    pub email_date_envoi: Option<i64>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewContactEtiquette {
+    pub contact_id: i64,
+    pub etiquette_id: i64,
+    pub attribue_par: Option<String>,   // Défaut: "AUTO"
+    pub email_date_prevue: Option<i64>,
+    pub notes: Option<String>,
+}
+
+// Étiquette enrichie avec le compteur de contacts
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EtiquetteWithCount {
+    pub id: i64,
+    pub nom: String,
+    pub couleur: String,
+    pub icone: Option<String>,
+    pub description: Option<String>,
+    pub priorite: i64,
+    pub auto_condition_type: Option<String>,
+    pub auto_condition_config: Option<String>,
+    pub auto_categories: Option<String>,
+    pub email_template_id: Option<i64>,
+    pub email_delai_jours: i64,
+    pub email_actif: bool,
+    pub is_default: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub contact_count: i64,             // Nombre de contacts avec cette étiquette
+}
+
+// Détails d'une étiquette sur un contact
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ContactEtiquetteDetails {
+    pub id: i64,
+    pub contact_id: i64,
+    pub etiquette_id: i64,
+    pub etiquette_nom: String,
+    pub etiquette_couleur: String,
+    pub etiquette_icone: Option<String>,
+    pub date_attribution: i64,
+    pub attribue_par: String,
+    pub email_envoye: bool,
+    pub email_date_prevue: Option<i64>,
+    pub notes: Option<String>,
+}

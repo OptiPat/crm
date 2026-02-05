@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Toaster } from "sonner";
 import { SetupPassword } from "@/pages/SetupPassword";
 import { UnlockScreen } from "@/pages/UnlockScreen";
 import { Layout } from "@/components/layout/Layout";
@@ -14,6 +15,7 @@ import { Interactions } from "@/pages/Interactions";
 import { Parametres } from "@/pages/Parametres";
 import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
+import { Etiquettes } from "@/pages/Etiquettes";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 
 function App() {
@@ -75,6 +77,8 @@ function App() {
         return <TemplatesEmail />;
       case "suivi":
         return <Suivi />;
+      case "etiquettes":
+        return <Etiquettes />;
       case "parametres":
         return <Parametres />;
       default:
@@ -104,13 +108,16 @@ function App() {
   // Afficher l'application avec le layout
   try {
     return (
-      <Layout
-        currentPage={currentPage}
-        onPageChange={setCurrentPage}
-        onLogout={handleLogout}
-      >
-        {renderPage()}
-      </Layout>
+      <>
+        <Layout
+          currentPage={currentPage}
+          onPageChange={setCurrentPage}
+          onLogout={handleLogout}
+        >
+          {renderPage()}
+        </Layout>
+        <Toaster richColors position="top-right" />
+      </>
     );
   } catch (error) {
     console.error("Error rendering app:", error);

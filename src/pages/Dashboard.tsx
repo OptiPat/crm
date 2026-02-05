@@ -8,18 +8,38 @@ import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { Users, Home, TrendingUp, Bell, CalendarClock, Building2, UserPlus, ShoppingCart } from "lucide-react";
 import { getDashboardStats, DashboardStats } from "@/lib/api/tauri-dashboard";
+import { checkAndApplyAutoEtiquettes, seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadStats();
+    initializeAndLoadStats();
   }, []);
 
-  const loadStats = async () => {
+  const initializeAndLoadStats = async () => {
     try {
       setLoading(true);
+      
+      // Initialiser les étiquettes par défaut si nécessaire
+      try {
+        await seedDefaultEtiquettes();
+      } catch (error) {
+        console.log("Étiquettes déjà initialisées ou erreur:", error);
+      }
+      
+      // Appliquer les étiquettes automatiques
+      try {
+        const assigned = await checkAndApplyAutoEtiquettes();
+        if (assigned > 0) {
+          console.log(`🏷️ ${assigned} étiquettes automatiques attribuées`);
+        }
+      } catch (error) {
+        console.error("Erreur moteur automatique étiquettes:", error);
+      }
+      
+      // Charger les statistiques
       const data = await getDashboardStats();
       setStats(data);
     } catch (error) {

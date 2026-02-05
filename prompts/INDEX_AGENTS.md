@@ -30,7 +30,7 @@
 | 2 | Génération PDF | `AGENT_2_PDF_GENERATION.md` | 🟠 Moyenne | 2-3 sessions | ❌ À faire |
 | 3 | GED | `AGENT_3_GED.md` | 🟡 Basse | 3-4 sessions | ⚠️ 20% fait |
 | **12** | **Familles & Foyers v2** | `AGENT_12_FAMILLES_FOYERS.md` | 🟠 Important | 2-3 sessions | ❌ À faire |
-| **13** | **Étiquettes & Alertes** | `AGENT_13_ETIQUETTES.md` | 🟠 **Important** | 3-4 sessions | ❌ À faire |
+| **13** | **Étiquettes & Alertes** | `AGENT_13_ETIQUETTES.md` | 🟠 **Important** | 3-4 sessions | ✅ **Terminé** |
 
 ### Phase 2 : Préparer la commercialisation
 
@@ -61,7 +61,7 @@
 ÉTAPE 1 - Finir les fonctionnalités
 ├── Agent 1 : OCR/RIO (finir)         🔴 1-2 sessions
 ├── Agent 11 : Historique Patrimoine  🔴 2-3 sessions
-├── Agent 13 : Étiquettes + Emails    🟠 3-4 sessions (NOUVEAU)
+├── Agent 13 : Étiquettes + Emails    ✅ TERMINÉ
 ├── Agent 2 : Génération PDF          🟠 2-3 sessions
 └── Agent 3 : GED                     🟡 3-4 sessions
 
@@ -120,7 +120,7 @@ prompts/
 ├── AGENT_1_OCR_RIO.md           ← Compléter import RIO
 ├── AGENT_11_HISTORIQUE_PATRIMOINE.md ← Évolution patrimoniale année/année
 ├── AGENT_12_FAMILLES_FOYERS.md  ← Hiérarchie Famille → Foyers
-├── AGENT_13_ETIQUETTES.md       ← Étiquettes personnalisables + Emails auto (NOUVEAU)
+├── AGENT_13_ETIQUETTES.md       ← Étiquettes personnalisables + Emails auto ✅
 ├── AGENT_2_PDF_GENERATION.md    ← Générer bulletins souscription
 ├── AGENT_3_GED.md               ← Organisation documents
 │
@@ -159,7 +159,8 @@ prompts/
 | Foyers CRUD | ✅ 100% (intégré dans Contacts) |
 | Partenaires CRUD | ✅ 100% |
 | Templates email | ✅ 100% |
-| Alertes & Suivi | ⚠️ Basique (sera remplacé par Agent 13 : Étiquettes) |
+| Alertes & Suivi | ✅ 100% (remplacé par système Étiquettes) |
+| **Étiquettes personnalisables** | ✅ 100% (page dédiée, intégration contacts, emails auto) |
 | **Prescripteurs** | ✅ 100% (arbre généalogique recommandations) |
 | **Dates suivi indépendantes** | ✅ 100% (client vs filleul) |
 | **Nettoyage données orphelines** | ✅ 100% (dans Paramètres) |
@@ -174,7 +175,7 @@ prompts/
 - [x] **Dates de suivi indépendantes : Client vs Filleul** ✅ Terminé (24/01/2026)
 - [x] **Nettoyage données orphelines** ✅ Terminé (24/01/2026)
 - [ ] Agent 11 : Historique patrimonial année après année
-- [ ] **Agent 13 : Étiquettes personnalisables + Emails automatiques** 🟠
+- [x] **Agent 13 : Étiquettes personnalisables + Emails automatiques** ✅ Terminé (31/01/2026)
 - [ ] Agent 1 : Détection doublons investissements RIO
 - [ ] Agent 1 : OCR PDF scannés (Tesseract)
 - [ ] Agent 2 : Génération PDF pré-remplis
