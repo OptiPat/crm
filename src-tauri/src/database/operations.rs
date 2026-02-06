@@ -2563,7 +2563,8 @@ impl Database {
     }
 
     /// Vérifie et crée les étiquettes par défaut manquantes (migration pour bases existantes)
-    /// Retourne le nombre d'étiquettes créées
+    /// Met aussi à jour les configs des étiquettes existantes si nécessaire
+    /// Retourne le nombre d'étiquettes créées ou mises à jour
     pub fn ensure_default_etiquettes(&self) -> Result<usize> {
         // Vérifier si la table existe
         let table_exists: i64 = self.conn.query_row(
@@ -2576,9 +2577,9 @@ impl Database {
             return Ok(0);
         }
 
-        let mut created = 0;
+        let mut changes = 0;
 
-        // Liste des étiquettes par défaut à vérifier/créer
+        // Liste des étiquettes par défaut à vérifier/créer/mettre à jour
         let default_etiquettes = vec![
             ("Suivi > 1 an", "#EF4444", "🔴", "Client non contacté depuis plus d'un an", 100, "DELAI_SANS_CONTACT", r#"{"jours": 365}"#, r#"["CLIENT"]"#),
             ("Suivi > 6 mois", "#F97316", "🟠", "Prospect/Suspect non contacté depuis plus de 6 mois", 95, "DELAI_SANS_CONTACT", r#"{"jours": 180}"#, r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#),
@@ -2592,39 +2593,55 @@ impl Database {
 
         for (nom, couleur, icone, description, priorite, condition_type, condition_config, categories) in default_etiquettes {
             // Vérifier si l'étiquette existe déjà (par nom)
-            let exists: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM etiquettes WHERE nom = ?1",
+            let existing: Option<(i64, Option<String>)> = self.conn.query_row(
+                "SELECT id, auto_condition_config FROM etiquettes WHERE nom = ?1",
                 params![nom],
-                |row| row.get(0),
-            ).unwrap_or(0);
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            ).ok();
 
-            if exists == 0 {
-                // Créer l'étiquette manquante
-                if self.create_etiquette(NewEtiquette {
-                    nom: nom.to_string(),
-                    couleur: Some(couleur.to_string()),
-                    icone: Some(icone.to_string()),
-                    description: Some(description.to_string()),
-                    priorite: Some(priorite),
-                    auto_condition_type: Some(condition_type.to_string()),
-                    auto_condition_config: Some(condition_config.to_string()),
-                    auto_categories: Some(categories.to_string()),
-                    email_template_id: None,
-                    email_delai_jours: Some(0),
-                    email_actif: Some(false),
-                    is_default: Some(true),
-                }).is_ok() {
-                    created += 1;
-                    println!("🏷️ Étiquette par défaut '{}' créée", nom);
+            match existing {
+                Some((id, current_config)) => {
+                    // L'étiquette existe - vérifier si la config doit être mise à jour
+                    let current = current_config.unwrap_or_default();
+                    if current != condition_config {
+                        // Mettre à jour la config et le type de condition
+                        if self.conn.execute(
+                            "UPDATE etiquettes SET auto_condition_type = ?1, auto_condition_config = ?2, auto_categories = ?3 WHERE id = ?4",
+                            params![condition_type, condition_config, categories, id],
+                        ).is_ok() {
+                            changes += 1;
+                            println!("🏷️ Étiquette '{}' mise à jour (nouvelle config)", nom);
+                        }
+                    }
+                }
+                None => {
+                    // Créer l'étiquette manquante
+                    if self.create_etiquette(NewEtiquette {
+                        nom: nom.to_string(),
+                        couleur: Some(couleur.to_string()),
+                        icone: Some(icone.to_string()),
+                        description: Some(description.to_string()),
+                        priorite: Some(priorite),
+                        auto_condition_type: Some(condition_type.to_string()),
+                        auto_condition_config: Some(condition_config.to_string()),
+                        auto_categories: Some(categories.to_string()),
+                        email_template_id: None,
+                        email_delai_jours: Some(0),
+                        email_actif: Some(false),
+                        is_default: Some(true),
+                    }).is_ok() {
+                        changes += 1;
+                        println!("🏷️ Étiquette par défaut '{}' créée", nom);
+                    }
                 }
             }
         }
 
-        if created > 0 {
-            println!("🏷️ Migration: {} étiquettes par défaut créées", created);
+        if changes > 0 {
+            println!("🏷️ Migration: {} étiquettes créées/mises à jour", changes);
         }
 
-        Ok(created)
+        Ok(changes)
     }
 
     // ==================== MOTEUR AUTOMATIQUE ETIQUETTES ====================
@@ -2690,7 +2707,7 @@ impl Database {
 
                 // Vérifier si l'étiquette est déjà attribuée (et si c'est automatique)
                 let assignment_info: Option<(i64, String)> = self.conn.query_row(
-                    "SELECT id, COALESCE(source, '') FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                    "SELECT id, COALESCE(attribue_par, '') FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
                     params![contact_id, etiquette.id],
                     |row| Ok((row.get(0)?, row.get(1)?)),
                 ).ok();
@@ -2858,8 +2875,6 @@ impl Database {
                                     let birth = DateTime::<Utc>::from_timestamp(date_naissance, 0);
                                     
                                     if let Some(birth_dt) = birth {
-                                        let now_dt = Utc::now();
-                                        let current_year = now_dt.year();
                                         let birth_year = birth_dt.year();
                                         
                                         // Année de l'anniversaire cible
@@ -2894,24 +2909,21 @@ impl Database {
                     _ => false,
                 };
 
-                match (should_assign, assignment_info) {
+                match (should_assign, &assignment_info) {
                     // Condition remplie et pas encore attribuée -> attribuer
                     (true, None) => {
                         if self.attribuer_etiquette(contact_id, etiquette.id, Some("AUTO".to_string())).is_ok() {
                             total_assigned += 1;
-                            println!("🏷️ Étiquette '{}' attribuée automatiquement à {} {}", 
-                                etiquette.nom, contact.prenom, contact.nom);
                         }
                     }
+                    // Condition remplie mais déjà attribuée -> rien à faire
+                    (true, Some(_)) => {}
                     // Condition non remplie et étiquette AUTO attribuée -> retirer
                     (false, Some((assignment_id, source))) if source == "AUTO" => {
-                        if self.conn.execute(
+                        let _ = self.conn.execute(
                             "DELETE FROM contact_etiquettes WHERE id = ?1",
-                            params![assignment_id],
-                        ).is_ok() {
-                            println!("🏷️ Étiquette '{}' retirée automatiquement de {} {} (condition non remplie)", 
-                                etiquette.nom, contact.prenom, contact.nom);
-                        }
+                            params![*assignment_id],
+                        );
                     }
                     // Autres cas: pas d'action nécessaire
                     _ => {}
