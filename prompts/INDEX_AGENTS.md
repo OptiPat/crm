@@ -22,61 +22,72 @@
 | ✅ | Contacts & Filleuls | `AGENT_CONTACTS_FILLEULS.md` | 🔴 Haute | 3-4 sessions | ✅ **Terminé** |
 | ✅ | Foyers & Familles | `AGENT_FOYERS_FAMILLES.md` | 🔴 Haute | 2-3 sessions | ✅ **Terminé** |
 
-### Phase 1 : Finir les fonctionnalités
+### Phase 1 : Terminé
 
 | Agent | Module | Fichier | Priorité | Durée | Status |
 |-------|--------|---------|----------|-------|--------|
-| 1 | OCR & RIO | `AGENT_1_OCR_RIO.md` | 🔴 Haute | 1-2 sessions | ⚠️ 90% fait |
-| 2 | Génération PDF | `AGENT_2_PDF_GENERATION.md` | 🟠 Moyenne | 2-3 sessions | ❌ À faire |
-| 3 | GED | `AGENT_3_GED.md` | 🟡 Basse | 3-4 sessions | ⚠️ 20% fait |
-| **12** | **Familles & Foyers v2** | `AGENT_12_FAMILLES_FOYERS.md` | 🟠 Important | 2-3 sessions | ❌ À faire |
+| **12** | **Familles & Foyers v2** | `AGENT_12_FAMILLES_FOYERS.md` | 🟠 Important | 2-3 sessions | ✅ **Terminé** (regroupement dynamique) |
 | **13** | **Étiquettes & Alertes** | `AGENT_13_ETIQUETTES.md` | 🟠 **Important** | 3-4 sessions | ✅ **Terminé** |
 
-### Phase 2 : Préparer la commercialisation
+### Phase 2 : V1 Commercialisable (PRIORITAIRE)
 
 | Agent | Module | Fichier | Priorité | Durée | Status |
 |-------|--------|---------|----------|-------|--------|
-| 11 | Historique Patrimoine | `AGENT_11_HISTORIQUE_PATRIMOINE.md` | 🔴 **Haute** | 2-3 sessions | ❌ À faire |
-| 6 | Sécurité & RGPD | `AGENT_6_SECURITE_RGPD.md` | 🔴 **Critique** | 2-3 sessions | ❌ À faire |
 | 7 | Backup & Restauration | `AGENT_7_BACKUP.md` | 🔴 **Critique** | 1-2 sessions | ❌ À faire |
-| 8 | Licences & Packaging | `AGENT_8_LICENCES.md` | 🔴 **Critique** | 2-3 sessions | ❌ À faire |
-| 9 | Onboarding | `AGENT_9_ONBOARDING.md` | 🟠 Important | 1-2 sessions | ❌ À faire |
-| 10 | Rapports & Exports | `AGENT_10_RAPPORTS.md` | 🟠 Important | 2 sessions | ❌ À faire |
+| 6 | Sécurité & RGPD | `AGENT_6_SECURITE_RGPD.md` | 🔴 **Critique** | 2-3 sessions | ❌ À faire |
+| 9 | Onboarding (Wizard seul) | `AGENT_9_ONBOARDING.md` | 🟠 Important | 1 session | ✅ **Terminé** |
 
 ### Phase 3 : V2 (après lancement)
 
 | Agent | Module | Fichier | Priorité | Durée | Status |
 |-------|--------|---------|----------|-------|--------|
-| 4 | Workflows | `AGENT_4_WORKFLOWS.md` | 🔵 Future | 4-5 sessions | ❌ V2 |
-| 5 | Calendrier | `AGENT_5_CALENDRIER.md` | 🔵 Future | 3-4 sessions | ❌ V2 |
+| 8 | Licences & Packaging | `AGENT_8_LICENCES.md` | 🔵 V2 | 2-3 sessions | ⏳ Reporté |
+| 10 | Rapports & Exports | `AGENT_10_RAPPORTS.md` | 🔵 V2 | 2 sessions | ⏳ Reporté |
+| 11 | Historique Patrimoine | `AGENT_11_HISTORIQUE_PATRIMOINE.md` | 🔵 V2 | 2-3 sessions | ⏳ Reporté |
+| 4 | Workflows & Automatisation | `AGENT_4_WORKFLOWS.md` | 🟠 **Prochain** | V1.5→V4 | 🟡 Étiquettes ✅ → Pipelines à faire |
+| 5 | Calendrier | `AGENT_5_CALENDRIER.md` | 🔵 V2 | 3-4 sessions | ⏳ Reporté |
+
+### Reportés (en attente de nouveaux modèles)
+
+| Agent | Module | Raison | Status |
+|-------|--------|--------|--------|
+| 1 | OCR & RIO | Nouveau modèle PDF prévu en 2026 | ⏸️ En pause |
+| 2 | Génération PDF | Partenaire va créer une solution | ⏸️ En pause |
+| 3 | GED | Nouveau modèle PDF prévu en 2026 | ⏸️ En pause |
 
 ---
 
 ## 🚀 Ordre recommandé pour la V1
 
 ```
-ÉTAPE 0 - Refonte en cours
-└── ✅ TERMINÉ
+✅ TERMINÉ
+├── Agent Contacts/Filleuls           ✅
+├── Agent Foyers/Familles             ✅
+├── Agent 12 : Familles v2            ✅ (regroupement dynamique par nom)
+└── Agent 13 : Étiquettes + Emails    ✅
 
-ÉTAPE 1 - Finir les fonctionnalités
-├── Agent 1 : OCR/RIO (finir)         🔴 1-2 sessions
-├── Agent 11 : Historique Patrimoine  🔴 2-3 sessions
-├── Agent 13 : Étiquettes + Emails    ✅ TERMINÉ
-├── Agent 2 : Génération PDF          🟠 2-3 sessions
-└── Agent 3 : GED                     🟡 3-4 sessions
+PRIORITÉ 1 - Indispensable pour vendre
+├── Agent 7 : Backup & Restauration   🔴 1-2 sessions
+└── Agent 6 : Sécurité & RGPD         🔴 2-3 sessions
 
-ÉTAPE 2 - Sécurité (OBLIGATOIRE)
-├── Agent 6 : Sécurité & RGPD         🔴 2-3 sessions
-└── Agent 7 : Backup & Restauration   🔴 1-2 sessions
+✅ TERMINÉ  
+└── Agent 9 : Onboarding (Wizard)     ✅
 
-ÉTAPE 3 - Monétisation
-└── Agent 8 : Licences & Packaging    🔴 2-3 sessions
+🟡 PROCHAIN (très prochainement)
+└── Agent 4 : Workflows & Automatisation (V1.5 Pipelines)
 
-ÉTAPE 4 - Polish
-├── Agent 9 : Onboarding              🟠 1-2 sessions
-└── Agent 10 : Rapports               🟠 2 sessions
+⏳ REPORTÉ EN V2
+├── Agent 8 : Licences & Packaging
+├── Agent 10 : Rapports & Exports
+├── Agent 11 : Historique Patrimoine
+└── Agent 5 : Calendrier
 
-TOTAL ESTIMÉ : 20-29 sessions pour V1 commercialisable
+⏸️ EN PAUSE (nouveaux modèles attendus)
+├── Agent 1 : OCR/RIO
+├── Agent 2 : Génération PDF
+└── Agent 3 : GED
+
+TOTAL V1 : 4-6 sessions
 ```
 
 ---
@@ -112,28 +123,30 @@ prompts/
 ├── INDEX_AGENTS.md              ← CE FICHIER
 ├── CONTEXTE_GLOBAL.md           ← Contexte général du projet
 │
-│── PHASE 0 : REFONTE DEMANDÉE
-├── AGENT_CONTACTS_FILLEULS.md   ← Onglets Clients/Filleuls + Import MLM ✅
-├── AGENT_FOYERS_FAMILLES.md     ← Foyers intégrés aux contacts
+│── TERMINÉ
+├── AGENT_CONTACTS_FILLEULS.md   ← ✅ Terminé
+├── AGENT_FOYERS_FAMILLES.md     ← ✅ Terminé
+├── AGENT_12_FAMILLES_FOYERS.md  ← ✅ Terminé (regroupement dynamique)
+├── AGENT_13_ETIQUETTES.md       ← ✅ Terminé
 │
-│── PHASE 1 : FONCTIONNALITÉS
-├── AGENT_1_OCR_RIO.md           ← Compléter import RIO
-├── AGENT_11_HISTORIQUE_PATRIMOINE.md ← Évolution patrimoniale année/année
-├── AGENT_12_FAMILLES_FOYERS.md  ← Hiérarchie Famille → Foyers
-├── AGENT_13_ETIQUETTES.md       ← Étiquettes personnalisables + Emails auto ✅
-├── AGENT_2_PDF_GENERATION.md    ← Générer bulletins souscription
-├── AGENT_3_GED.md               ← Organisation documents
+│── PRIORITÉ V1
+├── AGENT_7_BACKUP.md            ← 🔴 Backup & Restauration
+├── AGENT_6_SECURITE_RGPD.md     ← 🔴 Sécurité + RGPD
+├── AGENT_9_ONBOARDING.md        ← ✅ Wizard de configuration (terminé)
 │
-│── PHASE 2 : COMMERCIALISATION
-├── AGENT_6_SECURITE_RGPD.md     ← Sécurité + conformité légale
-├── AGENT_7_BACKUP.md            ← Sauvegarde automatique
-├── AGENT_8_LICENCES.md          ← Système de licence + packaging
-├── AGENT_9_ONBOARDING.md        ← Première utilisation
+│── PROCHAIN
+├── AGENT_4_WORKFLOWS.md         ← 🟡 Workflows & Automatisation (V1.5→V4)
+│
+│── REPORTÉ V2
+├── AGENT_8_LICENCES.md          ← Système de licence
 ├── AGENT_10_RAPPORTS.md         ← Exports Excel/PDF
+├── AGENT_11_HISTORIQUE_PATRIMOINE.md ← Évolution patrimoniale
+├── AGENT_5_CALENDRIER.md        ← Google/Outlook
 │
-│── PHASE 3 : V2
-├── AGENT_4_WORKFLOWS.md         ← Automatisation (V2)
-├── AGENT_5_CALENDRIER.md        ← Google/Outlook (V2)
+│── EN PAUSE
+├── AGENT_1_OCR_RIO.md           ← ⏸️ Nouveau modèle PDF attendu
+├── AGENT_2_PDF_GENERATION.md    ← ⏸️ Partenaire crée solution
+├── AGENT_3_GED.md               ← ⏸️ Nouveau modèle PDF attendu
 │
 │── SPECS DÉTAILLÉES
 ├── PROMPT_PDF_OCR.md
@@ -157,6 +170,7 @@ prompts/
 | Authentification | ✅ 100% |
 | Contacts CRUD | ✅ 100% |
 | Foyers CRUD | ✅ 100% (intégré dans Contacts) |
+| **Familles** | ✅ 100% (regroupement dynamique par nom) |
 | Partenaires CRUD | ✅ 100% |
 | Templates email | ✅ 100% |
 | Alertes & Suivi | ✅ 100% (remplacé par système Étiquettes) |
@@ -164,24 +178,41 @@ prompts/
 | **Prescripteurs** | ✅ 100% (arbre généalogique recommandations) |
 | **Dates suivi indépendantes** | ✅ 100% (client vs filleul) |
 | **Nettoyage données orphelines** | ✅ 100% (dans Paramètres) |
+| **Affichage patrimoine foyer** | ✅ 100% (indicateur 🏠 + montant) |
 
 ---
 
 ## 💰 Checklist V1 commercialisable
 
-- [x] **Agent Contacts/Filleuls : Refonte onglets + Import MLM** ✅ Terminé
-- [x] **Agent Foyers/Familles : Regroupement visuel + Détection import** ✅ Terminé
-- [x] **Prescripteurs : Arbre des recommandations + Patrimoine apporté** ✅ Terminé (24/01/2026)
-- [x] **Dates de suivi indépendantes : Client vs Filleul** ✅ Terminé (24/01/2026)
-- [x] **Nettoyage données orphelines** ✅ Terminé (24/01/2026)
-- [ ] Agent 11 : Historique patrimonial année après année
-- [x] **Agent 13 : Étiquettes personnalisables + Emails automatiques** ✅ Terminé (31/01/2026)
-- [ ] Agent 1 : Détection doublons investissements RIO
-- [ ] Agent 1 : OCR PDF scannés (Tesseract)
-- [ ] Agent 2 : Génération PDF pré-remplis
-- [ ] Agent 3 : GED avec arborescence
-- [ ] **Agent 6 : Verrouillage auto + RGPD** 🔴
-- [ ] **Agent 7 : Backup automatique** 🔴
-- [ ] **Agent 8 : Système de licence** 🔴
-- [ ] Agent 9 : Wizard de première utilisation
+### ✅ Terminé
+- [x] Agent Contacts/Filleuls : Refonte onglets + Import MLM
+- [x] Agent Foyers/Familles : Regroupement visuel + Détection import
+- [x] Agent 12 : Familles v2 (regroupement dynamique)
+- [x] Prescripteurs : Arbre des recommandations + Patrimoine apporté
+- [x] Dates de suivi indépendantes : Client vs Filleul
+- [x] Nettoyage données orphelines
+- [x] Agent 13 : Étiquettes personnalisables + Emails automatiques
+- [x] Affichage patrimoine foyer (indicateur 🏠)
+
+### 🔴 À faire (prioritaire)
+- [ ] **Agent 7 : Backup automatique**
+- [ ] **Agent 6 : Verrouillage auto + RGPD**
+- [x] ~~Agent 9 : Wizard de première utilisation~~ ✅
+
+### 🟡 Prochain (très prochainement)
+- [ ] **Agent 4 : Workflows V1.5** (Pipelines + bouton "Lancer workflow")
+
+### ⏳ Reporté V2
+- [ ] Agent 4 V2 : Webhooks + API locale pour n8n
+- [ ] Agent 4 V2.5 : n8n + Mistral (newsletter IA)
+- [ ] Agent 4 V3 : Historique mails Gmail/Outlook
+- [ ] Agent 4 V4 : Rule Builder visuel
+- [ ] Agent 8 : Système de licence
 - [ ] Agent 10 : Exports Excel + PDF rapports
+- [ ] Agent 11 : Historique patrimonial année après année
+- [ ] Agent 5 : Calendrier Google/Outlook
+
+### ⏸️ En pause
+- [ ] Agent 1 : OCR/RIO (nouveau modèle PDF attendu)
+- [ ] Agent 2 : Génération PDF (partenaire crée solution)
+- [ ] Agent 3 : GED (nouveau modèle PDF attendu)

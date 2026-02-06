@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Toaster } from "sonner";
 import { SetupPassword } from "@/pages/SetupPassword";
+import { SetupWizard } from "@/pages/SetupWizard";
 import { UnlockScreen } from "@/pages/UnlockScreen";
 import { Layout } from "@/components/layout/Layout";
 import { Dashboard } from "@/pages/Dashboard";
@@ -17,10 +18,12 @@ import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
+import { isWizardCompleted } from "@/lib/api/tauri-settings";
 
 function App() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [showWizard, setShowWizard] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
 
   useEffect(() => {
@@ -29,6 +32,12 @@ function App() {
       try {
         const firstLaunch = await invoke<boolean>("is_first_launch");
         setIsFirstLaunch(firstLaunch);
+        
+        // Si pas premier lancement, vérifier si le wizard est complété
+        if (!firstLaunch) {
+          const wizardDone = await isWizardCompleted();
+          setShowWizard(!wizardDone);
+        }
       } catch (error) {
         console.error("Error checking first launch:", error);
       }
@@ -37,13 +46,26 @@ function App() {
     checkFirstLaunch();
   }, []);
 
-  const handlePasswordCreated = () => {
+  const handlePasswordCreated = async () => {
     setIsFirstLaunch(false);
     setIsAuthenticated(true);
+    // Après création du mot de passe, afficher le wizard
+    setShowWizard(true);
   };
 
-  const handleUnlocked = () => {
+  const handleWizardComplete = () => {
+    setShowWizard(false);
+  };
+
+  const handleUnlocked = async () => {
     setIsAuthenticated(true);
+    // Vérifier si le wizard est complété après déverrouillage
+    try {
+      const wizardDone = await isWizardCompleted();
+      setShowWizard(!wizardDone);
+    } catch (error) {
+      console.error("Error checking wizard status:", error);
+    }
   };
 
   const handleLogout = () => {
@@ -103,6 +125,11 @@ function App() {
   // Lancements suivants : afficher l'écran de déverrouillage si pas authentifié
   if (!isAuthenticated) {
     return <UnlockScreen onUnlocked={handleUnlocked} />;
+  }
+
+  // Afficher le wizard de configuration si pas encore complété
+  if (showWizard) {
+    return <SetupWizard onWizardComplete={handleWizardComplete} />;
   }
 
   // Afficher l'application avec le layout

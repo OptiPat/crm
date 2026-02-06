@@ -35,6 +35,7 @@ export function SmtpConfigForm({ open, onOpenChange }: SmtpConfigFormProps) {
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [hasExistingPassword, setHasExistingPassword] = useState(false);
   const [formData, setFormData] = useState<SmtpConfigInput>({
     provider: "other",
     smtp_server: "",
@@ -56,13 +57,20 @@ export function SmtpConfigForm({ open, onOpenChange }: SmtpConfigFormProps) {
     try {
       const config = await getSmtpConfig();
       if (config) {
+        // Vérifier si un mot de passe existe (le backend ne le renvoie pas, mais on peut vérifier si la config existe)
+        const passwordExists = config.smtp_server && config.username;
+        setHasExistingPassword(!!passwordExists);
+        
         setFormData({
           ...config,
-          password: "", // Ne pas afficher le mot de passe
+          password: "", // Ne pas afficher le mot de passe réel
         });
+      } else {
+        setHasExistingPassword(false);
       }
     } catch (error) {
       console.error("Error loading SMTP config:", error);
+      setHasExistingPassword(false);
     }
   };
 
@@ -98,6 +106,9 @@ export function SmtpConfigForm({ open, onOpenChange }: SmtpConfigFormProps) {
 
     try {
       await saveSmtpConfig(formData);
+      setHasExistingPassword(true);
+      // Réinitialiser le champ mot de passe après sauvegarde
+      setFormData({ ...formData, password: "" });
       alert("Configuration SMTP enregistrée avec succès !");
     } catch (error) {
       console.error("Error saving SMTP config:", error);
@@ -114,6 +125,9 @@ export function SmtpConfigForm({ open, onOpenChange }: SmtpConfigFormProps) {
     try {
       // D'abord enregistrer la configuration
       await saveSmtpConfig(formData);
+      setHasExistingPassword(true);
+      // Réinitialiser le champ mot de passe après sauvegarde
+      setFormData({ ...formData, password: "" });
       
       // Puis tester la connexion
       const message = await testSmtpConnection();
@@ -140,6 +154,7 @@ export function SmtpConfigForm({ open, onOpenChange }: SmtpConfigFormProps) {
         from_email: "",
         use_tls: true,
       });
+      setHasExistingPassword(false);
       alert("Configuration supprimée");
     } catch (error) {
       console.error("Error deleting SMTP config:", error);
@@ -216,12 +231,21 @@ export function SmtpConfigForm({ open, onOpenChange }: SmtpConfigFormProps) {
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              placeholder="Votre mot de passe"
-              required={!formData.smtp_server}
+              placeholder={hasExistingPassword ? "••••••••••••••••" : "Votre mot de passe"}
             />
+            {hasExistingPassword && !formData.password && (
+              <p className="text-xs text-green-600">
+                Un mot de passe est déjà enregistré. Laissez vide pour le conserver.
+              </p>
+            )}
+            {formData.password && (
+              <p className="text-xs text-blue-600">
+                Le mot de passe sera mis à jour.
+              </p>
+            )}
             {formData.provider === "gmail" && (
               <p className="text-xs text-yellow-600">
-                ⚠️ Pour Gmail, utilisez un "mot de passe d'application" (pas votre mot de passe principal)
+                Pour Gmail, utilisez un "mot de passe d'application" (pas votre mot de passe principal)
               </p>
             )}
           </div>

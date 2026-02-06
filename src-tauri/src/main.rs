@@ -135,6 +135,17 @@ fn main() {
                         check_and_apply_auto_etiquettes,
                         get_pending_etiquette_emails,
                         mark_etiquette_email_sent,
+                        // Settings
+                        get_setting,
+                        set_setting,
+                        delete_setting,
+                        get_all_settings,
+                        get_cgp_config,
+                        save_cgp_config,
+                        is_wizard_completed,
+                        complete_wizard,
+                        update_wizard_step,
+                        // Auth
                         is_first_launch,
                         create_master_password,
                         verify_master_password,

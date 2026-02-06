@@ -209,6 +209,16 @@ impl Database {
             [],
         )?;
         
+        // Table settings (configuration CGP et wizard)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            )",
+            [],
+        )?;
+        
         println!("✅ Database tables initialized");
         
         // Migration automatique : Rendre contact_id optionnel dans investissements

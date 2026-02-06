@@ -2,19 +2,72 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Database, Bell, User, Mail, Trash2, Search, X } from "lucide-react";
+import { Lock, Database, Bell, User, Mail, Trash2, Search, X, Check, Building2, Phone } from "lucide-react";
 import { SmtpConfigForm } from "@/components/emails/SmtpConfigForm";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
+import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
+import { toast } from "sonner";
 
 export function Parametres() {
   const [showSmtpConfig, setShowSmtpConfig] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
   
+  // Profil CGP
+  const [cgpConfig, setCgpConfig] = useState<CgpConfig>({
+    nom: "",
+    prenom: "",
+    cabinet: "",
+    email: "",
+    telephone: "",
+    logo_path: "",
+    wizard_completed: true,
+    wizard_step: 4,
+  });
+  const [savingProfile, setSavingProfile] = useState(false);
+  
   // 🔍 Recherche et suppression de contacts
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
+  
+  // Charger la config CGP au montage
+  useEffect(() => {
+    const loadCgpConfig = async () => {
+      try {
+        const config = await getCgpConfig();
+        if (config) {
+          // S'assurer que toutes les valeurs sont des strings (pas undefined)
+          setCgpConfig({
+            nom: config.nom ?? "",
+            prenom: config.prenom ?? "",
+            cabinet: config.cabinet ?? "",
+            email: config.email ?? "",
+            telephone: config.telephone ?? "",
+            logo_path: config.logo_path ?? "",
+            wizard_completed: config.wizard_completed ?? true,
+            wizard_step: config.wizard_step ?? 4,
+          });
+        }
+      } catch (error) {
+        console.error("Erreur chargement config CGP:", error);
+      }
+    };
+    loadCgpConfig();
+  }, []);
+  
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      await saveCgpConfig(cgpConfig);
+      toast.success("Profil enregistré avec succès");
+    } catch (error) {
+      console.error("Erreur sauvegarde profil:", error);
+      toast.error("Erreur lors de l'enregistrement");
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const handleSearchContacts = async () => {
     if (!searchQuery.trim()) return;
@@ -87,25 +140,79 @@ export function Parametres() {
             <CardTitle>Profil utilisateur</CardTitle>
           </div>
           <CardDescription>
-            Informations personnelles
+            Informations personnelles du conseiller
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="nom">Nom</Label>
-              <Input id="nom" placeholder="Votre nom" />
+              <Label htmlFor="prenom">Prénom</Label>
+              <Input 
+                id="prenom" 
+                placeholder="Votre prénom"
+                value={cgpConfig.prenom || ""}
+                onChange={(e) => setCgpConfig({ ...cgpConfig, prenom: e.target.value })}
+              />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="prenom">Prénom</Label>
-              <Input id="prenom" placeholder="Votre prénom" />
+              <Label htmlFor="nom">Nom</Label>
+              <Input 
+                id="nom" 
+                placeholder="Votre nom"
+                value={cgpConfig.nom || ""}
+                onChange={(e) => setCgpConfig({ ...cgpConfig, nom: e.target.value })}
+              />
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" placeholder="votre@email.com" />
+            <Label htmlFor="cabinet">
+              <Building2 className="h-4 w-4 inline mr-1" />
+              Cabinet / Société
+            </Label>
+            <Input 
+              id="cabinet" 
+              placeholder="Nom de votre cabinet"
+              value={cgpConfig.cabinet || ""}
+              onChange={(e) => setCgpConfig({ ...cgpConfig, cabinet: e.target.value })}
+            />
           </div>
-          <Button>Enregistrer</Button>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">
+                <Mail className="h-4 w-4 inline mr-1" />
+                Email professionnel
+              </Label>
+              <Input 
+                id="email" 
+                type="email" 
+                placeholder="votre@email.com"
+                value={cgpConfig.email || ""}
+                onChange={(e) => setCgpConfig({ ...cgpConfig, email: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="telephone">
+                <Phone className="h-4 w-4 inline mr-1" />
+                Téléphone
+              </Label>
+              <Input 
+                id="telephone" 
+                placeholder="01 23 45 67 89"
+                value={cgpConfig.telephone || ""}
+                onChange={(e) => setCgpConfig({ ...cgpConfig, telephone: e.target.value })}
+              />
+            </div>
+          </div>
+          <Button onClick={handleSaveProfile} disabled={savingProfile}>
+            {savingProfile ? (
+              "Enregistrement..."
+            ) : (
+              <>
+                <Check className="h-4 w-4 mr-2" />
+                Enregistrer
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
 

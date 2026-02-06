@@ -439,3 +439,25 @@ pub struct ContactEtiquetteDetails {
     pub email_date_prevue: Option<i64>,
     pub notes: Option<String>,
 }
+
+// ==================== SETTINGS ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Setting {
+    pub key: String,
+    pub value: String,
+    pub updated_at: i64,
+}
+
+/// Configuration du CGP (stockée en JSON dans settings)
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CgpConfig {
+    pub nom: Option<String>,
+    pub prenom: Option<String>,
+    pub cabinet: Option<String>,
+    pub email: Option<String>,
+    pub telephone: Option<String>,
+    pub logo_path: Option<String>,
+    pub wizard_completed: bool,
+    pub wizard_step: i64,
+}

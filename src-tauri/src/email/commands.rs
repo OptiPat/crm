@@ -21,13 +21,32 @@ pub fn get_smtp_config(app_handle: AppHandle) -> Result<Option<SmtpConfig>, Stri
 
 #[tauri::command]
 pub fn save_smtp_config(app_handle: AppHandle, config: SmtpConfigInput) -> Result<(), String> {
-    // Encoder le mot de passe
+    // Si le mot de passe est vide, essayer de garder l'ancien
+    let password_encoded = if config.password.is_empty() {
+        // Charger la config existante pour récupérer l'ancien mot de passe
+        match SmtpConfig::load(&app_handle) {
+            Ok(Some(existing)) => {
+                println!("📧 Keeping existing password");
+                existing.password // Déjà encodé
+            }
+            _ => {
+                // Pas de config existante, utiliser un mot de passe vide (erreur probable plus tard)
+                println!("⚠️ No existing password found, using empty");
+                String::new()
+            }
+        }
+    } else {
+        // Nouveau mot de passe fourni, l'encoder
+        println!("📧 Encoding new password");
+        base64::engine::general_purpose::STANDARD.encode(&config.password)
+    };
+    
     let smtp_config = SmtpConfig {
         provider: config.provider,
         smtp_server: config.smtp_server,
         smtp_port: config.smtp_port,
         username: config.username,
-        password: base64::engine::general_purpose::STANDARD.encode(&config.password),
+        password: password_encoded,
         from_name: config.from_name,
         from_email: config.from_email,
         use_tls: config.use_tls,

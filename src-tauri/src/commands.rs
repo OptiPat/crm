@@ -1,6 +1,6 @@
 use tauri::State;
 use std::sync::Mutex;
-use crate::database::{Database, models::{Contact, NewContact, Famille, NewFamille, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact, Investissement, NewInvestissement, InvestissementWithDetails, Etiquette, NewEtiquette, ContactEtiquette, EtiquetteWithCount, ContactEtiquetteDetails}};
+use crate::database::{Database, models::{Contact, NewContact, Famille, NewFamille, Foyer, NewFoyer, Partenaire, NewPartenaire, Document, NewDocument, TemplateEmail, NewTemplateEmail, Alerte, NewAlerte, DashboardStats, CategoryStats, MonthlyStats, ProductStats, PipelineStats, AlerteWithContact, Investissement, NewInvestissement, InvestissementWithDetails, Etiquette, NewEtiquette, ContactEtiquette, EtiquetteWithCount, ContactEtiquetteDetails, Setting, CgpConfig}};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -691,4 +691,87 @@ pub fn mark_etiquette_email_sent(db: State<'_, DbState>, contact_etiquette_id: i
     
     database.mark_etiquette_email_sent(contact_etiquette_id)
         .map_err(|e| format!("Failed to mark email sent: {}", e))
+}
+
+// ========== SETTINGS ==========
+
+#[tauri::command]
+pub fn get_setting(db: State<'_, DbState>, key: String) -> Result<Option<String>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_setting(&key)
+        .map_err(|e| format!("Failed to get setting: {}", e))
+}
+
+#[tauri::command]
+pub fn set_setting(db: State<'_, DbState>, key: String, value: String) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.set_setting(&key, &value)
+        .map_err(|e| format!("Failed to set setting: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_setting(db: State<'_, DbState>, key: String) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.delete_setting(&key)
+        .map_err(|e| format!("Failed to delete setting: {}", e))
+}
+
+#[tauri::command]
+pub fn get_all_settings(db: State<'_, DbState>) -> Result<Vec<Setting>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_all_settings()
+        .map_err(|e| format!("Failed to get all settings: {}", e))
+}
+
+#[tauri::command]
+pub fn get_cgp_config(db: State<'_, DbState>) -> Result<CgpConfig, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.get_cgp_config()
+        .map_err(|e| format!("Failed to get CGP config: {}", e))
+}
+
+#[tauri::command]
+pub fn save_cgp_config(db: State<'_, DbState>, config: CgpConfig) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.save_cgp_config(&config)
+        .map_err(|e| format!("Failed to save CGP config: {}", e))
+}
+
+#[tauri::command]
+pub fn is_wizard_completed(db: State<'_, DbState>) -> Result<bool, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.is_wizard_completed()
+        .map_err(|e| format!("Failed to check wizard status: {}", e))
+}
+
+#[tauri::command]
+pub fn complete_wizard(db: State<'_, DbState>) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.complete_wizard()
+        .map_err(|e| format!("Failed to complete wizard: {}", e))
+}
+
+#[tauri::command]
+pub fn update_wizard_step(db: State<'_, DbState>, step: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    
+    database.update_wizard_step(step)
+        .map_err(|e| format!("Failed to update wizard step: {}", e))
 }
