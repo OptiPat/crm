@@ -1146,6 +1146,8 @@ impl Database {
             }
 
             let date_dernier_contact = contact.date_dernier_contact;
+            let date_dernier_contact_filleul = contact.date_dernier_contact_filleul;
+            let filleul_cat = contact.filleul_categorie.as_deref();
 
             // ========== CLIENTS ==========
             if contact.categorie == "CLIENT" {
@@ -1153,7 +1155,6 @@ impl Database {
                     let diff_seconds = now - last_contact;
                     let diff_months = diff_seconds / (30 * 24 * 60 * 60);
                     
-                    // 🔴 Suivi +1 an : Client non contacté depuis plus de 12 mois
                     if diff_months > 12 {
                         self.create_alerte(super::models::NewAlerte {
                             contact_id: contact.id.unwrap(),
@@ -1164,7 +1165,6 @@ impl Database {
                         count += 1;
                     }
                 } else {
-                    // 🔴 Jamais suivi : Client sans historique de contact
                     self.create_alerte(super::models::NewAlerte {
                         contact_id: contact.id.unwrap(),
                         type_alerte: "CLIENT_JAMAIS_SUIVI".to_string(),
@@ -1175,13 +1175,12 @@ impl Database {
                 }
             }
 
-            // ========== PROSPECTS & SUSPECTS ==========
-            if contact.categorie.contains("SUSPECT") || contact.categorie.contains("PROSPECT") {
+            // ========== PROSPECTS & SUSPECTS CLIENT ==========
+            if contact.categorie == "SUSPECT_CLIENT" || contact.categorie == "PROSPECT_CLIENT" {
                 if let Some(last_contact) = date_dernier_contact {
                     let diff_seconds = now - last_contact;
                     let diff_months = diff_seconds / (30 * 24 * 60 * 60);
                     
-                    // 🟠 Suivi +6 mois : Lead non contacté depuis plus de 6 mois
                     if diff_months > 6 {
                         self.create_alerte(super::models::NewAlerte {
                             contact_id: contact.id.unwrap(),
@@ -1192,7 +1191,6 @@ impl Database {
                         count += 1;
                     }
                 } else {
-                    // 🟠 Jamais contacté : Lead qui n'a jamais été contacté
                     self.create_alerte(super::models::NewAlerte {
                         contact_id: contact.id.unwrap(),
                         type_alerte: "LEAD_JAMAIS_CONTACTE".to_string(),
@@ -1200,6 +1198,45 @@ impl Database {
                         date_alerte: Some(now),
                     })?;
                     count += 1;
+                }
+            }
+
+            // ========== RÉSEAU FILLEUL ==========
+            if let Some(fc) = filleul_cat {
+                if fc == "FILLEUL" {
+                    if let Some(last_contact) = date_dernier_contact_filleul {
+                        let diff_months = (now - last_contact) / (30 * 24 * 60 * 60);
+                        if diff_months > 12 {
+                            self.create_alerte(super::models::NewAlerte {
+                                contact_id: contact.id.unwrap(),
+                                type_alerte: "SUIVI_FILLEUL_1AN".to_string(),
+                                message: format!("🔴 {} {} - Filleul suivi +1 an", contact.prenom, contact.nom),
+                                date_alerte: Some(now),
+                            })?;
+                            count += 1;
+                        }
+                    }
+                } else if fc == "PROSPECT_FILLEUL" || fc == "SUSPECT_FILLEUL" {
+                    if let Some(last_contact) = date_dernier_contact_filleul {
+                        let diff_months = (now - last_contact) / (30 * 24 * 60 * 60);
+                        if diff_months > 6 {
+                            self.create_alerte(super::models::NewAlerte {
+                                contact_id: contact.id.unwrap(),
+                                type_alerte: "FILLEUL_SUIVI_6MOIS".to_string(),
+                                message: format!("🟠 {} {} - Filleul suivi +6 mois", contact.prenom, contact.nom),
+                                date_alerte: Some(now),
+                            })?;
+                            count += 1;
+                        }
+                    } else {
+                        self.create_alerte(super::models::NewAlerte {
+                            contact_id: contact.id.unwrap(),
+                            type_alerte: "FILLEUL_JAMAIS_CONTACTE".to_string(),
+                            message: format!("🟠 {} {} - Filleul jamais contacté", contact.prenom, contact.nom),
+                            date_alerte: Some(now),
+                        })?;
+                        count += 1;
+                    }
                 }
             }
         }
@@ -1317,7 +1354,9 @@ impl Database {
         )?;
 
         let prospect_filleul: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie = 'PROSPECT_FILLEUL'",
+            "SELECT COUNT(*) FROM contacts
+             WHERE filleul_categorie = 'PROSPECT_FILLEUL'
+                OR (filleul_categorie IS NULL AND categorie = 'PROSPECT_FILLEUL')",
             [],
             |row| row.get(0),
         )?;
@@ -1329,7 +1368,9 @@ impl Database {
         )?;
 
         let suspect_filleul: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie = 'SUSPECT_FILLEUL'",
+            "SELECT COUNT(*) FROM contacts
+             WHERE filleul_categorie = 'SUSPECT_FILLEUL'
+                OR (filleul_categorie IS NULL AND categorie = 'SUSPECT_FILLEUL')",
             [],
             |row| row.get(0),
         )?;
@@ -1426,16 +1467,20 @@ impl Database {
     }
 
     pub fn get_pipeline_stats(&self) -> Result<super::models::PipelineStats> {
-        // Compter les suspects (SUSPECT_CLIENT + SUSPECT_FILLEUL)
         let suspects: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'SUSPECT%'",
+            "SELECT COUNT(*) FROM contacts
+             WHERE categorie = 'SUSPECT_CLIENT'
+                OR filleul_categorie = 'SUSPECT_FILLEUL'
+                OR (filleul_categorie IS NULL AND categorie = 'SUSPECT_FILLEUL')",
             [],
             |row| row.get(0),
         )?;
 
-        // Compter les prospects (PROSPECT_CLIENT + PROSPECT_FILLEUL)
         let prospects: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie LIKE 'PROSPECT%'",
+            "SELECT COUNT(*) FROM contacts
+             WHERE categorie = 'PROSPECT_CLIENT'
+                OR filleul_categorie = 'PROSPECT_FILLEUL'
+                OR (filleul_categorie IS NULL AND categorie = 'PROSPECT_FILLEUL')",
             [],
             |row| row.get(0),
         )?;
@@ -1467,16 +1512,19 @@ impl Database {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT a.id, a.contact_id, c.nom, c.prenom, c.categorie, c.date_dernier_contact,
-                    a.type_alerte, a.titre, a.date_echeance, a.statut
+            "SELECT a.id, a.contact_id, c.nom, c.prenom,
+                    COALESCE(NULLIF(c.filleul_categorie, ''), c.categorie) as display_categorie,
+                    c.date_dernier_contact,
+                    a.type_alerte, a.message, a.date_alerte, a.traitee
              FROM alertes a
              INNER JOIN contacts c ON a.contact_id = c.id
-             WHERE a.statut != 'TRAITE'
-             ORDER BY a.date_echeance ASC
+             WHERE a.traitee = 0
+             ORDER BY a.date_alerte ASC
              LIMIT ?1"
         )?;
 
         let alertes = stmt.query_map(params![limit], |row| {
+            let traitee: i64 = row.get(9)?;
             Ok(super::models::AlerteWithContact {
                 alerte_id: row.get(0)?,
                 contact_id: row.get(1)?,
@@ -1486,8 +1534,8 @@ impl Database {
                 date_dernier_contact: row.get(5)?,
                 type_alerte: row.get(6)?,
                 message: row.get(7)?,
-                date_alerte: row.get(8)?,
-                statut: row.get(9)?,
+                date_alerte: row.get::<_, i64>(8)?.to_string(),
+                statut: if traitee != 0 { "TRAITE" } else { "EN_ATTENTE" }.to_string(),
             })
         })?;
 
@@ -2680,9 +2728,16 @@ impl Database {
                     None => continue,
                 };
 
-                // Vérifier si la catégorie du contact correspond
-                if !categories.is_empty() && !categories.contains(&contact.categorie) {
-                    continue;
+                if !categories.is_empty() {
+                    let cat_match = categories.iter().any(|c| c == &contact.categorie);
+                    let filleul_match = contact
+                        .filleul_categorie
+                        .as_ref()
+                        .map(|fc| categories.iter().any(|c| c == fc))
+                        .unwrap_or(false);
+                    if !cat_match && !filleul_match {
+                        continue;
+                    }
                 }
 
                 // Vérifier si l'étiquette est déjà attribuée (et si c'est automatique)
@@ -2698,11 +2753,20 @@ impl Database {
                         if let Some(config_str) = config {
                             if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
                                 let jours = parsed["jours"].as_i64().unwrap_or(365);
-                                if let Some(last_contact) = contact.date_dernier_contact {
+                                let filleul_only = categories.iter().any(|c| c.contains("FILLEUL"))
+                                    && !categories.iter().any(|c| {
+                                        c == "CLIENT" || c == "PROSPECT_CLIENT" || c == "SUSPECT_CLIENT"
+                                    });
+                                let last_contact = if filleul_only {
+                                    contact.date_dernier_contact_filleul.or(contact.date_dernier_contact)
+                                } else {
+                                    contact.date_dernier_contact
+                                };
+                                if let Some(last_contact) = last_contact {
                                     let diff_days = (now - last_contact) / (24 * 60 * 60);
                                     diff_days >= jours
                                 } else {
-                                    true // Jamais contacté = condition remplie
+                                    true
                                 }
                             } else {
                                 false
@@ -2719,6 +2783,8 @@ impl Database {
                                 
                                 let date_value = match champ {
                                     "date_prochain_suivi" => contact.date_prochain_suivi,
+                                    "date_prochain_suivi_filleul" => contact.date_prochain_suivi_filleul,
+                                    "date_dernier_contact_filleul" => contact.date_dernier_contact_filleul,
                                     "date_naissance" => contact.date_naissance,
                                     _ => None,
                                 };

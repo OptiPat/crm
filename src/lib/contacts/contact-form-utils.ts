@@ -237,6 +237,30 @@ export function serializeFormSnapshot(data: NewContact): string {
   return JSON.stringify(data);
 }
 
+/** Catégories client/filleul pour l'import Excel général (colonne « Prospects Filleuls »). */
+export function resolveImportContactCategories(
+  hasProduit: boolean,
+  hasContact: boolean,
+  isFilleul: boolean
+): { categorie: string; filleul_categorie?: string } {
+  if (hasProduit) {
+    return {
+      categorie: "CLIENT",
+      filleul_categorie: isFilleul ? "FILLEUL" : undefined,
+    };
+  }
+  if (isFilleul) {
+    return {
+      categorie: "AUCUN",
+      filleul_categorie: hasContact ? "PROSPECT_FILLEUL" : "SUSPECT_FILLEUL",
+    };
+  }
+  return {
+    categorie: hasContact ? "PROSPECT_CLIENT" : "SUSPECT_CLIENT",
+    filleul_categorie: undefined,
+  };
+}
+
 /** Payload complet pour updateContact (evite d'ecraser civilite, dates, etc.). */
 export function contactToUpdatePayload(
   contact: Contact,

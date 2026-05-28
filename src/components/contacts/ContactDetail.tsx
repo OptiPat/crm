@@ -15,6 +15,9 @@ import {
   contactToUpdatePayload,
   formatCiviliteLabel,
   formatSituationLabel,
+  getClientLabel,
+  getFilleulLabel,
+  isFilleulStatut,
 } from "@/lib/contacts/contact-form-utils";
 import { ContactForm } from "./ContactForm";
 import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
@@ -365,17 +368,37 @@ export function ContactDetail({
 
   if (!contact) return null;
 
-  const getCategorieColor = (categorie: string) => {
+  const getCategorieColor = (categorie: string, filleulCat?: string | null) => {
+    const fc = filleulCat || (isFilleulStatut(categorie) ? categorie : null);
+    if (fc) {
+      switch (fc) {
+        case "FILLEUL":
+          return "bg-indigo-100 text-indigo-800";
+        case "PROSPECT_FILLEUL":
+          return "bg-purple-100 text-purple-800";
+        case "SUSPECT_FILLEUL":
+          return "bg-amber-100 text-amber-800";
+        default:
+          return "bg-gray-100 text-gray-800";
+      }
+    }
     switch (categorie) {
       case "CLIENT":
         return "bg-green-100 text-green-800";
-      case "PROSPECT":
+      case "PROSPECT_CLIENT":
         return "bg-blue-100 text-blue-800";
-      case "ANCIEN_CLIENT":
-        return "bg-gray-100 text-gray-800";
+      case "SUSPECT_CLIENT":
+        return "bg-slate-100 text-slate-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
+  };
+
+  const getContactStatusLabel = (c: Contact) => {
+    const filleulLabel = getFilleulLabel(c.filleul_categorie);
+    const clientLabel = getClientLabel(c.categorie);
+    if (filleulLabel && clientLabel) return `${clientLabel} · ${filleulLabel}`;
+    return filleulLabel || clientLabel || c.categorie;
   };
 
   const getStatutColor = (statut: string) => {
@@ -457,8 +480,8 @@ export function ContactDetail({
                   Détails du contact et informations personnelles
                 </DialogDescription>
                 <div className="flex gap-2 mt-2">
-                  <Badge className={getCategorieColor(contact.categorie)}>
-                    {contact.categorie}
+                  <Badge className={getCategorieColor(contact.categorie, contact.filleul_categorie)}>
+                    {getContactStatusLabel(contact)}
                   </Badge>
                   <Badge className={getStatutColor(contact.statut_suivi)}>
                     {contact.statut_suivi}
@@ -910,11 +933,11 @@ export function ContactDetail({
               </Card>
             )}
 
-            {/* Suivi */}
+            {/* Suivi client */}
             {(contact.date_dernier_contact || contact.date_prochain_suivi) && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Suivi</CardTitle>
+                  <CardTitle className="text-lg">Suivi client</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {contact.date_dernier_contact && (
@@ -945,6 +968,53 @@ export function ContactDetail({
                             try {
                               const date = new Date(contact.date_prochain_suivi * 1000);
                               return isNaN(date.getTime()) ? "Aucune date" : date.toLocaleDateString('fr-FR');
+                            } catch {
+                              return "Aucune date";
+                            }
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Suivi filleul */}
+            {(contact.date_dernier_contact_filleul || contact.date_prochain_suivi_filleul) && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Suivi filleul</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {contact.date_dernier_contact_filleul && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <span className="text-muted-foreground text-sm">Dernier contact filleul :</span>
+                        <p className="font-medium text-indigo-700">
+                          {(() => {
+                            try {
+                              const date = new Date(contact.date_dernier_contact_filleul! * 1000);
+                              return isNaN(date.getTime()) ? "Aucun" : date.toLocaleDateString("fr-FR");
+                            } catch {
+                              return "Aucun";
+                            }
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  {contact.date_prochain_suivi_filleul && (
+                    <div className="flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <span className="text-muted-foreground text-sm">Prochain suivi filleul :</span>
+                        <p className="font-medium text-orange-700">
+                          {(() => {
+                            try {
+                              const date = new Date(contact.date_prochain_suivi_filleul! * 1000);
+                              return isNaN(date.getTime()) ? "Aucune date" : date.toLocaleDateString("fr-FR");
                             } catch {
                               return "Aucune date";
                             }

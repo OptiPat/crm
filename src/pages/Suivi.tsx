@@ -14,6 +14,12 @@ import {
 } from "@/lib/api/tauri-alertes";
 import { getContactById, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import {
+  contactToUpdatePayload,
+  getClientLabel,
+  getFilleulLabel,
+  isFilleulStatut,
+} from "@/lib/contacts/contact-form-utils";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -150,35 +156,28 @@ export function Suivi() {
       const nextDate = new Date(now.getTime() + mois * 30 * 24 * 60 * 60 * 1000);
       const nextDateTimestamp = Math.floor(nextDate.getTime() / 1000).toString();
 
-      // Mettre à jour le contact (ne passer que les champs nécessaires)
-      await updateContact(alerte.contact_id, {
-        nom: contact.nom,
-        prenom: contact.prenom,
-        categorie: contact.categorie,
-        civilite: contact.civilite,
-        email: contact.email,
-        telephone: contact.telephone,
-        adresse: contact.adresse,
-        code_postal: contact.code_postal,
-        ville: contact.ville,
-        profession: contact.profession,
-        situation_familiale: contact.situation_familiale,
-        source_lead: contact.source_lead,
-        profil_risque_sri: contact.profil_risque_sri,
-        statut_suivi: contact.statut_suivi,
-        notes: contact.notes,
-        foyer_id: contact.foyer_id,
-        // Dates CLIENT
-        date_prochain_suivi: nextDateTimestamp,
-        date_dernier_contact: Math.floor(now.getTime() / 1000).toString(),
-        // Préserver les dates FILLEUL
-        date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
-          ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
-          : undefined,
-        date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
-          ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
-          : undefined,
-      });
+      const isFilleulAlert =
+        alerte.type_alerte.startsWith("FILLEUL") ||
+        isFilleulStatut(contact.filleul_categorie) ||
+        (contact.categorie !== "CLIENT" &&
+          contact.categorie !== "PROSPECT_CLIENT" &&
+          contact.categorie !== "SUSPECT_CLIENT" &&
+          isFilleulStatut(contact.categorie));
+
+      const nowIso = new Date(now.getTime()).toISOString();
+
+      await updateContact(
+        alerte.contact_id,
+        contactToUpdatePayload(contact, isFilleulAlert
+          ? {
+              date_prochain_suivi_filleul: nextDateTimestamp,
+              date_dernier_contact_filleul: nowIso,
+            }
+          : {
+              date_prochain_suivi: nextDateTimestamp,
+              date_dernier_contact: nowIso,
+            })
+      );
 
       // Marquer l'alerte comme traitée
       await marquerAlerteTraitee(alerte.id);
@@ -515,7 +514,12 @@ export function Suivi() {
                             {contact.prenom} {contact.nom}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            {contact.categorie}
+                            {[
+                              getFilleulLabel(contact.filleul_categorie),
+                              getClientLabel(contact.categorie),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") || contact.categorie}
                             {contact.email && ` • ${contact.email}`}
                           </p>
                         </div>

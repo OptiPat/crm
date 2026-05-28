@@ -46,9 +46,24 @@ export function buildContactIdMap(
 ): Map<string, number> {
   const map = new Map<string, number>();
   for (const c of contacts) {
-    map.set(contactNameKey(c.nom, c.prenom), c.id);
+    const direct = contactNameKey(c.nom, c.prenom);
+    const swapped = contactNameKey(c.prenom, c.nom);
+    map.set(direct, c.id);
+    if (!map.has(swapped)) {
+      map.set(swapped, c.id);
+    }
   }
   return map;
+}
+
+export function lookupContactIdInMap(
+  map: Map<string, number>,
+  nom: string,
+  prenom: string
+): number | undefined {
+  const direct = map.get(contactNameKey(nom, prenom));
+  if (direct !== undefined) return direct;
+  return map.get(contactNameKey(prenom, nom));
 }
 
 export type ParrainResolveStatus = "found" | "in_file" | "missing";

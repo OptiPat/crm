@@ -39,6 +39,7 @@ import {
   formatIdentityLine,
   getPairIdentityConflictMessages,
 } from "@/lib/contacts/duplicate-identity";
+import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -277,16 +278,21 @@ export function DocumentUpload({
 
       if (existingContact) {
         const newData = mapExtractedDataToContact(data);
-        const mergedData: NewContact = {
-          ...newData,
-          foyer_id: existingContact.foyer_id,
-          categorie: existingContact.categorie,
-          statut_suivi: existingContact.statut_suivi,
-          notes: existingContact.notes,
-          source_lead: existingContact.source_lead,
-          profil_risque_sri: existingContact.profil_risque_sri,
-        };
-        await updateContact(existingContact.id, mergedData);
+        await updateContact(
+          existingContact.id,
+          contactToUpdatePayload(existingContact, {
+            nom: newData.nom || existingContact.nom,
+            prenom: newData.prenom || existingContact.prenom,
+            email: newData.email || existingContact.email,
+            telephone: newData.telephone || existingContact.telephone,
+            adresse: newData.adresse || existingContact.adresse,
+            code_postal: newData.code_postal || existingContact.code_postal,
+            ville: newData.ville || existingContact.ville,
+            date_naissance: newData.date_naissance || undefined,
+            profession: newData.profession || existingContact.profession,
+            notes: newData.notes || existingContact.notes,
+          })
+        );
         finalContactId = existingContact.id;
         successMessage = `✅ Contact mis à jour: ${data.prenom} ${data.nom}`;
         existingContactNom = `${existingContact.prenom} ${existingContact.nom}`;
@@ -421,41 +427,10 @@ export function DocumentUpload({
           
           // Mettre à jour la catégorie si différente
           if (existingContact.categorie !== newCategorie) {
-            // Préparer les données de mise à jour
-            // Gérer la date de naissance avec prudence
-            let dateNaissanceISO: string | undefined = undefined;
-            if (existingContact.date_naissance && existingContact.date_naissance > 0) {
-              try {
-                const dateObj = new Date(existingContact.date_naissance * 1000);
-                if (!isNaN(dateObj.getTime())) {
-                  dateNaissanceISO = dateObj.toISOString();
-                }
-              } catch {
-                // Date de naissance invalide, ignorer
-              }
-            }
-            
-            const updatedContact: NewContact = {
-              nom: existingContact.nom,
-              prenom: existingContact.prenom,
-              categorie: newCategorie,
-              statut_suivi: existingContact.statut_suivi,
-              civilite: existingContact.civilite,
-              email: existingContact.email,
-              telephone: existingContact.telephone,
-              adresse: existingContact.adresse,
-              code_postal: existingContact.code_postal,
-              ville: existingContact.ville,
-              date_naissance: dateNaissanceISO,
-              profession: existingContact.profession,
-              situation_familiale: existingContact.situation_familiale,
-              foyer_id: existingContact.foyer_id,
-              notes: existingContact.notes,
-              source_lead: existingContact.source_lead,
-              profil_risque_sri: existingContact.profil_risque_sri,
-            };
-            
-            await updateContact(triContactId, updatedContact);
+            await updateContact(
+              triContactId,
+              contactToUpdatePayload(existingContact, { categorie: newCategorie })
+            );
           }
         } catch {
           // Impossible de mettre à jour la catégorie, ignorer

@@ -153,7 +153,7 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
         </Card>
 
         <p className="text-center text-sm text-muted-foreground mt-4">
-          Vos données sont chiffrées et protégées localement
+          Vos données sont stockées localement et protégées par mot de passe
         </p>
       </div>
     </div>

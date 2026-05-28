@@ -42,6 +42,10 @@ import {
   commitImportTransaction,
   rollbackImportTransaction,
 } from "@/lib/api/tauri-import-transaction";
+import {
+  contactToUpdatePayload,
+  resolveImportContactCategories,
+} from "@/lib/contacts/contact-form-utils";
 
 // ============================================
 // FUZZY MATCHING POUR LES PARTENAIRES
@@ -1774,23 +1778,18 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           return filleulStr === "OUI" || filleulStr === "YES" || filleulStr === "O" || filleulStr === "Y";
         })() : false;
         
-        let categorie = "SUSPECT_CLIENT";
-        
-        if (hasProduit) {
-          // 🎯 A souscrit un produit = CLIENT (jamais filleul car déjà client)
-          categorie = "CLIENT";
-        } else if (dateDernierContact) {
-          // 📞 Déjà contacté mais pas encore investi
-          categorie = isFilleul ? "PROSPECT_FILLEUL" : "PROSPECT_CLIENT";
-        } else {
-          // 🆕 Jamais contacté
-          categorie = isFilleul ? "SUSPECT_FILLEUL" : "SUSPECT_CLIENT";
-        }
+        const hasContactDate = !!dateDernierContact;
+        const { categorie, filleul_categorie } = resolveImportContactCategories(
+          !!hasProduit,
+          hasContactDate,
+          isFilleul
+        );
 
-        // Convertir la date en string ISO pour Rust
-        const dateDernierContactISO = dateDernierContact 
-          ? dateDernierContact.toISOString() 
+        const dateDernierContactISO = dateDernierContact
+          ? dateDernierContact.toISOString()
           : undefined;
+        const dateDernierContactFilleulISO =
+          isFilleul && dateDernierContactISO ? dateDernierContactISO : undefined;
 
         const dateNaissance = parseImportDate(row.data.date_naissance);
 
@@ -1809,9 +1808,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           // → Mettre à jour TOUTES les infos du contact + ajouter les investissements
           try {
             // Mettre à jour le contact avec les infos de la ligne Excel
-            const updateData: any = {
-              foyer_id: existingInCache.foyer_id, // Garder le foyer
-              role_foyer: existingInCache.role_foyer, // Garder le rôle
+            const updatePayload = contactToUpdatePayload(existingInCache, {
               nom: row.data.nom || existingInCache.nom,
               prenom: row.data.prenom || existingInCache.prenom,
               email: cleanString(row.data.email) || existingInCache.email,
@@ -1822,22 +1819,41 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               profession: cleanString(row.data.profession) || existingInCache.profession,
               source_lead: cleanString(row.data.source_lead) || existingInCache.source_lead,
               profil_risque_sri: profilRisque || existingInCache.profil_risque_sri,
-              categorie: categorie, // Recalculer la catégorie
+              categorie,
+              filleul_categorie,
               statut_suivi: existingInCache.statut_suivi || "ACTIF",
               notes: finalNotes || existingInCache.notes,
-              date_naissance: dateNaissance || (existingInCache.date_naissance 
-                ? new Date(existingInCache.date_naissance * 1000).toISOString() 
-                : undefined),
-              // 🔥 Prendre la date de suivi la plus RÉCENTE (consolidation multi-lignes)
-              date_dernier_contact: getMostRecentDate(dateDernierContactISO, existingInCache.date_dernier_contact),
-            };
-            
-            await updateContact(existingInCache.id, updateData);
+              date_naissance:
+                dateNaissance ||
+                (existingInCache.date_naissance
+                  ? new Date(existingInCache.date_naissance * 1000).toISOString()
+                  : undefined),
+              date_dernier_contact: isFilleul
+                ? undefined
+                : getMostRecentDate(
+                    dateDernierContactISO,
+                    existingInCache.date_dernier_contact
+                  ),
+              date_dernier_contact_filleul: isFilleul
+                ? getMostRecentDate(
+                    dateDernierContactFilleulISO,
+                    existingInCache.date_dernier_contact_filleul
+                  )
+                : existingInCache.date_dernier_contact_filleul
+                  ? new Date(existingInCache.date_dernier_contact_filleul * 1000).toISOString()
+                  : undefined,
+            });
+
+            await updateContact(existingInCache.id, updatePayload);
             
             // Mettre à jour le cache aussi
             const cacheIdx = allContactsCache.findIndex(c => c.id === existingInCache.id);
             if (cacheIdx !== -1) {
-              allContactsCache[cacheIdx] = { ...allContactsCache[cacheIdx], ...updateData };
+              allContactsCache[cacheIdx] = {
+                ...allContactsCache[cacheIdx],
+                categorie,
+                filleul_categorie: filleul_categorie ?? allContactsCache[cacheIdx].filleul_categorie,
+              };
             }
             
             // Créer l'investissement pour ce contact existant (avec TOUS les champs)
@@ -2065,8 +2081,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           profession: cleanString(row.data.profession),
           source_lead: cleanString(row.data.source_lead),
           profil_risque_sri: profilRisque,
-          date_dernier_contact: dateDernierContactISO,
-          categorie: categorie,
+          date_dernier_contact: isFilleul ? undefined : dateDernierContactISO,
+          date_dernier_contact_filleul: dateDernierContactFilleulISO,
+          categorie,
+          filleul_categorie,
           statut_suivi: "ACTIF",
           notes: finalNotes,
         };
@@ -2741,47 +2759,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 <li>🎯 <strong>CLIENT</strong> = Produit souscrit</li>
                 <li>📞 <strong>PROSPECT</strong> = Déjà contacté (date RDV) mais pas encore investi</li>
                 <li>🆕 <strong>SUSPECT</strong> = Pas encore contacté</li>
-                <li>👥 <strong>FILLEUL</strong> = Si colonne "Prospects Filleuls" = OUI → PROSPECT_FILLEUL ou SUSPECT_FILLEUL</li>
+                <li>👥 <strong>FILLEUL</strong> = Colonne « Prospects Filleuls » = OUI → statut réseau (onglet Filleuls), pas client</li>
               </ul>
             </div>
-
-            {/* DEBUG : Aperçu des données ET du mapping */}
-            {rows.length > 0 && (
-              <div className="space-y-3">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-yellow-900 mb-2">🔍 APERÇU DES DONNÉES (Première ligne) :</p>
-                  <div className="text-xs font-mono space-y-1 max-h-32 overflow-y-auto">
-                    {Object.entries(rows[0]).map(([key, value]) => (
-                      <div key={key} className="text-yellow-900">
-                        <strong>{key}:</strong> {String(value)}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Aperçu du mapping */}
-                <div className="bg-blue-50 border border-blue-300 rounded-lg p-3">
-                  <p className="text-xs font-semibold text-blue-900 mb-2">📋 MAPPING AUTOMATIQUE DÉTECTÉ :</p>
-                  <div className="text-xs space-y-1">
-                    {Object.entries(mapping).filter(([_, value]) => value && value !== "SKIP").map(([col, field]) => (
-                      <div key={col} className="text-blue-900">
-                        ✓ <strong>{col}</strong> → {fieldOptions.find(f => f.value === field)?.label}
-                      </div>
-                    ))}
-                    {Object.entries(mapping).filter(([_, value]) => !value || value === "SKIP").length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-blue-300">
-                        <p className="text-blue-700 font-semibold mb-1">⚠️ Colonnes ignorées :</p>
-                        {Object.entries(mapping).filter(([_, value]) => !value || value === "SKIP").map(([col]) => (
-                          <div key={col} className="text-blue-700 text-xs">
-                            • {col}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
 
             <div className="space-y-3">
               {columns.map(col => (
@@ -2971,14 +2951,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       return filleulStr === "OUI" || filleulStr === "YES" || filleulStr === "O" || filleulStr === "Y";
                     })();
                     
-                    let finalCategorie = "SUSPECT_CLIENT";
-                    if (hasProduit) {
-                      finalCategorie = "CLIENT";
-                    } else if (hasContact) {
-                      finalCategorie = isFilleul ? "PROSPECT_FILLEUL" : "PROSPECT_CLIENT";
-                    } else {
-                      finalCategorie = isFilleul ? "SUSPECT_FILLEUL" : "SUSPECT_CLIENT";
-                    }
+                    const { categorie: previewClientCat, filleul_categorie: previewFilleulCat } =
+                      resolveImportContactCategories(!!hasProduit, !!hasContact, !!isFilleul);
+                    const finalCategorie = previewFilleulCat
+                      ? `${previewClientCat === "AUCUN" ? "" : previewClientCat + " · "}${previewFilleulCat}`
+                      : previewClientCat;
                     
                     return (
                       <tr key={idx} className="border-t">
@@ -3008,20 +2985,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                           <Badge 
                             variant="outline" 
                             className={
-                              finalCategorie === "CLIENT" 
-                                ? "bg-green-50 text-green-700 border-green-300" 
-                                : finalCategorie === "PROSPECT_CLIENT"
-                                ? "bg-purple-50 text-purple-700 border-purple-300"
-                                : finalCategorie === "SUSPECT_CLIENT"
-                                ? "bg-slate-50 text-slate-700 border-slate-300"
-                                : finalCategorie === "PROSPECT_FILLEUL"
+                              previewClientCat === "CLIENT"
+                                ? "bg-green-50 text-green-700 border-green-300"
+                                : previewFilleulCat
                                 ? "bg-indigo-50 text-indigo-700 border-indigo-300"
-                                : finalCategorie === "SUSPECT_FILLEUL"
-                                ? "bg-amber-50 text-amber-700 border-amber-300"
-                                : "bg-gray-50 text-gray-600"
+                                : previewClientCat === "PROSPECT_CLIENT"
+                                ? "bg-purple-50 text-purple-700 border-purple-300"
+                                : "bg-slate-50 text-slate-700 border-slate-300"
                             }
                           >
-                            {finalCategorie.replace("_", " ")}
+                            {(finalCategorie || previewClientCat).replace(/_/g, " ")}
                           </Badge>
                         </td>
                       </tr>

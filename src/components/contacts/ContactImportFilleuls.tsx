@@ -22,10 +22,16 @@ import { createContact, getAllContacts, updateContact, type NewContact } from "@
 import {
   buildContactIdMap,
   contactNameKey,
+  lookupContactIdInMap,
   lookupParrainId,
   resolveParrain,
   type ParrainResolveStatus,
 } from "@/lib/contacts/name-match";
+import {
+  beginImportTransaction,
+  commitImportTransaction,
+  rollbackImportTransaction,
+} from "@/lib/api/tauri-import-transaction";
 import { parseImportDate } from "@/lib/contacts/parse-import-date";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { Badge } from "@/components/ui/badge";
@@ -267,6 +273,11 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     setStep("importing");
 
     const updatedRows = [...importRows];
+    let importTxActive = false;
+
+    try {
+      await beginImportTransaction();
+      importTxActive = true;
     
     // 🔥 STRUCTURE EN 2 PASSES :
     // 1. Créer les contacts QUI N'EXISTENT PAS DÉJÀ (sans parrain_id)
@@ -286,12 +297,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       try {
         const nom = (row.data.nom || "").trim();
         const prenom = (row.data.prenom || "").trim();
-        const contactKey = contactNameKey(nom, prenom);
         
-        // 🔥 VÉRIFIER SI LE CONTACT EXISTE DÉJÀ
-        if (contactsMap.has(contactKey)) {
-          // Contact existe déjà (probablement un CLIENT) → ne pas créer de doublon
-          const existingId = contactsMap.get(contactKey)!;
+        const existingId = lookupContactIdInMap(contactsMap, nom, prenom);
+        if (existingId !== undefined) {
           (row as any)._createdId = existingId;
           (row as any)._alreadyExists = true;
           
@@ -367,7 +375,12 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
         const createdContact = await createContact(newContact);
         
         // Stocker dans la map pour éviter les doublons dans le même import
-        contactsMap.set(contactKey, createdContact.id!);
+        const directKey = contactNameKey(nom, prenom);
+        contactsMap.set(directKey, createdContact.id!);
+        const swappedKey = contactNameKey(prenom, nom);
+        if (!contactsMap.has(swappedKey)) {
+          contactsMap.set(swappedKey, createdContact.id!);
+        }
         
         // Stocker les infos pour la passe 2
         (row as any)._createdId = createdContact.id;
@@ -537,19 +550,41 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       console.error("Erreur upgrade parrains:", upgradeError);
     }
 
-    setImportCompleted(true);
-    setImporting(false);
-
     const errors = updatedRows.filter((r) => r.status === "error").length;
-    const ok = updatedRows.filter(
-      (r) => r.status === "success" || r.status === "warning"
-    ).length;
+
     if (errors > 0) {
-      toast.warning(
-        `Import filleuls : ${ok} OK, ${errors} erreur(s). Vérifiez le rapport puis Fermer.`
+      await rollbackImportTransaction();
+      importTxActive = false;
+      toast.error(
+        `Import annulé : ${errors} erreur(s). Aucune donnée n'a été enregistrée.`
       );
-    } else if (ok > 0) {
-      toast.success(`${ok} filleul(s) traité(s). Cliquez Fermer.`);
+    } else {
+      await commitImportTransaction();
+      importTxActive = false;
+      const ok = updatedRows.filter(
+        (r) => r.status === "success" || r.status === "warning"
+      ).length;
+      if (ok > 0) {
+        toast.success(`${ok} filleul(s) traité(s). Cliquez Fermer.`);
+      }
+      setImportCompleted(true);
+    }
+
+    setImporting(false);
+    } catch (error) {
+      if (importTxActive) {
+        try {
+          await rollbackImportTransaction();
+        } catch (rollbackErr) {
+          console.error("Rollback import filleuls:", rollbackErr);
+        }
+        toast.error(
+          "Import annulé suite à une erreur technique. Aucune donnée n'a été enregistrée."
+        );
+      }
+      console.error("Import filleuls:", error);
+      setImporting(false);
+      setImportCompleted(true);
     }
   };
 

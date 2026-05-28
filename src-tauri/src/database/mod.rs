@@ -191,21 +191,79 @@ impl Database {
             [],
         )?;
         
-        // Table alertes
+        // Table alertes (schéma aligné sur operations.rs / Drizzle)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS alertes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 contact_id INTEGER NOT NULL,
                 type_alerte TEXT NOT NULL,
-                titre TEXT NOT NULL,
-                description TEXT,
-                date_echeance TEXT NOT NULL,
-                statut TEXT NOT NULL DEFAULT 'EN_ATTENTE',
-                priorite TEXT NOT NULL DEFAULT 'NORMALE',
+                message TEXT NOT NULL,
+                date_alerte INTEGER NOT NULL,
+                lue INTEGER NOT NULL DEFAULT 0,
+                traitee INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
             )",
+            [],
+        )?;
+
+        // Templates email
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS templates_email (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                sujet TEXT NOT NULL,
+                corps TEXT NOT NULL,
+                categorie TEXT NOT NULL,
+                variables TEXT,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            )",
+            [],
+        )?;
+
+        // Étiquettes
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS etiquettes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                couleur TEXT NOT NULL DEFAULT '#3B82F6',
+                icone TEXT,
+                description TEXT,
+                priorite INTEGER NOT NULL DEFAULT 0,
+                auto_condition_type TEXT,
+                auto_condition_config TEXT,
+                auto_categories TEXT,
+                email_template_id INTEGER,
+                email_delai_jours INTEGER NOT NULL DEFAULT 0,
+                email_actif INTEGER NOT NULL DEFAULT 0,
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (email_template_id) REFERENCES templates_email(id) ON DELETE SET NULL
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS contact_etiquettes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                etiquette_id INTEGER NOT NULL,
+                date_attribution INTEGER NOT NULL DEFAULT (unixepoch()),
+                attribue_par TEXT NOT NULL DEFAULT 'AUTO',
+                email_envoye INTEGER NOT NULL DEFAULT 0,
+                email_date_prevue INTEGER,
+                email_date_envoi INTEGER,
+                notes TEXT,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+                FOREIGN KEY (etiquette_id) REFERENCES etiquettes(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS contact_etiquettes_unique ON contact_etiquettes (contact_id, etiquette_id)",
             [],
         )?;
         
@@ -241,7 +299,82 @@ impl Database {
         
         // Migration automatique : Ajouter date_fin_pret aux investissements
         self.migrate_add_date_fin_pret()?;
+
+        self.migrate_alertes_crud_schema()?;
+        self.migrate_backfill_filleul_categorie()?;
         
+        Ok(())
+    }
+
+    fn table_has_column(&self, table: &str, column: &str) -> Result<bool> {
+        let mut stmt = self.conn.prepare(&format!("PRAGMA table_info({})", table))?;
+        let mut rows = stmt.query([])?;
+        while let Some(row) = rows.next()? {
+            let name: String = row.get(1)?;
+            if name == column {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+
+    /// Ancien schéma alertes (titre/date_echeance) → schéma CRUD (message/date_alerte).
+    fn migrate_alertes_crud_schema(&self) -> Result<()> {
+        let table_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='alertes'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        if table_exists == 0 {
+            return Ok(());
+        }
+
+        if self.table_has_column("alertes", "message")? {
+            return Ok(());
+        }
+
+        println!("🔄 Migration : alertes vers schéma message/date_alerte...");
+        self.conn.execute_batch(
+            "CREATE TABLE alertes_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                type_alerte TEXT NOT NULL,
+                message TEXT NOT NULL,
+                date_alerte INTEGER NOT NULL,
+                lue INTEGER NOT NULL DEFAULT 0,
+                traitee INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            );
+            DROP TABLE alertes;
+            ALTER TABLE alertes_new RENAME TO alertes;",
+        )?;
+        println!("✅ Migration alertes appliquée");
+        Ok(())
+    }
+
+    /// Déplace les statuts filleul legacy de categorie vers filleul_categorie.
+    fn migrate_backfill_filleul_categorie(&self) -> Result<()> {
+        if !self.table_has_column("contacts", "filleul_categorie")? {
+            return Ok(());
+        }
+
+        let updated = self.conn.execute(
+            "UPDATE contacts
+             SET filleul_categorie = categorie,
+                 categorie = 'AUCUN'
+             WHERE (filleul_categorie IS NULL OR filleul_categorie = '')
+               AND categorie IN ('FILLEUL', 'PROSPECT_FILLEUL', 'SUSPECT_FILLEUL', 'FILLEUL_DESINSCRIT')",
+            [],
+        )?;
+
+        if updated > 0 {
+            println!(
+                "✅ Migration filleul_categorie : {} contact(s) corrigé(s)",
+                updated
+            );
+        }
         Ok(())
     }
     
