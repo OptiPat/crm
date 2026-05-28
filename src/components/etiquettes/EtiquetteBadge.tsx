@@ -80,7 +80,7 @@ export function EtiquetteBadge({
           }}
           className={cn(
             "ml-1 rounded-full p-0.5 transition-colors",
-            "hover:bg-black/20 focus:outline-none focus:ring-1 focus:ring-white/50",
+            "hover:bg-black/20 focus:outline-hidden focus:ring-1 focus:ring-white/50",
             removeButtonSizes[size]
           )}
           style={{ color: textColor }}

@@ -19,6 +19,13 @@ import {
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
+import {
+  buildContactIdMap,
+  contactNameKey,
+  lookupParrainId,
+  resolveParrain,
+  type ParrainResolveStatus,
+} from "@/lib/contacts/name-match";
 import { Badge } from "@/components/ui/badge";
 
 interface ContactImportFilleulsProps {
@@ -32,6 +39,11 @@ interface ImportRow {
   status: "pending" | "success" | "error" | "warning";
   message?: string;
   warnings?: string[];
+  parrainPreview?: {
+    status: ParrainResolveStatus;
+    label: string;
+    swapped?: boolean;
+  };
 }
 
 export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: ContactImportFilleulsProps) {
@@ -173,15 +185,15 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     }
 
     try {
-      // 🔥 FIX: NE PAS créer les parrains ici - juste préparer les données
-      // Les parrains seront liés APRÈS l'import de tous les contacts
+      const existingContacts = await getAllContacts();
+      const importNameKeys = new Set<string>();
+
       const preparedRows: ImportRow[] = [];
-      
+
       for (const row of rows) {
         const contactData: Record<string, any> = {};
         const warnings: string[] = [];
-        
-        // Mapper les colonnes
+
         Object.entries(mapping).forEach(([sourceCol, targetField]) => {
           if (targetField && targetField !== "SKIP") {
             const value = row[sourceCol] !== undefined ? row[sourceCol] : null;
@@ -189,10 +201,10 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           }
         });
 
-        // 🔥 NE PAS chercher/créer le parrain ici - on le fera après l'import
-        // Juste noter le nom/prénom du parrain pour plus tard
-        if (contactData.nom_parrain && contactData.prenom_parrain) {
-          warnings.push(`Parrain: ${contactData.prenom_parrain} ${contactData.nom_parrain} (sera lié après import)`);
+        if (contactData.nom && contactData.prenom) {
+          importNameKeys.add(
+            contactNameKey(String(contactData.nom), String(contactData.prenom))
+          );
         }
 
         preparedRows.push({
@@ -200,6 +212,41 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           status: "pending" as const,
           warnings: warnings.length > 0 ? warnings : undefined,
         });
+      }
+
+      for (const prepared of preparedRows) {
+        if (prepared.data.nom_parrain && prepared.data.prenom_parrain) {
+          const resolution = resolveParrain(
+            String(prepared.data.nom_parrain),
+            String(prepared.data.prenom_parrain),
+            existingContacts,
+            importNameKeys
+          );
+          prepared.parrainPreview = {
+            status: resolution.status,
+            label: resolution.label,
+            swapped: resolution.swapped,
+          };
+          if (resolution.parrainId) {
+            prepared.data.parrain_id = resolution.parrainId;
+          }
+          if (resolution.status === "missing") {
+            prepared.warnings = [
+              ...(prepared.warnings || []),
+              `Parrain absent du CRM et du fichier : ${resolution.label}`,
+            ];
+          } else if (resolution.status === "in_file") {
+            prepared.warnings = [
+              ...(prepared.warnings || []),
+              `Parrain ${resolution.label} sera lié après import (présent dans le fichier)`,
+            ];
+          } else if (resolution.swapped) {
+            prepared.warnings = [
+              ...(prepared.warnings || []),
+              `Parrain trouvé (vérifiez nom/prénom parrain inversés dans Excel)`,
+            ];
+          }
+        }
       }
 
       setImportRows(preparedRows);
@@ -224,14 +271,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     // Charger tous les contacts existants AVANT l'import
     const existingContacts = await getAllContacts();
     
-    // Map pour stocker les contacts (existants + créés) : clé = "NOM|PRENOM", valeur = id
-    const contactsMap = new Map<string, number>();
-    
-    // Remplir la map avec les contacts existants
-    existingContacts.forEach(c => {
-      const key = `${c.nom.trim().toUpperCase()}|${c.prenom.trim().toUpperCase()}`;
-      contactsMap.set(key, c.id!);
-    });
+    const contactsMap = buildContactIdMap(
+      existingContacts.filter((c): c is typeof c & { id: number } => !!c.id)
+    );
 
     // === PASSE 1 : Créer les contacts qui n'existent pas ===
     for (let i = 0; i < updatedRows.length; i++) {
@@ -240,7 +282,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       try {
         const nom = (row.data.nom || "").trim();
         const prenom = (row.data.prenom || "").trim();
-        const contactKey = `${nom.toUpperCase()}|${prenom.toUpperCase()}`;
+        const contactKey = contactNameKey(nom, prenom);
         
         // 🔥 VÉRIFIER SI LE CONTACT EXISTE DÉJÀ
         if (contactsMap.has(contactKey)) {
@@ -436,20 +478,21 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       let parrainInfo = "";
       
       if (row.data.nom_parrain && row.data.prenom_parrain) {
-        const nomParrain = String(row.data.nom_parrain).trim().toUpperCase();
-        const prenomParrain = String(row.data.prenom_parrain).trim().toUpperCase();
-        
-        // Chercher le parrain dans tous les contacts (existants + créés)
-        const parrain = allContacts.find(c => 
-          c.nom.trim().toUpperCase() === nomParrain &&
-          c.prenom.trim().toUpperCase() === prenomParrain
+        const lookup = lookupParrainId(
+          String(row.data.nom_parrain),
+          String(row.data.prenom_parrain),
+          contactsMap,
+          allContacts.filter((c): c is typeof c & { id: number } => !!c.id)
         );
-        
-        if (parrain) {
-          parrainId = parrain.id;
-          parrainInfo = ` | Parrain: ${prenomParrain} ${nomParrain}`;
+        if (lookup.id) {
+          parrainId = lookup.id;
+          const parrain = allContacts.find((c) => c.id === lookup.id);
+          const label = parrain
+            ? `${parrain.prenom} ${parrain.nom}`
+            : `${row.data.prenom_parrain} ${row.data.nom_parrain}`;
+          parrainInfo = ` | Parrain: ${label}${lookup.swapped ? " (colonnes inversées ?)" : ""}`;
         } else {
-          parrainInfo = ` | ⚠️ Parrain non trouvé: ${prenomParrain} ${nomParrain}`;
+          parrainInfo = ` | ⚠️ Parrain non trouvé: ${row.data.prenom_parrain} ${row.data.nom_parrain}`;
         }
       }
       
@@ -596,7 +639,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
             <div className="flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-red-800">Erreur</p>
                 <p className="text-sm text-red-700 mt-1">{error}</p>
@@ -707,6 +750,23 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
                 <p className="text-sm font-medium">
                   {pendingCount} filleul{pendingCount > 1 ? "s" : ""} prêt{pendingCount > 1 ? "s" : ""} à être importé{pendingCount > 1 ? "s" : ""}
                 </p>
+                {(() => {
+                  const withParrain = importRows.filter((r) => r.data.nom_parrain);
+                  const found = withParrain.filter((r) => r.parrainPreview?.status === "found").length;
+                  const inFile = withParrain.filter((r) => r.parrainPreview?.status === "in_file").length;
+                  const missing = withParrain.filter((r) => r.parrainPreview?.status === "missing").length;
+                  if (withParrain.length === 0) return null;
+                  return (
+                    <p className="text-sm text-muted-foreground">
+                      Parrains : {found} dans le CRM · {inFile} dans le fichier ·{" "}
+                      {missing > 0 ? (
+                        <span className="text-orange-600">{missing} introuvable{missing > 1 ? "s" : ""}</span>
+                      ) : (
+                        "0 introuvable"
+                      )}
+                    </p>
+                  );
+                })()}
                 {importRows.some(r => r.warnings && r.warnings.length > 0) && (
                   <p className="text-sm text-orange-600">
                     {importRows.filter(r => r.warnings && r.warnings.length > 0).length} avertissement{importRows.filter(r => r.warnings && r.warnings.length > 0).length > 1 ? "s" : ""}
@@ -736,12 +796,24 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
                         </Badge>
                       </td>
                       <td className="p-2">
-                        {row.data.parrain_id ? (
-                          <span className="text-green-600">✓ Trouvé</span>
-                        ) : row.data.nom_parrain ? (
-                          <span className="text-orange-600">⚠️ Non trouvé</span>
-                        ) : (
+                        {!row.data.nom_parrain && !row.data.prenom_parrain ? (
                           <span className="text-gray-400">-</span>
+                        ) : row.parrainPreview?.status === "found" ? (
+                          <span className="text-green-600" title={row.parrainPreview.label}>
+                            ✓ {row.parrainPreview.label}
+                            {row.parrainPreview.swapped ? " ⚠️" : ""}
+                          </span>
+                        ) : row.parrainPreview?.status === "in_file" ? (
+                          <span className="text-blue-600" title="Sera lié à l'import">
+                            ○ {row.parrainPreview.label} (fichier)
+                          </span>
+                        ) : (
+                          <span
+                            className="text-orange-600"
+                            title="Absent du CRM et du fichier importé"
+                          >
+                            ⚠️ {row.parrainPreview?.label || "Non trouvé"}
+                          </span>
                         )}
                       </td>
                     </tr>

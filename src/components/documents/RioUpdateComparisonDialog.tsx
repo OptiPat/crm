@@ -1439,7 +1439,7 @@ export function RioUpdateComparisonDialog({
             value={notesRio}
             onChange={(e) => setNotesRio(e.target.value)}
             placeholder="Ajoutez des notes sur cette mise à jour annuelle..."
-            className="w-full h-20 p-2 text-sm border border-slate-300 rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full h-20 p-2 text-sm border border-slate-300 rounded-md resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 

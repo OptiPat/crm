@@ -68,6 +68,10 @@ export function Contacts() {
       ]);
       setContacts(dataContacts);
       setFoyers(dataFoyers);
+      setSelectedContact((prev) => {
+        if (!prev?.id) return prev;
+        return dataContacts.find((c) => c.id === prev.id) ?? prev;
+      });
       setLoading(false);
       setIsInitialLoad(false);
     } catch (error) {
@@ -1161,6 +1165,11 @@ export function Contacts() {
         open={showForm}
         onOpenChange={setShowForm}
         onSuccess={loadContacts}
+        createContext={mainTab === "filleuls" ? "filleuls" : "clients"}
+        onOpenContact={(c) => {
+          setSelectedContact(c);
+          setShowDetail(true);
+        }}
       />
 
       {/* Import de contacts clients */}
@@ -1197,6 +1206,7 @@ export function Contacts() {
           contact={selectedContact}
           onDelete={handleDeleteContact}
           onUpdate={loadContacts}
+          onContactRefreshed={setSelectedContact}
           onOpenContact={(contact) => {
             setSelectedContact(contact);
             setShowDetail(true);

@@ -1,11 +1,11 @@
 // Extraction de texte depuis les PDF natifs
 import * as pdfjsLib from "pdfjs-dist";
+import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { ExtractedText } from "./types";
 import { readPdfFile } from "@/lib/api/tauri-pdf";
 
-// Configuration du worker PDF.js pour Tauri
-// Utiliser le worker local au lieu du CDN
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// Worker bundlé via Vite (aligné sur la version pdfjs-dist installée)
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 /**
  * Extrait le texte d'un fichier PDF natif depuis un chemin de fichier (Tauri)

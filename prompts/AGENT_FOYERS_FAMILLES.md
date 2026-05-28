@@ -1,4 +1,4 @@
-# 🏠 AGENT : Foyers & Familles
+﻿# 🏠 AGENT : Foyers & Familles
 
 > **Objectif** : Gérer les foyers fiscaux directement depuis les contacts, avec regroupement visuel et détection automatique à l'import.
 
@@ -33,7 +33,7 @@
 
 ### Commande de lancement obligatoire
 ```powershell
-$proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1; if ($proc) { taskkill /F /PID $proc 2>$null }; cd D:\crm; npm run tauri:dev -- --release
+$proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1; if ($proc) { taskkill /F /PID $proc 2>$null }; cd D:\crm; npm run tauri:dev
 ```
 
 ### Si erreur de compilation (LNK1318)
@@ -41,7 +41,7 @@ $proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } 
 cd D:\crm\src-tauri
 cargo clean
 cd ..
-npm run tauri:dev -- --release
+npm run tauri:dev
 ```
 
 ---

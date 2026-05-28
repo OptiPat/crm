@@ -209,19 +209,25 @@ patrimoine-crm/
 
 ## 🚀 Commandes utiles
 
-```bash
-# Développement (mode release pour éviter LNK1318)
-npm run tauri:dev -- --release
+```powershell
+# Développement quotidien (compilation incrémentale — RAPIDE)
+.\dev.ps1
+# ou : npm run tauri:dev
 
-# Build production
+# Uniquement si erreur linker LNK1318
+npm run tauri:dev:release
+
+# Build installateur production
 npm run tauri:build
 
-# Si port 1420 déjà utilisé (PowerShell)
+# Libérer le port 1420 si bloqué
 $proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1; if ($proc) { taskkill /F /PID $proc }
 
-# Appliquer migration SQL
+# Appliquer migration SQL (scripts dev)
 node apply-migration-origine.cjs
 ```
+
+**Règle dev :** garder l'app ouverte ; modifier `src/` = pas de rebuild Rust ; ne pas supprimer `src-tauri/target/`.
 
 ---
 

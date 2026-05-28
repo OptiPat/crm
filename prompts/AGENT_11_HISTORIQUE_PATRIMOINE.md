@@ -1,4 +1,4 @@
-# 🤖 Agent 11 : Historique & Évolution Patrimoniale
+﻿# 🤖 Agent 11 : Historique & Évolution Patrimoniale
 
 > **Copie-colle ce prompt pour créer l'agent**
 >
@@ -181,9 +181,9 @@ Si l'utilisateur importe plusieurs RIOs en 2026 :
 ## Règles OBLIGATOIRES
 
 ### Commande de lancement
-TOUJOURS utiliser cette commande (jamais `npm run tauri:dev` seul) :
+Lancer l'app ( `npm run tauri:dev` seul) :
 ```powershell
-$proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1; if ($proc) { taskkill /F /PID $proc 2>$null }; cd D:\crm; npm run tauri:dev -- --release
+$proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1; if ($proc) { taskkill /F /PID $proc 2>$null }; cd D:\crm; npm run tauri:dev
 ```
 
 ### Si erreur de compilation

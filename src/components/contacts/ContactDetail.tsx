@@ -11,6 +11,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, Phone, MapPin, Calendar, Briefcase, Edit, Trash2, User, Wallet, Plus, Users2, Home } from "lucide-react";
 import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
+import {
+  contactToUpdatePayload,
+  formatCiviliteLabel,
+  formatSituationLabel,
+} from "@/lib/contacts/contact-form-utils";
 import { ContactForm } from "./ContactForm";
 import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
@@ -38,6 +43,7 @@ export function ContactDetail({
   contact,
   onDelete,
   onUpdate,
+  onContactRefreshed,
   onOpenContact,
 }: ContactDetailProps) {
   const [showEditForm, setShowEditForm] = useState(false);
@@ -66,29 +72,14 @@ export function ContactDetail({
     if (!confirm(confirmMsg)) return;
     
     try {
-      await updateContact(contact.id, {
-        ...contact,
-        foyer_id: null,
-        role_foyer: null,
-        date_naissance: contact.date_naissance 
-          ? new Date(contact.date_naissance * 1000).toISOString() 
-          : undefined,
-        // Dates CLIENT
-        date_dernier_contact: contact.date_dernier_contact 
-          ? new Date(contact.date_dernier_contact * 1000).toISOString() 
-          : undefined,
-        date_prochain_suivi: contact.date_prochain_suivi 
-          ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
-          : undefined,
-        // Dates FILLEUL
-        date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
-          ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
-          : undefined,
-        date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
-          ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
-          : undefined,
-      });
-      
+      const updated = await updateContact(
+        contact.id,
+        contactToUpdatePayload(contact, {
+          foyer_id: null,
+          role_foyer: null,
+        })
+      );
+      onContactRefreshed?.(updated);
       onUpdate();
     } catch (error) {
       console.error("🏠 [ContactDetail] ❌ Erreur dissociation:", error);
@@ -456,8 +447,18 @@ export function ContactDetail({
             <div className="flex items-start justify-between">
               <div>
                 <DialogTitle className="text-2xl">
-                  {contact.prenom} {contact.nom}
+                  {formatCiviliteLabel(contact.civilite)
+                    ? `${formatCiviliteLabel(contact.civilite)} ${contact.prenom} ${contact.nom}`
+                    : `${contact.prenom} ${contact.nom}`}
                 </DialogTitle>
+                {(formatSituationLabel(contact.situation_familiale) ||
+                  formatCiviliteLabel(contact.civilite)) && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {[formatCiviliteLabel(contact.civilite), formatSituationLabel(contact.situation_familiale)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </p>
+                )}
                 <DialogDescription className="sr-only">
                   Détails du contact et informations personnelles
                 </DialogDescription>
@@ -514,6 +515,15 @@ export function ContactDetail({
             <div><strong>ID:</strong> {contact.id}</div>
             <div><strong>Nom:</strong> {contact.nom}</div>
             <div><strong>Prénom:</strong> {contact.prenom}</div>
+            {contact.civilite && (
+              <div><strong>Civilité:</strong> {formatCiviliteLabel(contact.civilite)}</div>
+            )}
+            {contact.situation_familiale && (
+              <div>
+                <strong>Situation familiale:</strong>{" "}
+                {formatSituationLabel(contact.situation_familiale)}
+              </div>
+            )}
             {contact.email && <div><strong>Email:</strong> {contact.email}</div>}
             {contact.telephone && <div><strong>Téléphone:</strong> {contact.telephone}</div>}
             {contact.profession && <div><strong>Profession:</strong> {contact.profession}</div>}
@@ -1143,11 +1153,18 @@ export function ContactDetail({
         open={showEditForm}
         onOpenChange={setShowEditForm}
         contact={contact}
+        createContext="detail"
+        onOpenContact={onOpenContact}
         onSuccess={async () => {
           setShowEditForm(false);
-          // Fermer le ContactDetail pour forcer un rechargement complet
-          onOpenChange(false);
-          // Recharger la liste des contacts
+          if (contact?.id) {
+            try {
+              const fresh = await getContactById(contact.id);
+              onContactRefreshed?.(fresh);
+            } catch (error) {
+              console.error("Error refreshing contact after edit:", error);
+            }
+          }
           onUpdate();
         }}
       />

@@ -94,17 +94,24 @@ TOTAL V1 : 4-6 sessions
 
 ## 🔧 Règles globales (incluses dans chaque agent)
 
-### Commande de lancement obligatoire
+### Commande de lancement (dev quotidien)
 ```powershell
-$proc = netstat -ano | findstr :1420 | ForEach-Object { ($_ -split '\s+')[-1] } | Where-Object { $_ -match '^\d+$' -and $_ -ne '0' } | Select-Object -First 1; if ($proc) { taskkill /F /PID $proc 2>$null }; cd D:\crm; npm run tauri:dev -- --release
+cd D:\crm
+.\dev.ps1
 ```
 
-### Si erreur de compilation
+### Si erreur linker LNK1318 uniquement
+```powershell
+cd D:\crm
+npm run tauri:dev:release
+```
+
+### Si erreur de compilation persistante (dernier recours)
 ```powershell
 cd D:\crm\src-tauri
 cargo clean
 cd ..
-npm run tauri:dev -- --release
+npm run tauri:dev
 ```
 
 ### Règles de code
