@@ -528,4 +528,20 @@ impl Database {
     pub fn get_connection(&self) -> &Connection {
         &self.conn
     }
+
+    /// Démarre une transaction pour import atomique (tout commit ou tout rollback).
+    pub fn begin_import_transaction(&self) -> Result<()> {
+        self.conn.execute_batch("BEGIN IMMEDIATE")?;
+        Ok(())
+    }
+
+    pub fn commit_import_transaction(&self) -> Result<()> {
+        self.conn.execute_batch("COMMIT")?;
+        Ok(())
+    }
+
+    pub fn rollback_import_transaction(&self) -> Result<()> {
+        self.conn.execute_batch("ROLLBACK")?;
+        Ok(())
+    }
 }

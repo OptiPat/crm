@@ -32,6 +32,16 @@ import {
   findContactByNameKeyWithSwap,
 } from "@/lib/contacts/name-match";
 import { getPairIdentityConflictMessages } from "@/lib/contacts/duplicate-identity";
+import {
+  parseImportDate,
+  parseImportDateFinPret,
+  parseImportDateToDate,
+} from "@/lib/contacts/parse-import-date";
+import {
+  beginImportTransaction,
+  commitImportTransaction,
+  rollbackImportTransaction,
+} from "@/lib/api/tauri-import-transaction";
 
 // ============================================
 // FUZZY MATCHING POUR LES PARTENAIRES
@@ -412,8 +422,17 @@ interface ContactImportProps {
 
 interface ImportRow {
   data: Record<string, any>;
-  status: "pending" | "success" | "error" | "duplicate";
+  status: "pending" | "success" | "error" | "duplicate" | "skipped";
   message?: string;
+}
+
+/** Après rollback SQLite : le rapport ne doit plus afficher des lignes « succès ». */
+function markImportRowsCancelled(rows: ImportRow[]): ImportRow[] {
+  return rows.map((r) =>
+    r.status === "success"
+      ? { ...r, status: "error", message: "Import annulé — aucune donnée enregistrée" }
+      : r
+  );
 }
 
 export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportProps) {
@@ -728,14 +747,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         };
 
         if (contactKey && seenInImport.has(contactKey)) {
+          // Même personne plusieurs lignes dans le fichier (souvent 1 ligne = 1 investissement)
           firstOccurrenceInExcel = seenInImport.get(contactKey)!;
           isDuplicate = true;
           duplicateSource = "excel";
-          conflictReasons = getPairIdentityConflictMessages(rowIdentity, {
-            email: firstOccurrenceInExcel.email,
-            telephone: firstOccurrenceInExcel.telephone,
-          });
-          identityConflict = conflictReasons.length > 0;
+          // Pas d'alerte homonyme entre lignes Excel : emails/tél peuvent différer ou être vides
         } else if (contactKey) {
           seenInImport.set(contactKey, {
             rowIndex: idx,
@@ -811,7 +827,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     setStep("importing");
 
     const updatedRows = [...importRows];
-    
+    let importTxActive = false;
+
+    try {
+      await beginImportTransaction();
+      importTxActive = true;
+
     // Charger tous les partenaires existants
     let allPartenaires: Partenaire[] = [];
     try {
@@ -923,11 +944,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         if (duplicateAction === "skip") {
           continue; // Ignorer complètement
         } else if (duplicateAction === "consolidate") {
-          if (row.data._identityConflict) {
-            row.status = "error";
+          if (row.data._identityConflict && row.data._duplicateSource === "database") {
+            row.status = "skipped";
             row.message =
               `Homonyme probable (${(row.data._conflictReasons as string[])?.join(", ") || "coordonnées différentes"}). ` +
-              "Fusion refusée — confirmez via Dédupliquer ou modifiez la fiche à la main.";
+              "Ligne ignorée — fusionnez à la main ou via Dédupliquer.";
             updatedRows[i] = row;
             setImportRows([...updatedRows]);
             continue;
@@ -976,33 +997,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               // Mettre à jour le contact
               // Convertir le contact existant (avec timestamps) en NewContact (avec ISO strings)
               
-              // Parser la date de naissance de la ligne actuelle (si présente)
-              let rowDateNaissance: string | undefined;
-              if (row.data.date_naissance) {
-                const dateStr = String(row.data.date_naissance).trim();
-                if (dateStr) {
-                  const excelDate = parseFloat(dateStr);
-                  if (!isNaN(excelDate) && excelDate > 1) {
-                    const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                    if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1900 && jsDate.getFullYear() < 2100) {
-                      rowDateNaissance = jsDate.toISOString();
-                    }
-                  }
-                }
-              }
-              
-              // 🔥 Parser la date de suivi de la ligne actuelle (si présente)
-              let rowDateDernierContact: string | undefined;
-              if (row.data.dernier_rdv && row.data.dernier_rdv !== "-") {
-                const dernierRdvStr = String(row.data.dernier_rdv).trim();
-                const excelDate = parseFloat(dernierRdvStr);
-                if (!isNaN(excelDate) && excelDate > 1) {
-                  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                  if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
-                    rowDateDernierContact = jsDate.toISOString();
-                  }
-                }
-              }
+              const rowDateNaissance = parseImportDate(row.data.date_naissance);
+              const rowDateDernierContact =
+                row.data.dernier_rdv && row.data.dernier_rdv !== "-"
+                  ? parseImportDate(row.data.dernier_rdv)
+                  : undefined;
               
               // Utiliser la date de naissance de la ligne si le contact n'en a pas
               const finalDateNaissance = existingContact.date_naissance 
@@ -1145,17 +1144,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     }
                   }
                   
-                  // Parser la date de souscription
-                  let dateSouscription = null;
-                  let dateSouscriptionDate = null; // Garder l'objet Date pour calcul démembrement
-                  if (row.data.date_souscription) {
-                    const excelDate = parseFloat(String(row.data.date_souscription));
-                    if (!isNaN(excelDate) && excelDate > 1) {
-                      const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                      dateSouscription = jsDate.toISOString();
-                      dateSouscriptionDate = jsDate;
-                    }
-                  }
+                  const dateSouscriptionIso = parseImportDate(row.data.date_souscription);
+                  let dateSouscription: string | null = dateSouscriptionIso ?? null;
+                  let dateSouscriptionDate: Date | null = dateSouscriptionIso
+                    ? new Date(dateSouscriptionIso)
+                    : null;
                   
                   // Calculer la date de fin de démembrement
                   let dateFinDemembrement = null;
@@ -1191,45 +1184,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     typeProduit = 'SCPI_DEMEMBREMENT';
                   }
                   
-                  // 🔥 Parser la date de fin de prêt
-                  let dateFinPret: string | null = null;
-                  if (row.data.date_fin_pret) {
-                    const dateStr = String(row.data.date_fin_pret).trim();
-                    // Essayer d'abord le format numérique Excel
-                    const excelDate = parseFloat(dateStr);
-                    if (!isNaN(excelDate) && excelDate > 1000) {
-                      // Utiliser UTC pour éviter les décalages de fuseau horaire
-                      const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                      const year = jsDate.getUTCFullYear();
-                      const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-                      const day = String(jsDate.getUTCDate()).padStart(2, '0');
-                      if (year > 1950) {
-                        dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
-                      }
-                    } else {
-                      // Essayer le format texte DD/MM/YYYY ou YYYY-MM-DD
-                      const parts = dateStr.split(/[\/\-\.]/);
-                      if (parts.length === 3) {
-                        let year: number, month: number, day: number;
-                        if (parts[0].length === 4) {
-                          // Format YYYY-MM-DD
-                          year = parseInt(parts[0]);
-                          month = parseInt(parts[1]);
-                          day = parseInt(parts[2]);
-                        } else {
-                          // Format DD/MM/YYYY
-                          day = parseInt(parts[0]);
-                          month = parseInt(parts[1]);
-                          year = parseInt(parts[2]);
-                        }
-                        if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                          dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
-                        }
-                      }
-                    }
-                    if (dateFinPret) {
-                    }
-                  }
+                  const dateFinPret = parseImportDateFinPret(row.data.date_fin_pret);
                   
                   // Réinvestissement dividendes
                   let reinvestissement = false;
@@ -1321,6 +1276,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   investissementCree = result.created;
                 } catch (invError) {
                   console.error(`❌ Erreur création investissement pour contact ${existingContactId}:`, invError);
+                  throw invError;
                 }
               }
               
@@ -1785,67 +1741,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         }
 
-        // Parser la date du dernier RDV de suivi
         let dateDernierContact: Date | null = null;
-        
-        // Parser la date depuis l'Excel
         if (row.data.dernier_rdv && row.data.dernier_rdv !== "-") {
-          const dernierRdvStr = String(row.data.dernier_rdv).trim();
-          
-          // Essayer de parser comme date Excel (nombre)
-          const excelDate = parseFloat(dernierRdvStr);
-          if (!isNaN(excelDate) && excelDate > 1) {
-            // Conversion date Excel vers objet Date
-            // Note: Excel compte depuis le 01/01/1900, donc valeur minimale réaliste > 1
-            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-            
-            // Vérifier que la date est valide et raisonnable (après 1950)
-            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
-              dateDernierContact = jsDate;
-            }
-          } else {
-            // Essayer de parser comme date texte (format FR ou ISO)
-            const datePatterns = [
-              // Format DD/MM/YYYY
-              /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
-              // Format DD-MM-YYYY
-              /^(\d{1,2})-(\d{1,2})-(\d{4})$/,
-              // Format YYYY-MM-DD (ISO)
-              /^(\d{4})-(\d{1,2})-(\d{1,2})$/,
-            ];
-            
-            for (const pattern of datePatterns) {
-              const match = dernierRdvStr.match(pattern);
-              if (match) {
-                let day, month, year;
-                
-                // Déterminer l'ordre selon le pattern
-                if (pattern.source.startsWith('^(\\d{4})')) {
-                  // Format YYYY-MM-DD
-                  [, year, month, day] = match;
-                } else {
-                  // Format DD/MM/YYYY ou DD-MM-YYYY
-                  [, day, month, year] = match;
-                }
-                
-                const parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-                
-                // Vérifier que la date est valide et raisonnable
-                if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1950) {
-                  dateDernierContact = parsedDate;
-                  break;
-                }
-              }
-            }
-            
-            // Si pas de match avec les patterns, essayer Date.parse
-            if (!dateDernierContact) {
-              const parsedDate = new Date(dernierRdvStr);
-              if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() > 1950) {
-                dateDernierContact = parsedDate;
-              }
-            }
-          }
+          dateDernierContact = parseImportDateToDate(row.data.dernier_rdv) ?? null;
         }
 
         // Notes = colonnes de commentaires fusionnées (fait lors du mapping)
@@ -1894,21 +1792,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           ? dateDernierContact.toISOString() 
           : undefined;
 
-        // Parser la date de naissance (format Excel ou texte)
-        let dateNaissance: string | undefined;
-        if (row.data.date_naissance) {
-          const dateStr = String(row.data.date_naissance).trim();
-          if (dateStr) {
-            const excelDate = parseFloat(dateStr);
-            if (!isNaN(excelDate) && excelDate > 1) {
-              // Format Excel (nombre de jours depuis 1900)
-              const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-              if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1900 && jsDate.getFullYear() < 2100) {
-                dateNaissance = jsDate.toISOString();
-              }
-            }
-          }
-        }
+        const dateNaissance = parseImportDate(row.data.date_naissance);
 
         // 🔥 FIX: Vérifier si ce contact existe déjà dans le cache (créé pendant cet import)
         const existingInCache =
@@ -2044,17 +1928,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 }
               }
               
-              // 🔥 Parser la date de souscription
-              let dateSouscription = null;
-              let dateSouscriptionDate = null;
-              if (row.data.date_souscription) {
-                const excelDate = parseFloat(String(row.data.date_souscription));
-                if (!isNaN(excelDate) && excelDate > 1) {
-                  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                  dateSouscription = jsDate.toISOString();
-                  dateSouscriptionDate = jsDate;
-                }
-              }
+              const dateSouscriptionIso2 = parseImportDate(row.data.date_souscription);
+              let dateSouscription: string | null = dateSouscriptionIso2 ?? null;
+              let dateSouscriptionDate: Date | null = dateSouscriptionIso2
+                ? new Date(dateSouscriptionIso2)
+                : null;
               
               // 🔥 Calculer la date de fin de démembrement
               let dateFinDemembrement = null;
@@ -2088,40 +1966,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 typeProduit = 'SCPI_DEMEMBREMENT';
               }
               
-              // 🔥 Parser la date de fin de prêt
-              let dateFinPret: string | null = null;
-              if (row.data.date_fin_pret) {
-                const dateStr = String(row.data.date_fin_pret).trim();
-                const excelDate = parseFloat(dateStr);
-                if (!isNaN(excelDate) && excelDate > 1000) {
-                  const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                  const year = jsDate.getUTCFullYear();
-                  const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-                  const day = String(jsDate.getUTCDate()).padStart(2, '0');
-                  if (year > 1950) {
-                    dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
-                  }
-                } else {
-                  const parts = dateStr.split(/[\/\-\.]/);
-                  if (parts.length === 3) {
-                    let year: number, month: number, day: number;
-                    if (parts[0].length === 4) {
-                      year = parseInt(parts[0]);
-                      month = parseInt(parts[1]);
-                      day = parseInt(parts[2]);
-                    } else {
-                      day = parseInt(parts[0]);
-                      month = parseInt(parts[1]);
-                      year = parseInt(parts[2]);
-                    }
-                    if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                      dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
-                    }
-                  }
-                }
-                if (dateFinPret) {
-                }
-              }
+              const dateFinPret = parseImportDateFinPret(row.data.date_fin_pret);
               
               // 🔥 Réinvestissement dividendes
               let reinvestissement = false;
@@ -2339,17 +2184,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               }
             }
             
-            // Parser la date de souscription
-            let dateSouscription = null;
-            let dateSouscriptionDate = null; // Garder l'objet Date pour calcul démembrement
-            if (row.data.date_souscription) {
-              const excelDate = parseFloat(String(row.data.date_souscription));
-              if (!isNaN(excelDate) && excelDate > 1) {
-                const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                dateSouscription = jsDate.toISOString();
-                dateSouscriptionDate = jsDate;
-              }
-            }
+            const dateSouscriptionIso3 = parseImportDate(row.data.date_souscription);
+            let dateSouscription: string | null = dateSouscriptionIso3 ?? null;
+            let dateSouscriptionDate: Date | null = dateSouscriptionIso3
+              ? new Date(dateSouscriptionIso3)
+              : null;
             
             // Calculer la date de fin de démembrement
             let dateFinDemembrement = null;
@@ -2385,40 +2224,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               typeProduit = 'SCPI_DEMEMBREMENT';
             }
             
-            // 🔥 Parser la date de fin de prêt
-            let dateFinPret: string | null = null;
-            if (row.data.date_fin_pret) {
-              const dateStr = String(row.data.date_fin_pret).trim();
-              const excelDate = parseFloat(dateStr);
-              if (!isNaN(excelDate) && excelDate > 1000) {
-                const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-                const year = jsDate.getUTCFullYear();
-                const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-                const day = String(jsDate.getUTCDate()).padStart(2, '0');
-                if (year > 1950) {
-                  dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
-                }
-              } else {
-                const parts = dateStr.split(/[\/\-\.]/);
-                if (parts.length === 3) {
-                  let year: number, month: number, day: number;
-                  if (parts[0].length === 4) {
-                    year = parseInt(parts[0]);
-                    month = parseInt(parts[1]);
-                    day = parseInt(parts[2]);
-                  } else {
-                    day = parseInt(parts[0]);
-                    month = parseInt(parts[1]);
-                    year = parseInt(parts[2]);
-                  }
-                  if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                    dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
-                  }
-                }
-              }
-              if (dateFinPret) {
-              }
-            }
+            const dateFinPret = parseImportDateFinPret(row.data.date_fin_pret);
             
             // Réinvestissement dividendes
             let reinvestissement = false;
@@ -2508,6 +2314,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             await createOrUpdateInvestissement(newInvestissement);
           } catch (invError) {
             console.error(`❌ Erreur création investissement pour ${row.data.prenom} ${row.data.nom}:`, invError);
+            throw invError;
           }
         }
         
@@ -2609,18 +2416,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           : produitStr; // Fallback sur le type si pas de nom
         
         // 🔥 FIX: Parser les mêmes champs que les investissements individuels
-        // Date de souscription
-        let dateSouscription: string | undefined;
-        if (row.data.date_souscription) {
-          const dateStr = String(row.data.date_souscription).trim();
-          const excelDate = parseFloat(dateStr);
-          if (!isNaN(excelDate) && excelDate > 1) {
-            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
-              dateSouscription = jsDate.toISOString();
-            }
-          }
-        }
+        const dateSouscription = parseImportDate(row.data.date_souscription);
         
         // Montant VP
         const montantVP = row.data.montant_vp ? Math.round(parseFloat(String(row.data.montant_vp)) * 100) : undefined;
@@ -2675,40 +2471,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           typeProduit = 'SCPI_DEMEMBREMENT';
         }
         
-        // 🔥 Parser la date de fin de prêt
-        let dateFinPret: string | undefined;
-        if (row.data.date_fin_pret) {
-          const dateStr = String(row.data.date_fin_pret).trim();
-          const excelDate = parseFloat(dateStr);
-          if (!isNaN(excelDate) && excelDate > 1000) {
-            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-            const year = jsDate.getUTCFullYear();
-            const month = String(jsDate.getUTCMonth() + 1).padStart(2, '0');
-            const day = String(jsDate.getUTCDate()).padStart(2, '0');
-            if (year > 1950) {
-              dateFinPret = `${year}-${month}-${day}T12:00:00.000Z`;
-            }
-          } else {
-            const parts = dateStr.split(/[\/\-\.]/);
-            if (parts.length === 3) {
-              let year: number, month: number, day: number;
-              if (parts[0].length === 4) {
-                year = parseInt(parts[0]);
-                month = parseInt(parts[1]);
-                day = parseInt(parts[2]);
-              } else {
-                day = parseInt(parts[0]);
-                month = parseInt(parts[1]);
-                year = parseInt(parts[2]);
-              }
-              if (year > 1950 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-                dateFinPret = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T12:00:00.000Z`;
-              }
-            }
-          }
-          if (dateFinPret) {
-          }
-        }
+        const dateFinPret = parseImportDateFinPret(row.data.date_fin_pret) ?? undefined;
         
         // 🔥 Construire les notes avec mode_detention, durée, réinvestissement
         const notesArray: string[] = [];
@@ -2756,12 +2519,36 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         await createOrUpdateInvestissement(newInvestissement);
       } catch (error) {
         console.error("Erreur investissement foyer:", error);
+        const idx = coupleLine.rowIndex;
+        updatedRows[idx] = {
+          ...updatedRows[idx],
+          status: "error",
+          message: `Erreur investissement couple: ${String(error)}`,
+        };
       }
     }
 
+    setImportRows([...updatedRows]);
+    const errorCount = updatedRows.filter((r) => r.status === "error").length;
+
+    if (errorCount > 0) {
+      await rollbackImportTransaction();
+      importTxActive = false;
+      setImportRows(markImportRowsCancelled(updatedRows));
+      setImporting(false);
+      setImportCompleted(true);
+      toast.error(
+        `Import annulé : ${errorCount} erreur(s). Aucune donnée n'a été enregistrée.`
+      );
+      return;
+    }
+
+    await commitImportTransaction();
+    importTxActive = false;
+
     setImportCompleted(true);
     setImporting(false);
-    
+
     // Récupérer les contacts nouvellement créés pour la détection des foyers
     const successfulImports = updatedRows.filter(r => r.status === "success");
     
@@ -2819,14 +2606,32 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     } else {
     }
     
-    const errors = updatedRows.filter((r) => r.status === "error").length;
     const ok = updatedRows.filter((r) => r.status === "success").length;
-    if (errors > 0) {
-      toast.warning(
-        `Import terminé : ${ok} réussi(s), ${errors} erreur(s). Consultez le rapport puis cliquez Fermer.`
+    const skipped = updatedRows.filter((r) => r.status === "skipped").length;
+    if (ok > 0) {
+      toast.success(
+        skipped > 0
+          ? `${ok} ligne(s) importée(s), ${skipped} ignorée(s). Cliquez Fermer.`
+          : `${ok} ligne(s) importée(s). Cliquez Fermer pour terminer.`
       );
-    } else if (ok > 0) {
-      toast.success(`${ok} ligne(s) importée(s). Cliquez Fermer pour terminer.`);
+    } else if (skipped > 0) {
+      toast.warning(`${skipped} ligne(s) ignorée(s). Aucune création.`);
+    }
+    } catch (error) {
+      if (importTxActive) {
+        try {
+          await rollbackImportTransaction();
+        } catch (rollbackErr) {
+          console.error("Rollback import:", rollbackErr);
+        }
+        setImportRows(markImportRowsCancelled(updatedRows));
+        toast.error(
+          "Import annulé suite à une erreur technique. Aucune donnée n'a été enregistrée."
+        );
+      }
+      console.error("Import clients:", error);
+      setImporting(false);
+      setImportCompleted(true);
     }
   };
 
@@ -2856,13 +2661,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     if (refresh) onSuccess();
   };
 
-  const successCount = importRows.filter(r => r.status === "success").length;
-  const errorCount = importRows.filter(r => r.status === "error").length;
-  const duplicateCount = importRows.filter(r => r.status === "duplicate").length;
-  const ambiguousDuplicateCount = importRows.filter(
-    (r) => r.status === "duplicate" && r.data._identityConflict
+  const successCount = importRows.filter((r) => r.status === "success").length;
+  const errorCount = importRows.filter((r) => r.status === "error").length;
+  const skippedCount = importRows.filter(
+    (r) => r.status === "skipped" || (r.status === "duplicate" && duplicateAction === "skip")
   ).length;
-  const pendingCount = importRows.filter(r => r.status === "pending").length;
+  const duplicateCount = importRows.filter((r) => r.status === "duplicate").length;
+  const ambiguousDuplicateCount = importRows.filter(
+    (r) => r.status === "duplicate" && r.data._identityConflict && r.data._duplicateSource === "database"
+  ).length;
+  const pendingCount = importRows.filter((r) => r.status === "pending").length;
 
   return (
     <>
@@ -3023,16 +2831,25 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   <p className="text-sm font-medium">
                     {pendingCount} contact{pendingCount > 1 ? "s" : ""} prêt{pendingCount > 1 ? "s" : ""} à être importé{pendingCount > 1 ? "s" : ""}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    {duplicateCount > 0 && duplicateAction === "consolidate" && (
+                      <>
+                        Les doublons = même personne (souvent plusieurs investissements dans le
+                        fichier). Ils seront fusionnés, pas recréés.{" "}
+                      </>
+                    )}
+                    Import atomique : une erreur technique annule tout le fichier (pas les lignes
+                    ignorées).
+                  </p>
                   {duplicateCount > 0 && (
                     <p className="text-sm text-orange-600">
-                      {duplicateCount} doublon{duplicateCount > 1 ? "s" : ""} (même nom/prénom)
+                      {duplicateCount} doublon{duplicateCount > 1 ? "s" : ""} dans le fichier
                       {ambiguousDuplicateCount > 0 && (
                         <span className="text-amber-700">
                           {" "}
                           — dont {ambiguousDuplicateCount} homonyme
-                          {ambiguousDuplicateCount > 1 ? "s" : ""} possible
-                          {ambiguousDuplicateCount > 1 ? "s" : ""} (email/tél différents, fusion
-                          bloquée)
+                          {ambiguousDuplicateCount > 1 ? "s" : ""} en base (email/tél différents,
+                          ligne ignorée)
                         </span>
                       )}
                     </p>
@@ -3234,18 +3051,18 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         {/* ÉTAPE 4 : Import en cours */}
         {step === "importing" && (
           <div className="space-y-4">
-            <div className="flex items-center justify-around text-center">
+            <div className="flex items-center justify-around text-center flex-wrap gap-4">
               <div>
                 <div className="text-2xl font-bold text-green-600">{successCount}</div>
-                <div className="text-sm text-muted-foreground">Importés</div>
+                <div className="text-sm text-muted-foreground">Traités OK</div>
               </div>
               <div>
                 <div className="text-2xl font-bold text-red-600">{errorCount}</div>
                 <div className="text-sm text-muted-foreground">Erreurs</div>
               </div>
               <div>
-                <div className="text-2xl font-bold text-orange-600">{duplicateCount}</div>
-                <div className="text-sm text-muted-foreground">Doublons</div>
+                <div className="text-2xl font-bold text-slate-500">{skippedCount}</div>
+                <div className="text-sm text-muted-foreground">Ignorés</div>
               </div>
             </div>
 
@@ -3258,8 +3075,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   <div className="flex items-center gap-2">
                     {row.status === "success" && <CheckCircle className="h-4 w-4 text-green-600" />}
                     {row.status === "error" && <X className="h-4 w-4 text-red-600" />}
-                    {row.status === "duplicate" && duplicateAction === "skip" && (
-                      <AlertCircle className="h-4 w-4 text-orange-600" />
+                    {(row.status === "skipped" ||
+                      (row.status === "duplicate" && duplicateAction === "skip")) && (
+                      <AlertCircle className="h-4 w-4 text-slate-500" />
                     )}
                     {row.status === "pending" && <span className="text-xs text-muted-foreground">En attente...</span>}
                   </div>

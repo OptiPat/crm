@@ -38,3 +38,23 @@ export function parseImportDate(value: unknown): string | undefined {
 
   return undefined;
 }
+
+/** Objet Date pour calculs (démembrement, etc.). */
+export function parseImportDateToDate(value: unknown): Date | undefined {
+  const iso = parseImportDate(value);
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  return isNaN(d.getTime()) ? undefined : d;
+}
+
+/** Format ISO midi UTC pour date_fin_pret (évite décalages fuseau). */
+export function parseImportDateFinPret(value: unknown): string | null {
+  const iso = parseImportDate(value);
+  if (!iso) return null;
+  const d = new Date(iso);
+  const year = d.getUTCFullYear();
+  if (year <= 1950) return null;
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}T12:00:00.000Z`;
+}

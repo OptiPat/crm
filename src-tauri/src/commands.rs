@@ -775,3 +775,32 @@ pub fn update_wizard_step(db: State<'_, DbState>, step: i64) -> Result<(), Strin
     database.update_wizard_step(step)
         .map_err(|e| format!("Failed to update wizard step: {}", e))
 }
+
+// ========== IMPORT TRANSACTION (atomique) ==========
+
+#[tauri::command]
+pub fn begin_import_transaction(db: State<'_, DbState>) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .begin_import_transaction()
+        .map_err(|e| format!("Failed to begin import transaction: {}", e))
+}
+
+#[tauri::command]
+pub fn commit_import_transaction(db: State<'_, DbState>) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .commit_import_transaction()
+        .map_err(|e| format!("Failed to commit import transaction: {}", e))
+}
+
+#[tauri::command]
+pub fn rollback_import_transaction(db: State<'_, DbState>) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .rollback_import_transaction()
+        .map_err(|e| format!("Failed to rollback import transaction: {}", e))
+}
