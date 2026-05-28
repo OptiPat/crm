@@ -8,10 +8,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Users, CheckCircle } from "lucide-react";
-import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
-import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
-import { invoke } from "@tauri-apps/api/core";
+import { Users, CheckCircle, AlertTriangle } from "lucide-react";
+import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { contactNameKeyCanonical } from "@/lib/contacts/name-match";
+import {
+  formatIdentityLine,
+  getIdentityConflictMessages,
+} from "@/lib/contacts/duplicate-identity";
+import { mergeDuplicateGroup } from "@/lib/contacts/merge-duplicate-group";
+import { toast } from "sonner";
 
 interface ContactDeduplicateProps {
   open: boolean;
@@ -19,216 +24,269 @@ interface ContactDeduplicateProps {
   onSuccess: () => void;
 }
 
+interface ReviewGroup {
+  key: string;
+  label: string;
+  contacts: Contact[];
+  reasons: string[];
+}
+
+type Phase = "intro" | "review" | "done";
+
+interface DeduplicateResult {
+  merged: number;
+  kept: number;
+  skipped: number;
+}
+
 export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDeduplicateProps) {
-  const [deduplicating, setDeduplicating] = useState(false);
-  const [result, setResult] = useState<{ merged: number; kept: number } | null>(null);
+  const [phase, setPhase] = useState<Phase>("intro");
+  const [working, setWorking] = useState(false);
+  const [reviewGroups, setReviewGroups] = useState<ReviewGroup[]>([]);
+  const [reviewIndex, setReviewIndex] = useState(0);
+  const [result, setResult] = useState<DeduplicateResult | null>(null);
 
-  const handleDeduplicate = async () => {
-    setDeduplicating(true);
+  const resetState = () => {
+    setPhase("intro");
+    setReviewGroups([]);
+    setReviewIndex(0);
     setResult(null);
-
-    try {
-      const contacts = await getAllContacts();
-      
-      // Grouper les contacts par Nom + Prénom (insensible à la casse)
-      const groups = new Map<string, Contact[]>();
-      
-      contacts.forEach(contact => {
-        const key = `${contact.nom.toLowerCase()}_${contact.prenom.toLowerCase()}`;
-        if (!groups.has(key)) {
-          groups.set(key, []);
-        }
-        groups.get(key)!.push(contact);
-      });
-
-      let mergedCount = 0;
-      let keptCount = 0;
-
-      // Pour chaque groupe de doublons
-      for (const [_, duplicates] of groups) {
-        if (duplicates.length > 1) {
-          // Trier par ID (garder le plus ancien)
-          duplicates.sort((a, b) => a.id! - b.id!);
-          
-          const mainContact = duplicates[0];
-          const otherContacts = duplicates.slice(1);
-
-          // === RÈGLES DE FUSION INTELLIGENTES ===
-          
-          // 1. Date dernier contact : garder la PLUS RÉCENTE
-          let mostRecentDate = mainContact.date_dernier_contact;
-          duplicates.forEach(contact => {
-            if (contact.date_dernier_contact && (!mostRecentDate || contact.date_dernier_contact > mostRecentDate)) {
-              mostRecentDate = contact.date_dernier_contact;
-            }
-          });
-
-          // 2. Catégorie : garder la PLUS AVANCÉE (CLIENT > PROSPECT > SUSPECT)
-          const categorieOrder = {
-            "CLIENT": 3,
-            "PROSPECT_CLIENT": 2,
-            "PROSPECT_FILLEUL": 2,
-            "SUSPECT_CLIENT": 1,
-            "SUSPECT_FILLEUL": 1,
-          };
-          
-          let bestCategorie = mainContact.categorie;
-          let bestCategorieScore = categorieOrder[mainContact.categorie as keyof typeof categorieOrder] || 0;
-          
-          duplicates.forEach(contact => {
-            const score = categorieOrder[contact.categorie as keyof typeof categorieOrder] || 0;
-            if (score > bestCategorieScore) {
-              bestCategorie = contact.categorie;
-              bestCategorieScore = score;
-            }
-          });
-
-          // 3. Notes : fusionner toutes les notes
-          let allNotes: string[] = [];
-          
-          // Ajouter les notes du contact principal s'il y en a
-          if (mainContact.notes) {
-            allNotes.push(mainContact.notes);
-          }
-
-          // Ajouter les notes des autres contacts
-          otherContacts.forEach(contact => {
-            if (contact.notes && contact.notes !== mainContact.notes) {
-              allNotes.push(contact.notes);
-            }
-          });
-
-          const consolidatedNotes = allNotes.length > 0 ? allNotes.join('\n---\n') : mainContact.notes;
-
-          // Mettre à jour le contact principal avec toutes les infos fusionnées
-          await invoke("update_contact", {
-            id: mainContact.id,
-            contact: {
-              ...mainContact,
-              date_dernier_contact: mostRecentDate,
-              categorie: bestCategorie,
-              notes: consolidatedNotes,
-            },
-          });
-
-          // Transférer les investissements des doublons vers le contact principal
-          for (const duplicate of otherContacts) {
-            try {
-              const investissements = await getInvestissementsByContact(duplicate.id!);
-              
-              // Pour chaque investissement, le rattacher au contact principal
-              for (const inv of investissements) {
-                await invoke("update_investissement", {
-                  id: inv.id,
-                  investissement: {
-                    ...inv,
-                    contact_id: mainContact.id,
-                  },
-                });
-              }
-            } catch (error) {
-              console.error(`❌ Erreur transfert investissements du contact ${duplicate.id}:`, error);
-            }
-          }
-
-          // Supprimer les doublons
-          for (const duplicate of otherContacts) {
-            await deleteContact(duplicate.id!);
-            mergedCount++;
-          }
-
-          keptCount++;
-        }
-      }
-
-      setResult({ merged: mergedCount, kept: keptCount });
-      
-      // Attendre 2 secondes puis rafraîchir
-      setTimeout(() => {
-        onSuccess();
-      }, 2000);
-    } catch (error) {
-      console.error("Error deduplicating:", error);
-      alert("Erreur lors de la déduplication: " + String(error));
-    } finally {
-      setDeduplicating(false);
-    }
+    setWorking(false);
   };
 
   const handleClose = () => {
-    setResult(null);
+    if (result) onSuccess();
+    resetState();
     onOpenChange(false);
   };
 
+  const buildGroups = (contacts: Contact[]) => {
+    const groups = new Map<string, Contact[]>();
+    contacts.forEach((contact) => {
+      const key = contactNameKeyCanonical(contact.nom, contact.prenom);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(contact);
+    });
+    return groups;
+  };
+
+  const handleStart = async () => {
+    setWorking(true);
+    const partial: DeduplicateResult = { merged: 0, kept: 0, skipped: 0 };
+
+    try {
+      const contacts = await getAllContacts();
+      const groups = buildGroups(contacts);
+      const ambiguous: ReviewGroup[] = [];
+
+      for (const [key, duplicates] of groups) {
+        if (duplicates.length <= 1) continue;
+
+        const reasons = getIdentityConflictMessages(duplicates);
+        if (reasons.length > 0) {
+          ambiguous.push({
+            key,
+            label: `${duplicates[0].prenom} ${duplicates[0].nom}`,
+            contacts: duplicates,
+            reasons,
+          });
+          continue;
+        }
+
+        const removed = await mergeDuplicateGroup(duplicates);
+        partial.merged += removed;
+        partial.kept += 1;
+      }
+
+      if (ambiguous.length > 0) {
+        setResult(partial);
+        setReviewGroups(ambiguous);
+        setReviewIndex(0);
+        setPhase("review");
+        toast.info(
+          `${partial.merged} fusion(s) automatique(s). ${ambiguous.length} cas à valider (coordonnées différentes).`
+        );
+      } else {
+        setResult(partial);
+        setPhase("done");
+        toast.success(
+          partial.merged > 0
+            ? `${partial.merged} doublon${partial.merged > 1 ? "s" : ""} fusionné${partial.merged > 1 ? "s" : ""}`
+            : "Aucun doublon à fusionner"
+        );
+      }
+    } catch (error) {
+      console.error("Error deduplicating:", error);
+      toast.error("Erreur lors de la déduplication: " + String(error));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const finishReview = (final: DeduplicateResult) => {
+    setReviewGroups([]);
+    setResult(final);
+    setPhase("done");
+    toast.success(
+      `${final.merged} fusion(s), ${final.skipped} homonyme${final.skipped > 1 ? "s" : ""} laissé${final.skipped > 1 ? "s" : ""} séparé${final.skipped > 1 ? "s" : ""}`
+    );
+  };
+
+  const handleReviewMerge = async () => {
+    const group = reviewGroups[reviewIndex];
+    if (!group || !result) return;
+
+    setWorking(true);
+    try {
+      const removed = await mergeDuplicateGroup(group.contacts);
+      const next: DeduplicateResult = {
+        ...result,
+        merged: result.merged + removed,
+        kept: result.kept + 1,
+      };
+
+      const remaining = reviewGroups.filter((_, i) => i !== reviewIndex);
+      if (remaining.length === 0) {
+        finishReview(next);
+      } else {
+        setResult(next);
+        setReviewGroups(remaining);
+        setReviewIndex(0);
+      }
+    } catch (error) {
+      console.error("Error merging review group:", error);
+      toast.error("Erreur fusion: " + String(error));
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const handleReviewSkip = () => {
+    if (!result) return;
+    const next: DeduplicateResult = {
+      ...result,
+      skipped: result.skipped + 1,
+    };
+
+    const remaining = reviewGroups.filter((_, i) => i !== reviewIndex);
+    if (remaining.length === 0) {
+      finishReview(next);
+    } else {
+      setResult(next);
+      setReviewGroups(remaining);
+      setReviewIndex(0);
+    }
+  };
+
+  const currentReview = reviewGroups[reviewIndex];
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="h-5 w-5" />
             Dédupliquer les contacts
           </DialogTitle>
           <DialogDescription>
-            Fusionner automatiquement les contacts ayant le même nom et prénom
+            Même nom et prénom : fusion automatique seulement si email et téléphone
+            concordent ou sont vides. Sinon, validation manuelle.
           </DialogDescription>
         </DialogHeader>
 
-        {!result ? (
+        {phase === "intro" && (
           <div className="space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-900">
-                <strong>Cette action va :</strong>
-              </p>
+              <p className="text-sm text-blue-900 font-medium">Cette action va :</p>
               <ul className="text-sm text-blue-800 mt-2 space-y-1 list-disc list-inside">
-                <li>Détecter tous les contacts en double (même nom + prénom)</li>
-                <li>Garder le contact le plus ancien (ID le plus bas)</li>
-                <li>📅 Conserver la date de dernier contact <strong>la plus récente</strong></li>
-                <li>🎯 Conserver la catégorie <strong>la plus avancée</strong> (CLIENT &gt; PROSPECT &gt; SUSPECT)</li>
-                <li>📝 Fusionner toutes les notes avec séparateur</li>
-                <li>🗑️ Supprimer les doublons</li>
+                <li>Fusionner les vrais doublons (coordonnées compatibles)</li>
+                <li>Vous demander si email ou tél diffèrent (homonyme possible)</li>
+                <li>Garder la fiche la plus ancienne, transférer investissements et documents</li>
               </ul>
             </div>
-
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
               <p className="text-xs text-yellow-900">
-                ⚠️ Cette action est irréversible. Assurez-vous d'avoir une sauvegarde si nécessaire.
+                Irréversible pour les fusions confirmées. Sauvegarde recommandée.
               </p>
             </div>
           </div>
-        ) : (
+        )}
+
+        {phase === "review" && currentReview && result && (
           <div className="space-y-4">
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-              <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-green-900">
-                  Déduplication terminée !
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" />
+              <div className="text-sm text-amber-900">
+                <p className="font-medium">
+                  Homonyme ? ({reviewIndex + 1}/{reviewGroups.length}) — {currentReview.label}
                 </p>
-                <p className="text-sm text-green-800 mt-1">
-                  {result.merged} doublon{result.merged > 1 ? "s" : ""} fusionné{result.merged > 1 ? "s" : ""}
-                </p>
-                <p className="text-sm text-green-800">
-                  {result.kept} contact{result.kept > 1 ? "s" : ""} conservé{result.kept > 1 ? "s" : ""}
+                <p className="mt-1 text-amber-800">
+                  {currentReview.reasons.join(" · ")} — confirmez s&apos;il s&apos;agit de la même
+                  personne.
                 </p>
               </div>
+            </div>
+
+            <div className="border rounded-lg divide-y text-sm">
+              {currentReview.contacts.map((c) => (
+                <div key={c.id} className="p-3 space-y-1">
+                  <p className="font-medium">
+                    Fiche #{c.id} — {c.prenom} {c.nom}
+                    {c.id ===
+                      Math.min(...currentReview.contacts.map((x) => x.id!)) && (
+                      <span className="text-muted-foreground font-normal"> (serait gardée)</span>
+                    )}
+                  </p>
+                  <p className="text-muted-foreground text-xs">{formatIdentityLine(c)}</p>
+                </div>
+              ))}
+            </div>
+
+            {result.merged > 0 && (
+              <p className="text-xs text-muted-foreground">
+                Déjà fusionné automatiquement : {result.merged} fiche
+                {result.merged > 1 ? "s" : ""}.
+              </p>
+            )}
+          </div>
+        )}
+
+        {phase === "done" && result && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
+            <CheckCircle className="h-5 w-5 text-green-600 shrink-0 mt-0.5" />
+            <div className="text-sm text-green-900">
+              <p className="font-medium">Terminé</p>
+              <p className="mt-1 text-green-800">
+                {result.merged} fusion{result.merged > 1 ? "s" : ""},{" "}
+                {result.skipped} homonyme{result.skipped > 1 ? "s" : ""} non fusionné
+                {result.skipped > 1 ? "s" : ""}.
+              </p>
             </div>
           </div>
         )}
 
         <DialogFooter>
-          {!result ? (
+          {phase === "intro" && (
             <>
               <Button variant="outline" onClick={handleClose}>
                 Annuler
               </Button>
-              <Button onClick={handleDeduplicate} disabled={deduplicating}>
-                {deduplicating ? "Déduplication en cours..." : "Dédupliquer"}
+              <Button onClick={handleStart} disabled={working}>
+                {working ? "Analyse..." : "Analyser et dédupliquer"}
               </Button>
             </>
-          ) : (
-            <Button onClick={handleClose}>
-              Fermer
-            </Button>
           )}
+          {phase === "review" && currentReview && (
+            <>
+              <Button variant="outline" onClick={handleReviewSkip} disabled={working}>
+                Non, homonymes distincts
+              </Button>
+              <Button onClick={handleReviewMerge} disabled={working}>
+                {working ? "Fusion..." : "Oui, fusionner"}
+              </Button>
+            </>
+          )}
+          {phase === "done" && <Button onClick={handleClose}>Fermer et actualiser</Button>}
         </DialogFooter>
       </DialogContent>
     </Dialog>

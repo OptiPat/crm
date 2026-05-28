@@ -20,12 +20,25 @@ import {
 } from "@/components/ui/select";
 import { Upload, File, X, FileText } from "lucide-react";
 import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
-import { extractTextFromPDFPath, parseAuto, type ExtractedData } from "@/lib/pdf";
+import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { PatrimoineTriDialog } from "./PatrimoineTriDialog";
 import { RioUpdateComparisonDialog } from "./RioUpdateComparisonDialog";
-import { findContactByEmail, createContact, updateContact, getContactById, type NewContact } from "@/lib/api/tauri-contacts";
+import {
+  findContactByEmail,
+  findContactByName,
+  createContact,
+  updateContact,
+  getContactById,
+  type Contact,
+  type NewContact,
+} from "@/lib/api/tauri-contacts";
 import { createInvestissement, getInvestissementsByContact, type NewInvestissement } from "@/lib/api/tauri-investissements";
+import { toast } from "sonner";
+import {
+  formatIdentityLine,
+  getPairIdentityConflictMessages,
+} from "@/lib/contacts/duplicate-identity";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -100,6 +113,12 @@ export function DocumentUpload({
     try {
       const result = await extractTextFromPDFPath(filePath);
       setExtractedText(result.text);
+
+      if (!isNativeTextPDF(result.text)) {
+        toast.warning(
+          "Peu de texte extrait : PDF probablement scanné. Vérifiez les données avant d'appliquer."
+        );
+      }
 
       // Parser les données
       const parsedData = parseAuto(result.text);
@@ -195,6 +214,26 @@ export function DocumentUpload({
     return contact;
   };
 
+  const resolveExistingContact = async (data: ExtractedData): Promise<Contact | null> => {
+    if (contactId) {
+      try {
+        return await getContactById(contactId);
+      } catch {
+        // Fiche introuvable : retomber sur email / nom comme pour un import libre
+      }
+    }
+    if (data.email?.trim()) {
+      const byEmail = await findContactByEmail(data.email.trim());
+      if (byEmail) return byEmail;
+    }
+    const nom = data.nom?.trim();
+    const prenom = data.prenom?.trim();
+    if (nom && prenom) {
+      return await findContactByName(nom, prenom);
+    }
+    return null;
+  };
+
   /**
    * Applique les données extraites : crée ou met à jour le contact
    */
@@ -206,48 +245,66 @@ export function DocumentUpload({
       let successMessage = "";
       let isExistingContactWithInvestments = false;
       let existingContactNom = "";
-      
-      // 1. Chercher un contact existant par email
-      if (data.email) {
-        const existingContact = await findContactByEmail(data.email);
-        
-        if (existingContact) {
-          // Contact existant → UPDATE (fusion des données)
-          const newData = mapExtractedDataToContact(data);
-          const mergedData: NewContact = {
-            ...newData, // Nouvelles données
-            foyer_id: existingContact.foyer_id,
-            categorie: existingContact.categorie, // PRÉSERVER la catégorie existante !
-            statut_suivi: existingContact.statut_suivi, // Préserver le statut actuel
-            notes: existingContact.notes,
-            source_lead: existingContact.source_lead,
-            profil_risque_sri: existingContact.profil_risque_sri,
-          };
-          await updateContact(existingContact.id, mergedData);
-          finalContactId = existingContact.id;
-          successMessage = `✅ Contact mis à jour: ${data.prenom} ${data.nom}`;
-          existingContactNom = `${existingContact.prenom} ${existingContact.nom}`;
-          
-          // Vérifier si le contact a déjà des investissements
-          try {
-            const existingInvestissements = await getInvestissementsByContact(existingContact.id);
-            isExistingContactWithInvestments = existingInvestissements.length > 0;
-          } catch {
-            isExistingContactWithInvestments = false;
-          }
-        } else {
-          // Contact inexistant → CREATE
-          const contactData = mapExtractedDataToContact(data);
-          const newContact = await createContact(contactData);
-          finalContactId = newContact.id;
-          successMessage = `✅ Nouveau contact créé: ${data.prenom} ${data.nom}`;
+
+      let existingContact = await resolveExistingContact(data);
+
+      const identityConflicts =
+        existingContact &&
+        getPairIdentityConflictMessages(
+          { email: data.email, telephone: data.telephone },
+          existingContact
+        );
+
+      if (existingContact && identityConflicts && identityConflicts.length > 0) {
+        const confirmMerge = window.confirm(
+          [
+            "Même nom/prénom mais coordonnées différentes :",
+            identityConflicts.join(", "),
+            "",
+            "Fiche en base :",
+            formatIdentityLine(existingContact),
+            "Document :",
+            formatIdentityLine({ email: data.email, telephone: data.telephone }),
+            "",
+            "Fusionner sur la fiche existante ?",
+            "(Annuler = créer une nouvelle fiche)",
+          ].join("\n")
+        );
+        if (!confirmMerge) {
+          existingContact = null;
+        }
+      }
+
+      if (existingContact) {
+        const newData = mapExtractedDataToContact(data);
+        const mergedData: NewContact = {
+          ...newData,
+          foyer_id: existingContact.foyer_id,
+          categorie: existingContact.categorie,
+          statut_suivi: existingContact.statut_suivi,
+          notes: existingContact.notes,
+          source_lead: existingContact.source_lead,
+          profil_risque_sri: existingContact.profil_risque_sri,
+        };
+        await updateContact(existingContact.id, mergedData);
+        finalContactId = existingContact.id;
+        successMessage = `✅ Contact mis à jour: ${data.prenom} ${data.nom}`;
+        existingContactNom = `${existingContact.prenom} ${existingContact.nom}`;
+
+        try {
+          const existingInvestissements = await getInvestissementsByContact(existingContact.id);
+          isExistingContactWithInvestments = existingInvestissements.length > 0;
+        } catch {
+          isExistingContactWithInvestments = false;
         }
       } else {
-        // Pas d'email → impossible de chercher, on crée forcément
         const contactData = mapExtractedDataToContact(data);
         const newContact = await createContact(contactData);
         finalContactId = newContact.id;
-        successMessage = `✅ Nouveau contact créé: ${data.prenom} ${data.nom} (sans email)`;
+        const sansEmail = !data.email?.trim();
+        successMessage = sansEmail
+          ? `✅ Nouveau contact créé: ${data.prenom} ${data.nom} (sans email)`
+          : `✅ Nouveau contact créé: ${data.prenom} ${data.nom}`;
       }
 
       // 2. Enregistrer le document lié au contact
@@ -438,10 +495,11 @@ export function DocumentUpload({
    */
   const handlePatrimoineTriCancel = () => {
     setShowPatrimoineTri(false);
-    setTriContactId(null);
     setTriExtractedData(null);
-    
-    // Fermer tout
+    if (triContactId) {
+      toast.info("Patrimoine non importé. Le contact créé reste dans la base.");
+    }
+    setTriContactId(null);
     onSuccess();
     onOpenChange(false);
   };
@@ -475,11 +533,12 @@ export function DocumentUpload({
    */
   const handleRioUpdateCancel = () => {
     setShowRioUpdate(false);
-    setTriContactId(null);
     setTriExtractedData(null);
+    if (triContactId) {
+      toast.info("Mise à jour RIO annulée. Le contact reste enregistré.");
+    }
+    setTriContactId(null);
     setUpdateContactNom("");
-    
-    // Fermer tout
     onSuccess();
     onOpenChange(false);
   };

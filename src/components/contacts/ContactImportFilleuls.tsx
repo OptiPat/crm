@@ -26,7 +26,10 @@ import {
   resolveParrain,
   type ParrainResolveStatus,
 } from "@/lib/contacts/name-match";
+import { parseImportDate } from "@/lib/contacts/parse-import-date";
+import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 interface ContactImportFilleulsProps {
   open: boolean;
@@ -47,6 +50,7 @@ interface ImportRow {
 }
 
 export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: ContactImportFilleulsProps) {
+  const [importCompleted, setImportCompleted] = useState(false);
   const [_file, setFile] = useState<File | null>(null);
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<any[]>([]);
@@ -327,33 +331,8 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             filleulCategorie = "SUSPECT_FILLEUL"; // Par défaut
         }
 
-        // Parser la date de dernier suivi
-        let dateDernierContact: string | undefined;
-        if (row.data.date_dernier_suivi) {
-          const dateStr = String(row.data.date_dernier_suivi).trim();
-          const excelDate = parseFloat(dateStr);
-          
-          if (!isNaN(excelDate) && excelDate > 1) {
-            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
-              dateDernierContact = jsDate.toISOString();
-            }
-          }
-        }
-
-        // Parser la date de naissance
-        let dateNaissance: string | undefined;
-        if (row.data.date_naissance) {
-          const dateStr = String(row.data.date_naissance).trim();
-          const excelDate = parseFloat(dateStr);
-          
-          if (!isNaN(excelDate) && excelDate > 1) {
-            const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-            if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1900) {
-              dateNaissance = jsDate.toISOString();
-            }
-          }
-        }
+        const dateDernierContact = parseImportDate(row.data.date_dernier_suivi);
+        const dateNaissance = parseImportDate(row.data.date_naissance);
 
         // Construire les notes
         let notes = row.data.commentaire ? String(row.data.commentaire).trim() : undefined;
@@ -459,19 +438,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           filleulCategorieForContact = "SUSPECT_FILLEUL";
       }
       
-      // 🔥 Parser la date de dernier suivi FILLEUL depuis l'Excel
-      let dateDernierContactFilleul: string | undefined;
-      if (row.data.date_dernier_suivi) {
-        const dateStr = String(row.data.date_dernier_suivi).trim();
-        const excelDate = parseFloat(dateStr);
-        
-        if (!isNaN(excelDate) && excelDate > 1) {
-          const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-          if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1950) {
-            dateDernierContactFilleul = jsDate.toISOString();
-          }
-        }
-      }
+      const dateDernierContactFilleul = parseImportDate(row.data.date_dernier_suivi);
       
       // Chercher le parrain si nom/prénom fournis
       let parrainId: number | undefined = contact.parrain_id;
@@ -498,31 +465,19 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       
       try {
         // 🔥 Toujours mettre à jour filleul_categorie (avec ou sans parrain)
-        await updateContact(contactId, {
-          ...contact,
-          categorie: categorieToUse, // 🔥 Garder la catégorie CLIENT originale
-          filleul_categorie: filleulCategorieForContact, // 🔥 Ajouter la catégorie filleul
-          parrain_id: parrainId,
-          date_naissance: contact.date_naissance 
-            ? new Date(contact.date_naissance * 1000).toISOString() 
-            : undefined,
-          // 🔥 Garder la date de suivi CLIENT intacte
-          date_dernier_contact: contact.date_dernier_contact 
-            ? new Date(contact.date_dernier_contact * 1000).toISOString() 
-            : undefined,
-          date_prochain_suivi: contact.date_prochain_suivi 
-            ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
-            : undefined,
-          // 🔥 Mettre à jour la date de suivi FILLEUL (indépendante)
-          date_dernier_contact_filleul: dateDernierContactFilleul || (
-            contact.date_dernier_contact_filleul 
-              ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
-              : undefined
-          ),
-          date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
-            ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
-            : undefined,
-        });
+        await updateContact(
+          contactId,
+          contactToUpdatePayload(contact, {
+            categorie: categorieToUse,
+            filleul_categorie: filleulCategorieForContact,
+            parrain_id: parrainId,
+            date_dernier_contact_filleul:
+              dateDernierContactFilleul ||
+              (contact.date_dernier_contact_filleul
+                ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString()
+                : undefined),
+          })
+        );
         
         const prefix = alreadyExists ? "✓ Existant" : "✓ Créé";
         const categorieLabel = filleulCategorieForContact === "FILLEUL" ? "Filleul" 
@@ -570,28 +525,10 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
           if (!currentFilleulCat || 
               currentFilleulCat === "PROSPECT_FILLEUL" || 
               currentFilleulCat === "SUSPECT_FILLEUL") {
-            await updateContact(parrainId, {
-              ...parrain,
-              // 🔥 NE PAS toucher à categorie - elle reste indépendante
-              filleul_categorie: "FILLEUL", // Upgrade vers FILLEUL actif
-              date_naissance: parrain.date_naissance 
-                ? new Date(parrain.date_naissance * 1000).toISOString() 
-                : undefined,
-              // 🔥 Garder les dates CLIENT intactes
-              date_dernier_contact: parrain.date_dernier_contact 
-                ? new Date(parrain.date_dernier_contact * 1000).toISOString() 
-                : undefined,
-              date_prochain_suivi: parrain.date_prochain_suivi 
-                ? new Date(parrain.date_prochain_suivi * 1000).toISOString() 
-                : undefined,
-              // 🔥 Garder les dates FILLEUL intactes
-              date_dernier_contact_filleul: parrain.date_dernier_contact_filleul 
-                ? new Date(parrain.date_dernier_contact_filleul * 1000).toISOString() 
-                : undefined,
-              date_prochain_suivi_filleul: parrain.date_prochain_suivi_filleul 
-                ? new Date(parrain.date_prochain_suivi_filleul * 1000).toISOString() 
-                : undefined,
-            });
+            await updateContact(
+              parrainId,
+              contactToUpdatePayload(parrain, { filleul_categorie: "FILLEUL" })
+            );
           }
           // Si FILLEUL ou FILLEUL_DESINSCRIT → on ne change rien
         }
@@ -600,13 +537,20 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       console.error("Erreur upgrade parrains:", upgradeError);
     }
 
+    setImportCompleted(true);
     setImporting(false);
-    
-    // Attendre 2 secondes avant de fermer
-    setTimeout(() => {
-      handleClose();
-      setTimeout(() => onSuccess(), 100);
-    }, 2000);
+
+    const errors = updatedRows.filter((r) => r.status === "error").length;
+    const ok = updatedRows.filter(
+      (r) => r.status === "success" || r.status === "warning"
+    ).length;
+    if (errors > 0) {
+      toast.warning(
+        `Import filleuls : ${ok} OK, ${errors} erreur(s). Vérifiez le rapport puis Fermer.`
+      );
+    } else if (ok > 0) {
+      toast.success(`${ok} filleul(s) traité(s). Cliquez Fermer.`);
+    }
   };
 
   const handleClose = () => {
@@ -616,9 +560,23 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     setMapping({});
     setStep("upload");
     setImportRows([]);
+    setImportCompleted(false);
     setImporting(false);
     setError(null);
     onOpenChange(false);
+  };
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) return;
+    const refresh = importCompleted;
+    handleClose();
+    if (refresh) onSuccess();
+  };
+
+  const handleFinishImport = () => {
+    const refresh = importCompleted;
+    handleClose();
+    if (refresh) onSuccess();
   };
 
   const successCount = importRows.filter(r => r.status === "success" || r.status === "warning").length;
@@ -626,7 +584,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
   const pendingCount = importRows.filter(r => r.status === "pending").length;
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Importer des filleuls</DialogTitle>
@@ -865,9 +823,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
 
             {!importing && (
               <DialogFooter>
-                <Button onClick={handleClose}>
-                  Fermer
-                </Button>
+                <Button onClick={handleFinishImport}>Fermer</Button>
               </DialogFooter>
             )}
           </div>

@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users2 } from "lucide-react";
+import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users2, GitMerge } from "lucide-react";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import { getInvestissementsByContact, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
@@ -59,7 +59,7 @@ export function Contacts() {
       try {
         await checkAndApplyAutoEtiquettes();
       } catch (error) {
-        console.log("Erreur synchro étiquettes (ignorée):", error);
+        // synchro étiquettes optionnelle
       }
       
       const [dataContacts, dataFoyers] = await Promise.all([
@@ -298,7 +298,7 @@ export function Contacts() {
         const etiquettes = await getAllEtiquettes();
         setEtiquettesDisponibles(etiquettes);
       } catch (error) {
-        console.log("Erreur chargement étiquettes:", error);
+        // étiquettes non chargées pour ce contact
       }
     };
     loadEtiquettesDisponibles();
@@ -517,11 +517,18 @@ export function Contacts() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2" 
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setShowDeduplicate(true)}
+          >
+            <GitMerge className="h-4 w-4" />
+            Dédupliquer
+          </Button>
+          <Button
+            variant="outline"
+            className="gap-2"
             onClick={() => {
-              // Ouvrir l'import contextuel selon l'onglet actif
               if (mainTab === "filleuls") {
                 setShowImportFilleuls(true);
               } else {

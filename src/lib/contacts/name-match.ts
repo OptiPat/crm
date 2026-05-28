@@ -22,6 +22,25 @@ export function findContactByNameKey<T extends { nom: string; prenom: string }>(
   return contacts.find((c) => contactNameKey(c.nom, c.prenom) === key);
 }
 
+/** Clé canonique : nom/prénom inversés = même personne (dédup, doublons Excel). */
+export function contactNameKeyCanonical(nom: string, prenom: string): string {
+  const a = normalizeContactName(nom);
+  const b = normalizeContactName(prenom);
+  return a <= b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+/** Recherche directe puis nom/prénom inversés. */
+export function findContactByNameKeyWithSwap<T extends { nom: string; prenom: string }>(
+  contacts: T[],
+  nom: string,
+  prenom: string
+): T | undefined {
+  return (
+    findContactByNameKey(contacts, nom, prenom) ??
+    findContactByNameKey(contacts, prenom, nom)
+  );
+}
+
 export function buildContactIdMap(
   contacts: { nom: string; prenom: string; id: number }[]
 ): Map<string, number> {

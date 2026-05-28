@@ -26,6 +26,12 @@ import { createFoyer, getAllFoyers } from "@/lib/api/tauri-foyers";
 import { Badge } from "@/components/ui/badge";
 import { invoke } from "@tauri-apps/api/core";
 import { FoyerGroupingModal } from "@/components/foyers/FoyerGroupingModal";
+import { toast } from "sonner";
+import {
+  contactNameKeyCanonical,
+  findContactByNameKeyWithSwap,
+} from "@/lib/contacts/name-match";
+import { getPairIdentityConflictMessages } from "@/lib/contacts/duplicate-identity";
 
 // ============================================
 // FUZZY MATCHING POUR LES PARTENAIRES
@@ -419,6 +425,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [duplicateAction, setDuplicateAction] = useState<"skip" | "merge" | "consolidate">("consolidate");
+  const [importCompleted, setImportCompleted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showFoyerGrouping, setShowFoyerGrouping] = useState(false);
   const [importedContactsList, setImportedContactsList] = useState<Contact[]>([]);
@@ -669,7 +676,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       }
       
       // Map pour suivre les contacts déjà vus dans l'import en cours
-      const seenInImport = new Map<string, { rowIndex: number }>();
+      const seenInImport = new Map<
+      string,
+      { rowIndex: number; email?: string; telephone?: string }
+    >();
       
       const preparedRows: ImportRow[] = rows.map((row, idx) => {
         const contactData: Record<string, any> = {};
@@ -698,61 +708,92 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           }
         });
 
-        // Créer une clé unique basée sur Nom+Prénom
-        const contactKey = contactData.nom && contactData.prenom 
-          ? `${String(contactData.nom).toLowerCase()}_${String(contactData.prenom).toLowerCase()}`
-          : null;
+        const contactKey =
+          contactData.nom && contactData.prenom
+            ? contactNameKeyCanonical(String(contactData.nom), String(contactData.prenom))
+            : null;
 
         // Détecter les doublons dans l'Excel lui-même (priorité 1)
         let isDuplicate = false;
-        let duplicateContact = null;
+        let duplicateContact: Contact | null | undefined = null;
         let duplicateSource = null;
-        let firstOccurrenceInExcel = null;
+        let firstOccurrenceInExcel: { rowIndex: number; email?: string; telephone?: string } | null =
+          null;
+        let identityConflict = false;
+        let conflictReasons: string[] = [];
+
+        const rowIdentity = {
+          email: contactData.email ? String(contactData.email) : undefined,
+          telephone: contactData.telephone ? String(contactData.telephone) : undefined,
+        };
 
         if (contactKey && seenInImport.has(contactKey)) {
-          // C'est un doublon dans l'Excel (même contact, potentiellement avec un autre investissement)
-          // On le marque comme doublon pour qu'il soit CONSOLIDÉ (pas ignoré, pas créé en double)
           firstOccurrenceInExcel = seenInImport.get(contactKey)!;
           isDuplicate = true;
           duplicateSource = "excel";
-        } else if (contactKey) {
-          // Marquer ce contact comme vu dans l'Excel
-          seenInImport.set(contactKey, { rowIndex: idx });
-          
-          // Détecter les doublons dans la BDD existante (priorité 2)
-          duplicateContact = existingContacts.find(contact => {
-            // Doublon par Nom + Prénom (le plus important pour ce cas d'usage)
-            if (contactData.nom && contactData.prenom) {
-              const sameName = contact.nom.toLowerCase() === String(contactData.nom).toLowerCase() &&
-                             contact.prenom.toLowerCase() === String(contactData.prenom).toLowerCase();
-              if (sameName) return true;
-            }
-            // Doublon par Email
-            if (contactData.email && contact.email === contactData.email) return true;
-            // Doublon par Téléphone
-            if (contactData.telephone && contact.telephone === contactData.telephone) return true;
-            return false;
+          conflictReasons = getPairIdentityConflictMessages(rowIdentity, {
+            email: firstOccurrenceInExcel.email,
+            telephone: firstOccurrenceInExcel.telephone,
           });
-          
+          identityConflict = conflictReasons.length > 0;
+        } else if (contactKey) {
+          seenInImport.set(contactKey, {
+            rowIndex: idx,
+            email: rowIdentity.email,
+            telephone: rowIdentity.telephone,
+          });
+
+          duplicateContact =
+            contactData.nom && contactData.prenom
+              ? findContactByNameKeyWithSwap(
+                  existingContacts,
+                  String(contactData.nom),
+                  String(contactData.prenom)
+                )
+              : undefined;
+          if (!duplicateContact) {
+            duplicateContact =
+              existingContacts.find((contact) => {
+                if (contactData.email && contact.email === contactData.email) return true;
+                if (contactData.telephone && contact.telephone === contactData.telephone)
+                  return true;
+                return false;
+              }) ?? null;
+          }
+
           isDuplicate = !!duplicateContact;
-          if (isDuplicate) {
+          if (isDuplicate && duplicateContact) {
             duplicateSource = "database";
+            conflictReasons = getPairIdentityConflictMessages(rowIdentity, duplicateContact);
+            identityConflict = conflictReasons.length > 0;
+          }
+        }
+
+        let duplicateMessage: string | undefined;
+        if (isDuplicate) {
+          if (duplicateSource === "excel" && firstOccurrenceInExcel) {
+            duplicateMessage = `Doublon dans l'Excel (→ ligne ${firstOccurrenceInExcel.rowIndex + 1})`;
+          } else if (duplicateContact) {
+            duplicateMessage = `Doublon en base (${duplicateContact.prenom} ${duplicateContact.nom})`;
+          } else {
+            duplicateMessage = "Doublon détecté";
+          }
+          if (identityConflict) {
+            duplicateMessage += ` — Homonyme ? (${conflictReasons.join(", ")})`;
           }
         }
 
         return {
-          data: { 
-            ...contactData, 
+          data: {
+            ...contactData,
             _duplicateContactId: duplicateContact?.id,
             _duplicateSource: duplicateSource,
             _firstOccurrenceRowIndex: firstOccurrenceInExcel?.rowIndex,
+            _identityConflict: identityConflict,
+            _conflictReasons: conflictReasons,
           },
           status: isDuplicate ? "duplicate" : "pending",
-          message: isDuplicate 
-            ? (duplicateSource === "excel" 
-                ? `Doublon dans l'Excel (→ ligne ${firstOccurrenceInExcel!.rowIndex + 1})`
-                : `Doublon en base (${duplicateContact?.prenom} ${duplicateContact?.nom})`)
-            : undefined,
+          message: duplicateMessage,
         };
       });
 
@@ -882,6 +923,15 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         if (duplicateAction === "skip") {
           continue; // Ignorer complètement
         } else if (duplicateAction === "consolidate") {
+          if (row.data._identityConflict) {
+            row.status = "error";
+            row.message =
+              `Homonyme probable (${(row.data._conflictReasons as string[])?.join(", ") || "coordonnées différentes"}). ` +
+              "Fusion refusée — confirmez via Dédupliquer ou modifiez la fiche à la main.";
+            updatedRows[i] = row;
+            setImportRows([...updatedRows]);
+            continue;
+          }
           // Consolider : ajouter les nouvelles infos aux notes du contact existant
           try {
             // Déterminer le contact à consolider
@@ -1139,7 +1189,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
                   if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
                     typeProduit = 'SCPI_DEMEMBREMENT';
-                    console.log(`🏷️ Auto-détection: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
                   }
                   
                   // 🔥 Parser la date de fin de prêt
@@ -1179,7 +1228,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       }
                     }
                     if (dateFinPret) {
-                      console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
                     }
                   }
                   
@@ -1863,12 +1911,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         }
 
         // 🔥 FIX: Vérifier si ce contact existe déjà dans le cache (créé pendant cet import)
-        const nomLower = (row.data.nom || "").toLowerCase();
-        const prenomLower = (row.data.prenom || "").toLowerCase();
-        const existingInCache = allContactsCache.find(c => 
-          c.nom.toLowerCase() === nomLower && 
-          c.prenom.toLowerCase() === prenomLower
-        );
+        const existingInCache =
+          row.data.nom && row.data.prenom
+            ? findContactByNameKeyWithSwap(
+                allContactsCache,
+                String(row.data.nom),
+                String(row.data.prenom)
+              )
+            : undefined;
         
         if (existingInCache) {
           // Contact déjà créé pendant cet import (ex: par une ligne couple)
@@ -2036,7 +2086,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
               if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
                 typeProduit = 'SCPI_DEMEMBREMENT';
-                console.log(`🏷️ Auto-détection: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
               }
               
               // 🔥 Parser la date de fin de prêt
@@ -2071,7 +2120,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   }
                 }
                 if (dateFinPret) {
-                  console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
                 }
               }
               
@@ -2335,7 +2383,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
             if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
               typeProduit = 'SCPI_DEMEMBREMENT';
-              console.log(`🏷️ Auto-détection: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
             }
             
             // 🔥 Parser la date de fin de prêt
@@ -2370,7 +2417,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 }
               }
               if (dateFinPret) {
-                console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
               }
             }
             
@@ -2627,7 +2673,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         // 🔥 Auto-détection SCPI_DEMEMBREMENT si mode de détention = NP ou US avec durée
         if (typeProduit === 'SCPI' && (isNP || isUS) && (dureeDemembrement || isViager)) {
           typeProduit = 'SCPI_DEMEMBREMENT';
-          console.log(`🏷️ Auto-détection FOYER: SCPI → SCPI_DEMEMBREMENT (mode: ${modeDetention}, durée: ${dureeDemembrement})`);
         }
         
         // 🔥 Parser la date de fin de prêt
@@ -2662,7 +2707,6 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             }
           }
           if (dateFinPret) {
-            console.log(`📅 Date fin de prêt parsée: ${dateStr} → ${dateFinPret}`);
           }
         }
         
@@ -2715,6 +2759,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       }
     }
 
+    setImportCompleted(true);
     setImporting(false);
     
     // Récupérer les contacts nouvellement créés pour la détection des foyers
@@ -2727,9 +2772,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         
         const newContacts = successfulImports
           .map(row => {
-            const contact = allContacts.find(c => 
-              c.nom === row.data.nom && c.prenom === row.data.prenom
-            );
+            const contact =
+              row.data.nom && row.data.prenom
+                ? findContactByNameKeyWithSwap(
+                    allContacts,
+                    String(row.data.nom),
+                    String(row.data.prenom)
+                  )
+                : undefined;
             if (contact) {
             } else {
             }
@@ -2758,6 +2808,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         // Les familles sont créées automatiquement par nom
         // Les foyers doivent être composés manuellement (qui déclare ensemble)
         if (hasFamilies) {
+          setImportCompleted(true);
           setImportedContactsList(uniqueContacts);
           setShowFoyerGrouping(true);
           return;
@@ -2768,23 +2819,15 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     } else {
     }
     
-    // Si pas de familles détectées, fermer normalement après 2 secondes
-    setTimeout(() => {
-      try {
-        handleClose();
-        
-        // Recharger les contacts APRÈS la fermeture de la modale
-        setTimeout(async () => {
-          try {
-            await onSuccess();
-          } catch (error) {
-            console.error("Error reloading contacts:", error);
-          }
-        }, 100);
-      } catch (error) {
-        console.error("Error closing modal:", error);
-      }
-    }, 2000);
+    const errors = updatedRows.filter((r) => r.status === "error").length;
+    const ok = updatedRows.filter((r) => r.status === "success").length;
+    if (errors > 0) {
+      toast.warning(
+        `Import terminé : ${ok} réussi(s), ${errors} erreur(s). Consultez le rapport puis cliquez Fermer.`
+      );
+    } else if (ok > 0) {
+      toast.success(`${ok} ligne(s) importée(s). Cliquez Fermer pour terminer.`);
+    }
   };
 
   const handleClose = () => {
@@ -2794,19 +2837,36 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     setMapping({});
     setStep("upload");
     setImportRows([]);
+    setImportCompleted(false);
     setImporting(false);
     setError(null);
     onOpenChange(false);
   };
 
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (nextOpen) return;
+    const refresh = importCompleted;
+    handleClose();
+    if (refresh) onSuccess();
+  };
+
+  const handleFinishImport = () => {
+    const refresh = importCompleted;
+    handleClose();
+    if (refresh) onSuccess();
+  };
+
   const successCount = importRows.filter(r => r.status === "success").length;
   const errorCount = importRows.filter(r => r.status === "error").length;
   const duplicateCount = importRows.filter(r => r.status === "duplicate").length;
+  const ambiguousDuplicateCount = importRows.filter(
+    (r) => r.status === "duplicate" && r.data._identityConflict
+  ).length;
   const pendingCount = importRows.filter(r => r.status === "pending").length;
 
   return (
     <>
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Importer des contacts</DialogTitle>
@@ -2965,7 +3025,16 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   </p>
                   {duplicateCount > 0 && (
                     <p className="text-sm text-orange-600">
-                      {duplicateCount} doublon{duplicateCount > 1 ? "s" : ""} détecté{duplicateCount > 1 ? "s" : ""} (même nom/prénom)
+                      {duplicateCount} doublon{duplicateCount > 1 ? "s" : ""} (même nom/prénom)
+                      {ambiguousDuplicateCount > 0 && (
+                        <span className="text-amber-700">
+                          {" "}
+                          — dont {ambiguousDuplicateCount} homonyme
+                          {ambiguousDuplicateCount > 1 ? "s" : ""} possible
+                          {ambiguousDuplicateCount > 1 ? "s" : ""} (email/tél différents, fusion
+                          bloquée)
+                        </span>
+                      )}
                     </p>
                   )}
                   {/* Compteurs par catégorie */}
@@ -3098,8 +3167,15 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       <tr key={idx} className="border-t">
                         <td className="p-2">
                           {row.status === "duplicate" && (
-                            <Badge variant="outline" className="bg-orange-50 text-orange-800">
-                              Doublon
+                            <Badge
+                              variant="outline"
+                              className={
+                                row.data._identityConflict
+                                  ? "bg-amber-50 text-amber-900 border-amber-300"
+                                  : "bg-orange-50 text-orange-800"
+                              }
+                            >
+                              {row.data._identityConflict ? "Homonyme ?" : "Doublon"}
                             </Badge>
                           )}
                           {row.status === "pending" && (
@@ -3193,18 +3269,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
 
             {!importing && (
               <DialogFooter>
-                <Button 
-                  onClick={async () => {
-                    try {
-                      handleClose();
-                      await onSuccess();
-                    } catch (error) {
-                      console.error("Error closing import:", error);
-                    }
-                  }}
-                >
-                  Fermer
-                </Button>
+                <Button onClick={handleFinishImport}>Fermer</Button>
               </DialogFooter>
             )}
           </div>
@@ -3217,19 +3282,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       open={showFoyerGrouping}
       onOpenChange={setShowFoyerGrouping}
       importedContacts={importedContactsList}
-      onSuccess={() => {
-        // Fermer la modale de regroupement
+      onSuccess={async () => {
         setShowFoyerGrouping(false);
-        // Fermer la modale d'import
         handleClose();
-        // Recharger les contacts
-        setTimeout(async () => {
-          try {
-            await onSuccess();
-          } catch (error) {
-            console.error("Error reloading contacts:", error);
-          }
-        }, 100);
+        try {
+          await onSuccess();
+        } catch (error) {
+          console.error("Error reloading contacts:", error);
+        }
       }}
     />
     </>

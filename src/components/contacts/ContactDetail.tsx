@@ -34,7 +34,8 @@ interface ContactDetailProps {
   contact: Contact | null;
   onDelete: (id: number) => void;
   onUpdate: () => void;
-  onOpenContact?: (contact: Contact) => void; // Pour ouvrir la fiche d'un autre contact
+  onContactRefreshed?: (contact: Contact) => void;
+  onOpenContact?: (contact: Contact) => void;
 }
 
 export function ContactDetail({
@@ -87,10 +88,14 @@ export function ContactDetail({
     }
   };
 
-  const handleOpenMemberDetail = (member: Contact) => {
+  const handleOpenLinkedContact = (linked: Contact) => {
     if (onOpenContact) {
-      onOpenContact(member);
+      onOpenContact(linked);
     }
+  };
+
+  const handleOpenMemberDetail = (member: Contact) => {
+    handleOpenLinkedContact(member);
   };
 
   // Charger les partenaires au montage
@@ -254,25 +259,14 @@ export function ContactDetail({
       );
       setFoyerMembers(members);
       
-      // Calculer le patrimoine du foyer
+      // Patrimoine commun du foyer uniquement (evite double-comptage avec encours personnels)
       if (currentFoyer) {
         const investissementsFoyer = await getInvestissementsByFoyer(currentFoyer.id);
         const totalFoyer = investissementsFoyer.reduce(
-          (sum, inv) => sum + (inv.montant_initial || 0), 
+          (sum, inv) => sum + (inv.montant_initial || 0),
           0
         );
-        
-        // Ajouter les investissements individuels de chaque membre
-        const membersInvestissements = await Promise.all(
-          [contact, ...members].map(async (member) => {
-            if (!member.id) return 0;
-            const invs = await getInvestissementsByContact(member.id);
-            return invs.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-          })
-        );
-        
-        const totalMembers = membersInvestissements.reduce((a, b) => a + b, 0);
-        setFoyerPatrimoine((totalFoyer + totalMembers) / 100); // Convertir centimes en euros
+        setFoyerPatrimoine(totalFoyer / 100);
       }
     } catch (error) {
       console.error("Error loading foyer:", error);
@@ -510,28 +504,6 @@ export function ContactDetail({
             </div>
           </DialogHeader>
 
-          {/* DEBUG : Affichage des données brutes */}
-          <div className="bg-gray-100 border border-gray-300 rounded p-3 text-xs font-mono overflow-auto max-h-40">
-            <div><strong>ID:</strong> {contact.id}</div>
-            <div><strong>Nom:</strong> {contact.nom}</div>
-            <div><strong>Prénom:</strong> {contact.prenom}</div>
-            {contact.civilite && (
-              <div><strong>Civilité:</strong> {formatCiviliteLabel(contact.civilite)}</div>
-            )}
-            {contact.situation_familiale && (
-              <div>
-                <strong>Situation familiale:</strong>{" "}
-                {formatSituationLabel(contact.situation_familiale)}
-              </div>
-            )}
-            {contact.email && <div><strong>Email:</strong> {contact.email}</div>}
-            {contact.telephone && <div><strong>Téléphone:</strong> {contact.telephone}</div>}
-            {contact.profession && <div><strong>Profession:</strong> {contact.profession}</div>}
-            {contact.source_lead && <div><strong>Source/Produit:</strong> {contact.source_lead}</div>}
-            {contact.profil_risque_sri && <div><strong>Profil risque:</strong> {contact.profil_risque_sri}</div>}
-            {contact.notes && <div><strong>Notes:</strong> {contact.notes.substring(0, 100)}{contact.notes.length > 100 ? '...' : ''}</div>}
-          </div>
-
           <div className="space-y-4">
             {/* Informations de contact */}
             <Card>
@@ -588,6 +560,36 @@ export function ContactDetail({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                {contact.civilite && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">Civilité : </span>
+                    {formatCiviliteLabel(contact.civilite)}
+                  </div>
+                )}
+                {contact.situation_familiale && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">Situation familiale : </span>
+                    {formatSituationLabel(contact.situation_familiale)}
+                  </div>
+                )}
+                {contact.profession && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">Profession : </span>
+                    {contact.profession}
+                  </div>
+                )}
+                {contact.source_lead && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">Source / lead : </span>
+                    {contact.source_lead}
+                  </div>
+                )}
+                {contact.profil_risque_sri && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">Profil investisseur (SRI) : </span>
+                    {contact.profil_risque_sri}
+                  </div>
+                )}
                 {contact.date_naissance && (
                   <div className="flex items-center gap-2">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -666,9 +668,12 @@ export function ContactDetail({
                         <h3 className="font-semibold text-lg">{foyer.nom}</h3>
                         {foyerPatrimoine > 0 && (
                           <p className="text-sm text-primary font-medium">
-                            💰 Patrimoine cumulé : {foyerPatrimoine.toLocaleString("fr-FR")} €
+                            Patrimoine commun (foyer) : {foyerPatrimoine.toLocaleString("fr-FR")} €
                           </p>
                         )}
+                        <p className="text-xs text-muted-foreground">
+                          Encours personnels : voir section Patrimoine ci-dessous
+                        </p>
                       </div>
                       <div className="flex gap-2">
                         <Button 
@@ -766,11 +771,17 @@ export function ContactDetail({
                   {loadingParrain ? (
                     <div className="text-sm text-muted-foreground">Chargement...</div>
                   ) : parrain ? (
-                    <div 
+                    <div
                       className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                      onClick={() => {
-                        // TODO: Ouvrir la fiche du parrain
+                      onClick={() => handleOpenLinkedContact(parrain)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleOpenLinkedContact(parrain);
+                        }
                       }}
+                      role="button"
+                      tabIndex={0}
                     >
                       <div className="flex items-center justify-between">
                         <div>
@@ -841,24 +852,32 @@ export function ContactDetail({
                   ) : (
                     <div className="space-y-2">
                       {filleuls.map((filleul) => (
-                        <div 
+                        <div
                           key={filleul.id}
                           className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                          onClick={() => {
-                            // TODO: Ouvrir la fiche du filleul
+                          onClick={() => handleOpenLinkedContact(filleul)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              handleOpenLinkedContact(filleul);
+                            }
                           }}
+                          role="button"
+                          tabIndex={0}
                         >
                           <div className="flex items-center justify-between">
                             <div>
                               <p className="font-medium">
                                 {filleul.prenom} {filleul.nom}
                               </p>
-                              {filleul.date_dernier_contact && (() => {
+                              {filleul.date_dernier_contact_filleul && (() => {
                                 try {
-                                  const date = new Date(filleul.date_dernier_contact);
+                                  const date = new Date(
+                                    filleul.date_dernier_contact_filleul * 1000
+                                  );
                                   return !isNaN(date.getTime()) ? (
                                     <p className="text-xs text-muted-foreground">
-                                      Dernier suivi : {date.toLocaleDateString('fr-FR')}
+                                      Dernier suivi : {date.toLocaleDateString("fr-FR")}
                                     </p>
                                   ) : null;
                                 } catch {

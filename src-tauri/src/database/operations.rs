@@ -2,6 +2,15 @@ use rusqlite::{params, Result};
 use super::{Database, models::{Contact, NewContact, Famille, NewFamille, Etiquette, NewEtiquette, ContactEtiquette, NewContactEtiquette, EtiquetteWithCount, ContactEtiquetteDetails}};
 
 impl Database {
+    fn validate_contact_identity(nom: &str, prenom: &str) -> Result<()> {
+        if nom.trim().is_empty() || prenom.trim().is_empty() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Le nom et le prénom sont obligatoires".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     pub fn get_all_contacts(&self) -> Result<Vec<Contact>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
@@ -53,6 +62,8 @@ impl Database {
     
     pub fn create_contact(&self, new_contact: NewContact) -> Result<Contact> {
         use chrono::{DateTime, Utc};
+
+        Self::validate_contact_identity(&new_contact.nom, &new_contact.prenom)?;
         
         let statut = new_contact.statut_suivi.unwrap_or("ACTIF".to_string());
         
@@ -329,6 +340,8 @@ impl Database {
 
     pub fn update_contact(&self, id: i64, contact: &NewContact) -> Result<Contact> {
         use chrono::DateTime;
+
+        Self::validate_contact_identity(&contact.nom, &contact.prenom)?;
         
         // Convertir les dates ISO string en timestamps Unix - CLIENTS
         let date_dernier_contact_timestamp = contact.date_dernier_contact.as_ref().and_then(|date_str| {
@@ -1964,57 +1977,20 @@ impl Database {
         filleuls.collect()
     }
 
-    // Rechercher un contact par nom et prénom
+    // Rechercher un contact par nom et prénom (normalisation + inversion nom/prénom)
     pub fn find_contact_by_name(&self, nom: &str, prenom: &str) -> Result<Option<Contact>> {
-        match self.conn.query_row(
-            "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
-                    adresse, code_postal, ville, date_naissance, profession, situation_familiale,
-                    source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
-                    date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                    statut_suivi, notes, created_at, updated_at
-             FROM contacts 
-             WHERE LOWER(nom) = LOWER(?1) AND LOWER(prenom) = LOWER(?2)
-             LIMIT 1",
-            params![nom, prenom],
-            |row| {
-                Ok(Contact {
-                    id: row.get(0)?,
-                    famille_id: row.get(1)?,
-                    foyer_id: row.get(2)?,
-                    role_foyer: row.get(3)?,
-                    role_famille: row.get(4)?,
-                    categorie: row.get(5)?,
-                    filleul_categorie: row.get(6)?,
-                    parrain_id: row.get(7)?,
-                    prescripteur_id: row.get(8)?,
-                    civilite: row.get(9)?,
-                    nom: row.get(10)?,
-                    prenom: row.get(11)?,
-                    email: row.get(12)?,
-                    telephone: row.get(13)?,
-                    adresse: row.get(14)?,
-                    code_postal: row.get(15)?,
-                    ville: row.get(16)?,
-                    date_naissance: row.get(17)?,
-                    profession: row.get(18)?,
-                    situation_familiale: row.get(19)?,
-                    source_lead: row.get(20)?,
-                    profil_risque_sri: row.get(21)?,
-                    date_dernier_contact: row.get(22)?,
-                    date_prochain_suivi: row.get(23)?,
-                    date_dernier_contact_filleul: row.get(24)?,
-                    date_prochain_suivi_filleul: row.get(25)?,
-                    statut_suivi: row.get(26)?,
-                    notes: row.get(27)?,
-                    created_at: row.get(28)?,
-                    updated_at: row.get(29)?,
-                })
-            },
-        ) {
-            Ok(contact) => Ok(Some(contact)),
-            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(e),
+        use crate::contact_name::names_match;
+
+        if nom.trim().is_empty() || prenom.trim().is_empty() {
+            return Ok(None);
         }
+
+        for contact in self.get_all_contacts()? {
+            if names_match(nom, prenom, &contact.nom, &contact.prenom) {
+                return Ok(Some(contact));
+            }
+        }
+        Ok(None)
     }
 
     // 🔥 Récupérer tous les contacts recommandés par un prescripteur
