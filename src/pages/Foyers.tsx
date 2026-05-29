@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,11 +12,18 @@ import {
 } from "@/components/ui/select";
 import { Plus, Search, Users, Coins, Filter } from "lucide-react";
 import { getAllFoyers, deleteFoyer, type Foyer } from "@/lib/api/tauri-foyers";
+import { cleanupOrphanedData, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import {
+  formatFoyerMemberLabel,
+  getContactsForFoyer,
+} from "@/lib/foyers/foyer-utils";
 import { FoyerForm } from "@/components/foyers/FoyerForm";
 import { FoyerDetail } from "@/components/foyers/FoyerDetail";
+import { textMatchesSearch } from "@/lib/search-utils";
 
 export function Foyers() {
   const [foyers, setFoyers] = useState<Foyer[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
@@ -30,8 +37,13 @@ export function Foyers() {
 
   const loadFoyers = async () => {
     try {
-      const data = await getAllFoyers();
-      setFoyers(data);
+      await cleanupOrphanedData();
+      const [foyersData, contactsData] = await Promise.all([
+        getAllFoyers(),
+        getAllContacts(),
+      ]);
+      setFoyers(foyersData);
+      setContacts(contactsData);
     } catch (error) {
       console.error("Error loading foyers:", error);
     } finally {
@@ -39,10 +51,22 @@ export function Foyers() {
     }
   };
 
+  const membresParFoyerId = useMemo(() => {
+    const map = new Map<number, Contact[]>();
+    for (const foyer of foyers) {
+      map.set(foyer.id, getContactsForFoyer(contacts, foyer.id));
+    }
+    return map;
+  }, [foyers, contacts]);
+
   const filteredFoyers = foyers.filter((foyer) => {
     // Filtre de recherche textuelle
-    const search = searchQuery.toLowerCase();
-    const matchesSearch = foyer.nom?.toLowerCase().includes(search);
+    const membres = membresParFoyerId.get(foyer.id) ?? [];
+    const membresText = membres
+      .map((c) => `${c.prenom} ${c.nom}`)
+      .join(" ");
+    const matchesSearch =
+      textMatchesSearch(searchQuery, foyer.nom, membresText);
 
     // Filtre par type
     const matchesType = typeFilter === "ALL" || foyer.type_foyer === typeFilter;
@@ -178,49 +202,83 @@ export function Foyers() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredFoyers.map((foyer) => (
-                <div
-                  key={foyer.id}
-                  className="p-4 border border-border rounded-lg hover:bg-accent transition-colors cursor-pointer"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="font-semibold text-lg">{foyer.nom}</h3>
-                        <Badge className={getTypeColor(foyer.type_foyer)}>
-                          {foyer.type_foyer}
-                        </Badge>
-                        {foyer.tranche_imposition && (
-                          <Badge variant="outline">
-                            TMI {foyer.tranche_imposition}
+              {filteredFoyers.map((foyer) => {
+                const membres = membresParFoyerId.get(foyer.id) ?? [];
+                return (
+                  <div
+                    key={foyer.id}
+                    role="button"
+                    tabIndex={0}
+                    className="p-4 border border-border rounded-lg hover:bg-accent transition-colors cursor-pointer"
+                    onClick={() => handleViewFoyer(foyer)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleViewFoyer(foyer);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-2 flex-wrap">
+                          <h3 className="font-semibold text-lg">{foyer.nom}</h3>
+                          <Badge className={getTypeColor(foyer.type_foyer)}>
+                            {foyer.type_foyer}
                           </Badge>
+                          <Badge variant="secondary">
+                            {membres.length} membre
+                            {membres.length > 1 ? "s" : ""}
+                          </Badge>
+                          {foyer.tranche_imposition && (
+                            <Badge variant="outline">
+                              TMI {foyer.tranche_imposition}
+                            </Badge>
+                          )}
+                        </div>
+                        {membres.length > 0 ? (
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {membres
+                              .map((c) =>
+                                formatFoyerMemberLabel(c, c.role_foyer)
+                              )
+                              .join(" · ")}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-amber-700 mb-2">
+                            Aucun contact rattaché
+                          </p>
                         )}
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+                          {foyer.nombre_parts_fiscales && (
+                            <div className="flex items-center gap-1">
+                              <Users className="h-4 w-4" />
+                              {foyer.nombre_parts_fiscales} parts
+                            </div>
+                          )}
+                          {foyer.revenu_fiscal_reference && (
+                            <div className="flex items-center gap-1">
+                              <Coins className="h-4 w-4" />
+                              RFR: {formatCurrency(foyer.revenu_fiscal_reference)}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        {foyer.nombre_parts_fiscales && (
-                          <div className="flex items-center gap-1">
-                            <Users className="h-4 w-4" />
-                            {foyer.nombre_parts_fiscales} parts
-                          </div>
-                        )}
-                        {foyer.revenu_fiscal_reference && (
-                          <div className="flex items-center gap-1">
-                            <Coins className="h-4 w-4" />
-                            RFR: {formatCurrency(foyer.revenu_fiscal_reference)}
-                          </div>
-                        )}
-                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewFoyer(foyer);
+                        }}
+                      >
+                        Voir détails
+                      </Button>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleViewFoyer(foyer)}
-                    >
-                      Voir détails
-                    </Button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

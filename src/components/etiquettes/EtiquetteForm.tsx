@@ -46,8 +46,6 @@ interface EtiquetteFormProps {
   onSuccess: () => void;
 }
 
-const ICONES_DISPONIBLES = ["🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "📅", "📋", "🏠", "🎯", "⚠️", "✅", "❌", "💰", "📧", "🔔"];
-
 const CATEGORIES_CONTACTS = [
   { value: "CLIENT", label: "Client" },
   { value: "PROSPECT_CLIENT", label: "Prospect client" },
@@ -63,7 +61,6 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   // État du formulaire
   const [nom, setNom] = useState("");
   const [couleur, setCouleur] = useState("#3B82F6");
-  const [icone, setIcone] = useState<string | null>(null);
   const [description, setDescription] = useState("");
   const [priorite, setPriorite] = useState(0);
   
@@ -98,7 +95,6 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         // Mode édition
         setNom(etiquette.nom);
         setCouleur(etiquette.couleur);
-        setIcone(etiquette.icone);
         setDescription(etiquette.description || "");
         setPriorite(etiquette.priorite);
         
@@ -136,7 +132,6 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         // Mode création - réinitialiser
         setNom("");
         setCouleur("#3B82F6");
-        setIcone(null);
         setDescription("");
         setPriorite(0);
         setIsAuto(false);
@@ -180,7 +175,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       const data: NewEtiquette = {
         nom: nom.trim(),
         couleur,
-        icone,
+        icone: null,
         description: description.trim() || null,
         priorite,
         auto_condition_type: isAuto ? conditionType : null,
@@ -240,7 +235,6 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                 color: getContrastColor(couleur)
               }}
             >
-              {icone && <span>{icone}</span>}
               <span>{nom || "Aperçu"}</span>
             </span>
           </div>
@@ -275,34 +269,6 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   style={{ backgroundColor: c.code }}
                   title={c.nom}
                 />
-              ))}
-            </div>
-          </div>
-
-          {/* Icône */}
-          <div className="space-y-2">
-            <Label>Icône (optionnel)</Label>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setIcone(null)}
-                className={`w-8 h-8 rounded border flex items-center justify-center text-xs ${
-                  icone === null ? "border-primary bg-primary/10" : "border-border hover:bg-muted"
-                }`}
-              >
-                ∅
-              </button>
-              {ICONES_DISPONIBLES.map((ic) => (
-                <button
-                  key={ic}
-                  type="button"
-                  onClick={() => setIcone(ic)}
-                  className={`w-8 h-8 rounded border flex items-center justify-center ${
-                    icone === ic ? "border-primary bg-primary/10" : "border-border hover:bg-muted"
-                  }`}
-                >
-                  {ic}
-                </button>
               ))}
             </div>
           </div>

@@ -12,6 +12,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { AlertCircle, Check, Copy, Eye, EyeOff, Lock } from "lucide-react";
+import { APP_DISPLAY_NAME } from "@/lib/app-branding";
 
 interface SetupPasswordProps {
   onPasswordCreated: () => void;
@@ -170,7 +171,7 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
             <Lock className="h-8 w-8 text-primary" />
           </div>
           <h1 className="text-3xl font-serif font-bold text-primary mb-2">
-            Bienvenue dans Patrimoine CRM
+            Bienvenue dans {APP_DISPLAY_NAME}
           </h1>
           <p className="text-muted-foreground">
             Créez un mot de passe maître pour sécuriser vos données

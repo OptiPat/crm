@@ -5,7 +5,6 @@ import { cn } from "@/lib/utils";
 interface EtiquetteBadgeProps {
   nom: string;
   couleur: string;
-  icone?: string | null;
   onRemove?: () => void;
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -18,14 +17,13 @@ interface EtiquetteBadgeProps {
  * 
  * Usage:
  * ```tsx
- * <EtiquetteBadge nom="VIP" couleur="#EF4444" icone="⭐" />
+ * <EtiquetteBadge nom="VIP" couleur="#EF4444" />
  * <EtiquetteBadge nom="Urgent" couleur="#F97316" onRemove={() => handleRemove()} />
  * ```
  */
 export function EtiquetteBadge({
   nom,
   couleur,
-  icone,
   onRemove,
   size = "md",
   className,
@@ -40,12 +38,6 @@ export function EtiquetteBadge({
     lg: "px-4 py-1.5 text-base gap-2",
   };
 
-  const iconSizes = {
-    sm: "text-xs",
-    md: "text-sm",
-    lg: "text-base",
-  };
-
   const removeButtonSizes = {
     sm: "h-3 w-3 -mr-0.5",
     md: "h-3.5 w-3.5 -mr-1",
@@ -57,7 +49,7 @@ export function EtiquetteBadge({
       className={cn(
         "inline-flex items-center rounded-full font-medium shadow-sm transition-all",
         sizeClasses[size],
-        clickable && "cursor-pointer hover:shadow-md hover:scale-105",
+        clickable && "cursor-pointer",
         onRemove && "pr-1.5",
         className
       )}
@@ -69,7 +61,6 @@ export function EtiquetteBadge({
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
     >
-      {icone && <span className={iconSizes[size]}>{icone}</span>}
       <span>{nom}</span>
       {onRemove && (
         <button
@@ -101,7 +92,6 @@ interface EtiquetteListProps {
     id: number;
     nom: string;
     couleur: string;
-    icone?: string | null;
   }>;
   onRemove?: (id: number) => void;
   size?: "sm" | "md" | "lg";
@@ -130,7 +120,6 @@ export function EtiquetteList({
           key={etiquette.id}
           nom={etiquette.nom}
           couleur={etiquette.couleur}
-          icone={etiquette.icone}
           size={size}
           onRemove={onRemove ? () => onRemove(etiquette.id) : undefined}
         />

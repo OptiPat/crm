@@ -8,6 +8,7 @@ import { Layout } from "@/components/layout/Layout";
 import { Dashboard } from "@/pages/Dashboard";
 import { Contacts } from "@/pages/Contacts";
 import { Familles } from "@/pages/Familles";
+import { Foyers } from "@/pages/Foyers";
 import { Prescripteurs } from "@/pages/Prescripteurs";
 import { Partenaires } from "@/pages/Partenaires";
 import { Investissements } from "@/pages/Investissements";
@@ -18,6 +19,7 @@ import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
+import { AppUpdateChecker } from "@/components/system/AppUpdateChecker";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
 
 function App() {
@@ -76,7 +78,7 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentPage} />;
       case "contacts":
         return (
           <ErrorBoundary>
@@ -85,6 +87,8 @@ function App() {
         );
       case "familles":
         return <Familles />;
+      case "foyers":
+        return <Foyers />;
       case "prescripteurs":
         return <Prescripteurs />;
       case "partenaires":
@@ -104,7 +108,7 @@ function App() {
       case "parametres":
         return <Parametres />;
       default:
-        return <Dashboard />;
+        return <Dashboard onNavigate={setCurrentPage} />;
     }
   };
 
@@ -143,6 +147,7 @@ function App() {
         >
           {renderPage()}
         </Layout>
+        <AppUpdateChecker />
         <Toaster richColors position="top-right" />
       </>
     );

@@ -1,0 +1,181 @@
+import { Badge } from "@/components/ui/badge";
+import { InvestissementMetaRow } from "@/components/investissements/InvestissementMetaRow";
+import type { Investissement } from "@/lib/api/tauri-investissements";
+import {
+  formatEuroCentimes,
+  formatNomProduit,
+  getTypeProduitBgColor,
+  getTypeProduitTextClass,
+  INVESTISSEMENT_META_TONE_CLASS,
+} from "@/lib/investissements/investissement-display";
+import {
+  ArrowRight,
+  Building2,
+  Calendar,
+  RefreshCw,
+  Repeat,
+  Tag,
+  TrendingUp,
+  User,
+} from "lucide-react";
+
+export type InvestissementProprietaireVariant = "self" | "foyer" | "member";
+
+export interface InvestissementCardProps {
+  inv: Investissement;
+  partenaireNom?: string | null;
+  proprietaireLabel?: string;
+  proprietaireVariant?: InvestissementProprietaireVariant;
+  actions?: React.ReactNode;
+}
+
+function proprietaireBadgeClass(
+  variant: InvestissementProprietaireVariant | undefined
+): string {
+  switch (variant) {
+    case "self":
+      return "bg-green-50 text-green-700 border-green-200";
+    case "foyer":
+      return "bg-blue-50 text-blue-700 border-blue-200";
+    default:
+      return "bg-gray-50 text-gray-700 border-gray-200";
+  }
+}
+
+function nomProduitDistinctDuType(inv: Investissement): boolean {
+  if (!inv.nom_produit?.trim()) return false;
+  return (
+    inv.nom_produit.toUpperCase().replace(/[- ]/g, "") !==
+    inv.type_produit?.toUpperCase().replace(/_/g, "")
+  );
+}
+
+export function InvestissementCard({
+  inv,
+  partenaireNom,
+  proprietaireLabel,
+  proprietaireVariant,
+  actions,
+}: InvestissementCardProps) {
+  return (
+    <div className="p-3 border border-border/80 rounded-lg bg-card hover:bg-accent/50 transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              className={`${getTypeProduitTextClass(inv.type_produit, inv.origine)} text-xs font-medium px-2 py-0.5 border-transparent`}
+              style={{
+                backgroundColor: getTypeProduitBgColor(
+                  inv.type_produit,
+                  inv.origine
+                ),
+              }}
+            >
+              {formatNomProduit(inv.type_produit || "AUTRE")}
+            </Badge>
+            {inv.origine === "EXISTANT_CLIENT" && (
+              <span className="text-xs text-gray-500 italic">à côté</span>
+            )}
+            {proprietaireLabel && (
+              <Badge
+                variant="outline"
+                className={`inline-flex items-center gap-1 text-xs ${proprietaireBadgeClass(proprietaireVariant)}`}
+              >
+                <User className="h-3 w-3 shrink-0" aria-hidden />
+                {proprietaireLabel}
+              </Badge>
+            )}
+          </div>
+          {nomProduitDistinctDuType(inv) && (
+            <p className="font-medium text-foreground">
+              {formatNomProduit(inv.nom_produit)}
+            </p>
+          )}
+          {partenaireNom && (
+            <InvestissementMetaRow icon={Building2}>
+              {partenaireNom}
+            </InvestissementMetaRow>
+          )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
+            <InvestissementMetaRow tone="amount">
+              {formatEuroCentimes(inv.montant_initial)}
+            </InvestissementMetaRow>
+            {inv.date_souscription && (
+              <InvestissementMetaRow icon={Calendar}>
+                {new Date(inv.date_souscription * 1000).toLocaleDateString(
+                  "fr-FR"
+                )}
+              </InvestissementMetaRow>
+            )}
+            {inv.montant_versement_programme &&
+              inv.montant_versement_programme > 0 && (
+                <InvestissementMetaRow icon={Repeat} tone="vp">
+                  VP : {formatEuroCentimes(inv.montant_versement_programme)}
+                  {inv.frequence_versement &&
+                    ` (${inv.frequence_versement})`}
+                </InvestissementMetaRow>
+              )}
+            {inv.notes?.match(/Mode de détention:\s*([^\|]+)/i) && (
+              <InvestissementMetaRow icon={Tag} tone="tag">
+                {inv.notes
+                  .match(/Mode de détention:\s*([^\|]+)/i)?.[1]
+                  .trim()}
+              </InvestissementMetaRow>
+            )}
+            {inv.notes?.match(/Durée:\s*([^\|]+)/i) &&
+              (() => {
+                const dureeStr = inv.notes
+                  .match(/Durée:\s*([^\|]+)/i)?.[1]
+                  .trim();
+
+                if (dureeStr?.toLowerCase().includes("viager")) {
+                  return (
+                    <InvestissementMetaRow icon={RefreshCw} tone="term">
+                      Viager
+                    </InvestissementMetaRow>
+                  );
+                }
+                const dureeMatch = dureeStr?.match(/(\d+)\s*ans/i);
+                if (dureeMatch?.[1] && inv.date_fin_demembrement) {
+                  const dateFin = new Date(
+                    inv.date_fin_demembrement * 1000
+                  ).toLocaleDateString("fr-FR");
+                  return (
+                    <span
+                      className={`text-sm ${INVESTISSEMENT_META_TONE_CLASS.term}`}
+                    >
+                      <RefreshCw
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden
+                      />
+                      <span>{dureeMatch[1]}&nbsp;ans</span>
+                      <ArrowRight
+                        className="h-3 w-3 shrink-0 opacity-60"
+                        aria-hidden
+                      />
+                      <Calendar
+                        className="h-3.5 w-3.5 shrink-0"
+                        aria-hidden
+                      />
+                      <span>{dateFin}</span>
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            {inv.reinvestissement_dividendes && (
+              <InvestissementMetaRow icon={TrendingUp} tone="growth">
+                Réinv.{" "}
+                {(() => {
+                  const match = inv.notes?.match(/(\d+)%/);
+                  return match?.[1] ? `${match[1]}%` : "100%";
+                })()}
+              </InvestissementMetaRow>
+            )}
+          </div>
+        </div>
+        {actions ? <div className="flex gap-2 shrink-0">{actions}</div> : null}
+      </div>
+    </div>
+  );
+}

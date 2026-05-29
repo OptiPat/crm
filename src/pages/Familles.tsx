@@ -13,6 +13,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { textMatchesSearch } from "@/lib/search-utils";
+import {
+  formatEuroCentimes,
+  getTypeProduitBgColor,
+} from "@/lib/investissements/investissement-display";
 
 // Rôles familiaux disponibles
 const ROLES_FAMILLE = [
@@ -40,24 +45,6 @@ const getRolePriority = (role?: string): number => {
   if (!role) return 99;
   const found = ROLES_FAMILLE.find(r => r.value === role);
   return found ? found.priority : 99;
-};
-
-// 🎨 Couleurs des investissements (mêmes que ContactDetail)
-const getTypeProduitBgColor = (type: string, origine?: string): string => {
-  // Si "à côté" (existant client) → gris
-  if (origine === "EXISTANT_CLIENT") {
-    return "#9ca3af"; // gray-400
-  }
-  // 🏠 Immobilier et dérivés : vert
-  const immobilierTypes = [
-    "IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", 
-    "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", 
-    "LOCATIF_CLASSIQUE", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE",
-    "COLOCATION", "MONOLOCATION", "SCI"
-  ];
-  if (immobilierTypes.includes(type)) return "#85ad39";
-  // Tout le reste : rose foncé
-  return "#dc216e";
 };
 
 // 🔥 Interface étendue pour tracker les investissements communs
@@ -304,11 +291,17 @@ export function Familles() {
   // Filtrage
   const filteredFamilles = useMemo(() => {
     if (!searchQuery) return familleGroups;
-    const query = searchQuery.toLowerCase();
     return familleGroups.filter(
       (f) =>
-        f.nom.toLowerCase().includes(query) ||
-        f.membres.some((m) => `${m.contact.prenom} ${m.contact.nom}`.toLowerCase().includes(query))
+        textMatchesSearch(searchQuery, f.nom) ||
+        f.membres.some((m) =>
+          textMatchesSearch(
+            searchQuery,
+            m.contact.prenom,
+            m.contact.nom,
+            `${m.contact.prenom} ${m.contact.nom}`
+          )
+        )
     );
   }, [familleGroups, searchQuery]);
 
@@ -360,11 +353,6 @@ export function Familles() {
   const getFoyerForMember = (contact: Contact): Foyer | undefined => {
     if (!contact.foyer_id) return undefined;
     return foyers.find(f => f.id === contact.foyer_id);
-  };
-
-  // Formater le montant
-  const formatEuro = (centimes: number): string => {
-    return (centimes / 100).toLocaleString("fr-FR", { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + " €";
   };
 
   // Formater la date
@@ -470,11 +458,11 @@ export function Familles() {
                 <div className="flex items-center gap-4">
                   <div className="text-right">
                     <div className="text-lg font-semibold text-green-600">
-                      💰 {formatEuro(famille.patrimoineAvecMoi)} avec moi
+                      {formatEuroCentimes(famille.patrimoineAvecMoi)} avec moi
                     </div>
                     {famille.patrimoineTotal > famille.patrimoineAvecMoi && (
                       <div className="text-sm text-gray-400">
-                        ({formatEuro(famille.patrimoineTotal)} total)
+                        ({formatEuroCentimes(famille.patrimoineTotal)} total)
                       </div>
                     )}
                     <div className="text-xs text-muted-foreground">Patrimoine famille</div>
@@ -573,11 +561,11 @@ export function Familles() {
                                 {/* Patrimoine avec moi + total */}
                                 <div className="flex items-center gap-2">
                                   <Badge className="bg-green-100 text-green-700 border-green-300 font-semibold">
-                                    💰 {formatEuro(membre.avecMoiTotal)}
+                                    {formatEuroCentimes(membre.avecMoiTotal)}
                                   </Badge>
                                   {membre.patrimoine > membre.avecMoiTotal && (
                                     <span className="text-xs text-gray-400">
-                                      ({formatEuro(membre.patrimoine)} total)
+                                      ({formatEuroCentimes(membre.patrimoine)} total)
                                     </span>
                                   )}
                                 </div>
@@ -621,7 +609,7 @@ export function Familles() {
                                         )}
                                       </div>
                                       <span className="font-semibold" style={{ color: getTypeProduitBgColor(inv.type_produit, inv.origine) }}>
-                                        {formatEuro(inv.montant_initial || 0)}
+                                        {formatEuroCentimes(inv.montant_initial || 0)}
                                       </span>
                                     </div>
                                   ))}

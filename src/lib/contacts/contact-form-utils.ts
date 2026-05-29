@@ -18,7 +18,7 @@ export type SituationFamiliale =
   | "DIVORCE"
   | "VEUF"
   | "AUTRE";
-export type ContactFormContext = "clients" | "filleuls" | "detail";
+export type ContactFormContext = "clients" | "filleuls" | "prescripteurs" | "detail";
 export const SELECT_NONE = "__none__";
 
 export type FieldErrors = {
@@ -32,8 +32,12 @@ export function isFilleulStatut(cat?: string | null): cat is FilleulStatut {
   return !!cat && (FILLEUL_STATUTS as readonly string[]).includes(cat);
 }
 
+export function isPrescripteurCategorie(cat?: string | null): boolean {
+  return cat === "PRESCRIPTEUR";
+}
+
 export function isClientActif(cat?: string): boolean {
-  return !!cat && cat !== "AUCUN";
+  return !!cat && cat !== "AUCUN" && !isPrescripteurCategorie(cat);
 }
 
 export function toDateInput(dateValue: string | number | undefined | null): string {
@@ -108,6 +112,13 @@ export function getEmptyForm(context: ContactFormContext): NewContact {
       ...BASE_EMPTY,
       categorie: "AUCUN",
       filleul_categorie: "SUSPECT_FILLEUL",
+    };
+  }
+  if (context === "prescripteurs") {
+    return {
+      ...BASE_EMPTY,
+      categorie: "PRESCRIPTEUR",
+      filleul_categorie: undefined,
     };
   }
   return {
@@ -213,6 +224,8 @@ export function getClientLabel(categorie: string): string | null {
       return "Prospect client";
     case "SUSPECT_CLIENT":
       return "Suspect client";
+    case "PRESCRIPTEUR":
+      return "Prescripteur";
     default:
       return null;
   }
@@ -267,6 +280,30 @@ export function contactToUpdatePayload(
   overrides: Partial<NewContact> = {}
 ): NewContact {
   return buildSubmitPayload({ ...contactToFormData(contact), ...overrides });
+}
+
+/** Alertes réseau filleul (ex. SUIVI_FILLEUL_1AN, FILLEUL_SUIVI_6MOIS). */
+export function isAlerteSuiviFilleul(typeAlerte: string): boolean {
+  return typeAlerte.includes("FILLEUL");
+}
+
+/** Champs date à mettre à jour selon le type d'alerte (client vs filleul). */
+export function suiviDatesOverrides(
+  typeAlerte: string,
+  dates: { dernierContact: string; prochainSuivi?: string }
+): Partial<NewContact> {
+  if (isAlerteSuiviFilleul(typeAlerte)) {
+    return {
+      date_dernier_contact_filleul: dates.dernierContact,
+      ...(dates.prochainSuivi
+        ? { date_prochain_suivi_filleul: dates.prochainSuivi }
+        : {}),
+    };
+  }
+  return {
+    date_dernier_contact: dates.dernierContact,
+    ...(dates.prochainSuivi ? { date_prochain_suivi: dates.prochainSuivi } : {}),
+  };
 }
 
 export function formatCiviliteLabel(civilite?: string | null): string | null {

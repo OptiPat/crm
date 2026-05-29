@@ -144,7 +144,6 @@ export function EtiquetteSelector({
                         color: getContrastColor(etiquette.couleur)
                       }}
                     >
-                      {etiquette.icone && <span>{etiquette.icone}</span>}
                       <span>{etiquette.nom}</span>
                     </span>
                   </div>

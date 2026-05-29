@@ -7,6 +7,7 @@ import { Plus, Search, Building2, Shield, Home } from "lucide-react";
 import { getAllPartenaires, deletePartenaire, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { PartenaireForm } from "@/components/partenaires/PartenaireForm";
 import { PartenaireDetail } from "@/components/partenaires/PartenaireDetail";
+import { textMatchesSearch } from "@/lib/search-utils";
 
 // Helper pour afficher le type de partenaire
 const getTypeInfo = (type: string) => {
@@ -55,11 +56,12 @@ export function Partenaires() {
 
   const filteredPartenaires = partenaires.filter((partenaire) => {
     // Filtre de recherche textuelle
-    const search = searchQuery.toLowerCase();
-    const matchesSearch =
-      partenaire.raison_sociale?.toLowerCase().includes(search) ||
-      partenaire.nom_contact?.toLowerCase().includes(search) ||
-      partenaire.email?.toLowerCase().includes(search);
+    const matchesSearch = textMatchesSearch(
+      searchQuery,
+      partenaire.raison_sociale,
+      partenaire.nom_contact,
+      partenaire.email
+    );
 
     return matchesSearch;
   });

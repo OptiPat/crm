@@ -339,6 +339,8 @@ export function ContactForm({
 
   const filleulActif = isFilleulStatut(formData.filleul_categorie);
   const clientActif = isClientActif(formData.categorie);
+  const isPrescripteurForm =
+    createContext === "prescripteurs" || formData.categorie === "PRESCRIPTEUR";
 
   const setFilleulStatut = (value: string) => {
     if (value === "AUCUN") {
@@ -482,59 +484,68 @@ export function ContactForm({
       <Separator />
 
       <FormSection title="Rôles">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Statut client</Label>
-            <Select
-              value={formData.categorie || "AUCUN"}
-              onValueChange={(value) => setClientStatut(value as ClientStatut)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="AUCUN">Aucun (pas client)</SelectItem>
-                <SelectItem value="CLIENT">Client</SelectItem>
-                <SelectItem value="PROSPECT_CLIENT">Prospect client</SelectItem>
-                <SelectItem value="SUSPECT_CLIENT">Suspect client</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Statut filleul (réseau)</Label>
-            <Select
-              value={formData.filleul_categorie || "AUCUN"}
-              onValueChange={setFilleulStatut}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="AUCUN">Aucun (pas filleul)</SelectItem>
-                <SelectItem value="FILLEUL">Filleul</SelectItem>
-                <SelectItem value="PROSPECT_FILLEUL">Prospect filleul</SelectItem>
-                <SelectItem value="SUSPECT_FILLEUL">Suspect filleul</SelectItem>
-                <SelectItem value="FILLEUL_DESINSCRIT">Filleul désinscrit</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="statut_suivi">Statut de suivi</Label>
-          <Select
-            value={formData.statut_suivi}
-            onValueChange={(value) => setFormData((prev) => ({ ...prev, statut_suivi: value }))}
-          >
-            <SelectTrigger id="statut_suivi">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ACTIF">Actif</SelectItem>
-              <SelectItem value="EN_PAUSE">En pause</SelectItem>
-              <SelectItem value="ARCHIVE">Archivé</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {isPrescripteurForm ? (
+          <p className="text-sm text-muted-foreground rounded-md border border-purple-200 bg-purple-50/80 px-3 py-2">
+            Ce contact est enregistré comme <strong>prescripteur</strong>. Assignez-le ensuite
+            à vos clients depuis leur fiche (champ Prescripteur).
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Statut client</Label>
+                <Select
+                  value={formData.categorie || "AUCUN"}
+                  onValueChange={(value) => setClientStatut(value as ClientStatut)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AUCUN">Aucun (pas client)</SelectItem>
+                    <SelectItem value="CLIENT">Client</SelectItem>
+                    <SelectItem value="PROSPECT_CLIENT">Prospect client</SelectItem>
+                    <SelectItem value="SUSPECT_CLIENT">Suspect client</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Statut filleul (réseau)</Label>
+                <Select
+                  value={formData.filleul_categorie || "AUCUN"}
+                  onValueChange={setFilleulStatut}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="AUCUN">Aucun (pas filleul)</SelectItem>
+                    <SelectItem value="FILLEUL">Filleul</SelectItem>
+                    <SelectItem value="PROSPECT_FILLEUL">Prospect filleul</SelectItem>
+                    <SelectItem value="SUSPECT_FILLEUL">Suspect filleul</SelectItem>
+                    <SelectItem value="FILLEUL_DESINSCRIT">Filleul désinscrit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="statut_suivi">Statut de suivi</Label>
+              <Select
+                value={formData.statut_suivi}
+                onValueChange={(value) => setFormData((prev) => ({ ...prev, statut_suivi: value }))}
+              >
+                <SelectTrigger id="statut_suivi">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ACTIF">Actif</SelectItem>
+                  <SelectItem value="EN_PAUSE">En pause</SelectItem>
+                  <SelectItem value="ARCHIVE">Archivé</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
       </FormSection>
 
       <Separator />
@@ -777,12 +788,20 @@ export function ContactForm({
     </form>
   );
 
-  const title = isEdit ? "Modifier le contact" : "Nouveau contact";
+  const title = isEdit
+    ? isPrescripteurForm
+      ? "Modifier le prescripteur"
+      : "Modifier le contact"
+    : createContext === "prescripteurs"
+      ? "Nouveau prescripteur"
+      : "Nouveau contact";
   const description = isEdit
     ? "Modifiez les informations du contact."
     : createContext === "filleuls"
       ? "Création depuis l'onglet Filleuls : statut filleul par défaut."
-      : "Création depuis l'onglet Clients : statut client par défaut.";
+      : createContext === "prescripteurs"
+        ? "Personne qui recommande des clients. Elle apparaîtra dans l'arbre des prescripteurs."
+        : "Création depuis l'onglet Clients : statut client par défaut.";
 
   return (
     <>

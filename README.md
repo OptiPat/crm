@@ -1,4 +1,4 @@
-# Patrimoine CRM
+# CRM W.Y.S
 
 CRM Desktop pour Conseillers en Gestion de Patrimoine (CGP)
 
@@ -44,6 +44,10 @@ npm install
 ```powershell
 npm run tauri:build
 ```
+
+## Mises à jour automatiques
+
+Voir [docs/MISES_A_JOUR.md](docs/MISES_A_JOUR.md) — updater Tauri, backup avant migration, publication GitHub Releases pour vous et votre associé.
 
 ## Base de données
 

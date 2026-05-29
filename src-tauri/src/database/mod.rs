@@ -19,18 +19,25 @@ impl Database {
             .path()
             .app_data_dir()
             .expect("Failed to get app data directory");
-        
+
         // Créer le dossier s'il n'existe pas
         std::fs::create_dir_all(&app_data_dir).expect("Failed to create app data directory");
-        
+
         // Chemin vers la base de données
         let db_path = app_data_dir.join("patrimoine-crm.db");
-        
+        let db_existed = db_path.exists();
+
         println!("Database path: {:?}", db_path);
-        
+
+        if db_existed {
+            if let Err(e) = crate::backup::create_pre_migration_backup(&app_data_dir, &db_path) {
+                eprintln!("⚠️ Backup pré-migration échoué : {e}");
+            }
+        }
+
         // Ouvrir la connexion
-        let conn = Connection::open(db_path)?;
-        
+        let conn = Connection::open(&db_path)?;
+
         // TEMPORAIRE : SQLCipher désactivé (nécessite OpenSSL sur Windows)
         // Si une clé de chiffrement est fournie, l'utiliser pour SQLCipher
         // if let Some(key) = encryption_key {
@@ -40,18 +47,18 @@ impl Database {
         if encryption_key.is_some() {
             println!("⚠️ Database encryption NOT enabled (SQLCipher requires OpenSSL on Windows)");
         }
-        
+
         // Activer les clés étrangères
         conn.execute("PRAGMA foreign_keys = ON", [])?;
-        
+
         let db = Database { conn };
-        
+
         // Initialiser les tables
         db.init_tables()?;
-        
+
         Ok(db)
     }
-    
+
     fn init_tables(&self) -> Result<()> {
         // Table familles (lien de sang/parenté)
         self.conn.execute(
@@ -64,7 +71,7 @@ impl Database {
             )",
             [],
         )?;
-        
+
         // Table foyers (unité fiscale)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS foyers (
@@ -82,7 +89,7 @@ impl Database {
             )",
             [],
         )?;
-        
+
         // Table contacts
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS contacts (
@@ -118,7 +125,7 @@ impl Database {
             )",
             [],
         )?;
-        
+
         // Table partenaires
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS partenaires (
@@ -141,7 +148,7 @@ impl Database {
             )",
             [],
         )?;
-        
+
         // Table documents
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS documents (
@@ -162,7 +169,7 @@ impl Database {
             )",
             [],
         )?;
-        
+
         // Table investissements
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS investissements (
@@ -190,7 +197,7 @@ impl Database {
             )",
             [],
         )?;
-        
+
         // Table alertes (schéma aligné sur operations.rs / Drizzle)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS alertes (
@@ -266,7 +273,32 @@ impl Database {
             "CREATE UNIQUE INDEX IF NOT EXISTS contact_etiquettes_unique ON contact_etiquettes (contact_id, etiquette_id)",
             [],
         )?;
-        
+
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS interactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                type_interaction TEXT NOT NULL,
+                sujet TEXT,
+                contenu TEXT,
+                date_interaction INTEGER NOT NULL,
+                email_id INTEGER,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS interactions_contact_idx ON interactions (contact_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS interactions_date_idx ON interactions (date_interaction DESC)",
+            [],
+        )?;
+
         // Table settings (configuration CGP et wizard)
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS settings (
@@ -276,38 +308,40 @@ impl Database {
             )",
             [],
         )?;
-        
+
         println!("✅ Database tables initialized");
-        
+
         // Migration automatique : Rendre contact_id optionnel dans investissements
         self.migrate_investissements_contact_id_optional()?;
-        
+
         // Migration automatique : Ajouter famille_id aux contacts
         self.migrate_add_famille_id()?;
-        
+
         // Migration automatique : Ajouter role_famille aux contacts
         self.migrate_add_role_famille()?;
-        
+
         // Migration automatique : Ajouter filleul_categorie aux contacts
         self.migrate_add_filleul_categorie()?;
-        
+
         // Migration automatique : Ajouter dates de suivi filleul aux contacts
         self.migrate_add_filleul_dates()?;
-        
+
         // Migration automatique : Ajouter prescripteur_id aux contacts
         self.migrate_add_prescripteur_id()?;
-        
+
         // Migration automatique : Ajouter date_fin_pret aux investissements
         self.migrate_add_date_fin_pret()?;
 
         self.migrate_alertes_crud_schema()?;
         self.migrate_backfill_filleul_categorie()?;
-        
+
         Ok(())
     }
 
     fn table_has_column(&self, table: &str, column: &str) -> Result<bool> {
-        let mut stmt = self.conn.prepare(&format!("PRAGMA table_info({})", table))?;
+        let mut stmt = self
+            .conn
+            .prepare(&format!("PRAGMA table_info({})", table))?;
         let mut rows = stmt.query([])?;
         while let Some(row) = rows.next()? {
             let name: String = row.get(1)?;
@@ -377,7 +411,7 @@ impl Database {
         }
         Ok(())
     }
-    
+
     /// Migration : Ajouter date_fin_pret aux investissements existants
     fn migrate_add_date_fin_pret(&self) -> Result<()> {
         // Vérifier si la colonne date_fin_pret existe déjà
@@ -394,7 +428,7 @@ impl Database {
             }
             found
         };
-        
+
         if !has_date_fin_pret {
             self.conn.execute(
                 "ALTER TABLE investissements ADD COLUMN date_fin_pret INTEGER",
@@ -402,10 +436,10 @@ impl Database {
             )?;
             println!("✅ Migration appliquée : colonne date_fin_pret ajoutée aux investissements");
         }
-        
+
         Ok(())
     }
-    
+
     /// Migration : Ajouter prescripteur_id aux contacts existants
     fn migrate_add_prescripteur_id(&self) -> Result<()> {
         // Vérifier si la colonne prescripteur_id existe déjà
@@ -422,18 +456,18 @@ impl Database {
             }
             found
         };
-        
+
         if has_prescripteur_id {
             println!("✅ Migration prescripteur_id déjà appliquée");
             return Ok(());
         }
-        
+
         println!("🔄 Migration : Ajout de prescripteur_id aux contacts...");
         self.conn.execute("ALTER TABLE contacts ADD COLUMN prescripteur_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL", [])?;
         println!("✅ Migration prescripteur_id appliquée");
         Ok(())
     }
-    
+
     /// Migration : Ajouter les champs date_dernier_contact_filleul et date_prochain_suivi_filleul
     fn migrate_add_filleul_dates(&self) -> Result<()> {
         // Vérifier si les colonnes existent déjà
@@ -450,30 +484,30 @@ impl Database {
             }
             found
         };
-        
+
         if has_date_dernier_contact_filleul {
             println!("✅ Migration filleul_dates déjà appliquée");
             return Ok(());
         }
-        
+
         println!("🔄 Migration : Ajout des dates de suivi filleul...");
-        
+
         // Ajouter les colonnes
         self.conn.execute(
             "ALTER TABLE contacts ADD COLUMN date_dernier_contact_filleul INTEGER",
             [],
         )?;
-        
+
         self.conn.execute(
             "ALTER TABLE contacts ADD COLUMN date_prochain_suivi_filleul INTEGER",
             [],
         )?;
-        
+
         println!("✅ Migration filleul_dates appliquée");
-        
+
         Ok(())
     }
-    
+
     /// Migration : Ajouter role_famille aux contacts existants
     fn migrate_add_role_famille(&self) -> Result<()> {
         // Vérifier si la colonne role_famille existe déjà
@@ -490,25 +524,23 @@ impl Database {
             }
             found
         };
-        
+
         if has_role_famille {
             println!("✅ Migration role_famille déjà appliquée");
             return Ok(());
         }
-        
+
         println!("🔄 Migration : Ajout de role_famille aux contacts...");
-        
+
         // Ajouter la colonne role_famille
-        self.conn.execute(
-            "ALTER TABLE contacts ADD COLUMN role_famille TEXT",
-            [],
-        )?;
-        
+        self.conn
+            .execute("ALTER TABLE contacts ADD COLUMN role_famille TEXT", [])?;
+
         println!("✅ Migration role_famille appliquée");
-        
+
         Ok(())
     }
-    
+
     /// Migration : Ajouter filleul_categorie aux contacts existants
     fn migrate_add_filleul_categorie(&self) -> Result<()> {
         // Vérifier si la colonne filleul_categorie existe déjà
@@ -525,25 +557,23 @@ impl Database {
             }
             found
         };
-        
+
         if has_filleul_categorie {
             println!("✅ Migration filleul_categorie déjà appliquée");
             return Ok(());
         }
-        
+
         println!("🔄 Migration : Ajout de filleul_categorie aux contacts...");
-        
+
         // Ajouter la colonne filleul_categorie
-        self.conn.execute(
-            "ALTER TABLE contacts ADD COLUMN filleul_categorie TEXT",
-            [],
-        )?;
-        
+        self.conn
+            .execute("ALTER TABLE contacts ADD COLUMN filleul_categorie TEXT", [])?;
+
         println!("✅ Migration filleul_categorie appliquée");
-        
+
         Ok(())
     }
-    
+
     /// Migration : Ajouter famille_id aux contacts existants
     fn migrate_add_famille_id(&self) -> Result<()> {
         // Vérifier si la colonne famille_id existe déjà
@@ -560,25 +590,25 @@ impl Database {
             }
             found
         };
-        
+
         if has_famille_id {
             println!("✅ Migration famille_id déjà appliquée");
             return Ok(());
         }
-        
+
         println!("🔄 Migration : Ajout de famille_id aux contacts...");
-        
+
         // Ajouter la colonne famille_id
         self.conn.execute(
             "ALTER TABLE contacts ADD COLUMN famille_id INTEGER REFERENCES familles(id) ON DELETE SET NULL",
             [],
         )?;
-        
+
         println!("✅ Migration famille_id appliquée");
-        
+
         Ok(())
     }
-    
+
     /// Migration : Rendre contact_id optionnel pour les investissements de foyer
     fn migrate_investissements_contact_id_optional(&self) -> Result<()> {
         // Vérifier si la migration est nécessaire
@@ -586,12 +616,12 @@ impl Database {
         let contact_id_is_not_null = {
             let mut stmt = self.conn.prepare("PRAGMA table_info(investissements)")?;
             let mut rows = stmt.query([])?;
-            
+
             let mut is_not_null = false;
             while let Some(row) = rows.next()? {
                 let col_name: String = row.get(1)?;
                 let not_null: i64 = row.get(3)?;
-                
+
                 if col_name == "contact_id" && not_null == 1 {
                     is_not_null = true;
                     break;
@@ -599,17 +629,18 @@ impl Database {
             }
             is_not_null
         }; // ← stmt et rows sont libérés ici, le lock SQLite est relâché
-        
+
         if !contact_id_is_not_null {
             println!("✅ Migration contact_id déjà appliquée");
             return Ok(());
         }
-        
+
         println!("🔄 Migration : Rendre contact_id optionnel dans investissements...");
-        
+
         // Supprimer la table temporaire si elle existe déjà (migration précédente interrompue)
-        self.conn.execute("DROP TABLE IF EXISTS investissements_new", [])?;
-        
+        self.conn
+            .execute("DROP TABLE IF EXISTS investissements_new", [])?;
+
         // Créer table temporaire sans NOT NULL sur contact_id
         self.conn.execute(
             "CREATE TABLE investissements_new (
@@ -637,27 +668,27 @@ impl Database {
             )",
             [],
         )?;
-        
+
         // Copier les données
         self.conn.execute(
             "INSERT INTO investissements_new SELECT * FROM investissements",
             [],
         )?;
-        
+
         // Supprimer l'ancienne table
         self.conn.execute("DROP TABLE investissements", [])?;
-        
+
         // Renommer la nouvelle table
         self.conn.execute(
             "ALTER TABLE investissements_new RENAME TO investissements",
             [],
         )?;
-        
+
         println!("✅ Migration appliquée : contact_id est maintenant optionnel");
-        
+
         Ok(())
     }
-    
+
     pub fn get_connection(&self) -> &Connection {
         &self.conn
     }

@@ -1,0 +1,121 @@
+import { updateContact, type Contact } from "@/lib/api/tauri-contacts";
+import type { Foyer } from "@/lib/api/tauri-foyers";
+import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import {
+  getInvestissementsByContact,
+  getInvestissementsByFoyer,
+  type Investissement,
+} from "@/lib/api/tauri-investissements";
+
+export function getContactsForFoyer(
+  contacts: Contact[],
+  foyerId: number
+): Contact[] {
+  return contacts.filter(
+    (c) => c.foyer_id != null && Number(c.foyer_id) === Number(foyerId)
+  );
+}
+
+/** Rattache un contact à un foyer (payload complet, dates ISO). */
+export async function linkContactToFoyer(
+  contact: Contact,
+  foyerId: number,
+  roleFoyer: string
+): Promise<Contact> {
+  if (!contact.id) {
+    throw new Error("Contact invalide");
+  }
+  return updateContact(
+    contact.id,
+    contactToUpdatePayload(contact, {
+      foyer_id: foyerId,
+      role_foyer: roleFoyer,
+    })
+  );
+}
+
+const ROLE_FOYER_LABELS: Record<string, string> = {
+  DECLARANT_1: "Déclarant 1",
+  DECLARANT_2: "Déclarant 2",
+  ENFANT: "Enfant",
+  AUTRE: "Autre",
+};
+
+export function formatFoyerMemberLabel(
+  contact: Contact,
+  role?: string | null
+): string {
+  const name = `${contact.prenom} ${contact.nom}`.trim();
+  if (!role) return name;
+  return `${name} · ${ROLE_FOYER_LABELS[role] || role}`;
+}
+
+/** Foyer existant pour un nom de famille (évite les doublons à l'import). */
+export function findExistingFoyerByFamilleName(
+  foyers: Foyer[],
+  nomFamilleCompose: string
+): Foyer | undefined {
+  const famille = nomFamilleCompose.trim().toUpperCase();
+  if (!famille) return undefined;
+
+  const targetNom = `Foyer ${nomFamilleCompose.trim()}`.toUpperCase();
+  const exact = foyers.find((f) => f.nom.trim().toUpperCase() === targetNom);
+  if (exact) return exact;
+
+  return foyers.find((f) => {
+    const bare = f.nom.replace(/^(Foyer|Famille)\s+/i, "").trim().toUpperCase();
+    return bare === famille;
+  });
+}
+
+export type FoyerInvestissement = Investissement & {
+  proprietaireLabel: string;
+};
+
+/** Investissements du foyer : communs (foyer_id) + individuels des membres, sans doublon. */
+export async function loadFoyerInvestissements(
+  foyerId: number,
+  membres: Contact[]
+): Promise<FoyerInvestissement[]> {
+  const byId = new Map<number, FoyerInvestissement>();
+
+  const foyerInvs = await getInvestissementsByFoyer(foyerId);
+  for (const inv of foyerInvs) {
+    byId.set(inv.id, { ...inv, proprietaireLabel: "Commun (foyer)" });
+  }
+
+  for (const member of membres) {
+    if (!member.id) continue;
+    const invs = await getInvestissementsByContact(member.id);
+    const label = `${member.prenom} ${member.nom}`.trim() || "Membre";
+    for (const inv of invs) {
+      if (!byId.has(inv.id)) {
+        byId.set(inv.id, { ...inv, proprietaireLabel: label });
+      }
+    }
+  }
+
+  return Array.from(byId.values()).sort(
+    (a, b) => (b.date_souscription ?? 0) - (a.date_souscription ?? 0)
+  );
+}
+
+export function sumPatrimoineCentimes(
+  investissements: Pick<Investissement, "montant_initial" | "origine">[],
+  options?: { avecMoiOnly?: boolean }
+): number {
+  const list = options?.avecMoiOnly
+    ? investissements.filter((i) => i.origine === "MON_CONSEIL")
+    : investissements;
+  return list.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+}
+
+/** Patrimoine foyer (communs + membres), en centimes. */
+export async function loadFoyerPatrimoineCentimes(
+  foyerId: number,
+  membres: Contact[],
+  options?: { avecMoiOnly?: boolean }
+): Promise<number> {
+  const invs = await loadFoyerInvestissements(foyerId, membres);
+  return sumPatrimoineCentimes(invs, options);
+}

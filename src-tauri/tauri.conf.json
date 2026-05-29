@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
-  "productName": "Patrimoine CRM",
+  "productName": "CRM W.Y.S",
   "version": "0.1.0",
   "identifier": "com.patrimoine-crm.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Patrimoine CRM",
+        "title": "CRM W.Y.S",
         "width": 1280,
         "height": 800,
         "minWidth": 800,
@@ -29,6 +29,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -43,5 +44,15 @@
       "timestampUrl": ""
     }
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEZFRDBGRTA0OTc3OUY2QzYKUldURzlubVhCUDdRL2tlbXl4bEI0V0oyb21DTEY1emVwN2Zma21Na0M5TVFvNkRpUUYvNnVHMUIK",
+      "endpoints": [
+        "https://github.com/OptiPat/crm/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

@@ -7,9 +7,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Mail, Phone, MapPin, Calendar, Briefcase, Edit, Trash2, User, Wallet, Plus, Users2, Home } from "lucide-react";
+import {
+  Mail,
+  Phone,
+  MapPin,
+  Calendar,
+  Briefcase,
+  Edit,
+  Trash2,
+  User,
+  Wallet,
+  Plus,
+  Users2,
+  Home,
+} from "lucide-react";
 import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
 import {
   contactToUpdatePayload,
@@ -17,7 +40,6 @@ import {
   formatSituationLabel,
   getClientLabel,
   getFilleulLabel,
-  isFilleulStatut,
 } from "@/lib/contacts/contact-form-utils";
 import { ContactForm } from "./ContactForm";
 import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
@@ -30,6 +52,15 @@ import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
 import { EtiquetteSelector } from "@/components/etiquettes/EtiquetteSelector";
 import { getEtiquettesByContact, attribuerEtiquette, retirerEtiquette, type ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
 import { toast } from "sonner";
+import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
+import { InvestissementMetaRow } from "@/components/investissements/InvestissementMetaRow";
+import { InvestissementCard } from "@/components/investissements/InvestissementCard";
+import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
+import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import {
+  getContactsForFoyer,
+  loadFoyerPatrimoineCentimes,
+} from "@/lib/foyers/foyer-utils";
 
 interface ContactDetailProps {
   open: boolean;
@@ -67,6 +98,7 @@ export function ContactDetail({
   const [showFoyerCreateModal, setShowFoyerCreateModal] = useState(false);
   const [showFoyerLinkModal, setShowFoyerLinkModal] = useState(false);
   const [etiquettes, setEtiquettes] = useState<ContactEtiquetteDetails[]>([]);
+  const [showDeleteContactDialog, setShowDeleteContactDialog] = useState(false);
 
   const handleDissocierFoyer = async () => {
     if (!contact?.id) return;
@@ -262,12 +294,11 @@ export function ContactDetail({
       );
       setFoyerMembers(members);
       
-      // Patrimoine commun du foyer uniquement (evite double-comptage avec encours personnels)
-      if (currentFoyer) {
-        const investissementsFoyer = await getInvestissementsByFoyer(currentFoyer.id);
-        const totalFoyer = investissementsFoyer.reduce(
-          (sum, inv) => sum + (inv.montant_initial || 0),
-          0
+      if (currentFoyer && contact.foyer_id) {
+        const membres = getContactsForFoyer(allContacts, contact.foyer_id);
+        const totalFoyer = await loadFoyerPatrimoineCentimes(
+          currentFoyer.id,
+          membres
         );
         setFoyerPatrimoine(totalFoyer / 100);
       }
@@ -293,72 +324,7 @@ export function ContactDetail({
     .reduce((total, inv) => total + (inv.montant_initial || 0), 0);
 
   // Formatage des montants
-  const formatEuro = (centimes?: number) => {
-    if (!centimes) return "-";
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-    }).format(centimes / 100);
-  };
-
-  // Formatage du nom de produit (transformer ASSURANCE_VIE en Assurance Vie)
-  const formatNomProduit = (nom: string) => {
-    // Map des types de produits vers leurs labels lisibles
-    const typeLabels: Record<string, string> = {
-      "SCPI": "SCPI",
-      "SCPI_DEMEMBREMENT": "SCPI Démembrement",
-      "ASSURANCE_VIE": "Assurance Vie",
-      "PER": "PER",
-      "IMMOBILIER": "Immobilier",
-      "FIP_FCPI": "FIP/FCPI",
-      "FCPR": "FCPR",
-      "G3F": "G3F",
-      "PINEL": "Pinel",
-      "AUTRE": "Autre",
-    };
-    // Si c'est un type connu, utiliser le label
-    if (typeLabels[nom]) {
-      return typeLabels[nom];
-    }
-    // Sinon, formater proprement (remplacer _ par espace et capitaliser)
-    return nom
-      .replace(/_/g, " ")
-      .toLowerCase()
-      .replace(/\b\w/g, c => c.toUpperCase());
-  };
-
-  // Couleurs des badges par type de produit
-  const getTypeProduitColor = (type: string, origine?: string) => {
-    // Si "à côté" (existant client) → texte gris foncé sur fond gris
-    if (origine === "EXISTANT_CLIENT") {
-      return "text-gray-700";
-    }
-    // Immobilier : #85ad39 (vert)
-    if (type === "IMMOBILIER") {
-      return "text-white";
-    }
-    // Placements financiers : #dc216e (rose foncé)
-    return "text-white";
-  };
-  
-  const getTypeProduitBgColor = (type: string, origine?: string) => {
-    // Si "à côté" (existant client) → gris
-    if (origine === "EXISTANT_CLIENT") {
-      return "#9ca3af"; // gray-400
-    }
-    // 🏠 Immobilier et dérivés : vert
-    const immobilierTypes = [
-      "IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", 
-      "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", 
-      "LOCATIF_CLASSIQUE", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE",
-      "COLOCATION", "MONOLOCATION", "SCI"
-    ];
-    if (immobilierTypes.includes(type)) {
-      return "#85ad39";
-    }
-    // Tout le reste : rose foncé
-    return "#dc216e";
-  };
+  const formatEuro = formatEuroCentimes;
 
   const getPartenaireNom = (partenaireId?: number): string | null => {
     if (!partenaireId) return null;
@@ -367,32 +333,6 @@ export function ContactDetail({
   };
 
   if (!contact) return null;
-
-  const getCategorieColor = (categorie: string, filleulCat?: string | null) => {
-    const fc = filleulCat || (isFilleulStatut(categorie) ? categorie : null);
-    if (fc) {
-      switch (fc) {
-        case "FILLEUL":
-          return "bg-indigo-100 text-indigo-800";
-        case "PROSPECT_FILLEUL":
-          return "bg-purple-100 text-purple-800";
-        case "SUSPECT_FILLEUL":
-          return "bg-amber-100 text-amber-800";
-        default:
-          return "bg-gray-100 text-gray-800";
-      }
-    }
-    switch (categorie) {
-      case "CLIENT":
-        return "bg-green-100 text-green-800";
-      case "PROSPECT_CLIENT":
-        return "bg-blue-100 text-blue-800";
-      case "SUSPECT_CLIENT":
-        return "bg-slate-100 text-slate-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
 
   const getContactStatusLabel = (c: Contact) => {
     const filleulLabel = getFilleulLabel(c.filleul_categorie);
@@ -414,15 +354,11 @@ export function ContactDetail({
     }
   };
 
-  const handleDelete = () => {
-    if (
-      window.confirm(
-        `Êtes-vous sûr de vouloir supprimer ${contact.prenom} ${contact.nom} ?`
-      )
-    ) {
-      onDelete(contact.id);
-      onOpenChange(false);
-    }
+  const confirmDeleteContact = () => {
+    if (!contact?.id) return;
+    onDelete(contact.id);
+    setShowDeleteContactDialog(false);
+    onOpenChange(false);
   };
 
   const handleEditInvestissement = (inv: Investissement) => {
@@ -459,10 +395,10 @@ export function ContactDetail({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-start justify-between">
-              <div>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto shadow-md">
+          <DialogHeader className="pr-12">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
                 <DialogTitle className="text-2xl">
                   {formatCiviliteLabel(contact.civilite)
                     ? `${formatCiviliteLabel(contact.civilite)} ${contact.prenom} ${contact.nom}`
@@ -480,7 +416,12 @@ export function ContactDetail({
                   Détails du contact et informations personnelles
                 </DialogDescription>
                 <div className="flex gap-2 mt-2">
-                  <Badge className={getCategorieColor(contact.categorie, contact.filleul_categorie)}>
+                  <Badge
+                    className={getContactCategorieBadgeClass(
+                      contact.categorie,
+                      contact.filleul_categorie
+                    )}
+                  >
                     {getContactStatusLabel(contact)}
                   </Badge>
                   <Badge className={getStatutColor(contact.statut_suivi)}>
@@ -491,11 +432,10 @@ export function ContactDetail({
                 {/* Étiquettes du contact */}
                 <div className="flex items-center gap-2 mt-3">
                   <EtiquetteList
-                    etiquettes={etiquettes.map(e => ({
+                    etiquettes={etiquettes.map((e) => ({
                       id: e.etiquette_id,
                       nom: e.etiquette_nom,
                       couleur: e.etiquette_couleur,
-                      icone: e.etiquette_icone,
                     }))}
                     onRemove={handleRemoveEtiquette}
                     size="sm"
@@ -507,19 +447,23 @@ export function ContactDetail({
                   />
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex shrink-0 gap-2">
                 <Button
+                  type="button"
                   variant="outline"
                   size="icon"
                   onClick={() => setShowEditForm(true)}
+                  title="Modifier"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
                 <Button
+                  type="button"
                   variant="outline"
                   size="icon"
-                  onClick={handleDelete}
-                  className="text-red-600 hover:text-red-700"
+                  onClick={() => setShowDeleteContactDialog(true)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  title="Supprimer le contact"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -574,6 +518,21 @@ export function ContactDetail({
                 )}
               </CardContent>
             </Card>
+
+            {contact.id && (
+              <ContactInteractionsPanel
+                contactId={contact.id}
+                dateDernierContact={contact.date_dernier_contact}
+                dateDernierContactFilleul={contact.date_dernier_contact_filleul}
+                onContactUpdated={async () => {
+                  if (contact.id) {
+                    const refreshed = await getContactById(contact.id);
+                    onContactRefreshed?.(refreshed);
+                  }
+                  onUpdate();
+                }}
+              />
+            )}
 
             {/* Informations personnelles */}
             <Card>
@@ -1039,7 +998,9 @@ export function ContactDetail({
                     {totalEncours > 0 && (
                       <div className="text-sm text-muted-foreground mt-1">
                         <p>
-                          💰 Avec moi : <span className="font-semibold text-primary">{formatEuro(totalEncoursAvecMoi)}</span>
+                          <InvestissementMetaRow tone="amount">
+                            Avec moi : {formatEuro(totalEncoursAvecMoi)}
+                          </InvestissementMetaRow>
                           {totalEncours > totalEncoursAvecMoi && (
                             <span className="text-gray-400 ml-2">
                               (Total: {formatEuro(totalEncours)})
@@ -1072,127 +1033,47 @@ export function ContactDetail({
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {investissements.map((inv) => (
-                      <div
-                        key={inv.id}
-                        className="p-3 border border-border rounded-lg hover:bg-accent transition-colors"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 space-y-1">
-                            {/* Ligne 1 : Badge type + badges annexes */}
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge 
-                                className={getTypeProduitColor(inv.type_produit, inv.origine) + " text-base px-3 py-1"}
-                                style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
+                    {investissements.map((inv) => {
+                      const invExt = inv as Investissement & {
+                        _proprietaire?: string;
+                        _proprietaireId?: number | null;
+                      };
+                      return (
+                        <InvestissementCard
+                          key={inv.id}
+                          inv={inv}
+                          partenaireNom={getPartenaireNom(inv.partenaire_id)}
+                          proprietaireLabel={invExt._proprietaire}
+                          proprietaireVariant={
+                            invExt._proprietaireId === contact?.id
+                              ? "self"
+                              : invExt._proprietaire === "Foyer"
+                                ? "foyer"
+                                : "member"
+                          }
+                          actions={
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditInvestissement(inv)}
+                                className="h-8 w-8"
                               >
-                                {inv.type_produit?.replace(/_/g, " ") || "AUTRE"}
-                              </Badge>
-                              {inv.origine === "EXISTANT_CLIENT" && (
-                                <span className="text-xs text-gray-500 italic">à côté</span>
-                              )}
-                              {/* @ts-ignore - Propriétaire ajouté dynamiquement */}
-                              {inv._proprietaire && (
-                                <Badge 
-                                  variant="outline" 
-                                  className={`text-xs ${
-                                    /* @ts-ignore */
-                                    inv._proprietaireId === contact?.id 
-                                      ? "bg-green-50 text-green-700 border-green-200" 
-                                      /* @ts-ignore */
-                                      : inv._proprietaire === "Foyer"
-                                      ? "bg-blue-50 text-blue-700 border-blue-200"
-                                      : "bg-gray-50 text-gray-700 border-gray-200"
-                                  }`}
-                                >
-                                  {/* @ts-ignore */}
-                                  👤 {inv._proprietaire}
-                                </Badge>
-                              )}
-                            </div>
-                            {/* Ligne 2 : Nom du produit (si différent du type) */}
-                            {inv.nom_produit && 
-                             inv.nom_produit.trim() !== "" && 
-                             inv.nom_produit.toUpperCase().replace(/[- ]/g, "") !== inv.type_produit?.toUpperCase().replace(/_/g, "") && (
-                              <p className="font-medium text-foreground">
-                                {formatNomProduit(inv.nom_produit)}
-                              </p>
-                            )}
-                            {/* Ligne 3 : Partenaire (si renseigné) */}
-                            {getPartenaireNom(inv.partenaire_id) && (
-                              <p className="text-sm text-muted-foreground">
-                                📋 {getPartenaireNom(inv.partenaire_id)}
-                              </p>
-                            )}
-                            <div className="text-sm text-muted-foreground flex gap-4 flex-wrap">
-                              <span className="font-medium text-primary">
-                                💰 {formatEuro(inv.montant_initial)}
-                              </span>
-                              {inv.date_souscription && (
-                                <span>
-                                  📅 {new Date(inv.date_souscription * 1000).toLocaleDateString("fr-FR")}
-                                </span>
-                              )}
-                              {inv.montant_versement_programme && inv.montant_versement_programme > 0 && (
-                                <span className="font-medium text-orange-600">
-                                  🔁 VP: {formatEuro(inv.montant_versement_programme)}
-                                  {inv.frequence_versement && ` (${inv.frequence_versement})`}
-                                </span>
-                              )}
-                              {inv.notes?.match(/Mode de détention:\s*([^\|]+)/i) && (
-                                <span className="font-medium text-slate-600">
-                                  🏷️ {inv.notes.match(/Mode de détention:\s*([^\|]+)/i)?.[1].trim()}
-                                </span>
-                              )}
-                              {inv.notes?.match(/Durée:\s*([^\|]+)/i) && (
-                                <span className="font-medium text-purple-600">
-                                  {(() => {
-                                    const dureeStr = inv.notes.match(/Durée:\s*([^\|]+)/i)?.[1].trim();
-                                    
-                                    if (dureeStr?.toLowerCase().includes('viager')) {
-                                      return "🔄 Viager";
-                                    } else if (dureeStr) {
-                                      const dureeMatch = dureeStr.match(/(\d+)\s*ans/i);
-                                      if (dureeMatch && dureeMatch[1] && inv.date_fin_demembrement) {
-                                        const duree = dureeMatch[1];
-                                        const dateFin = new Date(inv.date_fin_demembrement * 1000).toLocaleDateString("fr-FR");
-                                        return `🔄 ${duree} ans → 📅 ${dateFin}`;
-                                      }
-                                    }
-                                    return null;
-                                  })()}
-                                </span>
-                              )}
-                              {inv.reinvestissement_dividendes && (
-                                <span className="font-medium text-green-600">
-                                  📈 Réinv. {(() => {
-                                    const match = inv.notes?.match(/(\d+)%/);
-                                    return match && match[1] ? `${match[1]}%` : "100%";
-                                  })()}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEditInvestissement(inv)}
-                              className="h-8 w-8"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteInvestissement(inv)}
-                              className="h-8 w-8 text-red-600 hover:text-red-700"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteInvestissement(inv)}
+                                className="h-8 w-8 text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </>
+                          }
+                        />
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -1298,6 +1179,37 @@ export function ContactDetail({
           />
         </>
       )}
+
+      <AlertDialog
+        open={showDeleteContactDialog}
+        onOpenChange={setShowDeleteContactDialog}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce contact ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {contact && (
+                <>
+                  Vous allez supprimer{" "}
+                  <strong>
+                    {contact.prenom} {contact.nom}
+                  </strong>
+                  . Cette action est irréversible.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={confirmDeleteContact}
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

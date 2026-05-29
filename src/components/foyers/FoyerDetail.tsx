@@ -1,6 +1,16 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -23,8 +33,16 @@ import {
 import { type Foyer } from "@/lib/api/tauri-foyers";
 import { FoyerForm } from "./FoyerForm";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import { getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
+import {
+  formatFoyerMemberLabel,
+  getContactsForFoyer,
+  loadFoyerInvestissements,
+  type FoyerInvestissement,
+} from "@/lib/foyers/foyer-utils";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
+import { InvestissementCard } from "@/components/investissements/InvestissementCard";
+import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
+import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 
 interface FoyerDetailProps {
   open: boolean;
@@ -44,8 +62,10 @@ export function FoyerDetail({
   const [showEditForm, setShowEditForm] = useState(false);
   const [showInvestissementForm, setShowInvestissementForm] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [investissements, setInvestissements] = useState<Investissement[]>([]);
+  const [investissements, setInvestissements] = useState<FoyerInvestissement[]>([]);
+  const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Charger les données du foyer
   useEffect(() => {
@@ -59,15 +79,16 @@ export function FoyerDetail({
 
     setLoadingData(true);
     try {
-      const [allContacts, foyerInvestissements] = await Promise.all([
+      const [allContacts, partenairesData] = await Promise.all([
         getAllContacts(),
-        getInvestissementsByFoyer(foyer.id),
+        getAllPartenaires(),
       ]);
-
-      // Filtrer les contacts du foyer
-      const foyerContacts = allContacts.filter((c) => c.foyer_id === foyer.id);
-      setContacts(foyerContacts);
-      setInvestissements(foyerInvestissements);
+      const membres = getContactsForFoyer(allContacts, foyer.id);
+      setContacts(membres);
+      setPartenaires(partenairesData);
+      setInvestissements(
+        await loadFoyerInvestissements(foyer.id, membres)
+      );
     } catch (error) {
       console.error("Error loading foyer data:", error);
     } finally {
@@ -81,48 +102,9 @@ export function FoyerDetail({
     0
   );
 
-  // Formatage des montants
-  const formatEuro = (centimes?: number) => {
-    if (!centimes) return "-";
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-    }).format(centimes / 100);
-  };
-
-  // Couleurs des badges par type de produit
-  const getTypeProduitColor = (type: string) => {
-    switch (type) {
-      case "SCPI":
-        return "bg-blue-100 text-blue-800";
-      case "SCPI_DEMEMBREMENT":
-        return "bg-purple-100 text-purple-800";
-      case "ASSURANCE_VIE":
-        return "bg-green-100 text-green-800";
-      case "PER":
-        return "bg-emerald-100 text-emerald-800";
-      case "IMMOBILIER":
-        return "bg-amber-100 text-amber-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  // Formatage du type de produit
-  const formatTypeProduit = (type: string) => {
-    const labels: Record<string, string> = {
-      "SCPI": "SCPI",
-      "SCPI_DEMEMBREMENT": "SCPI Démembrement",
-      "ASSURANCE_VIE": "Assurance Vie",
-      "PER": "PER",
-      "IMMOBILIER": "Immobilier",
-      "FIP_FCPI": "FIP/FCPI",
-      "FCPR": "FCPR",
-      "G3F": "G3F",
-      "PINEL": "Pinel",
-      "AUTRE": "Autre",
-    };
-    return labels[type] || type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+  const getPartenaireNom = (partenaireId?: number): string | null => {
+    if (!partenaireId) return null;
+    return partenaires.find((p) => p.id === partenaireId)?.raison_sociale ?? null;
   };
 
   if (!foyer) return null;
@@ -144,15 +126,11 @@ export function FoyerDetail({
     }
   };
 
-  const handleDelete = () => {
-    if (
-      window.confirm(
-        `Êtes-vous sûr de vouloir supprimer le foyer "${foyer.nom}" ?`
-      )
-    ) {
-      onDelete(foyer.id);
-      onOpenChange(false);
-    }
+  const handleDeleteConfirm = () => {
+    if (!foyer) return;
+    onDelete(foyer.id);
+    setShowDeleteDialog(false);
+    onOpenChange(false);
   };
 
   const formatCurrency = (value?: number) => {
@@ -197,7 +175,7 @@ export function FoyerDetail({
                 <Button
                   variant="outline"
                   size="icon"
-                  onClick={handleDelete}
+                  onClick={() => setShowDeleteDialog(true)}
                   className="text-red-600 hover:text-red-700"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -280,36 +258,46 @@ export function FoyerDetail({
             )}
 
             {/* Membres du foyer */}
-            {contacts.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    Membres du foyer ({contacts.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Membres du foyer ({contacts.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {loadingData ? (
+                  <p className="text-sm text-muted-foreground">Chargement…</p>
+                ) : contacts.length === 0 ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    Aucun contact rattaché à ce foyer. Associez des contacts depuis
+                    leur fiche (section Foyer) ou via Contacts → Afficher par foyer.
+                  </p>
+                ) : (
                   <div className="space-y-2">
                     {contacts.map((contact) => (
                       <div
                         key={contact.id}
                         className="flex items-center gap-3 p-2 rounded-lg bg-muted/50"
                       >
-                        <User className="h-4 w-4 text-muted-foreground" />
-                        <div className="flex-1">
+                        <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                        <div className="flex-1 min-w-0">
                           <div className="font-medium">
-                            {contact.prenom} {contact.nom}
+                            {formatFoyerMemberLabel(
+                              contact,
+                              contact.role_foyer
+                            )}
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {contact.email || contact.telephone}
+                          <div className="text-xs text-muted-foreground truncate">
+                            {contact.email || contact.telephone || "—"}
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                )}
+              </CardContent>
+            </Card>
 
             {/* Investissements du foyer */}
             <Card>
@@ -321,7 +309,7 @@ export function FoyerDetail({
                       Patrimoine du foyer
                     </CardTitle>
                     <div className="text-xl font-bold text-primary">
-                      {formatEuro(totalPatrimoineFoyer)}
+                      {formatEuroCentimes(totalPatrimoineFoyer)}
                     </div>
                   </div>
                   <Button
@@ -339,61 +327,23 @@ export function FoyerDetail({
                   </div>
                 ) : investissements.length === 0 ? (
                   <div className="text-sm text-muted-foreground text-center py-4">
-                    Aucun investissement commun pour ce foyer
+                    Aucun investissement pour ce foyer (ni commun ni rattaché aux
+                    membres)
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {investissements.map((inv) => (
-                      <div
+                      <InvestissementCard
                         key={inv.id}
-                        className="flex items-start justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                      >
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Badge className={getTypeProduitColor(inv.type_produit)}>
-                              {formatTypeProduit(inv.type_produit)}
-                            </Badge>
-                            {inv.versement_programme && (
-                              <Badge variant="outline" className="text-xs">
-                                VP
-                              </Badge>
-                            )}
-                            {inv.reinvestissement_dividendes && (
-                              <Badge variant="outline" className="text-xs">
-                                Reinv. dividendes
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="font-medium">{inv.nom_produit}</div>
-                          {inv.date_souscription && (
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Souscrit le{" "}
-                              {new Date(inv.date_souscription * 1000).toLocaleDateString(
-                                "fr-FR"
-                              )}
-                            </div>
-                          )}
-                          {inv.date_fin_demembrement && (
-                            <div className="text-xs text-orange-600 mt-1">
-                              Fin démembrement:{" "}
-                              {new Date(
-                                inv.date_fin_demembrement * 1000
-                              ).toLocaleDateString("fr-FR")}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <div className="text-lg font-semibold">
-                            {formatEuro(inv.montant_initial)}
-                          </div>
-                          {inv.versement_programme && (
-                            <div className="text-xs text-muted-foreground">
-                              + {formatEuro(inv.montant_versement_programme)} /{" "}
-                              {inv.frequence_versement?.toLowerCase()}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                        inv={inv}
+                        partenaireNom={getPartenaireNom(inv.partenaire_id)}
+                        proprietaireLabel={inv.proprietaireLabel}
+                        proprietaireVariant={
+                          inv.proprietaireLabel === "Commun (foyer)"
+                            ? "foyer"
+                            : "member"
+                        }
+                      />
                     ))}
                   </div>
                 )}
@@ -460,6 +410,27 @@ export function FoyerDetail({
           }}
         />
       )}
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce foyer ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Le foyer « {foyer?.nom} » sera supprimé. Les contacts ne seront
+              pas supprimés, seulement détachés du foyer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

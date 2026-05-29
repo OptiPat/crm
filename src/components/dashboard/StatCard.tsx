@@ -1,4 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { LucideIcon } from "lucide-react";
 
 interface StatCardProps {
@@ -6,6 +6,7 @@ interface StatCardProps {
   value: string | number;
   description: string;
   icon: LucideIcon;
+  accentColor: string;
   iconColor: string;
   iconBgColor: string;
 }
@@ -15,26 +16,30 @@ export function StatCard({
   value,
   description,
   icon: Icon,
+  accentColor,
   iconColor,
   iconBgColor,
 }: StatCardProps) {
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium text-muted-foreground">
-          {title}
-        </CardTitle>
-        <div className={`p-2 rounded-lg ${iconBgColor}`}>
-          <Icon className={`h-5 w-5 ${iconColor}`} />
+    <Card
+      className="overflow-hidden border-border/80 shadow-sm hover:shadow-md transition-shadow"
+      style={{ borderLeftWidth: 3, borderLeftColor: accentColor }}
+    >
+      <CardContent className="p-4 pt-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide truncate">
+              {title}
+            </p>
+            <p className="text-2xl lg:text-[1.65rem] font-serif font-bold text-primary mt-1 leading-tight tabular-nums">
+              {value}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{description}</p>
+          </div>
+          <div className={`p-2.5 rounded-xl shrink-0 ${iconBgColor}`}>
+            <Icon className={`h-5 w-5 ${iconColor}`} />
+          </div>
         </div>
-      </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-serif font-bold text-primary">
-          {value}
-        </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          {description}
-        </p>
       </CardContent>
     </Card>
   );

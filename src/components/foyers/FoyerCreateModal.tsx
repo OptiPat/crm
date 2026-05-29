@@ -18,8 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, X } from "lucide-react";
-import { type Contact, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
+import { type Contact, getAllContacts } from "@/lib/api/tauri-contacts";
 import { createFoyer } from "@/lib/api/tauri-foyers";
+import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
 import { Badge } from "@/components/ui/badge";
 
 interface FoyerCreateModalProps {
@@ -132,28 +133,7 @@ export function FoyerCreateModal({
       });
 
       for (const member of members) {
-        await updateContact(member.contact.id!, {
-          ...member.contact,
-          foyer_id: newFoyer.id,
-          role_foyer: member.role,
-          date_naissance: member.contact.date_naissance 
-            ? new Date(member.contact.date_naissance * 1000).toISOString() 
-            : undefined,
-          // Dates CLIENT
-          date_dernier_contact: member.contact.date_dernier_contact 
-            ? new Date(member.contact.date_dernier_contact * 1000).toISOString() 
-            : undefined,
-          date_prochain_suivi: member.contact.date_prochain_suivi 
-            ? new Date(member.contact.date_prochain_suivi * 1000).toISOString() 
-            : undefined,
-          // Dates FILLEUL
-          date_dernier_contact_filleul: member.contact.date_dernier_contact_filleul 
-            ? new Date(member.contact.date_dernier_contact_filleul * 1000).toISOString() 
-            : undefined,
-          date_prochain_suivi_filleul: member.contact.date_prochain_suivi_filleul 
-            ? new Date(member.contact.date_prochain_suivi_filleul * 1000).toISOString() 
-            : undefined,
-        });
+        await linkContactToFoyer(member.contact, newFoyer.id, member.role);
       }
 
       onSuccess();

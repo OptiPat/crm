@@ -18,6 +18,22 @@ export interface NewAlerte {
   date_alerte?: number;
 }
 
+/** Libellé titre alerte : nom du contact (sans motif dupliqué avec le badge). */
+export function formatAlerteContactLabel(
+  message: string,
+  typeAlerte?: string
+): string {
+  if (
+    typeAlerte === "FIN_DEMEMBREMENT" ||
+    typeAlerte === "ANNIVERSAIRE"
+  ) {
+    return message.trim();
+  }
+  let label = message.split(" - ")[0]?.trim() ?? message.trim();
+  label = label.replace(/^🔴|🟠|🟡|🟢|🔵|🟣|⚪\s*/u, "").trim();
+  return label;
+}
+
 export async function getAllAlertes(): Promise<Alerte[]> {
   return invoke<Alerte[]>("get_all_alertes");
 }

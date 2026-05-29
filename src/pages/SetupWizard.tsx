@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { APP_DISPLAY_NAME } from "@/lib/app-branding";
 import {
   User,
   Mail,
@@ -302,7 +303,7 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-serif font-bold text-primary mb-2">
-          Configuration de Patrimoine CRM
+          Configuration de {APP_DISPLAY_NAME}
         </h1>
         <p className="text-muted-foreground">
           Quelques étapes pour personnaliser votre application

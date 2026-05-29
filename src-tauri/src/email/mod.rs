@@ -1,6 +1,6 @@
-pub mod smtp_config;
-pub mod sender;
 pub mod commands;
+pub mod sender;
+pub mod smtp_config;
 
-pub use smtp_config::SmtpConfig;
 pub use sender::EmailSender;
+pub use smtp_config::SmtpConfig;

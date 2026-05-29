@@ -3,24 +3,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Users, ChevronDown, ChevronUp, ChevronRight, TrendingUp, Eye, EyeOff, Trash2 } from "lucide-react";
+import { Search, Users, ChevronDown, ChevronUp, ChevronRight, TrendingUp, Eye, EyeOff, Trash2, Plus } from "lucide-react";
 import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
+import { ContactForm } from "@/components/contacts/ContactForm";
 import { getInvestissementsByContact, getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
+import { contactMatchesSearch, textMatchesSearch } from "@/lib/search-utils";
 
-// 🎨 Couleurs des investissements (mêmes que Familles)
-const getTypeProduitBgColor = (type: string, origine?: string): string => {
-  if (origine === "EXISTANT_CLIENT") return "#9ca3af"; // gray-400
-  // 🏠 Immobilier et dérivés : vert
-  const immobilierTypes = [
-    "IMMOBILIER", "LMNP", "LMP", "PINEL", "MALRAUX", "DENORMANDIE", 
-    "RP", "RS", "DEFICIT_FONCIER", "MONUMENT_HISTORIQUE", "LOCATIF", 
-    "LOCATIF_CLASSIQUE", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE",
-    "COLOCATION", "MONOLOCATION", "SCI"
-  ];
-  if (immobilierTypes.includes(type)) return "#85ad39";
-  // Tout le reste : rose foncé
-  return "#dc216e";
-};
+import {
+  formatEuroCentimes,
+  getTypeProduitBgColor,
+} from "@/lib/investissements/investissement-display";
 
 // 🏷️ Formater la catégorie filleul pour affichage
 const formatFilleulCategorie = (categorie: string): string => {
@@ -87,6 +79,7 @@ export function Prescripteurs() {
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedPrescripteurs, setExpandedPrescripteurs] = useState<Set<number>>(new Set());
   const [expandedInvestissements, setExpandedInvestissements] = useState<Set<number>>(new Set()); // Mode compact
+  const [showPrescripteurForm, setShowPrescripteurForm] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -129,28 +122,13 @@ export function Prescripteurs() {
     return `👤 ${contact.prenom} ${contact.nom}`;
   };
 
-  // Helper pour vérifier si un contact match la recherche (incluant foyer)
-  const contactMatchesSearch = (contact: Contact, query: string): boolean => {
-    const q = query.toLowerCase();
-    
-    // Match direct sur nom/prénom
-    if (contact.nom.toLowerCase().includes(q) || contact.prenom.toLowerCase().includes(q)) {
-      return true;
-    }
-    
-    // Match sur le foyer (tous les membres)
+  const matchesContactOrFoyer = (contact: Contact, query: string): boolean => {
+    if (contactMatchesSearch(query, contact)) return true;
     if (contact.foyer_id && foyersInfo[contact.foyer_id]) {
       const foyer = foyersInfo[contact.foyer_id];
-      // Match sur le nom de famille du foyer
-      if (foyer.nom.toLowerCase().includes(q)) {
-        return true;
-      }
-      // Match sur les prénoms des membres du foyer
-      if (foyer.membres.some(m => m.prenom.toLowerCase().includes(q))) {
-        return true;
-      }
+      if (textMatchesSearch(query, foyer.nom)) return true;
+      if (foyer.membres.some((m) => textMatchesSearch(query, m.prenom))) return true;
     }
-    
     return false;
   };
 
@@ -437,7 +415,7 @@ export function Prescripteurs() {
   // Filtrer les prescripteurs (avec recherche par foyer)
   const filteredPrescripteurs = useMemo(() => {
     if (!searchQuery) return prescripteursRacines;
-    return prescripteursRacines.filter(p => contactMatchesSearch(p.contact, searchQuery));
+    return prescripteursRacines.filter((p) => matchesContactOrFoyer(p.contact, searchQuery));
   }, [prescripteursRacines, searchQuery, foyersInfo]);
 
   const toggleExpand = (id: number) => {
@@ -488,15 +466,6 @@ export function Prescripteurs() {
       console.error("Erreur suppression prescripteur:", error);
       alert("Erreur lors de la suppression");
     }
-  };
-
-  const formatEuro = (cents: number): string => {
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(cents / 100);
   };
 
   // Formater une date timestamp
@@ -570,7 +539,7 @@ export function Prescripteurs() {
             
             {/* Patrimoine personnel */}
             <Badge className="bg-emerald-100 text-emerald-700 font-semibold">
-              💰 {formatEuro(node.patrimoine)}
+              {formatEuroCentimes(node.patrimoine)}
             </Badge>
             
             {/* Toggle investissements (mode compact) */}
@@ -607,7 +576,7 @@ export function Prescripteurs() {
             <div className="px-3 py-1 border-t border-dashed text-xs text-muted-foreground flex items-center gap-2">
               <TrendingUp className="h-3 w-3" />
               <span>
-                📈 Branche : {brancheClients} client{brancheClients > 1 ? "s" : ""} • {formatEuro(branchePatrimoine)} apporté
+                📈 Branche : {brancheClients} client{brancheClients > 1 ? "s" : ""} • {formatEuroCentimes(branchePatrimoine)} apporté
               </span>
             </div>
           )}
@@ -659,7 +628,7 @@ export function Prescripteurs() {
                     className="font-semibold ml-2"
                     style={{ color: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
                   >
-                    {formatEuro(inv.montant_initial || 0)}
+                    {formatEuroCentimes(inv.montant_initial || 0)}
                   </span>
                 </div>
               ))}
@@ -746,7 +715,7 @@ export function Prescripteurs() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-600">
-              {formatEuro(totalPatrimoineApporte)}
+              {formatEuroCentimes(totalPatrimoineApporte)}
             </div>
           </CardContent>
         </Card>
@@ -769,9 +738,13 @@ export function Prescripteurs() {
           <CardContent className="py-12 text-center">
             <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
             <h3 className="text-lg font-medium mb-2">Aucun prescripteur</h3>
-            <p className="text-muted-foreground">
-              Les prescripteurs apparaîtront ici quand vous assignerez un prescripteur à vos contacts.
+            <p className="text-muted-foreground mb-4">
+              Créez un prescripteur ici, ou assignez-en un depuis la fiche d&apos;un client.
             </p>
+            <Button className="gap-2" onClick={() => setShowPrescripteurForm(true)}>
+              <Plus className="h-4 w-4" />
+              Nouveau prescripteur
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -820,12 +793,12 @@ export function Prescripteurs() {
                     <div className="flex items-center gap-4 text-right">
                       <div>
                         <div className="text-sm text-muted-foreground">Patrimoine (avec moi)</div>
-                        <div className="font-semibold">{formatEuro(prescripteur.patrimoinePersonnel)}</div>
+                        <div className="font-semibold">{formatEuroCentimes(prescripteur.patrimoinePersonnel)}</div>
                       </div>
                       <div>
                         <div className="text-sm text-muted-foreground">Patrimoine apporté (avec moi)</div>
                         <div className="font-semibold text-emerald-600">
-                          {formatEuro(prescripteur.patrimoineApporteTotal)}
+                          {formatEuroCentimes(prescripteur.patrimoineApporteTotal)}
                         </div>
                       </div>
                     </div>
@@ -845,6 +818,13 @@ export function Prescripteurs() {
           })}
         </div>
       )}
+
+      <ContactForm
+        open={showPrescripteurForm}
+        onOpenChange={setShowPrescripteurForm}
+        createContext="prescripteurs"
+        onSuccess={loadData}
+      />
     </div>
   );
 }

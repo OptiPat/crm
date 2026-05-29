@@ -13,6 +13,7 @@ import {
 import { Upload, Search, Trash2, Filter } from "lucide-react";
 import { getAllDocuments, deleteDocument, type Document } from "@/lib/api/tauri-documents";
 import { DocumentUpload } from "@/components/documents/DocumentUpload";
+import { textMatchesSearch } from "@/lib/search-utils";
 
 export function Documents() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -38,8 +39,7 @@ export function Documents() {
 
   const filteredDocuments = documents.filter((doc) => {
     // Filtre de recherche textuelle
-    const search = searchQuery.toLowerCase();
-    const matchesSearch = doc.nom_fichier?.toLowerCase().includes(search);
+    const matchesSearch = textMatchesSearch(searchQuery, doc.nom_fichier);
 
     // Filtre par type
     const matchesType = typeFilter === "ALL" || doc.type_document === typeFilter;

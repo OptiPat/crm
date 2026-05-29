@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -17,6 +16,8 @@ import {
   type InvestissementWithDetails,
 } from "@/lib/api/tauri-investissements";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
+import { InvestissementCard } from "@/components/investissements/InvestissementCard";
+import { textMatchesSearch } from "@/lib/search-utils";
 
 export function Investissements() {
   const [investissements, setInvestissements] = useState<InvestissementWithDetails[]>([]);
@@ -56,76 +57,16 @@ export function Investissements() {
     }
   };
 
-  // Formatage des montants
-  const formatEuro = (centimes?: number) => {
-    if (!centimes) return "-";
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-    }).format(centimes / 100);
-  };
-
-  // Formatage des dates
-  const formatDate = (timestamp?: number) => {
-    if (!timestamp) return "-";
-    return new Date(timestamp * 1000).toLocaleDateString("fr-FR");
-  };
-
-  // Couleurs des badges par type de produit
-  const getTypeProduitColor = (type: string) => {
-    switch (type) {
-      case "SCPI":
-        return "bg-blue-100 text-blue-800";
-      case "SCPI_DEMEMBREMENT":
-        return "bg-purple-100 text-purple-800";
-      case "ASSURANCE_VIE":
-        return "bg-green-100 text-green-800";
-      case "PER":
-        return "bg-emerald-100 text-emerald-800";
-      case "IMMOBILIER":
-        return "bg-amber-100 text-amber-800";
-      case "FIP_FCPI":
-        return "bg-orange-100 text-orange-800";
-      case "FCPR":
-        return "bg-pink-100 text-pink-800";
-      case "G3F":
-        return "bg-cyan-100 text-cyan-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  // Label lisible pour les types de produits
-  const getTypeProduitLabel = (type: string) => {
-    const labels: Record<string, string> = {
-      "SCPI": "SCPI",
-      "SCPI_DEMEMBREMENT": "SCPI Démembrement",
-      "ASSURANCE_VIE": "Assurance Vie",
-      "PER": "PER",
-      "IMMOBILIER": "Immobilier",
-      "FIP_FCPI": "FIP/FCPI",
-      "FCPR": "FCPR",
-      "G3F": "G3F",
-      "PINEL": "Pinel",
-      "AUTRE": "Autre",
-    };
-    return labels[type] || type.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-  };
-
-  // Formater le nom de produit (au cas où c'est un type comme ASSURANCE_VIE)
-  const formatNomProduit = (nom: string) => {
-    return getTypeProduitLabel(nom);
-  };
-
   // Filtrage
   const filteredInvestissements = investissements
     .filter((inv) => {
-      const search = searchQuery.toLowerCase();
-      const matchesSearch =
-        inv.nom_produit?.toLowerCase().includes(search) ||
-        inv.contact_nom?.toLowerCase().includes(search) ||
-        inv.contact_prenom?.toLowerCase().includes(search) ||
-        inv.partenaire_nom?.toLowerCase().includes(search);
+      const matchesSearch = textMatchesSearch(
+        searchQuery,
+        inv.nom_produit,
+        inv.contact_nom,
+        inv.contact_prenom,
+        inv.partenaire_nom
+      );
 
       const matchesType = typeFilter === "ALL" || inv.type_produit === typeFilter;
       
@@ -239,88 +180,44 @@ export function Investissements() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredInvestissements.map((inv) => (
-                <div
-                  key={inv.id}
-                  className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1 space-y-2">
-                      {/* Ligne 1 : Nom du produit + Type */}
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-semibold text-lg">{formatNomProduit(inv.nom_produit)}</h3>
-                        <Badge className={getTypeProduitColor(inv.type_produit)}>
-                          {getTypeProduitLabel(inv.type_produit)}
-                        </Badge>
-                      </div>
-
-                      {/* Ligne 2 : Client + Partenaire */}
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <div className="flex items-center gap-1">
-                          <span className="font-medium">Client :</span>
-                          <span>
-                            {inv.contact_prenom} {inv.contact_nom}
-                          </span>
-                        </div>
-                        {inv.partenaire_nom && (
-                          <div className="flex items-center gap-1">
-                            <span className="font-medium">Partenaire :</span>
-                            <span>{inv.partenaire_nom}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Ligne 3 : Montant + Date + Options */}
-                      <div className="flex items-center gap-4 text-sm">
-                        <div className="font-semibold text-primary">
-                          {formatEuro(inv.montant_initial)}
-                        </div>
-                        <div className="text-muted-foreground">
-                          Souscrit le {formatDate(inv.date_souscription)}
-                        </div>
-                        <div className="flex gap-2">
-                          {inv.versement_programme && (
-                            <Badge variant="outline" className="text-xs">
-                              VP
-                            </Badge>
-                          )}
-                          {inv.reinvestissement_dividendes && (
-                            <Badge variant="outline" className="text-xs">
-                              {inv.notes?.match(/Réinv\. (\d+)%/)?.[0] || "Réinv. 100%"}
-                            </Badge>
-                          )}
-                        </div>
-                        {inv.date_fin_demembrement && (
-                          <div className="text-xs text-purple-600 font-medium">
-                            Fin démembrement : {formatDate(inv.date_fin_demembrement)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedInvestissement(inv);
-                          setShowForm(true);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDelete(inv.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+              {filteredInvestissements.map((inv) => {
+                const ownerLabel = inv.foyer_nom
+                  ? inv.foyer_nom
+                  : [inv.contact_prenom, inv.contact_nom]
+                      .filter(Boolean)
+                      .join(" ")
+                      .trim();
+                return (
+                  <InvestissementCard
+                    key={inv.id}
+                    inv={inv}
+                    partenaireNom={inv.partenaire_nom}
+                    proprietaireLabel={ownerLabel || undefined}
+                    proprietaireVariant={inv.foyer_id ? "foyer" : "member"}
+                    actions={
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSelectedInvestissement(inv);
+                            setShowForm(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDelete(inv.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </>
+                    }
+                  />
+                );
+              })}
             </div>
           )}
         </CardContent>

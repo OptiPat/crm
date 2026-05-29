@@ -1,82 +1,117 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import {
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Area,
+  ComposedChart,
+} from "recharts";
 import { getMonthlyStats, MonthlyStats } from "@/lib/api/tauri-dashboard";
+import {
+  CHART_AXIS_STROKE,
+  CHART_GRID_STROKE,
+  ChartEmpty,
+  ChartLoading,
+  ChartTooltipBox,
+  DASHBOARD_PRIMARY,
+} from "./dashboard-ui";
 
 export function MonthlyChart() {
   const [data, setData] = useState<MonthlyStats[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const totalYear = useMemo(
+    () => data.reduce((s, d) => s + (d.nouveaux ?? 0), 0),
+    [data]
+  );
+
   useEffect(() => {
-    loadData();
+    (async () => {
+      try {
+        setLoading(true);
+        setData(await getMonthlyStats());
+      } catch (error) {
+        console.error("Erreur statistiques mensuelles:", error);
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, []);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const stats = await getMonthlyStats();
-      setData(stats);
-    } catch (error) {
-      console.error("Erreur lors du chargement des statistiques mensuelles:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 rounded-lg shadow-lg border border-border">
-          <p className="font-medium">{payload[0].payload.month}</p>
-          <p className="text-sm text-primary">
-            {payload[0].value} nouveau{payload[0].value > 1 ? 'x' : ''} contact{payload[0].value > 1 ? 's' : ''}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
-    <Card>
-      <CardHeader>
+    <Card className="shadow-sm border-border/80 h-full flex flex-col">
+      <CardHeader className="pb-2">
         <CardTitle className="font-serif text-xl">Évolution mensuelle</CardTitle>
-        <CardDescription>Nouveaux contacts sur les 12 derniers mois</CardDescription>
+        <CardDescription>
+          Nouveaux contacts sur 12 mois
+          {!loading && data.length > 0 && (
+            <span className="tabular-nums"> — {totalYear} au total</span>
+          )}
+        </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {loading ? (
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            Chargement...
-          </div>
+          <ChartLoading height={300} />
         ) : data.length === 0 ? (
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            Aucune donnée à afficher
-          </div>
+          <ChartEmpty height={300} title="Aucune donnée à afficher" />
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis 
-                dataKey="month" 
-                stroke="#6b7280"
-                style={{ fontSize: '12px' }}
+            <ComposedChart data={data} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="monthlyFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={DASHBOARD_PRIMARY} stopOpacity={0.2} />
+                  <stop offset="100%" stopColor={DASHBOARD_PRIMARY} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
+              <XAxis
+                dataKey="month"
+                stroke={CHART_AXIS_STROKE}
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
               />
-              <YAxis 
-                stroke="#6b7280"
-                style={{ fontSize: '12px' }}
+              <YAxis
+                stroke={CHART_AXIS_STROKE}
+                tick={{ fontSize: 11 }}
+                tickLine={false}
+                axisLine={false}
+                allowDecimals={false}
+                width={36}
               />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="nouveaux" 
-                stroke="#1E3A5F" 
-                strokeWidth={2}
-                name="Nouveaux contacts"
-                dot={{ fill: "#1E3A5F", r: 4 }}
-                activeDot={{ r: 6 }}
+              <Tooltip
+                content={({ active, payload }) => {
+                  if (!active || !payload?.length) return null;
+                  const v = payload[0].value as number;
+                  return (
+                    <ChartTooltipBox>
+                      <p className="font-medium">{payload[0].payload.month}</p>
+                      <p className="text-primary font-semibold">
+                        {v} nouveau{v > 1 ? "x" : ""} contact{v > 1 ? "s" : ""}
+                      </p>
+                    </ChartTooltipBox>
+                  );
+                }}
               />
-            </LineChart>
+              <Area
+                type="monotone"
+                dataKey="nouveaux"
+                fill="url(#monthlyFill)"
+                stroke="none"
+              />
+              <Line
+                type="monotone"
+                dataKey="nouveaux"
+                stroke={DASHBOARD_PRIMARY}
+                strokeWidth={2.5}
+                dot={{ fill: DASHBOARD_PRIMARY, r: 3, strokeWidth: 0 }}
+                activeDot={{ r: 5, fill: DASHBOARD_PRIMARY }}
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </CardContent>

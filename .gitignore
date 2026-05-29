@@ -25,3 +25,27 @@ dist-ssr
 
 # Tauri
 /src-tauri/target
+
+# --- Données sensibles (ne jamais committer) ---
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+auth.json
+*.key
+*.pem
+.env
+.env.*
+!.env.example
+
+# Sauvegardes locales / exports
+**/backups/
+*.backup
+*BACKUP*
+*OLD_*
+
+# Releases générées localement
+release-artifacts/
+
+# Excel (exports / modèles — regénérer avec generate-template-filleuls.ps1)
+*.xlsx

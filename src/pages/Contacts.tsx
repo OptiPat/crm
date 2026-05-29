@@ -14,7 +14,12 @@ import {
 import { Plus, Search, Mail, Phone, Filter, FileUp, Trash2, Users2, GitMerge } from "lucide-react";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
-import { getInvestissementsByContact, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
+import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
+import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
+import {
+  getContactsForFoyer,
+  loadFoyerPatrimoineCentimes,
+} from "@/lib/foyers/foyer-utils";
 import { getEtiquettesByContact, getAllEtiquettes, getContrastColor, checkAndApplyAutoEtiquettes, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
@@ -22,10 +27,102 @@ import { ContactImport } from "@/components/contacts/ContactImport";
 import { ContactImportFilleuls } from "@/components/contacts/ContactImportFilleuls";
 import { ContactDeduplicate } from "@/components/contacts/ContactDeduplicate";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
+import { contactMatchesSearch } from "@/lib/search-utils";
 
 type MainTab = "clients" | "filleuls";
 type ClientSubTab = "CLIENT" | "PROSPECT_CLIENT" | "SUSPECT_CLIENT";
 type FilleulSubTab = "FILLEUL" | "PROSPECT_FILLEUL" | "SUSPECT_FILLEUL" | "FILLEUL_DESINSCRIT";
+
+const MAX_ETIQUETTES_ON_ROW = 4;
+
+function ContactRowEtiquettes({
+  contactId,
+  etiquettesParContact,
+}: {
+  contactId: number;
+  etiquettesParContact: Record<number, ContactEtiquetteDetails[]>;
+}) {
+  const etiqs = etiquettesParContact[contactId];
+  if (!etiqs?.length) return null;
+
+  const shown = etiqs.slice(0, MAX_ETIQUETTES_ON_ROW);
+  const extra = etiqs.length - shown.length;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 gap-y-2 mt-2.5 mb-0.5 max-w-full">
+      {shown.map((etiq) => (
+        <span
+          key={etiq.etiquette_id}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium max-w-[11rem] truncate"
+          style={{
+            backgroundColor: etiq.etiquette_couleur,
+            color: getContrastColor(etiq.etiquette_couleur),
+          }}
+          title={etiq.etiquette_nom}
+        >
+          <span className="truncate">{etiq.etiquette_nom}</span>
+        </span>
+      ))}
+      {extra > 0 && (
+        <span className="text-xs text-muted-foreground shrink-0">+{extra}</span>
+      )}
+    </div>
+  );
+}
+
+function ContactRowMeta({
+  contact,
+  isFilleulTab,
+  withSeparator,
+}: {
+  contact: Contact;
+  isFilleulTab: boolean;
+  withSeparator: boolean;
+}) {
+  const dateToUse = isFilleulTab
+    ? contact.date_dernier_contact_filleul
+    : contact.date_dernier_contact;
+
+  let dernierContact: string | null = null;
+  if (dateToUse) {
+    try {
+      const date = new Date(dateToUse * 1000);
+      if (!isNaN(date.getTime())) {
+        dernierContact = date.toLocaleDateString("fr-FR");
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <div
+      className={
+        withSeparator
+          ? "flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground mt-3 pt-3 border-t border-border/50"
+          : "flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground mt-1"
+      }
+    >
+      {contact.email && (
+        <div className="flex items-center gap-1.5 min-w-0 max-w-full">
+          <Mail className="h-4 w-4 shrink-0" />
+          <span className="truncate">{contact.email}</span>
+        </div>
+      )}
+      {contact.telephone && (
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Phone className="h-4 w-4 shrink-0" />
+          {contact.telephone}
+        </div>
+      )}
+      {dernierContact && (
+        <div className="flex items-center gap-1 text-xs shrink-0">
+          <span>Dernier contact : {dernierContact}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Contacts() {
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -172,12 +269,7 @@ export function Contacts() {
   const filteredContacts = contacts
     .filter((contact) => {
       // Filtre de recherche textuelle
-      const search = searchQuery.toLowerCase();
-      const matchesSearch =
-        contact.nom?.toLowerCase().includes(search) ||
-        contact.prenom?.toLowerCase().includes(search) ||
-        contact.email?.toLowerCase().includes(search) ||
-        contact.telephone?.toLowerCase().includes(search);
+      const matchesSearch = contactMatchesSearch(searchQuery, contact);
 
       // 🔥 Filtre par catégorie - LOGIQUE INDÉPENDANTE
       let matchesCategorie = false;
@@ -219,7 +311,9 @@ export function Contacts() {
       const key = contact.foyer_id ? `foyer_${contact.foyer_id}` : `no_foyer_${contact.id}`;
 
       if (!grouped[key]) {
-        const foyer = contact.foyer_id ? foyers.find((f) => f.id === contact.foyer_id) || null : null;
+        const foyer = contact.foyer_id
+          ? foyers.find((f) => Number(f.id) === Number(contact.foyer_id)) || null
+          : null;
         grouped[key] = {
           foyer,
           contacts: [],
@@ -269,11 +363,11 @@ export function Contacts() {
 
       for (const foyer of foyers) {
         try {
-          const investissements = await getInvestissementsByFoyer(foyer.id);
-          const total = investissements.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-          const avecMoi = investissements
-            .filter(inv => inv.origine === "MON_CONSEIL")
-            .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
+          const membres = getContactsForFoyer(contacts, foyer.id);
+          const total = await loadFoyerPatrimoineCentimes(foyer.id, membres);
+          const avecMoi = await loadFoyerPatrimoineCentimes(foyer.id, membres, {
+            avecMoiOnly: true,
+          });
           newPatrimoines[`foyer_${foyer.id}`] = total / 100;
           newPatrimoinesAvecMoi[`foyer_${foyer.id}`] = avecMoi / 100;
         } catch (error) {
@@ -330,25 +424,6 @@ export function Contacts() {
     }
   }, [contacts]);
 
-  const getCategorieColor = (categorie: string) => {
-    switch (categorie) {
-      case "CLIENT":
-        return "bg-green-100 text-green-800";
-      case "PROSPECT_CLIENT":
-        return "bg-blue-100 text-blue-800";
-      case "SUSPECT_CLIENT":
-        return "bg-yellow-100 text-yellow-800";
-      case "FILLEUL":
-      case "PROSPECT_FILLEUL":
-      case "SUSPECT_FILLEUL":
-        return "bg-emerald-100 text-emerald-800"; // Filleul inscrit = vert
-      case "FILLEUL_DESINSCRIT":
-        return "bg-red-100 text-red-800"; // Filleul désinscrit = rouge
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
   const getCategorieLabel = (categorie: string) => {
     switch (categorie) {
       case "CLIENT": return "Client";
@@ -364,13 +439,8 @@ export function Contacts() {
   };
 
   const handleViewContact = (contact: Contact) => {
-    // Fermer d'abord puis rouvrir pour forcer le rafraîchissement
-    setShowDetail(false);
     setSelectedContact(contact);
-    // Utiliser setTimeout pour s'assurer que le state est bien mis à jour
-    setTimeout(() => {
-      setShowDetail(true);
-    }, 10);
+    setShowDetail(true);
   };
 
   const handleDeleteContact = async (id: number) => {
@@ -741,9 +811,9 @@ export function Contacts() {
                             </div>
                             {/* 🔥 Masquer patrimoine dans l'onglet Filleuls */}
                             {!isFilleulTab && totalPatrimoine > 0 && (
-                              <div className="text-sm font-medium text-primary">
-                                💰 {totalPatrimoine.toLocaleString("fr-FR")} €
-                              </div>
+                              <span className="text-sm font-medium text-primary">
+                                {totalPatrimoine.toLocaleString("fr-FR")} €
+                              </span>
                             )}
                           </div>
                         </div>
@@ -756,11 +826,20 @@ export function Contacts() {
                             return (
                               <div
                                 key={contact.id}
-                                className="p-4 hover:bg-accent transition-colors"
+                                role="button"
+                                tabIndex={0}
+                                className="p-4 hover:bg-muted/70 transition-colors cursor-pointer"
+                                onClick={() => handleViewContact(contact)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter" || e.key === " ") {
+                                    e.preventDefault();
+                                    handleViewContact(contact);
+                                  }
+                                }}
                               >
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center gap-3 mb-2">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-3 mb-1 flex-wrap">
                                       <h4 className="font-semibold">
                                         {contact.prenom} {contact.nom}
                                       </h4>
@@ -773,7 +852,7 @@ export function Contacts() {
                                       )}
                                       {/* 🔥 Badge categorie seulement si pas "AUCUN" ET pas dans l'onglet Filleuls */}
                                       {!isFilleulTab && contact.categorie !== "AUCUN" && (
-                                        <Badge className={getCategorieColor(contact.categorie)}>
+                                        <Badge className={getContactCategorieBadgeClass(contact.categorie, contact.filleul_categorie)}>
                                           {getCategorieLabel(contact.categorie)}
                                         </Badge>
                                       )}
@@ -793,7 +872,7 @@ export function Contacts() {
                                       {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                                       {!isFilleulTab && contactPatrimoine > 0 && (
                                         <span className="text-xs text-muted-foreground">
-                                          💰 {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
+                                          {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
                                           {contactPatrimoine > contactPatrimoineAvecMoi && (
                                             <span className="text-gray-400 ml-1">
                                               ({contactPatrimoine.toLocaleString("fr-FR")} € total)
@@ -812,69 +891,27 @@ export function Contacts() {
                                         </span>
                                       )}
                                     </div>
-                                    {/* 🏷️ Étiquettes du contact */}
-                                    {contact.id && etiquettesParContact[contact.id]?.length > 0 && (
-                                      <div className="flex flex-wrap gap-1 mt-1">
-                                        {etiquettesParContact[contact.id].slice(0, 3).map((etiq) => (
-                                          <span
-                                            key={etiq.etiquette_id}
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                                            style={{
-                                              backgroundColor: etiq.etiquette_couleur,
-                                              color: getContrastColor(etiq.etiquette_couleur)
-                                            }}
-                                          >
-                                            {etiq.etiquette_icone && <span>{etiq.etiquette_icone}</span>}
-                                            <span>{etiq.etiquette_nom}</span>
-                                          </span>
-                                        ))}
-                                        {etiquettesParContact[contact.id].length > 3 && (
-                                          <span className="text-xs text-muted-foreground">
-                                            +{etiquettesParContact[contact.id].length - 3}
-                                          </span>
-                                        )}
-                                      </div>
+                                    {contact.id && (
+                                      <ContactRowEtiquettes
+                                        contactId={contact.id}
+                                        etiquettesParContact={etiquettesParContact}
+                                      />
                                     )}
-                                    <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                      {contact.email && (
-                                        <div className="flex items-center gap-1">
-                                          <Mail className="h-4 w-4" />
-                                          {contact.email}
-                                        </div>
-                                      )}
-                                      {contact.telephone && (
-                                        <div className="flex items-center gap-1">
-                                          <Phone className="h-4 w-4" />
-                                          {contact.telephone}
-                                        </div>
-                                      )}
-                                      {/* 🔥 Afficher la bonne date selon l'onglet */}
-                                      {(() => {
-                                        const dateToUse = isFilleulTab 
-                                          ? contact.date_dernier_contact_filleul 
-                                          : contact.date_dernier_contact;
-                                        if (!dateToUse) return null;
-                                        try {
-                                          const date = new Date(dateToUse * 1000);
-                                          if (!isNaN(date.getTime())) {
-                                            return (
-                                              <div className="flex items-center gap-1 text-xs">
-                                                <span>
-                                                  Dernier contact : {date.toLocaleDateString('fr-FR')}
-                                                </span>
-                                              </div>
-                                            );
-                                          }
-                                        } catch (e) {
-                                          return null;
-                                        }
-                                        return null;
-                                      })()}
-                                    </div>
+                                    <ContactRowMeta
+                                      contact={contact}
+                                      isFilleulTab={isFilleulTab}
+                                      withSeparator={
+                                        !!(
+                                          contact.id &&
+                                          (etiquettesParContact[contact.id]?.length ?? 0) > 0
+                                        )
+                                      }
+                                    />
                                   </div>
                                   <Button 
                                     variant="outline" 
                                     size="sm"
+                                    className="shrink-0"
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       handleViewContact(contact);
@@ -898,11 +935,20 @@ export function Contacts() {
                           return (
                             <div
                               key={contact.id}
-                              className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
+                              role="button"
+                              tabIndex={0}
+                              className="p-4 border border-border rounded-lg hover:bg-muted/70 transition-colors cursor-pointer"
+                              onClick={() => handleViewContact(contact)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  handleViewContact(contact);
+                                }
+                              }}
                             >
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-2">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-3 mb-1 flex-wrap">
                                     <h3 className="font-semibold text-lg">
                                       {contact.prenom} {contact.nom}
                                     </h3>
@@ -911,7 +957,7 @@ export function Contacts() {
                                     </Badge>
                                     {/* 🔥 Badge categorie seulement si pas "AUCUN" ET pas dans l'onglet Filleuls */}
                                     {!isFilleulTab && contact.categorie !== "AUCUN" && (
-                                      <Badge className={getCategorieColor(contact.categorie)}>
+                                      <Badge className={getContactCategorieBadgeClass(contact.categorie, contact.filleul_categorie)}>
                                         {getCategorieLabel(contact.categorie)}
                                       </Badge>
                                     )}
@@ -931,7 +977,7 @@ export function Contacts() {
                                     {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                                     {!isFilleulTab && contactPatrimoine > 0 && (
                                       <span className="text-xs text-muted-foreground">
-                                        💰 {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
+                                        {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
                                         {contactPatrimoine > contactPatrimoineAvecMoi && (
                                           <span className="text-gray-400 ml-1">
                                             ({contactPatrimoine.toLocaleString("fr-FR")} € total)
@@ -950,69 +996,27 @@ export function Contacts() {
                                       </span>
                                     )}
                                   </div>
-                                  {/* 🏷️ Étiquettes du contact */}
-                                  {contact.id && etiquettesParContact[contact.id]?.length > 0 && (
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {etiquettesParContact[contact.id].slice(0, 3).map((etiq) => (
-                                        <span
-                                          key={etiq.etiquette_id}
-                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                                          style={{
-                                            backgroundColor: etiq.etiquette_couleur,
-                                            color: getContrastColor(etiq.etiquette_couleur)
-                                          }}
-                                        >
-                                          {etiq.etiquette_icone && <span>{etiq.etiquette_icone}</span>}
-                                          <span>{etiq.etiquette_nom}</span>
-                                        </span>
-                                      ))}
-                                      {etiquettesParContact[contact.id].length > 3 && (
-                                        <span className="text-xs text-muted-foreground">
-                                          +{etiquettesParContact[contact.id].length - 3}
-                                        </span>
-                                      )}
-                                    </div>
+                                  {contact.id && (
+                                    <ContactRowEtiquettes
+                                      contactId={contact.id}
+                                      etiquettesParContact={etiquettesParContact}
+                                    />
                                   )}
-                                  <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                                    {contact.email && (
-                                      <div className="flex items-center gap-1">
-                                        <Mail className="h-4 w-4" />
-                                        {contact.email}
-                                      </div>
-                                    )}
-                                    {contact.telephone && (
-                                      <div className="flex items-center gap-1">
-                                        <Phone className="h-4 w-4" />
-                                        {contact.telephone}
-                                      </div>
-                                    )}
-                                    {/* 🔥 Afficher la bonne date selon l'onglet */}
-                                    {(() => {
-                                      const dateToUse = isFilleulTab 
-                                        ? contact.date_dernier_contact_filleul 
-                                        : contact.date_dernier_contact;
-                                      if (!dateToUse) return null;
-                                      try {
-                                        const date = new Date(dateToUse * 1000);
-                                        if (!isNaN(date.getTime())) {
-                                          return (
-                                            <div className="flex items-center gap-1 text-xs">
-                                              <span>
-                                                Dernier contact : {date.toLocaleDateString('fr-FR')}
-                                              </span>
-                                            </div>
-                                          );
-                                        }
-                                      } catch (e) {
-                                        return null;
-                                      }
-                                      return null;
-                                    })()}
-                                  </div>
+                                  <ContactRowMeta
+                                    contact={contact}
+                                    isFilleulTab={isFilleulTab}
+                                    withSeparator={
+                                      !!(
+                                        contact.id &&
+                                        (etiquettesParContact[contact.id]?.length ?? 0) > 0
+                                      )
+                                    }
+                                  />
                                 </div>
                                 <Button 
                                   variant="outline" 
                                   size="sm"
+                                  className="shrink-0"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleViewContact(contact);
@@ -1039,17 +1043,26 @@ export function Contacts() {
                 return (
                   <div
                     key={contact.id}
-                    className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
+                    role="button"
+                    tabIndex={0}
+                    className="p-4 border border-border rounded-lg hover:bg-muted/70 transition-colors cursor-pointer"
+                    onClick={() => handleViewContact(contact)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleViewContact(contact);
+                      }
+                    }}
                   >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <h3 className="font-semibold text-lg">
                             {contact.prenom} {contact.nom}
                           </h3>
                           {/* 🔥 Badge categorie seulement si pas "AUCUN" ET pas dans l'onglet Filleuls */}
                           {!isFilleulTab && contact.categorie !== "AUCUN" && (
-                            <Badge className={getCategorieColor(contact.categorie)}>
+                            <Badge className={getContactCategorieBadgeClass(contact.categorie, contact.filleul_categorie)}>
                               {getCategorieLabel(contact.categorie)}
                             </Badge>
                           )}
@@ -1069,7 +1082,7 @@ export function Contacts() {
                           {/* 🔥 Patrimoine seulement dans l'onglet Clients */}
                           {!isFilleulTab && contactPatrimoine > 0 && (
                             <span className="text-sm font-medium text-primary">
-                              💰 {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
+                              {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
                               {contactPatrimoine > contactPatrimoineAvecMoi && (
                                 <span className="text-gray-400 ml-1 font-normal">
                                   ({contactPatrimoine.toLocaleString("fr-FR")} € total)
@@ -1088,69 +1101,27 @@ export function Contacts() {
                             </span>
                           )}
                         </div>
-                        {/* 🏷️ Étiquettes du contact */}
-                        {contact.id && etiquettesParContact[contact.id]?.length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {etiquettesParContact[contact.id].slice(0, 3).map((etiq) => (
-                              <span
-                                key={etiq.etiquette_id}
-                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
-                                style={{
-                                  backgroundColor: etiq.etiquette_couleur,
-                                  color: getContrastColor(etiq.etiquette_couleur)
-                                }}
-                              >
-                                {etiq.etiquette_icone && <span>{etiq.etiquette_icone}</span>}
-                                <span>{etiq.etiquette_nom}</span>
-                              </span>
-                            ))}
-                            {etiquettesParContact[contact.id].length > 3 && (
-                              <span className="text-xs text-muted-foreground">
-                                +{etiquettesParContact[contact.id].length - 3}
-                              </span>
-                            )}
-                          </div>
+                        {contact.id && (
+                          <ContactRowEtiquettes
+                            contactId={contact.id}
+                            etiquettesParContact={etiquettesParContact}
+                          />
                         )}
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          {contact.email && (
-                            <div className="flex items-center gap-1">
-                              <Mail className="h-4 w-4" />
-                              {contact.email}
-                            </div>
-                          )}
-                          {contact.telephone && (
-                            <div className="flex items-center gap-1">
-                              <Phone className="h-4 w-4" />
-                              {contact.telephone}
-                            </div>
-                          )}
-                          {/* 🔥 Afficher la bonne date selon l'onglet */}
-                          {(() => {
-                            const dateToUse = isFilleulTab 
-                              ? contact.date_dernier_contact_filleul 
-                              : contact.date_dernier_contact;
-                            if (!dateToUse) return null;
-                            try {
-                              const date = new Date(dateToUse * 1000);
-                              if (!isNaN(date.getTime())) {
-                                return (
-                                  <div className="flex items-center gap-1 text-xs">
-                                    <span>
-                                      Dernier contact : {date.toLocaleDateString('fr-FR')}
-                                    </span>
-                                  </div>
-                                );
-                              }
-                            } catch (e) {
-                              return null;
-                            }
-                            return null;
-                          })()}
-                        </div>
+                        <ContactRowMeta
+                          contact={contact}
+                          isFilleulTab={isFilleulTab}
+                          withSeparator={
+                            !!(
+                              contact.id &&
+                              (etiquettesParContact[contact.id]?.length ?? 0) > 0
+                            )
+                          }
+                        />
                       </div>
                       <Button 
                         variant="outline" 
                         size="sm"
+                        className="shrink-0"
                         onClick={(e) => {
                           e.stopPropagation();
                           handleViewContact(contact);

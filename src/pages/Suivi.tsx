@@ -11,14 +11,28 @@ import {
   genererAlertesAutomatiques,
   checkAndCreateDemembrementAlerts,
   type Alerte,
+  formatAlerteContactLabel,
 } from "@/lib/api/tauri-alertes";
 import { getContactById, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import {
+  addMonthsLocal,
   contactToUpdatePayload,
   getClientLabel,
   getFilleulLabel,
-  isFilleulStatut,
+  isAlerteSuiviFilleul,
+  suiviDatesOverrides,
+  todayLocal,
 } from "@/lib/contacts/contact-form-utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -39,30 +53,66 @@ import { toast } from "sonner";
 export function Suivi() {
   const [alertes, setAlertes] = useState<Alerte[]>([]);
   const [loading, setLoading] = useState(true);
-  const [generatingAlertes, setGeneratingAlertes] = useState(false);
   const [etiquettes, setEtiquettes] = useState<EtiquetteWithCount[]>([]);
   const [selectedEtiquette, setSelectedEtiquette] = useState<EtiquetteWithCount | null>(null);
   const [etiquetteContacts, setEtiquetteContacts] = useState<Contact[]>([]);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [activeTab, setActiveTab] = useState("alertes");
+  const [reporterSelectKeys, setReporterSelectKeys] = useState<Record<number, number>>({});
+  const [alerteATraiter, setAlerteATraiter] = useState<Alerte | null>(null);
+  const [dateDernierSuivi, setDateDernierSuivi] = useState(todayLocal());
+  const [submittingTraiter, setSubmittingTraiter] = useState(false);
 
   useEffect(() => {
-    loadAlertes();
+    void loadAlertes();
     loadEtiquettes();
   }, []);
 
-  const loadAlertes = async () => {
+  useEffect(() => {
+    if (activeTab !== "alertes") return;
+    const interval = window.setInterval(() => {
+      void loadAlertes({ silent: true });
+    }, 60_000);
+    return () => window.clearInterval(interval);
+  }, [activeTab]);
+
+  useEffect(() => {
+    const onFocus = () => void loadAlertes({ silent: true });
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, []);
+
+  const loadAlertes = async (options?: { silent?: boolean }) => {
+    const showLoading = !options?.silent;
     try {
-      // Vérifier et créer les alertes de fin de démembrement
-      await checkAndCreateDemembrementAlerts();
-      
-      // Charger toutes les alertes non traitées
+      if (showLoading) setLoading(true);
+
+      try {
+        await checkAndApplyAutoEtiquettes();
+      } catch (error) {
+        console.error("Error applying auto etiquettes:", error);
+      }
+
+      try {
+        await checkAndCreateDemembrementAlerts();
+      } catch (error) {
+        console.error("Error demembrement alerts:", error);
+      }
+
+      try {
+        await genererAlertesAutomatiques();
+      } catch (error) {
+        console.error("Error generating alertes:", error);
+        if (showLoading) toast.error("Erreur lors de la génération des alertes");
+      }
+
       const data = await getAlertesNonTraitees();
       setAlertes(data);
     } catch (error) {
       console.error("Error loading alertes:", error);
+      if (showLoading) toast.error("Erreur lors du chargement des alertes");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -122,89 +172,91 @@ export function Suivi() {
     }
   };
 
-  const handleGenererAlertes = async () => {
-    setGeneratingAlertes(true);
-    try {
-      const count = await genererAlertesAutomatiques();
-      alert(`${count} nouvelle(s) alerte(s) générée(s)`);
-      await loadAlertes();
-    } catch (error) {
-      console.error("Error generating alertes:", error);
-      alert("Erreur lors de la génération des alertes");
-    } finally {
-      setGeneratingAlertes(false);
-    }
+  const openTraiterDialog = (alerte: Alerte) => {
+    setAlerteATraiter(alerte);
+    setDateDernierSuivi(todayLocal());
   };
 
-  const handleTraiter = async (id: number) => {
+  const confirmTraiter = async () => {
+    if (!alerteATraiter) return;
+    setSubmittingTraiter(true);
     try {
-      await marquerAlerteTraitee(id);
-      await loadAlertes();
+      const contact = await getContactById(alerteATraiter.contact_id);
+      await updateContact(
+        alerteATraiter.contact_id,
+        contactToUpdatePayload(
+          contact,
+          suiviDatesOverrides(alerteATraiter.type_alerte, {
+            dernierContact: dateDernierSuivi,
+          })
+        )
+      );
+      await marquerAlerteTraitee(alerteATraiter.id);
+      setAlertes((prev) => prev.filter((a) => a.id !== alerteATraiter.id));
+      setAlerteATraiter(null);
+      toast.success("Suivi enregistré sur le contact");
+      void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error marking alerte as treated:", error);
-      alert("Erreur lors du traitement");
+      toast.error("Erreur lors du traitement");
+    } finally {
+      setSubmittingTraiter(false);
     }
   };
 
   const handleReporterSuivi = async (alerte: Alerte, mois: number) => {
     try {
-      // Récupérer le contact
       const contact = await getContactById(alerte.contact_id);
-
-      // Calculer la nouvelle date de prochain suivi
-      const now = new Date();
-      const nextDate = new Date(now.getTime() + mois * 30 * 24 * 60 * 60 * 1000);
-      const nextDateTimestamp = Math.floor(nextDate.getTime() / 1000).toString();
-
-      const isFilleulAlert =
-        alerte.type_alerte.startsWith("FILLEUL") ||
-        isFilleulStatut(contact.filleul_categorie) ||
-        (contact.categorie !== "CLIENT" &&
-          contact.categorie !== "PROSPECT_CLIENT" &&
-          contact.categorie !== "SUSPECT_CLIENT" &&
-          isFilleulStatut(contact.categorie));
-
-      const nowIso = new Date(now.getTime()).toISOString();
 
       await updateContact(
         alerte.contact_id,
-        contactToUpdatePayload(contact, isFilleulAlert
-          ? {
-              date_prochain_suivi_filleul: nextDateTimestamp,
-              date_dernier_contact_filleul: nowIso,
-            }
-          : {
-              date_prochain_suivi: nextDateTimestamp,
-              date_dernier_contact: nowIso,
-            })
+        contactToUpdatePayload(
+          contact,
+          suiviDatesOverrides(alerte.type_alerte, {
+            dernierContact: todayLocal(),
+            prochainSuivi: addMonthsLocal(mois),
+          })
+        )
       );
 
-      // Marquer l'alerte comme traitée
       await marquerAlerteTraitee(alerte.id);
-      await loadAlertes();
+      setAlertes((prev) => prev.filter((a) => a.id !== alerte.id));
+      setReporterSelectKeys((prev) => ({
+        ...prev,
+        [alerte.id]: (prev[alerte.id] ?? 0) + 1,
+      }));
+      toast.success(`Suivi reporté de ${mois} mois`);
+      void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error reporting suivi:", error);
-      alert("Erreur lors du report du suivi");
+      toast.error("Erreur lors du report du suivi");
     }
   };
 
   const handleSupprimer = async (id: number) => {
-    if (!confirm("Êtes-vous sûr de vouloir supprimer cette alerte ?")) return;
-
     try {
       await deleteAlerte(id);
-      await loadAlertes();
+      setAlertes((prev) => prev.filter((a) => a.id !== id));
+      toast.success("Alerte supprimée");
+      void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error deleting alerte:", error);
-      alert("Erreur lors de la suppression");
+      toast.error("Erreur lors de la suppression");
     }
   };
 
   const getTypeAlerteColor = (type: string) => {
     switch (type) {
+      case "SUIVI_CLIENT_1AN":
       case "SUIVI_CLIENT_ANNUEL":
+      case "CLIENT_JAMAIS_SUIVI":
+      case "SUIVI_FILLEUL_1AN":
         return "bg-red-100 text-red-800";
+      case "LEAD_SUIVI_6MOIS":
       case "SUIVI_PROSPECT_6MOIS":
+      case "LEAD_JAMAIS_CONTACTE":
+      case "FILLEUL_SUIVI_6MOIS":
+      case "FILLEUL_JAMAIS_CONTACTE":
         return "bg-orange-100 text-orange-800";
       case "FIN_DEMEMBREMENT":
         return "bg-blue-100 text-blue-800";
@@ -217,16 +269,28 @@ export function Suivi() {
 
   const getTypeAlerteLabel = (type: string) => {
     switch (type) {
+      case "SUIVI_CLIENT_1AN":
       case "SUIVI_CLIENT_ANNUEL":
-        return "Suivi client annuel";
+        return "Suivi client +1 an";
+      case "CLIENT_JAMAIS_SUIVI":
+        return "Client jamais suivi";
+      case "LEAD_SUIVI_6MOIS":
       case "SUIVI_PROSPECT_6MOIS":
-        return "Suivi prospect 6 mois";
+        return "Suivi prospect +6 mois";
+      case "LEAD_JAMAIS_CONTACTE":
+        return "Prospect jamais contacté";
+      case "SUIVI_FILLEUL_1AN":
+        return "Filleul suivi +1 an";
+      case "FILLEUL_SUIVI_6MOIS":
+        return "Filleul suivi +6 mois";
+      case "FILLEUL_JAMAIS_CONTACTE":
+        return "Filleul jamais contacté";
       case "FIN_DEMEMBREMENT":
         return "Fin démembrement";
       case "ANNIVERSAIRE":
         return "Anniversaire";
       default:
-        return type;
+        return type.replace(/_/g, " ").toLowerCase();
     }
   };
 
@@ -244,14 +308,9 @@ export function Suivi() {
             Gérez les alertes et le suivi de vos contacts
           </p>
         </div>
-        <Button
-          className="gap-2"
-          onClick={handleGenererAlertes}
-          disabled={generatingAlertes}
-        >
-          <RefreshCw className={`h-4 w-4 ${generatingAlertes ? "animate-spin" : ""}`} />
-          Générer les alertes
-        </Button>
+        {loading && (
+          <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+        )}
       </div>
 
       {/* Résumé */}
@@ -320,8 +379,15 @@ export function Suivi() {
                 <div className="text-center py-8">
                   <Check className="h-12 w-12 mx-auto mb-4 text-green-600" />
                   <p className="text-muted-foreground">
-                    Aucune alerte en attente. Tous vos contacts sont à jour !
+                    Aucune alerte en attente dans la liste de suivi.
                   </p>
+                  {totalContactsAvecEtiquettes > 0 && (
+                    <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
+                      Des contacts peuvent toutefois avoir une étiquette de relance
+                      (onglet Étiquettes). Les alertes se créent à partir des dates de
+                      dernier contact.
+                    </p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -349,16 +415,22 @@ export function Suivi() {
 
                       <div className="flex items-center gap-2 flex-wrap">
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           className="gap-1"
-                          onClick={() => handleTraiter(alerte.id)}
+                          onClick={() => openTraiterDialog(alerte)}
                         >
                           <Check className="h-4 w-4" />
                           Marquer comme traité
                         </Button>
 
-                        <Select onValueChange={(value) => handleReporterSuivi(alerte, parseInt(value))}>
+                        <Select
+                          key={`reporter-${alerte.id}-${reporterSelectKeys[alerte.id] ?? 0}`}
+                          onValueChange={(value) =>
+                            handleReporterSuivi(alerte, parseInt(value, 10))
+                          }
+                        >
                           <SelectTrigger className="w-[180px] h-9">
                             <Clock className="h-4 w-4 mr-2" />
                             <SelectValue placeholder="Reporter le suivi" />
@@ -371,6 +443,7 @@ export function Suivi() {
                         </Select>
 
                         <Button
+                          type="button"
                           variant="outline"
                           size="sm"
                           className="gap-1"
@@ -382,6 +455,7 @@ export function Suivi() {
                         </Button>
 
                         <Button
+                          type="button"
                           variant="ghost"
                           size="sm"
                           className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50"
@@ -434,7 +508,6 @@ export function Suivi() {
                             color: getContrastColor(etiquette.couleur)
                           }}
                         >
-                          {etiquette.icone && <span>{etiquette.icone}</span>}
                           <span>{etiquette.nom}</span>
                         </span>
                         <Badge variant="secondary">
@@ -468,7 +541,6 @@ export function Suivi() {
                             color: getContrastColor(selectedEtiquette.couleur)
                           }}
                         >
-                          {selectedEtiquette.icone && <span>{selectedEtiquette.icone}</span>}
                           <span>{selectedEtiquette.nom}</span>
                         </span>
                       ) : (
@@ -552,6 +624,62 @@ export function Suivi() {
           </div>
         </TabsContent>
       </Tabs>
+
+      <Dialog
+        open={alerteATraiter !== null}
+        onOpenChange={(open) => {
+          if (!open) setAlerteATraiter(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Marquer le suivi comme effectué</DialogTitle>
+            <DialogDescription>
+              {alerteATraiter && (
+                <>
+                  <span className="font-medium text-foreground">
+                    {formatAlerteContactLabel(
+                      alerteATraiter.message,
+                      alerteATraiter.type_alerte
+                    )}
+                  </span>
+                  {" · "}
+                  {getTypeAlerteLabel(alerteATraiter.type_alerte)}
+                  {isAlerteSuiviFilleul(alerteATraiter.type_alerte)
+                    ? " — mise à jour de la date de dernier contact filleul."
+                    : " — mise à jour de la date de dernier contact."}
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="date-dernier-suivi">Date du dernier suivi</Label>
+            <Input
+              id="date-dernier-suivi"
+              type="date"
+              value={dateDernierSuivi}
+              onChange={(e) => setDateDernierSuivi(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setAlerteATraiter(null)}
+              disabled={submittingTraiter}
+            >
+              Annuler
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void confirmTraiter()}
+              disabled={submittingTraiter || !dateDernierSuivi}
+            >
+              {submittingTraiter ? "Enregistrement…" : "Confirmer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

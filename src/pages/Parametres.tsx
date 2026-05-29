@@ -2,7 +2,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Lock, Database, Bell, User, Mail, Trash2, Search, X, Check, Building2, Phone } from "lucide-react";
+import { Lock, Database, Bell, User, Mail, Trash2, Search, X, Check, Building2, Phone, Download } from "lucide-react";
+import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
+import { getAppInfo, listDbBackups, type DbBackupEntry } from "@/lib/api/tauri-system";
 import { SmtpConfigForm } from "@/components/emails/SmtpConfigForm";
 import { useState, useEffect } from "react";
 import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
@@ -30,7 +32,9 @@ export function Parametres() {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Contact[]>([]);
   const [searching, setSearching] = useState(false);
-  
+  const [dbPath, setDbPath] = useState("");
+  const [backups, setBackups] = useState<DbBackupEntry[]>([]);
+
   // Charger la config CGP au montage
   useEffect(() => {
     const loadCgpConfig = async () => {
@@ -54,6 +58,12 @@ export function Parametres() {
       }
     };
     loadCgpConfig();
+    getAppInfo()
+      .then((info) => setDbPath(info.db_path))
+      .catch(() => {});
+    listDbBackups()
+      .then(setBackups)
+      .catch(() => {});
   }, []);
   
   const handleSaveProfile = async () => {
@@ -216,6 +226,26 @@ export function Parametres() {
         </CardContent>
       </Card>
 
+      {/* Mises à jour */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Download className="h-5 w-5 text-primary" />
+            <CardTitle>Mises à jour</CardTitle>
+          </div>
+          <CardDescription>
+            Mise à jour automatique du logiciel (vos données restent sur cet ordinateur)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <CheckForUpdatesButton />
+          <p className="text-xs text-muted-foreground">
+            Au démarrage, l&apos;application vérifie aussi les mises à jour disponibles.
+            Un backup de la base est créé automatiquement avant chaque migration.
+          </p>
+        </CardContent>
+      </Card>
+
       {/* Sécurité */}
       <Card>
         <CardHeader>
@@ -251,10 +281,22 @@ export function Parametres() {
         <CardContent className="space-y-4">
           <div className="p-4 bg-muted rounded-lg">
             <div className="text-sm font-medium mb-1">Emplacement</div>
-            <div className="text-xs text-muted-foreground font-mono">
-              %USERPROFILE%\AppData\Roaming\com.patrimoine-crm.app\patrimoine-crm.db
+            <div className="text-xs text-muted-foreground font-mono break-all">
+              {dbPath || "…"}
             </div>
           </div>
+          {backups.length > 0 && (
+            <div className="text-xs text-muted-foreground">
+              <div className="font-medium text-foreground mb-1">Sauvegardes automatiques ({backups.length})</div>
+              <ul className="font-mono space-y-0.5 max-h-24 overflow-y-auto">
+                {backups.slice(0, 5).map((b) => (
+                  <li key={b.name}>
+                    {b.name} ({(b.size / 1024 / 1024).toFixed(1)} Mo)
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="flex gap-2">
             <Button variant="outline">
               Exporter la base de données

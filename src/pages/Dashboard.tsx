@@ -1,16 +1,30 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
 import { MonthlyChart } from "@/components/dashboard/MonthlyChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
-import { Users, Home, TrendingUp, Bell, CalendarClock, Building2, UserPlus, ShoppingCart } from "lucide-react";
+import { QuickActions } from "@/components/dashboard/QuickActions";
+import { DashboardSectionTitle } from "@/components/dashboard/dashboard-ui";
+import { formatDashboardCurrency } from "@/components/dashboard/dashboard-ui";
+import {
+  Users,
+  Home,
+  TrendingUp,
+  Bell,
+  CalendarClock,
+  ShoppingCart,
+} from "lucide-react";
 import { getDashboardStats, DashboardStats } from "@/lib/api/tauri-dashboard";
 import { checkAndApplyAutoEtiquettes, seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
+import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
 
-export function Dashboard() {
+interface DashboardProps {
+  onNavigate?: (page: string) => void;
+}
+
+export function Dashboard({ onNavigate }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -21,169 +35,135 @@ export function Dashboard() {
   const initializeAndLoadStats = async () => {
     try {
       setLoading(true);
-      
-      // Initialiser les étiquettes par défaut si nécessaire
       try {
         await seedDefaultEtiquettes();
-      } catch (error) {
-        console.log("Étiquettes déjà initialisées ou erreur:", error);
+      } catch {
+        /* déjà initialisé */
       }
-      
-      // Appliquer les étiquettes automatiques
       try {
-        const assigned = await checkAndApplyAutoEtiquettes();
-        if (assigned > 0) {
-          console.log(`🏷️ ${assigned} étiquettes automatiques attribuées`);
-        }
+        await checkAndApplyAutoEtiquettes();
       } catch (error) {
-        console.error("Erreur moteur automatique étiquettes:", error);
+        console.error("Erreur moteur étiquettes:", error);
       }
-      
-      // Charger les statistiques
-      const data = await getDashboardStats();
-      setStats(data);
+      try {
+        await genererAlertesAutomatiques();
+      } catch (error) {
+        console.error("Erreur génération alertes:", error);
+      }
+      setStats(await getDashboardStats());
     } catch (error) {
-      console.error("Erreur lors du chargement des statistiques:", error);
+      console.error("Erreur statistiques:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("fr-FR", {
-      style: "currency",
-      currency: "EUR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-3xl font-serif font-bold text-primary mb-2">
+    <div className="space-y-8 max-w-[1600px]">
+      <header className="border-b border-border/60 pb-6">
+        <h2 className="text-3xl font-serif font-bold text-primary tracking-tight">
           Tableau de bord
         </h2>
-        <p className="text-muted-foreground">
-          Vue d'ensemble de votre activité
+        <p className="text-muted-foreground mt-1">
+          Vue d&apos;ensemble de votre portefeuille et de votre activité
         </p>
-      </div>
+      </header>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        {loading ? (
-          <div className="col-span-full text-center py-8 text-muted-foreground">
-            Chargement...
-          </div>
-        ) : stats ? (
-          <>
-            <StatCard
-              title="Clients"
-              value={stats.total_clients}
-              description="Contacts actifs"
-              icon={Users}
-              iconColor="text-green-600"
-              iconBgColor="bg-green-50"
-            />
-            <StatCard
-              title="Encours placements"
-              value={formatCurrency(stats.encours_placements)}
-              description="AV, PER, FIP/FCPI..."
-              icon={TrendingUp}
-              iconColor="text-amber-600"
-              iconBgColor="bg-amber-50"
-            />
-            <StatCard
-              title="Versements programmés"
-              value={formatCurrency(stats.versements_programmes_annuels)}
-              description="Montant annuel"
-              icon={CalendarClock}
-              iconColor="text-blue-600"
-              iconBgColor="bg-blue-50"
-            />
-            <StatCard
-              title="Biens immobiliers"
-              value={stats.nombre_biens_immobiliers}
-              description="Nombre de biens"
-              icon={Home}
-              iconColor="text-emerald-600"
-              iconBgColor="bg-emerald-50"
-            />
-            <StatCard
-              title="Panier moyen"
-              value={formatCurrency(stats.panier_moyen)}
-              description="Investissement / client"
-              icon={ShoppingCart}
-              iconColor="text-purple-600"
-              iconBgColor="bg-purple-50"
-            />
-            <StatCard
-              title="À recontacter"
-              value={stats.alertes_non_traitees}
-              description="Alertes actives"
-              icon={Bell}
-              iconColor="text-red-600"
-              iconBgColor="bg-red-50"
-            />
-          </>
-        ) : (
-          <div className="col-span-full text-center py-8 text-muted-foreground">
-            Erreur lors du chargement des statistiques
-          </div>
-        )}
-      </div>
+      <section className="space-y-4">
+        <DashboardSectionTitle>Indicateurs clés</DashboardSectionTitle>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {loading ? (
+            <div className="col-span-full text-center py-10 text-sm text-muted-foreground">
+              Chargement des indicateurs…
+            </div>
+          ) : stats ? (
+            <>
+              <StatCard
+                title="Clients"
+                value={stats.total_clients}
+                description="Contacts actifs"
+                icon={Users}
+                accentColor="#10B981"
+                iconColor="text-green-600"
+                iconBgColor="bg-green-50"
+              />
+              <StatCard
+                title="Encours placements"
+                value={formatDashboardCurrency(stats.encours_placements)}
+                description="AV, PER, FIP/FCPI…"
+                icon={TrendingUp}
+                accentColor="#C9A227"
+                iconColor="text-amber-600"
+                iconBgColor="bg-amber-50"
+              />
+              <StatCard
+                title="Versements programmés"
+                value={formatDashboardCurrency(stats.versements_programmes_annuels)}
+                description="Montant annuel"
+                icon={CalendarClock}
+                accentColor="#3B82F6"
+                iconColor="text-blue-600"
+                iconBgColor="bg-blue-50"
+              />
+              <StatCard
+                title="Biens immobiliers"
+                value={stats.nombre_biens_immobiliers}
+                description="Nombre de biens"
+                icon={Home}
+                accentColor="#059669"
+                iconColor="text-emerald-600"
+                iconBgColor="bg-emerald-50"
+              />
+              <StatCard
+                title="Panier moyen"
+                value={formatDashboardCurrency(stats.panier_moyen)}
+                description="Investissement / client"
+                icon={ShoppingCart}
+                accentColor="#8B5CF6"
+                iconColor="text-purple-600"
+                iconBgColor="bg-purple-50"
+              />
+              <StatCard
+                title="À recontacter"
+                value={stats.alertes_non_traitees}
+                description="Alertes actives"
+                icon={Bell}
+                accentColor="#EF4444"
+                iconColor="text-red-600"
+                iconBgColor="bg-red-50"
+              />
+            </>
+          ) : (
+            <div className="col-span-full text-center py-10 text-muted-foreground">
+              Impossible de charger les statistiques
+            </div>
+          )}
+        </div>
+      </section>
 
-      {/* Graphiques - Ligne 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <CategoryPieChart />
-        <ProductPieChart />
-      </div>
+      <section className="space-y-4">
+        <DashboardSectionTitle>Répartition</DashboardSectionTitle>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <CategoryPieChart />
+          <ProductPieChart />
+        </div>
+      </section>
 
-      {/* Graphiques - Ligne 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <MonthlyChart />
-        <PipelineChart />
-      </div>
+      <section className="space-y-4">
+        <DashboardSectionTitle>Activité & pipeline</DashboardSectionTitle>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <MonthlyChart />
+          <PipelineChart />
+        </div>
+      </section>
 
-      {/* Alertes et Actions rapides */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <AlertsPreview />
-        
-        {/* Quick Actions */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Actions rapides</CardTitle>
-          <CardDescription>
-            Commencez par ajouter vos premiers contacts
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <button className="p-4 border border-border rounded-lg hover:bg-accent transition-colors text-left">
-              <Users className="h-6 w-6 mb-2 text-primary" />
-              <div className="font-medium">Nouveau contact</div>
-              <div className="text-sm text-muted-foreground">
-                Ajouter un client ou prospect
-              </div>
-            </button>
-            <button className="p-4 border border-border rounded-lg hover:bg-accent transition-colors text-left">
-              <Building2 className="h-6 w-6 mb-2 text-primary" />
-              <div className="font-medium">Nouveau foyer</div>
-              <div className="text-sm text-muted-foreground">
-                Créer un foyer fiscal
-              </div>
-            </button>
-            <button className="p-4 border border-border rounded-lg hover:bg-accent transition-colors text-left">
-              <UserPlus className="h-6 w-6 mb-2 text-primary" />
-              <div className="font-medium">Nouveau partenaire</div>
-              <div className="text-sm text-muted-foreground">
-                Ajouter un collaborateur
-              </div>
-            </button>
-          </div>
-        </CardContent>
-      </Card>
-      </div>
+      <section className="space-y-4">
+        <DashboardSectionTitle>À faire</DashboardSectionTitle>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+          <AlertsPreview onNavigate={onNavigate} />
+          <QuickActions onNavigate={onNavigate} />
+        </div>
+      </section>
     </div>
   );
 }

@@ -1,5 +1,11 @@
+use super::{
+    models::{
+        Contact, ContactEtiquette, ContactEtiquetteDetails, Etiquette, EtiquetteWithCount, Famille,
+        NewContact, NewContactEtiquette, NewEtiquette, NewFamille,
+    },
+    Database,
+};
 use rusqlite::{params, Result};
-use super::{Database, models::{Contact, NewContact, Famille, NewFamille, Etiquette, NewEtiquette, ContactEtiquette, NewContactEtiquette, EtiquetteWithCount, ContactEtiquetteDetails}};
 
 impl Database {
     fn validate_contact_identity(nom: &str, prenom: &str) -> Result<()> {
@@ -21,7 +27,7 @@ impl Database {
              FROM contacts
              ORDER BY created_at DESC"
         )?;
-        
+
         let contacts = stmt.query_map([], |row| {
             Ok(Contact {
                 id: row.get(0)?,
@@ -56,49 +62,54 @@ impl Database {
                 updated_at: row.get(29)?,
             })
         })?;
-        
+
         contacts.collect()
     }
-    
+
     pub fn create_contact(&self, new_contact: NewContact) -> Result<Contact> {
         use chrono::{DateTime, Utc};
 
         Self::validate_contact_identity(&new_contact.nom, &new_contact.prenom)?;
-        
+
         let statut = new_contact.statut_suivi.unwrap_or("ACTIF".to_string());
-        
+
         // Convertir les dates ISO string en timestamps Unix - CLIENTS
-        let date_dernier_contact_timestamp = new_contact.date_dernier_contact.and_then(|date_str| {
-            DateTime::parse_from_rfc3339(&date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
+        let date_dernier_contact_timestamp =
+            new_contact.date_dernier_contact.and_then(|date_str| {
+                DateTime::parse_from_rfc3339(&date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
+
         let date_prochain_suivi_timestamp = new_contact.date_prochain_suivi.and_then(|date_str| {
             DateTime::parse_from_rfc3339(&date_str)
                 .ok()
                 .map(|dt| dt.timestamp())
         });
-        
+
         // Convertir les dates ISO string en timestamps Unix - FILLEULS
-        let date_dernier_contact_filleul_timestamp = new_contact.date_dernier_contact_filleul.and_then(|date_str| {
-            DateTime::parse_from_rfc3339(&date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
-        let date_prochain_suivi_filleul_timestamp = new_contact.date_prochain_suivi_filleul.and_then(|date_str| {
-            DateTime::parse_from_rfc3339(&date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
+        let date_dernier_contact_filleul_timestamp = new_contact
+            .date_dernier_contact_filleul
+            .and_then(|date_str| {
+                DateTime::parse_from_rfc3339(&date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
+
+        let date_prochain_suivi_filleul_timestamp = new_contact
+            .date_prochain_suivi_filleul
+            .and_then(|date_str| {
+                DateTime::parse_from_rfc3339(&date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
+
         let date_naissance_timestamp = new_contact.date_naissance.and_then(|date_str| {
             DateTime::parse_from_rfc3339(&date_str)
                 .ok()
                 .map(|dt| dt.timestamp())
         });
-        
+
         self.conn.execute(
             "INSERT INTO contacts (
                 famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
@@ -137,13 +148,13 @@ impl Database {
                 new_contact.notes,
             ],
         )?;
-        
+
         let id = self.conn.last_insert_rowid();
-        
+
         // Récupérer le contact créé
         self.get_contact_by_id(id)
     }
-    
+
     pub fn get_contact_by_id(&self, id: i64) -> Result<Contact> {
         self.conn.query_row(
             "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
@@ -189,44 +200,60 @@ impl Database {
             },
         )
     }
-    
+
     pub fn delete_contact(&self, id: i64) -> Result<()> {
         // 1. Récupérer le foyer_id du contact avant suppression
-        let foyer_id: Option<i64> = self.conn.query_row(
-            "SELECT foyer_id FROM contacts WHERE id = ?1",
-            params![id],
-            |row| row.get(0)
-        ).ok();
-        
+        let foyer_id: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT foyer_id FROM contacts WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .ok();
+
         // 2. Supprimer les investissements liés directement au contact
-        self.conn.execute("DELETE FROM investissements WHERE contact_id = ?1", params![id])?;
-        
+        self.conn.execute(
+            "DELETE FROM investissements WHERE contact_id = ?1",
+            params![id],
+        )?;
+
         // 3. 🔥 Nettoyer les références prescripteur_id (mettre à NULL)
-        self.conn.execute("UPDATE contacts SET prescripteur_id = NULL WHERE prescripteur_id = ?1", params![id])?;
-        
+        self.conn.execute(
+            "UPDATE contacts SET prescripteur_id = NULL WHERE prescripteur_id = ?1",
+            params![id],
+        )?;
+
         // 4. 🔥 Nettoyer les références parrain_id (mettre à NULL)
-        self.conn.execute("UPDATE contacts SET parrain_id = NULL WHERE parrain_id = ?1", params![id])?;
-        
+        self.conn.execute(
+            "UPDATE contacts SET parrain_id = NULL WHERE parrain_id = ?1",
+            params![id],
+        )?;
+
         // 5. Supprimer le contact
-        self.conn.execute("DELETE FROM contacts WHERE id = ?1", params![id])?;
-        
+        self.conn
+            .execute("DELETE FROM contacts WHERE id = ?1", params![id])?;
+
         // 6. Si le contact avait un foyer, vérifier s'il reste des membres
         if let Some(fid) = foyer_id {
-            let remaining_members: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM contacts WHERE foyer_id = ?1",
-                params![fid],
-                |row| row.get(0)
-            ).unwrap_or(0);
-            
+            let remaining_members: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM contacts WHERE foyer_id = ?1",
+                    params![fid],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
             // Si plus aucun membre, supprimer le foyer (et ses investissements)
             if remaining_members == 0 {
                 self.delete_foyer(fid)?;
             }
         }
-        
+
         Ok(())
     }
-    
+
     pub fn find_contact_by_email(&self, email: &str) -> Result<Option<Contact>> {
         match self.conn.query_row(
             "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
@@ -280,10 +307,10 @@ impl Database {
     pub fn delete_all_contacts(&self) -> Result<usize> {
         // 1. Supprimer tous les investissements (liés aux contacts ET aux foyers)
         self.conn.execute("DELETE FROM investissements", [])?;
-        
+
         // 2. Supprimer tous les foyers
         self.conn.execute("DELETE FROM foyers", [])?;
-        
+
         // 3. Supprimer tous les contacts
         let count = self.conn.execute("DELETE FROM contacts", [])?;
         Ok(count)
@@ -296,19 +323,19 @@ impl Database {
             "DELETE FROM investissements WHERE contact_id IS NOT NULL AND contact_id NOT IN (SELECT id FROM contacts)",
             []
         )?;
-        
+
         // Supprimer les investissements dont le foyer_id n'existe plus
         let deleted_foyer = self.conn.execute(
             "DELETE FROM investissements WHERE foyer_id IS NOT NULL AND foyer_id NOT IN (SELECT id FROM foyers)",
             []
         )?;
-        
+
         println!("🧹 Nettoyage: {} investissements contact orphelins, {} investissements foyer orphelins supprimés", 
             deleted_contact, deleted_foyer);
-        
+
         Ok(deleted_contact + deleted_foyer)
     }
-    
+
     /// 🔥 Nettoyer les foyers orphelins (sans membres)
     pub fn cleanup_orphaned_foyers(&self) -> Result<usize> {
         // D'abord supprimer les investissements liés à ces foyers orphelins
@@ -317,20 +344,20 @@ impl Database {
                 SELECT f.id FROM foyers f 
                 WHERE NOT EXISTS (SELECT 1 FROM contacts c WHERE c.foyer_id = f.id)
             )",
-            []
+            [],
         )?;
-        
+
         // Puis supprimer les foyers sans membres
         let deleted = self.conn.execute(
             "DELETE FROM foyers WHERE id NOT IN (SELECT DISTINCT foyer_id FROM contacts WHERE foyer_id IS NOT NULL)",
             []
         )?;
-        
+
         println!("🧹 Nettoyage: {} foyers orphelins supprimés", deleted);
-        
+
         Ok(deleted)
     }
-    
+
     /// 🔥 Nettoyage complet des données orphelines
     pub fn cleanup_all_orphaned_data(&self) -> Result<(usize, usize)> {
         let foyers = self.cleanup_orphaned_foyers()?;
@@ -342,42 +369,53 @@ impl Database {
         use chrono::DateTime;
 
         Self::validate_contact_identity(&contact.nom, &contact.prenom)?;
-        
+
         // Convertir les dates ISO string en timestamps Unix - CLIENTS
-        let date_dernier_contact_timestamp = contact.date_dernier_contact.as_ref().and_then(|date_str| {
-            DateTime::parse_from_rfc3339(date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
-        let date_prochain_suivi_timestamp = contact.date_prochain_suivi.as_ref().and_then(|date_str| {
-            DateTime::parse_from_rfc3339(date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
+        let date_dernier_contact_timestamp =
+            contact.date_dernier_contact.as_ref().and_then(|date_str| {
+                DateTime::parse_from_rfc3339(date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
+
+        let date_prochain_suivi_timestamp =
+            contact.date_prochain_suivi.as_ref().and_then(|date_str| {
+                DateTime::parse_from_rfc3339(date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
+
         // Convertir les dates ISO string en timestamps Unix - FILLEULS
-        let date_dernier_contact_filleul_timestamp = contact.date_dernier_contact_filleul.as_ref().and_then(|date_str| {
-            DateTime::parse_from_rfc3339(date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
-        let date_prochain_suivi_filleul_timestamp = contact.date_prochain_suivi_filleul.as_ref().and_then(|date_str| {
-            DateTime::parse_from_rfc3339(date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
+        let date_dernier_contact_filleul_timestamp = contact
+            .date_dernier_contact_filleul
+            .as_ref()
+            .and_then(|date_str| {
+                DateTime::parse_from_rfc3339(date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
+
+        let date_prochain_suivi_filleul_timestamp = contact
+            .date_prochain_suivi_filleul
+            .as_ref()
+            .and_then(|date_str| {
+                DateTime::parse_from_rfc3339(date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
+
         // 🔥 statut_suivi est NOT NULL, donc on met une valeur par défaut
-        let statut_suivi = contact.statut_suivi.clone().unwrap_or_else(|| "ACTIF".to_string());
-        
+        let statut_suivi = contact
+            .statut_suivi
+            .clone()
+            .unwrap_or_else(|| "ACTIF".to_string());
+
         let date_naissance_timestamp = contact.date_naissance.as_ref().and_then(|date_str| {
             DateTime::parse_from_rfc3339(date_str)
                 .ok()
                 .map(|dt| dt.timestamp())
         });
-        
+
         self.conn.execute(
             "UPDATE contacts SET 
                 famille_id = ?1,
@@ -447,9 +485,9 @@ impl Database {
     // ========== FAMILLES ==========
 
     pub fn get_all_familles(&self) -> Result<Vec<Famille>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, nom, notes, created_at, updated_at FROM familles ORDER BY nom"
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, nom, notes, created_at, updated_at FROM familles ORDER BY nom")?;
 
         let familles = stmt.query_map([], |row| {
             Ok(Famille {
@@ -523,7 +561,8 @@ impl Database {
 
     pub fn delete_famille(&self, id: i64) -> Result<()> {
         // Les contacts avec cette famille_id auront leur famille_id mis à NULL (ON DELETE SET NULL)
-        self.conn.execute("DELETE FROM familles WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM familles WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -548,7 +587,7 @@ impl Database {
                     revenu_fiscal_reference, situation_patrimoniale, objectifs_patrimoniaux, 
                     notes, created_at, updated_at 
              FROM foyers 
-             ORDER BY nom"
+             ORDER BY nom",
         )?;
 
         let foyers = stmt.query_map([], |row| {
@@ -621,7 +660,11 @@ impl Database {
         )
     }
 
-    pub fn update_foyer(&self, id: i64, foyer: &super::models::NewFoyer) -> Result<super::models::Foyer> {
+    pub fn update_foyer(
+        &self,
+        id: i64,
+        foyer: &super::models::NewFoyer,
+    ) -> Result<super::models::Foyer> {
         self.conn.execute(
             "UPDATE foyers SET 
                 nom = ?1,
@@ -652,10 +695,14 @@ impl Database {
 
     pub fn delete_foyer(&self, id: i64) -> Result<()> {
         // 🔥 FIX: Supprimer d'abord les investissements du foyer (car ON DELETE SET NULL ne les supprime pas)
-        self.conn.execute("DELETE FROM investissements WHERE foyer_id = ?1", params![id])?;
-        
+        self.conn.execute(
+            "DELETE FROM investissements WHERE foyer_id = ?1",
+            params![id],
+        )?;
+
         // Puis supprimer le foyer
-        self.conn.execute("DELETE FROM foyers WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM foyers WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -667,7 +714,7 @@ impl Database {
                     email, telephone, adresse, code_postal, ville, specialite, zone_geo,
                     niveau_collaboration, notes, created_at, updated_at
              FROM partenaires 
-             ORDER BY raison_sociale"
+             ORDER BY raison_sociale",
         )?;
 
         let partenaires = stmt.query_map([], |row| {
@@ -698,7 +745,10 @@ impl Database {
         Ok(result)
     }
 
-    pub fn create_partenaire(&self, partenaire: super::models::NewPartenaire) -> Result<super::models::Partenaire> {
+    pub fn create_partenaire(
+        &self,
+        partenaire: super::models::NewPartenaire,
+    ) -> Result<super::models::Partenaire> {
         self.conn.execute(
             "INSERT INTO partenaires (type_partenaire, raison_sociale, nom_contact, prenom_contact,
                                      email, telephone, adresse, code_postal, ville, specialite,
@@ -756,7 +806,11 @@ impl Database {
         )
     }
 
-    pub fn update_partenaire(&self, id: i64, partenaire: &super::models::NewPartenaire) -> Result<super::models::Partenaire> {
+    pub fn update_partenaire(
+        &self,
+        id: i64,
+        partenaire: &super::models::NewPartenaire,
+    ) -> Result<super::models::Partenaire> {
         self.conn.execute(
             "UPDATE partenaires SET 
                 type_partenaire = ?1,
@@ -796,7 +850,8 @@ impl Database {
     }
 
     pub fn delete_partenaire(&self, id: i64) -> Result<()> {
-        self.conn.execute("DELETE FROM partenaires WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM partenaires WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -807,7 +862,7 @@ impl Database {
             "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
                     taille_fichier, mime_type, date_document, notes, created_at, updated_at
              FROM documents 
-             ORDER BY created_at DESC"
+             ORDER BY created_at DESC",
         )?;
 
         let documents = stmt.query_map([], |row| {
@@ -834,7 +889,10 @@ impl Database {
         Ok(result)
     }
 
-    pub fn create_document(&self, document: super::models::NewDocument) -> Result<super::models::Document> {
+    pub fn create_document(
+        &self,
+        document: super::models::NewDocument,
+    ) -> Result<super::models::Document> {
         self.conn.execute(
             "INSERT INTO documents (contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
                                    taille_fichier, mime_type, date_document, notes) 
@@ -882,7 +940,11 @@ impl Database {
         )
     }
 
-    pub fn update_document(&self, id: i64, document: &super::models::NewDocument) -> Result<super::models::Document> {
+    pub fn update_document(
+        &self,
+        id: i64,
+        document: &super::models::NewDocument,
+    ) -> Result<super::models::Document> {
         self.conn.execute(
             "UPDATE documents SET 
                 contact_id = ?1,
@@ -908,7 +970,8 @@ impl Database {
     }
 
     pub fn delete_document(&self, id: i64) -> Result<()> {
-        self.conn.execute("DELETE FROM documents WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM documents WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -918,7 +981,7 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, nom, sujet, corps, categorie, variables, created_at, updated_at
              FROM templates_email 
-             ORDER BY created_at DESC"
+             ORDER BY created_at DESC",
         )?;
 
         let templates = stmt.query_map([], |row| {
@@ -941,7 +1004,10 @@ impl Database {
         Ok(result)
     }
 
-    pub fn create_template_email(&self, template: super::models::NewTemplateEmail) -> Result<super::models::TemplateEmail> {
+    pub fn create_template_email(
+        &self,
+        template: super::models::NewTemplateEmail,
+    ) -> Result<super::models::TemplateEmail> {
         self.conn.execute(
             "INSERT INTO templates_email (nom, sujet, corps, categorie, variables) 
              VALUES (?1, ?2, ?3, ?4, ?5)",
@@ -979,7 +1045,11 @@ impl Database {
         )
     }
 
-    pub fn update_template_email(&self, id: i64, template: &super::models::NewTemplateEmail) -> Result<super::models::TemplateEmail> {
+    pub fn update_template_email(
+        &self,
+        id: i64,
+        template: &super::models::NewTemplateEmail,
+    ) -> Result<super::models::TemplateEmail> {
         self.conn.execute(
             "UPDATE templates_email SET 
                 nom = ?1,
@@ -1003,7 +1073,8 @@ impl Database {
     }
 
     pub fn delete_template_email(&self, id: i64) -> Result<()> {
-        self.conn.execute("DELETE FROM templates_email WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM templates_email WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -1013,7 +1084,7 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
              FROM alertes 
-             ORDER BY date_alerte DESC, created_at DESC"
+             ORDER BY date_alerte DESC, created_at DESC",
         )?;
 
         let alertes = stmt.query_map([], |row| {
@@ -1041,7 +1112,7 @@ impl Database {
             "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
              FROM alertes 
              WHERE traitee = 0
-             ORDER BY date_alerte DESC, created_at DESC"
+             ORDER BY date_alerte DESC, created_at DESC",
         )?;
 
         let alertes = stmt.query_map([], |row| {
@@ -1109,22 +1180,59 @@ impl Database {
     }
 
     pub fn marquer_alerte_lue(&self, id: i64) -> Result<()> {
-        self.conn.execute("UPDATE alertes SET lue = 1 WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("UPDATE alertes SET lue = 1 WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     pub fn marquer_alerte_traitee(&self, id: i64) -> Result<()> {
-        self.conn.execute("UPDATE alertes SET traitee = 1, lue = 1 WHERE id = ?1", params![id])?;
+        self.conn.execute(
+            "UPDATE alertes SET traitee = 1, lue = 1 WHERE id = ?1",
+            params![id],
+        )?;
         Ok(())
     }
 
     pub fn delete_alerte(&self, id: i64) -> Result<()> {
-        self.conn.execute("DELETE FROM alertes WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM alertes WHERE id = ?1", params![id])?;
         Ok(())
     }
 
-    // Génération automatique des alertes
+    fn has_alerte_non_traitee(&self, contact_id: i64, type_alerte: &str) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM alertes WHERE contact_id = ?1 AND type_alerte = ?2 AND traitee = 0",
+            params![contact_id, type_alerte],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    fn try_create_alerte_suivi(
+        &self,
+        contact_id: i64,
+        type_alerte: &str,
+        message: String,
+        now: i64,
+    ) -> Result<bool> {
+        if self.has_alerte_non_traitee(contact_id, type_alerte)? {
+            return Ok(false);
+        }
+        self.create_alerte(super::models::NewAlerte {
+            contact_id,
+            type_alerte: type_alerte.to_string(),
+            message,
+            date_alerte: Some(now),
+        })?;
+        Ok(true)
+    }
+
+    // Génération automatique des alertes (alignée sur les étiquettes DELAI_SANS_CONTACT)
     pub fn generer_alertes_automatiques(&self) -> Result<usize> {
+        const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
+        const JOURS_6_MOIS: i64 = 180;
+        const JOURS_1_AN: i64 = 365;
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -1134,43 +1242,40 @@ impl Database {
         let mut count = 0;
 
         for contact in contacts {
-            // Vérifier si une alerte existe déjà pour ce contact
-            let existing_alerte: Result<i64> = self.conn.query_row(
-                "SELECT COUNT(*) FROM alertes WHERE contact_id = ?1 AND traitee = 0",
-                params![contact.id],
-                |row| row.get(0),
-            );
+            let contact_id = match contact.id {
+                Some(id) => id,
+                None => continue,
+            };
 
-            if existing_alerte.unwrap_or(0) > 0 {
-                continue; // Alerte déjà existante
+            if contact.statut_suivi == "ARCHIVE" || contact.statut_suivi == "EN_PAUSE" {
+                continue;
             }
 
             let date_dernier_contact = contact.date_dernier_contact;
             let date_dernier_contact_filleul = contact.date_dernier_contact_filleul;
             let filleul_cat = contact.filleul_categorie.as_deref();
 
+            let days_since = |last: i64| (now - last) / SECONDS_PER_DAY;
+
             // ========== CLIENTS ==========
             if contact.categorie == "CLIENT" {
                 if let Some(last_contact) = date_dernier_contact {
-                    let diff_seconds = now - last_contact;
-                    let diff_months = diff_seconds / (30 * 24 * 60 * 60);
-                    
-                    if diff_months > 12 {
-                        self.create_alerte(super::models::NewAlerte {
-                            contact_id: contact.id.unwrap(),
-                            type_alerte: "SUIVI_CLIENT_1AN".to_string(),
-                            message: format!("🔴 {} {} - Suivi +1 an", contact.prenom, contact.nom),
-                            date_alerte: Some(now),
-                        })?;
-                        count += 1;
+                    if days_since(last_contact) >= JOURS_1_AN {
+                        if self.try_create_alerte_suivi(
+                            contact_id,
+                            "SUIVI_CLIENT_1AN",
+                            format!("{} {}", contact.prenom, contact.nom),
+                            now,
+                        )? {
+                            count += 1;
+                        }
                     }
-                } else {
-                    self.create_alerte(super::models::NewAlerte {
-                        contact_id: contact.id.unwrap(),
-                        type_alerte: "CLIENT_JAMAIS_SUIVI".to_string(),
-                        message: format!("🔴 {} {} - Jamais suivi", contact.prenom, contact.nom),
-                        date_alerte: Some(now),
-                    })?;
+                } else if self.try_create_alerte_suivi(
+                    contact_id,
+                    "CLIENT_JAMAIS_SUIVI",
+                    format!("{} {}", contact.prenom, contact.nom),
+                    now,
+                )? {
                     count += 1;
                 }
             }
@@ -1178,63 +1283,63 @@ impl Database {
             // ========== PROSPECTS & SUSPECTS CLIENT ==========
             if contact.categorie == "SUSPECT_CLIENT" || contact.categorie == "PROSPECT_CLIENT" {
                 if let Some(last_contact) = date_dernier_contact {
-                    let diff_seconds = now - last_contact;
-                    let diff_months = diff_seconds / (30 * 24 * 60 * 60);
-                    
-                    if diff_months > 6 {
-                        self.create_alerte(super::models::NewAlerte {
-                            contact_id: contact.id.unwrap(),
-                            type_alerte: "LEAD_SUIVI_6MOIS".to_string(),
-                            message: format!("🟠 {} {} - Suivi +6 mois", contact.prenom, contact.nom),
-                            date_alerte: Some(now),
-                        })?;
-                        count += 1;
+                    if days_since(last_contact) >= JOURS_6_MOIS {
+                        if self.try_create_alerte_suivi(
+                            contact_id,
+                            "LEAD_SUIVI_6MOIS",
+                            format!("{} {}", contact.prenom, contact.nom),
+                            now,
+                        )? {
+                            count += 1;
+                        }
                     }
-                } else {
-                    self.create_alerte(super::models::NewAlerte {
-                        contact_id: contact.id.unwrap(),
-                        type_alerte: "LEAD_JAMAIS_CONTACTE".to_string(),
-                        message: format!("🟠 {} {} - Jamais contacté", contact.prenom, contact.nom),
-                        date_alerte: Some(now),
-                    })?;
+                } else if self.try_create_alerte_suivi(
+                    contact_id,
+                    "LEAD_JAMAIS_CONTACTE",
+                    format!("{} {}", contact.prenom, contact.nom),
+                    now,
+                )? {
                     count += 1;
                 }
             }
 
             // ========== RÉSEAU FILLEUL ==========
             if let Some(fc) = filleul_cat {
+                if fc == "FILLEUL_DESINSCRIT" {
+                    continue;
+                }
+                let last_filleul = date_dernier_contact_filleul.or(date_dernier_contact);
                 if fc == "FILLEUL" {
-                    if let Some(last_contact) = date_dernier_contact_filleul {
-                        let diff_months = (now - last_contact) / (30 * 24 * 60 * 60);
-                        if diff_months > 12 {
-                            self.create_alerte(super::models::NewAlerte {
-                                contact_id: contact.id.unwrap(),
-                                type_alerte: "SUIVI_FILLEUL_1AN".to_string(),
-                                message: format!("🔴 {} {} - Filleul suivi +1 an", contact.prenom, contact.nom),
-                                date_alerte: Some(now),
-                            })?;
-                            count += 1;
+                    if let Some(last_contact) = last_filleul {
+                        if days_since(last_contact) >= JOURS_1_AN {
+                            if self.try_create_alerte_suivi(
+                                contact_id,
+                                "SUIVI_FILLEUL_1AN",
+                                format!("{} {}", contact.prenom, contact.nom),
+                                now,
+                            )? {
+                                count += 1;
+                            }
                         }
                     }
                 } else if fc == "PROSPECT_FILLEUL" || fc == "SUSPECT_FILLEUL" {
-                    if let Some(last_contact) = date_dernier_contact_filleul {
-                        let diff_months = (now - last_contact) / (30 * 24 * 60 * 60);
-                        if diff_months > 6 {
-                            self.create_alerte(super::models::NewAlerte {
-                                contact_id: contact.id.unwrap(),
-                                type_alerte: "FILLEUL_SUIVI_6MOIS".to_string(),
-                                message: format!("🟠 {} {} - Filleul suivi +6 mois", contact.prenom, contact.nom),
-                                date_alerte: Some(now),
-                            })?;
-                            count += 1;
+                    if let Some(last_contact) = last_filleul {
+                        if days_since(last_contact) >= JOURS_6_MOIS {
+                            if self.try_create_alerte_suivi(
+                                contact_id,
+                                "FILLEUL_SUIVI_6MOIS",
+                                format!("{} {}", contact.prenom, contact.nom),
+                                now,
+                            )? {
+                                count += 1;
+                            }
                         }
-                    } else {
-                        self.create_alerte(super::models::NewAlerte {
-                            contact_id: contact.id.unwrap(),
-                            type_alerte: "FILLEUL_JAMAIS_CONTACTE".to_string(),
-                            message: format!("🟠 {} {} - Filleul jamais contacté", contact.prenom, contact.nom),
-                            date_alerte: Some(now),
-                        })?;
+                    } else if self.try_create_alerte_suivi(
+                        contact_id,
+                        "FILLEUL_JAMAIS_CONTACTE",
+                        format!("{} {}", contact.prenom, contact.nom),
+                        now,
+                    )? {
                         count += 1;
                     }
                 }
@@ -1323,11 +1428,14 @@ impl Database {
         };
 
         // Compter les alertes non traitées
-        let alertes_non_traitees: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM alertes WHERE traitee = 0",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+        let alertes_non_traitees: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM alertes WHERE traitee = 0",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         Ok(super::models::DashboardStats {
             total_clients,
@@ -1387,44 +1495,47 @@ impl Database {
     pub fn get_monthly_stats(&self) -> Result<Vec<super::models::MonthlyStats>> {
         // Récupérer les 12 derniers mois
         let mut stats = Vec::new();
-        
+
         // Obtenir le timestamp actuel
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        
+
         // Pour les 12 derniers mois
         for i in (0..12).rev() {
             // Calculer le début et la fin du mois
             let month_start = now - (i * 30 * 24 * 60 * 60);
             let month_end = now - ((i - 1) * 30 * 24 * 60 * 60);
-            
+
             // Compter les contacts créés ce mois
-            let count: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM contacts WHERE created_at >= ?1 AND created_at < ?2",
-                params![month_start, month_end],
-                |row| row.get(0),
-            ).unwrap_or(0);
-            
+            let count: i64 = self
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM contacts WHERE created_at >= ?1 AND created_at < ?2",
+                    params![month_start, month_end],
+                    |row| row.get(0),
+                )
+                .unwrap_or(0);
+
             // Formater le nom du mois
             let month_name = Self::format_month(month_start);
-            
+
             stats.push(super::models::MonthlyStats {
                 month: month_name,
                 nouveaux: count,
             });
         }
-        
+
         Ok(stats)
     }
-    
+
     fn format_month(timestamp: i64) -> String {
-        use std::time::{UNIX_EPOCH, Duration};
-        
+        use std::time::{Duration, UNIX_EPOCH};
+
         let datetime = UNIX_EPOCH + Duration::from_secs(timestamp as u64);
         let datetime: chrono::DateTime<chrono::Utc> = datetime.into();
-        
+
         // Format: "Jan 2026"
         datetime.format("%b %Y").to_string()
     }
@@ -1436,7 +1547,7 @@ impl Database {
             [],
             |row| row.get(0),
         );
-        
+
         if table_exists.unwrap_or(0) == 0 {
             return Ok(Vec::new());
         }
@@ -1446,13 +1557,13 @@ impl Database {
              FROM investissements 
              GROUP BY type_produit 
              HAVING total > 0
-             ORDER BY total DESC"
+             ORDER BY total DESC",
         )?;
 
         let stats = stmt.query_map([], |row| {
             let montant_centimes: i64 = row.get(1)?;
             let montant_euros = montant_centimes as f64 / 100.0; // Convertir centimes en euros
-            
+
             Ok(super::models::ProductStats {
                 type_produit: row.get(0)?,
                 montant: montant_euros,
@@ -1499,14 +1610,17 @@ impl Database {
         })
     }
 
-    pub fn get_alertes_with_contacts(&self, limit: i64) -> Result<Vec<super::models::AlerteWithContact>> {
+    pub fn get_alertes_with_contacts(
+        &self,
+        limit: i64,
+    ) -> Result<Vec<super::models::AlerteWithContact>> {
         // Vérifier si la table alertes existe
         let table_exists: Result<i64> = self.conn.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='alertes'",
             [],
             |row| row.get(0),
         );
-        
+
         if table_exists.unwrap_or(0) == 0 {
             return Ok(Vec::new());
         }
@@ -1520,7 +1634,7 @@ impl Database {
              INNER JOIN contacts c ON a.contact_id = c.id
              WHERE a.traitee = 0
              ORDER BY a.date_alerte ASC
-             LIMIT ?1"
+             LIMIT ?1",
         )?;
 
         let alertes = stmt.query_map(params![limit], |row| {
@@ -1555,7 +1669,7 @@ impl Database {
                     versement_programme, montant_versement_programme, frequence_versement,
                     reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
-             ORDER BY date_souscription DESC"
+             ORDER BY date_souscription DESC",
         )?;
 
         let investissements = stmt.query_map([], |row| {
@@ -1575,7 +1689,9 @@ impl Database {
                 frequence_versement: row.get(12)?,
                 reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
                 notes: row.get(14)?,
-                origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                origine: row
+                    .get::<_, String>(15)
+                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
                 created_at: row.get(16)?,
                 updated_at: row.get(17)?,
             })
@@ -1588,7 +1704,10 @@ impl Database {
         Ok(result)
     }
 
-    pub fn get_investissements_by_contact(&self, contact_id: i64) -> Result<Vec<super::models::Investissement>> {
+    pub fn get_investissements_by_contact(
+        &self,
+        contact_id: i64,
+    ) -> Result<Vec<super::models::Investissement>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                     montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
@@ -1596,7 +1715,7 @@ impl Database {
                     reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
              WHERE contact_id = ?1
-             ORDER BY date_souscription DESC"
+             ORDER BY date_souscription DESC",
         )?;
 
         let investissements = stmt.query_map(params![contact_id], |row| {
@@ -1616,7 +1735,9 @@ impl Database {
                 frequence_versement: row.get(12)?,
                 reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
                 notes: row.get(14)?,
-                origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                origine: row
+                    .get::<_, String>(15)
+                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
                 created_at: row.get(16)?,
                 updated_at: row.get(17)?,
             })
@@ -1629,7 +1750,10 @@ impl Database {
         Ok(result)
     }
 
-    pub fn get_investissements_by_foyer(&self, foyer_id: i64) -> Result<Vec<super::models::Investissement>> {
+    pub fn get_investissements_by_foyer(
+        &self,
+        foyer_id: i64,
+    ) -> Result<Vec<super::models::Investissement>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                     montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
@@ -1637,7 +1761,7 @@ impl Database {
                     reinvestissement_dividendes, notes, origine, created_at, updated_at
              FROM investissements 
              WHERE foyer_id = ?1
-             ORDER BY date_souscription DESC"
+             ORDER BY date_souscription DESC",
         )?;
 
         let investissements = stmt.query_map(params![foyer_id], |row| {
@@ -1657,7 +1781,9 @@ impl Database {
                 frequence_versement: row.get(12)?,
                 reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
                 notes: row.get(14)?,
-                origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                origine: row
+                    .get::<_, String>(15)
+                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
                 created_at: row.get(16)?,
                 updated_at: row.get(17)?,
             })
@@ -1670,7 +1796,9 @@ impl Database {
         Ok(result)
     }
 
-    pub fn get_investissements_with_details(&self) -> Result<Vec<super::models::InvestissementWithDetails>> {
+    pub fn get_investissements_with_details(
+        &self,
+    ) -> Result<Vec<super::models::InvestissementWithDetails>> {
         let mut stmt = self.conn.prepare(
             "SELECT i.id, i.contact_id, c.nom, c.prenom, i.foyer_id, f.nom as foyer_nom,
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
@@ -1705,7 +1833,9 @@ impl Database {
                 frequence_versement: row.get(16)?,
                 reinvestissement_dividendes: row.get::<_, i64>(17)? != 0,
                 notes: row.get(18)?,
-                origine: row.get::<_, String>(19).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                origine: row
+                    .get::<_, String>(19)
+                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
                 created_at: row.get(20)?,
                 updated_at: row.get(21)?,
             })
@@ -1718,11 +1848,23 @@ impl Database {
         Ok(result)
     }
 
-    pub fn create_investissement(&self, investissement: super::models::NewInvestissement) -> Result<super::models::Investissement> {
+    pub fn create_investissement(
+        &self,
+        investissement: super::models::NewInvestissement,
+    ) -> Result<super::models::Investissement> {
         use chrono::{DateTime, Utc};
-        
-        let versement_programme = if investissement.versement_programme.unwrap_or(false) { 1 } else { 0 };
-        let reinvestissement_dividendes = if investissement.reinvestissement_dividendes.unwrap_or(false) { 1 } else { 0 };
+
+        let versement_programme = if investissement.versement_programme.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+        let reinvestissement_dividendes =
+            if investissement.reinvestissement_dividendes.unwrap_or(false) {
+                1
+            } else {
+                0
+            };
 
         // Convertir les dates ISO string en timestamps Unix
         let date_souscription_timestamp = investissement.date_souscription.and_then(|date_str| {
@@ -1730,12 +1872,13 @@ impl Database {
                 .ok()
                 .map(|dt| dt.timestamp())
         });
-        
-        let date_fin_demembrement_timestamp = investissement.date_fin_demembrement.and_then(|date_str| {
-            DateTime::parse_from_rfc3339(&date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
+
+        let date_fin_demembrement_timestamp =
+            investissement.date_fin_demembrement.and_then(|date_str| {
+                DateTime::parse_from_rfc3339(&date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
 
         let date_fin_pret_timestamp = investissement.date_fin_pret.and_then(|date_str| {
             DateTime::parse_from_rfc3339(&date_str)
@@ -1744,7 +1887,9 @@ impl Database {
         });
 
         // Origine par défaut : MON_CONSEIL
-        let origine = investissement.origine.unwrap_or_else(|| "MON_CONSEIL".to_string());
+        let origine = investissement
+            .origine
+            .unwrap_or_else(|| "MON_CONSEIL".to_string());
 
         self.conn.execute(
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
@@ -1801,7 +1946,9 @@ impl Database {
                     frequence_versement: row.get(12)?,
                     reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
                     notes: row.get(14)?,
-                    origine: row.get::<_, String>(15).unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+                    origine: row
+                        .get::<_, String>(15)
+                        .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
                     created_at: row.get(16)?,
                     updated_at: row.get(17)?,
                 })
@@ -1809,24 +1956,44 @@ impl Database {
         )
     }
 
-    pub fn update_investissement(&self, id: i64, investissement: &super::models::NewInvestissement) -> Result<super::models::Investissement> {
+    pub fn update_investissement(
+        &self,
+        id: i64,
+        investissement: &super::models::NewInvestissement,
+    ) -> Result<super::models::Investissement> {
         use chrono::{DateTime, Utc};
-        
-        let versement_programme = if investissement.versement_programme.unwrap_or(false) { 1 } else { 0 };
-        let reinvestissement_dividendes = if investissement.reinvestissement_dividendes.unwrap_or(false) { 1 } else { 0 };
+
+        let versement_programme = if investissement.versement_programme.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+        let reinvestissement_dividendes =
+            if investissement.reinvestissement_dividendes.unwrap_or(false) {
+                1
+            } else {
+                0
+            };
 
         // Convertir les dates ISO string en timestamps Unix
-        let date_souscription_timestamp = investissement.date_souscription.as_ref().and_then(|date_str| {
-            DateTime::parse_from_rfc3339(date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
-        
-        let date_fin_demembrement_timestamp = investissement.date_fin_demembrement.as_ref().and_then(|date_str| {
-            DateTime::parse_from_rfc3339(date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
+        let date_souscription_timestamp =
+            investissement
+                .date_souscription
+                .as_ref()
+                .and_then(|date_str| {
+                    DateTime::parse_from_rfc3339(date_str)
+                        .ok()
+                        .map(|dt| dt.timestamp())
+                });
+
+        let date_fin_demembrement_timestamp = investissement
+            .date_fin_demembrement
+            .as_ref()
+            .and_then(|date_str| {
+                DateTime::parse_from_rfc3339(date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            });
 
         let date_fin_pret_timestamp = investissement.date_fin_pret.as_ref().and_then(|date_str| {
             DateTime::parse_from_rfc3339(date_str)
@@ -1875,7 +2042,8 @@ impl Database {
     }
 
     pub fn delete_investissement(&self, id: i64) -> Result<()> {
-        self.conn.execute("DELETE FROM investissements WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM investissements WHERE id = ?1", params![id])?;
         Ok(())
     }
 
@@ -1886,34 +2054,50 @@ impl Database {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        
+
         // Timestamp dans 6 mois (approximatif: 6 * 30 jours)
         let six_months = 6 * 30 * 24 * 60 * 60;
         let six_months_later = now + six_months;
 
         // Récupérer les SCPI en démembrement qui arrivent à échéance dans les 6 prochains mois
         let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, nom_produit, date_fin_demembrement
+            "SELECT id, contact_id, foyer_id, nom_produit, date_fin_demembrement
              FROM investissements
              WHERE type_produit = 'SCPI_DEMEMBREMENT'
                AND date_fin_demembrement IS NOT NULL
                AND date_fin_demembrement > ?1
-               AND date_fin_demembrement <= ?2"
+               AND date_fin_demembrement <= ?2",
         )?;
 
         let investissements = stmt.query_map(params![now, six_months_later], |row| {
             Ok((
-                row.get::<_, i64>(0)?,  // id
-                row.get::<_, i64>(1)?,  // contact_id
-                row.get::<_, String>(2)?,  // nom_produit
-                row.get::<_, i64>(3)?,  // date_fin_demembrement
+                row.get::<_, i64>(0)?,
+                row.get::<_, Option<i64>>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
             ))
         })?;
 
         let mut created_alerts = Vec::new();
 
         for inv_result in investissements {
-            let (_inv_id, contact_id, nom_produit, date_fin) = inv_result?;
+            let (_inv_id, contact_id, foyer_id, nom_produit, date_fin) = inv_result?;
+
+            let contact_id = match contact_id {
+                Some(id) => id,
+                None => {
+                    let Some(fid) = foyer_id else { continue };
+                    match self.conn.query_row(
+                        "SELECT id FROM contacts WHERE foyer_id = ?1 ORDER BY id LIMIT 1",
+                        params![fid],
+                        |row| row.get::<_, i64>(0),
+                    ) {
+                        Ok(id) => id,
+                        Err(_) => continue,
+                    }
+                }
+            };
 
             // Vérifier si une alerte existe déjà pour cet investissement
             let existing: Result<i64> = self.conn.query_row(
@@ -1934,8 +2118,7 @@ impl Database {
 
                 let message = format!(
                     "Fin de démembrement SCPI \"{}\" prévue le {}",
-                    nom_produit,
-                    date_fin_formatted
+                    nom_produit, date_fin_formatted
                 );
 
                 self.conn.execute(
@@ -1945,7 +2128,7 @@ impl Database {
                 )?;
 
                 let alerte_id = self.conn.last_insert_rowid();
-                
+
                 // Récupérer l'alerte créée
                 let alerte = self.conn.query_row(
                     "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
@@ -1964,7 +2147,7 @@ impl Database {
                         })
                     },
                 )?;
-                
+
                 created_alerts.push(alerte);
             }
         }
@@ -1986,7 +2169,7 @@ impl Database {
              WHERE parrain_id = ?1
              ORDER BY created_at DESC"
         )?;
-        
+
         let filleuls = stmt.query_map(params![parrain_id], |row| {
             Ok(Contact {
                 id: row.get(0)?,
@@ -2021,7 +2204,7 @@ impl Database {
                 updated_at: row.get(29)?,
             })
         })?;
-        
+
         filleuls.collect()
     }
 
@@ -2053,7 +2236,7 @@ impl Database {
              WHERE prescripteur_id = ?1
              ORDER BY created_at DESC"
         )?;
-        
+
         let clients = stmt.query_map(params![prescripteur_id], |row| {
             Ok(Contact {
                 id: row.get(0)?,
@@ -2088,7 +2271,7 @@ impl Database {
                 updated_at: row.get(29)?,
             })
         })?;
-        
+
         clients.collect()
     }
 
@@ -2102,7 +2285,7 @@ impl Database {
                     email_template_id, email_delai_jours, email_actif,
                     is_default, created_at, updated_at
              FROM etiquettes 
-             ORDER BY priorite DESC, nom ASC"
+             ORDER BY priorite DESC, nom ASC",
         )?;
 
         let etiquettes = stmt.query_map([], |row| {
@@ -2201,8 +2384,16 @@ impl Database {
         let couleur = etiquette.couleur.unwrap_or_else(|| "#3B82F6".to_string());
         let priorite = etiquette.priorite.unwrap_or(0);
         let email_delai_jours = etiquette.email_delai_jours.unwrap_or(0);
-        let email_actif = if etiquette.email_actif.unwrap_or(false) { 1 } else { 0 };
-        let is_default = if etiquette.is_default.unwrap_or(false) { 1 } else { 0 };
+        let email_actif = if etiquette.email_actif.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+        let is_default = if etiquette.is_default.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
 
         self.conn.execute(
             "INSERT INTO etiquettes (nom, couleur, icone, description, priorite,
@@ -2231,11 +2422,22 @@ impl Database {
 
     /// Mettre à jour une étiquette
     pub fn update_etiquette(&self, id: i64, etiquette: &NewEtiquette) -> Result<Etiquette> {
-        let couleur = etiquette.couleur.clone().unwrap_or_else(|| "#3B82F6".to_string());
+        let couleur = etiquette
+            .couleur
+            .clone()
+            .unwrap_or_else(|| "#3B82F6".to_string());
         let priorite = etiquette.priorite.unwrap_or(0);
         let email_delai_jours = etiquette.email_delai_jours.unwrap_or(0);
-        let email_actif = if etiquette.email_actif.unwrap_or(false) { 1 } else { 0 };
-        let is_default = if etiquette.is_default.unwrap_or(false) { 1 } else { 0 };
+        let email_actif = if etiquette.email_actif.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+        let is_default = if etiquette.is_default.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
 
         self.conn.execute(
             "UPDATE etiquettes SET 
@@ -2276,12 +2478,16 @@ impl Database {
     /// Supprimer une étiquette
     pub fn delete_etiquette(&self, id: i64) -> Result<()> {
         // Les liaisons contact_etiquettes seront supprimées par CASCADE
-        self.conn.execute("DELETE FROM etiquettes WHERE id = ?1", params![id])?;
+        self.conn
+            .execute("DELETE FROM etiquettes WHERE id = ?1", params![id])?;
         Ok(())
     }
 
     /// Récupérer les étiquettes d'un contact
-    pub fn get_etiquettes_by_contact(&self, contact_id: i64) -> Result<Vec<ContactEtiquetteDetails>> {
+    pub fn get_etiquettes_by_contact(
+        &self,
+        contact_id: i64,
+    ) -> Result<Vec<ContactEtiquetteDetails>> {
         let mut stmt = self.conn.prepare(
             "SELECT ce.id, ce.contact_id, ce.etiquette_id, 
                     e.nom, e.couleur, e.icone,
@@ -2290,7 +2496,7 @@ impl Database {
              FROM contact_etiquettes ce
              INNER JOIN etiquettes e ON ce.etiquette_id = e.id
              WHERE ce.contact_id = ?1
-             ORDER BY e.priorite DESC, e.nom ASC"
+             ORDER BY e.priorite DESC, e.nom ASC",
         )?;
 
         let etiquettes = stmt.query_map(params![contact_id], |row| {
@@ -2313,20 +2519,26 @@ impl Database {
     }
 
     /// Attribuer une étiquette à un contact
-    pub fn attribuer_etiquette(&self, contact_id: i64, etiquette_id: i64, attribue_par: Option<String>) -> Result<ContactEtiquette> {
+    pub fn attribuer_etiquette(
+        &self,
+        contact_id: i64,
+        etiquette_id: i64,
+        attribue_par: Option<String>,
+    ) -> Result<ContactEtiquette> {
         let attribue_par = attribue_par.unwrap_or_else(|| "MANUEL".to_string());
-        
+
         // Vérifier si l'étiquette a un email actif pour calculer la date prévue
         let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        let email_date_prevue: Option<i64> = if etiquette.email_actif && etiquette.email_delai_jours > 0 {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64;
-            Some(now + (etiquette.email_delai_jours * 24 * 60 * 60))
-        } else {
-            None
-        };
+        let email_date_prevue: Option<i64> =
+            if etiquette.email_actif && etiquette.email_delai_jours > 0 {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+                Some(now + (etiquette.email_delai_jours * 24 * 60 * 60))
+            } else {
+                None
+            };
 
         self.conn.execute(
             "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_date_prevue) 
@@ -2382,7 +2594,7 @@ impl Database {
              WHERE ce.etiquette_id = ?1
              ORDER BY c.nom, c.prenom"
         )?;
-        
+
         let contacts = stmt.query_map(params![etiquette_id], |row| {
             Ok(Contact {
                 id: row.get(0)?,
@@ -2417,27 +2629,27 @@ impl Database {
                 updated_at: row.get(29)?,
             })
         })?;
-        
+
         contacts.collect()
     }
 
     /// Compter les étiquettes (pour vérifier si la table est vide au premier lancement)
     pub fn count_etiquettes(&self) -> Result<i64> {
-        self.conn.query_row(
-            "SELECT COUNT(*) FROM etiquettes",
-            [],
-            |row| row.get(0),
-        )
+        self.conn
+            .query_row("SELECT COUNT(*) FROM etiquettes", [], |row| row.get(0))
     }
 
     /// Créer les étiquettes par défaut (seed initial)
     pub fn seed_default_etiquettes(&self) -> Result<usize> {
         // Vérifier si la table existe
-        let table_exists: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+        let table_exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         if table_exists == 0 {
             return Ok(0);
@@ -2476,7 +2688,9 @@ impl Database {
             description: Some("Date de prochain suivi dans moins de 30 jours".to_string()),
             priorite: Some(90),
             auto_condition_type: Some("DATE_APPROCHE".to_string()),
-            auto_condition_config: Some(r#"{"champ": "date_prochain_suivi", "jours_avant": 30}"#.to_string()),
+            auto_condition_config: Some(
+                r#"{"champ": "date_prochain_suivi", "jours_avant": 30}"#.to_string(),
+            ),
             auto_categories: Some(r#"["CLIENT", "PROSPECT_CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
@@ -2579,7 +2793,10 @@ impl Database {
             priorite: Some(95),
             auto_condition_type: Some("DELAI_SANS_CONTACT".to_string()),
             auto_condition_config: Some(r#"{"jours": 180}"#.to_string()),
-            auto_categories: Some(r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#.to_string()),
+            auto_categories: Some(
+                r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#
+                    .to_string(),
+            ),
             email_template_id: None,
             email_delai_jours: Some(0),
             email_actif: Some(false),
@@ -2595,11 +2812,14 @@ impl Database {
     /// Retourne le nombre d'étiquettes créées ou mises à jour
     pub fn ensure_default_etiquettes(&self) -> Result<usize> {
         // Vérifier si la table existe
-        let table_exists: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+        let table_exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         if table_exists == 0 {
             return Ok(0);
@@ -2609,23 +2829,108 @@ impl Database {
 
         // Liste des étiquettes par défaut à vérifier/créer/mettre à jour
         let default_etiquettes = vec![
-            ("Suivi > 1 an", "#EF4444", "🔴", "Client non contacté depuis plus d'un an", 100, "DELAI_SANS_CONTACT", r#"{"jours": 365}"#, r#"["CLIENT"]"#),
-            ("Suivi > 6 mois", "#F97316", "🟠", "Prospect/Suspect non contacté depuis plus de 6 mois", 95, "DELAI_SANS_CONTACT", r#"{"jours": 180}"#, r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#),
-            ("Suivi à planifier", "#F97316", "📅", "Date de prochain suivi dans moins de 30 jours", 90, "DATE_APPROCHE", r#"{"champ": "date_prochain_suivi", "jours_avant": 30}"#, r#"["CLIENT", "PROSPECT_CLIENT"]"#),
-            ("Fin démembrement", "#3B82F6", "🏠", "Fin de démembrement dans moins de 6 mois", 85, "DATE_APPROCHE_INVESTISSEMENT", r#"{"champ": "date_fin_demembrement", "jours_avant": 180, "types_produit": ["SCPI_DEMEMBREMENT"]}"#, r#"["CLIENT"]"#),
-            ("Fin de prêt", "#06B6D4", "💰", "Fin de prêt immobilier/SCPI dans moins d'un an", 80, "DATE_APPROCHE_INVESTISSEMENT", r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#, r#"["CLIENT"]"#),
-            ("Alerte 69 ans", "#EC4899", "🎂", "Client approchant 69 ans (assurance-vie)", 75, "AGE_APPROCHE", r#"{"age": 69, "jours_avant": 30}"#, r#"["CLIENT"]"#),
-            ("Déclaration IR", "#8B5CF6", "📋", "Période de déclaration d'impôts (avril-mai)", 70, "PERIODE_ANNEE", r#"{"mois_debut": 4, "mois_fin": 5}"#, r#"["CLIENT"]"#),
-            ("RDV fin d'année", "#10B981", "🎯", "Période de souscription fin d'année (oct-nov)", 60, "PERIODE_ANNEE", r#"{"mois_debut": 10, "mois_fin": 11}"#, r#"["CLIENT", "PROSPECT_CLIENT"]"#),
+            (
+                "Suivi > 1 an",
+                "#EF4444",
+                "🔴",
+                "Client non contacté depuis plus d'un an",
+                100,
+                "DELAI_SANS_CONTACT",
+                r#"{"jours": 365}"#,
+                r#"["CLIENT"]"#,
+            ),
+            (
+                "Suivi > 6 mois",
+                "#F97316",
+                "🟠",
+                "Prospect/Suspect non contacté depuis plus de 6 mois",
+                95,
+                "DELAI_SANS_CONTACT",
+                r#"{"jours": 180}"#,
+                r#"["PROSPECT_CLIENT", "PROSPECT_FILLEUL", "SUSPECT_CLIENT", "SUSPECT_FILLEUL"]"#,
+            ),
+            (
+                "Suivi à planifier",
+                "#F97316",
+                "📅",
+                "Date de prochain suivi dans moins de 30 jours",
+                90,
+                "DATE_APPROCHE",
+                r#"{"champ": "date_prochain_suivi", "jours_avant": 30}"#,
+                r#"["CLIENT", "PROSPECT_CLIENT"]"#,
+            ),
+            (
+                "Fin démembrement",
+                "#3B82F6",
+                "🏠",
+                "Fin de démembrement dans moins de 6 mois",
+                85,
+                "DATE_APPROCHE_INVESTISSEMENT",
+                r#"{"champ": "date_fin_demembrement", "jours_avant": 180, "types_produit": ["SCPI_DEMEMBREMENT"]}"#,
+                r#"["CLIENT"]"#,
+            ),
+            (
+                "Fin de prêt",
+                "#06B6D4",
+                "💰",
+                "Fin de prêt immobilier/SCPI dans moins d'un an",
+                80,
+                "DATE_APPROCHE_INVESTISSEMENT",
+                r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#,
+                r#"["CLIENT"]"#,
+            ),
+            (
+                "Alerte 69 ans",
+                "#EC4899",
+                "🎂",
+                "Client approchant 69 ans (assurance-vie)",
+                75,
+                "AGE_APPROCHE",
+                r#"{"age": 69, "jours_avant": 30}"#,
+                r#"["CLIENT"]"#,
+            ),
+            (
+                "Déclaration IR",
+                "#8B5CF6",
+                "📋",
+                "Période de déclaration d'impôts (avril-mai)",
+                70,
+                "PERIODE_ANNEE",
+                r#"{"mois_debut": 4, "mois_fin": 5}"#,
+                r#"["CLIENT"]"#,
+            ),
+            (
+                "RDV fin d'année",
+                "#10B981",
+                "🎯",
+                "Période de souscription fin d'année (oct-nov)",
+                60,
+                "PERIODE_ANNEE",
+                r#"{"mois_debut": 10, "mois_fin": 11}"#,
+                r#"["CLIENT", "PROSPECT_CLIENT"]"#,
+            ),
         ];
 
-        for (nom, couleur, icone, description, priorite, condition_type, condition_config, categories) in default_etiquettes {
+        for (
+            nom,
+            couleur,
+            icone,
+            description,
+            priorite,
+            condition_type,
+            condition_config,
+            categories,
+        ) in default_etiquettes
+        {
             // Vérifier si l'étiquette existe déjà (par nom)
-            let existing: Option<(i64, Option<String>)> = self.conn.query_row(
-                "SELECT id, auto_condition_config FROM etiquettes WHERE nom = ?1",
-                params![nom],
-                |row| Ok((row.get(0)?, row.get(1)?)),
-            ).ok();
+            let existing: Option<(i64, Option<String>)> = self
+                .conn
+                .query_row(
+                    "SELECT id, auto_condition_config FROM etiquettes WHERE nom = ?1",
+                    params![nom],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .ok();
 
             match existing {
                 Some((id, current_config)) => {
@@ -2644,20 +2949,23 @@ impl Database {
                 }
                 None => {
                     // Créer l'étiquette manquante
-                    if self.create_etiquette(NewEtiquette {
-                        nom: nom.to_string(),
-                        couleur: Some(couleur.to_string()),
-                        icone: Some(icone.to_string()),
-                        description: Some(description.to_string()),
-                        priorite: Some(priorite),
-                        auto_condition_type: Some(condition_type.to_string()),
-                        auto_condition_config: Some(condition_config.to_string()),
-                        auto_categories: Some(categories.to_string()),
-                        email_template_id: None,
-                        email_delai_jours: Some(0),
-                        email_actif: Some(false),
-                        is_default: Some(true),
-                    }).is_ok() {
+                    if self
+                        .create_etiquette(NewEtiquette {
+                            nom: nom.to_string(),
+                            couleur: Some(couleur.to_string()),
+                            icone: Some(icone.to_string()),
+                            description: Some(description.to_string()),
+                            priorite: Some(priorite),
+                            auto_condition_type: Some(condition_type.to_string()),
+                            auto_condition_config: Some(condition_config.to_string()),
+                            auto_categories: Some(categories.to_string()),
+                            email_template_id: None,
+                            email_delai_jours: Some(0),
+                            email_actif: Some(false),
+                            is_default: Some(true),
+                        })
+                        .is_ok()
+                    {
                         changes += 1;
                         println!("🏷️ Étiquette par défaut '{}' créée", nom);
                     }
@@ -2678,11 +2986,14 @@ impl Database {
     /// Retourne le nombre d'étiquettes attribuées
     pub fn check_and_apply_auto_etiquettes(&self) -> Result<usize> {
         // Vérifier si la table existe
-        let table_exists: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
-            [],
-            |row| row.get(0),
-        ).unwrap_or(0);
+        let table_exists: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
 
         if table_exists == 0 {
             return Ok(0);
@@ -2698,9 +3009,13 @@ impl Database {
 
         // Récupérer le mois actuel (1-12)
         let current_month = {
-            let datetime = chrono::DateTime::from_timestamp(now, 0)
-                .unwrap_or_else(|| chrono::Utc::now());
-            datetime.format("%m").to_string().parse::<i32>().unwrap_or(1)
+            let datetime =
+                chrono::DateTime::from_timestamp(now, 0).unwrap_or_else(|| chrono::Utc::now());
+            datetime
+                .format("%m")
+                .to_string()
+                .parse::<i32>()
+                .unwrap_or(1)
         };
 
         let mut total_assigned = 0;
@@ -2718,7 +3033,9 @@ impl Database {
         for etiquette in auto_etiquettes {
             let condition_type = etiquette.auto_condition_type.as_ref().unwrap();
             let config = etiquette.auto_condition_config.as_ref();
-            let categories: Vec<String> = etiquette.auto_categories.as_ref()
+            let categories: Vec<String> = etiquette
+                .auto_categories
+                .as_ref()
                 .and_then(|c| serde_json::from_str(c).ok())
                 .unwrap_or_default();
 
@@ -2751,14 +3068,20 @@ impl Database {
                 let should_assign = match condition_type.as_str() {
                     "DELAI_SANS_CONTACT" => {
                         if let Some(config_str) = config {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                            if let Ok(parsed) =
+                                serde_json::from_str::<serde_json::Value>(config_str)
+                            {
                                 let jours = parsed["jours"].as_i64().unwrap_or(365);
                                 let filleul_only = categories.iter().any(|c| c.contains("FILLEUL"))
                                     && !categories.iter().any(|c| {
-                                        c == "CLIENT" || c == "PROSPECT_CLIENT" || c == "SUSPECT_CLIENT"
+                                        c == "CLIENT"
+                                            || c == "PROSPECT_CLIENT"
+                                            || c == "SUSPECT_CLIENT"
                                     });
                                 let last_contact = if filleul_only {
-                                    contact.date_dernier_contact_filleul.or(contact.date_dernier_contact)
+                                    contact
+                                        .date_dernier_contact_filleul
+                                        .or(contact.date_dernier_contact)
                                 } else {
                                     contact.date_dernier_contact
                                 };
@@ -2777,14 +3100,20 @@ impl Database {
                     }
                     "DATE_APPROCHE" => {
                         if let Some(config_str) = config {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                            if let Ok(parsed) =
+                                serde_json::from_str::<serde_json::Value>(config_str)
+                            {
                                 let champ = parsed["champ"].as_str().unwrap_or("");
                                 let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(30);
-                                
+
                                 let date_value = match champ {
                                     "date_prochain_suivi" => contact.date_prochain_suivi,
-                                    "date_prochain_suivi_filleul" => contact.date_prochain_suivi_filleul,
-                                    "date_dernier_contact_filleul" => contact.date_dernier_contact_filleul,
+                                    "date_prochain_suivi_filleul" => {
+                                        contact.date_prochain_suivi_filleul
+                                    }
+                                    "date_dernier_contact_filleul" => {
+                                        contact.date_dernier_contact_filleul
+                                    }
                                     "date_naissance" => contact.date_naissance,
                                     _ => None,
                                 };
@@ -2808,10 +3137,12 @@ impl Database {
                     }
                     "PERIODE_ANNEE" => {
                         if let Some(config_str) = config {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                            if let Ok(parsed) =
+                                serde_json::from_str::<serde_json::Value>(config_str)
+                            {
                                 let mois_debut = parsed["mois_debut"].as_i64().unwrap_or(1) as i32;
                                 let mois_fin = parsed["mois_fin"].as_i64().unwrap_or(12) as i32;
-                                
+
                                 if mois_debut <= mois_fin {
                                     current_month >= mois_debut && current_month <= mois_fin
                                 } else {
@@ -2828,30 +3159,40 @@ impl Database {
                     "TYPE_PRODUIT" => {
                         // Vérifier si le contact a un investissement du type demandé
                         if let Some(config_str) = config {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                            if let Ok(parsed) =
+                                serde_json::from_str::<serde_json::Value>(config_str)
+                            {
                                 let types: Vec<String> = parsed["types"]
                                     .as_array()
-                                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|v| v.as_str().map(String::from))
+                                            .collect()
+                                    })
                                     .unwrap_or_default();
-                                
+
                                 if types.is_empty() {
                                     false
                                 } else {
-                                    let types_str = types.iter()
+                                    let types_str = types
+                                        .iter()
                                         .map(|t| format!("'{}'", t))
                                         .collect::<Vec<_>>()
                                         .join(",");
-                                    
-                                    let has_product: i64 = self.conn.query_row(
-                                        &format!(
-                                            "SELECT COUNT(*) FROM investissements 
+
+                                    let has_product: i64 = self
+                                        .conn
+                                        .query_row(
+                                            &format!(
+                                                "SELECT COUNT(*) FROM investissements 
                                              WHERE contact_id = ?1 AND type_produit IN ({})",
-                                            types_str
-                                        ),
-                                        params![contact_id],
-                                        |row| row.get(0),
-                                    ).unwrap_or(0);
-                                    
+                                                types_str
+                                            ),
+                                            params![contact_id],
+                                            |row| row.get(0),
+                                        )
+                                        .unwrap_or(0);
+
                                     has_product > 0
                                 }
                             } else {
@@ -2864,27 +3205,34 @@ impl Database {
                     "DATE_APPROCHE_INVESTISSEMENT" => {
                         // Vérifier si le contact a un investissement avec une date approchant
                         if let Some(config_str) = config {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                            if let Ok(parsed) =
+                                serde_json::from_str::<serde_json::Value>(config_str)
+                            {
                                 let champ = parsed["champ"].as_str().unwrap_or("");
                                 let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(180);
                                 let types_produit: Vec<String> = parsed["types_produit"]
                                     .as_array()
-                                    .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                                    .map(|arr| {
+                                        arr.iter()
+                                            .filter_map(|v| v.as_str().map(String::from))
+                                            .collect()
+                                    })
                                     .unwrap_or_default();
-                                
+
                                 // Construire la requête SQL pour chercher les investissements avec date approchant
                                 let type_filter = if types_produit.is_empty() {
                                     String::new()
                                 } else {
-                                    let types_str = types_produit.iter()
+                                    let types_str = types_produit
+                                        .iter()
                                         .map(|t| format!("'{}'", t))
                                         .collect::<Vec<_>>()
                                         .join(",");
                                     format!(" AND type_produit IN ({})", types_str)
                                 };
-                                
+
                                 let threshold = now + (jours_avant * 24 * 60 * 60);
-                                
+
                                 let query = format!(
                                     "SELECT COUNT(*) FROM investissements 
                                      WHERE contact_id = ?1 
@@ -2893,13 +3241,14 @@ impl Database {
                                      AND {} <= ?3{}",
                                     champ, champ, champ, type_filter
                                 );
-                                
-                                let has_approaching: i64 = self.conn.query_row(
-                                    &query,
-                                    params![contact_id, now, threshold],
-                                    |row| row.get(0),
-                                ).unwrap_or(0);
-                                
+
+                                let has_approaching: i64 = self
+                                    .conn
+                                    .query_row(&query, params![contact_id, now, threshold], |row| {
+                                        row.get(0)
+                                    })
+                                    .unwrap_or(0);
+
                                 has_approaching > 0
                             } else {
                                 false
@@ -2911,30 +3260,31 @@ impl Database {
                     "AGE_APPROCHE" => {
                         // Vérifier si le contact atteint un âge spécifique dans X jours
                         if let Some(config_str) = config {
-                            if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                            if let Ok(parsed) =
+                                serde_json::from_str::<serde_json::Value>(config_str)
+                            {
                                 let age_cible = parsed["age"].as_i64().unwrap_or(69);
                                 let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(30);
-                                
+
                                 if let Some(date_naissance) = contact.date_naissance {
                                     // Calculer la date d'anniversaire pour l'âge cible
-                                    use chrono::{DateTime, Utc, Datelike};
+                                    use chrono::{DateTime, Datelike, Utc};
                                     let birth = DateTime::<Utc>::from_timestamp(date_naissance, 0);
-                                    
+
                                     if let Some(birth_dt) = birth {
                                         let birth_year = birth_dt.year();
-                                        
+
                                         // Année de l'anniversaire cible
                                         let target_year = birth_year + age_cible as i32;
-                                        
+
                                         // Date de l'anniversaire cible
-                                        if let Some(target_birthday) = birth_dt
-                                            .with_year(target_year)
-                                            .map(|d| d.timestamp())
+                                        if let Some(target_birthday) =
+                                            birth_dt.with_year(target_year).map(|d| d.timestamp())
                                         {
                                             // L'anniversaire doit être dans le futur et dans les X jours
                                             let diff_seconds = target_birthday - now;
                                             let diff_days = diff_seconds / (24 * 60 * 60);
-                                            
+
                                             diff_days >= 0 && diff_days <= jours_avant
                                         } else {
                                             false
@@ -2958,7 +3308,10 @@ impl Database {
                 match (should_assign, &assignment_info) {
                     // Condition remplie et pas encore attribuée -> attribuer
                     (true, None) => {
-                        if self.attribuer_etiquette(contact_id, etiquette.id, Some("AUTO".to_string())).is_ok() {
+                        if self
+                            .attribuer_etiquette(contact_id, etiquette.id, Some("AUTO".to_string()))
+                            .is_ok()
+                        {
                             total_assigned += 1;
                         }
                     }
@@ -2977,7 +3330,10 @@ impl Database {
             }
         }
 
-        println!("🏷️ Moteur automatique: {} étiquettes attribuées", total_assigned);
+        println!(
+            "🏷️ Moteur automatique: {} étiquettes attribuées",
+            total_assigned
+        );
         Ok(total_assigned)
     }
 
@@ -3001,16 +3357,16 @@ impl Database {
                AND e.email_actif = 1
                AND e.email_template_id IS NOT NULL
                AND c.email IS NOT NULL
-               AND c.email != ''"
+               AND c.email != ''",
         )?;
 
         let results = stmt.query_map(params![now], |row| {
             Ok((
-                row.get::<_, i64>(0)?,      // contact_etiquette.id
-                row.get::<_, i64>(1)?,      // contact_id
-                row.get::<_, i64>(2)?,      // template_id
-                row.get::<_, String>(3)?,   // email
-                row.get::<_, String>(4)?,   // prenom
+                row.get::<_, i64>(0)?,    // contact_etiquette.id
+                row.get::<_, i64>(1)?,    // contact_id
+                row.get::<_, i64>(2)?,    // template_id
+                row.get::<_, String>(3)?, // email
+                row.get::<_, String>(4)?, // prenom
             ))
         })?;
 
@@ -3041,14 +3397,12 @@ impl Database {
 
     /// Récupérer une valeur de configuration
     pub fn get_setting(&self, key: &str) -> Result<Option<String>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT value FROM settings WHERE key = ?1"
-        )?;
-        
-        let result = stmt.query_row(params![key], |row| {
-            row.get::<_, String>(0)
-        });
-        
+        let mut stmt = self
+            .conn
+            .prepare("SELECT value FROM settings WHERE key = ?1")?;
+
+        let result = stmt.query_row(params![key], |row| row.get::<_, String>(0));
+
         match result {
             Ok(value) => Ok(Some(value)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -3074,19 +3428,17 @@ impl Database {
 
     /// Supprimer une valeur de configuration
     pub fn delete_setting(&self, key: &str) -> Result<()> {
-        self.conn.execute(
-            "DELETE FROM settings WHERE key = ?1",
-            params![key],
-        )?;
+        self.conn
+            .execute("DELETE FROM settings WHERE key = ?1", params![key])?;
         Ok(())
     }
 
     /// Récupérer toutes les configurations
     pub fn get_all_settings(&self) -> Result<Vec<super::models::Setting>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT key, value, updated_at FROM settings ORDER BY key"
-        )?;
-        
+        let mut stmt = self
+            .conn
+            .prepare("SELECT key, value, updated_at FROM settings ORDER BY key")?;
+
         let settings = stmt.query_map([], |row| {
             Ok(super::models::Setting {
                 key: row.get(0)?,
@@ -3094,25 +3446,25 @@ impl Database {
                 updated_at: row.get(2)?,
             })
         })?;
-        
+
         settings.collect()
     }
 
     /// Récupérer la configuration CGP (JSON sérialisé)
     pub fn get_cgp_config(&self) -> Result<super::models::CgpConfig> {
         match self.get_setting("cgp_config")? {
-            Some(json_str) => {
-                serde_json::from_str(&json_str)
-                    .map_err(|e| rusqlite::Error::InvalidParameterName(format!("JSON parse error: {}", e)))
-            }
-            None => Ok(super::models::CgpConfig::default())
+            Some(json_str) => serde_json::from_str(&json_str).map_err(|e| {
+                rusqlite::Error::InvalidParameterName(format!("JSON parse error: {}", e))
+            }),
+            None => Ok(super::models::CgpConfig::default()),
         }
     }
 
     /// Sauvegarder la configuration CGP
     pub fn save_cgp_config(&self, config: &super::models::CgpConfig) -> Result<()> {
-        let json_str = serde_json::to_string(config)
-            .map_err(|e| rusqlite::Error::InvalidParameterName(format!("JSON serialize error: {}", e)))?;
+        let json_str = serde_json::to_string(config).map_err(|e| {
+            rusqlite::Error::InvalidParameterName(format!("JSON serialize error: {}", e))
+        })?;
         self.set_setting("cgp_config", &json_str)
     }
 
@@ -3120,7 +3472,7 @@ impl Database {
     pub fn is_wizard_completed(&self) -> Result<bool> {
         match self.get_cgp_config() {
             Ok(config) => Ok(config.wizard_completed),
-            Err(_) => Ok(false)
+            Err(_) => Ok(false),
         }
     }
 
@@ -3137,5 +3489,156 @@ impl Database {
         let mut config = self.get_cgp_config()?;
         config.wizard_step = step;
         self.save_cgp_config(&config)
+    }
+
+    // ========== INTERACTIONS ==========
+
+    fn parse_interaction_timestamp(date_str: Option<&String>) -> Result<i64> {
+        if let Some(s) = date_str {
+            if !s.trim().is_empty() {
+                if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+                    return Ok(dt.timestamp());
+                }
+                if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S%.fZ") {
+                    return Ok(dt.and_utc().timestamp());
+                }
+            }
+        }
+        Ok(std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64)
+    }
+
+    pub fn get_all_interactions_with_contacts(
+        &self,
+    ) -> Result<Vec<super::models::InteractionWithContact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT i.id, i.contact_id, c.nom, c.prenom, i.type_interaction, i.sujet, i.contenu,
+                    i.date_interaction, i.created_at
+             FROM interactions i
+             INNER JOIN contacts c ON c.id = i.contact_id
+             ORDER BY i.date_interaction DESC, i.id DESC",
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok(super::models::InteractionWithContact {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                contact_nom: row.get(2)?,
+                contact_prenom: row.get(3)?,
+                type_interaction: row.get(4)?,
+                sujet: row.get(5)?,
+                contenu: row.get(6)?,
+                date_interaction: row.get(7)?,
+                created_at: row.get(8)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn get_interactions_by_contact(
+        &self,
+        contact_id: i64,
+    ) -> Result<Vec<super::models::Interaction>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, type_interaction, sujet, contenu, date_interaction, email_id, created_at
+             FROM interactions WHERE contact_id = ?1 ORDER BY date_interaction DESC",
+        )?;
+
+        let rows = stmt.query_map(params![contact_id], |row| {
+            Ok(super::models::Interaction {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                type_interaction: row.get(2)?,
+                sujet: row.get(3)?,
+                contenu: row.get(4)?,
+                date_interaction: row.get(5)?,
+                email_id: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    pub fn create_interaction(
+        &self,
+        interaction: super::models::NewInteraction,
+    ) -> Result<super::models::Interaction> {
+        let date_ts = Self::parse_interaction_timestamp(interaction.date_interaction.as_ref())?;
+
+        self.conn.execute(
+            "INSERT INTO interactions (contact_id, type_interaction, sujet, contenu, date_interaction)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                interaction.contact_id,
+                interaction.type_interaction,
+                interaction.sujet,
+                interaction.contenu,
+                date_ts,
+            ],
+        )?;
+
+        let id = self.conn.last_insert_rowid();
+        self.get_interaction_by_id(id)
+    }
+
+    pub fn get_interaction_by_id(&self, id: i64) -> Result<super::models::Interaction> {
+        self.conn.query_row(
+            "SELECT id, contact_id, type_interaction, sujet, contenu, date_interaction, email_id, created_at
+             FROM interactions WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(super::models::Interaction {
+                    id: row.get(0)?,
+                    contact_id: row.get(1)?,
+                    type_interaction: row.get(2)?,
+                    sujet: row.get(3)?,
+                    contenu: row.get(4)?,
+                    date_interaction: row.get(5)?,
+                    email_id: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            },
+        )
+    }
+
+    pub fn update_interaction(
+        &self,
+        id: i64,
+        interaction: super::models::NewInteraction,
+    ) -> Result<super::models::Interaction> {
+        let date_ts = Self::parse_interaction_timestamp(interaction.date_interaction.as_ref())?;
+
+        self.conn.execute(
+            "UPDATE interactions SET contact_id = ?1, type_interaction = ?2, sujet = ?3, contenu = ?4, date_interaction = ?5
+             WHERE id = ?6",
+            params![
+                interaction.contact_id,
+                interaction.type_interaction,
+                interaction.sujet,
+                interaction.contenu,
+                date_ts,
+                id,
+            ],
+        )?;
+
+        self.get_interaction_by_id(id)
+    }
+
+    pub fn delete_interaction(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM interactions WHERE id = ?1", params![id])?;
+        Ok(())
     }
 }

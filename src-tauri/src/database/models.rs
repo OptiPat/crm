@@ -239,21 +239,21 @@ pub struct CategoryStats {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MonthlyStats {
-    pub month: String,      // Format: "Jan 2026"
-    pub nouveaux: i64,      // Nombre de nouveaux contacts ce mois
+    pub month: String, // Format: "Jan 2026"
+    pub nouveaux: i64, // Nombre de nouveaux contacts ce mois
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProductStats {
-    pub type_produit: String,   // Type de produit
-    pub montant: f64,           // Montant total en euros
+    pub type_produit: String, // Type de produit
+    pub montant: f64,         // Montant total en euros
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PipelineStats {
-    pub suspects: i64,    // Nombre total de suspects
-    pub prospects: i64,   // Nombre total de prospects
-    pub clients: i64,     // Nombre total de clients
+    pub suspects: i64,  // Nombre total de suspects
+    pub prospects: i64, // Nombre total de prospects
+    pub clients: i64,   // Nombre total de clients
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -263,7 +263,7 @@ pub struct AlerteWithContact {
     pub contact_nom: String,
     pub contact_prenom: String,
     pub contact_categorie: String,
-    pub date_dernier_contact: Option<String>,
+    pub date_dernier_contact: Option<i64>,
     pub type_alerte: String,
     pub message: String,
     pub date_alerte: String,
@@ -300,9 +300,9 @@ pub struct NewInvestissement {
     pub partenaire_id: Option<i64>,
     pub nom_produit: String,
     pub montant_initial: Option<i64>,
-    pub date_souscription: Option<String>, // ISO string
+    pub date_souscription: Option<String>,     // ISO string
     pub date_fin_demembrement: Option<String>, // ISO string
-    pub date_fin_pret: Option<String>, // ISO string
+    pub date_fin_pret: Option<String>,         // ISO string
     pub versement_programme: Option<bool>,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,
@@ -348,9 +348,9 @@ pub struct Etiquette {
     pub description: Option<String>,
     pub priorite: i64,
     // Attribution automatique
-    pub auto_condition_type: Option<String>,    // DELAI_SANS_CONTACT, DATE_APPROCHE, PERIODE_ANNEE, TYPE_PRODUIT
-    pub auto_condition_config: Option<String>,  // JSON avec les paramètres
-    pub auto_categories: Option<String>,        // JSON array des catégories concernées
+    pub auto_condition_type: Option<String>, // DELAI_SANS_CONTACT, DATE_APPROCHE, PERIODE_ANNEE, TYPE_PRODUIT
+    pub auto_condition_config: Option<String>, // JSON avec les paramètres
+    pub auto_categories: Option<String>,     // JSON array des catégories concernées
     // Action email
     pub email_template_id: Option<i64>,
     pub email_delai_jours: i64,
@@ -364,10 +364,10 @@ pub struct Etiquette {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewEtiquette {
     pub nom: String,
-    pub couleur: Option<String>,        // Défaut: #3B82F6
+    pub couleur: Option<String>, // Défaut: #3B82F6
     pub icone: Option<String>,
     pub description: Option<String>,
-    pub priorite: Option<i64>,          // Défaut: 0
+    pub priorite: Option<i64>, // Défaut: 0
     // Attribution automatique
     pub auto_condition_type: Option<String>,
     pub auto_condition_config: Option<String>,
@@ -377,7 +377,7 @@ pub struct NewEtiquette {
     pub email_delai_jours: Option<i64>, // Défaut: 0
     pub email_actif: Option<bool>,      // Défaut: false
     // Système
-    pub is_default: Option<bool>,       // Défaut: false
+    pub is_default: Option<bool>, // Défaut: false
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -386,7 +386,7 @@ pub struct ContactEtiquette {
     pub contact_id: i64,
     pub etiquette_id: i64,
     pub date_attribution: i64,
-    pub attribue_par: String,           // "AUTO" ou "MANUEL"
+    pub attribue_par: String, // "AUTO" ou "MANUEL"
     // Suivi email
     pub email_envoye: bool,
     pub email_date_prevue: Option<i64>,
@@ -398,7 +398,7 @@ pub struct ContactEtiquette {
 pub struct NewContactEtiquette {
     pub contact_id: i64,
     pub etiquette_id: i64,
-    pub attribue_par: Option<String>,   // Défaut: "AUTO"
+    pub attribue_par: Option<String>, // Défaut: "AUTO"
     pub email_date_prevue: Option<i64>,
     pub notes: Option<String>,
 }
@@ -421,7 +421,7 @@ pub struct EtiquetteWithCount {
     pub is_default: bool,
     pub created_at: i64,
     pub updated_at: i64,
-    pub contact_count: i64,             // Nombre de contacts avec cette étiquette
+    pub contact_count: i64, // Nombre de contacts avec cette étiquette
 }
 
 // Détails d'une étiquette sur un contact
@@ -438,6 +438,42 @@ pub struct ContactEtiquetteDetails {
     pub email_envoye: bool,
     pub email_date_prevue: Option<i64>,
     pub notes: Option<String>,
+}
+
+// ==================== INTERACTIONS ====================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Interaction {
+    pub id: i64,
+    pub contact_id: i64,
+    pub type_interaction: String,
+    pub sujet: Option<String>,
+    pub contenu: Option<String>,
+    pub date_interaction: i64,
+    pub email_id: Option<i64>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewInteraction {
+    pub contact_id: i64,
+    pub type_interaction: String,
+    pub sujet: Option<String>,
+    pub contenu: Option<String>,
+    pub date_interaction: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct InteractionWithContact {
+    pub id: i64,
+    pub contact_id: i64,
+    pub contact_nom: String,
+    pub contact_prenom: String,
+    pub type_interaction: String,
+    pub sujet: Option<String>,
+    pub contenu: Option<String>,
+    pub date_interaction: i64,
+    pub created_at: i64,
 }
 
 // ==================== SETTINGS ====================

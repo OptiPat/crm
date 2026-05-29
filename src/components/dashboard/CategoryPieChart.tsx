@@ -1,17 +1,24 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getCategoryStats } from "@/lib/api/tauri-dashboard";
+import {
+  ChartEmpty,
+  ChartLegendGrid,
+  ChartLoading,
+  ChartTooltipBox,
+  formatDashboardPercent,
+} from "./dashboard-ui";
 
 const COLORS = {
-  clients: "#10B981",           // Vert
-  prospect_client: "#3B82F6",   // Bleu
-  prospect_filleul: "#06B6D4",  // Cyan
-  suspect_client: "#F59E0B",    // Ambre
-  suspect_filleul: "#F97316",   // Orange
+  clients: "#10B981",
+  prospect_client: "#3B82F6",
+  prospect_filleul: "#06B6D4",
+  suspect_client: "#F59E0B",
+  suspect_filleul: "#F97316",
 };
 
-const LABELS = {
+const LABELS: Record<keyof typeof COLORS, string> = {
   clients: "Clients",
   prospect_client: "Prospects clients",
   prospect_filleul: "Prospects filleuls",
@@ -20,8 +27,12 @@ const LABELS = {
 };
 
 export function CategoryPieChart() {
-  const [data, setData] = useState<Array<{ name: string; value: number; color: string }>>([]);
+  const [data, setData] = useState<
+    { name: string; value: number; color: string }[]
+  >([]);
   const [loading, setLoading] = useState(true);
+
+  const total = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data]);
 
   useEffect(() => {
     loadData();
@@ -31,73 +42,93 @@ export function CategoryPieChart() {
     try {
       setLoading(true);
       const stats = await getCategoryStats();
-      
-      const chartData = [
-        { name: LABELS.clients, value: stats.clients, color: COLORS.clients },
-        { name: LABELS.prospect_client, value: stats.prospect_client, color: COLORS.prospect_client },
-        { name: LABELS.prospect_filleul, value: stats.prospect_filleul, color: COLORS.prospect_filleul },
-        { name: LABELS.suspect_client, value: stats.suspect_client, color: COLORS.suspect_client },
-        { name: LABELS.suspect_filleul, value: stats.suspect_filleul, color: COLORS.suspect_filleul },
-      ].filter(item => item.value > 0); // Ne garder que les catégories avec des valeurs
-      
+      const chartData = (
+        [
+          { key: "clients" as const, value: stats.clients },
+          { key: "prospect_client" as const, value: stats.prospect_client },
+          { key: "prospect_filleul" as const, value: stats.prospect_filleul },
+          { key: "suspect_client" as const, value: stats.suspect_client },
+          { key: "suspect_filleul" as const, value: stats.suspect_filleul },
+        ] as const
+      )
+        .filter((item) => item.value > 0)
+        .map((item) => ({
+          name: LABELS[item.key],
+          value: item.value,
+          color: COLORS[item.key],
+        }))
+        .sort((a, b) => b.value - a.value);
+
       setData(chartData);
     } catch (error) {
-      console.error("Erreur lors du chargement des statistiques par catégorie:", error);
+      console.error("Erreur catégories:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const CustomTooltip = ({ active, payload }: any) => {
-    if (active && payload && payload.length) {
-      return (
-        <div className="bg-white p-3 rounded-lg shadow-lg border border-border">
-          <p className="font-medium">{payload[0].name}</p>
-          <p className="text-sm text-muted-foreground">
-            {payload[0].value} contact{payload[0].value > 1 ? 's' : ''}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  };
-
   return (
-    <Card>
-      <CardHeader>
+    <Card className="shadow-sm border-border/80 h-full flex flex-col">
+      <CardHeader className="pb-2">
         <CardTitle className="font-serif text-xl">Répartition par catégorie</CardTitle>
-        <CardDescription>Distribution des contacts par type</CardDescription>
+        <CardDescription>Clients, prospects et suspects — survol pour le détail</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         {loading ? (
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            Chargement...
-          </div>
+          <ChartLoading height={360} />
         ) : data.length === 0 ? (
-          <div className="h-[300px] flex items-center justify-center text-muted-foreground">
-            Aucune donnée à afficher
-          </div>
+          <ChartEmpty height={360} title="Aucune donnée à afficher" />
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
-                outerRadius={80}
-                fill="#8884d8"
-                dataKey="value"
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.color} />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="space-y-4">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={48}
+                  outerRadius={88}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {data.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.color}
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const entry = payload[0];
+                    return (
+                      <ChartTooltipBox>
+                        <p className="font-medium">{entry.name}</p>
+                        <p className="text-primary font-semibold">
+                          {entry.value} contact{(entry.value as number) > 1 ? "s" : ""}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDashboardPercent(entry.value as number, total)}
+                        </p>
+                      </ChartTooltipBox>
+                    );
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <ChartLegendGrid
+              items={data}
+              total={total}
+              maxHeight="8rem"
+              columns={data.length > 4 ? 2 : 1}
+            />
+            <p className="text-xs text-center text-muted-foreground tabular-nums">
+              Total : {total} contact{total > 1 ? "s" : ""}
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>

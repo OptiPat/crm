@@ -1,8 +1,8 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
-use base64::Engine;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SmtpConfig {
@@ -19,7 +19,7 @@ pub struct SmtpConfig {
 impl SmtpConfig {
     pub fn load(app_handle: &AppHandle) -> Result<Option<Self>, String> {
         let config_path = Self::get_config_path(app_handle)?;
-        
+
         if !config_path.exists() {
             return Ok(None);
         }
@@ -35,7 +35,7 @@ impl SmtpConfig {
 
     pub fn save(&self, app_handle: &AppHandle) -> Result<(), String> {
         let config_path = Self::get_config_path(app_handle)?;
-        
+
         let config_json = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize SMTP config: {}", e))?;
 
@@ -47,7 +47,7 @@ impl SmtpConfig {
 
     pub fn delete(app_handle: &AppHandle) -> Result<(), String> {
         let config_path = Self::get_config_path(app_handle)?;
-        
+
         if config_path.exists() {
             fs::remove_file(&config_path)
                 .map_err(|e| format!("Failed to delete SMTP config: {}", e))?;
@@ -96,8 +96,7 @@ impl SmtpConfig {
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(&self.password)
             .map_err(|e| format!("Failed to decode password: {}", e))?;
-        
-        String::from_utf8(decoded)
-            .map_err(|e| format!("Invalid UTF-8 in password: {}", e))
+
+        String::from_utf8(decoded).map_err(|e| format!("Invalid UTF-8 in password: {}", e))
     }
 }

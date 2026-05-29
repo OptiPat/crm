@@ -1,6 +1,6 @@
 use super::{EmailSender, SmtpConfig};
-use tauri::AppHandle;
 use base64::Engine;
+use tauri::AppHandle;
 
 #[derive(serde::Deserialize)]
 pub struct SmtpConfigInput {
@@ -40,7 +40,7 @@ pub fn save_smtp_config(app_handle: AppHandle, config: SmtpConfigInput) -> Resul
         println!("📧 Encoding new password");
         base64::engine::general_purpose::STANDARD.encode(&config.password)
     };
-    
+
     let smtp_config = SmtpConfig {
         provider: config.provider,
         smtp_server: config.smtp_server,
@@ -66,8 +66,8 @@ pub fn delete_smtp_config(app_handle: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 pub fn test_smtp_connection(app_handle: AppHandle) -> Result<String, String> {
-    let config = SmtpConfig::load(&app_handle)?
-        .ok_or("SMTP configuration not found".to_string())?;
+    let config =
+        SmtpConfig::load(&app_handle)?.ok_or("SMTP configuration not found".to_string())?;
 
     let sender = EmailSender::new(config.clone());
 
@@ -75,7 +75,7 @@ pub fn test_smtp_connection(app_handle: AppHandle) -> Result<String, String> {
     sender.send_email(
         &config.from_email,
         Some(&config.from_name),
-        "Test de connexion SMTP - Patrimoine CRM",
+        "Test de connexion SMTP - CRM W.Y.S",
         "Ceci est un email de test pour vérifier la configuration SMTP.\n\nSi vous recevez cet email, la configuration est correcte !",
     )?;
 
@@ -92,8 +92,9 @@ pub struct SendEmailInput {
 
 #[tauri::command]
 pub fn send_email(app_handle: AppHandle, email_data: SendEmailInput) -> Result<(), String> {
-    let config = SmtpConfig::load(&app_handle)?
-        .ok_or("SMTP configuration not found. Please configure your email settings first.".to_string())?;
+    let config = SmtpConfig::load(&app_handle)?.ok_or(
+        "SMTP configuration not found. Please configure your email settings first.".to_string(),
+    )?;
 
     let sender = EmailSender::new(config);
 

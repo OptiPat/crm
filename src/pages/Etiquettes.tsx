@@ -22,6 +22,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { textMatchesSearch } from "@/lib/search-utils";
 
 export function Etiquettes() {
   const [etiquettes, setEtiquettes] = useState<EtiquetteWithCount[]>([]);
@@ -61,13 +62,9 @@ export function Etiquettes() {
     }
   };
 
-  const filteredEtiquettes = etiquettes.filter((etiquette) => {
-    const search = searchQuery.toLowerCase();
-    return (
-      etiquette.nom.toLowerCase().includes(search) ||
-      etiquette.description?.toLowerCase().includes(search)
-    );
-  });
+  const filteredEtiquettes = etiquettes.filter((etiquette) =>
+    textMatchesSearch(searchQuery, etiquette.nom, etiquette.description)
+  );
 
   const handleEditEtiquette = (etiquette: EtiquetteWithCount) => {
     setSelectedEtiquette(etiquette);
@@ -201,7 +198,6 @@ export function Etiquettes() {
                         color: getContrastColor(etiquette.couleur)
                       }}
                     >
-                      {etiquette.icone && <span>{etiquette.icone}</span>}
                       <span>{etiquette.nom}</span>
                     </span>
                     

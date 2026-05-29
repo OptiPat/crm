@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Lock, AlertCircle } from "lucide-react";
+import { APP_DISPLAY_NAME } from "@/lib/app-branding";
 
 interface UnlockScreenProps {
   onUnlocked: () => void;
@@ -67,7 +68,7 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
             <Lock className="h-8 w-8 text-primary" />
           </div>
           <h1 className="text-3xl font-serif font-bold text-primary mb-2">
-            Patrimoine CRM
+            {APP_DISPLAY_NAME}
           </h1>
           <p className="text-muted-foreground">
             Entrez votre mot de passe pour déverrouiller
@@ -81,10 +82,12 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
               Saisissez votre mot de passe maître
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe</Label>
+              <div className="space-y-3">
+                <Label htmlFor="password" className="block">
+                  Mot de passe
+                </Label>
                 <div className="relative">
                   <Input
                     id="password"
@@ -92,9 +95,9 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder="Entrez votre mot de passe..."
                     className="pr-10"
                     autoFocus
+                    autoComplete="current-password"
                   />
                   <Button
                     type="button"

@@ -18,9 +18,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, Home } from "lucide-react";
-import { type Contact, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
+import { type Contact, getAllContacts } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, createFoyer, type Foyer } from "@/lib/api/tauri-foyers";
+import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
 import { Badge } from "@/components/ui/badge";
+import { contactMatchesSearch } from "@/lib/search-utils";
 
 interface FoyerLinkModalProps {
   open: boolean;
@@ -65,42 +67,20 @@ export function FoyerLinkModal({
     }
   };
 
-  const filteredContacts = contacts.filter(c => {
-    const search = searchQuery.toLowerCase();
-    return (
-      c.nom.toLowerCase().includes(search) ||
-      c.prenom.toLowerCase().includes(search) ||
-      c.email?.toLowerCase().includes(search)
-    );
-  });
+  const filteredContacts = contacts.filter((c) =>
+    contactMatchesSearch(searchQuery, c)
+  );
 
   const handleJoinFoyer = async (contact: Contact) => {
     if (!contact.foyer_id) return;
 
     setLoading(true);
     try {
-      await updateContact(currentContact.id!, {
-        ...currentContact,
-        foyer_id: contact.foyer_id,
-        role_foyer: selectedRole,
-        date_naissance: currentContact.date_naissance 
-          ? new Date(currentContact.date_naissance * 1000).toISOString() 
-          : undefined,
-        // Dates CLIENT
-        date_dernier_contact: currentContact.date_dernier_contact 
-          ? new Date(currentContact.date_dernier_contact * 1000).toISOString() 
-          : undefined,
-        date_prochain_suivi: currentContact.date_prochain_suivi 
-          ? new Date(currentContact.date_prochain_suivi * 1000).toISOString() 
-          : undefined,
-        // Dates FILLEUL
-        date_dernier_contact_filleul: currentContact.date_dernier_contact_filleul 
-          ? new Date(currentContact.date_dernier_contact_filleul * 1000).toISOString() 
-          : undefined,
-        date_prochain_suivi_filleul: currentContact.date_prochain_suivi_filleul 
-          ? new Date(currentContact.date_prochain_suivi_filleul * 1000).toISOString() 
-          : undefined,
-      });
+      await linkContactToFoyer(
+        currentContact,
+        contact.foyer_id,
+        selectedRole
+      );
 
       onSuccess();
       onOpenChange(false);
@@ -122,50 +102,8 @@ export function FoyerLinkModal({
       });
 
       await Promise.all([
-        updateContact(currentContact.id!, {
-          ...currentContact,
-          foyer_id: newFoyer.id,
-          role_foyer: "DECLARANT_1",
-          date_naissance: currentContact.date_naissance 
-            ? new Date(currentContact.date_naissance * 1000).toISOString() 
-            : undefined,
-          // Dates CLIENT
-          date_dernier_contact: currentContact.date_dernier_contact 
-            ? new Date(currentContact.date_dernier_contact * 1000).toISOString() 
-            : undefined,
-          date_prochain_suivi: currentContact.date_prochain_suivi 
-            ? new Date(currentContact.date_prochain_suivi * 1000).toISOString() 
-            : undefined,
-          // Dates FILLEUL
-          date_dernier_contact_filleul: currentContact.date_dernier_contact_filleul 
-            ? new Date(currentContact.date_dernier_contact_filleul * 1000).toISOString() 
-            : undefined,
-          date_prochain_suivi_filleul: currentContact.date_prochain_suivi_filleul 
-            ? new Date(currentContact.date_prochain_suivi_filleul * 1000).toISOString() 
-            : undefined,
-        }),
-        updateContact(contact.id!, {
-          ...contact,
-          foyer_id: newFoyer.id,
-          role_foyer: selectedRole,
-          date_naissance: contact.date_naissance 
-            ? new Date(contact.date_naissance * 1000).toISOString() 
-            : undefined,
-          // Dates CLIENT
-          date_dernier_contact: contact.date_dernier_contact 
-            ? new Date(contact.date_dernier_contact * 1000).toISOString() 
-            : undefined,
-          date_prochain_suivi: contact.date_prochain_suivi 
-            ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
-            : undefined,
-          // Dates FILLEUL
-          date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
-            ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
-            : undefined,
-          date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
-            ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
-            : undefined,
-        }),
+        linkContactToFoyer(currentContact, newFoyer.id, "DECLARANT_1"),
+        linkContactToFoyer(contact, newFoyer.id, selectedRole),
       ]);
 
       onSuccess();

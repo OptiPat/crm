@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Users2, X } from "lucide-react";
-import { type Contact, updateContact } from "@/lib/api/tauri-contacts";
+import { type Contact } from "@/lib/api/tauri-contacts";
 import { createFoyer } from "@/lib/api/tauri-foyers";
+import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
 
 interface ContactWithRole {
   contact: Contact;
@@ -189,29 +190,12 @@ export function FoyerGroupingModal({
           
           // Rattacher les autres membres au foyer existant
           for (const member of group.members) {
-            if (member.contact.foyer_id !== existingFoyerId) {
-              await updateContact(member.contact.id!, {
-                ...member.contact,
-                foyer_id: existingFoyerId,
-                role_foyer: member.role,
-                date_naissance: member.contact.date_naissance 
-                  ? new Date(member.contact.date_naissance * 1000).toISOString() 
-                  : undefined,
-                // Dates CLIENT
-                date_dernier_contact: member.contact.date_dernier_contact 
-                  ? new Date(member.contact.date_dernier_contact * 1000).toISOString() 
-                  : undefined,
-                date_prochain_suivi: member.contact.date_prochain_suivi 
-                  ? new Date(member.contact.date_prochain_suivi * 1000).toISOString() 
-                  : undefined,
-                // Dates FILLEUL
-                date_dernier_contact_filleul: member.contact.date_dernier_contact_filleul 
-                  ? new Date(member.contact.date_dernier_contact_filleul * 1000).toISOString() 
-                  : undefined,
-                date_prochain_suivi_filleul: member.contact.date_prochain_suivi_filleul 
-                  ? new Date(member.contact.date_prochain_suivi_filleul * 1000).toISOString() 
-                  : undefined,
-              });
+            if (Number(member.contact.foyer_id) !== Number(existingFoyerId)) {
+              await linkContactToFoyer(
+                member.contact,
+                existingFoyerId,
+                member.role
+              );
             }
           }
           continue;
@@ -226,28 +210,7 @@ export function FoyerGroupingModal({
 
         // Rattacher tous les membres au foyer
         for (const member of group.members) {
-          await updateContact(member.contact.id!, {
-            ...member.contact,
-            foyer_id: foyer.id,
-            role_foyer: member.role,
-            date_naissance: member.contact.date_naissance 
-              ? new Date(member.contact.date_naissance * 1000).toISOString() 
-              : undefined,
-            // Dates CLIENT
-            date_dernier_contact: member.contact.date_dernier_contact 
-              ? new Date(member.contact.date_dernier_contact * 1000).toISOString() 
-              : undefined,
-            date_prochain_suivi: member.contact.date_prochain_suivi 
-              ? new Date(member.contact.date_prochain_suivi * 1000).toISOString() 
-              : undefined,
-            // Dates FILLEUL
-            date_dernier_contact_filleul: member.contact.date_dernier_contact_filleul 
-              ? new Date(member.contact.date_dernier_contact_filleul * 1000).toISOString() 
-              : undefined,
-            date_prochain_suivi_filleul: member.contact.date_prochain_suivi_filleul 
-              ? new Date(member.contact.date_prochain_suivi_filleul * 1000).toISOString() 
-              : undefined,
-          });
+          await linkContactToFoyer(member.contact, foyer.id, member.role);
         }
       }
 
