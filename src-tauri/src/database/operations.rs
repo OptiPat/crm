@@ -1,7 +1,7 @@
 use super::{
     models::{
-        Contact, ContactEtiquette, ContactEtiquetteDetails, Etiquette, EtiquetteWithCount, Famille,
-        NewContact, NewContactEtiquette, NewEtiquette, NewFamille,
+        Contact, ContactEtiquette, ContactEtiquetteDetails, Etiquette, EtiquetteEmailQueueItem,
+        EtiquetteWithCount, Famille, NewContact, NewContactEtiquette, NewEtiquette, NewFamille,
     },
     Database,
 };
@@ -2277,37 +2277,79 @@ impl Database {
 
     // ==================== ETIQUETTES ====================
 
+    fn map_etiquette_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Etiquette> {
+        Ok(Etiquette {
+            id: row.get(0)?,
+            nom: row.get(1)?,
+            couleur: row.get(2)?,
+            icone: row.get(3)?,
+            description: row.get(4)?,
+            priorite: row.get(5)?,
+            auto_condition_type: row.get(6)?,
+            auto_condition_config: row.get(7)?,
+            auto_categories: row.get(8)?,
+            email_template_id: row.get(9)?,
+            email_delai_jours: row.get(10)?,
+            email_envoi_prevu: row.get(11)?,
+            email_actif: row.get::<_, i64>(12)? != 0,
+            is_default: row.get::<_, i64>(13)? != 0,
+            actif: row.get::<_, i64>(14)? != 0,
+            created_at: row.get(15)?,
+            updated_at: row.get(16)?,
+        })
+    }
+
+    /// Retire les attributions automatiques d'une étiquette (désactivation). Conserve les tags MANUEL.
+    pub fn remove_auto_assignments_for_etiquette(&self, etiquette_id: i64) -> Result<usize> {
+        let n = self.conn.execute(
+            "DELETE FROM contact_etiquettes WHERE etiquette_id = ?1 AND UPPER(TRIM(attribue_par)) != 'MANUEL'",
+            params![etiquette_id],
+        )?;
+        Ok(n)
+    }
+
+    fn resolve_email_date_prevue(etiquette: &Etiquette) -> Option<i64> {
+        if !etiquette.actif || !etiquette.email_actif {
+            return None;
+        }
+        if let Some(ts) = etiquette.email_envoi_prevu {
+            return Some(ts);
+        }
+        if etiquette.email_delai_jours > 0 {
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+            return Some(now + etiquette.email_delai_jours * 24 * 60 * 60);
+        }
+        None
+    }
+
+    fn sync_pending_email_dates_for_etiquette(
+        &self,
+        etiquette_id: i64,
+        date_prevue: Option<i64>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contact_etiquettes SET email_date_prevue = ?1
+             WHERE etiquette_id = ?2 AND email_envoye = 0",
+            params![date_prevue, etiquette_id],
+        )?;
+        Ok(())
+    }
+
     /// Récupérer toutes les étiquettes
     pub fn get_all_etiquettes(&self) -> Result<Vec<Etiquette>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, nom, couleur, icone, description, priorite,
                     auto_condition_type, auto_condition_config, auto_categories,
-                    email_template_id, email_delai_jours, email_actif,
-                    is_default, created_at, updated_at
+                    email_template_id, email_delai_jours, email_envoi_prevu, email_actif,
+                    is_default, actif, created_at, updated_at
              FROM etiquettes 
              ORDER BY priorite DESC, nom ASC",
         )?;
 
-        let etiquettes = stmt.query_map([], |row| {
-            Ok(Etiquette {
-                id: row.get(0)?,
-                nom: row.get(1)?,
-                couleur: row.get(2)?,
-                icone: row.get(3)?,
-                description: row.get(4)?,
-                priorite: row.get(5)?,
-                auto_condition_type: row.get(6)?,
-                auto_condition_config: row.get(7)?,
-                auto_categories: row.get(8)?,
-                email_template_id: row.get(9)?,
-                email_delai_jours: row.get(10)?,
-                email_actif: row.get::<_, i64>(11)? != 0,
-                is_default: row.get::<_, i64>(12)? != 0,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
-            })
-        })?;
-
+        let etiquettes = stmt.query_map([], Self::map_etiquette_from_row)?;
         etiquettes.collect()
     }
 
@@ -2316,8 +2358,8 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT e.id, e.nom, e.couleur, e.icone, e.description, e.priorite,
                     e.auto_condition_type, e.auto_condition_config, e.auto_categories,
-                    e.email_template_id, e.email_delai_jours, e.email_actif,
-                    e.is_default, e.created_at, e.updated_at,
+                    e.email_template_id, e.email_delai_jours, e.email_envoi_prevu, e.email_actif,
+                    e.is_default, e.actif, e.created_at, e.updated_at,
                     COALESCE((SELECT COUNT(*) FROM contact_etiquettes ce WHERE ce.etiquette_id = e.id), 0) as contact_count
              FROM etiquettes e
              ORDER BY e.priorite DESC, e.nom ASC"
@@ -2336,11 +2378,13 @@ impl Database {
                 auto_categories: row.get(8)?,
                 email_template_id: row.get(9)?,
                 email_delai_jours: row.get(10)?,
-                email_actif: row.get::<_, i64>(11)? != 0,
-                is_default: row.get::<_, i64>(12)? != 0,
-                created_at: row.get(13)?,
-                updated_at: row.get(14)?,
-                contact_count: row.get(15)?,
+                email_envoi_prevu: row.get(11)?,
+                email_actif: row.get::<_, i64>(12)? != 0,
+                is_default: row.get::<_, i64>(13)? != 0,
+                actif: row.get::<_, i64>(14)? != 0,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
+                contact_count: row.get(17)?,
             })
         })?;
 
@@ -2352,35 +2396,53 @@ impl Database {
         self.conn.query_row(
             "SELECT id, nom, couleur, icone, description, priorite,
                     auto_condition_type, auto_condition_config, auto_categories,
-                    email_template_id, email_delai_jours, email_actif,
-                    is_default, created_at, updated_at
+                    email_template_id, email_delai_jours, email_envoi_prevu, email_actif,
+                    is_default, actif, created_at, updated_at
              FROM etiquettes 
              WHERE id = ?1",
             params![id],
-            |row| {
-                Ok(Etiquette {
-                    id: row.get(0)?,
-                    nom: row.get(1)?,
-                    couleur: row.get(2)?,
-                    icone: row.get(3)?,
-                    description: row.get(4)?,
-                    priorite: row.get(5)?,
-                    auto_condition_type: row.get(6)?,
-                    auto_condition_config: row.get(7)?,
-                    auto_categories: row.get(8)?,
-                    email_template_id: row.get(9)?,
-                    email_delai_jours: row.get(10)?,
-                    email_actif: row.get::<_, i64>(11)? != 0,
-                    is_default: row.get::<_, i64>(12)? != 0,
-                    created_at: row.get(13)?,
-                    updated_at: row.get(14)?,
-                })
-            },
+            Self::map_etiquette_from_row,
         )
+    }
+
+    fn validate_etiquette_for_save(etiquette: &NewEtiquette) -> Result<()> {
+        if etiquette.nom.trim().is_empty() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Le nom de l'étiquette est obligatoire".to_string(),
+            ));
+        }
+        let is_auto = etiquette.actif.unwrap_or(true)
+            && etiquette
+                .auto_condition_type
+                .as_ref()
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false);
+        if is_auto {
+            let categories: Vec<String> = etiquette
+                .auto_categories
+                .as_ref()
+                .and_then(|c| serde_json::from_str(c).ok())
+                .unwrap_or_default();
+            if categories.is_empty() {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Au moins une catégorie de contact est requise pour une règle automatique"
+                        .to_string(),
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Créer une nouvelle étiquette
     pub fn create_etiquette(&self, etiquette: NewEtiquette) -> Result<Etiquette> {
+        Self::validate_etiquette_for_save(&etiquette)?;
+        if self.etiquette_nom_exists(&etiquette.nom, None)? {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Une étiquette nommée « {} » existe déjà",
+                etiquette.nom.trim()
+            )));
+        }
+
         let couleur = etiquette.couleur.unwrap_or_else(|| "#3B82F6".to_string());
         let priorite = etiquette.priorite.unwrap_or(0);
         let email_delai_jours = etiquette.email_delai_jours.unwrap_or(0);
@@ -2394,12 +2456,13 @@ impl Database {
         } else {
             0
         };
+        let actif = if etiquette.actif.unwrap_or(true) { 1 } else { 0 };
 
         self.conn.execute(
             "INSERT INTO etiquettes (nom, couleur, icone, description, priorite,
                                     auto_condition_type, auto_condition_config, auto_categories,
-                                    email_template_id, email_delai_jours, email_actif, is_default) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                                    email_template_id, email_delai_jours, email_envoi_prevu, email_actif, is_default, actif) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -2411,17 +2474,31 @@ impl Database {
                 &etiquette.auto_categories,
                 &etiquette.email_template_id,
                 email_delai_jours,
+                &etiquette.email_envoi_prevu,
                 email_actif,
                 is_default,
+                actif,
             ],
         )?;
 
         let id = self.conn.last_insert_rowid();
-        self.get_etiquette_by_id(id)
+        let created = self.get_etiquette_by_id(id)?;
+        if let Some(date_prevue) = Self::resolve_email_date_prevue(&created) {
+            self.sync_pending_email_dates_for_etiquette(id, Some(date_prevue))?;
+        }
+        Ok(created)
     }
 
     /// Mettre à jour une étiquette
     pub fn update_etiquette(&self, id: i64, etiquette: &NewEtiquette) -> Result<Etiquette> {
+        Self::validate_etiquette_for_save(etiquette)?;
+        if self.etiquette_nom_exists(&etiquette.nom, Some(id))? {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Une étiquette nommée « {} » existe déjà",
+                etiquette.nom.trim()
+            )));
+        }
+
         let couleur = etiquette
             .couleur
             .clone()
@@ -2438,6 +2515,7 @@ impl Database {
         } else {
             0
         };
+        let actif = if etiquette.actif.unwrap_or(true) { 1 } else { 0 };
 
         self.conn.execute(
             "UPDATE etiquettes SET 
@@ -2451,10 +2529,12 @@ impl Database {
                 auto_categories = ?8,
                 email_template_id = ?9,
                 email_delai_jours = ?10,
-                email_actif = ?11,
-                is_default = ?12,
+                email_envoi_prevu = ?11,
+                email_actif = ?12,
+                is_default = ?13,
+                actif = ?14,
                 updated_at = unixepoch()
-            WHERE id = ?13",
+            WHERE id = ?15",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -2466,18 +2546,39 @@ impl Database {
                 &etiquette.auto_categories,
                 &etiquette.email_template_id,
                 email_delai_jours,
+                &etiquette.email_envoi_prevu,
                 email_actif,
                 is_default,
+                actif,
                 id
             ],
         )?;
 
-        self.get_etiquette_by_id(id)
+        if actif == 0 {
+            let _ = self.remove_auto_assignments_for_etiquette(id)?;
+        }
+
+        let updated = self.get_etiquette_by_id(id)?;
+        let date_prevue = Self::resolve_email_date_prevue(&updated);
+        self.sync_pending_email_dates_for_etiquette(id, date_prevue)?;
+        Ok(updated)
     }
 
-    /// Supprimer une étiquette
+    /// Supprimer une étiquette (les étiquettes système `is_default` sont protégées).
     pub fn delete_etiquette(&self, id: i64) -> Result<()> {
-        // Les liaisons contact_etiquettes seront supprimées par CASCADE
+        let is_default: i64 = self
+            .conn
+            .query_row(
+                "SELECT is_default FROM etiquettes WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if is_default != 0 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Les étiquettes fournies par défaut ne peuvent pas être supprimées. Désactivez la règle auto ou modifiez le nom si besoin.".to_string(),
+            ));
+        }
         self.conn
             .execute("DELETE FROM etiquettes WHERE id = ?1", params![id])?;
         Ok(())
@@ -2518,6 +2619,56 @@ impl Database {
         etiquettes.collect()
     }
 
+    /// Toutes les liaisons contact–étiquette (évite N appels IPC sur la liste Contacts).
+    pub fn get_all_contact_etiquettes_details(
+        &self,
+    ) -> Result<Vec<ContactEtiquetteDetails>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ce.id, ce.contact_id, ce.etiquette_id, 
+                    e.nom, e.couleur, e.icone,
+                    ce.date_attribution, ce.attribue_par, ce.email_envoye,
+                    ce.email_date_prevue, ce.notes
+             FROM contact_etiquettes ce
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             ORDER BY ce.contact_id, e.priorite DESC, e.nom ASC",
+        )?;
+
+        let etiquettes = stmt.query_map([], |row| {
+            Ok(ContactEtiquetteDetails {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                etiquette_id: row.get(2)?,
+                etiquette_nom: row.get(3)?,
+                etiquette_couleur: row.get(4)?,
+                etiquette_icone: row.get(5)?,
+                date_attribution: row.get(6)?,
+                attribue_par: row.get(7)?,
+                email_envoye: row.get::<_, i64>(8)? != 0,
+                email_date_prevue: row.get(9)?,
+                notes: row.get(10)?,
+            })
+        })?;
+
+        etiquettes.collect()
+    }
+
+    fn etiquette_nom_exists(&self, nom: &str, exclude_id: Option<i64>) -> Result<bool> {
+        let count: i64 = if let Some(id) = exclude_id {
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM(?1)) AND id != ?2",
+                params![nom, id],
+                |r| r.get(0),
+            )?
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM(?1))",
+                params![nom],
+                |r| r.get(0),
+            )?
+        };
+        Ok(count > 0)
+    }
+
     /// Attribuer une étiquette à un contact
     pub fn attribuer_etiquette(
         &self,
@@ -2527,25 +2678,25 @@ impl Database {
     ) -> Result<ContactEtiquette> {
         let attribue_par = attribue_par.unwrap_or_else(|| "MANUEL".to_string());
 
-        // Vérifier si l'étiquette a un email actif pour calculer la date prévue
         let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        let email_date_prevue: Option<i64> =
-            if etiquette.email_actif && etiquette.email_delai_jours > 0 {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_secs() as i64;
-                Some(now + (etiquette.email_delai_jours * 24 * 60 * 60))
-            } else {
-                None
-            };
+        let email_date_prevue = Self::resolve_email_date_prevue(&etiquette);
 
         self.conn.execute(
             "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_date_prevue) 
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(contact_id, etiquette_id) DO UPDATE SET
-                attribue_par = excluded.attribue_par,
-                date_attribution = unixepoch()",
+                attribue_par = CASE
+                    WHEN contact_etiquettes.email_envoye = 0 THEN excluded.attribue_par
+                    ELSE contact_etiquettes.attribue_par
+                END,
+                date_attribution = CASE
+                    WHEN contact_etiquettes.email_envoye = 0 THEN unixepoch()
+                    ELSE contact_etiquettes.date_attribution
+                END,
+                email_date_prevue = CASE
+                    WHEN contact_etiquettes.email_envoye = 0 THEN excluded.email_date_prevue
+                    ELSE contact_etiquettes.email_date_prevue
+                END",
             params![contact_id, etiquette_id, &attribue_par, email_date_prevue],
         )?;
 
@@ -2675,8 +2826,10 @@ impl Database {
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
@@ -2694,8 +2847,10 @@ impl Database {
             auto_categories: Some(r#"["CLIENT", "PROSPECT_CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
@@ -2711,8 +2866,10 @@ impl Database {
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
@@ -2728,8 +2885,10 @@ impl Database {
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
@@ -2745,8 +2904,10 @@ impl Database {
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
@@ -2762,25 +2923,29 @@ impl Database {
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
-        // 8. RDV fin d'année (vert)
+        // 8. Réduction d'impôt fin d'année (vert)
         self.create_etiquette(NewEtiquette {
-            nom: "RDV fin d'année".to_string(),
+            nom: "Réduction d'impôt fin d'année".to_string(),
             couleur: Some("#10B981".to_string()),
             icone: Some("🎯".to_string()),
-            description: Some("Période de souscription fin d'année (oct-nov)".to_string()),
+            description: Some("Période de réduction d'impôt fin d'année (oct-nov)".to_string()),
             priorite: Some(60),
             auto_condition_type: Some("PERIODE_ANNEE".to_string()),
             auto_condition_config: Some(r#"{"mois_debut": 10, "mois_fin": 11}"#.to_string()),
             auto_categories: Some(r#"["CLIENT", "PROSPECT_CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
@@ -2799,17 +2964,19 @@ impl Database {
             ),
             email_template_id: None,
             email_delai_jours: Some(0),
+            email_envoi_prevu: None,
             email_actif: Some(false),
             is_default: Some(true),
+            actif: None,
         })?;
         created += 1;
 
         Ok(created)
     }
 
-    /// Vérifie et crée les étiquettes par défaut manquantes (migration pour bases existantes)
-    /// Met aussi à jour les configs des étiquettes existantes si nécessaire
-    /// Retourne le nombre d'étiquettes créées ou mises à jour
+    /// Vérifie et crée les étiquettes par défaut manquantes (migration pour bases existantes).
+    /// Ne modifie pas la config des étiquettes déjà présentes (personnalisation utilisateur).
+    /// Retourne le nombre d'étiquettes créées.
     pub fn ensure_default_etiquettes(&self) -> Result<usize> {
         // Vérifier si la table existe
         let table_exists: i64 = self
@@ -2827,7 +2994,7 @@ impl Database {
 
         let mut changes = 0;
 
-        // Liste des étiquettes par défaut à vérifier/créer/mettre à jour
+        // Étiquettes par défaut : création uniquement si le nom n'existe pas (config non écrasée).
         let default_etiquettes = vec![
             (
                 "Suivi > 1 an",
@@ -2900,16 +3067,26 @@ impl Database {
                 r#"["CLIENT"]"#,
             ),
             (
-                "RDV fin d'année",
+                "Réduction d'impôt fin d'année",
                 "#10B981",
                 "🎯",
-                "Période de souscription fin d'année (oct-nov)",
+                "Période de réduction d'impôt fin d'année (oct-nov)",
                 60,
                 "PERIODE_ANNEE",
                 r#"{"mois_debut": 10, "mois_fin": 11}"#,
                 r#"["CLIENT", "PROSPECT_CLIENT"]"#,
             ),
         ];
+
+        // Renommer l'ancienne étiquette par défaut si elle existe encore
+        let _ = self.conn.execute(
+            "UPDATE etiquettes SET nom = ?1, description = ?2 WHERE nom = ?3",
+            params![
+                "Réduction d'impôt fin d'année",
+                "Période de réduction d'impôt fin d'année (oct-nov)",
+                "RDV fin d'année"
+            ],
+        );
 
         for (
             nom,
@@ -2933,19 +3110,8 @@ impl Database {
                 .ok();
 
             match existing {
-                Some((id, current_config)) => {
-                    // L'étiquette existe - vérifier si la config doit être mise à jour
-                    let current = current_config.unwrap_or_default();
-                    if current != condition_config {
-                        // Mettre à jour la config et le type de condition
-                        if self.conn.execute(
-                            "UPDATE etiquettes SET auto_condition_type = ?1, auto_condition_config = ?2, auto_categories = ?3 WHERE id = ?4",
-                            params![condition_type, condition_config, categories, id],
-                        ).is_ok() {
-                            changes += 1;
-                            println!("🏷️ Étiquette '{}' mise à jour (nouvelle config)", nom);
-                        }
-                    }
+                Some((_id, _current_config)) => {
+                    // Ne pas écraser la config personnalisée de l'utilisateur
                 }
                 None => {
                     // Créer l'étiquette manquante
@@ -2961,8 +3127,10 @@ impl Database {
                             auto_categories: Some(categories.to_string()),
                             email_template_id: None,
                             email_delai_jours: Some(0),
+                            email_envoi_prevu: None,
                             email_actif: Some(false),
                             is_default: Some(true),
+            actif: None,
                         })
                         .is_ok()
                     {
@@ -2982,401 +3150,200 @@ impl Database {
 
     // ==================== MOTEUR AUTOMATIQUE ETIQUETTES ====================
 
-    /// Vérifie et applique automatiquement les étiquettes selon leurs conditions
-    /// Retourne le nombre d'étiquettes attribuées
-    pub fn check_and_apply_auto_etiquettes(&self) -> Result<usize> {
-        // Vérifier si la table existe
-        let table_exists: i64 = self
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='etiquettes'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+    /// Investissements du contact OU du foyer commun (si le contact est membre du foyer).
+    const INVESTISSEMENT_SCOPE_WHERE: &'static str =
+        "(contact_id = ?1 OR (?2 IS NOT NULL AND foyer_id = ?2))";
 
-        if table_exists == 0 {
-            return Ok(0);
+    pub(crate) fn contact_has_investment_types(
+        &self,
+        contact_id: i64,
+        foyer_id: Option<i64>,
+        types: &[String],
+    ) -> Result<bool> {
+        if types.is_empty() {
+            return Ok(false);
         }
-
-        // 🏷️ S'assurer que toutes les étiquettes par défaut existent (migration)
-        let _ = self.ensure_default_etiquettes();
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        // Récupérer le mois actuel (1-12)
-        let current_month = {
-            let datetime =
-                chrono::DateTime::from_timestamp(now, 0).unwrap_or_else(|| chrono::Utc::now());
-            datetime
-                .format("%m")
-                .to_string()
-                .parse::<i32>()
-                .unwrap_or(1)
-        };
-
-        let mut total_assigned = 0;
-
-        // Récupérer toutes les étiquettes automatiques
-        let etiquettes = self.get_all_etiquettes()?;
-        let auto_etiquettes: Vec<_> = etiquettes
-            .into_iter()
-            .filter(|e| e.auto_condition_type.is_some())
-            .collect();
-
-        // Récupérer tous les contacts
-        let contacts = self.get_all_contacts()?;
-
-        for etiquette in auto_etiquettes {
-            let condition_type = etiquette.auto_condition_type.as_ref().unwrap();
-            let config = etiquette.auto_condition_config.as_ref();
-            let categories: Vec<String> = etiquette
-                .auto_categories
-                .as_ref()
-                .and_then(|c| serde_json::from_str(c).ok())
-                .unwrap_or_default();
-
-            for contact in &contacts {
-                let contact_id = match contact.id {
-                    Some(id) => id,
-                    None => continue,
-                };
-
-                if !categories.is_empty() {
-                    let cat_match = categories.iter().any(|c| c == &contact.categorie);
-                    let filleul_match = contact
-                        .filleul_categorie
-                        .as_ref()
-                        .map(|fc| categories.iter().any(|c| c == fc))
-                        .unwrap_or(false);
-                    if !cat_match && !filleul_match {
-                        continue;
-                    }
-                }
-
-                // Vérifier si l'étiquette est déjà attribuée (et si c'est automatique)
-                let assignment_info: Option<(i64, String)> = self.conn.query_row(
-                    "SELECT id, COALESCE(attribue_par, '') FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
-                    params![contact_id, etiquette.id],
-                    |row| Ok((row.get(0)?, row.get(1)?)),
-                ).ok();
-
-                // Évaluer la condition
-                let should_assign = match condition_type.as_str() {
-                    "DELAI_SANS_CONTACT" => {
-                        if let Some(config_str) = config {
-                            if let Ok(parsed) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                            {
-                                let jours = parsed["jours"].as_i64().unwrap_or(365);
-                                let filleul_only = categories.iter().any(|c| c.contains("FILLEUL"))
-                                    && !categories.iter().any(|c| {
-                                        c == "CLIENT"
-                                            || c == "PROSPECT_CLIENT"
-                                            || c == "SUSPECT_CLIENT"
-                                    });
-                                let last_contact = if filleul_only {
-                                    contact
-                                        .date_dernier_contact_filleul
-                                        .or(contact.date_dernier_contact)
-                                } else {
-                                    contact.date_dernier_contact
-                                };
-                                if let Some(last_contact) = last_contact {
-                                    let diff_days = (now - last_contact) / (24 * 60 * 60);
-                                    diff_days >= jours
-                                } else {
-                                    true
-                                }
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    "DATE_APPROCHE" => {
-                        if let Some(config_str) = config {
-                            if let Ok(parsed) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                            {
-                                let champ = parsed["champ"].as_str().unwrap_or("");
-                                let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(30);
-
-                                let date_value = match champ {
-                                    "date_prochain_suivi" => contact.date_prochain_suivi,
-                                    "date_prochain_suivi_filleul" => {
-                                        contact.date_prochain_suivi_filleul
-                                    }
-                                    "date_dernier_contact_filleul" => {
-                                        contact.date_dernier_contact_filleul
-                                    }
-                                    "date_naissance" => contact.date_naissance,
-                                    _ => None,
-                                };
-
-                                // Pour date_fin_demembrement, il faudrait chercher dans les investissements
-                                // (simplifié ici)
-
-                                if let Some(target_date) = date_value {
-                                    let diff_seconds = target_date - now;
-                                    let diff_days = diff_seconds / (24 * 60 * 60);
-                                    diff_days >= 0 && diff_days <= jours_avant
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    "PERIODE_ANNEE" => {
-                        if let Some(config_str) = config {
-                            if let Ok(parsed) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                            {
-                                let mois_debut = parsed["mois_debut"].as_i64().unwrap_or(1) as i32;
-                                let mois_fin = parsed["mois_fin"].as_i64().unwrap_or(12) as i32;
-
-                                if mois_debut <= mois_fin {
-                                    current_month >= mois_debut && current_month <= mois_fin
-                                } else {
-                                    // Cas où la période chevauche l'année (ex: nov-fév)
-                                    current_month >= mois_debut || current_month <= mois_fin
-                                }
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    "TYPE_PRODUIT" => {
-                        // Vérifier si le contact a un investissement du type demandé
-                        if let Some(config_str) = config {
-                            if let Ok(parsed) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                            {
-                                let types: Vec<String> = parsed["types"]
-                                    .as_array()
-                                    .map(|arr| {
-                                        arr.iter()
-                                            .filter_map(|v| v.as_str().map(String::from))
-                                            .collect()
-                                    })
-                                    .unwrap_or_default();
-
-                                if types.is_empty() {
-                                    false
-                                } else {
-                                    let types_str = types
-                                        .iter()
-                                        .map(|t| format!("'{}'", t))
-                                        .collect::<Vec<_>>()
-                                        .join(",");
-
-                                    let has_product: i64 = self
-                                        .conn
-                                        .query_row(
-                                            &format!(
-                                                "SELECT COUNT(*) FROM investissements 
-                                             WHERE contact_id = ?1 AND type_produit IN ({})",
-                                                types_str
-                                            ),
-                                            params![contact_id],
-                                            |row| row.get(0),
-                                        )
-                                        .unwrap_or(0);
-
-                                    has_product > 0
-                                }
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    "DATE_APPROCHE_INVESTISSEMENT" => {
-                        // Vérifier si le contact a un investissement avec une date approchant
-                        if let Some(config_str) = config {
-                            if let Ok(parsed) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                            {
-                                let champ = parsed["champ"].as_str().unwrap_or("");
-                                let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(180);
-                                let types_produit: Vec<String> = parsed["types_produit"]
-                                    .as_array()
-                                    .map(|arr| {
-                                        arr.iter()
-                                            .filter_map(|v| v.as_str().map(String::from))
-                                            .collect()
-                                    })
-                                    .unwrap_or_default();
-
-                                // Construire la requête SQL pour chercher les investissements avec date approchant
-                                let type_filter = if types_produit.is_empty() {
-                                    String::new()
-                                } else {
-                                    let types_str = types_produit
-                                        .iter()
-                                        .map(|t| format!("'{}'", t))
-                                        .collect::<Vec<_>>()
-                                        .join(",");
-                                    format!(" AND type_produit IN ({})", types_str)
-                                };
-
-                                let threshold = now + (jours_avant * 24 * 60 * 60);
-
-                                let query = format!(
-                                    "SELECT COUNT(*) FROM investissements 
-                                     WHERE contact_id = ?1 
-                                     AND {} IS NOT NULL 
-                                     AND {} > ?2 
-                                     AND {} <= ?3{}",
-                                    champ, champ, champ, type_filter
-                                );
-
-                                let has_approaching: i64 = self
-                                    .conn
-                                    .query_row(&query, params![contact_id, now, threshold], |row| {
-                                        row.get(0)
-                                    })
-                                    .unwrap_or(0);
-
-                                has_approaching > 0
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    "AGE_APPROCHE" => {
-                        // Vérifier si le contact atteint un âge spécifique dans X jours
-                        if let Some(config_str) = config {
-                            if let Ok(parsed) =
-                                serde_json::from_str::<serde_json::Value>(config_str)
-                            {
-                                let age_cible = parsed["age"].as_i64().unwrap_or(69);
-                                let jours_avant = parsed["jours_avant"].as_i64().unwrap_or(30);
-
-                                if let Some(date_naissance) = contact.date_naissance {
-                                    // Calculer la date d'anniversaire pour l'âge cible
-                                    use chrono::{DateTime, Datelike, Utc};
-                                    let birth = DateTime::<Utc>::from_timestamp(date_naissance, 0);
-
-                                    if let Some(birth_dt) = birth {
-                                        let birth_year = birth_dt.year();
-
-                                        // Année de l'anniversaire cible
-                                        let target_year = birth_year + age_cible as i32;
-
-                                        // Date de l'anniversaire cible
-                                        if let Some(target_birthday) =
-                                            birth_dt.with_year(target_year).map(|d| d.timestamp())
-                                        {
-                                            // L'anniversaire doit être dans le futur et dans les X jours
-                                            let diff_seconds = target_birthday - now;
-                                            let diff_days = diff_seconds / (24 * 60 * 60);
-
-                                            diff_days >= 0 && diff_days <= jours_avant
-                                        } else {
-                                            false
-                                        }
-                                    } else {
-                                        false
-                                    }
-                                } else {
-                                    false
-                                }
-                            } else {
-                                false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    _ => false,
-                };
-
-                match (should_assign, &assignment_info) {
-                    // Condition remplie et pas encore attribuée -> attribuer
-                    (true, None) => {
-                        if self
-                            .attribuer_etiquette(contact_id, etiquette.id, Some("AUTO".to_string()))
-                            .is_ok()
-                        {
-                            total_assigned += 1;
-                        }
-                    }
-                    // Condition remplie mais déjà attribuée -> rien à faire
-                    (true, Some(_)) => {}
-                    // Condition non remplie et étiquette AUTO attribuée -> retirer
-                    (false, Some((assignment_id, source))) if source == "AUTO" => {
-                        let _ = self.conn.execute(
-                            "DELETE FROM contact_etiquettes WHERE id = ?1",
-                            params![*assignment_id],
-                        );
-                    }
-                    // Autres cas: pas d'action nécessaire
-                    _ => {}
-                }
-            }
-        }
-
-        println!(
-            "🏷️ Moteur automatique: {} étiquettes attribuées",
-            total_assigned
+        let types_str = types
+            .iter()
+            .map(|t| format!("'{}'", t.replace('\'', "''")))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT COUNT(*) FROM investissements WHERE {} AND type_produit IN ({})",
+            Self::INVESTISSEMENT_SCOPE_WHERE,
+            types_str
         );
-        Ok(total_assigned)
+        let count: i64 = self
+            .conn
+            .query_row(&sql, params![contact_id, foyer_id], |row| row.get(0))?;
+        Ok(count > 0)
     }
 
-    /// Envoie les emails programmés pour les étiquettes
-    /// Retourne le nombre d'emails envoyés
-    pub fn get_pending_etiquette_emails(&self) -> Result<Vec<(i64, i64, i64, String, String)>> {
-        // Récupérer les emails en attente (email_envoye = 0 ET email_date_prevue <= now)
+    pub(crate) fn contact_has_investment_date_approaching(
+        &self,
+        contact_id: i64,
+        foyer_id: Option<i64>,
+        champ: &str,
+        jours_avant: i64,
+        types_produit: &[String],
+        now: i64,
+    ) -> Result<bool> {
+        let allowed = [
+            "date_fin_demembrement",
+            "date_fin_pret",
+            "date_souscription",
+        ];
+        if !allowed.contains(&champ) {
+            return Ok(false);
+        }
+        let type_filter = if types_produit.is_empty() {
+            String::new()
+        } else {
+            let types_str = types_produit
+                .iter()
+                .map(|t| format!("'{}'", t.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(" AND type_produit IN ({})", types_str)
+        };
+        let threshold = now + (jours_avant * 24 * 60 * 60);
+        let query = format!(
+            "SELECT COUNT(*) FROM investissements WHERE {} 
+             AND {} IS NOT NULL AND {} > ?3 AND {} <= ?4{}",
+            Self::INVESTISSEMENT_SCOPE_WHERE,
+            champ,
+            champ,
+            champ,
+            type_filter
+        );
+        let count: i64 = self.conn.query_row(
+            &query,
+            params![contact_id, foyer_id, now, threshold],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// File d'envoi manuel : ready | incomplete | sent
+    pub fn get_etiquette_email_queue(
+        &self,
+        queue_status: &str,
+    ) -> Result<Vec<EtiquetteEmailQueueItem>> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
 
-        let mut stmt = self.conn.prepare(
-            "SELECT ce.id, ce.contact_id, e.email_template_id, c.email, c.prenom
-             FROM contact_etiquettes ce
-             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
-             INNER JOIN contacts c ON ce.contact_id = c.id
-             WHERE ce.email_envoye = 0 
-               AND ce.email_date_prevue IS NOT NULL 
-               AND ce.email_date_prevue <= ?1
-               AND e.email_actif = 1
-               AND e.email_template_id IS NOT NULL
-               AND c.email IS NOT NULL
-               AND c.email != ''",
-        )?;
-
-        let results = stmt.query_map(params![now], |row| {
-            Ok((
-                row.get::<_, i64>(0)?,    // contact_etiquette.id
-                row.get::<_, i64>(1)?,    // contact_id
-                row.get::<_, i64>(2)?,    // template_id
-                row.get::<_, String>(3)?, // email
-                row.get::<_, String>(4)?, // prenom
-            ))
-        })?;
-
-        let mut pending = Vec::new();
-        for result in results {
-            if let Ok(item) = result {
-                pending.push(item);
+        let sql = match queue_status {
+            "ready" => {
+                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), NULL
+                 FROM contact_etiquettes ce
+                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+                 INNER JOIN contacts c ON ce.contact_id = c.id
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 WHERE e.actif = 1 AND e.email_actif = 1
+                   AND ce.email_envoye = 0
+                   AND ce.email_date_prevue IS NOT NULL
+                   AND ce.email_date_prevue <= ?1
+                   AND e.email_template_id IS NOT NULL
+                   AND c.email IS NOT NULL
+                   AND TRIM(c.email) != ''
+                 ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
             }
+            "incomplete" => {
+                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''),
+                        CASE
+                          WHEN c.email IS NULL OR TRIM(c.email) = '' THEN 'NO_EMAIL'
+                          WHEN e.email_template_id IS NULL THEN 'NO_TEMPLATE'
+                          WHEN ce.email_date_prevue IS NULL THEN 'NO_DATE'
+                          WHEN ce.email_date_prevue > ?1 THEN 'SCHEDULED'
+                          ELSE 'OTHER'
+                        END
+                 FROM contact_etiquettes ce
+                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+                 INNER JOIN contacts c ON ce.contact_id = c.id
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 WHERE e.actif = 1 AND e.email_actif = 1
+                   AND ce.email_envoye = 0
+                   AND (
+                     c.email IS NULL OR TRIM(c.email) = ''
+                     OR e.email_template_id IS NULL
+                     OR ce.email_date_prevue IS NULL
+                     OR ce.email_date_prevue > ?1
+                   )
+                 ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
+            }
+            "sent" => {
+                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), NULL
+                 FROM contact_etiquettes ce
+                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+                 INNER JOIN contacts c ON ce.contact_id = c.id
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 WHERE e.actif = 1 AND e.email_actif = 1
+                   AND ce.email_envoye = 1
+                 ORDER BY ce.email_date_envoi DESC
+                 LIMIT 100"
+            }
+            _ => {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "queue_status invalide: {}",
+                    queue_status
+                )))
+            }
+        };
+
+        let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<EtiquetteEmailQueueItem> {
+            Ok(EtiquetteEmailQueueItem {
+                contact_etiquette_id: row.get(0)?,
+                contact_id: row.get(1)?,
+                contact_nom: row.get(2)?,
+                contact_prenom: row.get(3)?,
+                contact_email: row.get(4)?,
+                contact_telephone: row.get(5)?,
+                etiquette_id: row.get(6)?,
+                etiquette_nom: row.get(7)?,
+                etiquette_couleur: row.get(8)?,
+                email_date_prevue: row.get(9)?,
+                email_date_envoi: row.get(10)?,
+                template_sujet: row.get(11)?,
+                template_corps: row.get(12)?,
+                queue_issue: row.get(13)?,
+            })
+        };
+
+        if queue_status == "sent" {
+            let mut stmt = self.conn.prepare(sql)?;
+            let rows = stmt.query_map([], map_row)?;
+            return rows.collect();
         }
-        Ok(pending)
+
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(params![now], map_row)?;
+        rows.collect()
+    }
+
+    /// Compatibilité : file « prêts à envoyer »
+    pub fn get_pending_etiquette_emails(&self) -> Result<Vec<(i64, i64, i64, String, String)>> {
+        let queue = self.get_etiquette_email_queue("ready")?;
+        Ok(queue
+            .into_iter()
+            .filter_map(|item| {
+                let email = item.contact_email?;
+                Some((
+                    item.contact_etiquette_id,
+                    item.contact_id,
+                    0,
+                    email,
+                    item.contact_prenom,
+                ))
+            })
+            .collect())
     }
 
     /// Marquer un email d'étiquette comme envoyé
@@ -3386,10 +3353,16 @@ impl Database {
             .unwrap()
             .as_secs() as i64;
 
-        self.conn.execute(
+        let updated = self.conn.execute(
             "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1 WHERE id = ?2",
             params![now, contact_etiquette_id],
         )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "contact_etiquette introuvable: {}",
+                contact_etiquette_id
+            )));
+        }
         Ok(())
     }
 
@@ -3955,5 +3928,423 @@ mod database_integration_tests {
             )
             .unwrap();
         assert_eq!(remaining, 0);
+    }
+
+    #[test]
+    fn etiquette_email_queue_ready_incomplete_sent() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        fn sample_etiquette(
+            nom: &str,
+            template_id: Option<i64>,
+            envoi_prevu: Option<i64>,
+        ) -> NewEtiquette {
+            NewEtiquette {
+                nom: nom.into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: template_id,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: envoi_prevu,
+                email_actif: Some(true),
+                is_default: Some(false),
+            actif: None,
+            }
+        }
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Tpl test".into(),
+                sujet: "Bonjour {{prenom}}".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+            })
+            .unwrap();
+
+        let etiqu = db
+            .create_etiquette(sample_etiquette(
+                "Campagne test",
+                Some(tpl.id),
+                Some(now + 86_400),
+            ))
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("client@example.com".into()),
+                telephone: Some("0601020304".into()),
+                ..sample_contact("Martin", "Alice")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()))
+            .unwrap();
+
+        assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
+        let scheduled = db.get_etiquette_email_queue("incomplete").unwrap();
+        assert_eq!(scheduled.len(), 1);
+        assert_eq!(scheduled[0].queue_issue.as_deref(), Some("SCHEDULED"));
+
+        db.update_etiquette(
+            etiqu.id,
+            &sample_etiquette("Campagne test", Some(tpl.id), Some(now - 120)),
+        )
+        .unwrap();
+
+        let ready = db.get_etiquette_email_queue("ready").unwrap();
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].contact_telephone.as_deref(), Some("0601020304"));
+
+        let ce_id = ready[0].contact_etiquette_id;
+        db.mark_etiquette_email_sent(ce_id).unwrap();
+        assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
+        assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
+        assert!(db.mark_etiquette_email_sent(999_999).is_err());
+
+        let no_email = db
+            .create_contact(NewContact {
+                email: None,
+                ..sample_contact("Sans", "Mail")
+            })
+            .unwrap();
+        db.attribuer_etiquette(no_email.id.unwrap(), etiqu.id, Some("MANUEL".into()))
+            .unwrap();
+        let incomplete = db.get_etiquette_email_queue("incomplete").unwrap();
+        assert!(
+            incomplete
+                .iter()
+                .any(|i| i.queue_issue.as_deref() == Some("NO_EMAIL"))
+        );
+    }
+
+    #[test]
+    fn auto_etiquette_matches_foyer_investissement() {
+        use crate::database::models::{NewEtiquette, NewInvestissement};
+
+        let db = test_db();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer TEST".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                categorie: "CLIENT".into(),
+                ..sample_contact("Lopez", "Marie")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: None,
+            foyer_id: Some(foyer.id),
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Foyer only".into(),
+            montant_initial: Some(50_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "A une SCPI".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(10),
+                auto_condition_type: Some("TYPE_PRODUIT".into()),
+                auto_condition_config: Some(r#"{"types":["SCPI"]}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+            actif: None,
+            })
+            .unwrap();
+
+        let assigned = db.check_and_apply_auto_etiquettes().unwrap();
+        assert!(assigned >= 1);
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn ensure_default_etiquettes_preserves_custom_config() {
+        let db = test_db();
+        db.ensure_default_etiquettes().unwrap();
+
+        let custom_config = r#"{"jours": 400}"#;
+        db.conn
+            .execute(
+                "UPDATE etiquettes SET auto_condition_config = ?1 WHERE nom = ?2",
+                params![custom_config, "Suivi > 1 an"],
+            )
+            .unwrap();
+
+        db.ensure_default_etiquettes().unwrap();
+
+        let config: String = db
+            .conn
+            .query_row(
+                "SELECT auto_condition_config FROM etiquettes WHERE nom = ?1",
+                params!["Suivi > 1 an"],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(config, custom_config);
+    }
+
+    #[test]
+    fn delai_sans_contact_inclure_sans_date_false_skips_contact_without_date() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let contact = db
+            .create_contact(NewContact {
+                date_dernier_contact: None,
+                ..sample_contact("SansDate", "Paul")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Delai strict".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: Some("DELAI_SANS_CONTACT".into()),
+                auto_condition_config: Some(
+                    r#"{"jours": 30, "inclure_sans_date": false}"#.into(),
+                ),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+            actif: None,
+            })
+            .unwrap();
+
+        db.check_auto_etiquettes_for_contact(cid).unwrap();
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+
+        db.conn
+            .execute(
+                "UPDATE etiquettes SET auto_condition_config = ?1 WHERE id = ?2",
+                params![r#"{"jours": 30, "inclure_sans_date": true}"#, etiqu.id],
+            )
+            .unwrap();
+
+        db.check_auto_etiquettes_for_contact(cid).unwrap();
+        let count_after: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count_after, 1);
+    }
+
+    #[test]
+    fn create_etiquette_rejects_duplicate_nom() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let mk = || NewEtiquette {
+            nom: "Doublon test".into(),
+            couleur: None,
+            icone: None,
+            description: None,
+            priorite: Some(0),
+            auto_condition_type: None,
+            auto_condition_config: None,
+            auto_categories: None,
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_envoi_prevu: None,
+            email_actif: Some(false),
+            is_default: Some(false),
+            actif: None,
+        };
+        db.create_etiquette(mk()).unwrap();
+        let err = db.create_etiquette(mk()).unwrap_err();
+        assert!(
+            err.to_string().contains("existe déjà"),
+            "unexpected: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn deactivate_etiquette_removes_auto_assignments() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Actif", "Test")).unwrap();
+        let cid = contact.id.unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Temp auto".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: Some("DELAI_SANS_CONTACT".into()),
+                auto_condition_config: Some(r#"{"jours": 0, "inclure_sans_date": true}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+            })
+            .unwrap();
+
+        db.attribuer_etiquette(cid, etiqu.id, Some("AUTO".into()))
+            .unwrap();
+
+        db.update_etiquette(
+            etiqu.id,
+            &NewEtiquette {
+                nom: etiqu.nom.clone(),
+                couleur: Some(etiqu.couleur.clone()),
+                icone: etiqu.icone.clone(),
+                description: etiqu.description.clone(),
+                priorite: Some(etiqu.priorite),
+                auto_condition_type: etiqu.auto_condition_type.clone(),
+                auto_condition_config: etiqu.auto_condition_config.clone(),
+                auto_categories: etiqu.auto_categories.clone(),
+                email_template_id: etiqu.email_template_id,
+                email_delai_jours: Some(etiqu.email_delai_jours),
+                email_envoi_prevu: etiqu.email_envoi_prevu,
+                email_actif: Some(etiqu.email_actif),
+                is_default: Some(etiqu.is_default),
+                actif: Some(false),
+            },
+        )
+        .unwrap();
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+
+        let actif_db: i64 = db
+            .conn
+            .query_row(
+                "SELECT actif FROM etiquettes WHERE id = ?1",
+                params![etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(actif_db, 0);
+    }
+
+    #[test]
+    fn delete_default_etiquette_is_blocked() {
+        let db = test_db();
+        db.ensure_default_etiquettes().unwrap();
+        let id: i64 = db
+            .conn
+            .query_row(
+                "SELECT id FROM etiquettes WHERE nom = ?1",
+                params!["Suivi > 1 an"],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let err = db.delete_etiquette(id).unwrap_err();
+        assert!(err.to_string().contains("défaut"));
+    }
+
+    #[test]
+    fn create_etiquette_rejects_auto_rule_without_categories() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let err = db
+            .create_etiquette(NewEtiquette {
+                nom: "Auto sans cat".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: Some("DELAI_SANS_CONTACT".into()),
+                auto_condition_config: Some(r#"{"jours": 90}"#.into()),
+                auto_categories: Some("[]".into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+            actif: None,
+            })
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("catégorie"),
+            "unexpected: {}",
+            err
+        );
     }
 }

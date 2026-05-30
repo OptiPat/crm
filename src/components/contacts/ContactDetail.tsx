@@ -51,6 +51,7 @@ import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
 import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
 import { EtiquetteSelector } from "@/components/etiquettes/EtiquetteSelector";
 import { getEtiquettesByContact, attribuerEtiquette, retirerEtiquette, type ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
 import { InvestissementMetaRow } from "@/components/investissements/InvestissementMetaRow";
@@ -172,6 +173,7 @@ export function ContactDetail({
     try {
       await attribuerEtiquette(contact.id, etiquetteId, "MANUEL");
       await loadEtiquettes();
+      notifyEtiquettesChanged();
       toast.success("Étiquette ajoutée");
     } catch (error) {
       console.error("Error adding etiquette:", error);
@@ -184,6 +186,7 @@ export function ContactDetail({
     try {
       await retirerEtiquette(contact.id, etiquetteId);
       await loadEtiquettes();
+      notifyEtiquettesChanged();
       toast.success("Étiquette retirée");
     } catch (error) {
       console.error("Error removing etiquette:", error);
@@ -388,7 +391,8 @@ export function ContactDetail({
   };
 
   const handleInvestissementSuccess = () => {
-    loadInvestissements(); // Recharger la liste
+    loadInvestissements();
+    notifyEtiquettesChanged();
     handleInvestissementFormClose();
   };
 

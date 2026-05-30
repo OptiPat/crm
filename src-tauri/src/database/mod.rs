@@ -1,6 +1,7 @@
 use rusqlite::{Connection, Result};
 use tauri::{AppHandle, Manager};
 
+pub mod etiquettes_auto_engine;
 pub mod models;
 pub mod operations;
 
@@ -243,8 +244,10 @@ impl Database {
                 auto_categories TEXT,
                 email_template_id INTEGER,
                 email_delai_jours INTEGER NOT NULL DEFAULT 0,
+                email_envoi_prevu INTEGER,
                 email_actif INTEGER NOT NULL DEFAULT 0,
                 is_default INTEGER NOT NULL DEFAULT 0,
+                actif INTEGER NOT NULL DEFAULT 1,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 FOREIGN KEY (email_template_id) REFERENCES templates_email(id) ON DELETE SET NULL
@@ -271,6 +274,11 @@ impl Database {
 
         self.conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS contact_etiquettes_unique ON contact_etiquettes (contact_id, etiquette_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS contact_etiquettes_contact_idx ON contact_etiquettes (contact_id)",
             [],
         )?;
 
@@ -334,7 +342,40 @@ impl Database {
 
         self.migrate_alertes_crud_schema()?;
         self.migrate_backfill_filleul_categorie()?;
+        self.migrate_add_email_envoi_prevu()?;
+        self.migrate_contact_etiquettes_contact_index()?;
+        self.migrate_etiquettes_actif()?;
 
+        Ok(())
+    }
+
+    fn migrate_etiquettes_actif(&self) -> Result<()> {
+        if !self.table_has_column("etiquettes", "actif")? {
+            self.conn.execute(
+                "ALTER TABLE etiquettes ADD COLUMN actif INTEGER NOT NULL DEFAULT 1",
+                [],
+            )?;
+            println!("✅ Migration: colonne actif sur etiquettes");
+        }
+        Ok(())
+    }
+
+    fn migrate_contact_etiquettes_contact_index(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS contact_etiquettes_contact_idx ON contact_etiquettes (contact_id)",
+            [],
+        )?;
+        Ok(())
+    }
+
+    fn migrate_add_email_envoi_prevu(&self) -> Result<()> {
+        if !self.table_has_column("etiquettes", "email_envoi_prevu")? {
+            self.conn.execute(
+                "ALTER TABLE etiquettes ADD COLUMN email_envoi_prevu INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne email_envoi_prevu sur etiquettes");
+        }
         Ok(())
     }
 

@@ -34,9 +34,18 @@ import {
   type EtiquetteWithCount,
   type ConditionDelaiSansContact,
   type ConditionDateApproche,
+  type ConditionDateApprocheInvestissement,
   type ConditionPeriodeAnnee,
+  type ConditionTypeProduit,
+  type ConditionAgeApproche,
 } from "@/lib/api/tauri-etiquettes";
+import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
+import {
+  localDatetimeToUnix,
+  unixToLocalDatetime,
+} from "@/lib/etiquettes/etiquette-email-preview";
 import { getAllTemplatesEmail, type TemplateEmail } from "@/lib/api/tauri-templates-email";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 
 interface EtiquetteFormProps {
@@ -63,21 +72,29 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [couleur, setCouleur] = useState("#3B82F6");
   const [description, setDescription] = useState("");
   const [priorite, setPriorite] = useState(0);
+  const [actif, setActif] = useState(true);
   
   // Attribution automatique
   const [isAuto, setIsAuto] = useState(false);
   const [conditionType, setConditionType] = useState<string>("DELAI_SANS_CONTACT");
   const [delaiJours, setDelaiJours] = useState(365);
+  const [inclureSansDate, setInclureSansDate] = useState(true);
+  const [ageCible, setAgeCible] = useState(69);
+  const [ageJoursAvant, setAgeJoursAvant] = useState(30);
   const [champDate, setChampDate] = useState("date_prochain_suivi");
   const [joursAvant, setJoursAvant] = useState(30);
   const [moisDebut, setMoisDebut] = useState(4);
   const [moisFin, setMoisFin] = useState(5);
+  const [typesProduitSelectionnes, setTypesProduitSelectionnes] = useState<string[]>([]);
+  const [invChampDate, setInvChampDate] = useState("date_fin_demembrement");
+  const [invJoursAvant, setInvJoursAvant] = useState(180);
+  const [invTypesProduit, setInvTypesProduit] = useState<string[]>([]);
   const [categoriesSelectionnees, setCategoriesSelectionnees] = useState<string[]>(["CLIENT"]);
   
   // Email
   const [emailActif, setEmailActif] = useState(false);
   const [emailTemplateId, setEmailTemplateId] = useState<number | null>(null);
-  const [emailDelaiJours, setEmailDelaiJours] = useState(0);
+  const [emailEnvoiLocal, setEmailEnvoiLocal] = useState("");
 
   // Charger les templates email
   useEffect(() => {
@@ -97,7 +114,8 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setCouleur(etiquette.couleur);
         setDescription(etiquette.description || "");
         setPriorite(etiquette.priorite);
-        
+        setActif(etiquette.actif !== false);
+
         // Attribution automatique
         setIsAuto(!!etiquette.auto_condition_type);
         if (etiquette.auto_condition_type) {
@@ -106,7 +124,16 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
           // Parser la config selon le type
           if (etiquette.auto_condition_type === "DELAI_SANS_CONTACT") {
             const config = parseConditionConfig<ConditionDelaiSansContact>(etiquette.auto_condition_config);
-            if (config) setDelaiJours(config.jours);
+            if (config) {
+              setDelaiJours(config.jours);
+              setInclureSansDate(config.inclure_sans_date !== false);
+            }
+          } else if (etiquette.auto_condition_type === "AGE_APPROCHE") {
+            const config = parseConditionConfig<ConditionAgeApproche>(etiquette.auto_condition_config);
+            if (config) {
+              setAgeCible(config.age);
+              setAgeJoursAvant(config.jours_avant);
+            }
           } else if (etiquette.auto_condition_type === "DATE_APPROCHE") {
             const config = parseConditionConfig<ConditionDateApproche>(etiquette.auto_condition_config);
             if (config) {
@@ -119,6 +146,18 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
               setMoisDebut(config.mois_debut);
               setMoisFin(config.mois_fin);
             }
+          } else if (etiquette.auto_condition_type === "TYPE_PRODUIT") {
+            const config = parseConditionConfig<ConditionTypeProduit>(etiquette.auto_condition_config);
+            if (config) setTypesProduitSelectionnes(config.types);
+          } else if (etiquette.auto_condition_type === "DATE_APPROCHE_INVESTISSEMENT") {
+            const config = parseConditionConfig<ConditionDateApprocheInvestissement>(
+              etiquette.auto_condition_config
+            );
+            if (config) {
+              setInvChampDate(config.champ);
+              setInvJoursAvant(config.jours_avant);
+              setInvTypesProduit(config.types_produit ?? []);
+            }
           }
           
           setCategoriesSelectionnees(parseCategories(etiquette.auto_categories));
@@ -127,24 +166,32 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         // Email
         setEmailActif(etiquette.email_actif);
         setEmailTemplateId(etiquette.email_template_id);
-        setEmailDelaiJours(etiquette.email_delai_jours);
+        setEmailEnvoiLocal(unixToLocalDatetime(etiquette.email_envoi_prevu));
       } else {
         // Mode création - réinitialiser
         setNom("");
         setCouleur("#3B82F6");
         setDescription("");
         setPriorite(0);
+        setActif(true);
         setIsAuto(false);
         setConditionType("DELAI_SANS_CONTACT");
         setDelaiJours(365);
+        setInclureSansDate(true);
+        setAgeCible(69);
+        setAgeJoursAvant(30);
         setChampDate("date_prochain_suivi");
         setJoursAvant(30);
         setMoisDebut(4);
         setMoisFin(5);
+        setTypesProduitSelectionnes([]);
+        setInvChampDate("date_fin_demembrement");
+        setInvJoursAvant(180);
+        setInvTypesProduit([]);
         setCategoriesSelectionnees(["CLIENT"]);
         setEmailActif(false);
         setEmailTemplateId(null);
-        setEmailDelaiJours(0);
+        setEmailEnvoiLocal("");
       }
     }
   }, [open, etiquette]);
@@ -156,6 +203,27 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       toast.error("Le nom est obligatoire");
       return;
     }
+
+    if (emailActif) {
+      if (!emailTemplateId) {
+        toast.error("Sélectionnez un template d'email");
+        return;
+      }
+      if (!emailEnvoiLocal.trim()) {
+        toast.error("Indiquez la date et l'heure d'envoi prévue");
+        return;
+      }
+    }
+
+    if (actif && isAuto && categoriesSelectionnees.length === 0) {
+      toast.error("Sélectionnez au moins une catégorie de contact");
+      return;
+    }
+
+    if (actif && isAuto && conditionType === "TYPE_PRODUIT" && typesProduitSelectionnes.length === 0) {
+      toast.error("Sélectionnez au moins un type de produit");
+      return;
+    }
     
     setLoading(true);
 
@@ -164,11 +232,27 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       let autoConditionConfig: string | null = null;
       if (isAuto) {
         if (conditionType === "DELAI_SANS_CONTACT") {
-          autoConditionConfig = stringifyConditionConfig({ jours: delaiJours });
+          autoConditionConfig = stringifyConditionConfig({
+            jours: delaiJours,
+            inclure_sans_date: inclureSansDate,
+          });
+        } else if (conditionType === "AGE_APPROCHE") {
+          autoConditionConfig = stringifyConditionConfig({
+            age: ageCible,
+            jours_avant: ageJoursAvant,
+          });
         } else if (conditionType === "DATE_APPROCHE") {
           autoConditionConfig = stringifyConditionConfig({ champ: champDate, jours_avant: joursAvant });
         } else if (conditionType === "PERIODE_ANNEE") {
           autoConditionConfig = stringifyConditionConfig({ mois_debut: moisDebut, mois_fin: moisFin });
+        } else if (conditionType === "TYPE_PRODUIT") {
+          autoConditionConfig = stringifyConditionConfig({ types: typesProduitSelectionnes });
+        } else if (conditionType === "DATE_APPROCHE_INVESTISSEMENT") {
+          autoConditionConfig = stringifyConditionConfig({
+            champ: invChampDate,
+            jours_avant: invJoursAvant,
+            types_produit: invTypesProduit.length > 0 ? invTypesProduit : undefined,
+          });
         }
       }
       
@@ -182,9 +266,11 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         auto_condition_config: autoConditionConfig,
         auto_categories: isAuto ? stringifyCategories(categoriesSelectionnees) : null,
         email_template_id: emailActif ? emailTemplateId : null,
-        email_delai_jours: emailActif ? emailDelaiJours : 0,
+        email_delai_jours: 0,
+        email_envoi_prevu: emailActif ? localDatetimeToUnix(emailEnvoiLocal) : null,
         email_actif: emailActif,
         is_default: etiquette?.is_default || false,
+        actif,
       };
 
       if (etiquette) {
@@ -195,6 +281,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         toast.success("Étiquette créée");
       }
       
+      notifyEtiquettesChanged();
       onSuccess();
       onOpenChange(false);
     } catch (error) {
@@ -210,6 +297,15 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       prev.includes(category)
         ? prev.filter(c => c !== category)
         : [...prev, category]
+    );
+  };
+
+  const toggleTypeInList = (
+    value: string,
+    setter: React.Dispatch<React.SetStateAction<string[]>>
+  ) => {
+    setter((prev) =>
+      prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value]
     );
   };
 
@@ -237,6 +333,16 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             >
               <span>{nom || "Aperçu"}</span>
             </span>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="actif" className="text-base">Étiquette active</Label>
+              <p className="text-xs text-muted-foreground">
+                Désactivée : plus de règle auto ni campagne email. Les tags manuels restent sur les fiches.
+              </p>
+            </div>
+            <Switch id="actif" checked={actif} onCheckedChange={setActif} />
           </div>
 
           {/* Nom */}
@@ -285,8 +391,35 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             />
           </div>
 
+          <div className="space-y-2">
+            <Label htmlFor="priorite">Priorité d&apos;affichage</Label>
+            <Input
+              id="priorite"
+              type="number"
+              min={0}
+              max={100}
+              value={priorite}
+              onChange={(e) => setPriorite(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+            />
+            <p className="text-xs text-muted-foreground">
+              Plus la valeur est élevée, plus le badge apparaît en premier sur les fiches contact (0–100).
+            </p>
+          </div>
+
+          {etiquette?.is_default && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Étiquette système : désactivez-la si vous ne l&apos;utilisez pas (les attributions automatiques seront retirées). La suppression reste impossible.
+            </p>
+          )}
+
+          {!actif && (
+            <p className="text-xs text-muted-foreground bg-muted/50 border rounded-md px-3 py-2">
+              Étiquette inactive : vous pouvez préparer les règles ci-dessous ; elles ne s&apos;appliqueront qu&apos;à la réactivation.
+            </p>
+          )}
+
           {/* Attribution automatique */}
-          <div className="space-y-4 p-4 border rounded-lg">
+          <div className={`space-y-4 p-4 border rounded-lg ${!actif ? "opacity-90" : ""}`}>
             <div className="flex items-center justify-between">
               <div>
                 <Label className="text-base">Attribution automatique</Label>
@@ -316,20 +449,68 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                       <SelectItem value="PERIODE_ANNEE">
                         Période de l'année
                       </SelectItem>
+                      <SelectItem value="TYPE_PRODUIT">
+                        Détient un type de produit
+                      </SelectItem>
+                      <SelectItem value="DATE_APPROCHE_INVESTISSEMENT">
+                        Date sur un investissement (contact ou foyer)
+                      </SelectItem>
+                      <SelectItem value="AGE_APPROCHE">
+                        Âge approchant (ex. 69 ans)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Les règles « investissement » incluent les produits du contact et ceux du foyer commun.
+                  </p>
                 </div>
 
                 {/* Paramètres selon le type */}
                 {conditionType === "DELAI_SANS_CONTACT" && (
-                  <div className="space-y-2">
-                    <Label>Nombre de jours sans contact</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={delaiJours}
-                      onChange={(e) => setDelaiJours(parseInt(e.target.value) || 1)}
-                    />
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label>Nombre de jours sans contact</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={delaiJours}
+                        onChange={(e) => setDelaiJours(parseInt(e.target.value) || 1)}
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="inclure-sans-date"
+                        checked={inclureSansDate}
+                        onCheckedChange={(c) => setInclureSansDate(!!c)}
+                      />
+                      <Label htmlFor="inclure-sans-date" className="text-sm font-normal cursor-pointer">
+                        Inclure les contacts sans date de dernier contact
+                      </Label>
+                    </div>
+                  </div>
+                )}
+
+                {conditionType === "AGE_APPROCHE" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Âge cible</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={120}
+                        value={ageCible}
+                        onChange={(e) => setAgeCible(parseInt(e.target.value) || 69)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Dans les prochains (jours)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        value={ageJoursAvant}
+                        onChange={(e) => setAgeJoursAvant(parseInt(e.target.value) || 30)}
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -342,9 +523,10 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="date_prochain_suivi">Prochain suivi</SelectItem>
-                          <SelectItem value="date_fin_demembrement">Fin démembrement</SelectItem>
-                          <SelectItem value="date_naissance">Anniversaire</SelectItem>
+                          <SelectItem value="date_prochain_suivi">Prochain suivi client</SelectItem>
+                          <SelectItem value="date_prochain_suivi_filleul">Prochain suivi filleul</SelectItem>
+                          <SelectItem value="date_dernier_contact_filleul">Dernier contact filleul</SelectItem>
+                          <SelectItem value="date_naissance">Date de naissance</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -356,6 +538,93 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                         value={joursAvant}
                         onChange={(e) => setJoursAvant(parseInt(e.target.value) || 1)}
                       />
+                    </div>
+                  </div>
+                )}
+
+                {conditionType === "TYPE_PRODUIT" && (
+                  <div className="space-y-2">
+                    <Label>Types de produits détenus (au moins un)</Label>
+                    <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-3">
+                      {INVESTISSEMENT_TYPE_GROUPS.map((group) => (
+                        <div key={group.label}>
+                          <p className="text-xs font-semibold text-muted-foreground mb-1">
+                            {group.label}
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {group.types.map((t) => (
+                              <div key={t.value} className="flex items-center gap-1.5">
+                                <Checkbox
+                                  id={`type-${t.value}`}
+                                  checked={typesProduitSelectionnes.includes(t.value)}
+                                  onCheckedChange={() =>
+                                    toggleTypeInList(t.value, setTypesProduitSelectionnes)
+                                  }
+                                />
+                                <Label
+                                  htmlFor={`type-${t.value}`}
+                                  className="text-sm font-normal cursor-pointer"
+                                >
+                                  {t.label}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {conditionType === "DATE_APPROCHE_INVESTISSEMENT" && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Date sur l&apos;investissement</Label>
+                        <Select value={invChampDate} onValueChange={setInvChampDate}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="date_fin_demembrement">
+                              Fin de démembrement
+                            </SelectItem>
+                            <SelectItem value="date_fin_pret">Fin de prêt</SelectItem>
+                            <SelectItem value="date_souscription">Date de souscription</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Dans les prochains (jours)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={invJoursAvant}
+                          onChange={(e) => setInvJoursAvant(parseInt(e.target.value) || 1)}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Limiter aux types (optionnel, vide = tous)</Label>
+                      <div className="max-h-36 overflow-y-auto border rounded-md p-2 flex flex-wrap gap-2">
+                        {INVESTISSEMENT_TYPE_GROUPS.flatMap((g) => g.types).map((t) => (
+                          <div key={`inv-${t.value}`} className="flex items-center gap-1">
+                            <Checkbox
+                              id={`inv-type-${t.value}`}
+                              checked={invTypesProduit.includes(t.value)}
+                              onCheckedChange={() =>
+                                toggleTypeInList(t.value, setInvTypesProduit)
+                              }
+                            />
+                            <Label
+                              htmlFor={`inv-type-${t.value}`}
+                              className="text-xs font-normal cursor-pointer"
+                            >
+                              {t.label}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -418,12 +687,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
           </div>
 
           {/* Action email */}
-          <div className="space-y-4 p-4 border rounded-lg">
+          <div className={`space-y-4 p-4 border rounded-lg ${!actif ? "opacity-90" : ""}`}>
             <div className="flex items-center justify-between">
               <div>
-                <Label className="text-base">Envoyer un email</Label>
+                <Label className="text-base">Campagne email</Label>
                 <p className="text-sm text-muted-foreground">
-                  Envoyer un email automatique après l'attribution
+                  Prépare une file d&apos;envoi ; vous confirmez chaque email dans Suivi → Envois
                 </p>
               </div>
               <Switch checked={emailActif} onCheckedChange={setEmailActif} />
@@ -432,7 +701,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             {emailActif && (
               <div className="space-y-4 pt-4 border-t">
                 <div className="space-y-2">
-                  <Label>Template d'email</Label>
+                  <Label>Template d&apos;email</Label>
                   <Select 
                     value={emailTemplateId?.toString() || ""} 
                     onValueChange={(v) => setEmailTemplateId(v ? parseInt(v) : null)}
@@ -451,15 +720,16 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Délai avant envoi (jours)</Label>
+                  <Label htmlFor="email-envoi-prevu">Date et heure d&apos;envoi prévue</Label>
                   <Input
-                    type="number"
-                    min={0}
-                    value={emailDelaiJours}
-                    onChange={(e) => setEmailDelaiJours(parseInt(e.target.value) || 0)}
+                    id="email-envoi-prevu"
+                    type="datetime-local"
+                    value={emailEnvoiLocal}
+                    onChange={(e) => setEmailEnvoiLocal(e.target.value)}
+                    required
                   />
                   <p className="text-xs text-muted-foreground">
-                    0 = envoi immédiat
+                    À partir de ce moment, les contacts taggés apparaîtront dans la file « Prêts à envoyer ».
                   </p>
                 </div>
               </div>

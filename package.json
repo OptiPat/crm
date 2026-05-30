@@ -20,7 +20,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "test:all": "npm run test && npm run test:rust"
+    "test:all": "npm run test && npm run test:rust",
+    "verify": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1",
+    "verify:quick": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1 -Quick",
+    "verify:full": "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1 -Build"
   },
   "dependencies": {
     "@radix-ui/react-alert-dialog": "^1.1.15",

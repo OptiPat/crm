@@ -63,7 +63,7 @@ export function EtiquetteSelector({
     setLoading(true);
     try {
       const data = await getAllEtiquettes();
-      setEtiquettes(data);
+      setEtiquettes(data.filter((e) => e.actif !== false));
     } catch (error) {
       console.error("Error loading etiquettes:", error);
     } finally {

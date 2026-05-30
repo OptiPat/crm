@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,14 @@ import {
   getContactsForFoyer,
   loadFoyerPatrimoineCentimes,
 } from "@/lib/foyers/foyer-utils";
-import { getEtiquettesByContact, getAllEtiquettes, getContrastColor, checkAndApplyAutoEtiquettes, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
+import { getAllEtiquettes, getAllContactEtiquettesDetails, getContrastColor, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
+import { groupEtiquettesByContactId } from "@/lib/etiquettes/etiquette-condition-labels";
+import { buildEtiquettesPourFiltre } from "@/lib/etiquettes/etiquettes-filter";
+import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { buildFoyerFlatRows } from "@/lib/foyers/foyer-list-rows";
+import { VirtualizedContactList } from "@/components/contacts/VirtualizedContactList";
+import { VirtualizedFoyerContactList } from "@/components/contacts/VirtualizedFoyerContactList";
+import { FoyerFlatRowRenderer } from "@/components/contacts/FoyerFlatRowRenderer";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
@@ -28,6 +35,7 @@ import { ContactImportFilleuls } from "@/components/contacts/ContactImportFilleu
 import { ContactDeduplicate } from "@/components/contacts/ContactDeduplicate";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { contactMatchesSearch } from "@/lib/search-utils";
+import { toast } from "sonner";
 
 type MainTab = "clients" | "filleuls";
 type ClientSubTab = "CLIENT" | "PROSPECT_CLIENT" | "SUSPECT_CLIENT";
@@ -150,15 +158,23 @@ export function Contacts() {
     loadContacts();
   }, []);
 
+  useEffect(() => {
+    if (loading || contacts.length === 0) return;
+    const raw = sessionStorage.getItem("crm_open_contact_id");
+    if (!raw) return;
+    sessionStorage.removeItem("crm_open_contact_id");
+    const id = parseInt(raw, 10);
+    const contact = contacts.find((c) => c.id === id);
+    if (contact) {
+      setSelectedContact(contact);
+      setShowDetail(true);
+    } else {
+      toast.error("Contact introuvable — il a peut-être été supprimé.");
+    }
+  }, [loading, contacts]);
+
   const loadContacts = async () => {
     try {
-      // 🏷️ Synchroniser les étiquettes automatiques avant de charger les contacts
-      try {
-        await checkAndApplyAutoEtiquettes();
-      } catch (error) {
-        // synchro étiquettes optionnelle
-      }
-      
       const [dataContacts, dataFoyers] = await Promise.all([
         getAllContacts(),
         getAllFoyers(),
@@ -341,6 +357,13 @@ export function Contacts() {
   const [patrimoines, setPatrimoines] = useState<Record<string, number>>({});
   const [patrimoinesAvecMoi, setPatrimoinesAvecMoi] = useState<Record<string, number>>({});
 
+  const foyerFlatRows = useMemo(() => {
+    if (!contactsGroupedByFoyer) return [];
+    return buildFoyerFlatRows(contactsGroupedByFoyer, patrimoines);
+  }, [contactsGroupedByFoyer, patrimoines]);
+
+  const useFoyerVirtual = groupByFoyer && foyerFlatRows.length > 40;
+
   useEffect(() => {
     const calculatePatrimoines = async () => {
       const newPatrimoines: Record<string, number> = {};
@@ -385,44 +408,37 @@ export function Contacts() {
     }
   }, [contacts, foyers]);
 
-  // Charger les étiquettes disponibles (pour le filtre)
-  useEffect(() => {
-    const loadEtiquettesDisponibles = async () => {
-      try {
-        const etiquettes = await getAllEtiquettes();
-        setEtiquettesDisponibles(etiquettes);
-      } catch (error) {
-        // étiquettes non chargées pour ce contact
-      }
-    };
-    loadEtiquettesDisponibles();
-  }, []);
-
-  // Charger les étiquettes pour tous les contacts
-  useEffect(() => {
-    const loadEtiquettes = async () => {
-      const etiquettesMap: Record<number, ContactEtiquetteDetails[]> = {};
-      
-      for (const contact of contacts) {
-        if (contact.id) {
-          try {
-            const etiquettes = await getEtiquettesByContact(contact.id);
-            if (etiquettes.length > 0) {
-              etiquettesMap[contact.id] = etiquettes;
-            }
-          } catch (error) {
-            // Ignorer les erreurs silencieusement
-          }
-        }
-      }
-      
-      setEtiquettesParContact(etiquettesMap);
-    };
-
-    if (contacts.length > 0) {
-      loadEtiquettes();
+  const reloadEtiquettesAttributions = useCallback(async () => {
+    try {
+      const [all, rows] = await Promise.all([
+        getAllEtiquettes(),
+        contacts.length > 0
+          ? getAllContactEtiquettesDetails()
+          : Promise.resolve([]),
+      ]);
+      const grouped =
+        rows.length > 0
+          ? (groupEtiquettesByContactId(rows) as Record<
+              number,
+              ContactEtiquetteDetails[]
+            >)
+          : {};
+      setEtiquettesParContact(grouped);
+      setEtiquettesDisponibles(buildEtiquettesPourFiltre(all, grouped));
+    } catch {
+      setEtiquettesParContact({});
     }
-  }, [contacts]);
+  }, [contacts.length]);
+
+  useEffect(() => {
+    void reloadEtiquettesAttributions();
+  }, [reloadEtiquettesAttributions]);
+
+  useEffect(() => {
+    return subscribeEtiquettesChanged(() => {
+      void reloadEtiquettesAttributions();
+    });
+  }, [reloadEtiquettesAttributions]);
 
   const getCategorieLabel = (categorie: string) => {
     switch (categorie) {
@@ -755,6 +771,7 @@ export function Contacts() {
                           style={{ backgroundColor: etiquette.couleur }}
                         />
                         {etiquette.nom}
+                        {etiquette.actif === false ? " (inactive)" : ""}
                       </span>
                     </SelectItem>
                   ))}
@@ -784,6 +801,37 @@ export function Contacts() {
                 : "Aucun contact. Commencez par en créer un !"}
             </div>
           ) : groupByFoyer && contactsGroupedByFoyer ? (
+            useFoyerVirtual ? (
+              <div className="border border-border rounded-lg overflow-hidden divide-y divide-border">
+                <VirtualizedFoyerContactList
+                  rows={foyerFlatRows}
+                  renderRow={(row) => (
+                    <FoyerFlatRowRenderer
+                      row={row}
+                      isFilleulTab={isFilleulTab}
+                      patrimoines={patrimoines}
+                      patrimoinesAvecMoi={patrimoinesAvecMoi}
+                      etiquettesParContact={etiquettesParContact}
+                      getCategorieLabel={getCategorieLabel}
+                      onViewContact={handleViewContact}
+                      renderEtiquettes={(contactId) => (
+                        <ContactRowEtiquettes
+                          contactId={contactId}
+                          etiquettesParContact={etiquettesParContact}
+                        />
+                      )}
+                      renderMeta={(contact, withSeparator) => (
+                        <ContactRowMeta
+                          contact={contact}
+                          isFilleulTab={isFilleulTab}
+                          withSeparator={withSeparator}
+                        />
+                      )}
+                    />
+                  )}
+                />
+              </div>
+            ) : (
             <div className="space-y-6">
               {contactsGroupedByFoyer.map((group, groupIndex) => {
                 const foyerPatrimoine = group.foyer 
@@ -1034,18 +1082,19 @@ export function Contacts() {
                 );
               })}
             </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredContacts.map((contact) => {
-                // 🔥 Calcul priorité pour le tri (mais plus d'affichage visuel - géré par étiquettes)
+            )
+          ) : filteredContacts.length > 50 ? (
+            <VirtualizedContactList
+              items={filteredContacts}
+              getKey={(contact) => contact.id ?? `${contact.nom}-${contact.prenom}`}
+              renderItem={(contact) => {
                 const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
                 const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
                 return (
                   <div
-                    key={contact.id}
                     role="button"
                     tabIndex={0}
-                    className="p-4 border border-border rounded-lg hover:bg-muted/70 transition-colors cursor-pointer"
+                    className="p-4 mb-3 border border-border rounded-lg hover:bg-muted/70 transition-colors cursor-pointer"
                     onClick={() => handleViewContact(contact)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
@@ -1120,6 +1169,100 @@ export function Contacts() {
                       </div>
                       <Button 
                         variant="outline" 
+                        size="sm"
+                        className="shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleViewContact(contact);
+                        }}
+                      >
+                        Voir détails
+                      </Button>
+                    </div>
+                  </div>
+                );
+              }}
+            />
+          ) : (
+            <div className="space-y-3">
+              {filteredContacts.map((contact) => {
+                const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
+                const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
+                return (
+                  <div
+                    key={contact.id}
+                    role="button"
+                    tabIndex={0}
+                    className="p-4 border border-border rounded-lg hover:bg-muted/70 transition-colors cursor-pointer"
+                    onClick={() => handleViewContact(contact)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleViewContact(contact);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
+                          <h3 className="font-semibold text-lg">
+                            {contact.prenom} {contact.nom}
+                          </h3>
+                          {!isFilleulTab && contact.categorie !== "AUCUN" && (
+                            <Badge className={getContactCategorieBadgeClass(contact.categorie, contact.filleul_categorie)}>
+                              {getCategorieLabel(contact.categorie)}
+                            </Badge>
+                          )}
+                          {isFilleulTab && contact.filleul_categorie && (
+                            <Badge className={
+                              contact.filleul_categorie === "FILLEUL_DESINSCRIT"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-emerald-100 text-emerald-800"
+                            }>
+                              {contact.filleul_categorie === "FILLEUL" && "✅ Filleul inscrit"}
+                              {contact.filleul_categorie === "PROSPECT_FILLEUL" && "🟡 Prospect filleul"}
+                              {contact.filleul_categorie === "SUSPECT_FILLEUL" && "🟠 Suspect filleul"}
+                              {contact.filleul_categorie === "FILLEUL_DESINSCRIT" && "❌ Filleul désinscrit"}
+                            </Badge>
+                          )}
+                          {!isFilleulTab && contactPatrimoine > 0 && (
+                            <span className="text-sm font-medium text-primary">
+                              {contactPatrimoineAvecMoi.toLocaleString("fr-FR")} € avec moi
+                              {contactPatrimoine > contactPatrimoineAvecMoi && (
+                                <span className="text-gray-400 ml-1 font-normal">
+                                  ({contactPatrimoine.toLocaleString("fr-FR")} € total)
+                                </span>
+                              )}
+                              {contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                                <span className="text-blue-600 ml-1" title="Patrimoine commun dans le foyer">🏠</span>
+                              )}
+                            </span>
+                          )}
+                          {!isFilleulTab && contactPatrimoine === 0 && contact.foyer_id && (patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0) > 0 && (
+                            <span className="text-sm text-blue-600" title="Patrimoine commun dans le foyer">
+                              🏠 {(patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0).toLocaleString("fr-FR")} € <span className="text-blue-400">(foyer)</span>
+                            </span>
+                          )}
+                        </div>
+                        {contact.id && (
+                          <ContactRowEtiquettes
+                            contactId={contact.id}
+                            etiquettesParContact={etiquettesParContact}
+                          />
+                        )}
+                        <ContactRowMeta
+                          contact={contact}
+                          isFilleulTab={isFilleulTab}
+                          withSeparator={
+                            !!(
+                              contact.id &&
+                              (etiquettesParContact[contact.id]?.length ?? 0) > 0
+                            )
+                          }
+                        />
+                      </div>
+                      <Button
+                        variant="outline"
                         size="sm"
                         className="shrink-0"
                         onClick={(e) => {

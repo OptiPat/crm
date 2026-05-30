@@ -13,6 +13,7 @@ export interface CgpConfig {
   cabinet?: string;
   email?: string;
   telephone?: string;
+  lien_calendly?: string;
   logo_path?: string;
   wizard_completed: boolean;
   wizard_step: number;

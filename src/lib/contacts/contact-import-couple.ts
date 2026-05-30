@@ -24,7 +24,8 @@ export function extractCompositeName(nom: string): string {
   return nom;
 }
 
-export function isContactCouple(prenom: string): boolean {
+/** Détecte une ligne « couple » à partir du prénom (et éventuellement du nom). */
+export function isContactCouple(prenom: string, _nom?: string): boolean {
   const prenomLower = prenom.toLowerCase();
   return prenomLower.includes(" et ") || prenomLower.includes(" & ");
 }

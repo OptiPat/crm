@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -44,13 +44,26 @@ import {
   getAllEtiquettesWithCount,
   getContactsByEtiquette,
   retirerEtiquette,
-  checkAndApplyAutoEtiquettes,
   getContrastColor,
+  getEtiquetteEmailQueue,
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
+import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
+import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
+import {
+  notifyEtiquettesChanged,
+  subscribeEtiquettesChanged,
+} from "@/lib/etiquettes/etiquette-events";
+import { ALERTE_ETIQUETTE_EXPLICATION } from "@/lib/alertes/alerte-etiquette-links";
+import { AlerteEtiquetteHint } from "@/components/suivi/AlerteEtiquetteHint";
 import { toast } from "sonner";
 
-export function Suivi() {
+interface SuiviProps {
+  onNavigate?: (page: string) => void;
+  onOpenContact?: (contactId: number) => void;
+}
+
+export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
   const [alertes, setAlertes] = useState<Alerte[]>([]);
   const [loading, setLoading] = useState(true);
   const [etiquettes, setEtiquettes] = useState<EtiquetteWithCount[]>([]);
@@ -62,11 +75,29 @@ export function Suivi() {
   const [alerteATraiter, setAlerteATraiter] = useState<Alerte | null>(null);
   const [dateDernierSuivi, setDateDernierSuivi] = useState(todayLocal());
   const [submittingTraiter, setSubmittingTraiter] = useState(false);
+  const [readyEmailCount, setReadyEmailCount] = useState(0);
+  const [syncingEtiquettes, setSyncingEtiquettes] = useState(false);
 
   useEffect(() => {
     void loadAlertes();
     loadEtiquettes();
+    void loadEmailQueueCount();
   }, []);
+
+  const loadEmailQueueCount = async () => {
+    try {
+      const ready = await getEtiquetteEmailQueue("ready");
+      setReadyEmailCount(ready.length);
+    } catch {
+      setReadyEmailCount(0);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "envois") {
+      void loadEmailQueueCount();
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "alertes") return;
@@ -86,12 +117,6 @@ export function Suivi() {
     const showLoading = !options?.silent;
     try {
       if (showLoading) setLoading(true);
-
-      try {
-        await checkAndApplyAutoEtiquettes();
-      } catch (error) {
-        console.error("Error applying auto etiquettes:", error);
-      }
 
       try {
         await checkAndCreateDemembrementAlerts();
@@ -116,37 +141,53 @@ export function Suivi() {
     }
   };
 
+  const sortEtiquettes = useCallback((data: EtiquetteWithCount[]) => {
+    return [...data].sort((a, b) => {
+      if (b.contact_count !== a.contact_count) {
+        return b.contact_count - a.contact_count;
+      }
+      return b.priorite - a.priorite;
+    });
+  }, []);
+
+  const refreshEtiquetteCounts = useCallback(async () => {
+    try {
+      const sorted = sortEtiquettes(await getAllEtiquettesWithCount());
+      setEtiquettes(sorted);
+      setSelectedEtiquette((prev) => {
+        if (!prev) return prev;
+        return sorted.find((e) => e.id === prev.id) ?? prev;
+      });
+    } catch (error) {
+      console.error("Error refreshing etiquette counts:", error);
+    }
+  }, [sortEtiquettes]);
+
   const loadEtiquettes = async () => {
     try {
-      // Appliquer les étiquettes automatiques
-      await checkAndApplyAutoEtiquettes();
-      
-      // Charger les étiquettes avec compteur
-      const data = await getAllEtiquettesWithCount();
-      // Trier par nombre de contacts (desc) puis par priorité
-      const sorted = data.sort((a, b) => {
-        if (b.contact_count !== a.contact_count) {
-          return b.contact_count - a.contact_count;
-        }
-        return b.priorite - a.priorite;
-      });
+      const sorted = sortEtiquettes(await getAllEtiquettesWithCount());
       setEtiquettes(sorted);
-      
-      // Sélectionner la première étiquette avec des contacts
-      const firstWithContacts = sorted.find(e => e.contact_count > 0);
+
+      const firstWithContacts = sorted.find((e) => e.contact_count > 0);
       if (firstWithContacts) {
-        handleSelectEtiquette(firstWithContacts);
+        await handleSelectEtiquette(firstWithContacts);
       }
     } catch (error) {
       console.error("Error loading etiquettes:", error);
     }
   };
 
+  useEffect(() => {
+    return subscribeEtiquettesChanged(() => {
+      void refreshEtiquetteCounts();
+    });
+  }, [refreshEtiquetteCounts]);
+
   const handleSelectEtiquette = async (etiquette: EtiquetteWithCount) => {
     setSelectedEtiquette(etiquette);
     setLoadingContacts(true);
     try {
-      const contacts = await getContactsByEtiquette(etiquette.id) as Contact[];
+      const contacts = await getContactsByEtiquette(etiquette.id);
       setEtiquetteContacts(contacts);
     } catch (error) {
       console.error("Error loading contacts for etiquette:", error);
@@ -195,6 +236,7 @@ export function Suivi() {
       setAlertes((prev) => prev.filter((a) => a.id !== alerteATraiter.id));
       setAlerteATraiter(null);
       toast.success("Suivi enregistré sur le contact");
+      notifyEtiquettesChanged();
       void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error marking alerte as treated:", error);
@@ -226,6 +268,7 @@ export function Suivi() {
         [alerte.id]: (prev[alerte.id] ?? 0) + 1,
       }));
       toast.success(`Suivi reporté de ${mois} mois`);
+      notifyEtiquettesChanged();
       void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error reporting suivi:", error);
@@ -294,12 +337,29 @@ export function Suivi() {
     }
   };
 
+  const handleSyncEtiquettes = async () => {
+    setSyncingEtiquettes(true);
+    try {
+      const n = await runFullEtiquettesRecalc();
+      await refreshEtiquetteCounts();
+      toast.success(
+        n > 0
+          ? `${n} attribution${n > 1 ? "s" : ""} automatique${n > 1 ? "s" : ""} appliquée${n > 1 ? "s" : ""}`
+          : "Étiquettes à jour"
+      );
+    } catch {
+      toast.error("Erreur lors de la synchronisation des étiquettes");
+    } finally {
+      setSyncingEtiquettes(false);
+    }
+  };
+
   // Compter le total de contacts avec étiquettes
   const totalContactsAvecEtiquettes = etiquettes.reduce((sum, e) => sum + e.contact_count, 0);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-serif font-bold text-primary mb-2">
             Suivi des contacts
@@ -308,9 +368,21 @@ export function Suivi() {
             Gérez les alertes et le suivi de vos contacts
           </p>
         </div>
-        {loading && (
-          <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => void handleSyncEtiquettes()}
+            disabled={syncingEtiquettes}
+          >
+            <RefreshCw className={`h-4 w-4 ${syncingEtiquettes ? "animate-spin" : ""}`} />
+            Recalculer les règles auto
+          </Button>
+          {loading && (
+            <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" aria-hidden />
+          )}
+        </div>
       </div>
 
       {/* Résumé */}
@@ -359,6 +431,15 @@ export function Suivi() {
               <Badge variant="secondary" className="ml-1">{totalContactsAvecEtiquettes}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="envois" className="gap-2">
+            <Mail className="h-4 w-4" />
+            Envois
+            {readyEmailCount > 0 && (
+              <Badge variant="secondary" className="ml-1 bg-blue-600 text-white">
+                {readyEmailCount}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         {/* Onglet Alertes */}
@@ -367,7 +448,8 @@ export function Suivi() {
             <CardHeader>
               <CardTitle>Alertes de suivi</CardTitle>
               <CardDescription>
-                {alertes.length} alerte{alertes.length > 1 ? "s" : ""} non traitée{alertes.length > 1 ? "s" : ""}
+                {alertes.length} alerte{alertes.length > 1 ? "s" : ""} non traitée
+                {alertes.length > 1 ? "s" : ""}. {ALERTE_ETIQUETTE_EXPLICATION}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -383,9 +465,9 @@ export function Suivi() {
                   </p>
                   {totalContactsAvecEtiquettes > 0 && (
                     <p className="text-sm text-muted-foreground mt-2 max-w-md mx-auto">
-                      Des contacts peuvent toutefois avoir une étiquette de relance
-                      (onglet Étiquettes). Les alertes se créent à partir des dates de
-                      dernier contact.
+                      {totalContactsAvecEtiquettes} contact
+                      {totalContactsAvecEtiquettes > 1 ? "s" : ""} ont une étiquette de
+                      relance — voir l&apos;onglet Étiquettes.
                     </p>
                   )}
                 </div>
@@ -410,6 +492,11 @@ export function Suivi() {
                               {new Date(alerte.date_alerte * 1000).toLocaleDateString('fr-FR')}
                             </span>
                           </div>
+                          <AlerteEtiquetteHint
+                            typeAlerte={alerte.type_alerte}
+                            etiquettes={etiquettes}
+                            onOpenEtiquettesTab={() => setActiveTab("etiquettes")}
+                          />
                         </div>
                       </div>
 
@@ -491,7 +578,7 @@ export function Suivi() {
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {etiquettes.filter(e => e.contact_count > 0).map((etiquette) => (
+                    {etiquettes.filter(e => e.contact_count > 0 && e.actif !== false).map((etiquette) => (
                       <button
                         key={etiquette.id}
                         onClick={() => handleSelectEtiquette(etiquette)}
@@ -600,8 +687,8 @@ export function Suivi() {
                             variant="outline"
                             size="sm"
                             className="gap-1"
-                            disabled
-                            title="Fonctionnalité disponible prochainement"
+                            title="Ouvrir la file d'envoi"
+                            onClick={() => setActiveTab("envois")}
                           >
                             <Mail className="h-4 w-4" />
                           </Button>
@@ -622,6 +709,20 @@ export function Suivi() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="envois" className="mt-4">
+          <EtiquetteEnvoisTab
+            onQueueChanged={() => void loadEmailQueueCount()}
+            onOpenContact={(id) => {
+              if (onOpenContact) {
+                onOpenContact(id);
+              } else if (onNavigate) {
+                sessionStorage.setItem("crm_open_contact_id", String(id));
+                onNavigate("contacts");
+              }
+            }}
+          />
         </TabsContent>
       </Tabs>
 

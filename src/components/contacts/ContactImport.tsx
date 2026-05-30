@@ -25,6 +25,7 @@ import { createFoyer, getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
   analyzeCoupleContact,
   extractCompositeName,
+  isContactCouple,
 } from "@/lib/contacts/contact-import-couple";
 import {
   findExistingFoyerByFamilleName,
@@ -35,6 +36,7 @@ import { Badge } from "@/components/ui/badge";
 import { invoke } from "@tauri-apps/api/core";
 import { FoyerGroupingModal } from "@/components/foyers/FoyerGroupingModal";
 import { toast } from "sonner";
+import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
   contactNameKeyCanonical,
   findContactByNameKeyWithSwap,
@@ -2366,13 +2368,23 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     if (nextOpen) return;
     const refresh = importCompleted;
     handleClose();
-    if (refresh) onSuccess();
+    if (refresh) {
+      onSuccess();
+      void runFullEtiquettesRecalc().catch((e) =>
+        console.error("Recalcul étiquettes après import:", e)
+      );
+    }
   };
 
   const handleFinishImport = () => {
     const refresh = importCompleted;
     handleClose();
-    if (refresh) onSuccess();
+    if (refresh) {
+      onSuccess();
+      void runFullEtiquettesRecalc().catch((e) =>
+        console.error("Recalcul étiquettes après import:", e)
+      );
+    }
   };
 
   const successCount = importRows.filter((r) => r.status === "success").length;

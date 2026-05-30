@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Toaster } from "sonner";
 import { SetupPassword } from "@/pages/SetupPassword";
@@ -21,6 +21,8 @@ import { Etiquettes } from "@/pages/Etiquettes";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
+import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
+import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 
 function App() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -75,6 +77,27 @@ function App() {
     setCurrentPage("dashboard");
   };
 
+  // Étiquettes par défaut + recalcul complet une fois par session (après wizard si besoin)
+  const etiquettesRecalcDone = useRef(false);
+  useEffect(() => {
+    if (!isAuthenticated || showWizard) return;
+    if (etiquettesRecalcDone.current) return;
+    etiquettesRecalcDone.current = true;
+
+    void (async () => {
+      try {
+        await seedDefaultEtiquettes();
+      } catch {
+        /* déjà initialisé */
+      }
+      try {
+        await runFullEtiquettesRecalc();
+      } catch (error) {
+        console.error("Erreur recalcul étiquettes (arrière-plan):", error);
+      }
+    })();
+  }, [isAuthenticated, showWizard]);
+
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
@@ -102,9 +125,24 @@ function App() {
       case "templates-email":
         return <TemplatesEmail />;
       case "suivi":
-        return <Suivi />;
+        return (
+          <Suivi
+            onNavigate={setCurrentPage}
+            onOpenContact={(contactId) => {
+              sessionStorage.setItem("crm_open_contact_id", String(contactId));
+              setCurrentPage("contacts");
+            }}
+          />
+        );
       case "etiquettes":
-        return <Etiquettes />;
+        return (
+          <Etiquettes
+            onOpenContact={(contactId) => {
+              sessionStorage.setItem("crm_open_contact_id", String(contactId));
+              setCurrentPage("contacts");
+            }}
+          />
+        );
       case "parametres":
         return <Parametres />;
       default:

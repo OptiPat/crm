@@ -19,6 +19,7 @@ import {
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
+import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
   buildContactIdMap,
   contactNameKey,
@@ -605,13 +606,23 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     if (nextOpen) return;
     const refresh = importCompleted;
     handleClose();
-    if (refresh) onSuccess();
+    if (refresh) {
+      onSuccess();
+      void runFullEtiquettesRecalc().catch((e) =>
+        console.error("Recalcul étiquettes après import:", e)
+      );
+    }
   };
 
   const handleFinishImport = () => {
     const refresh = importCompleted;
     handleClose();
-    if (refresh) onSuccess();
+    if (refresh) {
+      onSuccess();
+      void runFullEtiquettesRecalc().catch((e) =>
+        console.error("Recalcul étiquettes après import:", e)
+      );
+    }
   };
 
   const successCount = importRows.filter(r => r.status === "success" || r.status === "warning").length;

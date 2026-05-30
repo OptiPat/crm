@@ -1,12 +1,24 @@
 ﻿# 🏷️ Agent 13 : Étiquettes & Alertes Automatiques
 
-> ✅ **TERMINÉ - 31 janvier 2026**
->
-> Ce module est entièrement implémenté et fonctionnel.
+> ✅ **Module en production** — doc à jour : **[docs/ETIQUETTES.md](../docs/ETIQUETTES.md)**  
+> Dernière évolution majeure : mai 2026 (`actif`, moteur incrémental, perf, alertes ↔ étiquettes).
 
 ---
 
-## Résumé de l'implémentation
+## Résumé actuel (mai 2026)
+
+| Sujet | Détail |
+|-------|--------|
+| Doc utilisateur + technique | `docs/ETIQUETTES.md` |
+| Moteur auto | `etiquettes_auto_engine.rs` + recalcul incrémental dans `commands.rs` |
+| Désactivation | Champ `actif` ; étiquettes système non supprimables |
+| Perf | Lecture bulk attributions ; virtualisation listes ; recalcul complet transactionnel |
+| UI | Compteurs via `etiquette-events` ; filtre Contacts inclut inactives encore assignées |
+| Alertes | Complémentaires ; mapping type → nom d’étiquette dans Suivi |
+
+---
+
+## Résumé de l'implémentation (janvier 2026)
 
 | Composant | Fichier | Statut |
 |-----------|---------|--------|
@@ -22,23 +34,16 @@
 | **Intégration Contacts** | `src/components/contacts/ContactDetail.tsx` | ✅ |
 | **Intégration Suivi** | `src/pages/Suivi.tsx` | ✅ |
 | **Navigation** | `src/components/layout/Sidebar.tsx` + `App.tsx` | ✅ |
-| **Moteur auto** | `checkAndApplyAutoEtiquettes()` | ✅ |
-| **Emails différés** | `getPendingEtiquetteEmails()` + `markEtiquetteEmailSent()` | ✅ |
+| **Moteur auto** | `etiquettes_auto_engine.rs` + `checkAndApplyAutoEtiquettes()` | ✅ |
+| **Emails différés** | File Suivi → Envois + `markEtiquetteEmailSent()` | ✅ |
 
-### Fonctionnalités implémentées
-- ✅ Création/modification/suppression d'étiquettes via interface graphique
-- ✅ Palette de couleurs visuelle (18 couleurs)
-- ✅ Sélection d'icônes emoji
-- ✅ Prévisualisation en temps réel du badge
-- ✅ Attribution automatique avec 3 types de conditions :
-  - `DELAI_SANS_CONTACT` (ex: 365 jours sans RDV)
-  - `DATE_APPROCHE` (ex: prochain suivi dans 30 jours)
-  - `PERIODE_ANNEE` (ex: période fiscale avril-mai)
-- ✅ Filtrage par catégorie de contact (Client, Prospect, etc.)
-- ✅ Action email automatique avec template et délai configurable
-- ✅ 5 étiquettes par défaut (modifiables par l'utilisateur)
-- ✅ Affichage des badges sur les fiches contacts
-- ✅ Onglet dédié dans la page Suivi
+### Fonctionnalités (état actuel — voir `docs/ETIQUETTES.md`)
+- ✅ CRUD étiquettes, priorité, désactivation (`actif`), protection suppression système
+- ✅ Conditions auto : délai sans contact, dates contact/investissement, période année, type produit, âge
+- ✅ Campagne email (datetime planifié, confirmation dans Suivi)
+- ✅ ~8 étiquettes par défaut (seed + `ensure_default_etiquettes`)
+- ✅ Contacts, Suivi, Étiquettes, import ; recalcul incrémental et complet
+- ✅ Convergence UI Alertes ↔ étiquettes liées
 
 ---
 

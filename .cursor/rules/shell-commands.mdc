@@ -1,0 +1,88 @@
+---
+description: Cheat sheet commandes shell du projet (PowerShell, npm, Cargo, git)
+alwaysApply: true
+---
+
+# Commandes shell — Patrimoine CRM
+
+Environnement typique : **Windows + PowerShell**. Racine dépôt : `D:\crm` (ou `$PSScriptRoot`).
+
+## Syntaxe PowerShell
+
+- Enchaîner avec **`;`** — pas `&&` (souvent invalide ou capricieux).
+- Exemple : `cd D:\crm; npm run verify`
+- Chemins avec espaces : guillemets `"D:\crm\src-tauri"`.
+
+```powershell
+# ❌ cd D:\crm && npm run test
+# ✅ cd D:\crm; npm run test
+```
+
+## Vérification (agents — prioritaire)
+
+| Besoin | Commande |
+|--------|----------|
+| Défaut après modif code | `npm run verify` |
+| Frontend seul (`src/`, pas Rust) | `npm run verify:quick` |
+| + build Vite / release check | `npm run verify:full` |
+| Unix (CI / WSL) | `./scripts/verify.sh` |
+
+Détail du flux : `verification-automatique.mdc`, `AGENTS.md`.
+
+## Tests unitaires
+
+| Cible | Commande |
+|-------|----------|
+| Vitest (tout) | `npm run test` |
+| Vitest watch | `npm run test:watch` |
+| Un fichier | `npx vitest run src/lib/etiquettes/etiquettes-filter.test.ts` |
+| Rust (intégration SQLite mémoire) | `npm run test:rust` |
+| Les deux | `npm run test:all` |
+| TypeScript seul | `npx tsc --noEmit` |
+
+## Développement (surtout humain)
+
+| Action | Commande |
+|--------|----------|
+| App Tauri + UI | `.\dev.ps1` |
+| UI seule (pas SQLite/Tauri) | `.\dev.ps1 -Ui` |
+| Rust release (si linker) | `.\dev.ps1 -Release` |
+| Install deps | `npm install` |
+| Build installateur | `npm run tauri:build` |
+
+Ne pas lancer plusieurs `dev.ps1` en parallèle.
+
+## Rust (depuis racine ou `src-tauri`)
+
+```powershell
+cd D:\crm\src-tauri; cargo test
+cd D:\crm\src-tauri; cargo build
+```
+
+Éviter `cargo clean` sauf dernier recours (rebuild long).
+
+## Git
+
+```powershell
+cd D:\crm; git status
+cd D:\crm; git diff
+cd D:\crm; git log -5 --oneline
+```
+
+- **Pas** de `git commit` / `git push` / `reset --hard` / `push --force` sauf demande explicite.
+- **Pas** de `git config` (user rule).
+
+PR GitHub : `gh pr create` (voir règle utilisateur creating-pull-requests).
+
+## Drizzle / DB (scripts dev, pas prod)
+
+```powershell
+npm run db:generate
+npm run db:migrate
+```
+
+DB prod : `%APPDATA%\com.patrimoine-crm.app\patrimoine-crm.db` — ne pas reset sans sauvegarde.
+
+## Hors stack actuelle
+
+Ce dépôt n’utilise **pas** Python / `uv` / `pytest`. Si un module Python est ajouté plus tard, documenter ici : `uv run pytest`, etc.

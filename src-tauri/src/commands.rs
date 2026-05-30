@@ -29,9 +29,13 @@ pub fn create_contact(db: State<'_, DbState>, new_contact: NewContact) -> Result
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let contact = database
         .create_contact(new_contact)
-        .map_err(|e| format!("Failed to create contact: {}", e))
+        .map_err(|e| format!("Failed to create contact: {}", e))?;
+    if let Some(id) = contact.id {
+        let _ = database.check_auto_etiquettes_for_contact(id);
+    }
+    Ok(contact)
 }
 
 #[tauri::command]
@@ -83,9 +87,11 @@ pub fn update_contact(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let updated = database
         .update_contact(id, &contact)
-        .map_err(|e| format!("Failed to update contact: {}", e))
+        .map_err(|e| format!("Failed to update contact: {}", e))?;
+    let _ = database.check_auto_etiquettes_for_contact(id);
+    Ok(updated)
 }
 
 #[tauri::command]
@@ -635,9 +641,11 @@ pub fn create_investissement(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let inv = database
         .create_investissement(new_investissement)
-        .map_err(|e| format!("Failed to create investissement: {}", e))
+        .map_err(|e| format!("Failed to create investissement: {}", e))?;
+    let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id);
+    Ok(inv)
 }
 
 #[tauri::command]
@@ -659,9 +667,11 @@ pub fn update_investissement(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let inv = database
         .update_investissement(id, &investissement)
-        .map_err(|e| format!("Failed to update investissement: {}", e))
+        .map_err(|e| format!("Failed to update investissement: {}", e))?;
+    let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id);
+    Ok(inv)
 }
 
 #[tauri::command]
@@ -669,9 +679,14 @@ pub fn delete_investissement(db: State<'_, DbState>, id: i64) -> Result<(), Stri
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
+    let inv = database.get_investissement_by_id(id).ok();
     database
         .delete_investissement(id)
-        .map_err(|e| format!("Failed to delete investissement: {}", e))
+        .map_err(|e| format!("Failed to delete investissement: {}", e))?;
+    if let Some(inv) = inv {
+        let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -735,9 +750,13 @@ pub fn create_etiquette(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let etiqu = database
         .create_etiquette(new_etiquette)
-        .map_err(|e| format!("Failed to create etiquette: {}", e))
+        .map_err(|e| format!("Failed to create etiquette: {}", e))?;
+    if etiqu.actif && etiqu.auto_condition_type.is_some() {
+        let _ = database.check_auto_etiquettes_for_etiquette(etiqu.id);
+    }
+    Ok(etiqu)
 }
 
 #[tauri::command]
@@ -749,9 +768,13 @@ pub fn update_etiquette(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let etiqu = database
         .update_etiquette(id, &etiquette)
-        .map_err(|e| format!("Failed to update etiquette: {}", e))
+        .map_err(|e| format!("Failed to update etiquette: {}", e))?;
+    if etiqu.actif && etiqu.auto_condition_type.is_some() {
+        let _ = database.check_auto_etiquettes_for_etiquette(etiqu.id);
+    }
+    Ok(etiqu)
 }
 
 #[tauri::command]
@@ -775,6 +798,18 @@ pub fn get_etiquettes_by_contact(
     database
         .get_etiquettes_by_contact(contact_id)
         .map_err(|e| format!("Failed to get contact etiquettes: {}", e))
+}
+
+#[tauri::command]
+pub fn get_all_contact_etiquettes_details(
+    db: State<'_, DbState>,
+) -> Result<Vec<ContactEtiquetteDetails>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_all_contact_etiquettes_details()
+        .map_err(|e| format!("Failed to get all contact etiquettes: {}", e))
 }
 
 #[tauri::command]
@@ -849,6 +884,19 @@ pub fn get_pending_etiquette_emails(
     database
         .get_pending_etiquette_emails()
         .map_err(|e| format!("Failed to get pending emails: {}", e))
+}
+
+#[tauri::command]
+pub fn get_etiquette_email_queue(
+    db: State<'_, DbState>,
+    queue_status: String,
+) -> Result<Vec<crate::database::models::EtiquetteEmailQueueItem>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_etiquette_email_queue(&queue_status)
+        .map_err(|e| format!("Failed to get etiquette email queue: {}", e))
 }
 
 #[tauri::command]

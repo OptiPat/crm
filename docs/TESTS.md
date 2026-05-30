@@ -23,6 +23,8 @@ Logique métier pure, sans Tauri ni UI :
 - `tauri-alertes` — libellés alertes
 - **`contact-import-couple`** — détection couples Excel (extrait de `ContactImport`)
 - **`merge-duplicate-logic`** — fusion champs doublons (extrait de `merge-duplicate-group`)
+- **`etiquette-email-preview`** — date/heure campagne email étiquettes
+- **`etiquettes-filter`** — filtre Contacts (actives + inactives encore assignées)
 
 Fixtures : `src/lib/contacts/__fixtures__/import-couple-fixtures.ts`
 
@@ -35,9 +37,12 @@ Fixtures : `src/lib/contacts/__fixtures__/import-couple-fixtures.ts`
 - `cleanup_orphaned_foyers`
 - `update_contact_persists_foyer_id_and_role`
 - `investissements_by_contact_and_by_foyer`
-- `delete_contact_clears_foyer_id_on_contact`
+  - `delete_contact_clears_foyer_id_on_contact`
+  - **Étiquettes** : `deactivate_etiquette_removes_auto_assignments`, `delete_default_etiquette_is_blocked`, `ensure_default_etiquettes_preserves_custom_config`, `create_etiquette_rejects_*`, `auto_etiquette_matches_foyer_investissement`, `etiquette_email_queue_*`, `delai_sans_contact_inclure_sans_date_false_*`
 
 Base de test : `Database::open_in_memory_for_tests()`.
+
+Suite complète recommandée pour les agents : `npm run verify` (voir `AGENTS.md`).
 
 ## Hors scope
 

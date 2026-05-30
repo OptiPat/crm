@@ -348,15 +348,22 @@ pub struct Etiquette {
     pub description: Option<String>,
     pub priorite: i64,
     // Attribution automatique
-    pub auto_condition_type: Option<String>, // DELAI_SANS_CONTACT, DATE_APPROCHE, PERIODE_ANNEE, TYPE_PRODUIT
+    /// DELAI_SANS_CONTACT, DATE_APPROCHE (champs fiche contact uniquement),
+    /// DATE_APPROCHE_INVESTISSEMENT (ex. date_fin_demembrement sur investissement/foyer),
+    /// PERIODE_ANNEE, TYPE_PRODUIT, AGE_APPROCHE
+    pub auto_condition_type: Option<String>,
     pub auto_condition_config: Option<String>, // JSON avec les paramètres
     pub auto_categories: Option<String>,     // JSON array des catégories concernées
     // Action email
     pub email_template_id: Option<i64>,
     pub email_delai_jours: i64,
+    /// Date/heure Unix de la campagne d'envoi (file d'attente)
+    pub email_envoi_prevu: Option<i64>,
     pub email_actif: bool,
     // Système
     pub is_default: bool,
+    /// false = étiquette désactivée (pas de règle auto ni campagne, tags AUTO retirés)
+    pub actif: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -374,10 +381,32 @@ pub struct NewEtiquette {
     pub auto_categories: Option<String>,
     // Action email
     pub email_template_id: Option<i64>,
-    pub email_delai_jours: Option<i64>, // Défaut: 0
+    pub email_delai_jours: Option<i64>, // Défaut: 0 (legacy)
+    pub email_envoi_prevu: Option<i64>,
     pub email_actif: Option<bool>,      // Défaut: false
     // Système
     pub is_default: Option<bool>, // Défaut: false
+    pub actif: Option<bool>,      // Défaut: true
+}
+
+/// Ligne de la file d'envoi manuel (étiquettes + email)
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EtiquetteEmailQueueItem {
+    pub contact_etiquette_id: i64,
+    pub contact_id: i64,
+    pub contact_nom: String,
+    pub contact_prenom: String,
+    pub contact_email: Option<String>,
+    pub contact_telephone: Option<String>,
+    pub etiquette_id: i64,
+    pub etiquette_nom: String,
+    pub etiquette_couleur: String,
+    pub email_date_prevue: Option<i64>,
+    pub email_date_envoi: Option<i64>,
+    pub template_sujet: String,
+    pub template_corps: String,
+    /// Raison si file « incomplete » : NO_EMAIL, NO_TEMPLATE, NO_DATE, SCHEDULED
+    pub queue_issue: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -417,8 +446,10 @@ pub struct EtiquetteWithCount {
     pub auto_categories: Option<String>,
     pub email_template_id: Option<i64>,
     pub email_delai_jours: i64,
+    pub email_envoi_prevu: Option<i64>,
     pub email_actif: bool,
     pub is_default: bool,
+    pub actif: bool,
     pub created_at: i64,
     pub updated_at: i64,
     pub contact_count: i64, // Nombre de contacts avec cette étiquette
@@ -493,6 +524,7 @@ pub struct CgpConfig {
     pub cabinet: Option<String>,
     pub email: Option<String>,
     pub telephone: Option<String>,
+    pub lien_calendly: Option<String>,
     pub logo_path: Option<String>,
     pub wizard_completed: bool,
     pub wizard_step: i64,

@@ -22,6 +22,7 @@ export function Parametres() {
     cabinet: "",
     email: "",
     telephone: "",
+    lien_calendly: "",
     logo_path: "",
     wizard_completed: true,
     wizard_step: 4,
@@ -48,6 +49,7 @@ export function Parametres() {
             cabinet: config.cabinet ?? "",
             email: config.email ?? "",
             telephone: config.telephone ?? "",
+            lien_calendly: config.lien_calendly ?? "",
             logo_path: config.logo_path ?? "",
             wizard_completed: config.wizard_completed ?? true,
             wizard_step: config.wizard_step ?? 4,
@@ -212,6 +214,16 @@ export function Parametres() {
                 onChange={(e) => setCgpConfig({ ...cgpConfig, telephone: e.target.value })}
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lien_calendly">Lien Calendly (variable {"{{lien_calendly}}"})</Label>
+            <Input
+              id="lien_calendly"
+              type="url"
+              placeholder="https://calendly.com/votre-lien"
+              value={cgpConfig.lien_calendly || ""}
+              onChange={(e) => setCgpConfig({ ...cgpConfig, lien_calendly: e.target.value })}
+            />
           </div>
           <Button onClick={handleSaveProfile} disabled={savingProfile}>
             {savingProfile ? (

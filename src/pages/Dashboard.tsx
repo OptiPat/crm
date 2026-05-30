@@ -17,7 +17,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { getDashboardStats, DashboardStats } from "@/lib/api/tauri-dashboard";
-import { checkAndApplyAutoEtiquettes, seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
+import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
 
 interface DashboardProps {
@@ -39,11 +39,6 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         await seedDefaultEtiquettes();
       } catch {
         /* déjà initialisé */
-      }
-      try {
-        await checkAndApplyAutoEtiquettes();
-      } catch (error) {
-        console.error("Erreur moteur étiquettes:", error);
       }
       try {
         await genererAlertesAutomatiques();

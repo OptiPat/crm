@@ -47,6 +47,7 @@ import {
   type NewContact,
   type Contact,
 } from "@/lib/api/tauri-contacts";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
@@ -327,6 +328,7 @@ export function ContactForm({
         toast.success("Contact créé");
       }
       setDirty(false);
+      notifyEtiquettesChanged();
       onSuccess();
       onOpenChange(false);
       setFormData(getEmptyForm(createContext));

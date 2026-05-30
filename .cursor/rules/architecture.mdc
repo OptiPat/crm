@@ -1,0 +1,54 @@
+---
+description: Structure du projet et contrôles attendus après modification de code
+alwaysApply: true
+---
+
+# Architecture — Patrimoine CRM
+
+## Stack
+
+| Couche | Emplacement | Techno |
+|--------|-------------|--------|
+| UI | `src/` | React 19, TypeScript, Vite, Tailwind, shadcn |
+| Desktop / API | `src-tauri/src/` | Tauri 2, Rust, SQLite |
+| Migrations SQL dev | `drizzle/` | Scripts ; runtime = migrations Rust `database/mod.rs` |
+| Docs agents | `docs/`, `AGENTS.md`, `.cursor/rules/` | |
+
+100 % local — pas de backend cloud métier.
+
+## Modules métier (repères)
+
+| Domaine | Frontend | Backend |
+|---------|----------|---------|
+| Contacts / foyers | `src/pages/Contacts.tsx`, `components/contacts/` | `operations.rs`, `commands.rs` |
+| Étiquettes | `src/pages/Etiquettes.tsx`, `lib/etiquettes/` | `etiquettes_auto_engine.rs` |
+| Suivi / alertes | `src/pages/Suivi.tsx` | alertes + étiquettes dans `operations.rs` |
+| Investissements | `ContactDetail`, API `tauri-investissements` | `operations.rs` |
+
+Doc étiquettes : `docs/ETIQUETTES.md`.
+
+## Flux données étiquettes (résumé)
+
+1. Navigation → lecture bulk `getAllContactEtiquettesDetails` (pas de recalcul complet).
+2. Save contact / investissement / étiquette → recalcul **incrémental** Rust.
+3. Import / bouton Recalculer / 1× session → recalcul **complet** (transaction).
+4. UI → `notifyEtiquettesChanged()` pour compteurs Suivi / Étiquettes / Contacts.
+
+## Après modification de code
+
+1. **Tests** — lancer via Shell (pas l’utilisateur) :
+   - défaut : `npm run verify`
+   - UI/TS seul : `npm run verify:quick`
+2. **Linter** — `ReadLints` sur les fichiers **que tu as modifiés** (ou le dossier touché).
+3. Corriger erreurs introduites ; relancer verify si le fix touche la logique.
+4. Ne pas annoncer « terminé » si verify ou lints bloquants restent rouges.
+
+## Conventions
+
+- Messages UI en **français** ; identifiants code en **anglais**.
+- Diff minimal ; réutiliser patterns existants du fichier voisin.
+- Pas de commit/push sauf demande explicite.
+
+## Fichiers sensibles
+
+- `.env`, credentials SMTP, `patrimoine-crm.db` prod → voir `donnees-sensibles.mdc`.

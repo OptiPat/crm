@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Contact } from "@/lib/api/tauri-contacts";
 
 // ==================== INTERFACES ====================
 
@@ -16,9 +17,12 @@ export interface Etiquette {
   // Action email
   email_template_id: number | null;
   email_delai_jours: number;
+  email_envoi_prevu: number | null;
   email_actif: boolean;
   // Système
   is_default: boolean;
+  /** false = désactivée (pas de règle auto ni campagne email) */
+  actif: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -35,10 +39,12 @@ export interface NewEtiquette {
   auto_categories?: string | null;
   // Action email
   email_template_id?: number | null;
-  email_delai_jours?: number; // Défaut: 0
+  email_delai_jours?: number; // Défaut: 0 (legacy)
+  email_envoi_prevu?: number | null;
   email_actif?: boolean;      // Défaut: false
   // Système
   is_default?: boolean;       // Défaut: false
+  actif?: boolean;            // Défaut: true
 }
 
 export interface ContactEtiquette {
@@ -58,6 +64,25 @@ export interface EtiquetteWithCount extends Etiquette {
   contact_count: number;
 }
 
+export interface EtiquetteEmailQueueItem {
+  contact_etiquette_id: number;
+  contact_id: number;
+  contact_nom: string;
+  contact_prenom: string;
+  contact_email: string | null;
+  contact_telephone: string | null;
+  etiquette_id: number;
+  etiquette_nom: string;
+  etiquette_couleur: string;
+  email_date_prevue: number | null;
+  email_date_envoi: number | null;
+  template_sujet: string;
+  template_corps: string;
+  queue_issue: string | null;
+}
+
+export type EtiquetteEmailQueueStatus = "ready" | "incomplete" | "sent";
+
 export interface ContactEtiquetteDetails {
   id: number;
   contact_id: number;
@@ -74,18 +99,31 @@ export interface ContactEtiquetteDetails {
 
 // ==================== TYPES DE CONDITIONS ====================
 
-export type ConditionType = 
-  | "DELAI_SANS_CONTACT"   // X jours depuis date_dernier_contact
-  | "DATE_APPROCHE"        // X jours avant un champ date
-  | "PERIODE_ANNEE"        // Entre mois X et mois Y
-  | "TYPE_PRODUIT";        // Client a un investissement de ce type
+export type ConditionType =
+  | "DELAI_SANS_CONTACT"
+  | "DATE_APPROCHE"
+  | "PERIODE_ANNEE"
+  | "TYPE_PRODUIT"
+  | "DATE_APPROCHE_INVESTISSEMENT"
+  | "AGE_APPROCHE";
 
 export interface ConditionDelaiSansContact {
   jours: number;
+  /** Défaut true : taguer aussi sans date de dernier contact */
+  inclure_sans_date?: boolean;
 }
 
 export interface ConditionDateApproche {
-  champ: "date_prochain_suivi" | "date_fin_demembrement" | "date_naissance";
+  champ:
+    | "date_prochain_suivi"
+    | "date_prochain_suivi_filleul"
+    | "date_dernier_contact_filleul"
+    | "date_naissance";
+  jours_avant: number;
+}
+
+export interface ConditionAgeApproche {
+  age: number;
   jours_avant: number;
 }
 
@@ -96,6 +134,12 @@ export interface ConditionPeriodeAnnee {
 
 export interface ConditionTypeProduit {
   types: string[];  // Liste des types de produits
+}
+
+export interface ConditionDateApprocheInvestissement {
+  champ: "date_fin_demembrement" | "date_fin_pret" | "date_souscription";
+  jours_avant: number;
+  types_produit?: string[];
 }
 
 // ==================== PALETTE DE COULEURS ====================
@@ -162,6 +206,11 @@ export async function getEtiquettesByContact(contactId: number): Promise<Contact
   return invoke<ContactEtiquetteDetails[]>("get_etiquettes_by_contact", { contactId });
 }
 
+/** Toutes les liaisons contact–étiquette en un seul appel (liste Contacts). */
+export async function getAllContactEtiquettesDetails(): Promise<ContactEtiquetteDetails[]> {
+  return invoke<ContactEtiquetteDetails[]>("get_all_contact_etiquettes_details");
+}
+
 /**
  * Attribue une étiquette à un contact
  */
@@ -187,8 +236,8 @@ export async function retirerEtiquette(contactId: number, etiquetteId: number): 
 /**
  * Récupère tous les contacts ayant une étiquette spécifique
  */
-export async function getContactsByEtiquette(etiquetteId: number): Promise<unknown[]> {
-  return invoke<unknown[]>("get_contacts_by_etiquette", { etiquetteId });
+export async function getContactsByEtiquette(etiquetteId: number): Promise<Contact[]> {
+  return invoke<Contact[]>("get_contacts_by_etiquette", { etiquetteId });
 }
 
 /**
@@ -207,9 +256,17 @@ export async function checkAndApplyAutoEtiquettes(): Promise<number> {
 }
 
 /**
- * Récupère les emails en attente pour les étiquettes
- * Retourne: [(contact_etiquette_id, contact_id, template_id, email, prenom)]
+ * File d'envoi manuel par étiquettes
  */
+export async function getEtiquetteEmailQueue(
+  queueStatus: EtiquetteEmailQueueStatus
+): Promise<EtiquetteEmailQueueItem[]> {
+  return invoke<EtiquetteEmailQueueItem[]>("get_etiquette_email_queue", {
+    queueStatus,
+  });
+}
+
+/** @deprecated Utiliser getEtiquetteEmailQueue("ready") */
 export async function getPendingEtiquetteEmails(): Promise<[number, number, number, string, string][]> {
   return invoke<[number, number, number, string, string][]>("get_pending_etiquette_emails");
 }
@@ -300,16 +357,19 @@ export const CONDITION_LABELS: Record<ConditionType, string> = {
   DELAI_SANS_CONTACT: "Le client n'a pas été contacté depuis X jours",
   DATE_APPROCHE: "La date de [champ] est dans moins de X jours",
   PERIODE_ANNEE: "Nous sommes entre [mois] et [mois]",
-  TYPE_PRODUIT: "Le client détient un produit de type..."
+  TYPE_PRODUIT: "Le client détient un produit de type...",
+  DATE_APPROCHE_INVESTISSEMENT: "Une date sur un investissement (contact ou foyer) approche",
+  AGE_APPROCHE: "Le client approche d'un âge cible",
 };
 
 /**
  * Labels pour les champs de date
  */
 export const CHAMPS_DATE_LABELS: Record<string, string> = {
-  date_prochain_suivi: "Prochain suivi",
-  date_fin_demembrement: "Fin de démembrement",
-  date_naissance: "Anniversaire"
+  date_prochain_suivi: "Prochain suivi client",
+  date_prochain_suivi_filleul: "Prochain suivi filleul",
+  date_dernier_contact_filleul: "Dernier contact filleul",
+  date_naissance: "Date de naissance",
 };
 
 /**

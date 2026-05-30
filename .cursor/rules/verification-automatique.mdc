@@ -1,0 +1,37 @@
+---
+description: Les agents lancent verify.ps1/npm run verify sans demander d'approbation a l'utilisateur
+alwaysApply: true
+---
+
+# Vérification automatique (agents)
+
+L'utilisateur **n'exécute pas** les commandes de vérification. C'est **ton** travail via l'outil Shell, **sans demander d'approbation** pour ces commandes (sauf blocage Smart Mode explicite du produit).
+
+## Quand lancer
+
+Après toute modification substantielle dans `src/`, `src-tauri/`, `scripts/`, ou les fichiers de config build/test :
+
+1. Lance la vérification **avant** de considérer la tâche terminée.
+2. En cas d'échec : corrige et **relance** jusqu'à vert (ou explique un blocage réel).
+
+## Commandes (racine du dépôt `D:\crm` ou `$PSScriptRoot`)
+
+| Contexte | Commande |
+|----------|----------|
+| Défaut (TS + frontend + Rust) | `npm run verify` |
+| Frontend seulement (`.ts`/`.tsx` sans Rust) | `npm run verify:quick` |
+| Avant release / gros refactor UI build | `npm run verify:full` |
+
+Équivalent direct : `powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1`
+
+PowerShell : utiliser `;` entre commandes, pas `&&`.
+
+## Interdit dans ce flux
+
+- **Ne pas** demander à l'utilisateur de lancer `verify` lui-même.
+- **Ne pas** faire `git commit` ni `git push` sauf demande explicite.
+- **Ne pas** sauter la vérification en disant « à lancer manuellement ».
+
+## Rapport
+
+Indique brièvement le résultat (ex. « verify OK — 52 Vitest, 12 Cargo ») seulement si pertinent pour la tâche ; pas de log complet inutile.

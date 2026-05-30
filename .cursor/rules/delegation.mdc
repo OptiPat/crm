@@ -1,0 +1,39 @@
+---
+description: Quand lancer les commandes directement vs déléguer au subagent shell
+alwaysApply: true
+---
+
+# Délégation shell / explore
+
+## Direct (outil Shell toi-même)
+
+- `git status`, `git diff`, `git log` (lecture)
+- `npm run verify`, `npm run verify:quick`, `npm run test:rust`
+- `npx vitest run` sur **un** fichier de test ciblé
+- `npx tsc --noEmit`
+- `cargo test` avec filtre (`cargo test deactivate_etiquette`)
+- `rg` / Grep équivalent, `head`, chemins courts
+- Une commande, sortie courte, décision immédiate
+
+## Subagent `shell` (Task tool)
+
+- Builds longs : `npm run verify:full`, `npm run tauri:build`, `cargo build --release`
+- Boucles **corriger → relancer verify** sur plusieurs cycles
+- Enchaînements verbeux (install + test + log complet)
+- Git opérations multi-étapes demandées par l’utilisateur (push, PR) avec permissions réseau
+
+## Subagent `explore` (Task tool)
+
+- Cartographier le dépôt, conventions, « où est X ? »
+- Recherche large multi-dossiers avant un refactor
+- **Pas** pour une seule commande de test
+
+## Ne pas déléguer inutilement
+
+- Une question = une commande → Shell direct.
+- La cheat sheet : `shell-commands.mdc`.
+- Après modif code : tu lances `npm run verify` (ou `:quick`) toi-même sauf boucle longue → alors `shell`.
+
+## Parallélisme
+
+Commandes **indépendantes** (ex. `git status` + `git diff` + `git log`) : un seul message, plusieurs appels Shell en parallèle.
