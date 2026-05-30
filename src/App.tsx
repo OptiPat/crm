@@ -113,15 +113,15 @@ function App() {
       case "contacts":
         return (
           <ErrorBoundary>
-            <Contacts />
+            <Contacts onNavigate={setCurrentPage} />
           </ErrorBoundary>
         );
       case "familles":
-        return <Familles />;
+        return <Familles onNavigate={setCurrentPage} />;
       case "foyers":
-        return <Foyers />;
+        return <Foyers onNavigate={setCurrentPage} />;
       case "prescripteurs":
-        return <Prescripteurs />;
+        return <Prescripteurs onNavigate={setCurrentPage} />;
       case "partenaires":
         return <Partenaires />;
       case "investissements":

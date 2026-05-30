@@ -63,7 +63,10 @@ import {
 } from "@/lib/alertes/alerte-email-queue";
 import { AlerteEtiquetteHint } from "@/components/suivi/AlerteEtiquetteHint";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
-import { consumeSuiviNavigationIntent } from "@/lib/navigation/suivi-navigation";
+import {
+  consumeSuiviNavigationIntent,
+  setEnvoisContactFocus,
+} from "@/lib/navigation/suivi-navigation";
 import { toast } from "sonner";
 
 interface SuiviProps {
@@ -88,17 +91,35 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
   const [alertEmailItem, setAlertEmailItem] = useState<EtiquetteEmailQueueItem | null>(null);
   const [alertEmailLoadingId, setAlertEmailLoadingId] = useState<number | null>(null);
   const [loadingEtiquettes, setLoadingEtiquettes] = useState(true);
+  const [pendingSuiviContactId, setPendingSuiviContactId] = useState<number | null>(null);
 
   useEffect(() => {
-    const { tab, envoisSubTab } = consumeSuiviNavigationIntent();
+    const { tab, envoisSubTab, contactId } = consumeSuiviNavigationIntent();
     if (tab) setActiveTab(tab);
     if (envoisSubTab) {
       sessionStorage.setItem("crm_nav_suivi_envois_subtab", envoisSubTab);
+    }
+    if (contactId != null) {
+      if (tab === "envois") {
+        setEnvoisContactFocus(contactId);
+      } else {
+        setPendingSuiviContactId(contactId);
+      }
     }
     void loadAlertes();
     loadEtiquettes();
     void loadEmailQueueCount();
   }, []);
+
+  useEffect(() => {
+    if (pendingSuiviContactId == null || loading || activeTab !== "alertes") return;
+    const alerte = alertes.find((a) => a.contact_id === pendingSuiviContactId);
+    if (alerte) {
+      setAlerteATraiter(alerte);
+      setDateDernierSuivi(todayLocal());
+    }
+    setPendingSuiviContactId(null);
+  }, [pendingSuiviContactId, loading, alertes, activeTab]);
 
   const loadEmailQueueCount = async () => {
     try {

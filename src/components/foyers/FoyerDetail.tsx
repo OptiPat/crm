@@ -28,8 +28,15 @@ import {
   Trash2,
   Coins,
   Wallet,
-  User,
+  ChevronRight,
+  X,
 } from "lucide-react";
+import {
+  getFoyerTypeBadgeClass,
+  getFoyerTypeLabel,
+} from "@/lib/foyers/foyer-display";
+import { ContactInitialsAvatar } from "@/components/contacts/contacts-ui";
+import { cn } from "@/lib/utils";
 import { type Foyer } from "@/lib/api/tauri-foyers";
 import { FoyerForm } from "./FoyerForm";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
@@ -50,6 +57,8 @@ interface FoyerDetailProps {
   foyer: Foyer | null;
   onDelete: (id: number) => void;
   onUpdate: () => void;
+  onMemberClick?: (contact: Contact) => void;
+  embedded?: boolean;
 }
 
 export function FoyerDetail({
@@ -58,6 +67,8 @@ export function FoyerDetail({
   foyer,
   onDelete,
   onUpdate,
+  onMemberClick,
+  embedded = false,
 }: FoyerDetailProps) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showInvestissementForm, setShowInvestissementForm] = useState(false);
@@ -67,12 +78,13 @@ export function FoyerDetail({
   const [loadingData, setLoadingData] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
-  // Charger les données du foyer
+  const detailActive = embedded || open;
+
   useEffect(() => {
-    if (foyer?.id && open) {
+    if (foyer?.id && detailActive) {
       loadFoyerData();
     }
-  }, [foyer?.id, open]);
+  }, [foyer?.id, detailActive]);
 
   const loadFoyerData = async () => {
     if (!foyer?.id) return;
@@ -109,23 +121,6 @@ export function FoyerDetail({
 
   if (!foyer) return null;
 
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case "COUPLE":
-        return "bg-purple-100 text-purple-800";
-      case "FAMILLE":
-        return "bg-blue-100 text-blue-800";
-      case "CELIBATAIRE":
-        return "bg-gray-100 text-gray-800";
-      case "DIVORCE":
-        return "bg-orange-100 text-orange-800";
-      case "VEUF":
-        return "bg-gray-100 text-gray-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
   const handleDeleteConfirm = () => {
     if (!foyer) return;
     onDelete(foyer.id);
@@ -142,48 +137,65 @@ export function FoyerDetail({
     }).format(value);
   };
 
-  return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-start justify-between">
-              <div>
-                <DialogTitle className="text-2xl">{foyer.nom}</DialogTitle>
-                <DialogDescription className="sr-only">
-                  Détails du foyer fiscal et patrimoine associé
-                </DialogDescription>
-                <div className="flex gap-2 mt-2">
-                  <Badge className={getTypeColor(foyer.type_foyer)}>
-                    {foyer.type_foyer}
-                  </Badge>
-                  {foyer.tranche_imposition && (
-                    <Badge variant="outline">
-                      TMI {foyer.tranche_imposition}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowEditForm(true)}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setShowDeleteDialog(true)}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </DialogHeader>
+  const headerBlock = (
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0 flex-1">
+        {embedded ? (
+          <h2 className="text-xl font-serif font-bold text-primary leading-tight truncate">
+            {foyer.nom}
+          </h2>
+        ) : (
+          <DialogTitle className="text-2xl">{foyer.nom}</DialogTitle>
+        )}
+        {!embedded && (
+          <DialogDescription className="sr-only">
+            Détails du foyer fiscal et patrimoine associé
+          </DialogDescription>
+        )}
+        <div className="flex flex-wrap gap-2 mt-2">
+          <Badge
+            className={cn("border", getFoyerTypeBadgeClass(foyer.type_foyer))}
+          >
+            {getFoyerTypeLabel(foyer.type_foyer)}
+          </Badge>
+          {foyer.tranche_imposition && (
+            <Badge variant="outline">TMI {foyer.tranche_imposition}</Badge>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setShowEditForm(true)}
+          title="Modifier"
+        >
+          <Edit className="h-4 w-4" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={() => setShowDeleteDialog(true)}
+          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+          title="Supprimer"
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+        {embedded && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onOpenChange(false)}
+            title="Fermer"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 
+  const bodyBlock = (
           <div className="space-y-4">
             {/* Informations fiscales */}
             <Card>
@@ -275,25 +287,53 @@ export function FoyerDetail({
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    {contacts.map((contact) => (
-                      <div
-                        key={contact.id}
-                        className="flex items-center gap-3 p-2 rounded-lg bg-muted/50"
-                      >
-                        <User className="h-4 w-4 text-muted-foreground shrink-0" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium">
-                            {formatFoyerMemberLabel(
-                              contact,
-                              contact.role_foyer
-                            )}
+                    {onMemberClick && (
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Cliquez sur un membre pour ouvrir sa fiche contact.
+                      </p>
+                    )}
+                    {contacts.map((contact) => {
+                      const inner = (
+                        <>
+                          <ContactInitialsAvatar
+                            prenom={contact.prenom}
+                            nom={contact.nom}
+                            className="h-9 w-9"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-medium text-sm">
+                              {formatFoyerMemberLabel(
+                                contact,
+                                contact.role_foyer
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground truncate">
+                              {contact.email || contact.telephone || "—"}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground truncate">
-                            {contact.email || contact.telephone || "—"}
-                          </div>
+                          {onMemberClick && (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0" />
+                          )}
+                        </>
+                      );
+                      return onMemberClick ? (
+                        <button
+                          key={contact.id}
+                          type="button"
+                          className="w-full flex items-center gap-3 p-2.5 rounded-lg border border-border/60 bg-muted/30 hover:bg-muted/60 hover:border-primary/25 transition-colors text-left group"
+                          onClick={() => onMemberClick(contact)}
+                        >
+                          {inner}
+                        </button>
+                      ) : (
+                        <div
+                          key={contact.id}
+                          className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/50"
+                        >
+                          {inner}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
@@ -382,9 +422,10 @@ export function FoyerDetail({
               </CardContent>
             </Card>
           </div>
-        </DialogContent>
-      </Dialog>
+  );
 
+  const modals = (
+    <>
       {/* Formulaire de modification */}
       <FoyerForm
         open={showEditForm}
@@ -431,6 +472,32 @@ export function FoyerDetail({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <>
+        <div className="flex flex-col h-full min-h-[420px] max-h-[calc(100vh-10rem)] rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
+          <div className="shrink-0 border-b border-border/60 px-4 py-3">
+            {headerBlock}
+          </div>
+          <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">{bodyBlock}</div>
+        </div>
+        {modals}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto shadow-md flex flex-col">
+          <DialogHeader className="pr-12 shrink-0">{headerBlock}</DialogHeader>
+          <div className="min-h-0">{bodyBlock}</div>
+        </DialogContent>
+      </Dialog>
+      {modals}
     </>
   );
 }

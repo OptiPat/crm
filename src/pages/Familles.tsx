@@ -1,92 +1,54 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
-import { Search, Users, ChevronDown, ChevronUp, Home } from "lucide-react";
+import { Search, Users, ChevronDown, ChevronUp, Home, ArrowLeft, X, TreePine } from "lucide-react";
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
-import { getInvestissementsByContact, getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  getInvestissementsByContact,
+  getInvestissementsByFoyer,
+  type Investissement,
+} from "@/lib/api/tauri-investissements";
 import { textMatchesSearch } from "@/lib/search-utils";
-import {
-  formatEuroCentimes,
-  getTypeProduitBgColor,
-} from "@/lib/investissements/investissement-display";
+import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { buildFamilleGroups } from "@/lib/familles/build-famille-groups";
+import type { FamilleGroup } from "@/lib/familles/famille-types";
+import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import { FamilleMemberTree } from "@/components/familles/FamilleMemberTree";
+import { FamilleSummaryCard } from "@/components/familles/FamilleSummaryCard";
+import { FamilleDetailHeader } from "@/components/familles/FamilleDetailHeader";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { ContactDetail } from "@/components/contacts/ContactDetail";
+import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { cn } from "@/lib/utils";
 
-// Rôles familiaux disponibles
-const ROLES_FAMILLE = [
-  { value: "PERE", label: "👨 Père", icon: "👨", priority: 1 },
-  { value: "MERE", label: "👩 Mère", icon: "👩", priority: 2 },
-  { value: "CONJOINT", label: "💑 Conjoint(e)", icon: "💑", priority: 3 },
-  { value: "FILS", label: "👦 Fils", icon: "👦", priority: 4 },
-  { value: "FILLE", label: "👧 Fille", icon: "👧", priority: 5 },
-  { value: "FRERE", label: "👨 Frère", icon: "👨", priority: 6 },
-  { value: "SOEUR", label: "👩 Sœur", icon: "👩", priority: 7 },
-  { value: "GRAND_PERE", label: "👴 Grand-père", icon: "👴", priority: 0 },
-  { value: "GRAND_MERE", label: "👵 Grand-mère", icon: "👵", priority: 0 },
-  { value: "PETIT_FILS", label: "👦 NOM3-fils", icon: "👦", priority: 8 },
-  { value: "PETITE_FILLE", label: "👧 NOM3e-fille", icon: "👧", priority: 8 },
-  { value: "AUTRE", label: "👤 Autre", icon: "👤", priority: 10 },
-];
-
-const getRoleFamilleIcon = (role?: string): string => {
-  if (!role) return "👤";
-  const found = ROLES_FAMILLE.find(r => r.value === role);
-  return found ? found.icon : "👤";
+type FamillesProps = {
+  onNavigate?: (page: string) => void;
 };
 
-const getRolePriority = (role?: string): number => {
-  if (!role) return 99;
-  const found = ROLES_FAMILLE.find(r => r.value === role);
-  return found ? found.priority : 99;
-};
-
-// 🔥 Interface étendue pour tracker les investissements communs
-interface InvestWithCommun extends Investissement {
-  isCommun?: boolean; // true si c'est un investissement partagé du foyer
-}
-
-interface MemberWithInvestments {
-  contact: Contact;
-  investissements: InvestWithCommun[];
-  patrimoine: number;
-  patrimoinePerso: number; // 🔥 Patrimoine personnel (sans les communs)
-  patrimoineCommun: number; // 🔥 Patrimoine commun du foyer
-  avecMoiPerso: number; // 🔥 Patrimoine personnel "avec moi"
-  avecMoiCommun: number; // 🔥 Patrimoine commun "avec moi"
-  avecMoiTotal: number; // 🔥 Total "avec moi"
-  isSpouse: boolean; // true si c'est un conjoint d'une autre famille
-  spouseOf?: string; // "Conjoint de X"
-}
-
-interface FamilleGroup {
-  nom: string;
-  membres: MemberWithInvestments[];
-  foyers: Foyer[];
-  patrimoineTotal: number;
-  patrimoineAvecMoi: number; // 🔥 Patrimoine "avec moi" uniquement
-}
-
-export function Familles() {
+export function Familles({ onNavigate }: FamillesProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [foyers, setFoyers] = useState<Foyer[]>([]);
-  const [investissementsByContact, setInvestissementsByContact] = useState<Record<number, Investissement[]>>({});
-  const [investissementsByFoyer, setInvestissementsByFoyer] = useState<Record<number, Investissement[]>>({});
+  const [investissementsByContact, setInvestissementsByContact] = useState<
+    Record<number, Investissement[]>
+  >({});
+  const [investissementsByFoyer, setInvestissementsByFoyer] = useState<
+    Record<number, Investissement[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedFamilles, setExpandedFamilles] = useState<Set<string>>(new Set());
+  const [selectedFamilleNom, setSelectedFamilleNom] = useState<string | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [showContactDetail, setShowContactDetail] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const isWideLayout = useMediaQuery("(min-width: 1024px)");
+  const showSplit =
+    isWideLayout && (selectedFamilleNom != null || selectedContact != null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [dataContacts, dataFoyers] = await Promise.all([
         getAllContacts(),
@@ -95,28 +57,23 @@ export function Familles() {
       setContacts(dataContacts);
       setFoyers(dataFoyers);
 
-      // 🔥 FIX: Charger les investissements par CONTACT et par FOYER
       const investsByContact: Record<number, Investissement[]> = {};
       const investsByFoyer: Record<number, Investissement[]> = {};
 
-      // Charger les investissements par contact
       await Promise.all(
         dataContacts.map(async (contact) => {
           try {
-            const invests = await getInvestissementsByContact(contact.id);
-            investsByContact[contact.id] = invests;
+            investsByContact[contact.id] = await getInvestissementsByContact(contact.id);
           } catch {
             investsByContact[contact.id] = [];
           }
         })
       );
 
-      // Charger les investissements par foyer
       await Promise.all(
         dataFoyers.map(async (foyer) => {
           try {
-            const invests = await getInvestissementsByFoyer(foyer.id);
-            investsByFoyer[foyer.id] = invests;
+            investsByFoyer[foyer.id] = await getInvestissementsByFoyer(foyer.id);
           } catch {
             investsByFoyer[foyer.id] = [];
           }
@@ -125,170 +82,36 @@ export function Familles() {
 
       setInvestissementsByContact(investsByContact);
       setInvestissementsByFoyer(investsByFoyer);
-      setLoading(false);
+      setSelectedContact((prev) => {
+        if (!prev?.id) return prev;
+        return dataContacts.find((c) => c.id === prev.id) ?? prev;
+      });
     } catch (error) {
-      console.error("Erreur chargement contacts:", error);
+      console.error("Erreur chargement familles:", error);
+    } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // 🔥 Calculer le patrimoine d'un contact avec distinction perso/commun et avec moi/total
-  // Tous les investissements sont affichés, mais les communs sont marqués
-  const getContactPatrimoine = (contact: Contact): { 
-    investissements: InvestWithCommun[], 
-    patrimoinePerso: number, 
-    patrimoineCommun: number,
-    total: number,
-    avecMoiPerso: number, // 🔥 Patrimoine personnel "avec moi"
-    avecMoiCommun: number, // 🔥 Patrimoine commun "avec moi"
-    avecMoiTotal: number // 🔥 Total "avec moi"
-  } => {
-    // Investissements personnels (liés directement au contact)
-    const contactInvests: InvestWithCommun[] = (investissementsByContact[contact.id] || [])
-      .map(inv => ({ ...inv, isCommun: false }));
-    
-    // Investissements communs du foyer (sans contact_id spécifique)
-    let foyerInvests: InvestWithCommun[] = [];
-    if (contact.foyer_id) {
-      const allFoyerInvests = investissementsByFoyer[contact.foyer_id] || [];
-      // Investissements du foyer sans contact_id spécifique (= communs au couple)
-      foyerInvests = allFoyerInvests
-        .filter(inv => !inv.contact_id)
-        .map(inv => ({ ...inv, isCommun: true })); // 🏠 Marqué comme commun
-    }
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
-    const allInvests = [...contactInvests, ...foyerInvests];
-    const patrimoinePerso = contactInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-    const patrimoineCommun = foyerInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-    const total = patrimoinePerso + patrimoineCommun;
-    
-    // 🔥 Calcul "avec moi" (origine === MON_CONSEIL)
-    const avecMoiPerso = contactInvests
-      .filter(inv => inv.origine === "MON_CONSEIL")
-      .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-    const avecMoiCommun = foyerInvests
-      .filter(inv => inv.origine === "MON_CONSEIL")
-      .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-    const avecMoiTotal = avecMoiPerso + avecMoiCommun;
+  useAppAutoRefresh(() => {
+    void loadData();
+  });
 
-    return { investissements: allInvests, patrimoinePerso, patrimoineCommun, total, avecMoiPerso, avecMoiCommun, avecMoiTotal };
-  };
+  const familleGroups = useMemo(
+    () =>
+      buildFamilleGroups(
+        contacts,
+        foyers,
+        investissementsByContact,
+        investissementsByFoyer
+      ),
+    [contacts, foyers, investissementsByContact, investissementsByFoyer]
+  );
 
-  // 🔥 GROUPEMENT DYNAMIQUE PAR NOM DE FAMILLE + CONJOINTS
-  const familleGroups = useMemo<FamilleGroup[]>(() => {
-    const groupMap = new Map<string, Contact[]>();
-    
-    // Grouper les contacts par nom de famille
-    contacts.forEach(contact => {
-      const nomNormalized = contact.nom.trim().toUpperCase();
-      if (!groupMap.has(nomNormalized)) {
-        groupMap.set(nomNormalized, []);
-      }
-      groupMap.get(nomNormalized)!.push(contact);
-    });
-
-    // Convertir en array avec membres enrichis
-    const groups: FamilleGroup[] = [];
-    groupMap.forEach((membres, nom) => {
-      // Ne garder que les familles avec 2+ membres
-      if (membres.length >= 2) {
-        // Trouver les foyers des membres
-        const foyerIds = new Set(membres.map(m => m.foyer_id).filter(Boolean));
-        const famillesFoyers = foyers.filter(f => foyerIds.has(f.id));
-        
-        // D'abord trier les membres par rôle
-        const membresSorted = [...membres].sort((a, b) => 
-          getRolePriority(a.role_famille) - getRolePriority(b.role_famille)
-        );
-
-        // Construire la liste avec conjoints JUSTE APRÈS leur partenaire
-        const membresWithInvests: MemberWithInvestments[] = [];
-        const spousesAdded = new Set<number>(); // Pour éviter les doublons
-        const foyersCommunsCounted = new Set<number>(); // 🔥 Pour compter les communs UNE SEULE fois
-
-        membresSorted.forEach(membre => {
-          const { investissements, patrimoinePerso, patrimoineCommun, total, avecMoiPerso, avecMoiCommun, avecMoiTotal } = getContactPatrimoine(membre);
-          
-          membresWithInvests.push({
-            contact: membre,
-            investissements,
-            patrimoine: total,
-            patrimoinePerso,
-            patrimoineCommun,
-            avecMoiPerso,
-            avecMoiCommun,
-            avecMoiTotal,
-            isSpouse: false,
-          });
-
-          // 🔥 Ajouter le conjoint JUSTE APRÈS ce membre s'il a un nom différent
-          if (membre.foyer_id) {
-            const foyerMembers = contacts.filter(
-              c => c.foyer_id === membre.foyer_id && c.id !== membre.id
-            );
-            foyerMembers.forEach(spouse => {
-              // Si le conjoint a un nom différent et n'a pas encore été ajouté
-              if (spouse.nom.toUpperCase() !== nom && !spousesAdded.has(spouse.id)) {
-                spousesAdded.add(spouse.id);
-                const spouseData = getContactPatrimoine(spouse);
-                membresWithInvests.push({
-                  contact: spouse,
-                  investissements: spouseData.investissements,
-                  patrimoine: spouseData.total,
-                  patrimoinePerso: spouseData.patrimoinePerso,
-                  patrimoineCommun: spouseData.patrimoineCommun,
-                  avecMoiPerso: spouseData.avecMoiPerso,
-                  avecMoiCommun: spouseData.avecMoiCommun,
-                  avecMoiTotal: spouseData.avecMoiTotal,
-                  isSpouse: true,
-                  spouseOf: `Conjoint de ${membre.prenom}`,
-                });
-              }
-            });
-          }
-        });
-
-        // 🔥 Calculer le patrimoine total SANS doubler les communs
-        // Pour chaque membre : on compte le perso + le commun (mais commun 1 seule fois par foyer)
-        let patrimoineTotal = 0;
-        let patrimoineAvecMoi = 0;
-        const foyersAvecMoiCounted = new Set<number>(); // Pour compter avecMoi communs UNE SEULE fois
-        
-        membresWithInvests.forEach(m => {
-          // Toujours ajouter le patrimoine personnel
-          patrimoineTotal += m.patrimoinePerso;
-          patrimoineAvecMoi += m.avecMoiPerso;
-          
-          // Ajouter le patrimoine commun SEULEMENT si ce foyer n'a pas encore été compté
-          if (m.contact.foyer_id && !foyersCommunsCounted.has(m.contact.foyer_id)) {
-            patrimoineTotal += m.patrimoineCommun;
-            foyersCommunsCounted.add(m.contact.foyer_id);
-          }
-          
-          // 🔥 Patrimoine "avec moi" commun (compter 1 fois par foyer)
-          if (m.contact.foyer_id && !foyersAvecMoiCounted.has(m.contact.foyer_id)) {
-            patrimoineAvecMoi += m.avecMoiCommun;
-            foyersAvecMoiCounted.add(m.contact.foyer_id);
-          }
-        });
-
-        groups.push({
-          nom,
-          membres: membresWithInvests,
-          foyers: famillesFoyers,
-          patrimoineTotal,
-          patrimoineAvecMoi,
-        });
-      }
-    });
-
-    // Trier par nom
-    groups.sort((a, b) => a.nom.localeCompare(b.nom));
-    
-    return groups;
-  }, [contacts, foyers, investissementsByContact, investissementsByFoyer]);
-
-  // Filtrage
   const filteredFamilles = useMemo(() => {
     if (!searchQuery) return familleGroups;
     return familleGroups.filter(
@@ -305,359 +128,358 @@ export function Familles() {
     );
   }, [familleGroups, searchQuery]);
 
+  const selectedFamille = useMemo(
+    () =>
+      selectedFamilleNom
+        ? (filteredFamilles.find((f) => f.nom === selectedFamilleNom) ??
+          familleGroups.find((f) => f.nom === selectedFamilleNom) ??
+          null)
+        : null,
+    [selectedFamilleNom, filteredFamilles, familleGroups]
+  );
+
+  const totalPatrimoineAvecMoi = useMemo(
+    () => familleGroups.reduce((s, f) => s + f.patrimoineAvecMoi, 0),
+    [familleGroups]
+  );
+
+  const memberCount = (f: FamilleGroup) =>
+    f.membres.filter((m) => !m.isSpouse).length;
+
   const toggleExpand = (familleNom: string) => {
-    const newExpanded = new Set(expandedFamilles);
-    if (newExpanded.has(familleNom)) {
-      newExpanded.delete(familleNom);
-    } else {
-      newExpanded.add(familleNom);
-    }
-    setExpandedFamilles(newExpanded);
+    const next = new Set(expandedFamilles);
+    if (next.has(familleNom)) next.delete(familleNom);
+    else next.add(familleNom);
+    setExpandedFamilles(next);
   };
 
-  // Mettre à jour le rôle familial d'un membre
+  const openFamille = (famille: FamilleGroup) => {
+    setSelectedFamilleNom(famille.nom);
+    setSelectedContact(null);
+    if (!isWideLayout) {
+      setExpandedFamilles((prev) => new Set(prev).add(famille.nom));
+    }
+  };
+
+  const closeSplit = () => {
+    setSelectedFamilleNom(null);
+    setSelectedContact(null);
+    setShowContactDetail(false);
+  };
+
+  const openMember = (contact: Contact) => {
+    setSelectedContact(contact);
+    if (!isWideLayout) {
+      setShowContactDetail(true);
+    }
+  };
+
   const handleRoleFamilleChange = async (contact: Contact, newRole: string) => {
     try {
-      await updateContact(contact.id, {
-        ...contact,
-        role_famille: newRole,
-        date_naissance: contact.date_naissance 
-          ? new Date(contact.date_naissance * 1000).toISOString() 
-          : undefined,
-        // Dates CLIENT
-        date_dernier_contact: contact.date_dernier_contact 
-          ? new Date(contact.date_dernier_contact * 1000).toISOString() 
-          : undefined,
-        date_prochain_suivi: contact.date_prochain_suivi 
-          ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
-          : undefined,
-        // Dates FILLEUL
-        date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
-          ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
-          : undefined,
-        date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
-          ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
-          : undefined,
-      });
-      
-      // Mettre à jour le state local
-      setContacts(contacts.map(c => 
-        c.id === contact.id ? { ...c, role_famille: newRole } : c
-      ));
+      await updateContact(
+        contact.id,
+        contactToUpdatePayload(contact, { role_famille: newRole })
+      );
+      setContacts((prev) =>
+        prev.map((c) =>
+          c.id === contact.id ? { ...c, role_famille: newRole } : c
+        )
+      );
+      setSelectedContact((prev) =>
+        prev?.id === contact.id ? { ...prev, role_famille: newRole } : prev
+      );
     } catch (error) {
       console.error("Erreur mise à jour rôle famille:", error);
     }
   };
 
-  // Trouver le foyer d'un membre
-  const getFoyerForMember = (contact: Contact): Foyer | undefined => {
-    if (!contact.foyer_id) return undefined;
-    return foyers.find(f => f.id === contact.foyer_id);
+  const handleDeleteContact = async (id: number) => {
+    await loadData();
+    if (selectedContact?.id === id) {
+      setSelectedContact(null);
+      setShowContactDetail(false);
+    }
   };
 
-  // Formater la date
-  const formatDate = (timestamp?: number): string => {
-    if (!timestamp) return "";
-    return new Date(timestamp * 1000).toLocaleDateString("fr-FR");
-  };
+  const today = new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date());
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="space-y-6 max-w-[1600px] mx-auto pb-8 animate-pulse">
+        <div className="h-20 rounded-lg bg-muted/50" />
+        <div className="grid gap-4 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted/50" />
+          ))}
+        </div>
+        <div className="h-10 max-w-md rounded-md bg-muted/50" />
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-20 rounded-xl bg-muted/50" />
+          ))}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+    <div
+      className={cn(
+        "space-y-6 mx-auto pb-8",
+        showSplit ? "max-w-[1800px]" : "max-w-[1600px]"
+      )}
+    >
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Familles</h1>
-          <p className="text-muted-foreground">
-            Groupement automatique par nom de famille (2+ personnes)
+          <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
+          <h2 className="text-3xl font-serif font-bold text-primary tracking-tight mt-1">
+            Familles
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm max-w-xl">
+            Regroupement automatique par nom de famille (2 personnes ou plus).{" "}
+            <span className="text-foreground/80 tabular-nums">
+              {filteredFamilles.length} famille{filteredFamilles.length !== 1 ? "s" : ""}
+            </span>{" "}
+            affichée{filteredFamilles.length !== 1 ? "s" : ""}.
           </p>
         </div>
+        {!showSplit && filteredFamilles.length > 0 && (
+          <p className="text-sm text-muted-foreground hidden lg:block">
+            <TreePine className="inline h-4 w-4 mr-1 text-primary/70" />
+            Cliquez sur une famille pour voir le détail
+          </p>
+        )}
+      </header>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          title="Familles"
+          value={familleGroups.length}
+          description="2 membres ou plus, même nom"
+          icon={Users}
+          accentColor="#1d4ed8"
+          iconColor="text-blue-700"
+          iconBgColor="bg-blue-50"
+        />
+        <StatCard
+          title="Membres listés"
+          value={familleGroups.reduce((sum, f) => sum + f.membres.length, 0)}
+          description="Inclut conjoints d'autres noms"
+          icon={Users}
+          accentColor="#047857"
+          iconColor="text-emerald-700"
+          iconBgColor="bg-emerald-50"
+        />
+        <StatCard
+          title="Patrimoine avec moi"
+          value={formatEuroCentimes(totalPatrimoineAvecMoi)}
+          description={`${foyers.length} foyer${foyers.length !== 1 ? "s" : ""} au total`}
+          icon={Home}
+          accentColor="#b45309"
+          iconColor="text-amber-700"
+          iconBgColor="bg-amber-50"
+        />
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">👨‍👩‍👧‍👦 Familles</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{familleGroups.length}</div>
-            <p className="text-xs text-muted-foreground">avec 2+ membres</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">👥 Membres en famille</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {familleGroups.reduce((sum, f) => sum + f.membres.length, 0)}
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+            <div>
+              <CardTitle className="font-serif text-lg">Liste des familles</CardTitle>
+              <CardDescription>
+                {searchQuery
+                  ? `${filteredFamilles.length} résultat(s) pour « ${searchQuery} »`
+                  : "Recherchez par nom de famille ou par membre"}
+              </CardDescription>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">🏠 Foyers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{foyers.length}</div>
-          </CardContent>
-        </Card>
-      </div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+              {searchQuery && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Effacer la recherche"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
 
-      {/* Recherche */}
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Rechercher une famille ou un membre..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-      </div>
-
-      {/* Liste des familles */}
-      <div className="space-y-4">
-        {filteredFamilles.map((famille) => (
-          <Card key={famille.nom} className="overflow-hidden">
-            <CardHeader
-              className="cursor-pointer hover:bg-muted/50 transition-colors"
-              onClick={() => toggleExpand(famille.nom)}
+        <CardContent className="pt-0">
+          <div className={cn("grid gap-4 items-start", showSplit && "lg:grid-cols-2")}>
+            <div
+              className={cn(
+                "space-y-2 min-w-0",
+                showSplit && "lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1"
+              )}
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Users className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      Famille {famille.nom}
-                      <Badge variant="secondary">{famille.membres.filter(m => !m.isSpouse).length} membre{famille.membres.filter(m => !m.isSpouse).length > 1 ? "s" : ""}</Badge>
-                      {famille.foyers.length > 0 && (
-                        <Badge variant="outline">
-                          <Home className="h-3 w-3 mr-1" />
-                          {famille.foyers.length} foyer{famille.foyers.length > 1 ? "s" : ""}
-                        </Badge>
-                      )}
-                    </CardTitle>
-                    <CardDescription>
-                      {famille.membres.filter(m => !m.isSpouse).slice(0, 4).map((m) => `${getRoleFamilleIcon(m.contact.role_famille)} ${m.contact.prenom}`).join(", ")}
-                      {famille.membres.filter(m => !m.isSpouse).length > 4 && ` +${famille.membres.filter(m => !m.isSpouse).length - 4}`}
-                    </CardDescription>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="text-right">
-                    <div className="text-lg font-semibold text-green-600">
-                      {formatEuroCentimes(famille.patrimoineAvecMoi)} avec moi
-                    </div>
-                    {famille.patrimoineTotal > famille.patrimoineAvecMoi && (
-                      <div className="text-sm text-gray-400">
-                        ({formatEuroCentimes(famille.patrimoineTotal)} total)
-                      </div>
-                    )}
-                    <div className="text-xs text-muted-foreground">Patrimoine famille</div>
-                  </div>
-                  {expandedFamilles.has(famille.nom) ? (
-                    <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              {showSplit && (
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1 pb-1 sticky top-0 bg-card z-10 py-2">
+                  Familles ({filteredFamilles.length})
+                </p>
+              )}
+
+              {filteredFamilles.length === 0 ? (
+                <div className="py-14 text-center text-muted-foreground rounded-xl border border-dashed border-border/80 bg-muted/15">
+                  {searchQuery ? (
+                    <p>Aucune famille ne correspond à votre recherche.</p>
                   ) : (
-                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                    <div className="space-y-2">
+                      <Users className="h-12 w-12 mx-auto opacity-35" />
+                      <p className="font-medium text-foreground/80">Aucune famille détectée</p>
+                      <p className="text-sm max-w-sm mx-auto">
+                        Les familles apparaissent lorsque au moins deux contacts partagent le
+                        même nom.
+                      </p>
+                    </div>
                   )}
                 </div>
-              </div>
-            </CardHeader>
-
-            {expandedFamilles.has(famille.nom) && (
-              <CardContent className="border-t bg-muted/20 pt-4">
-                {/* Arborescence des membres */}
-                <div className="space-y-1">
-                  <h4 className="font-medium text-sm text-muted-foreground mb-4">
-                    🌳 Arborescence famille {famille.nom}
-                  </h4>
-                  
-                  {famille.membres.map((membre, index) => {
-                    const foyer = getFoyerForMember(membre.contact);
-                    const isLast = index === famille.membres.length - 1;
-                    const isSpouseAndPreviousWasSpouseOf = membre.isSpouse && index > 0 && 
-                      famille.membres[index - 1].contact.foyer_id === membre.contact.foyer_id;
-                    
-                    return (
-                      <div key={membre.contact.id} className="relative">
-                        {/* Membre principal */}
-                        <div className={`flex items-start gap-2 ${membre.isSpouse ? 'ml-8' : ''}`}>
-                          {/* Ligne de connexion visuelle */}
-                          <div className="flex flex-col items-center w-6 text-muted-foreground font-mono text-lg select-none">
-                            {membre.isSpouse ? (
-                              isSpouseAndPreviousWasSpouseOf ? "│" : "└─"
-                            ) : (
-                              index === 0 ? "┌" : isLast ? "└" : "├"
-                            )}
-                          </div>
-                          
-                          {/* Carte du membre */}
-                          <div className={`flex-1 rounded-lg border ${membre.isSpouse ? 'bg-blue-50 border-blue-200' : 'bg-background'} p-3`}>
-                            {/* En-tête du membre */}
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-3">
-                                <div className="text-2xl">
-                                  {/* Pour les conjoints externes : toujours 💑, sinon le rôle stocké */}
-                                  {membre.isSpouse ? "💑" : getRoleFamilleIcon(membre.contact.role_famille)}
-                                </div>
-                                <div>
-                                  <div className="font-semibold flex items-center gap-2">
-                                    {membre.contact.prenom} {membre.contact.nom}
-                                    {membre.isSpouse && (
-                                      <Badge variant="outline" className="text-blue-600 border-blue-300 text-xs">
-                                        💑 {membre.spouseOf}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <div className="text-sm text-muted-foreground flex items-center gap-2">
-                                    {foyer ? (
-                                      <>
-                                        <Home className="h-3 w-3" />
-                                        <span>{foyer.nom}</span>
-                                      </>
-                                    ) : (
-                                      <span className="text-orange-500">Sans foyer</span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center gap-3">
-                                {/* Sélecteur de rôle : uniquement pour les membres de la famille (pas les conjoints externes) */}
-                                {!membre.isSpouse ? (
-                                  <Select
-                                    value={membre.contact.role_famille || ""}
-                                    onValueChange={(value) => handleRoleFamilleChange(membre.contact, value)}
-                                  >
-                                    <SelectTrigger className="h-8 text-sm w-36">
-                                      <SelectValue placeholder="Définir rôle..." />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {ROLES_FAMILLE.map((role) => (
-                                        <SelectItem key={role.value} value={role.value}>
-                                          {role.label}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <Badge variant="outline" className="h-8 px-3 text-blue-600 border-blue-300">
-                                    💑 Conjoint(e)
-                                  </Badge>
-                                )}
-                                
-                                {/* Patrimoine avec moi + total */}
-                                <div className="flex items-center gap-2">
-                                  <Badge className="bg-green-100 text-green-700 border-green-300 font-semibold">
-                                    {formatEuroCentimes(membre.avecMoiTotal)}
-                                  </Badge>
-                                  {membre.patrimoine > membre.avecMoiTotal && (
-                                    <span className="text-xs text-gray-400">
-                                      ({formatEuroCentimes(membre.patrimoine)} total)
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {/* Liste des investissements */}
-                            {membre.investissements.length > 0 && (
-                              <div className="mt-2 pt-2 border-t border-dashed">
-                                <div className="grid gap-1">
-                                  {membre.investissements.map((inv) => (
-                                    <div 
-                                      key={inv.id} 
-                                      className={`flex items-center justify-between text-sm py-1.5 px-2 rounded ${
-                                        inv.isCommun ? 'bg-blue-50 border border-blue-200' : 'bg-muted/30'
-                                      }`}
-                                    >
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <Badge 
-                                          className="text-xs text-white px-2 py-0.5"
-                                          style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
-                                        >
-                                          {inv.type_produit.replace(/_/g, " ")}
-                                        </Badge>
-                                        {/* Nom du produit seulement s'il est différent du type */}
-                                        {inv.nom_produit && 
-                                         inv.nom_produit.trim() !== "" && 
-                                         inv.nom_produit.toUpperCase().replace(/[- ]/g, "") !== inv.type_produit?.toUpperCase().replace(/_/g, "") && (
-                                          <span className="font-medium">{inv.nom_produit}</span>
-                                        )}
-                                        {/* 🏠 Badge "Commun" pour les investissements partagés */}
-                                        {inv.isCommun && (
-                                          <Badge className="bg-blue-100 text-blue-700 border-blue-300 text-xs">
-                                            🏠 Commun
-                                          </Badge>
-                                        )}
-                                        {inv.date_souscription && (
-                                          <span className="text-muted-foreground text-xs">
-                                            {formatDate(inv.date_souscription)}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <span className="font-semibold" style={{ color: getTypeProduitBgColor(inv.type_produit, inv.origine) }}>
-                                        {formatEuroCentimes(inv.montant_initial || 0)}
-                                      </span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                            
-                            {membre.investissements.length === 0 && (
-                              <div className="mt-2 pt-2 border-t border-dashed">
-                                <div className="text-sm text-muted-foreground italic">
-                                  Aucun investissement
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Ligne verticale de connexion */}
-                        {!isLast && !membre.isSpouse && (
-                          <div className="absolute left-3 top-full h-1 w-px bg-muted-foreground/30"></div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            )}
-          </Card>
-        ))}
-
-        {filteredFamilles.length === 0 && (
-          <Card>
-            <CardContent className="py-12 text-center text-muted-foreground">
-              {searchQuery ? (
-                <p>Aucune famille ne correspond à votre recherche.</p>
+              ) : showSplit ? (
+                filteredFamilles.map((famille) => (
+                  <FamilleSummaryCard
+                    key={famille.nom}
+                    famille={famille}
+                    memberCount={memberCount(famille)}
+                    compact
+                    selected={
+                      selectedFamilleNom === famille.nom && !selectedContact
+                    }
+                    onClick={() => openFamille(famille)}
+                  />
+                ))
               ) : (
-                <div className="space-y-2">
-                  <Users className="h-12 w-12 mx-auto text-muted-foreground/50" />
-                  <p>Aucune famille détectée.</p>
-                  <p className="text-sm">
-                    Les familles apparaissent quand 2+ contacts ont le même nom de famille.
-                  </p>
-                </div>
+                filteredFamilles.map((famille) => {
+                  const expanded = expandedFamilles.has(famille.nom);
+                  return (
+                    <div
+                      key={famille.nom}
+                      className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-sm"
+                    >
+                      <div className="flex items-stretch">
+                        <div className="flex-1 min-w-0 p-1">
+                          <FamilleSummaryCard
+                            famille={famille}
+                            memberCount={memberCount(famille)}
+                            onClick={() => openFamille(famille)}
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          className="px-4 border-l border-border/60 hover:bg-muted/50 flex items-center shrink-0"
+                          onClick={() => toggleExpand(famille.nom)}
+                          aria-expanded={expanded}
+                          aria-label={expanded ? "Replier" : "Déplier les membres"}
+                        >
+                          {expanded ? (
+                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </button>
+                      </div>
+                      {expanded && (
+                        <div className="border-t border-border/60 bg-muted/15 px-4 py-4">
+                          <FamilleMemberTree
+                            famille={famille}
+                            foyers={foyers}
+                            onRoleChange={handleRoleFamilleChange}
+                            onMemberClick={openMember}
+                            showTitle={false}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
               )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+            </div>
+
+            {showSplit && (
+              <div className="hidden lg:block min-w-0 lg:sticky lg:top-4 self-start w-full">
+                {selectedContact ? (
+                  <div className="space-y-2">
+                    {selectedFamilleNom && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shadow-sm"
+                        onClick={() => setSelectedContact(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Famille {selectedFamilleNom}
+                      </Button>
+                    )}
+                    <ContactDetail
+                      key={selectedContact.id}
+                      embedded
+                      open
+                      contact={selectedContact}
+                      onOpenChange={(open) => {
+                        if (!open) setSelectedContact(null);
+                      }}
+                      onDelete={handleDeleteContact}
+                      onUpdate={() => void loadData()}
+                      onContactRefreshed={setSelectedContact}
+                      onNavigate={onNavigate}
+                      onOpenContact={openMember}
+                    />
+                  </div>
+                ) : selectedFamille ? (
+                  <div className="rounded-xl border border-border/70 bg-card shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-10rem)]">
+                    <FamilleDetailHeader
+                      famille={selectedFamille}
+                      memberCount={memberCount(selectedFamille)}
+                      onClose={closeSplit}
+                    />
+                    <div className="flex-1 overflow-y-auto min-h-0 p-4">
+                      <FamilleMemberTree
+                        famille={selectedFamille}
+                        foyers={foyers}
+                        onRoleChange={handleRoleFamilleChange}
+                        onMemberClick={openMember}
+                        selectedContactId={undefined}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {!isWideLayout && selectedContact && (
+        <ContactDetail
+          key={selectedContact.id}
+          open={showContactDetail}
+          onOpenChange={(open) => {
+            setShowContactDetail(open);
+            if (!open) setSelectedContact(null);
+          }}
+          contact={selectedContact}
+          onDelete={handleDeleteContact}
+          onUpdate={() => void loadData()}
+          onContactRefreshed={setSelectedContact}
+          onNavigate={onNavigate}
+          onOpenContact={openMember}
+        />
+      )}
     </div>
   );
 }

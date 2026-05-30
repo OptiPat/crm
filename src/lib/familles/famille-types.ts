@@ -1,0 +1,28 @@
+import type { Contact } from "@/lib/api/tauri-contacts";
+import type { Foyer } from "@/lib/api/tauri-foyers";
+import type { Investissement } from "@/lib/api/tauri-investissements";
+
+export interface InvestWithCommun extends Investissement {
+  isCommun?: boolean;
+}
+
+export interface MemberWithInvestments {
+  contact: Contact;
+  investissements: InvestWithCommun[];
+  patrimoine: number;
+  patrimoinePerso: number;
+  patrimoineCommun: number;
+  avecMoiPerso: number;
+  avecMoiCommun: number;
+  avecMoiTotal: number;
+  isSpouse: boolean;
+  spouseOf?: string;
+}
+
+export interface FamilleGroup {
+  nom: string;
+  membres: MemberWithInvestments[];
+  foyers: Foyer[];
+  patrimoineTotal: number;
+  patrimoineAvecMoi: number;
+}

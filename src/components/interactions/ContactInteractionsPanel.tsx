@@ -14,6 +14,7 @@ import {
   History,
   AlertCircle,
   Send,
+  ArrowRight,
 } from "lucide-react";
 import {
   getInteractionsByContact,
@@ -22,10 +23,18 @@ import {
   type Interaction,
   type InteractionWithContact,
 } from "@/lib/api/tauri-interactions";
-import { getContactRelationStatus, type ContactRelationStatus } from "@/lib/api/tauri-contact-relation";
+import {
+  getContactRelationStatus,
+  type ContactPendingEmail,
+  type ContactRelationStatus,
+} from "@/lib/api/tauri-contact-relation";
+import type { EtiquetteEmailQueueStatus } from "@/lib/api/tauri-etiquettes";
 import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { getTypeAlerteLabel } from "@/lib/alertes/alerte-labels";
+import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { InteractionForm } from "./InteractionForm";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const TYPE_ICONS: Record<string, typeof Phone> = {
   APPEL: Phone,
@@ -40,6 +49,7 @@ interface ContactInteractionsPanelProps {
   dateDernierContact?: number | null;
   dateDernierContactFilleul?: number | null;
   onContactUpdated?: () => void;
+  onNavigate?: (page: string) => void;
 }
 
 function getTypeLabel(value: string): string {
@@ -70,11 +80,89 @@ function formatInteractionDate(ts: number): string {
   }
 }
 
+function envoisSubTabForPending(
+  pending: ContactPendingEmail
+): EtiquetteEmailQueueStatus {
+  if (pending.queue_status === "followup") return "followup";
+  if (pending.queue_status === "incomplete") return "incomplete";
+  if (pending.queue_status === "sent") return "sent";
+  return "ready";
+}
+
+function pendingEmailActionLabel(pending: ContactPendingEmail): string {
+  switch (pending.queue_status) {
+    case "ready":
+      return "Ouvrir Envois — prêt à envoyer";
+    case "followup":
+      return "Ouvrir Envois — à relancer";
+    case "incomplete":
+      return "Ouvrir Envois — à compléter";
+    case "sent":
+      return "Ouvrir Envois — en attente de réponse";
+    default:
+      return "Ouvrir Suivi → Envois";
+  }
+}
+
+function pendingEmailSummary(pending: ContactPendingEmail): string {
+  const status =
+    pending.queue_status === "ready"
+      ? "email prêt à envoyer"
+      : pending.queue_status === "followup"
+        ? "relance à envisager"
+        : pending.queue_status === "sent"
+          ? "en attente de réponse client"
+          : "configuration ou date à compléter";
+  return `Campagne « ${pending.etiquette_nom} » — ${status}`;
+}
+
+function RelationActionLink({
+  variant,
+  icon: Icon,
+  title,
+  actionLabel,
+  onClick,
+}: {
+  variant: "alert" | "email";
+  icon: typeof AlertCircle;
+  title: string;
+  actionLabel: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "w-full flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors group",
+        variant === "alert"
+          ? "border-orange-200 bg-orange-50/80 hover:bg-orange-100/90 text-orange-950"
+          : "border-blue-200 bg-blue-50/80 hover:bg-blue-100/90 text-blue-950"
+      )}
+    >
+      <Icon className="h-4 w-4 shrink-0 mt-0.5" />
+      <span className="flex-1 min-w-0">
+        <span className="block leading-snug">{title}</span>
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 mt-1 text-xs font-medium",
+            variant === "alert" ? "text-orange-800" : "text-blue-800"
+          )}
+        >
+          {actionLabel}
+          <ArrowRight className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </span>
+      </span>
+    </button>
+  );
+}
+
 export function ContactInteractionsPanel({
   contactId,
   dateDernierContact,
   dateDernierContactFilleul,
   onContactUpdated,
+  onNavigate,
 }: ContactInteractionsPanelProps) {
   const [items, setItems] = useState<Interaction[]>([]);
   const [relationStatus, setRelationStatus] = useState<ContactRelationStatus | null>(null);
@@ -102,7 +190,7 @@ export function ContactInteractionsPanel({
   };
 
   useEffect(() => {
-    if (contactId) load();
+    if (contactId) void load();
   }, [contactId]);
 
   useEffect(() => {
@@ -112,6 +200,22 @@ export function ContactInteractionsPanel({
       onContactUpdated?.();
     });
   }, [contactId, onContactUpdated]);
+
+  const goToSuiviAlertes = () => {
+    if (!onNavigate) {
+      toast.info("Ouvrez l'écran Suivi depuis le menu latéral.");
+      return;
+    }
+    navigateToSuivi(onNavigate, "alertes", undefined, contactId);
+  };
+
+  const goToSuiviEnvois = (subTab: EtiquetteEmailQueueStatus) => {
+    if (!onNavigate) {
+      toast.info("Ouvrez l'écran Suivi → Envois depuis le menu latéral.");
+      return;
+    }
+    navigateToSuivi(onNavigate, "envois", subTab, contactId);
+  };
 
   const handleDelete = async (id: number) => {
     if (!confirm("Supprimer cette interaction ?")) return;
@@ -143,6 +247,7 @@ export function ContactInteractionsPanel({
 
   const dernierClient = formatTs(dateDernierContact);
   const dernierFilleul = formatTs(dateDernierContactFilleul);
+  const firstAlerte = relationStatus?.open_alertes[0];
 
   return (
     <>
@@ -192,28 +297,34 @@ export function ContactInteractionsPanel({
           {!loading && relationStatus && (
             <div className="space-y-2 mb-4">
               {relationStatus.open_alertes.length > 0 && (
-                <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>
-                    {relationStatus.open_alertes.length}{" "}
-                    {relationStatus.open_alertes.length > 1 ? "alertes ouvertes" : "alerte ouverte"}{" "}
-                    — voir Suivi &amp; alertes
-                  </span>
-                </div>
+                <RelationActionLink
+                  variant="alert"
+                  icon={AlertCircle}
+                  title={
+                    relationStatus.open_alertes.length > 1
+                      ? `${relationStatus.open_alertes.length} alertes ouvertes${
+                          firstAlerte
+                            ? ` — ${getTypeAlerteLabel(firstAlerte.type_alerte)}`
+                            : ""
+                        }`
+                      : firstAlerte
+                        ? `Alerte : ${getTypeAlerteLabel(firstAlerte.type_alerte)}`
+                        : "1 alerte ouverte"
+                  }
+                  actionLabel="Traiter dans Suivi → Alertes"
+                  onClick={goToSuiviAlertes}
+                />
               )}
               {relationStatus.pending_email && (
-                <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                  <Send className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span>
-                    Campagne « {relationStatus.pending_email.etiquette_nom} » —{" "}
-                    {relationStatus.pending_email.queue_status === "ready"
-                      ? "email prêt à envoyer"
-                      : relationStatus.pending_email.queue_status === "followup"
-                        ? "relance à envisager"
-                        : "configuration ou date à compléter"}{" "}
-                    (Suivi → Envois)
-                  </span>
-                </div>
+                <RelationActionLink
+                  variant="email"
+                  icon={Send}
+                  title={pendingEmailSummary(relationStatus.pending_email)}
+                  actionLabel={pendingEmailActionLabel(relationStatus.pending_email)}
+                  onClick={() =>
+                    goToSuiviEnvois(envoisSubTabForPending(relationStatus.pending_email!))
+                  }
+                />
               )}
             </div>
           )}
@@ -226,17 +337,25 @@ export function ContactInteractionsPanel({
               <p className="text-xs text-muted-foreground mt-1 mb-3">
                 Notez un appel, un email ou un rendez-vous pour garder la trace ici.
               </p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  setEditing(null);
-                  setShowForm(true);
-                }}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Premier échange
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditing(null);
+                    setShowForm(true);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Premier échange
+                </Button>
+                {onNavigate && relationStatus && relationStatus.open_alertes.length > 0 && (
+                  <Button size="sm" variant="ghost" onClick={goToSuiviAlertes}>
+                    Voir l&apos;alerte
+                    <ArrowRight className="h-4 w-4 ml-1" />
+                  </Button>
+                )}
+              </div>
             </div>
           ) : (
             <ul className="space-y-2 relative before:absolute before:left-[1.35rem] before:top-3 before:bottom-3 before:w-px before:bg-border/80">

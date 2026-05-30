@@ -1,165 +1,79 @@
-import { useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Search, Users, ChevronDown, ChevronUp, ChevronRight, TrendingUp, Eye, EyeOff, Trash2, Plus } from "lucide-react";
+import { Search, Users, ChevronDown, ChevronUp, Share2, TrendingUp, Plus, X, ArrowLeft } from "lucide-react";
 import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "@/components/contacts/ContactForm";
+import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { getInvestissementsByContact, getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
-import { contactMatchesSearch, textMatchesSearch } from "@/lib/search-utils";
-
 import {
-  formatEuroCentimes,
-  getTypeProduitBgColor,
-} from "@/lib/investissements/investissement-display";
+  buildFoyersInfo,
+  buildPrescripteurTree,
+  computePrescripteursRacines,
+  getContactDisplayName,
+  matchesContactOrFoyer,
+  type PrescripteurStats,
+} from "@/lib/prescripteurs/prescripteur-tree";
+import { PrescripteurSummaryCard } from "@/components/prescripteurs/PrescripteurSummaryCard";
+import { PrescripteurTreeView } from "@/components/prescripteurs/PrescripteurTreeView";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { cn } from "@/lib/utils";
 
-// 🏷️ Formater la catégorie filleul pour affichage
-const formatFilleulCategorie = (categorie: string): string => {
-  switch (categorie) {
-    case "FILLEUL": return "Filleul";
-    case "PROSPECT_FILLEUL": return "Prospect filleul";
-    case "SUSPECT_FILLEUL": return "Suspect filleul";
-    case "FILLEUL_DESINSCRIT": return "Filleul désinscrit";
-    default: return categorie.replace(/_/g, " ").toLowerCase();
-  }
+type PrescripteursProps = {
+  onNavigate?: (page: string) => void;
 };
 
-// 🎨 Couleurs par niveau de l'arbre
-const getNiveauStyles = (niveau: number): { bg: string; border: string; text: string } => {
-  switch (niveau) {
-    case 0:
-      return { bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-900" };
-    case 1:
-      return { bg: "bg-sky-50", border: "border-sky-200", text: "text-sky-800" };
-    case 2:
-      return { bg: "bg-slate-50", border: "border-slate-200", text: "text-slate-700" };
-    default:
-      return { bg: "bg-gray-50", border: "border-gray-200", text: "text-gray-600" };
-  }
-};
-
-// Interface pour investissement avec flag "commun" et propriétaire
-interface InvestWithCommun extends Investissement {
-  isCommun: boolean;
-  ownerName?: string; // Prénom du propriétaire (pour investissements perso dans un foyer)
-}
-
-// Interface pour un nœud de l'arbre de prescriptions
-interface PrescripteurNode {
-  contact: Contact;
-  patrimoine: number;
-  investissements: InvestWithCommun[];
-  clientsRecommandes: PrescripteurNode[];
-  niveau: number;
-}
-
-// Interface pour les stats d'un prescripteur
-interface PrescripteurStats {
-  contact: Contact;
-  patrimoinePersonnel: number;
-  nombreClientsDirects: number;
-  patrimoineApporteTotal: number;
-  nombreClientsTotal: number;
-}
-
-// Interface pour les infos d'un foyer
-interface FoyerInfo {
-  id: number;
-  nom: string; // Nom de famille commun
-  membres: Contact[];
-  displayName: string; // ex. "Foyer couple (Didier + Sylvie)"
-}
-
-export function Prescripteurs() {
+export function Prescripteurs({ onNavigate }: PrescripteursProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [investissementsByContact, setInvestissementsByContact] = useState<Record<number, Investissement[]>>({});
-  const [investissementsByFoyer, setInvestissementsByFoyer] = useState<Record<number, Investissement[]>>({});
+  const [investissementsByContact, setInvestissementsByContact] = useState<
+    Record<number, Investissement[]>
+  >({});
+  const [investissementsByFoyer, setInvestissementsByFoyer] = useState<
+    Record<number, Investissement[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedPrescripteurs, setExpandedPrescripteurs] = useState<Set<number>>(new Set());
-  const [expandedInvestissements, setExpandedInvestissements] = useState<Set<number>>(new Set()); // Mode compact
+  const [expandedInvestissements, setExpandedInvestissements] = useState<Set<number>>(
+    new Set()
+  );
   const [showPrescripteurForm, setShowPrescripteurForm] = useState(false);
+  const [selectedPrescripteurId, setSelectedPrescripteurId] = useState<number | null>(null);
+  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [showContactDetail, setShowContactDetail] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const isWideLayout = useMediaQuery("(min-width: 1024px)");
+  const showSplit =
+    isWideLayout && (selectedPrescripteurId != null || selectedContact != null);
 
-  // 🏠 Construire les infos des foyers
-  const foyersInfo = useMemo<Record<number, FoyerInfo>>(() => {
-    const foyers: Record<number, FoyerInfo> = {};
-    
-    // Grouper les contacts par foyer_id
-    contacts.forEach(contact => {
-      if (contact.foyer_id) {
-        if (!foyers[contact.foyer_id]) {
-          foyers[contact.foyer_id] = {
-            id: contact.foyer_id,
-            nom: contact.nom,
-            membres: [],
-            displayName: "",
-          };
-        }
-        foyers[contact.foyer_id].membres.push(contact);
-      }
-    });
-    
-    // Construire le displayName pour chaque foyer
-    Object.values(foyers).forEach(foyer => {
-      const prenoms = foyer.membres.map(m => m.prenom).join(" + ");
-      foyer.displayName = `🏠 Foyer ${foyer.nom} (${prenoms})`;
-    });
-    
-    return foyers;
-  }, [contacts]);
-
-  // Helper pour obtenir le displayName d'un contact (foyer ou individuel)
-  const getContactDisplayName = (contact: Contact): string => {
-    // 🏠 Si le contact fait partie d'un foyer, toujours afficher le nom du foyer
-    if (contact.foyer_id && foyersInfo[contact.foyer_id]) {
-      return foyersInfo[contact.foyer_id].displayName;
-    }
-    return `👤 ${contact.prenom} ${contact.nom}`;
-  };
-
-  const matchesContactOrFoyer = (contact: Contact, query: string): boolean => {
-    if (contactMatchesSearch(query, contact)) return true;
-    if (contact.foyer_id && foyersInfo[contact.foyer_id]) {
-      const foyer = foyersInfo[contact.foyer_id];
-      if (textMatchesSearch(query, foyer.nom)) return true;
-      if (foyer.membres.some((m) => textMatchesSearch(query, m.prenom))) return true;
-    }
-    return false;
-  };
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const dataContacts = await getAllContacts();
       setContacts(dataContacts);
 
-      // Charger les investissements par contact
       const investsByContact: Record<number, Investissement[]> = {};
       const investsByFoyer: Record<number, Investissement[]> = {};
 
       await Promise.all(
         dataContacts.map(async (contact) => {
           try {
-            const invests = await getInvestissementsByContact(contact.id);
-            investsByContact[contact.id] = invests;
+            investsByContact[contact.id] = await getInvestissementsByContact(contact.id);
           } catch {
             investsByContact[contact.id] = [];
           }
         })
       );
 
-      // Charger les investissements par foyer (pour les investissements communs)
-      const foyerIds = new Set(dataContacts.map(c => c.foyer_id).filter(Boolean));
+      const foyerIds = new Set(dataContacts.map((c) => c.foyer_id).filter(Boolean));
       await Promise.all(
         Array.from(foyerIds).map(async (foyerId) => {
           if (foyerId) {
             try {
-              const invests = await getInvestissementsByFoyer(foyerId);
-              investsByFoyer[foyerId] = invests;
+              investsByFoyer[foyerId] = await getInvestissementsByFoyer(foyerId);
             } catch {
               investsByFoyer[foyerId] = [];
             }
@@ -169,298 +83,131 @@ export function Prescripteurs() {
 
       setInvestissementsByContact(investsByContact);
       setInvestissementsByFoyer(investsByFoyer);
-      setLoading(false);
+      setSelectedContact((prev) => {
+        if (!prev?.id) return prev;
+        return dataContacts.find((c) => c.id === prev.id) ?? prev;
+      });
+      setSelectedPrescripteurId((prev) => {
+        if (prev == null) return prev;
+        return dataContacts.some((c) => c.id === prev) ? prev : null;
+      });
     } catch (error) {
       console.error("Erreur chargement données:", error);
+    } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  // Calculer le patrimoine et investissements d'un contact
-  // foyersProcessed: Set pour tracker les foyers dont les investissements ont déjà été attribués
-  // 🔥 Dans Prescripteurs: On ne compte QUE les investissements "MON_CONSEIL" (avec moi)
-  const getContactPatrimoineWithInvests = (
-    contact: Contact, 
-    foyersProcessed: Set<number>
-  ): { total: number; investissements: InvestWithCommun[]; foyerAdded: boolean } => {
-    let total = 0;
-    let allInvests: InvestWithCommun[] = [];
-    let foyerAdded = false;
-    
-    // Si le contact fait partie d'un foyer ET que le foyer n'a pas encore été traité
-    if (contact.foyer_id && !foyersProcessed.has(contact.foyer_id) && foyersInfo[contact.foyer_id]) {
-      const foyer = foyersInfo[contact.foyer_id];
-      
-      // 🏠 Ajouter les investissements personnels de TOUS les membres du foyer
-      // 🔥 Filtrer pour ne garder que MON_CONSEIL
-      foyer.membres.forEach(membre => {
-        const membreInvests = (investissementsByContact[membre.id] || [])
-          .filter(inv => inv.origine === "MON_CONSEIL");
-        const membreTotal = membreInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-        total += membreTotal;
-        
-        // Marquer chaque investissement avec le nom du propriétaire
-        allInvests = [
-          ...allInvests,
-          ...membreInvests.map(inv => ({ 
-            ...inv, 
-            isCommun: false, 
-            ownerName: membre.prenom // Ex: "Didier" ou "Sylvie"
-          }))
-        ];
-      });
-      
-      // Ajouter les investissements communs du foyer (🔥 MON_CONSEIL uniquement)
-      const foyerInvests = investissementsByFoyer[contact.foyer_id] || [];
-      const foyerOnlyInvests = foyerInvests.filter(inv => !inv.contact_id && inv.origine === "MON_CONSEIL");
-      const foyerTotal = foyerOnlyInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-      total += foyerTotal;
-      
-      // Marquer les investissements foyer comme COMMUNS
-      allInvests = [
-        ...allInvests, 
-        ...foyerOnlyInvests.map(inv => ({ ...inv, isCommun: true }))
-      ];
-      
-      foyerAdded = true;
-    } else {
-      // Contact individuel (pas de foyer ou foyer déjà traité)
-      // 🔥 Filtrer pour ne garder que MON_CONSEIL
-      const contactInvests = (investissementsByContact[contact.id] || [])
-        .filter(inv => inv.origine === "MON_CONSEIL");
-      total = contactInvests.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-      allInvests = contactInvests.map(inv => ({ ...inv, isCommun: false }));
-    }
-    
-    return { total, investissements: allInvests, foyerAdded };
-  };
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
-  // 🏠 Option B: Trouver les membres du même foyer (pour éviter doublons)
-  const getFoyerMembersIds = (foyerId: number | undefined): Set<number> => {
-    if (!foyerId) return new Set();
-    return new Set(contacts.filter(c => c.foyer_id === foyerId).map(c => c.id));
-  };
+  useAppAutoRefresh(() => {
+    void loadData();
+  });
 
-  // Construire l'arbre des prescriptions récursivement
-  const buildPrescripteurTree = (
-    prescripteur: Contact, 
-    niveau: number = 0, 
-    visitedIds: Set<number> = new Set(),
-    foyersProcessed: Set<number> = new Set(),
-    foyerMembersInTree: Set<number> = new Set() // 🏠 Option B: membres de foyers déjà dans l'arbre
-  ): PrescripteurNode => {
-    // Éviter les boucles infinies
-    if (visitedIds.has(prescripteur.id)) {
-      return {
-        contact: prescripteur,
-        patrimoine: 0,
-        investissements: [],
-        clientsRecommandes: [],
-        niveau,
-      };
-    }
-    
-    const newVisitedIds = new Set(visitedIds);
-    newVisitedIds.add(prescripteur.id);
-    
-    // 🏠 Option B: Marquer les membres du foyer comme "dans l'arbre"
-    const newFoyerMembersInTree = new Set(foyerMembersInTree);
-    if (prescripteur.foyer_id) {
-      const foyerMembers = getFoyerMembersIds(prescripteur.foyer_id);
-      foyerMembers.forEach(id => newFoyerMembersInTree.add(id));
-    }
-    
-    // Calculer patrimoine (en passant foyersProcessed pour éviter double comptage)
-    const { total, investissements, foyerAdded } = getContactPatrimoineWithInvests(prescripteur, foyersProcessed);
-    
-    // Si on a ajouté les investissements du foyer, marquer ce foyer comme traité
-    if (foyerAdded && prescripteur.foyer_id) {
-      foyersProcessed.add(prescripteur.foyer_id);
-    }
-    
-    // Trouver tous les contacts recommandés par ce prescripteur OU par un membre de son foyer
-    // 🏠 Inclure les recommandations de TOUS les membres du foyer
-    const prescripteurIds = prescripteur.foyer_id && foyersInfo[prescripteur.foyer_id]
-      ? foyersInfo[prescripteur.foyer_id].membres.map(m => m.id)
-      : [prescripteur.id];
-    
-    // 🏠 Option B: Exclure les membres du même foyer déjà présents dans l'arbre
-    const clientsRecommandesAll = contacts.filter(c => 
-      prescripteurIds.includes(c.prescripteur_id!) && 
-      !newFoyerMembersInTree.has(c.id) // Exclure si déjà dans l'arbre via le foyer
-    );
-    
-    // 🏠 Consolider les foyers dans les clients recommandés (éviter doublons Sylvie + Didier)
-    const foyersClientsVus = new Set<number>();
-    const clientsRecommandes = clientsRecommandesAll.filter(c => {
-      if (c.foyer_id) {
-        if (foyersClientsVus.has(c.foyer_id)) {
-          return false;
-        }
-        foyersClientsVus.add(c.foyer_id);
-      }
-      return true;
-    });
-    
-    return {
-      contact: prescripteur,
-      patrimoine: total,
-      investissements,
-      clientsRecommandes: clientsRecommandes.map(client => 
-        buildPrescripteurTree(client, niveau + 1, newVisitedIds, foyersProcessed, newFoyerMembersInTree)
+  const foyersInfo = useMemo(() => buildFoyersInfo(contacts), [contacts]);
+
+  const prescripteursRacines = useMemo(
+    () =>
+      computePrescripteursRacines(
+        contacts,
+        investissementsByContact,
+        investissementsByFoyer
       ),
-      niveau,
-    };
-  };
+    [contacts, investissementsByContact, investissementsByFoyer]
+  );
 
-  // Calculer le patrimoine total d'un arbre
-  const calculateTreePatrimoine = (node: PrescripteurNode): number => {
-    let total = node.patrimoine;
-    for (const child of node.clientsRecommandes) {
-      total += calculateTreePatrimoine(child);
-    }
-    return total;
-  };
-
-  // Compter le nombre total de clients dans un arbre
-  const countTreeClients = (node: PrescripteurNode): number => {
-    let count = node.clientsRecommandes.length;
-    for (const child of node.clientsRecommandes) {
-      count += countTreeClients(child);
-    }
-    return count;
-  };
-
-  // Trouver tous les prescripteurs "racines"
-  const prescripteursRacines = useMemo<PrescripteurStats[]>(() => {
-    // Un prescripteur racine est quelqu'un qui :
-    // 1. A recommandé au moins un client (quelqu'un a son ID comme prescripteur_id)
-    // 2. N'a pas de prescripteur lui-même (prescripteur_id est null)
-    // OU
-    // 3. A la catégorie "PRESCRIPTEUR" (créé manuellement comme prescripteur)
-    
-    const prescripteurIds = new Set(
-      contacts
-        .filter(c => c.prescripteur_id)
-        .map(c => c.prescripteur_id!)
-    );
-    
-    // 🏠 Helper: vérifier si un membre du foyer a un prescripteur
-    const foyerHasPrescripteur = (foyerId: number): boolean => {
-      if (!foyerId || !foyersInfo[foyerId]) return false;
-      return foyersInfo[foyerId].membres.some(m => m.prescripteur_id);
-    };
-    
-    const racinesAll = contacts.filter(c => {
-      // Vérifier si ce contact (ou son foyer) a un prescripteur
-      const hasPrescripteur = c.prescripteur_id || (c.foyer_id && foyerHasPrescripteur(c.foyer_id));
-      
-      // Soit il a recommandé quelqu'un et n'a pas été recommandé lui-même (ni son foyer)
-      if (prescripteurIds.has(c.id) && !hasPrescripteur) return true;
-      
-      // Soit c'est un prescripteur créé manuellement (catégorie PRESCRIPTEUR)
-      if (c.categorie === "PRESCRIPTEUR" && !hasPrescripteur) return true;
-      
-      return false;
-    });
-    
-    // 🏠 Consolider les foyers : si plusieurs membres du même foyer sont prescripteurs,
-    // garder seulement le premier pour éviter les doublons
-    const foyersVus = new Set<number>();
-    const racines = racinesAll.filter(c => {
-      if (c.foyer_id) {
-        if (foyersVus.has(c.foyer_id)) {
-          return false; // Foyer déjà représenté, on ignore ce membre
-        }
-        foyersVus.add(c.foyer_id);
-      }
-      return true;
-    });
-    
-    return racines.map(prescripteur => {
-      // Créer un nouveau Set pour chaque arbre (ne pas réutiliser entre prescripteurs)
-      const foyersProcessedForTree = new Set<number>();
-      const foyerMembersInTree = new Set<number>();
-      const tree = buildPrescripteurTree(prescripteur, 0, new Set(), foyersProcessedForTree, foyerMembersInTree);
-      
-      // Calculer le patrimoine personnel avec un nouveau Set (pour les stats affichées)
-      const { total: patrimoinePersonnel } = getContactPatrimoineWithInvests(prescripteur, new Set());
-      
-      // 🏠 Option B: Compter les clients directs en excluant les doublons de foyer
-      const clientsDirects = contacts.filter(c => c.prescripteur_id === prescripteur.id);
-      const foyersVus = new Set<number>();
-      let nombreClientsDirectsSansFoyerDoublons = 0;
-      for (const client of clientsDirects) {
-        if (client.foyer_id) {
-          if (!foyersVus.has(client.foyer_id)) {
-            foyersVus.add(client.foyer_id);
-            nombreClientsDirectsSansFoyerDoublons++;
-          }
-          // Si foyer déjà vu, on ne compte pas ce client
-        } else {
-          nombreClientsDirectsSansFoyerDoublons++;
-        }
-      }
-      
-      return {
-        contact: prescripteur,
-        patrimoinePersonnel,
-        nombreClientsDirects: nombreClientsDirectsSansFoyerDoublons,
-        patrimoineApporteTotal: calculateTreePatrimoine(tree) - patrimoinePersonnel,
-        nombreClientsTotal: countTreeClients(tree),
-      };
-    }).sort((a, b) => b.patrimoineApporteTotal - a.patrimoineApporteTotal);
-  }, [contacts, investissementsByContact, investissementsByFoyer]);
-
-  // Filtrer les prescripteurs (avec recherche par foyer)
   const filteredPrescripteurs = useMemo(() => {
     if (!searchQuery) return prescripteursRacines;
-    return prescripteursRacines.filter((p) => matchesContactOrFoyer(p.contact, searchQuery));
+    return prescripteursRacines.filter((p) =>
+      matchesContactOrFoyer(p.contact, searchQuery, foyersInfo)
+    );
   }, [prescripteursRacines, searchQuery, foyersInfo]);
 
+  const selectedStats = useMemo(
+    () =>
+      selectedPrescripteurId != null
+        ? (prescripteursRacines.find((p) => p.contact.id === selectedPrescripteurId) ??
+          null)
+        : null,
+    [prescripteursRacines, selectedPrescripteurId]
+  );
+
+  const treeContext = useMemo(
+    () => ({
+      contacts,
+      investissementsByContact,
+      investissementsByFoyer,
+      foyersInfo,
+    }),
+    [contacts, investissementsByContact, investissementsByFoyer, foyersInfo]
+  );
+
+  const selectedTree = useMemo(() => {
+    if (!selectedStats) return null;
+    return buildPrescripteurTree(selectedStats.contact, treeContext);
+  }, [selectedStats, treeContext]);
+
+  const totalClientsApportes = prescripteursRacines.reduce(
+    (sum, p) => sum + p.nombreClientsTotal,
+    0
+  );
+  const totalPatrimoineApporte = prescripteursRacines.reduce(
+    (sum, p) => sum + p.patrimoineApporteTotal,
+    0
+  );
+
   const toggleExpand = (id: number) => {
-    setExpandedPrescripteurs(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
+    setExpandedPrescripteurs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
-  // Toggle pour les investissements (mode compact)
-  const toggleInvestissements = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation(); // Ne pas propager le clic
-    setExpandedInvestissements(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(id)) {
-        newSet.delete(id);
-      } else {
-        newSet.add(id);
-      }
-      return newSet;
+  const toggleInvestissements = (id: number) => {
+    setExpandedInvestissements((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
-  // 🗑️ Supprimer un prescripteur
-  const handleDeletePrescripteur = async (contact: Contact, e: React.MouseEvent) => {
-    e.stopPropagation(); // Ne pas propager le clic
-    
-    // Vérifier s'il a des clients recommandés
-    const clientsRecommandes = contacts.filter(c => c.prescripteur_id === contact.id);
-    
+  const openPrescripteur = (stats: PrescripteurStats) => {
+    setSelectedPrescripteurId(stats.contact.id);
+    setSelectedContact(null);
+    setExpandedPrescripteurs((prev) => new Set(prev).add(stats.contact.id));
+  };
+
+  const closeSplit = () => {
+    setSelectedPrescripteurId(null);
+    setSelectedContact(null);
+    setShowContactDetail(false);
+  };
+
+  const openMember = (contact: Contact) => {
+    setSelectedContact(contact);
+    if (!isWideLayout) {
+      setShowContactDetail(true);
+    }
+  };
+
+  const handleDeletePrescripteur = async (contact: Contact) => {
+    const clientsRecommandes = contacts.filter((c) => c.prescripteur_id === contact.id);
     let confirmMessage = `Supprimer ${contact.prenom} ${contact.nom} ?`;
     if (clientsRecommandes.length > 0) {
-      confirmMessage += `\n\n⚠️ Attention : ${clientsRecommandes.length} client(s) recommandé(s) par ce prescripteur perdront leur lien.`;
+      confirmMessage += `\n\nAttention : ${clientsRecommandes.length} client(s) recommandé(s) perdront leur lien prescripteur.`;
     }
-    
     if (!confirm(confirmMessage)) return;
-    
+
     try {
       await deleteContact(contact.id);
-      // Recharger les données
+      if (selectedPrescripteurId === contact.id) {
+        closeSplit();
+      }
       await loadData();
     } catch (error) {
       console.error("Erreur suppression prescripteur:", error);
@@ -468,363 +215,321 @@ export function Prescripteurs() {
     }
   };
 
-  // Formater une date timestamp
-  const formatDate = (timestamp: number): string => {
-    return new Date(timestamp * 1000).toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
+  const handleDeleteContact = async (id: number) => {
+    await loadData();
+    if (selectedContact?.id === id) {
+      setSelectedContact(null);
+      setShowContactDetail(false);
+    }
   };
 
-  // Composant récursif pour afficher l'arbre
-  const TreeNode = ({ node, isLast = false }: { node: PrescripteurNode; isLast?: boolean }) => {
-    const hasChildren = node.clientsRecommandes.length > 0;
-    const isExpanded = expandedPrescripteurs.has(node.contact.id);
-    const showInvestissements = expandedInvestissements.has(node.contact.id);
-    
-    // 🎨 Couleurs par niveau
-    const styles = getNiveauStyles(node.niveau);
-    
-    // 📈 Stats de la branche (incluant ce nœud)
-    const brancheClients = countTreeClients(node);
-    const branchePatrimoine = calculateTreePatrimoine(node) - node.patrimoine; // Exclure le patrimoine personnel
-    
-    return (
-      <div className="relative mb-2">
-        {/* En-tête du contact */}
-        <div className={`rounded-lg border ${styles.bg} ${styles.border}`}>
-          <div 
-            className="flex items-center gap-3 py-2 px-3 cursor-pointer hover:opacity-80"
-            onClick={() => hasChildren && toggleExpand(node.contact.id)}
-          >
-            {/* Indentation visuelle */}
-            {node.niveau > 0 && (
-              <span className="text-muted-foreground text-sm font-mono">
-                {isLast ? "└" : "├"}─
-              </span>
-            )}
-            
-            {/* Icône expand/collapse enfants */}
-            {hasChildren ? (
-              <button className="p-1 hover:bg-white/50 rounded">
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </button>
-            ) : (
-              <div className="w-6" />
-            )}
-            
-            {/* Infos du contact (avec nom du foyer si applicable) */}
-            <div className={`flex-1 flex items-center gap-2 flex-wrap ${styles.text}`}>
-              <span className="font-semibold">
-                {getContactDisplayName(node.contact)}
-              </span>
-              
-              {node.contact.categorie === "CLIENT" && (
-                <Badge className="bg-green-100 text-green-700 text-xs">Client</Badge>
-              )}
-              {node.contact.categorie === "PRESCRIPTEUR" && (
-                <Badge className="bg-purple-100 text-purple-700 text-xs">Prescripteur</Badge>
-              )}
-              {node.contact.filleul_categorie && (
-                <Badge className="bg-amber-100 text-amber-700 text-xs">
-                  {formatFilleulCategorie(node.contact.filleul_categorie)}
-                </Badge>
-              )}
-            </div>
-            
-            {/* Patrimoine personnel */}
-            <Badge className="bg-emerald-100 text-emerald-700 font-semibold">
-              {formatEuroCentimes(node.patrimoine)}
-            </Badge>
-            
-            {/* Toggle investissements (mode compact) */}
-            {node.investissements.length > 0 && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2"
-                onClick={(e) => toggleInvestissements(node.contact.id, e)}
-              >
-                {showInvestissements ? (
-                  <EyeOff className="h-3 w-3 mr-1" />
-                ) : (
-                  <Eye className="h-3 w-3 mr-1" />
-                )}
-                <span className="text-xs">{node.investissements.length}</span>
-              </Button>
-            )}
-            
-            {/* 🗑️ Bouton supprimer (seulement si prescripteur-only ou sans investissements) */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-red-500 hover:text-red-700 hover:bg-red-50"
-              onClick={(e) => handleDeletePrescripteur(node.contact, e)}
-              title="Supprimer ce contact"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
-          </div>
-          
-          {/* 📈 Stats de la branche (si a des enfants) */}
-          {hasChildren && (
-            <div className="px-3 py-1 border-t border-dashed text-xs text-muted-foreground flex items-center gap-2">
-              <TrendingUp className="h-3 w-3" />
-              <span>
-                📈 Branche : {brancheClients} client{brancheClients > 1 ? "s" : ""} • {formatEuroCentimes(branchePatrimoine)} apporté
-              </span>
-            </div>
-          )}
-          
-          {/* Détail des investissements (MODE COMPACT: caché par défaut) */}
-          {showInvestissements && node.investissements.length > 0 && (
-            <div className="px-3 pb-2 pt-1 border-t border-dashed space-y-1">
-              {node.investissements.map((inv) => (
-                <div 
-                  key={inv.id} 
-                  className={`flex items-center justify-between text-sm py-1 px-2 rounded ${
-                    inv.isCommun ? 'bg-blue-100/50' : 'bg-white/50'
-                  }`}
-                >
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge 
-                      className="text-xs text-white px-2 py-0.5"
-                      style={{ backgroundColor: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
-                    >
-                      {inv.type_produit.replace(/_/g, " ")}
-                    </Badge>
-                    {inv.isCommun ? (
-                      <Badge className="bg-blue-200 text-blue-800 text-xs px-2 py-0.5">
-                        🏠 Commun
-                      </Badge>
-                    ) : inv.ownerName && (
-                      <Badge className="bg-slate-200 text-slate-700 text-xs px-2 py-0.5">
-                        👤 {inv.ownerName}
-                      </Badge>
-                    )}
-                    {/* Nom du produit seulement s'il est différent du type */}
-                    {inv.nom_produit && 
-                     inv.nom_produit.trim() !== "" && 
-                     inv.nom_produit.toUpperCase().replace(/[- ]/g, "") !== inv.type_produit?.toUpperCase().replace(/_/g, "") && (
-                      <span className="font-medium">{inv.nom_produit}</span>
-                    )}
-                    {inv.date_souscription && (
-                      <span className="text-muted-foreground text-xs">
-                        📅 {formatDate(inv.date_souscription)}
-                      </span>
-                    )}
-                    {inv.notes && inv.notes.includes("Mode de détention:") && (
-                      <Badge variant="outline" className="text-xs">
-                        {inv.notes.split("Mode de détention:")[1]?.split("|")[0]?.trim()}
-                      </Badge>
-                    )}
-                  </div>
-                  <span 
-                    className="font-semibold ml-2"
-                    style={{ color: getTypeProduitBgColor(inv.type_produit, inv.origine) }}
-                  >
-                    {formatEuroCentimes(inv.montant_initial || 0)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        
-        {/* Enfants (récursif) */}
-        {hasChildren && isExpanded && (
-          <div className="ml-8 mt-2 border-l-2 border-muted-foreground/20 pl-4">
-            {node.clientsRecommandes.map((child, index) => (
-              <TreeNode 
-                key={child.contact.id} 
-                node={child}
-                isLast={index === node.clientsRecommandes.length - 1}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    );
-  };
+  const today = new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date());
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">Chargement des prescripteurs...</p>
+      <div className="space-y-6 max-w-[1600px] mx-auto pb-8 animate-pulse">
+        <div className="h-20 rounded-lg bg-muted/50" />
+        <div className="grid gap-3 md:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-24 rounded-xl bg-muted/50" />
+          ))}
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-20 rounded-xl bg-muted/50" />
+          ))}
         </div>
       </div>
     );
   }
 
-  // Stats globales
-  const totalPrescripteurs = prescripteursRacines.length;
-  const totalClientsApportes = prescripteursRacines.reduce((sum, p) => sum + p.nombreClientsTotal, 0);
-  const totalPatrimoineApporte = prescripteursRacines.reduce((sum, p) => sum + p.patrimoineApporteTotal, 0);
-
   return (
-    <div className="container py-8 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Prescripteurs</h1>
-        <p className="text-muted-foreground mt-1">
-          Arbre des recommandations clients
-        </p>
-      </div>
+    <div
+      className={cn(
+        "space-y-6 mx-auto pb-8",
+        showSplit ? "max-w-[1800px]" : "max-w-[1600px]"
+      )}
+    >
+      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
+          <h2 className="text-3xl font-serif font-bold text-primary tracking-tight mt-1">
+            Prescripteurs
+          </h2>
+          <p className="text-muted-foreground mt-1 text-sm max-w-xl">
+            Arbre des recommandations (patrimoine « avec moi » uniquement) —{" "}
+            <span className="tabular-nums text-foreground/80">
+              {filteredPrescripteurs.length} racine
+              {filteredPrescripteurs.length !== 1 ? "s" : ""}
+            </span>
+          </p>
+        </div>
+        <Button className="gap-2 shadow-sm" onClick={() => setShowPrescripteurForm(true)}>
+          <Plus className="h-4 w-4" />
+          Nouveau prescripteur
+        </Button>
+      </header>
 
-      {/* Stats globales */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Prescripteurs actifs
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold flex items-center gap-2">
-              <Users className="h-5 w-5 text-primary" />
-              {totalPrescripteurs}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Clients recommandés
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-green-600" />
-              {totalClientsApportes}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Patrimoine apporté (avec moi)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">
-              {formatEuroCentimes(totalPatrimoineApporte)}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Recherche */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder="Rechercher un prescripteur ou un foyer..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-10"
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          title="Prescripteurs actifs"
+          value={prescripteursRacines.length}
+          description="Racines de l'arbre (sans prescripteur amont)"
+          icon={Share2}
+          accentColor="#6d28d9"
+          iconColor="text-violet-700"
+          iconBgColor="bg-violet-50"
+        />
+        <StatCard
+          title="Clients recommandés"
+          value={totalClientsApportes}
+          description="Dans tous les arbres"
+          icon={Users}
+          accentColor="#1d4ed8"
+          iconColor="text-blue-700"
+          iconBgColor="bg-blue-50"
+        />
+        <StatCard
+          title="Patrimoine apporté"
+          value={formatEuroCentimes(totalPatrimoineApporte)}
+          description="Hors patrimoine personnel des racines"
+          icon={TrendingUp}
+          accentColor="#047857"
+          iconColor="text-emerald-700"
+          iconBgColor="bg-emerald-50"
         />
       </div>
 
-      {/* Liste des prescripteurs avec arbres */}
-      {filteredPrescripteurs.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <Users className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
-            <h3 className="text-lg font-medium mb-2">Aucun prescripteur</h3>
-            <p className="text-muted-foreground mb-4">
-              Créez un prescripteur ici, ou assignez-en un depuis la fiche d&apos;un client.
-            </p>
-            <Button className="gap-2" onClick={() => setShowPrescripteurForm(true)}>
-              <Plus className="h-4 w-4" />
-              Nouveau prescripteur
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {filteredPrescripteurs.map((prescripteur) => {
-            const tree = buildPrescripteurTree(prescripteur.contact);
-            const isExpanded = expandedPrescripteurs.has(prescripteur.contact.id);
-            
-            return (
-              <Card key={prescripteur.contact.id} className="overflow-hidden">
-                <CardHeader 
-                  className="cursor-pointer hover:bg-muted/30 transition-colors"
-                  onClick={() => toggleExpand(prescripteur.contact.id)}
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+            <div>
+              <CardTitle className="font-serif text-lg">Liste des prescripteurs</CardTitle>
+              <CardDescription>
+                {searchQuery
+                  ? `${filteredPrescripteurs.length} résultat(s)`
+                  : "Recherche par nom, foyer ou membre"}
+              </CardDescription>
+            </div>
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Rechercher…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+              {searchQuery && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                  onClick={() => setSearchQuery("")}
+                  aria-label="Effacer"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {isExpanded ? (
-                        <ChevronUp className="h-5 w-5" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5" />
-                      )}
-                      <div>
-                        <CardTitle className="flex items-center gap-2">
-                          🌳 {getContactDisplayName(prescripteur.contact).replace(/^(👤|🏠)\s*/, '')}
-                          {prescripteur.contact.categorie === "CLIENT" && (
-                            <Badge className="bg-green-100 text-green-700 text-xs">Client</Badge>
-                          )}
-                          {prescripteur.contact.categorie === "PRESCRIPTEUR" && (
-                            <Badge className="bg-purple-100 text-purple-700 text-xs">Prescripteur</Badge>
-                          )}
-                          {prescripteur.contact.filleul_categorie && (
-                            <Badge className="bg-amber-100 text-amber-700 text-xs">
-                              {formatFilleulCategorie(prescripteur.contact.filleul_categorie)}
-                            </Badge>
-                          )}
-                        </CardTitle>
-                        <CardDescription className="mt-1">
-                          {prescripteur.nombreClientsDirects} client{prescripteur.nombreClientsDirects > 1 ? "s" : ""} recommandé{prescripteur.nombreClientsDirects > 1 ? "s" : ""} directement
-                          {prescripteur.nombreClientsTotal > prescripteur.nombreClientsDirects && (
-                            <span> • {prescripteur.nombreClientsTotal} au total dans l'arbre</span>
-                          )}
-                        </CardDescription>
-                      </div>
-                    </div>
-                    
-                    <div className="flex items-center gap-4 text-right">
-                      <div>
-                        <div className="text-sm text-muted-foreground">Patrimoine (avec moi)</div>
-                        <div className="font-semibold">{formatEuroCentimes(prescripteur.patrimoinePersonnel)}</div>
-                      </div>
-                      <div>
-                        <div className="text-sm text-muted-foreground">Patrimoine apporté (avec moi)</div>
-                        <div className="font-semibold text-emerald-600">
-                          {formatEuroCentimes(prescripteur.patrimoineApporteTotal)}
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="pt-0">
+          <div className={cn("grid gap-4 items-start", showSplit && "lg:grid-cols-2")}>
+            <div
+              className={cn(
+                "space-y-2 min-w-0",
+                showSplit && "lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1"
+              )}
+            >
+              {showSplit && (
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide sticky top-0 bg-card z-10 py-2 px-1">
+                  Prescripteurs ({filteredPrescripteurs.length})
+                </p>
+              )}
+
+              {filteredPrescripteurs.length === 0 ? (
+                <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
+                  <Share2 className="h-12 w-12 mx-auto text-muted-foreground/35 mb-3" />
+                  <p className="font-medium text-foreground/90">Aucun prescripteur</p>
+                  <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm mx-auto">
+                    Créez un prescripteur ou assignez-en un depuis la fiche d&apos;un client.
+                  </p>
+                  <Button className="gap-2" onClick={() => setShowPrescripteurForm(true)}>
+                    <Plus className="h-4 w-4" />
+                    Nouveau prescripteur
+                  </Button>
+                </div>
+              ) : showSplit ? (
+                filteredPrescripteurs.map((p) => (
+                  <PrescripteurSummaryCard
+                    key={p.contact.id}
+                    stats={p}
+                    foyersInfo={foyersInfo}
+                    compact
+                    selected={
+                      selectedPrescripteurId === p.contact.id && !selectedContact
+                    }
+                    onClick={() => openPrescripteur(p)}
+                  />
+                ))
+              ) : (
+                filteredPrescripteurs.map((prescripteur) => {
+                  const tree = buildPrescripteurTree(prescripteur.contact, treeContext);
+                  const isExpanded = expandedPrescripteurs.has(prescripteur.contact.id);
+
+                  return (
+                    <div
+                      key={prescripteur.contact.id}
+                      className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-sm"
+                    >
+                      <div className="flex items-stretch">
+                        <div className="flex-1 min-w-0 p-1">
+                          <PrescripteurSummaryCard
+                            stats={prescripteur}
+                            foyersInfo={foyersInfo}
+                            onClick={() => openPrescripteur(prescripteur)}
+                          />
                         </div>
+                        <button
+                          type="button"
+                          className="px-4 border-l border-border/60 hover:bg-muted/50 flex items-center shrink-0"
+                          onClick={() => toggleExpand(prescripteur.contact.id)}
+                          aria-expanded={isExpanded}
+                          aria-label={isExpanded ? "Replier l'arbre" : "Déplier l'arbre"}
+                        >
+                          {isExpanded ? (
+                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
+                          ) : (
+                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                          )}
+                        </button>
                       </div>
+                      {isExpanded && (
+                        <div className="border-t border-border/60 bg-muted/15 px-4 py-4">
+                          <PrescripteurTreeView
+                            root={tree}
+                            foyersInfo={foyersInfo}
+                            expandedNodes={expandedPrescripteurs}
+                            expandedInvestissements={expandedInvestissements}
+                            onToggleNode={toggleExpand}
+                            onToggleInvestissements={toggleInvestissements}
+                            onNodeClick={openMember}
+                            onDeletePrescripteur={handleDeletePrescripteur}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {showSplit && selectedTree && selectedStats && (
+              <div className="hidden lg:block min-w-0 lg:sticky lg:top-4 self-start w-full">
+                {selectedContact ? (
+                  <div className="space-y-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 shadow-sm"
+                      onClick={() => setSelectedContact(null)}
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      {getContactDisplayName(selectedStats.contact, foyersInfo)}
+                    </Button>
+                    <ContactDetail
+                      key={selectedContact.id}
+                      embedded
+                      open
+                      contact={selectedContact}
+                      onOpenChange={(open) => {
+                        if (!open) setSelectedContact(null);
+                      }}
+                      onDelete={handleDeleteContact}
+                      onUpdate={() => void loadData()}
+                      onContactRefreshed={setSelectedContact}
+                      onNavigate={onNavigate}
+                      onOpenContact={openMember}
+                    />
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-border/70 bg-card shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-10rem)]">
+                    <div className="shrink-0 border-b border-border/60 bg-muted/30 px-4 py-3 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Arbre
+                        </p>
+                        <h3 className="text-lg font-serif font-bold text-primary truncate">
+                          {getContactDisplayName(selectedStats.contact, foyersInfo)}
+                        </h3>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {selectedStats.nombreClientsTotal} client
+                          {selectedStats.nombreClientsTotal !== 1 ? "s" : ""} ·{" "}
+                          {formatEuroCentimes(selectedStats.patrimoineApporteTotal)} apporté
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={closeSplit}
+                        title="Fermer"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto min-h-0 p-4">
+                      <PrescripteurTreeView
+                        root={selectedTree}
+                        foyersInfo={foyersInfo}
+                        expandedNodes={expandedPrescripteurs}
+                        expandedInvestissements={expandedInvestissements}
+                        onToggleNode={toggleExpand}
+                        onToggleInvestissements={toggleInvestissements}
+                        onNodeClick={openMember}
+                        onDeletePrescripteur={handleDeletePrescripteur}
+                        selectedContactId={undefined}
+                      />
                     </div>
                   </div>
-                </CardHeader>
-                
-                {isExpanded && (
-                  <CardContent className="border-t pt-4">
-                    <div className="text-sm font-medium text-muted-foreground mb-3">
-                      🌳 Arbre des recommandations
-                    </div>
-                    <TreeNode node={tree} />
-                  </CardContent>
                 )}
-              </Card>
-            );
-          })}
-        </div>
-      )}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <ContactForm
         open={showPrescripteurForm}
         onOpenChange={setShowPrescripteurForm}
         createContext="prescripteurs"
-        onSuccess={loadData}
+        onSuccess={() => void loadData()}
       />
+
+      {!isWideLayout && selectedContact && (
+        <ContactDetail
+          key={selectedContact.id}
+          open={showContactDetail}
+          onOpenChange={(open) => {
+            setShowContactDetail(open);
+            if (!open) setSelectedContact(null);
+          }}
+          contact={selectedContact}
+          onDelete={handleDeleteContact}
+          onUpdate={() => void loadData()}
+          onContactRefreshed={setSelectedContact}
+          onNavigate={onNavigate}
+          onOpenContact={openMember}
+        />
+      )}
     </div>
   );
 }

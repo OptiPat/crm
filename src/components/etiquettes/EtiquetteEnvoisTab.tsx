@@ -37,6 +37,8 @@ import {
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { consumeEnvoisContactFocus } from "@/lib/navigation/suivi-navigation";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface EtiquetteEnvoisTabProps {
@@ -57,6 +59,8 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
+  const [highlightRowKey, setHighlightRowKey] = useState<number | null>(null);
 
   const runAutoSync = useCallback(async () => {
     if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
@@ -94,6 +98,8 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       setSubTab(raw);
       sessionStorage.removeItem("crm_nav_suivi_envois_subtab");
     }
+    const focusId = consumeEnvoisContactFocus();
+    if (focusId != null) setHighlightContactId(focusId);
   }, []);
 
   const loadQueue = useCallback(async () => {
@@ -154,6 +160,37 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   }, [loadQueue]);
 
   useAppAutoRefresh(() => loadQueue());
+
+  useEffect(() => {
+    if (highlightContactId == null || loading) return;
+    const buckets: Array<{
+      mode: typeof subTab;
+      items: EtiquetteEmailQueueItem[];
+    }> = [
+      { mode: "ready", items: ready },
+      { mode: "incomplete", items: incomplete },
+      { mode: "followup", items: followup },
+      { mode: "sent", items: sent },
+    ];
+    for (const { mode, items } of buckets) {
+      const match = items.find((i) => i.contact_id === highlightContactId);
+      if (match) {
+        setSubTab(mode);
+        setHighlightRowKey(match.contact_etiquette_id);
+        window.setTimeout(() => {
+          document
+            .getElementById(`envoi-contact-${match.contact_etiquette_id}`)
+            ?.scrollIntoView({ behavior: "smooth", block: "center" });
+        }, 150);
+        if (mode === "ready") {
+          setConfirmItem(match);
+        }
+        window.setTimeout(() => setHighlightRowKey(null), 4000);
+        break;
+      }
+    }
+    setHighlightContactId(null);
+  }, [highlightContactId, loading, ready, incomplete, sent, followup]);
 
   useEffect(() => {
     if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
@@ -239,8 +276,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
           return (
             <div
+              id={`envoi-contact-${item.contact_etiquette_id}`}
               key={item.contact_etiquette_id}
-              className="p-4 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center gap-3 justify-between"
+              className={cn(
+                "p-4 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center gap-3 justify-between",
+                highlightRowKey === item.contact_etiquette_id && "ring-2 ring-primary/40"
+              )}
             >
               <div className="space-y-1 min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
