@@ -1,4 +1,5 @@
 use super::{
+    email_schedule::{normalize_email_heure, resolve_email_date_prevue_for_contact},
     models::{
         Contact, ContactEtiquette, ContactEtiquetteDetails, Etiquette, EtiquetteEmailQueueItem,
         EtiquetteWithCount, Famille, NewContact, NewContactEtiquette, NewEtiquette, NewFamille,
@@ -2368,12 +2369,26 @@ impl Database {
             email_template_id: row.get(9)?,
             email_delai_jours: row.get(10)?,
             email_envoi_prevu: row.get(11)?,
-            email_actif: row.get::<_, i64>(12)? != 0,
-            is_default: row.get::<_, i64>(13)? != 0,
-            actif: row.get::<_, i64>(14)? != 0,
-            created_at: row.get(15)?,
-            updated_at: row.get(16)?,
+            email_envoi_heure: row.get(12)?,
+            email_actif: row.get::<_, i64>(13)? != 0,
+            is_default: row.get::<_, i64>(14)? != 0,
+            actif: row.get::<_, i64>(15)? != 0,
+            created_at: row.get(16)?,
+            updated_at: row.get(17)?,
         })
+    }
+
+    fn normalized_email_campaign_fields(
+        etiquette: &NewEtiquette,
+    ) -> (Option<i64>, Option<String>) {
+        let heure = etiquette
+            .email_envoi_heure
+            .as_ref()
+            .and_then(|s| normalize_email_heure(s));
+        if heure.is_some() {
+            return (None, heure);
+        }
+        (etiquette.email_envoi_prevu, None)
     }
 
     /// Retire les attributions automatiques d'une étiquette (désactivation). Conserve les tags MANUEL.
@@ -2385,34 +2400,68 @@ impl Database {
         Ok(n)
     }
 
-    fn resolve_email_date_prevue(etiquette: &Etiquette) -> Option<i64> {
-        if !etiquette.actif || !etiquette.email_actif {
-            return None;
+    fn sync_pending_email_dates_for_etiquette(&self, etiquette_id: i64) -> Result<()> {
+        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
+        if !etiquette.email_actif {
+            return Ok(());
         }
-        if let Some(ts) = etiquette.email_envoi_prevu {
-            return Some(ts);
+
+        if etiquette.email_envoi_prevu.is_some() {
+            let fixed = etiquette.email_envoi_prevu;
+            self.conn.execute(
+                "UPDATE contact_etiquettes SET email_date_prevue = ?1
+                 WHERE etiquette_id = ?2 AND email_envoye = 0",
+                params![fixed, etiquette_id],
+            )?;
+            return Ok(());
         }
-        if etiquette.email_delai_jours > 0 {
-            let now = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64;
-            return Some(now + etiquette.email_delai_jours * 24 * 60 * 60);
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, date_attribution FROM contact_etiquettes
+             WHERE etiquette_id = ?1 AND email_envoye = 0",
+        )?;
+        let rows: Vec<(i64, i64)> = stmt
+            .query_map(params![etiquette_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        for (ce_id, date_attribution) in rows {
+            let prevue =
+                resolve_email_date_prevue_for_contact(&etiquette, date_attribution);
+            self.conn.execute(
+                "UPDATE contact_etiquettes SET email_date_prevue = ?1 WHERE id = ?2",
+                params![prevue, ce_id],
+            )?;
         }
-        None
+        Ok(())
     }
 
-    fn sync_pending_email_dates_for_etiquette(
+    /// Associe un template aux étiquettes choisies (vue « template → étiquettes »).
+    pub fn set_template_etiquette_links(
         &self,
-        etiquette_id: i64,
-        date_prevue: Option<i64>,
+        template_id: i64,
+        etiquette_ids: &[i64],
     ) -> Result<()> {
         self.conn.execute(
-            "UPDATE contact_etiquettes SET email_date_prevue = ?1
-             WHERE etiquette_id = ?2 AND email_envoye = 0",
-            params![date_prevue, etiquette_id],
+            "UPDATE etiquettes SET email_template_id = NULL WHERE email_template_id = ?1",
+            params![template_id],
         )?;
+        for &eid in etiquette_ids {
+            self.conn.execute(
+                "UPDATE etiquettes SET email_template_id = ?1 WHERE id = ?2",
+                params![template_id, eid],
+            )?;
+        }
         Ok(())
+    }
+
+    pub fn get_etiquette_ids_for_template(&self, template_id: i64) -> Result<Vec<i64>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM etiquettes WHERE email_template_id = ?1 ORDER BY nom")?;
+        let ids = stmt
+            .query_map(params![template_id], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(ids)
     }
 
     /// Récupérer toutes les étiquettes
@@ -2420,8 +2469,8 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, nom, couleur, icone, description, priorite,
                     auto_condition_type, auto_condition_config, auto_categories,
-                    email_template_id, email_delai_jours, email_envoi_prevu, email_actif,
-                    is_default, actif, created_at, updated_at
+                    email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
+                    email_actif, is_default, actif, created_at, updated_at
              FROM etiquettes 
              ORDER BY priorite DESC, nom ASC",
         )?;
@@ -2435,8 +2484,8 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT e.id, e.nom, e.couleur, e.icone, e.description, e.priorite,
                     e.auto_condition_type, e.auto_condition_config, e.auto_categories,
-                    e.email_template_id, e.email_delai_jours, e.email_envoi_prevu, e.email_actif,
-                    e.is_default, e.actif, e.created_at, e.updated_at,
+                    e.email_template_id, e.email_delai_jours, e.email_envoi_prevu, e.email_envoi_heure,
+                    e.email_actif, e.is_default, e.actif, e.created_at, e.updated_at,
                     COALESCE((SELECT COUNT(*) FROM contact_etiquettes ce WHERE ce.etiquette_id = e.id), 0) as contact_count
              FROM etiquettes e
              ORDER BY e.priorite DESC, e.nom ASC"
@@ -2456,12 +2505,13 @@ impl Database {
                 email_template_id: row.get(9)?,
                 email_delai_jours: row.get(10)?,
                 email_envoi_prevu: row.get(11)?,
-                email_actif: row.get::<_, i64>(12)? != 0,
-                is_default: row.get::<_, i64>(13)? != 0,
-                actif: row.get::<_, i64>(14)? != 0,
-                created_at: row.get(15)?,
-                updated_at: row.get(16)?,
-                contact_count: row.get(17)?,
+                email_envoi_heure: row.get(12)?,
+                email_actif: row.get::<_, i64>(13)? != 0,
+                is_default: row.get::<_, i64>(14)? != 0,
+                actif: row.get::<_, i64>(15)? != 0,
+                created_at: row.get(16)?,
+                updated_at: row.get(17)?,
+                contact_count: row.get(18)?,
             })
         })?;
 
@@ -2473,8 +2523,8 @@ impl Database {
         self.conn.query_row(
             "SELECT id, nom, couleur, icone, description, priorite,
                     auto_condition_type, auto_condition_config, auto_categories,
-                    email_template_id, email_delai_jours, email_envoi_prevu, email_actif,
-                    is_default, actif, created_at, updated_at
+                    email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
+                    email_actif, is_default, actif, created_at, updated_at
              FROM etiquettes 
              WHERE id = ?1",
             params![id],
@@ -2507,6 +2557,19 @@ impl Database {
                 ));
             }
         }
+        if etiquette.email_actif.unwrap_or(false) {
+            if etiquette.email_template_id.is_none() {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Un template d'email est requis pour la campagne".to_string(),
+                ));
+            }
+            let (prevu, heure) = Self::normalized_email_campaign_fields(etiquette);
+            if prevu.is_none() && heure.is_none() {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Indiquez une heure d'envoi (éligibilité) ou une date fixe de campagne".to_string(),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -2520,7 +2583,10 @@ impl Database {
             )));
         }
 
-        let couleur = etiquette.couleur.unwrap_or_else(|| "#3B82F6".to_string());
+        let (email_envoi_prevu, email_envoi_heure) = Self::normalized_email_campaign_fields(&etiquette);
+        let couleur = etiquette
+            .couleur
+            .unwrap_or_else(|| "#3B82F6".to_string());
         let priorite = etiquette.priorite.unwrap_or(0);
         let email_delai_jours = etiquette.email_delai_jours.unwrap_or(0);
         let email_actif = if etiquette.email_actif.unwrap_or(false) {
@@ -2538,8 +2604,9 @@ impl Database {
         self.conn.execute(
             "INSERT INTO etiquettes (nom, couleur, icone, description, priorite,
                                     auto_condition_type, auto_condition_config, auto_categories,
-                                    email_template_id, email_delai_jours, email_envoi_prevu, email_actif, is_default, actif) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                                    email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
+                                    email_actif, is_default, actif) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -2551,7 +2618,8 @@ impl Database {
                 &etiquette.auto_categories,
                 &etiquette.email_template_id,
                 email_delai_jours,
-                &etiquette.email_envoi_prevu,
+                &email_envoi_prevu,
+                &email_envoi_heure,
                 email_actif,
                 is_default,
                 actif,
@@ -2560,8 +2628,8 @@ impl Database {
 
         let id = self.conn.last_insert_rowid();
         let created = self.get_etiquette_by_id(id)?;
-        if let Some(date_prevue) = Self::resolve_email_date_prevue(&created) {
-            self.sync_pending_email_dates_for_etiquette(id, Some(date_prevue))?;
+        if created.email_actif {
+            self.sync_pending_email_dates_for_etiquette(id)?;
         }
         Ok(created)
     }
@@ -2593,6 +2661,7 @@ impl Database {
             0
         };
         let actif = if etiquette.actif.unwrap_or(true) { 1 } else { 0 };
+        let (email_envoi_prevu, email_envoi_heure) = Self::normalized_email_campaign_fields(&etiquette);
 
         self.conn.execute(
             "UPDATE etiquettes SET 
@@ -2607,11 +2676,12 @@ impl Database {
                 email_template_id = ?9,
                 email_delai_jours = ?10,
                 email_envoi_prevu = ?11,
-                email_actif = ?12,
-                is_default = ?13,
-                actif = ?14,
+                email_envoi_heure = ?12,
+                email_actif = ?13,
+                is_default = ?14,
+                actif = ?15,
                 updated_at = unixepoch()
-            WHERE id = ?15",
+            WHERE id = ?16",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -2623,7 +2693,8 @@ impl Database {
                 &etiquette.auto_categories,
                 &etiquette.email_template_id,
                 email_delai_jours,
-                &etiquette.email_envoi_prevu,
+                &email_envoi_prevu,
+                &email_envoi_heure,
                 email_actif,
                 is_default,
                 actif,
@@ -2636,8 +2707,9 @@ impl Database {
         }
 
         let updated = self.get_etiquette_by_id(id)?;
-        let date_prevue = Self::resolve_email_date_prevue(&updated);
-        self.sync_pending_email_dates_for_etiquette(id, date_prevue)?;
+        if updated.email_actif {
+            self.sync_pending_email_dates_for_etiquette(id)?;
+        }
         Ok(updated)
     }
 
@@ -2756,7 +2828,11 @@ impl Database {
         let attribue_par = attribue_par.unwrap_or_else(|| "MANUEL".to_string());
 
         let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        let email_date_prevue = Self::resolve_email_date_prevue(&etiquette);
+        let eligible_at = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let email_date_prevue = resolve_email_date_prevue_for_contact(&etiquette, eligible_at);
 
         self.conn.execute(
             "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_date_prevue) 
@@ -2904,6 +2980,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -2925,6 +3002,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -2944,6 +3022,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -2963,6 +3042,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -2982,6 +3062,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3001,6 +3082,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3020,6 +3102,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3042,6 +3125,7 @@ impl Database {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3205,6 +3289,7 @@ impl Database {
                             email_template_id: None,
                             email_delai_jours: Some(0),
                             email_envoi_prevu: None,
+                            email_envoi_heure: None,
                             email_actif: Some(false),
                             is_default: Some(true),
             actif: None,
@@ -3301,7 +3386,7 @@ impl Database {
         Ok(count > 0)
     }
 
-    /// File d'envoi manuel : ready | incomplete | sent
+    /// File d'envoi manuel : ready | incomplete | sent | followup
     pub fn get_etiquette_email_queue(
         &self,
         queue_status: &str,
@@ -3311,11 +3396,20 @@ impl Database {
             .unwrap()
             .as_secs() as i64;
 
+        let delai_jours = self
+            .get_cgp_config()
+            .ok()
+            .and_then(|c| c.email_suivi_delai_jours)
+            .filter(|d| *d > 0)
+            .unwrap_or(5);
+        let delai_secs = delai_jours * 86_400;
+
         let sql = match queue_status {
             "ready" => {
                 "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL,
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -3339,7 +3433,8 @@ impl Database {
                           WHEN ce.email_date_prevue IS NULL THEN 'NO_DATE'
                           WHEN ce.email_date_prevue > ?1 THEN 'SCHEDULED'
                           ELSE 'OTHER'
-                        END
+                        END,
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -3357,7 +3452,8 @@ impl Database {
             "sent" => {
                 "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL,
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -3366,6 +3462,25 @@ impl Database {
                    AND ce.email_envoye = 1
                  ORDER BY ce.email_date_envoi DESC
                  LIMIT 100"
+            }
+            "followup" => {
+                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, 'FOLLOWUP',
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
+                 FROM contact_etiquettes ce
+                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+                 INNER JOIN contacts c ON ce.contact_id = c.id
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 WHERE e.actif = 1 AND e.email_actif = 1
+                   AND ce.email_envoye = 1
+                   AND ce.email_date_envoi IS NOT NULL
+                   AND ce.email_date_envoi + ?2 <= ?1
+                   AND ce.email_reponse_at IS NULL
+                   AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                   AND c.email IS NOT NULL
+                   AND TRIM(c.email) != ''
+                 ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom"
             }
             _ => {
                 return Err(rusqlite::Error::InvalidParameterName(format!(
@@ -3392,12 +3507,21 @@ impl Database {
                 template_corps: row.get(12)?,
                 template_agenda_link_id: row.get(13)?,
                 queue_issue: row.get(14)?,
+                email_reponse_at: row.get(15)?,
+                email_reponse_type: row.get(16)?,
+                contact_date_dernier_contact: row.get(17)?,
             })
         };
 
         if queue_status == "sent" {
             let mut stmt = self.conn.prepare(sql)?;
             let rows = stmt.query_map([], map_row)?;
+            return rows.collect();
+        }
+
+        if queue_status == "followup" {
+            let mut stmt = self.conn.prepare(sql)?;
+            let rows = stmt.query_map(params![now, delai_secs], map_row)?;
             return rows.collect();
         }
 
@@ -3424,20 +3548,300 @@ impl Database {
             .collect())
     }
 
-    /// Marquer un email d'étiquette comme envoyé
-    pub fn mark_etiquette_email_sent(&self, contact_etiquette_id: i64) -> Result<()> {
+    fn is_client_actif(categorie: &str) -> bool {
+        categorie != "AUCUN" && categorie != "PRESCRIPTEUR"
+    }
+
+    fn is_filleul_statut(cat: Option<&str>) -> bool {
+        matches!(
+            cat,
+            Some("FILLEUL")
+                | Some("PROSPECT_FILLEUL")
+                | Some("SUSPECT_FILLEUL")
+                | Some("FILLEUL_DESINSCRIT")
+        )
+    }
+
+    fn touch_contact_last_contact(&self, contact_id: i64, ts: i64) -> Result<()> {
+        let contact = self.get_contact_by_id(contact_id)?;
+        let client = Self::is_client_actif(&contact.categorie);
+        let filleul = Self::is_filleul_statut(contact.filleul_categorie.as_deref());
+
+        if client {
+            self.conn.execute(
+                "UPDATE contacts SET date_dernier_contact = ?1, updated_at = ?1 WHERE id = ?2",
+                params![ts, contact_id],
+            )?;
+        }
+        if filleul {
+            self.conn.execute(
+                "UPDATE contacts SET date_dernier_contact_filleul = ?1, updated_at = ?1 WHERE id = ?2",
+                params![ts, contact_id],
+            )?;
+        }
+        if !client && !filleul {
+            self.conn.execute(
+                "UPDATE contacts SET date_dernier_contact = ?1, updated_at = ?1 WHERE id = ?2",
+                params![ts, contact_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn get_campaign_context_for_contact_etiquette(
+        &self,
+        contact_etiquette_id: i64,
+    ) -> Result<(i64, String, String)> {
+        self.conn.query_row(
+            "SELECT ce.contact_id, e.nom, COALESCE(t.sujet, 'Email campagne')
+             FROM contact_etiquettes ce
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             LEFT JOIN templates_email t ON e.email_template_id = t.id
+             WHERE ce.id = ?1",
+            params![contact_etiquette_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+    }
+
+    fn insert_campaign_interaction(
+        &self,
+        contact_id: i64,
+        type_interaction: &str,
+        sujet: &str,
+        contenu: &str,
+        date_ts: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO interactions (contact_id, type_interaction, sujet, contenu, date_interaction)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![contact_id, type_interaction, sujet, contenu, date_ts],
+        )?;
+        Ok(())
+    }
+
+    fn auto_close_suivi_alertes_after_contact(&self, contact_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE alertes SET traitee = 1, lue = 1
+             WHERE contact_id = ?1 AND traitee = 0
+               AND type_alerte NOT IN ('FIN_DEMEMBREMENT')",
+            params![contact_id],
+        )?;
+        Ok(())
+    }
+
+    fn campaign_response_already_recorded(&self, contact_etiquette_id: i64) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_etiquettes
+             WHERE id = ?1 AND email_envoye = 1 AND email_reponse_at IS NOT NULL",
+            params![contact_etiquette_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    fn campaign_email_already_sent(&self, contact_etiquette_id: i64) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_etiquettes
+             WHERE id = ?1 AND email_envoye = 1",
+            params![contact_etiquette_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Marquer un email d'étiquette comme envoyé (+ trace dans l'historique).
+    pub fn mark_etiquette_email_sent(
+        &self,
+        contact_etiquette_id: i64,
+        gmail_message_id: Option<&str>,
+        gmail_thread_id: Option<&str>,
+        email_subject: Option<&str>,
+    ) -> Result<()> {
+        if self.campaign_email_already_sent(contact_etiquette_id)? {
+            return Ok(());
+        }
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
 
+        let (contact_id, etiquette_nom, template_sujet) =
+            self.get_campaign_context_for_contact_etiquette(contact_etiquette_id)?;
+
+        self.conn.execute("BEGIN IMMEDIATE", [])?;
+
+        let mark_result = (|| -> Result<()> {
+            let updated = self.conn.execute(
+                "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1,
+                 email_reponse_at = NULL, email_reponse_type = NULL, email_suivi_ignore = 0,
+                 email_gmail_message_id = ?3, email_gmail_thread_id = ?4
+                 WHERE id = ?2 AND email_envoye = 0",
+                params![now, contact_etiquette_id, gmail_message_id, gmail_thread_id],
+            )?;
+            if updated == 0 {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "contact_etiquette introuvable ou déjà envoyé: {}",
+                    contact_etiquette_id
+                )));
+            }
+
+            let sujet = email_subject
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or(template_sujet.as_str());
+            let contenu = format!(
+                "Campagne « {} » — email envoyé depuis Suivi → Envois.",
+                etiquette_nom
+            );
+            self.insert_campaign_interaction(contact_id, "EMAIL", sujet, &contenu, now)?;
+            Ok(())
+        })();
+
+        match mark_result {
+            Ok(()) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
+    }
+
+    /// Client a répondu ou pris RDV — clôture le suivi relance (+ historique + date contact).
+    pub fn mark_email_campaign_response(
+        &self,
+        contact_etiquette_id: i64,
+        response_type: &str,
+    ) -> Result<()> {
+        let allowed = ["mail", "rdv", "autre"];
+        if !allowed.contains(&response_type) {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Type de réponse invalide: {}",
+                response_type
+            )));
+        }
+        if self.campaign_response_already_recorded(contact_etiquette_id)? {
+            return Ok(());
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let (contact_id, etiquette_nom, template_sujet) =
+            self.get_campaign_context_for_contact_etiquette(contact_etiquette_id)?;
+
+        self.conn.execute("BEGIN IMMEDIATE", [])?;
+
+        let mark_result = (|| -> Result<()> {
+            let updated = self.conn.execute(
+                "UPDATE contact_etiquettes SET email_reponse_at = ?1, email_reponse_type = ?2
+                 WHERE id = ?3 AND email_envoye = 1 AND email_reponse_at IS NULL",
+                params![now, response_type, contact_etiquette_id],
+            )?;
+            if updated == 0 {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "Envoi introuvable ou déjà traité: {}",
+                    contact_etiquette_id
+                )));
+            }
+
+            let (type_interaction, label) = match response_type {
+                "mail" => ("EMAIL", "Réponse email"),
+                "rdv" => ("RDV", "RDV pris"),
+                _ => ("AUTRE", "Retour client"),
+            };
+            let sujet = format!("{} — campagne « {} »", label, etiquette_nom);
+            let contenu = format!(
+                "Retour enregistré après envoi « {} ».",
+                template_sujet
+            );
+            self.insert_campaign_interaction(contact_id, type_interaction, &sujet, &contenu, now)?;
+            self.touch_contact_last_contact(contact_id, now)?;
+            self.auto_close_suivi_alertes_after_contact(contact_id)?;
+            Ok(())
+        })();
+
+        match mark_result {
+            Ok(()) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
+    }
+
+    /// Ne plus proposer de relance pour cet envoi.
+    pub fn dismiss_email_campaign_followup(&self, contact_etiquette_id: i64) -> Result<()> {
         let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1 WHERE id = ?2",
-            params![now, contact_etiquette_id],
+            "UPDATE contact_etiquettes SET email_suivi_ignore = 1 WHERE id = ?1",
+            params![contact_etiquette_id],
         )?;
         if updated == 0 {
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "contact_etiquette introuvable: {}",
+                contact_etiquette_id
+            )));
+        }
+        Ok(())
+    }
+
+    /// Campagnes envoyées sans réponse enregistrée (pour sync Gmail / Agenda).
+    pub fn list_campaigns_pending_response_check(
+        &self,
+    ) -> Result<Vec<super::models::PendingCampaignResponseCheck>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
+             FROM contact_etiquettes ce
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             WHERE e.actif = 1 AND e.email_actif = 1
+               AND ce.email_envoye = 1
+               AND ce.email_date_envoi IS NOT NULL
+               AND ce.email_reponse_at IS NULL
+               AND COALESCE(ce.email_suivi_ignore, 0) = 0
+               AND c.email IS NOT NULL AND TRIM(c.email) != ''
+             ORDER BY ce.email_date_envoi ASC
+             LIMIT 80",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(super::models::PendingCampaignResponseCheck {
+                contact_etiquette_id: row.get(0)?,
+                contact_email: row.get::<_, String>(1)?,
+                email_date_envoi: row.get(2)?,
+                email_gmail_thread_id: row.get(3)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Remet l'envoi en file « Prêts » pour une relance manuelle.
+    pub fn prepare_email_campaign_relance(&self, contact_etiquette_id: i64) -> Result<()> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let updated = self.conn.execute(
+            "UPDATE contact_etiquettes SET
+                email_envoye = 0,
+                email_date_envoi = NULL,
+                email_date_prevue = ?1,
+                email_reponse_at = NULL,
+                email_reponse_type = NULL,
+                email_suivi_ignore = 0,
+                email_gmail_message_id = NULL,
+                email_gmail_thread_id = NULL
+             WHERE id = ?2 AND email_envoye = 1",
+            params![now, contact_etiquette_id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Envoi introuvable: {}",
                 contact_etiquette_id
             )));
         }
@@ -3502,6 +3906,16 @@ impl Database {
     }
 
     fn normalize_cgp_config(mut config: super::models::CgpConfig) -> super::models::CgpConfig {
+        use crate::email::signature_html::{decode_html_entities, normalize_signature_html};
+        if config.email_suivi_delai_jours.unwrap_or(0) <= 0 {
+            config.email_suivi_delai_jours = Some(5);
+        }
+        if let Some(ref sig) = config.email_signature {
+            config.email_signature = Some(decode_html_entities(sig));
+        }
+        if let Some(ref html) = config.email_signature_html {
+            config.email_signature_html = Some(normalize_signature_html(html));
+        }
         if config.agenda_links.is_empty() {
             if let Some(url) = config
                 .lien_agenda
@@ -3639,6 +4053,130 @@ impl Database {
             result.push(row?);
         }
         Ok(result)
+    }
+
+    /// Alertes non traitées pour un contact (fiche relation).
+    pub fn get_alertes_for_contact(&self, contact_id: i64) -> Result<Vec<super::models::Alerte>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
+             FROM alertes
+             WHERE contact_id = ?1 AND traitee = 0
+             ORDER BY date_alerte DESC",
+        )?;
+        let rows = stmt.query_map(params![contact_id], |row| {
+            Ok(super::models::Alerte {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                type_alerte: row.get(2)?,
+                message: row.get(3)?,
+                date_alerte: row.get(4)?,
+                lue: row.get(5)?,
+                traitee: row.get(6)?,
+                created_at: row.get(7)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    /// Synthèse relation : alertes ouvertes + prochain email campagne en attente.
+    pub fn get_contact_relation_status(
+        &self,
+        contact_id: i64,
+    ) -> Result<super::models::ContactRelationStatus> {
+        let open_alertes = self.get_alertes_for_contact(contact_id)?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let delai_jours = self
+            .get_cgp_config()
+            .ok()
+            .and_then(|c| c.email_suivi_delai_jours)
+            .filter(|d| *d > 0)
+            .unwrap_or(5);
+        let delai_secs = delai_jours * 86_400;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT ce.id, e.nom, ce.email_date_prevue, ce.email_envoye, ce.email_reponse_at,
+                    COALESCE(ce.email_suivi_ignore, 0), ce.email_date_envoi
+             FROM contact_etiquettes ce
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             WHERE ce.contact_id = ?1
+               AND e.actif = 1 AND e.email_actif = 1
+               AND e.email_template_id IS NOT NULL
+               AND (
+                 (ce.email_envoye = 0 AND ce.email_date_prevue IS NOT NULL AND ce.email_date_prevue <= ?2
+                  AND c.email IS NOT NULL AND TRIM(c.email) != '')
+                 OR (ce.email_envoye = 0 AND (
+                      c.email IS NULL OR TRIM(c.email) = ''
+                      OR ce.email_date_prevue IS NULL OR ce.email_date_prevue > ?2))
+                 OR (ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
+                     AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                     AND ce.email_date_envoi IS NOT NULL
+                     AND ce.email_date_envoi + ?3 <= ?2
+                     AND c.email IS NOT NULL AND TRIM(c.email) != '')
+               )
+             ORDER BY
+               CASE
+                 WHEN ce.email_envoye = 0 AND ce.email_date_prevue IS NOT NULL AND ce.email_date_prevue <= ?2
+                      AND c.email IS NOT NULL AND TRIM(c.email) != '' THEN 0
+                 WHEN ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
+                      AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                      AND ce.email_date_envoi IS NOT NULL AND ce.email_date_envoi + ?3 <= ?2 THEN 1
+                 ELSE 2
+               END,
+               ce.email_date_prevue ASC
+             LIMIT 1",
+        )?;
+
+        let pending_email = match stmt.query_row(params![contact_id, now, delai_secs], |row| {
+            let ce_id: i64 = row.get(0)?;
+            let etiquette_nom: String = row.get(1)?;
+            let email_date_prevue: Option<i64> = row.get(2)?;
+            let email_envoye: i64 = row.get(3)?;
+            let email_reponse_at: Option<i64> = row.get(4)?;
+            let email_suivi_ignore: i64 = row.get(5)?;
+            let email_date_envoi: Option<i64> = row.get(6)?;
+
+            let queue_status = if email_envoye == 0 {
+                if email_date_prevue.map(|d| d <= now).unwrap_or(false) {
+                    "ready".to_string()
+                } else {
+                    "incomplete".to_string()
+                }
+            } else if email_reponse_at.is_none()
+                && email_suivi_ignore == 0
+                && email_date_envoi
+                    .map(|d| d + delai_secs <= now)
+                    .unwrap_or(false)
+            {
+                "followup".to_string()
+            } else {
+                "incomplete".to_string()
+            };
+
+            Ok(super::models::ContactPendingEmail {
+                contact_etiquette_id: ce_id,
+                etiquette_nom,
+                queue_status,
+                email_date_prevue,
+            })
+        }) {
+            Ok(v) => Some(v),
+            Err(rusqlite::Error::QueryReturnedNoRows) => None,
+            Err(e) => return Err(e),
+        };
+
+        Ok(super::models::ContactRelationStatus {
+            open_alertes,
+            pending_email,
+        })
     }
 
     pub fn create_interaction(
@@ -4035,6 +4573,7 @@ mod database_integration_tests {
             nom: &str,
             template_id: Option<i64>,
             envoi_prevu: Option<i64>,
+            envoi_heure: Option<&str>,
         ) -> NewEtiquette {
             NewEtiquette {
                 nom: nom.into(),
@@ -4048,9 +4587,10 @@ mod database_integration_tests {
                 email_template_id: template_id,
                 email_delai_jours: Some(0),
                 email_envoi_prevu: envoi_prevu,
+                email_envoi_heure: envoi_heure.map(|s| s.to_string()),
                 email_actif: Some(true),
                 is_default: Some(false),
-            actif: None,
+                actif: None,
             }
         }
 
@@ -4076,6 +4616,7 @@ mod database_integration_tests {
                 "Campagne test",
                 Some(tpl.id),
                 Some(now + 86_400),
+                None,
             ))
             .unwrap();
 
@@ -4098,7 +4639,7 @@ mod database_integration_tests {
 
         db.update_etiquette(
             etiqu.id,
-            &sample_etiquette("Campagne test", Some(tpl.id), Some(now - 120)),
+            &sample_etiquette("Campagne test", Some(tpl.id), Some(now - 120), None),
         )
         .unwrap();
 
@@ -4107,10 +4648,32 @@ mod database_integration_tests {
         assert_eq!(ready[0].contact_telephone.as_deref(), Some("0601020304"));
 
         let ce_id = ready[0].contact_etiquette_id;
-        db.mark_etiquette_email_sent(ce_id).unwrap();
+        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet test")).unwrap();
         assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
         assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
-        assert!(db.mark_etiquette_email_sent(999_999).is_err());
+        let interactions = db.get_interactions_by_contact(cid).unwrap();
+        assert_eq!(interactions.len(), 1);
+        assert_eq!(interactions[0].type_interaction, "EMAIL");
+        assert!(db.mark_etiquette_email_sent(999_999, None, None, None).is_err());
+
+        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet test")).unwrap();
+        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
+
+        db.create_alerte(crate::database::models::NewAlerte {
+            contact_id: cid,
+            type_alerte: "SUIVI_CLIENT_1AN".into(),
+            message: "Test alerte".into(),
+            date_alerte: Some(now),
+        })
+        .unwrap();
+        assert_eq!(db.get_alertes_for_contact(cid).unwrap().len(), 1);
+
+        db.mark_email_campaign_response(ce_id, "mail").unwrap();
+        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 2);
+        assert!(db.get_alertes_for_contact(cid).unwrap().is_empty());
+
+        db.mark_email_campaign_response(ce_id, "mail").unwrap();
+        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 2);
 
         let no_email = db
             .create_contact(NewContact {
@@ -4187,6 +4750,7 @@ mod database_integration_tests {
                 email_template_id: None,
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
+                email_envoi_heure: None,
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
@@ -4261,6 +4825,7 @@ mod database_integration_tests {
                 email_template_id: None,
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
+                email_envoi_heure: None,
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
@@ -4315,6 +4880,7 @@ mod database_integration_tests {
             email_template_id: None,
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
+            email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(false),
             actif: None,
@@ -4349,6 +4915,7 @@ mod database_integration_tests {
                 email_template_id: None,
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
+                email_envoi_heure: None,
                 email_actif: Some(false),
                 is_default: Some(false),
                 actif: Some(true),
@@ -4372,6 +4939,7 @@ mod database_integration_tests {
                 email_template_id: etiqu.email_template_id,
                 email_delai_jours: Some(etiqu.email_delai_jours),
                 email_envoi_prevu: etiqu.email_envoi_prevu,
+                email_envoi_heure: etiqu.email_envoi_heure.clone(),
                 email_actif: Some(etiqu.email_actif),
                 is_default: Some(etiqu.is_default),
                 actif: Some(false),
@@ -4434,6 +5002,7 @@ mod database_integration_tests {
                 email_template_id: None,
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
+                email_envoi_heure: None,
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,

@@ -41,6 +41,19 @@ export async function deleteTemplateEmail(id: number): Promise<void> {
   return invoke<void>("delete_template_email", { id });
 }
 
+export async function setTemplateEtiquetteLinks(
+  templateId: number,
+  etiquetteIds: number[]
+): Promise<void> {
+  return invoke<void>("set_template_etiquette_links", {
+    input: { template_id: templateId, etiquette_ids: etiquetteIds },
+  });
+}
+
+export async function getEtiquetteIdsForTemplate(templateId: number): Promise<number[]> {
+  return invoke<number[]>("get_etiquette_ids_for_template", { templateId });
+}
+
 /** Modèles métier par défaut (idempotent : n'écrase pas les existants). */
 export async function seedDefaultEmailTemplates(): Promise<number> {
   return invoke<number>("seed_default_email_templates");

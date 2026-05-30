@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Line,
   XAxis,
@@ -17,6 +16,7 @@ import {
   ChartEmpty,
   ChartLoading,
   ChartTooltipBox,
+  DashboardPanel,
   DASHBOARD_PRIMARY,
 } from "./dashboard-ui";
 
@@ -43,17 +43,15 @@ export function MonthlyChart() {
   }, []);
 
   return (
-    <Card className="shadow-sm border-border/80 h-full flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle className="font-serif text-xl">Évolution mensuelle</CardTitle>
-        <CardDescription>
-          Nouveaux contacts sur 12 mois
-          {!loading && data.length > 0 && (
-            <span className="tabular-nums"> — {totalYear} au total</span>
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1">
+    <DashboardPanel
+      title="Nouveaux contacts"
+      description={
+        !loading && data.length > 0
+          ? `12 derniers mois · ${totalYear} au total`
+          : "12 derniers mois"
+      }
+      className="h-full"
+    >
         {loading ? (
           <ChartLoading height={300} />
         ) : data.length === 0 ? (
@@ -114,7 +112,6 @@ export function MonthlyChart() {
             </ComposedChart>
           </ResponsiveContainer>
         )}
-      </CardContent>
-    </Card>
+    </DashboardPanel>
   );
 }

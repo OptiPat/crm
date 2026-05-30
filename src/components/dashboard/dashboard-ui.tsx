@@ -1,4 +1,6 @@
 import { ReactNode } from "react";
+import { Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const DASHBOARD_PRIMARY = "#1E3A5F";
 export const CHART_GRID_STROKE = "#e5e7eb";
@@ -21,11 +23,89 @@ export function formatDashboardPercent(value: number, total: number) {
 export function ChartLoading({ height = 360 }: { height?: number }) {
   return (
     <div
-      className="flex items-center justify-center text-muted-foreground text-sm"
+      className="flex flex-col items-center justify-center gap-2 text-muted-foreground text-sm"
       style={{ height }}
     >
+      <Loader2 className="h-6 w-6 animate-spin text-primary/50" />
       Chargement…
     </div>
+  );
+}
+
+export function StatCardSkeleton() {
+  return (
+    <div className="rounded-xl border border-border/70 bg-card p-4 animate-pulse">
+      <div className="flex items-center gap-3">
+        <div className="h-10 w-10 bg-muted rounded-xl shrink-0" />
+        <div className="flex-1 space-y-2">
+          <div className="h-3 w-20 bg-muted rounded" />
+          <div className="h-7 w-28 bg-muted rounded" />
+          <div className="h-3 w-16 bg-muted rounded" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ContactInitialsAvatar({
+  prenom,
+  nom,
+  className,
+}: {
+  prenom: string;
+  nom: string;
+  className?: string;
+}) {
+  const initials = `${prenom?.trim().charAt(0) ?? ""}${nom?.trim().charAt(0) ?? ""}`.toUpperCase() || "?";
+  return (
+    <div
+      className={cn(
+        "h-11 w-11 rounded-full bg-primary/10 text-primary font-semibold text-sm",
+        "flex items-center justify-center shrink-0 ring-2 ring-background",
+        className
+      )}
+      aria-hidden
+    >
+      {initials}
+    </div>
+  );
+}
+
+export function DashboardPanel({
+  title,
+  description,
+  children,
+  className,
+  action,
+}: {
+  title: string;
+  description?: ReactNode;
+  children: ReactNode;
+  className?: string;
+  action?: ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "rounded-2xl border border-border/70 bg-card shadow-sm overflow-hidden flex flex-col",
+        className
+      )}
+    >
+      <div className="border-b border-border/50 px-5 py-3.5 shrink-0">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-serif text-base font-semibold text-foreground tracking-tight">
+              {title}
+            </h3>
+            {description ? (
+              <div className="text-xs text-muted-foreground mt-0.5">{description}</div>
+            ) : null}
+          </div>
+          {action}
+        </div>
+      </div>
+      <div className="p-4 sm:p-5 flex-1 flex flex-col min-h-0">{children}</div>
+    </section>
   );
 }
 
@@ -112,18 +192,48 @@ export function ChartLegendGrid({
   );
 }
 
+export function DashboardPageHeader() {
+  const today = new Intl.DateTimeFormat("fr-FR", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date());
+
+  return (
+    <header className="border-b border-border/60 pb-6">
+      <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
+      <h2 className="text-3xl font-serif font-bold text-primary tracking-tight mt-1">
+        Tableau de bord
+      </h2>
+      <p className="text-muted-foreground mt-1 text-sm max-w-xl">
+        Priorités du jour, indicateurs portefeuille et tendances — sans action manuelle.
+      </p>
+    </header>
+  );
+}
+
 export function DashboardSectionTitle({
   children,
+  subtitle,
   className = "",
 }: {
   children: ReactNode;
+  subtitle?: ReactNode;
   className?: string;
 }) {
   return (
-    <h3
-      className={`text-sm font-semibold uppercase tracking-wide text-muted-foreground ${className}`}
-    >
-      {children}
-    </h3>
+    <div className={cn("flex flex-wrap items-end justify-between gap-2", className)}>
+      <div className="flex items-center gap-3 min-w-0">
+        <span className="w-1 h-6 rounded-full bg-primary/80 shrink-0" aria-hidden />
+        <div>
+          <h3 className="font-serif text-lg font-semibold text-foreground tracking-tight">
+            {children}
+          </h3>
+          {subtitle ? (
+            <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+          ) : null}
+        </div>
+      </div>
+    </div>
   );
 }

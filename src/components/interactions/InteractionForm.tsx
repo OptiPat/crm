@@ -27,6 +27,8 @@ import {
   type NewInteraction,
 } from "@/lib/api/tauri-interactions";
 import { touchContactAfterInteraction } from "@/lib/interactions/touch-contact-after-interaction";
+import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { toast } from "sonner";
 
 interface InteractionFormProps {
   open: boolean;
@@ -127,11 +129,12 @@ export function InteractionForm({
         await createInteraction(payload);
         await touchContactAfterInteraction(formData.contact_id, dateIso);
       }
+      notifyRelationChanged(formData.contact_id);
       onSuccess();
       onOpenChange(false);
     } catch (error) {
       console.error(error);
-      alert("Erreur : " + String(error));
+      toast.error(`Erreur : ${String(error)}`);
     } finally {
       setLoading(false);
     }

@@ -101,7 +101,15 @@ function App() {
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
-        return <Dashboard onNavigate={setCurrentPage} />;
+        return (
+          <Dashboard
+            onNavigate={setCurrentPage}
+            onOpenContact={(contactId) => {
+              sessionStorage.setItem("crm_open_contact_id", String(contactId));
+              setCurrentPage("contacts");
+            }}
+          />
+        );
       case "contacts":
         return (
           <ErrorBoundary>
@@ -146,7 +154,15 @@ function App() {
       case "parametres":
         return <Parametres />;
       default:
-        return <Dashboard onNavigate={setCurrentPage} />;
+        return (
+          <Dashboard
+            onNavigate={setCurrentPage}
+            onOpenContact={(contactId) => {
+              sessionStorage.setItem("crm_open_contact_id", String(contactId));
+              setCurrentPage("contacts");
+            }}
+          />
+        );
     }
   };
 

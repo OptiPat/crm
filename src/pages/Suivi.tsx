@@ -46,16 +46,24 @@ import {
   retirerEtiquette,
   getContrastColor,
   getEtiquetteEmailQueue,
+  type EtiquetteEmailQueueItem,
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
-  notifyEtiquettesChanged,
+  notifyRelationChanged,
   subscribeEtiquettesChanged,
+  subscribeRelationChanged,
 } from "@/lib/etiquettes/etiquette-events";
 import { ALERTE_ETIQUETTE_EXPLICATION } from "@/lib/alertes/alerte-etiquette-links";
+import {
+  alerteHasActiveEmailCampaign,
+  resolveAlerteEmailAction,
+} from "@/lib/alertes/alerte-email-queue";
 import { AlerteEtiquetteHint } from "@/components/suivi/AlerteEtiquetteHint";
+import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
+import { consumeSuiviNavigationIntent } from "@/lib/navigation/suivi-navigation";
 import { toast } from "sonner";
 
 interface SuiviProps {
@@ -77,8 +85,16 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
   const [submittingTraiter, setSubmittingTraiter] = useState(false);
   const [readyEmailCount, setReadyEmailCount] = useState(0);
   const [syncingEtiquettes, setSyncingEtiquettes] = useState(false);
+  const [alertEmailItem, setAlertEmailItem] = useState<EtiquetteEmailQueueItem | null>(null);
+  const [alertEmailLoadingId, setAlertEmailLoadingId] = useState<number | null>(null);
+  const [loadingEtiquettes, setLoadingEtiquettes] = useState(true);
 
   useEffect(() => {
+    const { tab, envoisSubTab } = consumeSuiviNavigationIntent();
+    if (tab) setActiveTab(tab);
+    if (envoisSubTab) {
+      sessionStorage.setItem("crm_nav_suivi_envois_subtab", envoisSubTab);
+    }
     void loadAlertes();
     loadEtiquettes();
     void loadEmailQueueCount();
@@ -165,6 +181,7 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
 
   const loadEtiquettes = async () => {
     try {
+      setLoadingEtiquettes(true);
       const sorted = sortEtiquettes(await getAllEtiquettesWithCount());
       setEtiquettes(sorted);
 
@@ -174,6 +191,8 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
       }
     } catch (error) {
       console.error("Error loading etiquettes:", error);
+    } finally {
+      setLoadingEtiquettes(false);
     }
   };
 
@@ -182,6 +201,13 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
       void refreshEtiquetteCounts();
     });
   }, [refreshEtiquetteCounts]);
+
+  useEffect(() => {
+    return subscribeRelationChanged(() => {
+      void loadAlertes({ silent: true });
+      void loadEmailQueueCount();
+    });
+  }, []);
 
   const handleSelectEtiquette = async (etiquette: EtiquetteWithCount) => {
     setSelectedEtiquette(etiquette);
@@ -218,6 +244,49 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
     setDateDernierSuivi(todayLocal());
   };
 
+  const handleEnvoyerEmailDepuisAlerte = async (alerte: Alerte) => {
+    if (loadingEtiquettes) {
+      toast.info("Chargement des étiquettes…");
+      return;
+    }
+    setAlertEmailLoadingId(alerte.id);
+    try {
+      const resolution = await resolveAlerteEmailAction(alerte, etiquettes);
+      switch (resolution.kind) {
+        case "send": {
+          if (!resolution.item.contact_email?.trim()) {
+            toast.warning("Ajoutez l'email du contact avant d'envoyer.");
+            onOpenContact?.(alerte.contact_id);
+            return;
+          }
+          setAlertEmailItem(resolution.item);
+          return;
+        }
+        case "followup":
+          toast.info(
+            "Email déjà envoyé — utilisez « Relancer » dans Suivi → Envois → À relancer."
+          );
+          setActiveTab("envois");
+          return;
+        case "sent_waiting":
+        case "incomplete":
+          toast.info(resolution.message);
+          setActiveTab("envois");
+          return;
+        case "no_campaign":
+          toast.info(
+            "Aucune campagne email active pour cette alerte. Activez-la sur l'étiquette liée."
+          );
+          return;
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Impossible de préparer l'envoi");
+    } finally {
+      setAlertEmailLoadingId(null);
+    }
+  };
+
   const confirmTraiter = async () => {
     if (!alerteATraiter) return;
     setSubmittingTraiter(true);
@@ -233,10 +302,11 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
         )
       );
       await marquerAlerteTraitee(alerteATraiter.id);
+      const treatedContactId = alerteATraiter.contact_id;
       setAlertes((prev) => prev.filter((a) => a.id !== alerteATraiter.id));
       setAlerteATraiter(null);
       toast.success("Suivi enregistré sur le contact");
-      notifyEtiquettesChanged();
+      notifyRelationChanged(treatedContactId);
       void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error marking alerte as treated:", error);
@@ -268,7 +338,7 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
         [alerte.id]: (prev[alerte.id] ?? 0) + 1,
       }));
       toast.success(`Suivi reporté de ${mois} mois`);
-      notifyEtiquettesChanged();
+      notifyRelationChanged(alerte.contact_id);
       void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error reporting suivi:", error);
@@ -529,17 +599,23 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
                           </SelectContent>
                         </Select>
 
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1"
-                          disabled
-                          title="Fonctionnalité disponible prochainement"
-                        >
-                          <Mail className="h-4 w-4" />
-                          Envoyer un email
-                        </Button>
+                        {alerteHasActiveEmailCampaign(alerte, etiquettes) && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1"
+                            disabled={
+                              loadingEtiquettes || alertEmailLoadingId === alerte.id
+                            }
+                            onClick={() => void handleEnvoyerEmailDepuisAlerte(alerte)}
+                          >
+                            <Mail className="h-4 w-4" />
+                            {alertEmailLoadingId === alerte.id
+                              ? "Préparation…"
+                              : "Envoyer un email"}
+                          </Button>
+                        )}
 
                         <Button
                           type="button"
@@ -781,6 +857,18 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EtiquetteEmailSendDialog
+        item={alertEmailItem}
+        open={!!alertEmailItem}
+        onOpenChange={(o) => !o && setAlertEmailItem(null)}
+        onSent={() => {
+          const contactId = alertEmailItem?.contact_id;
+          notifyRelationChanged(contactId);
+          void loadEmailQueueCount();
+          void loadAlertes({ silent: true });
+        }}
+      />
     </div>
   );
 }

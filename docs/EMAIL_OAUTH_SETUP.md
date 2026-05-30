@@ -16,11 +16,11 @@ Le CRM doit rester **ouvert** pendant la connexion (le navigateur revient sur ce
 
 1. [Google Cloud Console](https://console.cloud.google.com/) → projet → **APIs & Services** → **Credentials**.
 2. **Create Credentials** → **OAuth client ID** → type **Desktop app**.
-3. Copiez le **Client ID** dans le CRM (Paramètres → Identifiants OAuth → Google).
+3. Copiez le **Client ID** et le **code secret du client** dans le CRM (Paramètres → Connexion email → Google).
 4. **APIs & Services** → **Library** → activer **Gmail API**.
 5. **OAuth consent screen** : mode Testing ou Production, ajoutez votre compte comme test user si Testing.
 
-Scopes utilisés : envoi Gmail + lecture de l’adresse email du profil.
+Scopes utilisés : envoi Gmail, lecture Gmail (réponses), signature d’envoi, **Google Calendar en lecture** (RDV), adresse du profil.
 
 ---
 
@@ -67,5 +67,9 @@ Recommandations : poste verrouillé, sauvegardes du dossier App Data protégées
 | `redirect_uri_mismatch` | URI identique dans la console cloud et ci-dessus |
 | Gmail API disabled | Activer Gmail API dans Google Cloud |
 | Compte Testing Google | Ajouter l’email dans utilisateurs test de l’écran de consentement |
+| `Missing required parameter: scope` (400) | Bug Windows corrigé (URL OAuth tronquée) — mettre à jour le CRM puis réessayer **Connecter Google** |
+| `redirect_uri_mismatch` à l'échange du code | Google Cloud → **Clients** → votre client → URI de redirection : `http://127.0.0.1:3847/callback` (exact) |
+| `invalid_grant` à l'échange | Ne pas recharger la page de succès ; une seule tentative — recliquer **Connecter Google** après 5 s |
+| `client_secret is missing` | Collez le **code secret** Google (Clients → CRM Bureau) dans Paramètres → Email, puis **Enregistrer** |
 
 L’ancienne méthode SMTP n’est plus proposée dans Paramètres : connectez OAuth pour les nouveaux postes.

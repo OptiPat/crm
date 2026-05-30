@@ -12,6 +12,8 @@ import {
   Calendar,
   FileText,
   History,
+  AlertCircle,
+  Send,
 } from "lucide-react";
 import {
   getInteractionsByContact,
@@ -20,7 +22,10 @@ import {
   type Interaction,
   type InteractionWithContact,
 } from "@/lib/api/tauri-interactions";
+import { getContactRelationStatus, type ContactRelationStatus } from "@/lib/api/tauri-contact-relation";
+import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { InteractionForm } from "./InteractionForm";
+import { toast } from "sonner";
 
 const TYPE_ICONS: Record<string, typeof Phone> = {
   APPEL: Phone,
@@ -72,6 +77,7 @@ export function ContactInteractionsPanel({
   onContactUpdated,
 }: ContactInteractionsPanelProps) {
   const [items, setItems] = useState<Interaction[]>([]);
+  const [relationStatus, setRelationStatus] = useState<ContactRelationStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<InteractionWithContact | null>(null);
@@ -79,10 +85,17 @@ export function ContactInteractionsPanel({
   const load = async () => {
     try {
       setLoading(true);
-      setItems(await getInteractionsByContact(contactId));
+      const [interactions, status] = await Promise.all([
+        getInteractionsByContact(contactId),
+        getContactRelationStatus(contactId),
+      ]);
+      setItems(interactions);
+      setRelationStatus(status);
     } catch (error) {
       console.error(error);
       setItems([]);
+      setRelationStatus(null);
+      toast.error("Impossible de charger la relation client");
     } finally {
       setLoading(false);
     }
@@ -92,6 +105,14 @@ export function ContactInteractionsPanel({
     if (contactId) load();
   }, [contactId]);
 
+  useEffect(() => {
+    return subscribeRelationChanged((changedContactId) => {
+      if (changedContactId != null && changedContactId !== contactId) return;
+      void load();
+      onContactUpdated?.();
+    });
+  }, [contactId, onContactUpdated]);
+
   const handleDelete = async (id: number) => {
     if (!confirm("Supprimer cette interaction ?")) return;
     try {
@@ -99,7 +120,7 @@ export function ContactInteractionsPanel({
       await load();
       onContactUpdated?.();
     } catch (error) {
-      alert("Erreur : " + String(error));
+      toast.error(`Erreur : ${String(error)}`);
     }
   };
 
@@ -131,10 +152,10 @@ export function ContactInteractionsPanel({
             <div>
               <CardTitle className="text-lg flex items-center gap-2">
                 <History className="h-5 w-5 text-primary" />
-                Historique des échanges
+                Relation client
                 {!loading && items.length > 0 && (
                   <span className="text-sm font-normal text-muted-foreground">
-                    ({items.length})
+                    ({items.length} échange{items.length > 1 ? "s" : ""})
                   </span>
                 )}
               </CardTitle>
@@ -168,6 +189,34 @@ export function ContactInteractionsPanel({
           </div>
         </CardHeader>
         <CardContent>
+          {!loading && relationStatus && (
+            <div className="space-y-2 mb-4">
+              {relationStatus.open_alertes.length > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm text-orange-900">
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>
+                    {relationStatus.open_alertes.length}{" "}
+                    {relationStatus.open_alertes.length > 1 ? "alertes ouvertes" : "alerte ouverte"}{" "}
+                    — voir Suivi &amp; alertes
+                  </span>
+                </div>
+              )}
+              {relationStatus.pending_email && (
+                <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                  <Send className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>
+                    Campagne « {relationStatus.pending_email.etiquette_nom} » —{" "}
+                    {relationStatus.pending_email.queue_status === "ready"
+                      ? "email prêt à envoyer"
+                      : relationStatus.pending_email.queue_status === "followup"
+                        ? "relance à envisager"
+                        : "configuration ou date à compléter"}{" "}
+                    (Suivi → Envois)
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
           {loading ? (
             <p className="text-sm text-muted-foreground py-2">Chargement de l&apos;historique…</p>
           ) : items.length === 0 ? (
@@ -190,13 +239,13 @@ export function ContactInteractionsPanel({
               </Button>
             </div>
           ) : (
-            <ul className="space-y-2">
+            <ul className="space-y-2 relative before:absolute before:left-[1.35rem] before:top-3 before:bottom-3 before:w-px before:bg-border/80">
               {items.map((item) => {
                 const Icon = TYPE_ICONS[item.type_interaction] || FileText;
                 return (
                   <li
                     key={item.id}
-                    className="flex items-start justify-between gap-2 p-3 border border-border/80 rounded-lg bg-card hover:bg-accent/40 transition-colors text-sm"
+                    className="relative flex items-start justify-between gap-2 p-3 pl-1 border border-border/80 rounded-lg bg-card hover:bg-accent/40 transition-colors text-sm"
                   >
                     <div className="flex gap-3 min-w-0">
                       <span className="p-2 rounded-lg bg-primary/5 shrink-0 h-fit">

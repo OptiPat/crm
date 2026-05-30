@@ -1,4 +1,5 @@
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
+import { appendEmailSignature } from "@/lib/emails/email-signature";
 import { buildVariablesFromContact } from "@/lib/emails/template-email-meta";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
@@ -24,10 +25,21 @@ export function renderEtiquetteEmailPreview(
   cgp: CgpConfig | null
 ): { subject: string; body: string } {
   const vars = buildTemplateVariables(item, cgp);
+  const body = replaceTemplateVariables(item.template_corps, vars);
   return {
     subject: replaceTemplateVariables(item.template_sujet, vars),
-    body: replaceTemplateVariables(item.template_corps, vars),
+    body: appendEmailSignature(body, cgp?.email_signature),
   };
+}
+
+/** Indice : dernier contact fiche mis à jour après l'envoi campagne. */
+export function hasContactActivityAfterEmailSend(
+  item: EtiquetteEmailQueueItem
+): boolean {
+  const sent = item.email_date_envoi;
+  const last = item.contact_date_dernier_contact;
+  if (sent == null || last == null) return false;
+  return last > sent;
 }
 
 /** datetime-local (YYYY-MM-DDTHH:mm) → unix secondes */

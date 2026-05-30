@@ -1,0 +1,349 @@
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { SettingsPanel } from "@/components/settings/parametres-ui";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Archive,
+  HardDrive,
+  HelpCircle,
+  Search,
+  Trash2,
+  Wrench,
+  X,
+} from "lucide-react";
+import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
+import type { DbBackupEntry } from "@/lib/api/tauri-system";
+import { toast } from "sonner";
+
+type ParametresDatabaseSectionProps = {
+  dbPath: string;
+  backups: DbBackupEntry[];
+};
+
+function Explainer({ children }: { children: ReactNode }) {
+  return (
+    <p className="text-sm text-muted-foreground leading-relaxed flex gap-2">
+      <HelpCircle className="h-4 w-4 shrink-0 mt-0.5 text-primary/70" />
+      <span>{children}</span>
+    </p>
+  );
+}
+
+export function ParametresDatabaseSection({ dbPath, backups }: ParametresDatabaseSectionProps) {
+  const [cleaningUp, setCleaningUp] = useState(false);
+  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
+
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<Contact[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
+  const [deletingContact, setDeletingContact] = useState(false);
+
+  const handleSearchContacts = async () => {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    try {
+      const allContacts = await getAllContacts();
+      const query = searchQuery.toLowerCase();
+      setSearchResults(
+        allContacts.filter(
+          (c) =>
+            c.nom.toLowerCase().includes(query) || c.prenom.toLowerCase().includes(query)
+        )
+      );
+    } catch (error) {
+      console.error("Erreur recherche:", error);
+      toast.error("Impossible de rechercher les contacts");
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleCleanupOrphaned = async () => {
+    setCleaningUp(true);
+    try {
+      const [foyersDeleted, investmentsDeleted] = await cleanupOrphanedData();
+      toast.success("Nettoyage terminé", {
+        description: `${foyersDeleted} foyer(s) et ${investmentsDeleted} investissement(s) fantômes supprimé(s).`,
+      });
+    } catch (error) {
+      console.error("Erreur nettoyage:", error);
+      toast.error("Erreur lors du nettoyage");
+    } finally {
+      setCleaningUp(false);
+      setCleanupDialogOpen(false);
+    }
+  };
+
+  const handleConfirmDeleteContact = async () => {
+    if (!contactToDelete) return;
+    setDeletingContact(true);
+    try {
+      await deleteContact(contactToDelete.id);
+      setSearchResults((prev) => prev.filter((c) => c.id !== contactToDelete.id));
+      toast.success(`${contactToDelete.prenom} ${contactToDelete.nom} supprimé`);
+      setContactToDelete(null);
+    } catch (error) {
+      console.error("Erreur suppression:", error);
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setDeletingContact(false);
+    }
+  };
+
+  const formatBackupSize = (bytes: number) => {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} Mo`;
+  };
+
+  return (
+    <>
+      <SettingsPanel
+        title="Où sont stockées vos données ?"
+        description="Tout le CRM vit sur ce PC — rien n'est envoyé sur Internet (sauf vos emails OAuth)."
+        action={
+          backups.length > 0 ? (
+            <Badge variant="secondary" className="font-normal gap-1">
+              <Archive className="h-3 w-3" />
+              {backups.length} copie{backups.length > 1 ? "s" : ""} de secours
+            </Badge>
+          ) : null
+        }
+      >
+        <div className="space-y-4">
+          <Explainer>
+            Le fichier ci-dessous contient tous vos contacts, foyers, investissements et réglages. Vous pouvez
+            le sauvegarder vous-même en copiant ce fichier (pendant que le CRM est fermé).
+          </Explainer>
+
+          <div className="rounded-xl border bg-muted/30 p-4">
+            <div className="flex items-center gap-2 text-sm font-medium mb-2">
+              <HardDrive className="h-4 w-4 text-primary" />
+              Fichier principal
+            </div>
+            <p className="text-xs font-mono text-muted-foreground break-all leading-relaxed">
+              {dbPath || "Chargement…"}
+            </p>
+          </div>
+
+          {backups.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Copies automatiques de secours</p>
+              <Explainer>
+                Avant chaque mise à jour du logiciel, le CRM duplique votre base. Ce n&apos;est pas un export
+                Excel : ce sont des fichiers techniques pour revenir en arrière en cas de problème. Vous n&apos;avez
+                normalement <strong>rien à faire</strong> avec cette liste.
+              </Explainer>
+              <ul className="rounded-xl border divide-y max-h-36 overflow-y-auto text-xs font-mono bg-background">
+                {backups.slice(0, 8).map((b) => (
+                  <li
+                    key={b.name}
+                    className="flex items-center justify-between gap-2 px-3 py-2.5 text-muted-foreground"
+                  >
+                    <span className="truncate">{b.name}</span>
+                    <span className="shrink-0 tabular-nums">{formatBackupSize(b.size)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <p className="text-xs text-muted-foreground border-t pt-3">
+            Export / import complet de la base — fonctionnalité prévue ultérieurement.
+          </p>
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="Corriger un doublon de contact"
+        description="Uniquement si vous avez créé deux fois la même personne par erreur."
+      >
+        <div className="space-y-4">
+          <Explainer>
+            Recherchez par nom ou prénom, vérifiez l&apos;email affiché, puis supprimez la fiche en trop. Les
+            vrais clients avec historique ne doivent pas être supprimés ici — préférez la fusion depuis la liste
+            Contacts si les deux fiches sont utiles.
+          </Explainer>
+
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Nom ou prénom…"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && void handleSearchContacts()}
+                className="pl-9"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => void handleSearchContacts()}
+                disabled={searching || !searchQuery.trim()}
+              >
+                {searching ? "Recherche…" : "Rechercher"}
+              </Button>
+              {searchResults.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    setSearchResults([]);
+                    setSearchQuery("");
+                  }}
+                  title="Effacer"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+
+          {searchResults.length > 0 && (
+            <ul className="rounded-xl border divide-y overflow-hidden">
+              {searchResults.map((contact) => (
+                <li
+                  key={contact.id}
+                  className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">
+                      {contact.prenom} {contact.nom}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {contact.categorie || "AUCUN"}
+                      {contact.filleul_categorie ? ` · ${contact.filleul_categorie}` : ""}
+                      {contact.email ? ` · ${contact.email}` : ""}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:bg-destructive/10 shrink-0"
+                    onClick={() => setContactToDelete(contact)}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Supprimer
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {searchResults.length === 0 && searchQuery.trim() && !searching && (
+            <p className="text-sm text-muted-foreground">Aucun résultat pour « {searchQuery} ».</p>
+          )}
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="Nettoyage technique (données « fantômes »)"
+        description="Rarement nécessaire — en cas de base incohérente après d'anciennes manipulations."
+        className="border-amber-200/50"
+      >
+        <div className="space-y-4">
+          <Explainer>
+            Parfois il reste des entrées vides dans la base : un <strong>foyer sans aucun membre</strong>, ou un{" "}
+            <strong>investissement</strong> qui ne pointe plus vers aucun contact. Ce bouton supprime uniquement
+            ces lignes orphelines — pas vos clients ni leurs placements valides.
+          </Explainer>
+          <ul className="text-xs text-muted-foreground list-disc pl-5 space-y-1">
+            <li>Ne supprime pas un contact que vous voyez encore dans l&apos;onglet Contacts</li>
+            <li>Utile après des imports ratés ou des tests</li>
+            <li>Action irréversible sur ces lignes fantômes uniquement</li>
+          </ul>
+          <Button
+            variant="outline"
+            size="sm"
+            className="border-amber-300"
+            onClick={() => setCleanupDialogOpen(true)}
+            disabled={cleaningUp}
+          >
+            <Wrench className="h-4 w-4 mr-1.5" />
+            Lancer le nettoyage technique
+          </Button>
+        </div>
+      </SettingsPanel>
+
+      <AlertDialog open={cleanupDialogOpen} onOpenChange={setCleanupDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Nettoyer les données fantômes ?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <span className="block">
+                Le CRM va supprimer uniquement les foyers vides et les investissements sans propriétaire
+                reconnu.
+              </span>
+              <span className="block text-sm">
+                Vos contacts et foyers habituels ne sont pas ciblés. Cette action ne peut pas être annulée.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cleaningUp}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={cleaningUp}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleCleanupOrphaned();
+              }}
+            >
+              {cleaningUp ? "Nettoyage…" : "Confirmer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!contactToDelete}
+        onOpenChange={(open) => !open && !deletingContact && setContactToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer définitivement ce contact ?</AlertDialogTitle>
+            <AlertDialogDescription className="text-left space-y-2">
+              {contactToDelete && (
+                <>
+                  <span className="block">
+                    <strong>
+                      {contactToDelete.prenom} {contactToDelete.nom}
+                    </strong>{" "}
+                    et ses données liées (investissements, documents, etc.) seront effacés.
+                  </span>
+                  <span className="block text-sm">
+                    À n&apos;utiliser que pour un doublon ou une fiche créée par erreur.
+                  </span>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingContact}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingContact}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmDeleteContact();
+              }}
+            >
+              {deletingContact ? "Suppression…" : "Supprimer définitivement"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
+  );
+}

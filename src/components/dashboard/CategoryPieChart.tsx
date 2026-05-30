@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getCategoryStats } from "@/lib/api/tauri-dashboard";
 import {
@@ -7,6 +6,7 @@ import {
   ChartLegendGrid,
   ChartLoading,
   ChartTooltipBox,
+  DashboardPanel,
   formatDashboardPercent,
 } from "./dashboard-ui";
 
@@ -68,12 +68,11 @@ export function CategoryPieChart() {
   };
 
   return (
-    <Card className="shadow-sm border-border/80 h-full flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle className="font-serif text-xl">Répartition par catégorie</CardTitle>
-        <CardDescription>Clients, prospects et suspects — survol pour le détail</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1">
+    <DashboardPanel
+      title="Par catégorie"
+      description="Clients, prospects et suspects"
+      className="h-full"
+    >
         {loading ? (
           <ChartLoading height={360} />
         ) : data.length === 0 ? (
@@ -130,7 +129,6 @@ export function CategoryPieChart() {
             </p>
           </div>
         )}
-      </CardContent>
-    </Card>
+    </DashboardPanel>
   );
 }

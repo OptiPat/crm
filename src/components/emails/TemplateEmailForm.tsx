@@ -21,9 +21,12 @@ import {
 import {
   createTemplateEmail,
   updateTemplateEmail,
+  getEtiquetteIdsForTemplate,
+  setTemplateEtiquetteLinks,
   type NewTemplateEmail,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
+import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import {
@@ -34,6 +37,7 @@ import {
 } from "@/lib/emails/template-email-meta";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 
 interface TemplateEmailFormProps {
@@ -53,6 +57,8 @@ export function TemplateEmailForm({
   const [cgp, setCgp] = useState<Awaited<ReturnType<typeof getCgpConfig>> | null>(null);
   const [previewContactId, setPreviewContactId] = useState<string>("sample");
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
+  const [linkedEtiquetteIds, setLinkedEtiquetteIds] = useState<number[]>([]);
   const [formData, setFormData] = useState<NewTemplateEmail>({
     nom: "",
     sujet: "",
@@ -68,6 +74,7 @@ export function TemplateEmailForm({
     void getAllContacts()
       .then((list) => setContacts(list.filter((c) => c.email?.trim())))
       .catch(() => setContacts([]));
+    void getAllEtiquettes().then(setEtiquettes).catch(() => setEtiquettes([]));
   }, [open]);
 
   useEffect(() => {
@@ -90,8 +97,19 @@ export function TemplateEmailForm({
         agenda_link_id: null,
       });
       setPreviewContactId("sample");
+      setLinkedEtiquetteIds([]);
     }
   }, [template, open]);
+
+  useEffect(() => {
+    if (!open || !template?.id) {
+      if (!template) setLinkedEtiquetteIds([]);
+      return;
+    }
+    void getEtiquetteIdsForTemplate(template.id)
+      .then(setLinkedEtiquetteIds)
+      .catch(() => setLinkedEtiquetteIds([]));
+  }, [open, template?.id]);
 
   const previewContact = useMemo(() => {
     if (previewContactId === "sample") return null;
@@ -106,12 +124,17 @@ export function TemplateEmailForm({
     e.preventDefault();
     setLoading(true);
     try {
+      let templateId = template?.id;
       if (template) {
         await updateTemplateEmail(template.id, formData);
         toast.success("Template modifié");
       } else {
-        await createTemplateEmail(formData);
+        const created = await createTemplateEmail(formData);
+        templateId = created.id;
         toast.success("Template créé");
+      }
+      if (templateId != null) {
+        await setTemplateEtiquetteLinks(templateId, linkedEtiquetteIds);
       }
       onSuccess();
     } catch (error) {
@@ -173,6 +196,45 @@ export function TemplateEmailForm({
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+          </div>
+
+          <div className="space-y-2 p-3 border rounded-lg bg-muted/30">
+            <Label>Étiquettes qui utilisent ce template</Label>
+            <p className="text-xs text-muted-foreground">
+              Cochez les étiquettes dont la campagne email enverra ce modèle (Paramètres campagne sur
+              chaque étiquette).
+            </p>
+            <div className="max-h-40 overflow-y-auto space-y-2 pt-1">
+              {etiquettes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Aucune étiquette.</p>
+              ) : (
+                etiquettes.map((e) => (
+                  <label
+                    key={e.id}
+                    className="flex items-center gap-2 text-sm cursor-pointer"
+                  >
+                    <Checkbox
+                      checked={linkedEtiquetteIds.includes(e.id)}
+                      onCheckedChange={(checked) => {
+                        setLinkedEtiquetteIds((prev) =>
+                          checked
+                            ? [...prev, e.id]
+                            : prev.filter((id) => id !== e.id)
+                        );
+                      }}
+                    />
+                    <span
+                      className="inline-block w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: e.couleur }}
+                    />
+                    {e.nom}
+                    {e.email_actif ? (
+                      <span className="text-xs text-muted-foreground">(campagne)</span>
+                    ) : null}
+                  </label>
+                ))
+              )}
             </div>
           </div>
 

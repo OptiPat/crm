@@ -26,6 +26,12 @@ export interface CgpConfig {
   logo_path?: string;
   wizard_completed: boolean;
   wizard_step: number;
+  /** Signature en fin d'email (texte brut). */
+  email_signature?: string | null;
+  /** Signature HTML (logo Gmail) — utilisée à l'envoi. */
+  email_signature_html?: string | null;
+  /** Jours sans retour avant proposition de relance (défaut 5). */
+  email_suivi_delai_jours?: number | null;
 }
 
 // ========== SETTINGS GÉNÉRIQUES ==========

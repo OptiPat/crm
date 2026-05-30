@@ -1,6 +1,7 @@
 use rusqlite::{Connection, Result};
 use tauri::{AppHandle, Manager};
 
+pub mod email_schedule;
 pub mod etiquettes_auto_engine;
 pub mod models;
 pub mod operations;
@@ -344,10 +345,51 @@ impl Database {
         self.migrate_alertes_crud_schema()?;
         self.migrate_backfill_filleul_categorie()?;
         self.migrate_add_email_envoi_prevu()?;
+        self.migrate_add_email_envoi_heure()?;
         self.migrate_contact_etiquettes_contact_index()?;
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
+        self.migrate_contact_etiquettes_email_suivi()?;
 
+        Ok(())
+    }
+
+    fn migrate_contact_etiquettes_email_suivi(&self) -> Result<()> {
+        if !self.table_has_column("contact_etiquettes", "email_reponse_at")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_reponse_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: email_reponse_at sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_reponse_type")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_reponse_type TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_reponse_type sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_suivi_ignore")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_suivi_ignore INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            println!("✅ Migration: email_suivi_ignore sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_gmail_thread_id")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_gmail_thread_id TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_gmail_thread_id sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_gmail_message_id")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_gmail_message_id TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_gmail_message_id sur contact_etiquettes");
+        }
         Ok(())
     }
 
@@ -388,6 +430,17 @@ impl Database {
                 [],
             )?;
             println!("✅ Migration: colonne email_envoi_prevu sur etiquettes");
+        }
+        Ok(())
+    }
+
+    fn migrate_add_email_envoi_heure(&self) -> Result<()> {
+        if !self.table_has_column("etiquettes", "email_envoi_heure")? {
+            self.conn.execute(
+                "ALTER TABLE etiquettes ADD COLUMN email_envoi_heure TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne email_envoi_heure sur etiquettes");
         }
         Ok(())
     }

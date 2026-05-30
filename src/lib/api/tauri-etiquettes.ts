@@ -18,6 +18,8 @@ export interface Etiquette {
   email_template_id: number | null;
   email_delai_jours: number;
   email_envoi_prevu: number | null;
+  /** Heure locale HH:MM — envoi le jour de l'éligibilité */
+  email_envoi_heure: string | null;
   email_actif: boolean;
   // Système
   is_default: boolean;
@@ -41,6 +43,7 @@ export interface NewEtiquette {
   email_template_id?: number | null;
   email_delai_jours?: number; // Défaut: 0 (legacy)
   email_envoi_prevu?: number | null;
+  email_envoi_heure?: string | null;
   email_actif?: boolean;      // Défaut: false
   // Système
   is_default?: boolean;       // Défaut: false
@@ -80,9 +83,16 @@ export interface EtiquetteEmailQueueItem {
   template_corps: string;
   template_agenda_link_id: string | null;
   queue_issue: string | null;
+  email_reponse_at?: number | null;
+  email_reponse_type?: string | null;
+  contact_date_dernier_contact?: number | null;
 }
 
-export type EtiquetteEmailQueueStatus = "ready" | "incomplete" | "sent";
+export type EtiquetteEmailQueueStatus =
+  | "ready"
+  | "incomplete"
+  | "sent"
+  | "followup";
 
 export interface ContactEtiquetteDetails {
   id: number;
@@ -275,8 +285,40 @@ export async function getPendingEtiquetteEmails(): Promise<[number, number, numb
 /**
  * Marque un email d'étiquette comme envoyé
  */
-export async function markEtiquetteEmailSent(contactEtiquetteId: number): Promise<void> {
-  return invoke<void>("mark_etiquette_email_sent", { contactEtiquetteId });
+export async function markEtiquetteEmailSent(
+  contactEtiquetteId: number,
+  gmailMessageId?: string | null,
+  gmailThreadId?: string | null,
+  emailSubject?: string | null
+): Promise<void> {
+  return invoke<void>("mark_etiquette_email_sent", {
+    contactEtiquetteId,
+    gmailMessageId: gmailMessageId ?? null,
+    gmailThreadId: gmailThreadId ?? null,
+    emailSubject: emailSubject ?? null,
+  });
+}
+
+export async function markEmailCampaignResponse(
+  contactEtiquetteId: number,
+  responseType: "mail" | "rdv" | "autre"
+): Promise<void> {
+  return invoke<void>("mark_email_campaign_response", {
+    contactEtiquetteId,
+    responseType,
+  });
+}
+
+export async function dismissEmailCampaignFollowup(
+  contactEtiquetteId: number
+): Promise<void> {
+  return invoke<void>("dismiss_email_campaign_followup", { contactEtiquetteId });
+}
+
+export async function prepareEmailCampaignRelance(
+  contactEtiquetteId: number
+): Promise<void> {
+  return invoke<void>("prepare_email_campaign_relance", { contactEtiquetteId });
 }
 
 // ==================== UTILITAIRES ====================

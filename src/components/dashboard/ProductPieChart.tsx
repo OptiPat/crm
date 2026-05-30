@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getProductStats } from "@/lib/api/tauri-dashboard";
 import {
@@ -7,6 +6,7 @@ import {
   ChartLegendGrid,
   ChartLoading,
   ChartTooltipBox,
+  DashboardPanel,
   formatDashboardCurrency,
   formatDashboardPercent,
 } from "./dashboard-ui";
@@ -120,12 +120,11 @@ export function ProductPieChart() {
   }, []);
 
   return (
-    <Card className="shadow-sm border-border/80 h-full flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle className="font-serif text-xl">Répartition par produit</CardTitle>
-        <CardDescription>Encours par type de produit — survol pour le détail</CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1">
+    <DashboardPanel
+      title="Par produit"
+      description="Encours par type de produit"
+      className="h-full"
+    >
         {loading ? (
           <ChartLoading height={360} />
         ) : data.length === 0 ? (
@@ -136,22 +135,23 @@ export function ProductPieChart() {
           />
         ) : (
           <div className="space-y-4">
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={data}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={48}
-                  outerRadius={88}
-                  paddingAngle={1}
-                  dataKey="value"
-                >
-                  {data.map((entry, index) => (
-                    <Cell key={index} fill={entry.color} stroke="#fff" strokeWidth={1} />
-                  ))}
-                </Pie>
-                <Tooltip
+            <div className="relative">
+              <ResponsiveContainer width="100%" height={240}>
+                <PieChart>
+                  <Pie
+                    data={data}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={56}
+                    outerRadius={92}
+                    paddingAngle={1}
+                    dataKey="value"
+                  >
+                    {data.map((entry, index) => (
+                      <Cell key={index} fill={entry.color} stroke="#fff" strokeWidth={1} />
+                    ))}
+                  </Pie>
+                  <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
                     const v = payload[0].value as number;
@@ -166,15 +166,23 @@ export function ProductPieChart() {
                     );
                   }}
                 />
-              </PieChart>
-            </ResponsiveContainer>
-            <ChartLegendGrid items={data} total={total} columns={2} maxHeight="9rem" />
-            <p className="text-xs text-center text-muted-foreground tabular-nums">
-              Total : {formatDashboardCurrency(total)}
-            </p>
+                </PieChart>
+              </ResponsiveContainer>
+              <div
+                className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center"
+                aria-hidden
+              >
+                <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                  Encours
+                </span>
+                <span className="text-sm font-serif font-bold text-primary tabular-nums leading-tight mt-0.5">
+                  {formatDashboardCurrency(total)}
+                </span>
+              </div>
+            </div>
+            <ChartLegendGrid items={data} total={total} columns={2} maxHeight="8rem" />
           </div>
         )}
-      </CardContent>
-    </Card>
+    </DashboardPanel>
   );
 }

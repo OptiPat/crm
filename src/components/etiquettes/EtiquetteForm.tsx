@@ -98,6 +98,8 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   // Email
   const [emailActif, setEmailActif] = useState(false);
   const [emailTemplateId, setEmailTemplateId] = useState<number | null>(null);
+  const [emailEnvoiMode, setEmailEnvoiMode] = useState<"eligibility" | "fixed">("eligibility");
+  const [emailEnvoiHeure, setEmailEnvoiHeure] = useState("09:00");
   const [emailEnvoiLocal, setEmailEnvoiLocal] = useState("");
 
   // Charger les templates email
@@ -170,7 +172,18 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         // Email
         setEmailActif(etiquette.email_actif);
         setEmailTemplateId(etiquette.email_template_id);
-        setEmailEnvoiLocal(unixToLocalDatetime(etiquette.email_envoi_prevu));
+        if (etiquette.email_envoi_heure) {
+          setEmailEnvoiMode("eligibility");
+          setEmailEnvoiHeure(etiquette.email_envoi_heure);
+          setEmailEnvoiLocal("");
+        } else if (etiquette.email_envoi_prevu) {
+          setEmailEnvoiMode("fixed");
+          setEmailEnvoiLocal(unixToLocalDatetime(etiquette.email_envoi_prevu));
+        } else {
+          setEmailEnvoiMode(etiquette.auto_condition_type ? "eligibility" : "fixed");
+          setEmailEnvoiHeure("09:00");
+          setEmailEnvoiLocal("");
+        }
       } else {
         // Mode création - réinitialiser
         setNom("");
@@ -195,6 +208,8 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setCategoriesSelectionnees(["CLIENT"]);
         setEmailActif(false);
         setEmailTemplateId(null);
+        setEmailEnvoiMode("eligibility");
+        setEmailEnvoiHeure("09:00");
         setEmailEnvoiLocal("");
       }
     }
@@ -213,8 +228,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         toast.error("Sélectionnez un template d'email");
         return;
       }
-      if (!emailEnvoiLocal.trim()) {
-        toast.error("Indiquez la date et l'heure d'envoi prévue");
+      if (emailEnvoiMode === "eligibility" && !emailEnvoiHeure.trim()) {
+        toast.error("Indiquez l'heure d'envoi (éligibilité)");
+        return;
+      }
+      if (emailEnvoiMode === "fixed" && !emailEnvoiLocal.trim()) {
+        toast.error("Indiquez la date et l'heure de la campagne");
         return;
       }
     }
@@ -271,7 +290,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         auto_categories: isAuto ? stringifyCategories(categoriesSelectionnees) : null,
         email_template_id: emailActif ? emailTemplateId : null,
         email_delai_jours: 0,
-        email_envoi_prevu: emailActif ? localDatetimeToUnix(emailEnvoiLocal) : null,
+        email_envoi_prevu:
+          emailActif && emailEnvoiMode === "fixed"
+            ? localDatetimeToUnix(emailEnvoiLocal)
+            : null,
+        email_envoi_heure:
+          emailActif && emailEnvoiMode === "eligibility" ? emailEnvoiHeure.trim() : null,
         email_actif: emailActif,
         is_default: etiquette?.is_default || false,
         actif,
@@ -703,6 +727,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                 checked={emailActif}
                 onCheckedChange={(checked) => {
                   setEmailActif(checked);
+                  if (checked && isAuto) setEmailEnvoiMode("eligibility");
                   if (checked && !emailTemplateId && templates.length > 0 && nom.trim()) {
                     const suggested = suggestTemplateIdForEtiquette(nom, templates);
                     if (suggested) setEmailTemplateId(suggested);
@@ -761,18 +786,54 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="email-envoi-prevu">Date et heure d&apos;envoi prévue</Label>
-                  <Input
-                    id="email-envoi-prevu"
-                    type="datetime-local"
-                    value={emailEnvoiLocal}
-                    onChange={(e) => setEmailEnvoiLocal(e.target.value)}
-                    required
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    À partir de ce moment, les contacts taggés apparaîtront dans la file « Prêts à envoyer ».
-                  </p>
+                  <Label>Planification de l&apos;envoi</Label>
+                  <Select
+                    value={emailEnvoiMode}
+                    onValueChange={(v) => setEmailEnvoiMode(v as "eligibility" | "fixed")}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="eligibility">
+                        Dès éligibilité (règle auto) — heure du jour
+                      </SelectItem>
+                      <SelectItem value="fixed">Date fixe — tous les contacts taggés</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
+
+                {emailEnvoiMode === "eligibility" ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="email-envoi-heure">Heure d&apos;envoi (jour où le contact devient éligible)</Label>
+                    <Input
+                      id="email-envoi-heure"
+                      type="time"
+                      value={emailEnvoiHeure}
+                      onChange={(e) => setEmailEnvoiHeure(e.target.value)}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Ex. contact « Suivi &gt; 1 an » : le mail est prêt dès que la règle s&apos;applique, à
+                      cette heure (ou tout de suite si l&apos;heure est déjà passée). Pensez à recalculer
+                      les étiquettes après modification.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label htmlFor="email-envoi-prevu">Date et heure de campagne (tous les contacts)</Label>
+                    <Input
+                      id="email-envoi-prevu"
+                      type="datetime-local"
+                      value={emailEnvoiLocal}
+                      onChange={(e) => setEmailEnvoiLocal(e.target.value)}
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Tous les contacts avec cette étiquette partagent la même date d&apos;entrée en file.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>

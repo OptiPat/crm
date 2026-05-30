@@ -70,4 +70,31 @@ describe("etiquette-email-preview", () => {
     expect(rendered.subject).toBe("Bonjour Jean Dupont");
     expect(rendered.body).toContain("0612345678");
   });
+
+  it("ajoute la signature CGP en fin de corps", () => {
+    const item: EtiquetteEmailQueueItem = {
+      contact_etiquette_id: 1,
+      contact_id: 2,
+      contact_nom: "Dupont",
+      contact_prenom: "Jean",
+      contact_email: "jean@example.com",
+      contact_telephone: null,
+      etiquette_id: 3,
+      etiquette_nom: "Campagne",
+      etiquette_couleur: "#3B82F6",
+      email_date_prevue: null,
+      email_date_envoi: null,
+      template_sujet: "Sujet",
+      template_corps: "Message.",
+      template_agenda_link_id: null,
+      queue_issue: null,
+    };
+    const rendered = renderEtiquetteEmailPreview(item, {
+      wizard_completed: true,
+      wizard_step: 4,
+      email_signature: "Paul Martin\nCabinet",
+    });
+    expect(rendered.body).toContain("Message.");
+    expect(rendered.body).toContain("Paul Martin");
+  });
 });

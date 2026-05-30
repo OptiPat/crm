@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
@@ -6,35 +6,37 @@ import { MonthlyChart } from "@/components/dashboard/MonthlyChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { QuickActions } from "@/components/dashboard/QuickActions";
-import { DashboardSectionTitle } from "@/components/dashboard/dashboard-ui";
-import { formatDashboardCurrency } from "@/components/dashboard/dashboard-ui";
+import {
+  DashboardPageHeader,
+  DashboardSectionTitle,
+  StatCardSkeleton,
+  formatDashboardCurrency,
+} from "@/components/dashboard/dashboard-ui";
+import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import {
   Users,
   Home,
   TrendingUp,
-  Bell,
   CalendarClock,
   ShoppingCart,
 } from "lucide-react";
-import { getDashboardStats, DashboardStats } from "@/lib/api/tauri-dashboard";
+import { getDashboardStats, type DashboardStats } from "@/lib/api/tauri-dashboard";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
 
 interface DashboardProps {
   onNavigate?: (page: string) => void;
+  onOpenContact?: (contactId: number) => void;
 }
 
-export function Dashboard({ onNavigate }: DashboardProps) {
+export function Dashboard({ onNavigate, onOpenContact }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    initializeAndLoadStats();
-  }, []);
-
-  const initializeAndLoadStats = async () => {
+  const loadStats = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
-      setLoading(true);
       try {
         await seedDefaultEtiquettes();
       } catch {
@@ -48,29 +50,39 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       setStats(await getDashboardStats());
     } catch (error) {
       console.error("Erreur statistiques:", error);
+      setStats(null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  }, []);
+
+  const refreshAll = useCallback(() => {
+    setRefreshKey((k) => k + 1);
+    void loadStats(true);
+  }, [loadStats]);
+
+  useEffect(() => {
+    void loadStats();
+  }, [loadStats]);
+
+  useAppAutoRefresh(refreshAll);
+
+  const retryLoad = () => {
+    setRefreshKey((k) => k + 1);
+    void loadStats(false);
   };
 
   return (
-    <div className="space-y-8 max-w-[1600px]">
-      <header className="border-b border-border/60 pb-6">
-        <h2 className="text-3xl font-serif font-bold text-primary tracking-tight">
-          Tableau de bord
-        </h2>
-        <p className="text-muted-foreground mt-1">
-          Vue d&apos;ensemble de votre portefeuille et de votre activité
-        </p>
-      </header>
+    <div className="space-y-10 max-w-[1600px] mx-auto pb-8">
+      <DashboardPageHeader />
 
       <section className="space-y-4">
-        <DashboardSectionTitle>Indicateurs clés</DashboardSectionTitle>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+        <DashboardSectionTitle subtitle="Chiffres consolidés du portefeuille">
+          Vue d&apos;ensemble
+        </DashboardSectionTitle>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
           {loading ? (
-            <div className="col-span-full text-center py-10 text-sm text-muted-foreground">
-              Chargement des indicateurs…
-            </div>
+            Array.from({ length: 5 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : stats ? (
             <>
               <StatCard
@@ -81,6 +93,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 accentColor="#10B981"
                 iconColor="text-green-600"
                 iconBgColor="bg-green-50"
+                onClick={onNavigate ? () => onNavigate("contacts") : undefined}
               />
               <StatCard
                 title="Encours placements"
@@ -90,6 +103,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 accentColor="#C9A227"
                 iconColor="text-amber-600"
                 iconBgColor="bg-amber-50"
+                onClick={onNavigate ? () => onNavigate("investissements") : undefined}
               />
               <StatCard
                 title="Versements programmés"
@@ -118,45 +132,53 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 iconColor="text-purple-600"
                 iconBgColor="bg-purple-50"
               />
-              <StatCard
-                title="À recontacter"
-                value={stats.alertes_non_traitees}
-                description="Alertes actives"
-                icon={Bell}
-                accentColor="#EF4444"
-                iconColor="text-red-600"
-                iconBgColor="bg-red-50"
-              />
             </>
           ) : (
-            <div className="col-span-full text-center py-10 text-muted-foreground">
-              Impossible de charger les statistiques
+            <div className="col-span-full rounded-xl border border-dashed py-12 text-center text-muted-foreground">
+              Impossible de charger les statistiques.{" "}
+              <button type="button" className="text-primary underline" onClick={retryLoad}>
+                Réessayer
+              </button>
             </div>
           )}
         </div>
       </section>
 
       <section className="space-y-4">
-        <DashboardSectionTitle>Répartition</DashboardSectionTitle>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-          <CategoryPieChart />
-          <ProductPieChart />
+        <DashboardSectionTitle subtitle="Relances et raccourcis">
+          Suivi &amp; actions
+        </DashboardSectionTitle>
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+          <div className="lg:col-span-8 min-h-[280px]">
+            <AlertsPreview
+              key={`alerts-${refreshKey}`}
+              onNavigate={onNavigate}
+              onOpenContact={onOpenContact}
+            />
+          </div>
+          <div className="lg:col-span-4 min-h-[280px]">
+            <QuickActions onNavigate={onNavigate} />
+          </div>
         </div>
       </section>
 
       <section className="space-y-4">
-        <DashboardSectionTitle>Activité & pipeline</DashboardSectionTitle>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-          <MonthlyChart />
-          <PipelineChart />
+        <DashboardSectionTitle subtitle="Catégories et produits">
+          Répartition
+        </DashboardSectionTitle>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+          <CategoryPieChart key={`cat-${refreshKey}`} />
+          <ProductPieChart key={`prod-${refreshKey}`} />
         </div>
       </section>
 
       <section className="space-y-4">
-        <DashboardSectionTitle>À faire</DashboardSectionTitle>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-          <AlertsPreview onNavigate={onNavigate} />
-          <QuickActions onNavigate={onNavigate} />
+        <DashboardSectionTitle subtitle="Acquisition et funnel commercial">
+          Activité
+        </DashboardSectionTitle>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+          <MonthlyChart key={`month-${refreshKey}`} />
+          <PipelineChart key={`pipe-${refreshKey}`} />
         </div>
       </section>
     </div>

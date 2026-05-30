@@ -201,7 +201,7 @@ pub struct NewTemplateEmail {
     pub agenda_link_id: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Alerte {
     pub id: i64,
     pub contact_id: i64,
@@ -360,8 +360,10 @@ pub struct Etiquette {
     // Action email
     pub email_template_id: Option<i64>,
     pub email_delai_jours: i64,
-    /// Date/heure Unix de la campagne d'envoi (file d'attente)
+    /// Date/heure Unix campagne à date fixe (tous les contacts)
     pub email_envoi_prevu: Option<i64>,
+    /// Heure locale « HH:MM » : envoi le jour de l'éligibilité (règle auto)
+    pub email_envoi_heure: Option<String>,
     pub email_actif: bool,
     // Système
     pub is_default: bool,
@@ -386,6 +388,7 @@ pub struct NewEtiquette {
     pub email_template_id: Option<i64>,
     pub email_delai_jours: Option<i64>, // Défaut: 0 (legacy)
     pub email_envoi_prevu: Option<i64>,
+    pub email_envoi_heure: Option<String>,
     pub email_actif: Option<bool>,      // Défaut: false
     // Système
     pub is_default: Option<bool>, // Défaut: false
@@ -411,6 +414,36 @@ pub struct EtiquetteEmailQueueItem {
     pub template_agenda_link_id: Option<String>,
     /// Raison si file « incomplete » : NO_EMAIL, NO_TEMPLATE, NO_DATE, SCHEDULED
     pub queue_issue: Option<String>,
+    /// Réponse client enregistrée (suivi campagne)
+    pub email_reponse_at: Option<i64>,
+    pub email_reponse_type: Option<String>,
+    /// Dernier contact fiche (indice « contacté » après envoi)
+    pub contact_date_dernier_contact: Option<i64>,
+}
+
+/// Email campagne en attente pour un contact (fiche relation).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContactPendingEmail {
+    pub contact_etiquette_id: i64,
+    pub etiquette_nom: String,
+    pub queue_status: String,
+    pub email_date_prevue: Option<i64>,
+}
+
+/// Synthèse relation client (alertes + file email).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContactRelationStatus {
+    pub open_alertes: Vec<Alerte>,
+    pub pending_email: Option<ContactPendingEmail>,
+}
+
+/// Ligne à contrôler pour détection auto réponse mail / RDV.
+#[derive(Debug, Clone)]
+pub struct PendingCampaignResponseCheck {
+    pub contact_etiquette_id: i64,
+    pub contact_email: String,
+    pub email_date_envoi: i64,
+    pub email_gmail_thread_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -451,6 +484,7 @@ pub struct EtiquetteWithCount {
     pub email_template_id: Option<i64>,
     pub email_delai_jours: i64,
     pub email_envoi_prevu: Option<i64>,
+    pub email_envoi_heure: Option<String>,
     pub email_actif: bool,
     pub is_default: bool,
     pub actif: bool,
@@ -545,4 +579,13 @@ pub struct CgpConfig {
     pub logo_path: Option<String>,
     pub wizard_completed: bool,
     pub wizard_step: i64,
+    /// Signature ajoutée en fin de chaque email (texte brut, aperçu / édition).
+    #[serde(default)]
+    pub email_signature: Option<String>,
+    /// Signature HTML (logo, mise en forme) — utilisée à l'envoi si présente.
+    #[serde(default)]
+    pub email_signature_html: Option<String>,
+    /// Délai avant proposition de relance après envoi (jours, défaut 5).
+    #[serde(default)]
+    pub email_suivi_delai_jours: Option<i64>,
 }

@@ -2,27 +2,28 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Mail, Send, AlertTriangle, CheckCircle2, RefreshCw, ExternalLink } from "lucide-react";
+  Mail,
+  Send,
+  AlertTriangle,
+  RefreshCw,
+  ExternalLink,
+  MessageSquare,
+  CalendarCheck,
+  X,
+  RotateCcw,
+} from "lucide-react";
 import {
   getEtiquetteEmailQueue,
-  markEtiquetteEmailSent,
+  markEmailCampaignResponse,
+  dismissEmailCampaignFollowup,
+  prepareEmailCampaignRelance,
   getContrastColor,
   type EtiquetteEmailQueueItem,
 } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
-import { sendEmail } from "@/lib/api/tauri-email";
+import { syncEmailCampaignResponses } from "@/lib/api/tauri-email";
 import {
   getEmailConnectionStatus,
   type EmailConnectionStatus,
@@ -30,8 +31,12 @@ import {
 import {
   formatEtiquetteSendDatetime,
   getIncompleteQueueLabel,
+  hasContactActivityAfterEmailSend,
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
+import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
+import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import { toast } from "sonner";
 
 interface EtiquetteEnvoisTabProps {
@@ -43,30 +48,98 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [ready, setReady] = useState<EtiquetteEmailQueueItem[]>([]);
   const [incomplete, setIncomplete] = useState<EtiquetteEmailQueueItem[]>([]);
   const [sent, setSent] = useState<EtiquetteEmailQueueItem[]>([]);
+  const [followup, setFollowup] = useState<EtiquetteEmailQueueItem[]>([]);
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [subTab, setSubTab] = useState<"ready" | "incomplete" | "sent">("ready");
+  const [subTab, setSubTab] = useState<
+    "ready" | "incomplete" | "sent" | "followup"
+  >("ready");
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
   const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  const runAutoSync = useCallback(async () => {
+    if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
+    try {
+      setSyncing(true);
+      const r = await syncEmailCampaignResponses();
+      if (r.mail_detected > 0 || r.rdv_detected > 0) {
+        const parts: string[] = [];
+        if (r.mail_detected > 0) parts.push(`${r.mail_detected} réponse(s) mail`);
+        if (r.rdv_detected > 0) parts.push(`${r.rdv_detected} RDV Agenda`);
+        toast.success(`Détection auto : ${parts.join(", ")}`);
+        notifyRelationChanged();
+      }
+      if (r.errors.length > 0) {
+        toast.warning(r.errors[0]);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes("reconnectez") && !msg.includes("Connectez Google")) {
+        console.warn("sync email:", msg);
+      }
+    } finally {
+      setSyncing(false);
+    }
+  }, [emailStatus?.provider, emailStatus?.connected]);
+
+  useEffect(() => {
+    const raw = sessionStorage.getItem("crm_nav_suivi_envois_subtab");
+    if (
+      raw === "ready" ||
+      raw === "incomplete" ||
+      raw === "sent" ||
+      raw === "followup"
+    ) {
+      setSubTab(raw);
+      sessionStorage.removeItem("crm_nav_suivi_envois_subtab");
+    }
+  }, []);
 
   const loadQueue = useCallback(async () => {
     try {
       setLoading(true);
-      const [cgp, r, i, s, emailConn] = await Promise.all([
+      const [cgp, r, i, s, f, emailConn] = await Promise.all([
         getCgpConfig(),
         getEtiquetteEmailQueue("ready"),
         getEtiquetteEmailQueue("incomplete"),
         getEtiquetteEmailQueue("sent"),
+        getEtiquetteEmailQueue("followup"),
         getEmailConnectionStatus(),
       ]);
       setCgpConfig(cgp);
       setReady(r);
       setIncomplete(i);
       setSent(s);
+      setFollowup(f);
       setEmailStatus(emailConn);
+      if (emailConn.provider === "google" && emailConn.connected) {
+        try {
+          const r = await syncEmailCampaignResponses();
+          if (r.mail_detected > 0 || r.rdv_detected > 0) {
+            const parts: string[] = [];
+            if (r.mail_detected > 0) parts.push(`${r.mail_detected} réponse(s) mail`);
+            if (r.rdv_detected > 0) parts.push(`${r.rdv_detected} RDV Agenda`);
+            toast.success(`Détection auto : ${parts.join(", ")}`);
+            notifyRelationChanged();
+            const [r2, i2, s2, f2] = await Promise.all([
+              getEtiquetteEmailQueue("ready"),
+              getEtiquetteEmailQueue("incomplete"),
+              getEtiquetteEmailQueue("sent"),
+              getEtiquetteEmailQueue("followup"),
+            ]);
+            setReady(r2);
+            setIncomplete(i2);
+            setSent(s2);
+            setFollowup(f2);
+          }
+        } catch (syncErr) {
+          const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+          if (msg.includes("reconnectez") || msg.includes("Agenda")) {
+            toast.warning(msg);
+          }
+        }
+      }
       onQueueChanged?.();
     } catch (error) {
       console.error("Error loading email queue:", error);
@@ -80,56 +153,64 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     void loadQueue();
   }, [loadQueue]);
 
-  const openConfirm = async (item: EtiquetteEmailQueueItem) => {
+  useAppAutoRefresh(() => loadQueue());
+
+  useEffect(() => {
+    if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
+    const syncAndReload = async () => {
+      await runAutoSync();
+      await loadQueue();
+    };
+    const id = window.setInterval(() => {
+      if (!document.hidden) void syncAndReload();
+    }, 180_000);
+    return () => window.clearInterval(id);
+  }, [emailStatus?.provider, emailStatus?.connected, runAutoSync, loadQueue]);
+
+  const openConfirm = (item: EtiquetteEmailQueueItem) => {
+    setConfirmItem(item);
+  };
+
+  const suiviJours = cgpConfig?.email_suivi_delai_jours ?? 5;
+
+  const handleMarkResponse = async (
+    item: EtiquetteEmailQueueItem,
+    responseType: "mail" | "rdv" | "autre"
+  ) => {
     try {
-      const cgp = cgpConfig ?? (await getCgpConfig());
-      const preview = renderEtiquetteEmailPreview(item, cgp);
-      setConfirmItem(item);
-      setSubject(preview.subject);
-      setBody(preview.body);
-    } catch (error) {
-      console.error(error);
-      toast.error("Impossible de préparer l'aperçu");
+      await markEmailCampaignResponse(item.contact_etiquette_id, responseType);
+      toast.success("Retour client enregistré");
+      notifyRelationChanged(item.contact_id);
+      await loadQueue();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
     }
   };
 
-  const handleSend = async () => {
-    if (!confirmItem?.contact_email) return;
-    setSending(true);
+  const handleDismissFollowup = async (item: EtiquetteEmailQueueItem) => {
     try {
-      await sendEmail({
-        to_email: confirmItem.contact_email,
-        to_name: `${confirmItem.contact_prenom} ${confirmItem.contact_nom}`,
-        subject: subject.trim(),
-        body,
-      });
-      try {
-        await markEtiquetteEmailSent(confirmItem.contact_etiquette_id);
-      } catch (markError) {
-        console.error(markError);
-        toast.warning(
-          "Email envoyé, mais l'enregistrement CRM a échoué — ne renvoyez pas sans vérifier la fiche."
-        );
-        setConfirmItem(null);
-        await loadQueue();
-        return;
-      }
-      toast.success(`Email envoyé à ${confirmItem.contact_prenom} ${confirmItem.contact_nom}`);
-      setConfirmItem(null);
+      await dismissEmailCampaignFollowup(item.contact_etiquette_id);
+      toast.success("Relance masquée pour cet envoi");
       await loadQueue();
-    } catch (error) {
-      console.error("Error sending etiquette email:", error);
-      const hint =
-        error instanceof Error ? error.message : "Erreur lors de l'envoi";
-      toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Email)`);
-    } finally {
-      setSending(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  };
+
+  const handlePrepareRelance = async (item: EtiquetteEmailQueueItem) => {
+    try {
+      await prepareEmailCampaignRelance(item.contact_etiquette_id);
+      toast.success("Contact remis dans « Prêts à envoyer » pour une relance");
+      setSubTab("ready");
+      await loadQueue();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
     }
   };
 
   const renderList = (
     items: EtiquetteEmailQueueItem[],
-    options: { mode: "ready" | "incomplete" | "sent" }
+    options: { mode: "ready" | "incomplete" | "sent" | "followup" }
   ) => {
     if (loading) {
       return (
@@ -139,10 +220,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     if (items.length === 0) {
       const empty =
         options.mode === "ready"
-          ? "Aucun email prêt à envoyer. Vérifiez la date d'envoi de l'étiquette et que des contacts sont taggés."
+          ? "Aucun email prêt. Sur une étiquette : activer « Campagne email », choisir un template, date d'envoi passée ou aujourd'hui, étiquette active, puis recalculer. Les contacts doivent avoir un email en fiche."
           : options.mode === "incomplete"
-            ? "Aucun contact en attente de complément."
-            : "Aucun envoi récent enregistré.";
+            ? "Aucun contact en attente. Soit aucune campagne email n'est configurée, soit tout est déjà dans « Prêts » / « Envoyés »."
+            : options.mode === "followup"
+              ? `Aucune relance à proposer (${suiviJours} jours sans retour enregistré).`
+              : "Aucun envoi récent enregistré.";
       return <div className="text-center py-8 text-muted-foreground">{empty}</div>;
     }
 
@@ -185,10 +268,23 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {options.mode === "sent"
+                  {options.mode === "sent" || options.mode === "followup"
                     ? `Envoyé le ${formatEtiquetteSendDatetime(item.email_date_envoi)}`
                     : `Prévu le ${formatEtiquetteSendDatetime(item.email_date_prevue)}`}
                 </p>
+                {(options.mode === "followup" ||
+                  options.mode === "sent") &&
+                  hasContactActivityAfterEmailSend(item) && (
+                    <p className="text-xs text-blue-700">
+                      Dernier contact fiche mis à jour après l&apos;envoi — à vérifier
+                      avant relance.
+                    </p>
+                  )}
+                {options.mode === "followup" && (
+                  <p className="text-xs text-amber-800">
+                    Aucun retour enregistré depuis {suiviJours} jours (mail ou RDV).
+                  </p>
+                )}
                 {options.mode === "ready" && preview && (
                   <p className="text-xs text-muted-foreground truncate">
                     Objet : {preview.subject}
@@ -202,10 +298,45 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               </div>
               <div className="flex gap-2 shrink-0">
                 {options.mode === "ready" && (
-                  <Button size="sm" onClick={() => void openConfirm(item)}>
+                  <Button size="sm" onClick={() => openConfirm(item)}>
                     <Send className="h-4 w-4 mr-1" />
                     Confirmer et envoyer
                   </Button>
+                )}
+                {options.mode === "followup" && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={() => void handlePrepareRelance(item)}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-1" />
+                      Relancer
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Réponse par email"
+                      onClick={() => void handleMarkResponse(item, "mail")}
+                    >
+                      <MessageSquare className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="RDV pris (Agenda)"
+                      onClick={() => void handleMarkResponse(item, "rdv")}
+                    >
+                      <CalendarCheck className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Ignorer le suivi"
+                      onClick={() => void handleDismissFollowup(item)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
                 )}
                 {options.mode === "incomplete" &&
                   (item.queue_issue === "NO_EMAIL" || item.queue_issue === "OTHER") && (
@@ -250,12 +381,19 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
           </span>
         </p>
       )}
-      {emailStatus?.connected && (
+      {emailStatus?.connected && emailStatus.method === "oauth" && (
         <p className="text-sm text-green-900 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
-          Boîte active :{" "}
-          {emailStatus.method === "oauth"
-            ? `${emailStatus.provider === "google" ? "Google" : "Microsoft"} — ${emailStatus.email ?? ""}`
-            : "SMTP (ancienne config — connectez OAuth dans Paramètres)"}
+          Boîte active : {emailStatus.provider === "google" ? "Google" : "Microsoft"} —{" "}
+          {emailStatus.email ?? ""}
+        </p>
+      )}
+      {emailStatus?.connected && emailStatus.method === "smtp" && (
+        <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            Boîte active : <strong>ancienne config SMTP</strong> (pas Gmail OAuth). Paramètres → Email →{" "}
+            <strong>Supprimer l&apos;ancienne config SMTP</strong>, puis <strong>Connecter Google</strong>.
+          </span>
         </p>
       )}
       <Card>
@@ -269,10 +407,22 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               Les emails ne partent qu&apos;après votre confirmation, un contact à la fois.
             </CardDescription>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void loadQueue()} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1 ${loading ? "animate-spin" : ""}`} />
-            Actualiser
-          </Button>
+          <div className="flex gap-2">
+            {emailStatus?.provider === "google" && emailStatus.connected && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={loading || syncing}
+                onClick={async () => {
+                  await runAutoSync();
+                  await loadQueue();
+                }}
+              >
+                <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} />
+                Vérifier réponses
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <Tabs value={subTab} onValueChange={(v) => setSubTab(v as typeof subTab)}>
@@ -297,6 +447,14 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   <Badge variant="outline">{sent.length}</Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="followup" className="gap-2">
+                À relancer
+                {followup.length > 0 && (
+                  <Badge variant="secondary" className="bg-orange-100">
+                    {followup.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
             </TabsList>
             <TabsContent value="ready" className="mt-4">
               {renderList(ready, { mode: "ready" })}
@@ -307,61 +465,25 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             <TabsContent value="sent" className="mt-4">
               {renderList(sent, { mode: "sent" })}
             </TabsContent>
+            <TabsContent value="followup" className="mt-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                Délai : {suiviJours} jours (Paramètres → Profil). Avec Google connecté, le CRM
+                détecte les réponses mail et les RDV Agenda (bouton « Vérifier réponses » ou à
+                l&apos;actualisation). Reconnectez Google si l&apos;accès Agenda est refusé.
+              </p>
+              {renderList(followup, { mode: "followup" })}
+            </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
 
-      <Dialog open={!!confirmItem} onOpenChange={(o) => !o && setConfirmItem(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Confirmer l&apos;envoi</DialogTitle>
-            <DialogDescription>
-              {confirmItem && (
-                <>
-                  À <strong>{confirmItem.contact_email}</strong> — étiquette{" "}
-                  <strong>{confirmItem.etiquette_nom}</strong>
-                </>
-              )}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="confirm-subject">Objet</Label>
-              <Input
-                id="confirm-subject"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-body">Message</Label>
-              <Textarea
-                id="confirm-body"
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={10}
-                className="font-mono text-sm"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmItem(null)} disabled={sending}>
-              Annuler
-            </Button>
-            <Button
-              onClick={() => void handleSend()}
-              disabled={sending || !subject.trim() || !body.trim()}
-            >
-              {sending ? "Envoi..." : (
-                <>
-                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                  Envoyer maintenant
-                </>
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <EtiquetteEmailSendDialog
+        item={confirmItem}
+        open={!!confirmItem}
+        onOpenChange={(o) => !o && setConfirmItem(null)}
+        cgpConfig={cgpConfig}
+        onSent={() => void loadQueue()}
+      />
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import { useEffect, useState, useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart,
   Bar,
@@ -9,15 +8,16 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
+  LabelList,
 } from "recharts";
 import { getPipelineStats } from "@/lib/api/tauri-dashboard";
 import {
   CHART_AXIS_STROKE,
   CHART_GRID_STROKE,
   ChartEmpty,
-  ChartLegendGrid,
   ChartLoading,
   ChartTooltipBox,
+  DashboardPanel,
   formatDashboardPercent,
 } from "./dashboard-ui";
 
@@ -62,17 +62,15 @@ export function PipelineChart() {
   }, []);
 
   return (
-    <Card className="shadow-sm border-border/80 h-full flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle className="font-serif text-xl">Pipeline commercial</CardTitle>
-        <CardDescription>
-          Funnel suspects → prospects → clients
-          {!loading && total > 0 && (
-            <span className="tabular-nums"> — {clientShare} % clients</span>
-          )}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="flex-1">
+    <DashboardPanel
+      title="Pipeline commercial"
+      description={
+        !loading && total > 0
+          ? `${clientShare} % de clients dans le portefeuille actif`
+          : "Suspects, prospects et clients"
+      }
+      className="h-full"
+    >
         {loading ? (
           <ChartLoading height={300} />
         ) : total === 0 ? (
@@ -125,27 +123,25 @@ export function PipelineChart() {
                     );
                   }}
                 />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={36}>
+                <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={40}>
                   {data.map((entry, index) => (
                     <Cell key={index} fill={entry.color} />
                   ))}
+                  <LabelList
+                    dataKey="count"
+                    position="right"
+                    className="fill-foreground/80 text-xs font-medium"
+                    formatter={(value) => {
+                      const n = typeof value === "number" ? value : Number(value);
+                      if (!Number.isFinite(n)) return "";
+                      return `${n} contact${n > 1 ? "s" : ""}`;
+                    }}
+                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            <ChartLegendGrid
-              items={data.map((d) => ({
-                name: d.stage,
-                value: d.count,
-                color: d.color,
-                formatValue: (v) => `${v} contact${v > 1 ? "s" : ""}`,
-              }))}
-              total={total}
-              columns={3}
-              maxHeight="none"
-            />
           </div>
         )}
-      </CardContent>
-    </Card>
+    </DashboardPanel>
   );
 }

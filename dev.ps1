@@ -16,6 +16,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
+$onWindows = ($IsWindows -or $env:OS -match 'Windows')
 
 Write-Host '=== Patrimoine CRM - mode dev ===' -ForegroundColor Cyan
 
@@ -34,6 +35,17 @@ if (-not (Test-Path 'node_modules')) {
     npm install
 }
 
+# node_modules cree sous Linux/Docker : binaire Tauri Windows souvent absent
+$tauriCliNative = Join-Path $PSScriptRoot 'node_modules\@tauri-apps\cli-win32-x64-msvc'
+if ($onWindows -and -not (Test-Path $tauriCliNative)) {
+    Write-Host 'Binaire Tauri CLI Windows manquant -> npm install (reparer node_modules)...' -ForegroundColor Yellow
+    npm install
+    if (-not (Test-Path $tauriCliNative)) {
+        Write-Host 'ERREUR: tauri CLI toujours absent. Supprimez node_modules puis: npm install' -ForegroundColor Red
+        exit 1
+    }
+}
+
 if ($Ui) {
     Write-Host ''
     Write-Host 'Mode: UI seule (Vite)' -ForegroundColor Green
@@ -44,7 +56,6 @@ if ($Ui) {
     exit 0
 }
 
-$onWindows = ($IsWindows -or $env:OS -match 'Windows')
 $useRelease = $Release.IsPresent
 
 Write-Host ''

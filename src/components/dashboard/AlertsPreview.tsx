@@ -1,19 +1,33 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Bell, ChevronRight, Sparkles } from "lucide-react";
-import { getAlertesWithContacts, AlerteWithContact } from "@/lib/api/tauri-dashboard";
+import { ArrowRight, CheckCircle2 } from "lucide-react";
+import { getAlertesWithContacts, type AlerteWithContact } from "@/lib/api/tauri-dashboard";
 import {
   CONTACT_DISPLAY_CATEGORY_LABELS,
   getDisplayCategorieBadgeClass,
 } from "@/lib/contacts/contact-category-display";
+import {
+  getTypeAlerteBadgeClass,
+  getTypeAlerteLabel,
+} from "@/lib/alertes/alerte-labels";
+import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
 
 interface AlertsPreviewProps {
   onNavigate?: (page: string) => void;
+  onOpenContact?: (contactId: number) => void;
 }
 
-export function AlertsPreview({ onNavigate }: AlertsPreviewProps) {
+function formatLastContact(timestamp: number | null) {
+  if (!timestamp) return null;
+  return new Intl.DateTimeFormat("fr-FR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(timestamp * 1000));
+}
+
+export function AlertsPreview({ onNavigate, onOpenContact }: AlertsPreviewProps) {
   const [alertes, setAlertes] = useState<AlerteWithContact[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -30,71 +44,75 @@ export function AlertsPreview({ onNavigate }: AlertsPreviewProps) {
     })();
   }, []);
 
-  const formatDate = (timestamp: number | null) => {
-    if (!timestamp) return "Jamais contacté";
-    return new Intl.DateTimeFormat("fr-FR", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(timestamp * 1000));
+  const openAlert = (alerte: AlerteWithContact) => {
+    if (onOpenContact) {
+      onOpenContact(alerte.contact_id);
+    } else {
+      onNavigate?.("suivi");
+    }
   };
 
+  const panelDescription = loading
+    ? "Chargement…"
+    : alertes.length > 0
+      ? `${alertes.length} contact${alertes.length > 1 ? "s" : ""} — clic pour ouvrir la fiche`
+      : "Rien à traiter pour le moment";
+
   return (
-    <Card className="shadow-sm border-border/80 h-full flex flex-col">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <CardTitle className="font-serif text-xl flex items-center gap-2">
-              <span className="p-1.5 rounded-lg bg-red-50">
-                <Bell className="h-4 w-4 text-red-600" />
-              </span>
-              Contacts à recontacter
-            </CardTitle>
-            <CardDescription className="mt-1.5">
-              {loading
-                ? "Chargement…"
-                : alertes.length > 0
-                  ? `${alertes.length} alerte${alertes.length > 1 ? "s" : ""} prioritaire${alertes.length > 1 ? "s" : ""}`
-                  : "Tous vos contacts sont à jour"}
-            </CardDescription>
-          </div>
-          {onNavigate && alertes.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground shrink-0"
-              onClick={() => onNavigate("suivi")}
-            >
-              Tout voir
-              <ChevronRight className="h-4 w-4 ml-0.5" />
-            </Button>
-          )}
+    <DashboardPanel
+      title="Contacts à recontacter"
+      description={panelDescription}
+      className="h-full"
+      action={
+        onNavigate && alertes.length > 0 ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0 gap-1"
+            onClick={() => onNavigate("suivi")}
+          >
+            Tout le suivi
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        ) : undefined
+      }
+    >
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-14 rounded-xl bg-muted/50 animate-pulse" />
+          ))}
         </div>
-      </CardHeader>
-      <CardContent className="flex-1">
-        {loading ? (
-          <div className="py-10 text-center text-sm text-muted-foreground">Chargement…</div>
-        ) : alertes.length === 0 ? (
-          <div className="py-10 text-center">
-            <div className="inline-flex p-4 rounded-full bg-emerald-50 mb-3">
-              <Sparkles className="h-8 w-8 text-emerald-600 opacity-80" />
-            </div>
-            <p className="font-medium text-foreground/90">Rien à traiter</p>
-            <p className="text-sm text-muted-foreground mt-1">Votre suivi est à jour.</p>
+      ) : alertes.length === 0 ? (
+        <div className="py-12 flex flex-col items-center justify-center text-center">
+          <div className="inline-flex p-3 rounded-full bg-emerald-50 mb-3">
+            <CheckCircle2 className="h-8 w-8 text-emerald-600" />
           </div>
-        ) : (
-          <ul className="space-y-2">
-            {alertes.map((alerte) => (
+          <p className="font-medium text-foreground">Suivi à jour</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-xs">
+            Aucune alerte en attente.
+          </p>
+        </div>
+      ) : (
+        <ul className="space-y-2">
+          {alertes.map((alerte) => {
+            const lastContact = formatLastContact(alerte.date_dernier_contact);
+            const typeLabel = getTypeAlerteLabel(alerte.type_alerte);
+
+            return (
               <li key={alerte.alerte_id}>
                 <button
                   type="button"
-                  onClick={() => onNavigate?.("suivi")}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border/80 bg-card hover:bg-accent/60 hover:border-primary/20 transition-colors text-left group"
+                  onClick={() => openAlert(alerte)}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl border border-border/70 bg-background/80 hover:bg-muted/40 hover:border-primary/25 transition-colors text-left group"
                 >
-                  <div className="w-1 self-stretch rounded-full bg-red-400/80 shrink-0 min-h-[2.5rem]" />
-                  <div className="flex-1 min-w-0 space-y-1">
+                  <ContactInitialsAvatar
+                    prenom={alerte.contact_prenom}
+                    nom={alerte.contact_nom}
+                  />
+                  <div className="flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium truncate">
+                      <p className="font-semibold text-foreground truncate">
                         {alerte.contact_prenom} {alerte.contact_nom}
                       </p>
                       <Badge
@@ -104,21 +122,26 @@ export function AlertsPreview({ onNavigate }: AlertsPreviewProps) {
                         {CONTACT_DISPLAY_CATEGORY_LABELS[alerte.contact_categorie] ||
                           alerte.contact_categorie}
                       </Badge>
+                      <Badge
+                        variant="outline"
+                        className={`text-[10px] px-1.5 py-0 h-5 shrink-0 ${getTypeAlerteBadgeClass(alerte.type_alerte)}`}
+                      >
+                        {typeLabel}
+                      </Badge>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Dernier contact : {formatDate(alerte.date_dernier_contact)}
-                    </p>
-                    {alerte.message && (
-                      <p className="text-sm text-primary/90 line-clamp-1">{alerte.message}</p>
-                    )}
+                    {lastContact ? (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Dernier contact : {lastContact}
+                      </p>
+                    ) : null}
                   </div>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0 opacity-40 group-hover:opacity-100 group-hover:text-primary transition-all" />
                 </button>
               </li>
-            ))}
-          </ul>
-        )}
-      </CardContent>
-    </Card>
+            );
+          })}
+        </ul>
+      )}
+    </DashboardPanel>
   );
 }

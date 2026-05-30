@@ -1,12 +1,12 @@
+use super::oauth_client::build_basic_client;
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore, OAUTH_REDIRECT_URI};
-use oauth2::basic::BasicClient;
 use oauth2::reqwest::http_client;
 use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope,
-    TokenResponse, TokenUrl,
+    AuthorizationCode, CsrfToken, PkceCodeChallenge, RedirectUrl, RequestTokenError, Scope,
+    TokenResponse,
 };
 use std::io::{Read, Write};
-use std::net::TcpListener;
+use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 use tauri::AppHandle;
 use url::Url;
@@ -24,6 +24,9 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
             token_url: "https://oauth2.googleapis.com/token",
             scopes: &[
                 "https://www.googleapis.com/auth/gmail.send",
+                "https://www.googleapis.com/auth/gmail.readonly",
+                "https://www.googleapis.com/auth/gmail.settings.basic",
+                "https://www.googleapis.com/auth/calendar.readonly",
                 "https://www.googleapis.com/auth/userinfo.email",
                 "openid",
             ],
@@ -46,8 +49,16 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
 /// Ouvre l’URL OAuth dans le navigateur par défaut (sans plugin shell/opener déprécié).
 fn open_authorization_url(url: &str) -> Result<(), String> {
     if cfg!(target_os = "windows") {
-        std::process::Command::new("cmd")
-            .args(["/C", "start", "", url])
+        // `cmd start` tronque souvent l’URL au premier `&` → Google renvoie « Missing parameter: scope ».
+        let escaped = url.replace('\'', "''");
+        std::process::Command::new("powershell")
+            .args([
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-Command",
+                &format!("Start-Process '{escaped}'"),
+            ])
             .spawn()
             .map_err(|e| format!("Ouverture du navigateur: {}", e))?;
     } else if cfg!(target_os = "macos") {
@@ -64,33 +75,23 @@ fn open_authorization_url(url: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn client_id_for(store: &EmailOAuthStore, provider: &str) -> Result<String, String> {
-    let id = match provider {
-        "google" => store.google_client_id.as_ref(),
-        "microsoft" => store.microsoft_client_id.as_ref(),
-        _ => None,
-    };
-    id.filter(|s| !s.trim().is_empty())
-        .cloned()
-        .ok_or_else(|| {
-            format!(
-                "Identifiant client {} manquant. Renseignez-le dans Paramètres → Email (voir docs/EMAIL_OAUTH_SETUP.md).",
-                provider
-            )
-        })
+fn write_http_response(stream: &mut TcpStream, status: &str, body: &str) {
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    let _ = stream.write_all(response.as_bytes());
+    let _ = stream.flush();
 }
 
-fn wait_for_callback(
-    listener: &TcpListener,
+fn try_read_oauth_callback(
+    stream: &mut TcpStream,
     expected_state: &str,
-) -> Result<(String, String), String> {
-    let (mut stream, _) = listener
-        .accept()
-        .map_err(|e| format!("Écoute OAuth: {}", e))?;
-    let _ = stream.set_read_timeout(Some(Duration::from_secs(120)));
+) -> Result<Option<String>, String> {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
     let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
 
-    let mut buf = [0u8; 4096];
+    let mut buf = [0u8; 8192];
     let n = stream
         .read(&mut buf)
         .map_err(|e| format!("Lecture callback OAuth: {}", e))?;
@@ -99,9 +100,14 @@ fn wait_for_callback(
     let path = request_line
         .split_whitespace()
         .nth(1)
-        .unwrap_or("/callback");
+        .unwrap_or("/");
 
-    let full_url = format!("http://127.0.0.1{}", path);
+    if !path.starts_with("/callback") {
+        write_http_response(stream, "404 Not Found", "");
+        return Ok(None);
+    }
+
+    let full_url = format!("http://127.0.0.1{path}");
     let parsed = Url::parse(&full_url).map_err(|e| e.to_string())?;
     let mut code = None;
     let mut state = None;
@@ -115,26 +121,50 @@ fn wait_for_callback(
         }
     }
 
-    let body = r#"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>CRM</title></head>
+    let success_body = r#"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>CRM</title></head>
 <body style="font-family:sans-serif;padding:2rem"><h1>Connexion réussie</h1>
 <p>Vous pouvez fermer cet onglet et revenir au CRM.</p></body></html>"#;
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-        body.len(),
-        body
-    );
-    let _ = stream.write_all(response.as_bytes());
-    let _ = stream.flush();
+    write_http_response(stream, "200 OK", success_body);
 
     if let Some(e) = err {
         return Err(format!("OAuth refusé: {}", e));
     }
-    let state = state.ok_or("Paramètre state manquant")?;
+    let state = state.ok_or("Paramètre state manquant dans le callback")?;
     if state != expected_state {
-        return Err("État OAuth invalide (CSRF)".into());
+        return Err("État OAuth invalide (CSRF). Réessayez Connecter Google.".into());
     }
-    let code = code.ok_or("Code d'autorisation manquant")?;
-    Ok((code, state))
+    let code = code.ok_or(
+        "Code d'autorisation manquant. Ne rechargez pas la page Google : recliquez Connecter Google dans le CRM.",
+    )?;
+    Ok(Some(code))
+}
+
+/// Ignore les requêtes parasites (favicon, etc.) jusqu'au vrai `/callback`.
+fn wait_for_callback(listener: &TcpListener, expected_state: &str) -> Result<String, String> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(120);
+    listener
+        .set_nonblocking(true)
+        .map_err(|e| format!("Écoute OAuth: {}", e))?;
+
+    loop {
+        if std::time::Instant::now() > deadline {
+            return Err(
+                "Délai OAuth dépassé (120 s). Fermez l'onglet du navigateur et réessayez.".into(),
+            );
+        }
+        match listener.accept() {
+            Ok((mut stream, _)) => {
+                match try_read_oauth_callback(&mut stream, expected_state)? {
+                    Some(code) => return Ok(code),
+                    None => continue,
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                std::thread::sleep(Duration::from_millis(150));
+            }
+            Err(e) => return Err(format!("Écoute OAuth: {}", e)),
+        }
+    }
 }
 
 fn fetch_user_email(provider: &str, access_token: &str) -> Result<String, String> {
@@ -175,23 +205,22 @@ fn fetch_user_email(provider: &str, access_token: &str) -> Result<String, String
 
 pub fn run_oauth_connect(app: &AppHandle, provider: &str) -> Result<EmailOAuthConnection, String> {
     let mut store = EmailOAuthStore::load(app)?;
-    let client_id = client_id_for(&store, provider)?;
     let cfg = provider_config(provider)?;
 
-    let oauth_client = BasicClient::new(
-        ClientId::new(client_id),
-        None,
-        AuthUrl::new(cfg.auth_url.to_string()).map_err(|e| e.to_string())?,
-        Some(TokenUrl::new(cfg.token_url.to_string()).map_err(|e| e.to_string())?),
-    )
-    .set_redirect_uri(RedirectUrl::new(OAUTH_REDIRECT_URI.to_string()).map_err(|e| e.to_string())?);
+    let oauth_client = build_basic_client(provider, &store)?
+        .set_redirect_uri(RedirectUrl::new(OAUTH_REDIRECT_URI.to_string()).map_err(|e| e.to_string())?);
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-    let mut auth_request = oauth_client.authorize_url(CsrfToken::new_random);
-    for scope in cfg.scopes {
-        auth_request = auth_request.add_scope(Scope::new((*scope).to_string()));
-    }
-    let (auth_url, csrf_token) = auth_request.set_pkce_challenge(pkce_challenge).url();
+    let scopes: Vec<Scope> = cfg
+        .scopes
+        .iter()
+        .map(|s| Scope::new((*s).to_string()))
+        .collect();
+    let (auth_url, csrf_token) = oauth_client
+        .authorize_url(CsrfToken::new_random)
+        .add_scopes(scopes)
+        .set_pkce_challenge(pkce_challenge)
+        .url();
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", super::oauth_store::OAUTH_REDIRECT_PORT))
         .map_err(|e| {
@@ -204,13 +233,38 @@ pub fn run_oauth_connect(app: &AppHandle, provider: &str) -> Result<EmailOAuthCo
 
     open_authorization_url(auth_url.as_ref())?;
 
-    let (code, _) = wait_for_callback(&listener, csrf_token.secret())?;
+    let code = wait_for_callback(&listener, csrf_token.secret())?;
 
     let token = oauth_client
         .exchange_code(AuthorizationCode::new(code))
         .set_pkce_verifier(pkce_verifier)
         .request(http_client)
-        .map_err(|e| format!("Échange du code OAuth: {}", e))?;
+        .map_err(|e| match &e {
+            RequestTokenError::ServerResponse(resp) => {
+                let code = resp.error().to_string();
+                let desc = resp
+                    .error_description()
+                    .map(|c| c.to_string())
+                    .unwrap_or_default();
+                let hint = match code.as_str() {
+                    "redirect_uri_mismatch" => " Ajoutez http://127.0.0.1:3847/callback dans Google Cloud → Clients → URI de redirection.",
+                    "invalid_grant" => " Fermez l'onglet Google, attendez 5 s, recliquez Connecter Google une seule fois.",
+                    "invalid_client" => " Vérifiez le Client ID (Application de bureau).",
+                    _ => "",
+                };
+                if desc.is_empty() {
+                    format!("Échange du code OAuth: {code}{hint}")
+                } else {
+                    format!("Échange du code OAuth: {code} — {desc}{hint}")
+                }
+            }
+            RequestTokenError::Request(err) => format!("Échange du code OAuth (réseau): {err}"),
+            RequestTokenError::Parse(err, raw) => format!(
+                "Échange du code OAuth (réponse illisible): {err} — {}",
+                String::from_utf8_lossy(raw)
+            ),
+            RequestTokenError::Other(msg) => format!("Échange du code OAuth: {msg}"),
+        })?;
 
     let access_token = token.access_token().secret().clone();
     let refresh_token = token.refresh_token().map(|t| t.secret().clone());

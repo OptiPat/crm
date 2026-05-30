@@ -74,11 +74,75 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 
 ---
 
+## Signature Gmail
+
+L’API Gmail **n’ajoute pas** la signature configurée dans Gmail. Dans **Paramètres → Profil** :
+
+- **Importer depuis Gmail** (recommandé) : conserve le **logo** et la mise en forme (envoi en HTML).
+- Ou coller du texte seul (sans image).
+
+Si vous voyez `&#39;` au lieu d’apostrophes : **réimportez depuis Gmail** puis **Enregistrer** le profil (ou rechargez l’app : les apostrophes sont corrigées à la lecture). Ne modifiez pas le texte après import si vous voulez garder le logo.
+
+La signature est ajoutée en fin de chaque message dans la file d’envoi (aperçu texte + envoi HTML si logo importé), y compris l’**email de test** OAuth (Paramètres → Email → Tester la connexion), si elle est configurée dans le profil.
+
+## Suivi après envoi (relance)
+
+| Réglage | Où | Défaut |
+|---------|-----|--------|
+| Délai sans retour | Paramètres → Profil → **Délai relance** | 5 jours |
+
+Après envoi depuis **Suivi → Envois**, si aucun retour n’est enregistré au bout de N jours, l’onglet **À relancer** propose :
+
+- **Relancer** : remet le contact dans **Prêts à envoyer** (même template / étiquette),
+- **Icône mail / calendrier** : marquer réponse par email ou RDV pris,
+- **Ignorer** : ne plus proposer de relance pour cet envoi.
+
+Indice : si la **date de dernier contact** sur la fiche est postérieure à l’envoi, un bandeau bleu signale un contact possible — à confirmer manuellement.
+
+Les envois et réponses campagne créent des **interactions** dans le panneau **Relation client** (fiche contact). Les alertes de suivi se clôturent automatiquement quand une réponse est enregistrée (manuelle ou sync Google). L’interface se rafraîchit sans action manuelle (Suivi, Envois, fiche ouverte).
+
+### Détection automatique (Google)
+
+Nécessite **Google connecté** avec les droits Gmail (lecture) et **Google Calendar** (lecture). Si l’accès Agenda échoue : **Paramètres → Email → reconnecter Google**.
+
+| Source | Détection |
+|--------|-----------|
+| **Gmail** | Réponse du client dans le fil de discussion (thread enregistré à l’envoi) ou message `from:client` après la date d’envoi |
+| **Agenda** | Événement sur l’agenda principal avec le client en participant, après l’envoi |
+
+Déclenchement : à l’**actualisation** de la file, ou bouton **Vérifier réponses** (Suivi → Envois). Les contacts détectés sont marqués « répondu » (mail ou RDV) et sortent de **À relancer**.
+
+Limite : envois **avant** cette version sans thread Gmail enregistré — la recherche par expéditeur compense en partie. Microsoft / SMTP : pas de sync auto (marquage manuel).
+
+---
+
+## Campagne par étiquette : éligibilité vs date fixe
+
+| Mode (formulaire étiquette) | Champ SQLite | Comportement |
+|-----------------------------|--------------|--------------|
+| **Dès éligibilité** | `email_envoi_heure` (ex. `09:00`) | Chaque contact reçoit une date d’envoi calculée à partir de **sa** date d’attribution (ou du recalcul auto). Ex. règle « Suivi > 1 an » : le mail devient **Prêt** dès que le délai est dépassé, au créneau horaire du jour (ou immédiatement si l’heure est déjà passée). |
+| **Date fixe** | `email_envoi_prevu` (timestamp) | Même date/heure pour tous les contacts déjà tagués (campagnes ponctuelles type « envoi le 15/06 à 10h »). |
+
+Prérequis pour voir des lignes dans **Suivi → Envois** :
+
+1. Campagne email **activée** sur l’étiquette + template choisi.
+2. Pour les étiquettes auto : lancer **Recalculer les règles** (contacts tagués + dates recalculées).
+3. OAuth connecté ; envoi manuel depuis l’onglet **Prêts**.
+
+Les deux modes sont exclusifs : enregistrer l’un efface l’autre côté base.
+
+## Templates ↔ étiquettes
+
+- Dans **Templates email** → modifier un modèle : section **Étiquettes qui utilisent ce template** (cases à cocher). Enregistrement = `email_template_id` mis à jour sur chaque étiquette cochée.
+- Dans **Étiquette** : le template reste aussi sélectionnable dans « Paramètres campagne » ; la suggestion par nom (`Suggérer`) complète le lien sans remplacer la liste template→étiquettes.
+
+---
+
 ## Parcours cible (utilisateur CGP)
 
 1. Connecter la boîte Gmail ou Outlook (étape 3).
-2. Créer ou choisir des templates (étape 2).
-3. Activer campagne email sur une étiquette → contacts entrent dans la file.
+2. Créer ou choisir des templates (étape 2) ; lier les étiquettes concernées depuis le formulaire template.
+3. Sur chaque étiquette : activer la campagne, choisir le template, mode **Dès éligibilité** (heure) ou **Date fixe**, puis recalculer si règle auto.
 4. Ouvrir **Suivi → Envois** avec le CRM lancé → valider et envoyer.
 5. Consulter l’historique (étape 4).
 

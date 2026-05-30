@@ -20,6 +20,8 @@ pub struct EmailOAuthConnection {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EmailOAuthStore {
     pub google_client_id: Option<String>,
+    /// Code secret Google (clients « Web » ou bureau avec secret exigé par Google).
+    pub google_client_secret: Option<String>,
     pub microsoft_client_id: Option<String>,
     pub connection: Option<EmailOAuthConnection>,
 }
@@ -29,6 +31,8 @@ struct PersistedOAuthStore {
     #[serde(default)]
     version: u32,
     google_client_id: Option<String>,
+    #[serde(default)]
+    google_client_secret_enc: Option<String>,
     microsoft_client_id: Option<String>,
     connection: Option<PersistedOAuthConnection>,
 }
@@ -89,8 +93,22 @@ impl EmailOAuthStore {
             .connection
             .map(|c| persisted_connection_to_runtime(c, storage_key))
             .transpose()?;
+        let google_client_secret = match (
+            persisted.google_client_secret_enc.as_ref(),
+            storage_key,
+        ) {
+            (Some(enc), Some(key)) => Some(decrypt_secret(enc, key)?),
+            (Some(_), None) => {
+                return Err(
+                    "Code secret Google chiffré : ouvrez le CRM avec votre mot de passe maître."
+                        .into(),
+                );
+            }
+            (None, _) => None,
+        };
         Ok(Self {
             google_client_id: persisted.google_client_id,
+            google_client_secret,
             microsoft_client_id: persisted.microsoft_client_id,
             connection,
         })
@@ -102,9 +120,22 @@ impl EmailOAuthStore {
             .as_ref()
             .map(|c| runtime_connection_to_persisted(c, storage_key))
             .transpose()?;
+        let google_client_secret_enc = match (self.google_client_secret.as_ref(), storage_key) {
+            (Some(secret), Some(key)) if !secret.trim().is_empty() => {
+                Some(encrypt_secret(secret, key)?)
+            }
+            (Some(_), None) => {
+                return Err(
+                    "Impossible de sauvegarder le code secret Google sans mot de passe maître CRM."
+                        .into(),
+                );
+            }
+            _ => None,
+        };
         Ok(PersistedOAuthStore {
             version: if storage_key.is_some() { 2 } else { 1 },
             google_client_id: self.google_client_id.clone(),
+            google_client_secret_enc,
             microsoft_client_id: self.microsoft_client_id.clone(),
             connection,
         })

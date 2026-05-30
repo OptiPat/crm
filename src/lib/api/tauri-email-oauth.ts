@@ -9,6 +9,14 @@ export interface EmailConnectionStatus {
 
 export interface OAuthAppSettings {
   google_client_id: string | null;
+  google_client_secret_configured: boolean;
+  microsoft_client_id: string | null;
+}
+
+export interface OAuthAppSettingsInput {
+  google_client_id: string | null;
+  /** Omit or null = keep existing secret; non-empty string = save new secret */
+  google_client_secret?: string | null;
   microsoft_client_id: string | null;
 }
 
@@ -20,7 +28,7 @@ export async function getOAuthAppSettings(): Promise<OAuthAppSettings> {
   return invoke<OAuthAppSettings>("get_oauth_app_settings");
 }
 
-export async function saveOAuthAppSettings(settings: OAuthAppSettings): Promise<void> {
+export async function saveOAuthAppSettings(settings: OAuthAppSettingsInput): Promise<void> {
   return invoke<void>("save_oauth_app_settings", { settings });
 }
 
@@ -36,4 +44,14 @@ export async function disconnectEmailOAuth(): Promise<void> {
 
 export async function testEmailConnection(): Promise<string> {
   return invoke<string>("test_email_connection");
+}
+
+export interface ImportedGmailSignature {
+  html: string;
+  plain: string;
+}
+
+/** Signature Gmail (HTML + texte). Reconnecter Google si accès refusé. */
+export async function fetchGmailSignatureForCgp(): Promise<ImportedGmailSignature> {
+  return invoke<ImportedGmailSignature>("fetch_gmail_signature_for_cgp");
 }

@@ -436,6 +436,36 @@ pub fn update_template_email(
         .map_err(|e| format!("Failed to update template: {}", e))
 }
 
+#[derive(serde::Deserialize)]
+pub struct SetTemplateEtiquetteLinksInput {
+    pub template_id: i64,
+    pub etiquette_ids: Vec<i64>,
+}
+
+#[tauri::command]
+pub fn set_template_etiquette_links(
+    db: State<'_, DbState>,
+    input: SetTemplateEtiquetteLinksInput,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .set_template_etiquette_links(input.template_id, &input.etiquette_ids)
+        .map_err(|e| format!("Failed to link template to etiquettes: {}", e))
+}
+
+#[tauri::command]
+pub fn get_etiquette_ids_for_template(
+    db: State<'_, DbState>,
+    template_id: i64,
+) -> Result<Vec<i64>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_etiquette_ids_for_template(template_id)
+        .map_err(|e| format!("Failed to get etiquettes for template: {}", e))
+}
+
 #[tauri::command]
 pub fn delete_template_email(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
@@ -913,13 +943,84 @@ pub fn get_etiquette_email_queue(
 pub fn mark_etiquette_email_sent(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
+    gmail_message_id: Option<String>,
+    gmail_thread_id: Option<String>,
+    email_subject: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .mark_etiquette_email_sent(contact_etiquette_id)
+        .mark_etiquette_email_sent(
+            contact_etiquette_id,
+            gmail_message_id.as_deref(),
+            gmail_thread_id.as_deref(),
+            email_subject.as_deref(),
+        )
         .map_err(|e| format!("Failed to mark email sent: {}", e))
+}
+
+#[tauri::command]
+pub fn sync_email_campaign_responses(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+) -> Result<crate::email::response_sync::EmailCampaignSyncResult, String> {
+    let pending = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .list_campaigns_pending_response_check()
+            .map_err(|e| e.to_string())?
+    };
+
+    crate::email::response_sync::sync_email_campaign_responses(
+        &app_handle,
+        pending,
+        |contact_etiquette_id, response_type| {
+            let db_guard = db.lock().unwrap();
+            let database = db_guard.as_ref().ok_or("Database not initialized")?;
+            database
+                .mark_email_campaign_response(contact_etiquette_id, response_type)
+                .map_err(|e| e.to_string())
+        },
+    )
+}
+
+#[tauri::command]
+pub fn mark_email_campaign_response(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+    response_type: String,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_email_campaign_response(contact_etiquette_id, &response_type)
+        .map_err(|e| format!("Failed to mark response: {}", e))
+}
+
+#[tauri::command]
+pub fn dismiss_email_campaign_followup(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .dismiss_email_campaign_followup(contact_etiquette_id)
+        .map_err(|e| format!("Failed to dismiss followup: {}", e))
+}
+
+#[tauri::command]
+pub fn prepare_email_campaign_relance(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .prepare_email_campaign_relance(contact_etiquette_id)
+        .map_err(|e| format!("Failed to prepare relance: {}", e))
 }
 
 // ========== SETTINGS ==========
@@ -1066,6 +1167,18 @@ pub fn get_interactions_by_contact(
     database
         .get_interactions_by_contact(contact_id)
         .map_err(|e| format!("Failed to get interactions: {}", e))
+}
+
+#[tauri::command]
+pub fn get_contact_relation_status(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<crate::database::models::ContactRelationStatus, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_contact_relation_status(contact_id)
+        .map_err(|e| format!("Failed to get contact relation status: {}", e))
 }
 
 #[tauri::command]

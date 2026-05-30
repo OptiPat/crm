@@ -1,5 +1,7 @@
 use super::oauth_flow::{disconnect_oauth, run_oauth_connect};
-use super::oauth_send::{send_test_to_self, send_with_oauth};
+use super::oauth_send::{
+    fetch_gmail_signature, send_test_to_self, send_with_oauth, ImportedGmailSignature, OAuthSendResult,
+};
 use super::oauth_store::EmailOAuthStore;
 use super::{EmailSender, SmtpConfig};
 use serde::Serialize;
@@ -16,12 +18,15 @@ pub struct EmailConnectionStatus {
 #[derive(Debug, Clone, Serialize)]
 pub struct OAuthAppSettings {
     pub google_client_id: Option<String>,
+    pub google_client_secret_configured: bool,
     pub microsoft_client_id: Option<String>,
 }
 
 #[derive(serde::Deserialize)]
 pub struct OAuthAppSettingsInput {
     pub google_client_id: Option<String>,
+    /// `None` = ne pas modifier le secret enregistré ; chaîne non vide = enregistrer.
+    pub google_client_secret: Option<String>,
     pub microsoft_client_id: Option<String>,
 }
 
@@ -57,6 +62,10 @@ pub fn get_oauth_app_settings(app_handle: AppHandle) -> Result<OAuthAppSettings,
     let store = EmailOAuthStore::load(&app_handle)?;
     Ok(OAuthAppSettings {
         google_client_id: store.google_client_id,
+        google_client_secret_configured: store
+            .google_client_secret
+            .as_ref()
+            .is_some_and(|s| !s.trim().is_empty()),
         microsoft_client_id: store.microsoft_client_id,
     })
 }
@@ -75,6 +84,12 @@ pub fn save_oauth_app_settings(
         .microsoft_client_id
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty());
+    if let Some(secret) = settings.google_client_secret {
+        let trimmed = secret.trim();
+        if !trimmed.is_empty() {
+            store.google_client_secret = Some(trimmed.to_string());
+        }
+    }
     store.save(&app_handle)
 }
 
@@ -95,6 +110,13 @@ pub fn connect_email_oauth(
 #[tauri::command]
 pub fn disconnect_email_oauth(app_handle: AppHandle) -> Result<(), String> {
     disconnect_oauth(&app_handle)
+}
+
+#[tauri::command]
+pub fn fetch_gmail_signature_for_cgp(
+    app_handle: AppHandle,
+) -> Result<ImportedGmailSignature, String> {
+    fetch_gmail_signature(&app_handle)
 }
 
 #[tauri::command]
@@ -121,13 +143,16 @@ pub fn send_email_unified(
     to_name: Option<&str>,
     subject: &str,
     body: &str,
-) -> Result<(), String> {
+    body_html: Option<&str>,
+) -> Result<OAuthSendResult, String> {
     let oauth = EmailOAuthStore::load(app_handle)?;
     if oauth.connection.is_some() {
-        return send_with_oauth(app_handle, to_email, to_name, subject, body);
+        return send_with_oauth(app_handle, to_email, to_name, subject, body, body_html);
     }
     let config = SmtpConfig::load(app_handle)?.ok_or(
         "Aucune connexion email. Paramètres → Email : connectez Google/Microsoft ou SMTP.".to_string(),
     )?;
-    EmailSender::new(config).send_email(to_email, to_name, subject, body)
+    let _ = body_html;
+    EmailSender::new(config).send_email(to_email, to_name, subject, body)?;
+    Ok(OAuthSendResult::default())
 }

@@ -27,6 +27,13 @@ export interface SendEmailInput {
   to_name?: string;
   subject: string;
   body: string;
+  /** HTML avec signature (logo) — optionnel. */
+  body_html?: string | null;
+}
+
+export interface SendEmailResult {
+  gmail_message_id: string | null;
+  gmail_thread_id: string | null;
 }
 
 export async function getSmtpConfig(): Promise<SmtpConfig | null> {
@@ -45,6 +52,17 @@ export async function testSmtpConnection(): Promise<string> {
   return invoke<string>("test_smtp_connection");
 }
 
-export async function sendEmail(emailData: SendEmailInput): Promise<void> {
-  return invoke<void>("send_email", { emailData });
+export async function sendEmail(emailData: SendEmailInput): Promise<SendEmailResult> {
+  return invoke<SendEmailResult>("send_email", { emailData });
+}
+
+export interface EmailCampaignSyncResult {
+  checked: number;
+  mail_detected: number;
+  rdv_detected: number;
+  errors: string[];
+}
+
+export async function syncEmailCampaignResponses(): Promise<EmailCampaignSyncResult> {
+  return invoke<EmailCampaignSyncResult>("sync_email_campaign_responses");
 }
