@@ -36,4 +36,4 @@ if ($existing) {
 Write-Host "Creation du tag $tag ..." -ForegroundColor Cyan
 git tag $tag
 git push origin $tag
-Write-Host "OK — suivez le workflow: https://github.com/OptiPat/crm/actions" -ForegroundColor Green
+Write-Host "OK - suivez le workflow: https://github.com/OptiPat/crm/actions" -ForegroundColor Green
