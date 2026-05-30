@@ -1,0 +1,29 @@
+---
+description: Publier une version CRM W.Y.S (bump, tag, GitHub Actions, updater)
+alwaysApply: false
+---
+
+# Publication d'une version (éditeur)
+
+Quand l'utilisateur demande de **publier**, **release**, **tagger**, **bump** ou **mettre en ligne** une version :
+
+## Commandes (dans l'ordre)
+
+1. `.\scripts\bump-version.ps1 X.Y.Z` — aligne `package.json`, `tauri.conf.json`, `Cargo.toml`
+2. Commit + push `main` (workflow `.github/workflows/release.yml` doit déjà être sur `main`)
+3. `.\scripts\release-tag.ps1 X.Y.Z` — tag `vX.Y.Z` → GitHub Actions (~15–30 min)
+
+## Interdits / pièges
+
+- **Ne jamais** re-créer un tag déjà publié sur GitHub (ex. `v0.1.0` existe en manuel)
+- Tag `vX.Y.Z` **doit** égaler les 3 versions des fichiers ci-dessus
+- Secret repo : `TAURI_SIGNING_PRIVATE_KEY` (contenu du `.key`, pas le chemin)
+- Ne **pas** `git push` sans demande explicite de l'utilisateur
+
+## Résultat attendu sur GitHub
+
+Release `vX.Y.Z` avec : installateur NSIS `.exe` + `.sig` + `latest.json` (sans BOM UTF-8)
+
+## Utilisatrice (associée)
+
+Après install ≥ 0.1.0 : bannière + popup au démarrage → **Installer** (pas de téléchargement GitHub manuel). Données locales inchangées (`com.patrimoine-crm.app`).

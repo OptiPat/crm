@@ -33,21 +33,51 @@ Le dépôt doit être **public** (ou les MAJ auto ne pourront pas télécharger 
 $env:TAURI_SIGNING_PRIVATE_KEY_PATH = "$env:USERPROFILE\.tauri\patrimoine-crm.key"
 ```
 
-## Publier une version pour vous et votre associé
+## Publier une version (automatisé — GitHub Actions)
 
-1. Incrémenter la version dans `package.json` et `src-tauri/tauri.conf.json` (et `Cargo.toml`).
-2. Builder :
+### Configuration une seule fois
+
+1. GitHub → **OptiPat/crm** → **Settings** → **Secrets and variables** → **Actions**
+2. **New repository secret** :
+   - Nom : `TAURI_SIGNING_PRIVATE_KEY`
+   - Valeur : **tout le contenu** du fichier `%USERPROFILE%\.tauri\patrimoine-crm.key` (copier-coller)
+3. (Optionnel) Si votre clé a un mot de passe : secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`  
+   Sinon ne créez pas ce secret (clé sans mot de passe).
+
+### À chaque nouvelle version
+
+1. Mettre la **même** version dans :
+   - `package.json`
+   - `src-tauri/tauri.conf.json`
+   - `src-tauri/Cargo.toml`
+2. Commit + push sur `main`
+3. Lancer :
+
+```powershell
+.\scripts\release-tag.ps1 0.1.1
+```
+
+→ Le workflow **Release CRM W.Y.S** build, signe, crée la release et uploade `.exe`, `.sig`, `latest.json`.
+
+Suivi : https://github.com/OptiPat/crm/actions (~15–30 min)
+
+Votre associé : **Paramètres → Mises à jour** dans l’app (1 clic), pas de retéléchargement manuel.
+
+### Publication manuelle (secours)
 
 ```powershell
 .\scripts\publish-release.ps1
 ```
 
-3. Créer une **Release GitHub** avec le tag `vX.Y.Z`.
-4. Y joindre :
-   - `latest.json` (généré par le script)
-   - l’installateur Windows (`.exe` ou `.msi`) + son fichier `.sig`
+Puis release GitHub à la main (voir ancienne procédure ci-dessous).
 
-Votre associé **n’a rien à réinstaller** : au prochain lancement (ou via Paramètres → Mises à jour), l’app propose la MAJ.
+---
+
+## Publication manuelle (détail)
+
+1. Incrémenter la version dans les 3 fichiers ci-dessus.
+2. `.\scripts\publish-release.ps1`
+3. Release GitHub `vX.Y.Z` + `.exe` + `.sig` + `latest.json` (sans BOM UTF-8)
 
 ## Fichier `latest.json` (exemple)
 

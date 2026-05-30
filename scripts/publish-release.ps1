@@ -10,6 +10,8 @@ $keyPath = "$env:USERPROFILE\.tauri\patrimoine-crm.key"
 if (-not $env:TAURI_SIGNING_PRIVATE_KEY -and -not $env:TAURI_SIGNING_PRIVATE_KEY_PATH) {
     if (Test-Path $keyPath) {
         $env:TAURI_SIGNING_PRIVATE_KEY_PATH = $keyPath
+        # Tauri build lit surtout TAURI_SIGNING_PRIVATE_KEY (chemin ou contenu)
+        $env:TAURI_SIGNING_PRIVATE_KEY = $keyPath
         Write-Host "Cle de signature: $keyPath"
     } else {
         Write-Host "ERREUR: Generez d'abord une cle:" -ForegroundColor Red
@@ -32,7 +34,11 @@ Write-Host "=== Artefacts ===" -ForegroundColor Green
 if ($nsis) {
     Write-Host "Installateur NSIS: $($nsis.FullName)"
     $sig = "$($nsis.FullName).sig"
-    if (Test-Path $sig) { Write-Host "Signature:       $sig" }
+    if (-not (Test-Path $sig) -and (Test-Path $keyPath)) {
+        Write-Host "Signature manquante, signature en cours..." -ForegroundColor Yellow
+        npx tauri signer sign -f $keyPath $nsis.FullName
+    }
+    if (Test-Path $sig) { Write-Host "Signature:       $sig" } else { Write-Host "ATTENTION: pas de fichier .sig — MAJ auto impossible" -ForegroundColor Red }
 }
 if ($msi) {
     Write-Host "MSI:               $($msi.FullName)"
@@ -53,7 +59,8 @@ $exampleJson = @{
 $outDir = Join-Path $Root "release-artifacts"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $jsonPath = Join-Path $outDir "latest.json"
-$exampleJson | Set-Content -Path $jsonPath -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($jsonPath, $exampleJson, $utf8NoBom)
 
 Write-Host ""
 Write-Host "Modele latest.json: $jsonPath" -ForegroundColor Yellow

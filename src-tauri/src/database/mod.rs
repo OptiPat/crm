@@ -689,6 +689,15 @@ impl Database {
         Ok(())
     }
 
+    /// Base SQLite en mémoire pour les tests (`cargo test`).
+    pub fn open_in_memory_for_tests() -> Result<Self> {
+        let conn = Connection::open_in_memory()?;
+        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        let db = Database { conn };
+        db.init_tables()?;
+        Ok(db)
+    }
+
     pub fn get_connection(&self) -> &Connection {
         &self.conn
     }

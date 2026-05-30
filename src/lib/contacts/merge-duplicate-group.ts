@@ -7,48 +7,16 @@ import {
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
 import { getAllDocuments, updateDocument } from "@/lib/api/tauri-documents";
 import { invoke } from "@tauri-apps/api/core";
+import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import {
-  contactToUpdatePayload,
-  isFilleulStatut,
-} from "@/lib/contacts/contact-form-utils";
+  computeMergedContactFields,
+  pickMainContactId,
+} from "@/lib/contacts/merge-duplicate-logic";
 import {
   beginImportTransaction,
   commitImportTransaction,
   rollbackImportTransaction,
 } from "@/lib/api/tauri-import-transaction";
-
-function effectiveClientCategorie(cat: string): string {
-  return isFilleulStatut(cat) ? "AUCUN" : cat;
-}
-
-function effectiveFilleulCategorie(c: Contact): string | null | undefined {
-  if (c.filleul_categorie) return c.filleul_categorie;
-  if (isFilleulStatut(c.categorie)) return c.categorie;
-  return null;
-}
-
-const CLIENT_CATEGORIE_SCORE: Record<string, number> = {
-  CLIENT: 4,
-  PROSPECT_CLIENT: 3,
-  SUSPECT_CLIENT: 2,
-  AUCUN: 0,
-  PRESCRIPTEUR: 0,
-};
-
-const FILLEUL_CATEGORIE_SCORE: Record<string, number> = {
-  FILLEUL: 4,
-  PROSPECT_FILLEUL: 3,
-  SUSPECT_FILLEUL: 2,
-  FILLEUL_DESINSCRIT: 1,
-};
-
-function scoreClient(cat?: string): number {
-  return CLIENT_CATEGORIE_SCORE[cat || ""] ?? 0;
-}
-
-function scoreFilleul(cat?: string | null): number {
-  return cat ? (FILLEUL_CATEGORIE_SCORE[cat] ?? 0) : 0;
-}
 
 /** Fusionne un groupe de doublons (garde le plus petit id). Retourne le nombre de fiches supprimées. */
 export async function mergeDuplicateGroup(duplicates: Contact[]): Promise<number> {
@@ -71,69 +39,27 @@ export async function mergeDuplicateGroup(duplicates: Contact[]): Promise<number
 
 async function mergeDuplicateGroupInner(duplicates: Contact[]): Promise<number> {
   const sorted = [...duplicates].sort((a, b) => a.id! - b.id!);
-  const mainContact = sorted[0];
-  const otherContacts = sorted.slice(1);
-
-  let mostRecentClient = mainContact.date_dernier_contact;
-  let mostRecentFilleul = mainContact.date_dernier_contact_filleul;
-  let bestClientCat = effectiveClientCategorie(mainContact.categorie);
-  let bestClientScore = scoreClient(bestClientCat);
-  let bestFilleulCat = effectiveFilleulCategorie(mainContact);
-  let bestFilleulScore = scoreFilleul(bestFilleulCat);
-
-  let email = mainContact.email;
-  let telephone = mainContact.telephone;
-  let civilite = mainContact.civilite;
-  let situation = mainContact.situation_familiale;
-  const notesParts: string[] = mainContact.notes ? [mainContact.notes] : [];
-
-  for (const c of sorted) {
-    if (
-      c.date_dernier_contact &&
-      (!mostRecentClient || c.date_dernier_contact > mostRecentClient)
-    ) {
-      mostRecentClient = c.date_dernier_contact;
-    }
-    if (
-      c.date_dernier_contact_filleul &&
-      (!mostRecentFilleul || c.date_dernier_contact_filleul > mostRecentFilleul)
-    ) {
-      mostRecentFilleul = c.date_dernier_contact_filleul;
-    }
-    const cs = scoreClient(effectiveClientCategorie(c.categorie));
-    if (cs > bestClientScore) {
-      bestClientCat = effectiveClientCategorie(c.categorie);
-      bestClientScore = cs;
-    }
-    const fc = effectiveFilleulCategorie(c);
-    const fs = scoreFilleul(fc);
-    if (fs > bestFilleulScore) {
-      bestFilleulCat = fc;
-      bestFilleulScore = fs;
-    }
-    if (!email && c.email) email = c.email;
-    if (!telephone && c.telephone) telephone = c.telephone;
-    if (!civilite && c.civilite) civilite = c.civilite;
-    if (!situation && c.situation_familiale) situation = c.situation_familiale;
-    if (c.notes && !notesParts.includes(c.notes)) notesParts.push(c.notes);
-  }
+  const mainId = pickMainContactId(duplicates);
+  const mainContact = sorted.find((c) => c.id === mainId)!;
+  const otherContacts = sorted.filter((c) => c.id !== mainId);
+  const merged = computeMergedContactFields(duplicates);
 
   await updateContact(
     mainContact.id,
     contactToUpdatePayload(mainContact, {
-      date_dernier_contact: mostRecentClient
-        ? new Date(mostRecentClient * 1000).toISOString()
+      date_dernier_contact: merged.date_dernier_contact
+        ? new Date(merged.date_dernier_contact * 1000).toISOString()
         : undefined,
-      date_dernier_contact_filleul: mostRecentFilleul
-        ? new Date(mostRecentFilleul * 1000).toISOString()
+      date_dernier_contact_filleul: merged.date_dernier_contact_filleul
+        ? new Date(merged.date_dernier_contact_filleul * 1000).toISOString()
         : undefined,
-      categorie: bestClientCat,
-      filleul_categorie: bestFilleulCat || undefined,
-      email: email || undefined,
-      telephone: telephone || undefined,
-      civilite: civilite || undefined,
-      situation_familiale: situation || undefined,
-      notes: notesParts.length > 0 ? notesParts.join("\n---\n") : undefined,
+      categorie: merged.categorie,
+      filleul_categorie: merged.filleul_categorie,
+      email: merged.email,
+      telephone: merged.telephone,
+      civilite: merged.civilite,
+      situation_familiale: merged.situation_familiale,
+      notes: merged.notes,
     })
   );
 

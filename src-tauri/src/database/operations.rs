@@ -3642,3 +3642,318 @@ impl Database {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod database_integration_tests {
+    use super::*;
+    use crate::database::models::{NewContact, NewFoyer, NewInvestissement};
+    use crate::database::Database;
+
+    fn test_db() -> Database {
+        Database::open_in_memory_for_tests().expect("in-memory db")
+    }
+
+    fn sample_contact(nom: &str, prenom: &str) -> NewContact {
+        NewContact {
+            categorie: "CLIENT".into(),
+            nom: nom.into(),
+            prenom: prenom.into(),
+            statut_suivi: Some("ACTIF".into()),
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            filleul_categorie: None,
+            parrain_id: None,
+            prescripteur_id: None,
+            civilite: None,
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            date_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            notes: None,
+        }
+    }
+
+    #[test]
+    fn get_alertes_with_contacts_reads_integer_date_dernier_contact() {
+        let db = test_db();
+        let contact = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some("2024-12-05T12:00:00+00:00".into()),
+                ..sample_contact("NOM1", "Jean")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+        let stored_ts = contact
+            .date_dernier_contact
+            .expect("date_dernier_contact en base");
+
+        db.get_connection()
+            .execute(
+                "INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee)
+                 VALUES (?1, 'SUIVI_CLIENT_1AN', 'Test alerte', ?2, 0, 0)",
+                params![contact_id, stored_ts],
+            )
+            .unwrap();
+
+        let alertes = db.get_alertes_with_contacts(10).unwrap();
+        assert_eq!(alertes.len(), 1);
+        assert_eq!(alertes[0].contact_id, contact_id);
+        assert_eq!(alertes[0].date_dernier_contact, Some(stored_ts));
+    }
+
+    #[test]
+    fn demembrement_alert_when_investissement_has_foyer_only() {
+        let db = test_db();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer TEST".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let c1 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                ..sample_contact("NOM1", "Jean")
+            })
+            .unwrap();
+        db.create_contact(NewContact {
+            foyer_id: Some(foyer.id),
+            role_foyer: Some("DECLARANT_2".into()),
+            ..sample_contact("NOM1", "Veronique")
+        })
+        .unwrap();
+
+        let now = chrono::Utc::now().timestamp();
+        let in_90_days = now + 90 * 24 * 3600;
+        let iso = chrono::DateTime::from_timestamp(in_90_days, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: None,
+            foyer_id: Some(foyer.id),
+            type_produit: "SCPI_DEMEMBREMENT".into(),
+            partenaire_id: None,
+            nom_produit: "Comete".into(),
+            montant_initial: Some(2_000_000),
+            date_souscription: None,
+            date_fin_demembrement: Some(iso),
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let created = db.check_and_create_demembrement_alerts().unwrap();
+        assert_eq!(created.len(), 1);
+        assert_eq!(created[0].contact_id, c1.id.unwrap());
+        assert_eq!(created[0].type_alerte, "FIN_DEMEMBREMENT");
+    }
+
+    #[test]
+    fn cleanup_orphaned_foyers_removes_foyer_without_members() {
+        let db = test_db();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer ORPHELIN".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let deleted = db.cleanup_orphaned_foyers().unwrap();
+        assert!(deleted >= 1);
+
+        let count: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT COUNT(*) FROM foyers WHERE id = ?1",
+                params![foyer.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn update_contact_persists_foyer_id_and_role() {
+        let db = test_db();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer PERSIST".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let created = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                ..sample_contact("DUPONT", "Jean")
+            })
+            .unwrap();
+        let id = created.id.unwrap();
+
+        let updated = db
+            .update_contact(
+                id,
+                &NewContact {
+                    foyer_id: Some(foyer.id),
+                    role_foyer: Some("DECLARANT_2".into()),
+                    email: Some("jean@example.com".into()),
+                    ..sample_contact("DUPONT", "Jean")
+                },
+            )
+            .unwrap();
+
+        assert_eq!(updated.foyer_id, Some(foyer.id));
+        assert_eq!(updated.role_foyer.as_deref(), Some("DECLARANT_2"));
+        assert_eq!(updated.email.as_deref(), Some("jean@example.com"));
+
+        let reloaded = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reloaded.foyer_id, Some(foyer.id));
+        assert_eq!(reloaded.role_foyer.as_deref(), Some("DECLARANT_2"));
+    }
+
+    #[test]
+    fn investissements_by_contact_and_by_foyer() {
+        let db = test_db();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer INV".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                ..sample_contact("MARTIN", "Paul")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Perso".into(),
+            montant_initial: Some(10_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: None,
+            foyer_id: Some(foyer.id),
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Commun".into(),
+            montant_initial: Some(20_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let by_contact = db.get_investissements_by_contact(cid).unwrap();
+        assert_eq!(by_contact.len(), 1);
+        assert_eq!(by_contact[0].nom_produit, "Perso");
+
+        let by_foyer = db.get_investissements_by_foyer(foyer.id).unwrap();
+        assert_eq!(by_foyer.len(), 1);
+        assert_eq!(by_foyer[0].nom_produit, "Commun");
+    }
+
+    #[test]
+    fn delete_contact_clears_foyer_id_on_contact() {
+        let db = test_db();
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer DEL".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let c = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                ..sample_contact("X", "Y")
+            })
+            .unwrap();
+        let id = c.id.unwrap();
+        db.delete_contact(id).unwrap();
+
+        let remaining: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT COUNT(*) FROM contacts WHERE foyer_id = ?1",
+                params![foyer.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(remaining, 0);
+    }
+}

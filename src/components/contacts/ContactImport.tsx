@@ -23,6 +23,10 @@ import { createInvestissement, updateInvestissement, getAllInvestissements, type
 import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenaire } from "@/lib/api/tauri-partenaires";
 import { createFoyer, getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
+  analyzeCoupleContact,
+  extractCompositeName,
+} from "@/lib/contacts/contact-import-couple";
+import {
   findExistingFoyerByFamilleName,
   linkContactToFoyer,
 } from "@/lib/foyers/foyer-utils";
@@ -213,214 +217,6 @@ const deduireTypePartenaire = (typeProduit: string): string => {
 };
 
 // ============================================
-
-// ============================================
-// DÉTECTION DES CONTACTS "COUPLES" (FOYERS)
-// ============================================
-
-// Extraire le nom de famille principal d'un nom composé (ex: "NOM1 et NOM2" → "NOM1-NOM2")
-const extractCompositeName = (nom: string): string => {
-  // Si le nom contient "et" ou "&", créer un nom composé
-  if (nom.includes(" et ") || nom.includes(" & ")) {
-    const parts = nom.split(/ et | & /).map(p => p.trim());
-    return parts.join("-");
-  }
-  return nom;
-};
-
-// Détecter si un nom/prénom est un couple (ex: "Marie et Pierre")
-const isContactCouple = (prenom: string, _nom: string): boolean => {
-  const prenomLower = prenom.toLowerCase();
-  return prenomLower.includes(" et ") || prenomLower.includes(" & ");
-};
-
-// Extraire les 2 prénoms d'un couple
-const extractCoupleNames = (prenomCouple: string): { prenom1: string; prenom2: string } | null => {
-  const separators = [" et ", " & ", " ET ", " Et "];
-  
-  for (const sep of separators) {
-    if (prenomCouple.includes(sep)) {
-      const parts = prenomCouple.split(sep).map(p => p.trim());
-      if (parts.length === 2) {
-        return { prenom1: parts[0], prenom2: parts[1] };
-      }
-    }
-  }
-  
-  return null;
-};
-
-// Extraire les noms individuels d'un nom composé (ex: "NOM1 et Aurel" → ["NOM1", "NOM2"])
-const extractIndividualNames = (nom: string): { nom1: string; nom2: string } | null => {
-  if (nom.includes(" et ") || nom.includes(" & ")) {
-    const parts = nom.split(/ et | & /).map(p => p.trim().toUpperCase());
-    if (parts.length >= 2) {
-      return { nom1: parts[0], nom2: parts[1] };
-    }
-  }
-  return null;
-};
-
-// Trouver le foyer correspondant à un couple
-const findFoyerForCouple = async (
-  nom: string,
-  prenom1: string,
-  prenom2: string,
-  allContacts: Contact[]
-): Promise<number | null> => {
-  const nomUpper = nom.toUpperCase();
-  const prenom1Upper = prenom1.toUpperCase();
-  const prenom2Upper = prenom2.toUpperCase();
-  
-  // 🔥 FIX: Extraire les noms individuels si c'est un nom composé
-  const individualNames = extractIndividualNames(nom);
-  const nom1 = individualNames?.nom1 || nomUpper;
-  const nom2 = individualNames?.nom2 || nomUpper;
-  
-  // Chercher contact1: nom = nom1 (ou nom complet) ET prenom = prenom1
-  const contact1 = allContacts.find(c => 
-    (c.nom.toUpperCase() === nom1 || c.nom.toUpperCase() === nomUpper) && 
-    c.prenom.toUpperCase() === prenom1Upper
-  );
-  
-  // Chercher contact2: nom = nom2 (ou nom complet) ET prenom = prenom2
-  const contact2 = allContacts.find(c => 
-    (c.nom.toUpperCase() === nom2 || c.nom.toUpperCase() === nomUpper) && 
-    c.prenom.toUpperCase() === prenom2Upper
-  );
-  
-  if (contact1 && contact2) {
-    if (contact1.foyer_id && contact1.foyer_id === contact2.foyer_id) {
-      return contact1.foyer_id;
-    }
-  }
-  
-  return null;
-};
-
-interface ImportResult {
-  shouldSkipContact: boolean;
-  foyerId: number | null;
-  contact1: Contact | null;
-  contact2: Contact | null;
-  prenom1?: string;
-  prenom2?: string;
-  nom1?: string; // Nom individuel du contact 1
-  nom2?: string; // Nom individuel du contact 2
-  shouldCreateContacts?: boolean; // Si true, il faut créer LES DEUX contacts
-  shouldCreateContact1?: boolean; // Si true, il faut créer seulement contact1
-  shouldCreateContact2?: boolean; // Si true, il faut créer seulement contact2
-}
-
-// Analyser si c'est un contact couple et trouver/créer le foyer
-const analyzeCoupleContact = async (
-  prenom: string,
-  nom: string,
-  allContacts: Contact[]
-): Promise<ImportResult> => {
-  if (!isContactCouple(prenom, nom)) {
-    return { shouldSkipContact: false, foyerId: null, contact1: null, contact2: null };
-  }
-  
-  const names = extractCoupleNames(prenom);
-  if (!names) {
-    return { shouldSkipContact: false, foyerId: null, contact1: null, contact2: null };
-  }
-  
-  const { prenom1, prenom2 } = names;
-  const nomUpper = nom.toUpperCase();
-  const prenom1Upper = prenom1.toUpperCase();
-  const prenom2Upper = prenom2.toUpperCase();
-  
-  // 🔥 FIX: Extraire les noms individuels si c'est un nom composé (ex: "NOM1 et Aurel")
-  const individualNames = extractIndividualNames(nom);
-  const nom1 = individualNames?.nom1 || nomUpper;
-  const nom2 = individualNames?.nom2 || nomUpper;
-  
-  // Chercher contact1: nom = nom1 (ou nom complet) ET prenom = prenom1
-  const contact1 = allContacts.find(c => 
-    (c.nom.toUpperCase() === nom1 || c.nom.toUpperCase() === nomUpper) && 
-    c.prenom.toUpperCase() === prenom1Upper
-  );
-  
-  // Chercher contact2: nom = nom2 (ou nom complet) ET prenom = prenom2
-  const contact2 = allContacts.find(c => 
-    (c.nom.toUpperCase() === nom2 || c.nom.toUpperCase() === nomUpper) && 
-    c.prenom.toUpperCase() === prenom2Upper
-  );
-  
-  // CAS 1: Les deux contacts existent
-  if (contact1 && contact2) {
-    const foyerId = await findFoyerForCouple(nom, prenom1, prenom2, allContacts);
-    
-    if (foyerId) {
-      return { 
-        shouldSkipContact: true,
-        foyerId,
-        contact1,
-        contact2,
-        prenom1,
-        prenom2,
-        nom1,
-        nom2
-      };
-    } else {
-      return {
-        shouldSkipContact: true,
-        foyerId: null,
-        contact1,
-        contact2,
-        prenom1,
-        prenom2,
-        nom1,
-        nom2,
-        shouldCreateContacts: false
-      };
-    }
-  }
-  
-  // 🔥 CAS 2.5: UN SEUL contact existe → créer seulement le manquant
-  if (contact1 && !contact2) {
-    return {
-      shouldSkipContact: true,
-      foyerId: contact1.foyer_id || null,
-      contact1,
-      contact2: null,
-      prenom1,
-      prenom2,
-      nom1,
-      nom2,
-      shouldCreateContact2: true // Créer seulement contact2
-    };
-  }
-  
-  if (!contact1 && contact2) {
-    return {
-      shouldSkipContact: true,
-      foyerId: contact2.foyer_id || null,
-      contact1: null,
-      contact2,
-      prenom1,
-      prenom2,
-      nom1,
-      nom2,
-      shouldCreateContact1: true // Créer seulement contact1
-    };
-  }
-  
-  // CAS 3: Aucun contact n'existe → créer les deux
-  return {
-    shouldSkipContact: true,
-    foyerId: null,
-    contact1: null,
-    contact2: null,
-    prenom1,
-    prenom2,
-    nom1,
-    nom2,
-    shouldCreateContacts: true
-  };
-};
 
 interface ContactImportProps {
   open: boolean;
@@ -1325,7 +1121,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           continue;
         }
         
-        const coupleAnalysis = await analyzeCoupleContact(
+        const coupleAnalysis = analyzeCoupleContact(
           prenom,
           nom,
           allContactsCache

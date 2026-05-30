@@ -19,7 +19,7 @@ import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
-import { AppUpdateChecker } from "@/components/system/AppUpdateChecker";
+import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
 
 function App() {
@@ -140,14 +140,15 @@ function App() {
   try {
     return (
       <>
-        <Layout
-          currentPage={currentPage}
-          onPageChange={setCurrentPage}
-          onLogout={handleLogout}
-        >
-          {renderPage()}
-        </Layout>
-        <AppUpdateChecker />
+        <AppUpdateProvider>
+          <Layout
+            currentPage={currentPage}
+            onPageChange={setCurrentPage}
+            onLogout={handleLogout}
+          >
+            {renderPage()}
+          </Layout>
+        </AppUpdateProvider>
         <Toaster richColors position="top-right" />
       </>
     );

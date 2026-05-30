@@ -59,3 +59,36 @@ pub fn names_match(nom_a: &str, prenom_a: &str, nom_b: &str, prenom_b: &str) -> 
     let key_a = contact_name_key(nom_a, prenom_a);
     key_a == contact_name_key(nom_b, prenom_b) || key_a == contact_name_key(prenom_b, nom_b)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalize_strips_accents_and_case() {
+        assert_eq!(normalize_contact_name("  Élisabeth  "), "ELISABETH");
+        assert_eq!(normalize_contact_name("François"), "FRANCOIS");
+    }
+
+    #[test]
+    fn contact_name_key_matches_with_accents() {
+        assert_eq!(
+            contact_name_key("Arnaud", "Jean-Marc"),
+            contact_name_key("NOM1", "jean-marc")
+        );
+    }
+
+    #[test]
+    fn names_match_detects_swapped_nom_prenom() {
+        assert!(names_match("NOM1", "Jean", "Jean", "NOM1"));
+        assert!(!names_match("NOM1", "Jean", "NOM2", "Paul"));
+    }
+
+    #[test]
+    fn canonical_key_is_order_independent() {
+        assert_eq!(
+            contact_name_key_canonical("NOM1", "Jean"),
+            contact_name_key_canonical("Jean", "NOM1")
+        );
+    }
+}

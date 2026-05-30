@@ -47,7 +47,7 @@ npm run tauri:build
 
 ## Mises à jour automatiques
 
-Voir [docs/MISES_A_JOUR.md](docs/MISES_A_JOUR.md) — updater Tauri, backup avant migration, publication GitHub Releases pour vous et votre associé.
+Voir [docs/MISES_A_JOUR.md](docs/MISES_A_JOUR.md) — updater Tauri, backup, releases automatisées (`git tag vX.Y.Z` → GitHub Actions).
 
 ## Base de données
 

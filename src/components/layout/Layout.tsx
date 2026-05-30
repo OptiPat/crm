@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { AppUpdateBanner } from "@/components/system/AppUpdateBanner";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 
@@ -16,7 +17,8 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
       
       <div className="flex-1 flex flex-col">
         <Header onLogout={onLogout} />
-        
+        <AppUpdateBanner />
+
         <main className="flex-1 p-6 overflow-auto">
           {children}
         </main>
