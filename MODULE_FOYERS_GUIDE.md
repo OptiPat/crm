@@ -26,7 +26,7 @@
 - Bouton "X" pour retirer des membres
 
 ### 5. **NOUVEAU** : Investissements communs ✅
-- **Détection automatique** des lignes "Marie et Pierre"
+- **Détection automatique** des lignes « Marie et Pierre » (exemple fictif)
 - **Création automatique** :
   - Si les contacts n'existent pas → Créer les 2 contacts + le foyer
   - Si les contacts existent sans foyer → Créer le foyer et les lier
@@ -120,13 +120,13 @@ npm run tauri:dev -- --release
 5. ✅ Vérifier les foyers dans la liste
 
 ### Test 3 : Investissements communs (création automatique)
-1. Importer une ligne "Marie et Pierre" avec un produit
-2. ✅ Les contacts Daniele et Richard sont créés automatiquement
-3. ✅ Un foyer "Foyer couple" est créé automatiquement
+1. Importer une ligne « Marie et Pierre » avec un produit
+2. ✅ Les contacts Marie et Pierre sont créés automatiquement
+3. ✅ Un foyer « Foyer couple » est créé automatiquement
 4. ✅ Les 2 contacts sont liés au foyer (DECLARANT_1 et DECLARANT_2)
-5. Ouvrir la fiche de Daniele
+5. Ouvrir la fiche de Marie
 6. ✅ Voir l'investissement avec badge "Foyer" (bleu)
-7. Ouvrir la fiche de Richard
+7. Ouvrir la fiche de Pierre
 8. ✅ Voir le même investissement avec badge "Foyer" (bleu)
 
 ### Test 4 : Dissociation
@@ -154,7 +154,7 @@ Pour les supprimer après validation, chercher et supprimer toutes les lignes `c
 
 1. **Enfants adultes** : À retirer manuellement lors du regroupement (bouton X)
 2. **Homonymes** : Cocher "Ce sont des homonymes" pour ignorer un groupe
-3. **Couples** : Les lignes "Prenom1 et Prenom2 NOM" sont automatiquement détectées
+3. **Couples** : Les lignes « Prénom1 et Prénom2 » sont automatiquement détectées
 4. **Patrimoine** : Calculé automatiquement (contact + foyer)
 
 ---

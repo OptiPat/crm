@@ -74,7 +74,7 @@ Dans la page Documents ou dans la fiche contact :
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  📁 Documents de Jean MARTIN                                │
+│  📁 Documents de Jean                                │
 ├────────────────┬────────────────────────────────────────────┤
 │                │                                            │
 │  📁 Identité   │  Nom           Type      Date      Actions │

@@ -9,11 +9,11 @@ describe("formatAlerteContactLabel", () => {
 
   it("extrait le nom avant le tiret pour suivi client", () => {
     expect(
-      formatAlerteContactLabel("Jean NOM1 - Suivi +1 an", "SUIVI_CLIENT_1AN")
-    ).toBe("Jean NOM1");
+      formatAlerteContactLabel("Jean - Suivi +1 an", "SUIVI_CLIENT_1AN")
+    ).toBe("Jean");
   });
 
   it("retire les emojis de préfixe", () => {
-    expect(formatAlerteContactLabel("🔴 Jean NOM1 - alerte")).toBe("Jean NOM1");
+    expect(formatAlerteContactLabel("🔴 Jean - alerte")).toBe("Jean");
   });
 });

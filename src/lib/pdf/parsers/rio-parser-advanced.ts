@@ -67,9 +67,9 @@ function extractNombreEnfants(text: string): number | undefined {
     // Chercher tous les patterns d'enfants dans le texte entier
     // (on filtre par contexte après)
     const enfantsPatterns = [
-      // Format: "Junior A (05/05/2020)" ou "Prénom NOM (date)"
+      // Format: "Junior NOM1 (05/05/2020)" ou "Prénom NOM (date)"
       /\b([A-ZÀ-Ü][a-zà-ü]+)\s+([A-ZÀ-Ü]{2,})\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
-      // Format: "A Junior (05/05/2020)"
+      // Format: "NOM1 Junior (05/05/2020)"
       /\b([A-ZÀ-Ü]{2,})\s+([A-ZÀ-Ü][a-zà-ü]+)\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
     ];
     
@@ -127,12 +127,12 @@ function extractEnfantsDetails(text: string): Array<{ nom?: string; prenom?: str
   
   // Patterns pour détecter les enfants
   const enfantsPatterns = [
-    // Format: "Junior A (05/05/2020)" - Prénom en minuscules, NOM en majuscules
+    // Format: "Junior NOM1 (05/05/2020)" - Prénom en minuscules, NOM en majuscules
     {
       regex: /\b([A-ZÀ-Ü][a-zà-ü]+)\s+([A-ZÀ-Ü]{2,})\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
       groups: { prenom: 1, nom: 2, date: 3 }
     },
-    // Format: "A Junior (05/05/2020)" - NOM en majuscules, Prénom en minuscules
+    // Format: "NOM1 Junior (05/05/2020)" - NOM en majuscules, Prénom en minuscules
     {
       regex: /\b([A-ZÀ-Ü]{2,})\s+([A-ZÀ-Ü][a-zà-ü]+)\s*\((\d{2}\/\d{2}\/\d{4})\)/g,
       groups: { nom: 1, prenom: 2, date: 3 }

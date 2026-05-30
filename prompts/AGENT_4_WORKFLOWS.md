@@ -67,10 +67,10 @@ Chaque étiquette peut avoir un **pipeline de suivi** avec des statuts.
 ┌─────────────────────────────────────────────────────────────────┐
 │  🏷️ Exceltis Rendement Mai 2025                    [Lancer ▶️]  │
 ├─────────────────────────────────────────────────────────────────┤
-│  👤 M. NOM1          À traiter                                │
-│  👤 Mme NOM2         À traiter                                │
+│  👤 Client A           À traiter                                │
+│  👤 Client B           À traiter                                │
 │  👤 M. Durand          Mail envoyé (il y a 3j)                  │
-│  👤 Mme NOM3          RDV pris ✓                               │
+│  👤 Mme C              RDV pris ✓                               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -227,7 +227,7 @@ Voir l'historique des échanges email avec chaque client.
 ### UI
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  📧 Historique emails - M. NOM1                               │
+│  📧 Historique emails - Client A                                │
 ├─────────────────────────────────────────────────────────────────┤
 │  📤 15/01/2026 - Confirmation RDV                               │
 │  📥 14/01/2026 - RE: Proposition SCPI                           │
@@ -615,7 +615,7 @@ INTERDITS :
 
 4. CONCLUSION + CTA
    ✓ CTA clair : "Cliquez ici pour simuler vos économies en 2 minutes"
-   ✓ Signature personnalisée : "Nicolas A, Votre Conseiller (qui préfère le champagne aux tableaux Excel)"
+   ✓ Signature personnalisée : « Nicolas, Votre Conseiller (…) »
 ```
 
 ### Techniques d'humour efficaces

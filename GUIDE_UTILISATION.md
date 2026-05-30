@@ -156,7 +156,7 @@
 
 ### Emplacement
 ```
-%USERPROFILE%\AppData\Roaming\com.patrimoine-crm.app\
+%APPDATA%\com.patrimoine-crm.app\
 ├── patrimoine-crm.db      # Base de données
 ├── auth.json              # Configuration authentification
 └── smtp_config.json       # Configuration email

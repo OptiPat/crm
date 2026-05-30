@@ -12,10 +12,7 @@
 
 **Solution:** 
 - Nouvelle fonction `extractCompositeName()` qui transforme "X et Y" en "X-Y"
-- Les contacts gardent leur nom de famille respectif :
-  - Virginie NOM1
-  - Emmanuel NOM2
-  - Foyer: "Foyer NOM1-NOM2"
+- Colonne Excel « Nom » : `NOM1 et NOM2` → foyer `NOM1-NOM2` ; contacts affichés : Sophie, Jean
 
 ### 3. Patrimoine disparu ❌
 **Cause:** L'investissement était stocké mais pas créé à cause des erreurs précédentes
@@ -45,7 +42,7 @@ const newFoyer = await createFoyer({
 
 ### 3. Gestion des noms composés pour les contacts
 ```typescript
-// Pour "Sophie et Jean"
+// Pour "Sophie et Jean NOM1 et NOM2"
 const nomContact1 = "NOM1";  // Premier nom
 const nomContact2 = "NOM2";   // Deuxième nom
 const nomFoyer = "Foyer NOM1-NOM2"; // Foyer composé
@@ -56,17 +53,17 @@ const nomFoyer = "Foyer NOM1-NOM2"; // Foyer composé
 ### Exemple 1 : "Marie et Pierre"
 ```
 Création automatique:
-  ✓ Contact: Daniele EXEMPLE (DECLARANT_1)
-  ✓ Contact: Richard EXEMPLE (DECLARANT_2)
-  ✓ Foyer: "Foyer couple" (type: COUPLE)
+  ✓ Contact: Marie (DECLARANT_1)
+  ✓ Contact: Pierre (DECLARANT_2)
+  ✓ Foyer: « Foyer couple » (type: COUPLE)
   ✓ Investissement rattaché au foyer
 ```
 
-### Exemple 2 : "Sophie et Jean"
+### Exemple 2 : « Sophie et Jean » (colonne Nom : NOM1 et NOM2)
 ```
 Création automatique:
-  ✓ Contact: Virgine NOM1 (DECLARANT_1)
-  ✓ Contact: Emmanuel NOM2 (DECLARANT_2)
+  ✓ Contact: Sophie (DECLARANT_1)
+  ✓ Contact: Jean (DECLARANT_2)
   ✓ Foyer: "Foyer NOM1-NOM2" (type: COUPLE)
   ✓ Investissement rattaché au foyer
 ```
@@ -81,13 +78,13 @@ Création automatique:
 
 Les logs sont maintenant ultra-détaillés pour debug :
 ```
-👫 [ContactImport] Détection d'un couple: Sophie et Jean
-👫 [ContactImport] Prénoms extraits: "Virgine" et "Emmanuel"
+👫 [ContactImport] Détection d'un couple: Sophie et Jean NOM1 et NOM2
+👫 [ContactImport] Prénoms extraits: "Sophie" et "Jean"
 👫 [ContactImport] Nom de famille extrait: "NOM1-NOM2" (original: "NOM1 et NOM2")
 👫 [ContactImport] Noms contacts: "NOM1" et "NOM2"
 👫 [ContactImport] ✓ Foyer 5 créé: Foyer NOM1-NOM2
-👫 [ContactImport] ✓ Contact Virgine NOM1 créé (ID: 12)
-👫 [ContactImport] ✓ Contact Emmanuel NOM2 créé (ID: 13)
+👫 [ContactImport] ✓ Contact Sophie créé (ID: 12)
+👫 [ContactImport] ✓ Contact Jean créé (ID: 13)
 👫 [ContactImport] ✓ Investissement ajouté à la file pour le foyer 5
 ```
 

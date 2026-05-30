@@ -365,7 +365,7 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
                   id="nom"
                   value={cgpConfig.nom || ""}
                   onChange={(e) => setCgpConfig({ ...cgpConfig, nom: e.target.value })}
-                  placeholder="NOM1"
+                  placeholder="Nom (ex. NOM1)"
                 />
               </div>
             </div>

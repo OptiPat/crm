@@ -3,8 +3,8 @@ import { contactMatchesSearch, textMatchesSearch } from "./search-utils";
 
 describe("textMatchesSearch", () => {
   it("ignore accents et casse", () => {
-    expect(textMatchesSearch("élisabeth", "Elisabeth NOM2")).toBe(true);
-    expect(textMatchesSearch("dupont", "Jean DUPONT")).toBe(true);
+    expect(textMatchesSearch("élisabeth", "Elisabeth")).toBe(true);
+    expect(textMatchesSearch("nom1", "Jean NOM1")).toBe(true);
   });
 
   it("chaîne vide = tout correspond", () => {
@@ -15,7 +15,7 @@ describe("textMatchesSearch", () => {
 describe("contactMatchesSearch", () => {
   it("cherche dans nom, prénom, email", () => {
     expect(
-      contactMatchesSearch("arnaud", {
+      contactMatchesSearch("jean", {
         nom: "NOM1",
         prenom: "Jean",
         email: "j@x.fr",

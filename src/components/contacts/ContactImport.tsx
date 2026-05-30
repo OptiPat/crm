@@ -731,7 +731,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       const row = updatedRows[i];
       
       // 🔥 DÉTECTION COUPLE EN PREMIER (avant le traitement des doublons)
-      // Cela permet de gérer les lignes "Marie et Pierre" qui sont marquées comme doublons
+      // Cela permet de gérer les lignes couple « Prénom1 et Prénom2 » marquées comme doublons
       const prenomCheck = String(row.data.prenom || "").trim();
       const nomCheck = String(row.data.nom || "").trim();
       const produitCheck = String(row.data.produit || "").trim();

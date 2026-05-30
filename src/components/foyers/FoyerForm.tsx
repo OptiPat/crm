@@ -94,7 +94,7 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
                 onChange={(e) =>
                   setFormData({ ...formData, nom: e.target.value })
                 }
-                placeholder="Ex: Famille NOM1"
+                placeholder="Ex. Famille A"
                 required
               />
             </div>

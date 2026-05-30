@@ -169,7 +169,7 @@ export function FoyerCreateModal({
               id="foyerName"
               value={foyerName}
               onChange={(e) => setFoyerName(e.target.value)}
-              placeholder="Foyer DUPONT"
+              placeholder="Foyer (nom du foyer)"
             />
           </div>
 

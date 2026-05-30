@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn contact_name_key_matches_with_accents() {
         assert_eq!(
-            contact_name_key("Arnaud", "Jean-Marc"),
+            contact_name_key("NOM1", "Jean-Marc"),
             contact_name_key("NOM1", "jean-marc")
         );
     }

@@ -3824,7 +3824,7 @@ mod database_integration_tests {
             .create_contact(NewContact {
                 foyer_id: Some(foyer.id),
                 role_foyer: Some("DECLARANT_1".into()),
-                ..sample_contact("DUPONT", "Jean")
+                ..sample_contact("NOM2", "Jean")
             })
             .unwrap();
         let id = created.id.unwrap();
@@ -3836,7 +3836,7 @@ mod database_integration_tests {
                     foyer_id: Some(foyer.id),
                     role_foyer: Some("DECLARANT_2".into()),
                     email: Some("jean@example.com".into()),
-                    ..sample_contact("DUPONT", "Jean")
+                    ..sample_contact("NOM2", "Jean")
                 },
             )
             .unwrap();
@@ -3869,7 +3869,7 @@ mod database_integration_tests {
         let contact = db
             .create_contact(NewContact {
                 foyer_id: Some(foyer.id),
-                ..sample_contact("MARTIN", "Paul")
+                ..sample_contact("NOM3", "Paul")
             })
             .unwrap();
         let cid = contact.id.unwrap();

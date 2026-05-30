@@ -192,7 +192,7 @@ Dans `ContactDetail.tsx` :
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  📄 Générer un document pour Jean MARTIN                    │
+│  📄 Générer un document pour Jean                    │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  Modèle : [Bulletin SCPI Corum Origin    ▼]                │

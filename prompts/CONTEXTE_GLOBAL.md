@@ -268,7 +268,7 @@ node apply-migration-origine.cjs
 **Règle** : Toujours mettre à jour `allContactsCache` après `createContact()`.
 
 ### 🔥 Détection des couples
-**Contexte** : Les lignes "Marie et Pierre" avec plusieurs SCPIs ne créaient qu'un seul investissement.
+**Contexte** : Les lignes « Marie et Pierre » (couple) avec plusieurs SCPIs ne créaient qu'un seul investissement.
 
 **Solution** (`ContactImport.tsx`) :
 - Détecter les couples **AVANT** le traitement des doublons

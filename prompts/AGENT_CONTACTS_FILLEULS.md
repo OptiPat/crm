@@ -57,7 +57,7 @@
   - **Mode compact** : Investissements cachés par défaut, bouton 👁️ pour afficher
   - **Stats par branche** : "📈 Branche : X clients • Y€ apporté"
   - **Couleurs par niveau** : Bleu (racine) → Ciel → Gris → Clair
-  - **Foyers consolidés** : "🏠 Foyer B (Didier + Sylvie)"
+  - **Foyers consolidés** : "🏠 Foyer exemple (Didier + Sylvie)"
   - **Investissements foyer** : Badge 👤 Prénom pour perso, 🏠 Commun pour partagés
   - **Recherche par foyer** : Match sur nom de famille et prénoms des membres
   - **Option B** : Un seul prescripteur_id par foyer (évite doublons dans l'arbre)
@@ -136,7 +136,7 @@ Page Prescripteurs
     └── 🌳 Arbre récursif par prescripteur
         ├── 👤 Prescripteur (patrimoine personnel + apporté) 👁️ 5
         │   📈 Branche : X clients • Y€ apporté
-        │   ├── 🏠 Foyer B (Didier + Sylvie) 💰 150k€
+        │   ├── 🏠 Foyer exemple (Didier + Sylvie) 💰 150k€
         │   │   ├─ SCPI 👤 Didier Épargne Pierre 25k€
         │   │   ├─ AV 👤 Sylvie Assurance-vie 30k€
         │   │   └─ SCPI 🏠 Commun Primovie 50k€

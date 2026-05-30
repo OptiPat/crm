@@ -3,9 +3,9 @@
 ## 🔍 DIAGNOSTIC
 
 ### ✅ Ce qui fonctionne
-- ✅ Détection des couples : "Sophie et Jean"
-- ✅ Extraction des prénoms : "Virgine" et "Emmanuel"
-- ✅ Création des contacts : Virgine NOM1 et Emmanuel NOM2
+- ✅ Détection des couples : « Sophie et Jean » (nom Excel : NOM1 et NOM2)
+- ✅ Extraction des prénoms : "Sophie" et "Jean"
+- ✅ Création des contacts : Sophie et Jean
 - ✅ Création du foyer : "Foyer NOM1-NOM2" (ID: 50)
 - ✅ Stockage dans `couplesLines` : 2 lignes détectées
 - ✅ Traitement des investissements : Boucle exécutée
@@ -64,13 +64,13 @@ Après avoir appliqué la solution :
    ```
 
 3. **Ouvrez les fiches contacts** :
-   - Emmanuel NOM2 → Devrait afficher l'investissement Pinel
-   - Virgine NOM1 → Devrait afficher le même investissement
+   - Jean → Devrait afficher l'investissement Pinel
+   - Sophie → Devrait afficher le même investissement
    - Badge 🔵 "Foyer" sur l'investissement
 
 4. **Vue par foyer** :
    - Cliquez sur "Afficher par foyer"
-   - Le foyer "NOM1-NOM2" devrait afficher 188 192 € de patrimoine
+   - Le foyer "NOM1-NOM2" devrait afficher 120 000 € de patrimoine
 
 ## 🎯 Résultat attendu
 
@@ -81,22 +81,22 @@ Après avoir appliqué la solution :
 👫 Ligne 32: Marie et Pierre
 👫 Foyer ID: 51
 👫 Produit: SCPI
-👫 Montant: 39955
+👫 Montant: 25000
 👫 Partenaire: Norma Capital
 ✅ Investissement de foyer 51 créé avec succès
    Type: SCPI
    Nom: SCPI
-   Montant: 39955.00 €
+   Montant: 25000.00 €
 ```
 
-**Fiche Richard EXEMPLE :**
+**Fiche Pierre :**
 ```
 Investissements (3)  ← +1 investissement
-Total encours : 73 955,00 €  ← 34000 + 39955
+Total encours : 45 000,00 €  ← 20 000 + 25 000
 
-- Assurance-Vie (👤 Daniele EXEMPLE) - 17 000 €
-- Assurance-Vie (👤 Richard EXEMPLE) - 17 000 €
-- SCPI (👤 Foyer 🔵) - 39 955 €  ← NOUVEAU
+- Assurance-Vie (👤 Marie) - 12 500 €
+- Assurance-Vie (👤 Pierre) - 12 500 €
+- SCPI (👤 Foyer 🔵) - 25 000 €  ← NOUVEAU
 ```
 
 ## 📝 Détails techniques

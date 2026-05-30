@@ -156,9 +156,9 @@ Après extraction, afficher un dialog :
 │  📄 Données extraites du RIO                    │
 ├─────────────────────────────────────────────────┤
 │                                                 │
-│  Nom        : [MARTIN        ] ← [MARTIN]      │
+│  Nom        : [NOM1          ] ← [NOM1]        │
 │  Prénom     : [Jean          ] ← [Jean]        │
-│  Email      : [j.martin@mail ] ← (nouveau)     │
+│  Email      : [client@mail   ] ← (nouveau)     │
 │  Téléphone  : [0612345678    ] ← [0612345678]  │
 │  ...                                            │
 │                                                 │
@@ -183,8 +183,8 @@ Certains RIO contiennent 2 personnes (couple).
 │  ⚠️ 2 personnes détectées dans ce document      │
 ├─────────────────────────────────────────────────┤
 │                                                 │
-│  Personne 1 : Jean MARTIN                       │
-│  Personne 2 : Marie MARTIN                      │
+│  Personne 1 : Jean                              │
+│  Personne 2 : Marie                             │
 │                                                 │
 │  [ ] Créer les 2 contacts                       │
 │  [ ] Lier à un foyer existant                   │

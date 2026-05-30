@@ -8,7 +8,7 @@
 
 ### Ce qui est fait ✅
 - [x] Champ `role_foyer` ajouté aux contacts (schema + Rust)
-- [x] Détection automatique des couples à l'import ("Marie et Pierre")
+- [x] Détection automatique des couples à l'import (ex. « Marie et Pierre »)
 - [x] Création automatique des foyers pour les couples
 - [x] Modale post-import `FoyerGroupingModal` pour regrouper les familles
 - [x] Regroupement visuel dans la liste des contacts (toggle)
@@ -145,6 +145,6 @@ db.close();
 ## 📌 Notes importantes
 
 1. **Les investissements peuvent être liés à un contact OU un foyer** (via `contact_id` ou `foyer_id`)
-2. **Les couples** (ex: "Marie et Pierre") créent un foyer avec 2 contacts séparés
+2. **Les couples** (ex. « Marie et Pierre ») créent un foyer avec 2 contacts séparés
 3. **La détection des familles** se fait par nom de famille après l'import
 4. **Le dashboard** compte l'encours total des investissements (tous types confondus)

@@ -15,7 +15,7 @@ describe("normalizeContactName", () => {
 
 describe("contactNameKey", () => {
   it("produit la même clé pour variantes", () => {
-    expect(contactNameKey("Arnaud", "Jean-Marc")).toBe(
+    expect(contactNameKey("NOM1", "Jean-Marc")).toBe(
       contactNameKey("NOM1", "jean-marc")
     );
   });

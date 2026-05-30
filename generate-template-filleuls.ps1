@@ -35,7 +35,7 @@ for ($i = 0; $i -lt $headers.Length; $i++) {
 # Ajouter un exemple de ligne
 $worksheet.Cells.Item(2, 1) = "NOM1"
 $worksheet.Cells.Item(2, 2) = "Marie"
-$worksheet.Cells.Item(2, 3) = "marie.dupont@example.com"
+$worksheet.Cells.Item(2, 3) = "marie@example.com"
 $worksheet.Cells.Item(2, 4) = "06 12 34 56 78"
 $worksheet.Cells.Item(2, 5) = "15/03/1985"
 $worksheet.Cells.Item(2, 6) = "Filleul"
@@ -46,20 +46,20 @@ $worksheet.Cells.Item(2, 10) = "15/12/2025"
 $worksheet.Cells.Item(2, 11) = "Premier filleul actif"
 
 # Ajouter une ligne avec prospect
-$worksheet.Cells.Item(3, 1) = "NOM4"
+$worksheet.Cells.Item(3, 1) = "NOM3"
 $worksheet.Cells.Item(3, 2) = "Sophie"
-$worksheet.Cells.Item(3, 3) = "sophie.bernard@example.com"
+$worksheet.Cells.Item(3, 3) = "sophie@example.com"
 $worksheet.Cells.Item(3, 4) = "06 23 45 67 89"
 $worksheet.Cells.Item(3, 5) = ""
 $worksheet.Cells.Item(3, 6) = "Prospect"
-$worksheet.Cells.Item(3, 7) = "NOM2"
+$worksheet.Cells.Item(3, 7) = "NOM3"
 $worksheet.Cells.Item(3, 8) = "Jean"
 $worksheet.Cells.Item(3, 9) = "05/11/2025"
 $worksheet.Cells.Item(3, 10) = "10/01/2026"
 $worksheet.Cells.Item(3, 11) = "En cours de prospection"
 
 # Ajouter une ligne avec suspect
-$worksheet.Cells.Item(4, 1) = "NOM3"
+$worksheet.Cells.Item(4, 1) = "NOM4"
 $worksheet.Cells.Item(4, 2) = "Lucas"
 $worksheet.Cells.Item(4, 3) = ""
 $worksheet.Cells.Item(4, 4) = "06 34 56 78 90"

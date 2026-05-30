@@ -71,8 +71,8 @@ SUCCES : contact_id est maintenant OPTIONNEL !
    ```
 
 3. **Ouvrez les fiches** :
-   - Emmanuel NOM2 → Investissement Pinel visible
-   - Virgine NOM1 → Même investissement visible
+   - Jean → Investissement Pinel visible
+   - Sophie  → Même investissement visible
    - Badge 🔵 "Foyer"
 
 ## ⚠️ Si ça ne fonctionne toujours pas

@@ -68,7 +68,7 @@ interface FoyerInfo {
   id: number;
   nom: string; // Nom de famille commun
   membres: Contact[];
-  displayName: string; // "Foyer B (Didier + Sylvie)"
+  displayName: string; // ex. "Foyer couple (Didier + Sylvie)"
 }
 
 export function Prescripteurs() {

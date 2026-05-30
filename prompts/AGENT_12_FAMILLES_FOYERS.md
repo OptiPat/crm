@@ -3,7 +3,7 @@
 ## 🎯 Objectif
 
 Implémenter une hiérarchie à deux niveaux pour gérer les relations familiales et fiscales :
-- **FAMILLE** = lien de parenté/sang (tous les A sont dans la même famille)
+- **FAMILLE** = lien de parenté/sang (regroupement par identifiant famille, ex. A / B)
 - **FOYER** = unité fiscale (déclaration d'impôts commune)
 
 ## 📊 Contexte métier CGP
@@ -11,7 +11,7 @@ Implémenter une hiérarchie à deux niveaux pour gérer les relations familiale
 Un conseiller en gestion de patrimoine a besoin de :
 1. Voir tous les membres d'une **famille** pour la planification successorale
 2. Gérer les **foyers fiscaux** séparément pour les déclarations et investissements communs
-3. Comprendre les liens entre familles quand un couple se forme (ex: Nicolas A + Pauline B)
+3. Comprendre les liens entre familles quand un couple se forme (ex. Nicolas + Pauline, familles A et B)
 
 ## 🏗️ Structure de données proposée
 
@@ -19,10 +19,10 @@ Un conseiller en gestion de patrimoine a besoin de :
 
 ```
 FAMILLE A                          FAMILLE B
-├── Bruno A                        ├── Didier B
-├── Michèle A                      ├── Sylvie B
-├── Coralie A                      ├── Thomas B
-└── Nicolas A ─────────────────────┴── Pauline B
+├── Bruno (fam. A)                 ├── Didier (fam. B)
+├── Michèle (fam. A)               ├── Sylvie (fam. B)
+├── Coralie (fam. A)               ├── Thomas (fam. B)
+└── Nicolas (fam. A) ──────────────┴── Pauline (fam. B)
          │                                      │
          └──────────── FOYER ──────────────────┘
               Nicolas + Pauline
@@ -81,7 +81,7 @@ L'Excel ne change pas. L'import déduit automatiquement :
    - Contacts individuels → foyer individuel (célibataire) OU rattachés au foyer parental s'ils sont mineurs
 
 3. **Cas des couples inter-familles** :
-   - Nicolas A + Pauline B
+   - Nicolas + Pauline (familles A et B)
    - Nicolas reste dans famille A
    - Pauline reste dans famille B
    - Les deux sont dans le MÊME foyer fiscal
@@ -129,7 +129,7 @@ L'Excel ne change pas. L'import déduit automatiquement :
 │ └───────────────────────────────────────────────────────┘   │
 │ ┌───────────────────────────────────────────────────────┐   │
 │ │ 🏠 Foyer Nicolas + Pauline (couple inter-familles)    │   │
-│ │ 💰 95 000 € | Nicolas A + Pauline B       │   │
+│ │ 💰 95 000 € | Nicolas + Pauline (fam. A + B)│   │
 │ │ ⚠️ Lien avec famille B                        │   │
 │ └───────────────────────────────────────────────────────┘   │
 ├─────────────────────────────────────────────────────────────┤
@@ -174,14 +174,14 @@ Ajouter dans la fiche contact :
 
 ## ⚠️ Points d'attention
 
-1. **Noms composés** : "NOM1 NOM2" = une seule famille ou deux ?
-   - Proposition : traiter comme UNE famille "NOM1 NOM2"
+1. **Noms composés** : « NOM1 NOM2 » = une seule famille ou deux ?
+   - Proposition : traiter comme UNE famille « NOM1-NOM2 »
 
 2. **Changement de nom** : Si Pauline B devient Pauline A après mariage
    - Elle reste dans famille B (origine)
    - Son nom affiché peut changer, mais pas sa famille
 
-3. **Homonymes** : Deux familles MARTIN non liées ?
+3. **Homonymes** : Deux familles homonymes non liées ?
    - L'utilisateur devra créer manuellement deux familles distinctes
    - Ou on ajoute un champ "ville d'origine" pour distinguer
 
@@ -196,7 +196,7 @@ Ajouter dans la fiche contact :
 - [ ] Fiche contact montre famille ET foyer
 - [ ] Liens cliquables entre famille ↔ foyers ↔ contacts
 - [ ] Patrimoine total famille calculé correctement
-- [ ] Couples inter-familles gérés (Nicolas A + Pauline B)
+- [ ] Couples inter-familles gérés (Nicolas + Pauline, familles A et B)
 
 ## 📅 Estimation
 

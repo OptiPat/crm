@@ -35,14 +35,14 @@ describe("findExistingFoyerByFamilleName", () => {
   const foyers: Foyer[] = [
     {
       id: 1,
-      nom: "Foyer BOULOC",
+      nom: "Foyer A",
       type_foyer: "COUPLE",
       created_at: 0,
       updated_at: 0,
     },
     {
       id: 2,
-      nom: "Famille MARTIN",
+      nom: "Famille B",
       type_foyer: "FAMILLE",
       created_at: 0,
       updated_at: 0,
@@ -50,11 +50,11 @@ describe("findExistingFoyerByFamilleName", () => {
   ];
 
   it("match exact", () => {
-    expect(findExistingFoyerByFamilleName(foyers, "BOULOC")?.id).toBe(1);
+    expect(findExistingFoyerByFamilleName(foyers, "A")?.id).toBe(1);
   });
 
   it("match par nom nu", () => {
-    expect(findExistingFoyerByFamilleName(foyers, "MARTIN")?.id).toBe(2);
+    expect(findExistingFoyerByFamilleName(foyers, "B")?.id).toBe(2);
   });
 });
 

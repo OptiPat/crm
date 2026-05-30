@@ -154,7 +154,7 @@ Dans la fiche contact :
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  📅 Planifier un RDV avec Jean MARTIN                       │
+│  📅 Planifier un RDV avec Jean                       │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  Type de RDV : [Suivi annuel           ▼]                  │
@@ -213,10 +213,10 @@ const events = await calendar.events.list({
 await calendar.events.insert({
   calendarId: 'primary',
   requestBody: {
-    summary: 'RDV avec Jean MARTIN - Suivi annuel',
+    summary: 'RDV avec Jean - Suivi annuel',
     start: { dateTime: '2026-01-22T10:00:00', timeZone: 'Europe/Paris' },
     end: { dateTime: '2026-01-22T11:00:00', timeZone: 'Europe/Paris' },
-    attendees: [{ email: 'jean.martin@email.com' }],
+    attendees: [{ email: 'client@example.com' }],
   },
 });
 ```

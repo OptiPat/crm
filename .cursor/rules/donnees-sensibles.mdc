@@ -1,0 +1,14 @@
+---
+description: Ne jamais committer noms clients réels ni chemins perso Windows
+globs: "**/*.{md,ps1,tsx,ts,rs}"
+alwaysApply: false
+---
+
+# Données sensibles dans le repo (public)
+
+- **Interdit** : noms de famille réels, montants réels liés à un client, emails, `C:\Users\...\`
+- **Exemples doc** : prénoms seuls (« Marie et Pierre ») ou placeholders `NOM1`, `NOM2`
+- **Chemins** : `%APPDATA%\com.patrimoine-crm.app\` ou `$env:APPDATA\...`
+- **Jamais** : `.db`, `.xlsx`, `auth.json`, `*.key`, `.env`
+
+Avant commit : `git diff` — pas de donnée nominative réelle.

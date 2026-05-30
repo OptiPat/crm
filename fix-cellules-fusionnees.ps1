@@ -2,7 +2,7 @@
 Write-Host "=== FIX CELLULES FUSIONNEES ===" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "Detection automatique des lignes sans prenom (cellules fusionnees)" -ForegroundColor Yellow
-Write-Host "Les 3 SCPI EXEMPLE seront maintenant detectees !" -ForegroundColor Green
+Write-Host "Les 3 SCPI du couple exemple seront maintenant detectees !" -ForegroundColor Green
 Write-Host ""
 
 # Arrêter

@@ -12,8 +12,8 @@ function baseContact(
   };
 }
 
-/** Jean + Véronique NOM1, même foyer 10 */
-export const contactsArnaudCouple: Contact[] = [
+/** Même nom de famille (placeholder NOM1), foyer 10 */
+export const contactsSameNomCouple: Contact[] = [
   baseContact({
     id: 1,
     nom: "NOM1",
@@ -30,8 +30,8 @@ export const contactsArnaudCouple: Contact[] = [
   }),
 ];
 
-/** NOM1 / NOM2 noms composés */
-export const contactsBrigaudAurel: Contact[] = [
+/** Noms composés NOM1 et NOM2 */
+export const contactsCompositeNomCouple: Contact[] = [
   baseContact({ id: 3, nom: "NOM1", prenom: "Jeremy", foyer_id: 20 }),
   baseContact({ id: 4, nom: "NOM2", prenom: "Gaelle", foyer_id: 20 }),
 ];
