@@ -42,6 +42,7 @@ auth.json
 **/backups/
 *.backup
 *BACKUP*
+!src-tauri/src/backup.rs
 *OLD_*
 
 # Releases générées localement

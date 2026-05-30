@@ -73,7 +73,7 @@ jobs:
             - `latest.json` + `.sig` : mises à jour automatiques dans l'app
           releaseDraft: false
           prerelease: false
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
           generateReleaseNotes: true
           tauriScript: npm run tauri
