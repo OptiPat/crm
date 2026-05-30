@@ -14,7 +14,8 @@ export function buildTemplateVariables(
       email: item.contact_email,
       telephone: item.contact_telephone,
     },
-    cgp
+    cgp,
+    item.template_agenda_link_id
   );
 }
 

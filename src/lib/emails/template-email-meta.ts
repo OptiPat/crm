@@ -1,7 +1,11 @@
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
-import type { Contact } from "@/lib/api/tauri-contacts";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
+import {
+  buildAgendaTemplateVariables,
+  normalizeAgendaLinks,
+  type AgendaLink,
+} from "@/lib/emails/agenda-links";
 
 export type EmailTemplateCategory =
   | "RELANCE"
@@ -24,7 +28,7 @@ export const EMAIL_TEMPLATE_CATEGORIES: {
   { id: "AUTRE", label: "Autre", badgeClass: "bg-gray-100 text-gray-800" },
 ];
 
-/** Variables supportées par `replaceTemplateVariables` / file d'envoi. */
+/** Variables contact + CGP (hors liens agenda). */
 export const EMAIL_TEMPLATE_VARIABLES: {
   token: string;
   key: string;
@@ -35,12 +39,29 @@ export const EMAIL_TEMPLATE_VARIABLES: {
   { token: "{{nom}}", key: "nom", label: "Nom contact", hint: "Fiche contact" },
   { token: "{{email}}", key: "email", label: "Email contact", hint: "Fiche contact" },
   { token: "{{telephone}}", key: "telephone", label: "Téléphone contact", hint: "Fiche contact" },
-  { token: "{{lien_calendly}}", key: "lien_calendly", label: "Lien Calendly", hint: "Paramètres → Profil CGP" },
   { token: "{{cgp_prenom}}", key: "cgp_prenom", label: "Prénom conseiller", hint: "Profil CGP" },
   { token: "{{cgp_nom}}", key: "cgp_nom", label: "Nom conseiller", hint: "Profil CGP" },
   { token: "{{cgp_email}}", key: "cgp_email", label: "Email conseiller", hint: "Profil CGP" },
   { token: "{{cgp_telephone}}", key: "cgp_telephone", label: "Téléphone conseiller", hint: "Profil CGP" },
 ];
+
+export function getAgendaVariableTokens(links: AgendaLink[]) {
+  const tokens: { token: string; label: string; hint: string }[] = [
+    {
+      token: "{{lien_agenda}}",
+      label: "Lien Google Agenda (choix du template)",
+      hint: "Paramètres → liens + sélection dans le template",
+    },
+  ];
+  for (const link of links) {
+    tokens.push({
+      token: `{{lien_agenda_${link.id}}}`,
+      label: link.label,
+      hint: "Lien fixe (tous templates)",
+    });
+  }
+  return tokens;
+}
 
 /** Nom d'étiquette système → nom de template par défaut suggéré. */
 export const ETIQUETTE_NOM_TO_TEMPLATE_NOM: Record<string, string> = {
@@ -69,18 +90,19 @@ export function buildVariablesFromContact(
     email?: string | null;
     telephone?: string | null;
   },
-  cgp: CgpConfig | null
+  cgp: CgpConfig | null,
+  templateAgendaLinkId?: string | null
 ): Record<string, string> {
   return {
     prenom: contact.prenom ?? "",
     nom: contact.nom ?? "",
     email: contact.email ?? "",
     telephone: contact.telephone ?? "",
-    lien_calendly: cgp?.lien_calendly ?? "",
     cgp_nom: cgp?.nom ?? "",
     cgp_prenom: cgp?.prenom ?? "",
     cgp_telephone: cgp?.telephone ?? "",
     cgp_email: cgp?.email ?? "",
+    ...buildAgendaTemplateVariables(cgp, templateAgendaLinkId),
   };
 }
 
@@ -94,57 +116,43 @@ export const SAMPLE_PREVIEW_CONTACT = {
 export function renderTemplatePreview(
   sujet: string,
   corps: string,
-  contact: Pick<Contact, "prenom" | "nom" | "email" | "telephone">,
-  cgp: CgpConfig | null
+  contact: typeof SAMPLE_PREVIEW_CONTACT,
+  cgp: CgpConfig | null,
+  templateAgendaLinkId?: string | null
 ): { subject: string; body: string } {
-  const vars = buildVariablesFromContact(contact, cgp);
+  const vars = buildVariablesFromContact(contact, cgp, templateAgendaLinkId);
   return {
     subject: replaceTemplateVariables(sujet, vars),
     body: replaceTemplateVariables(corps, vars),
   };
 }
 
-/** Suggère un template pour une étiquette (nom exact ou catégorie RELANCE par défaut). */
 export function suggestTemplateIdForEtiquette(
   etiquetteNom: string,
   templates: TemplateEmail[]
 ): number | null {
-  const preferredNom = ETIQUETTE_NOM_TO_TEMPLATE_NOM[etiquetteNom.trim()];
-  if (preferredNom) {
-    const exact = templates.find((t) => t.nom === preferredNom);
-    if (exact) return exact.id;
-  }
-
-  const lower = etiquetteNom.toLowerCase();
-  if (lower.includes("ir") || lower.includes("fiscal")) {
-    const t = templates.find((t) => t.categorie === "FISCALITE");
-    if (t) return t.id;
-  }
-  if (lower.includes("6 mois") || lower.includes("prospect")) {
-    const t = templates.find((t) => t.nom.includes("6 mois"));
-    if (t) return t.id;
-  }
-  if (lower.includes("1 an") || lower.includes("suivi")) {
-    const t = templates.find((t) => t.nom.includes("1 an"));
-    if (t) return t.id;
-  }
-
-  const relance = templates.find((t) => t.categorie === "RELANCE");
-  return relance?.id ?? templates[0]?.id ?? null;
+  const targetNom = ETIQUETTE_NOM_TO_TEMPLATE_NOM[etiquetteNom];
+  if (!targetNom) return null;
+  const found = templates.find((t) => t.nom === targetNom);
+  return found?.id ?? null;
 }
 
-export function duplicateTemplatePayload(template: TemplateEmail): {
+export function duplicateTemplatePayload(source: TemplateEmail): {
   nom: string;
   sujet: string;
   corps: string;
   categorie: string;
   variables: string | null;
+  agenda_link_id: string | null;
 } {
   return {
-    nom: `${template.nom} (copie)`,
-    sujet: template.sujet,
-    corps: template.corps,
-    categorie: template.categorie,
-    variables: template.variables,
+    nom: `${source.nom} (copie)`,
+    sujet: source.sujet,
+    corps: source.corps,
+    categorie: source.categorie,
+    variables: source.variables,
+    agenda_link_id: source.agenda_link_id,
   };
 }
+
+export { normalizeAgendaLinks };

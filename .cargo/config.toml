@@ -1,3 +1,6 @@
-# Evite LNK1318 (limite PDB MSVC) en mode dev sur Windows
+# Evite LNK1318 (limite PDB MSVC) + reduit les OOM en link sur machines limitees en RAM
+[build]
+jobs = 1
+
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "debuginfo=0", "-C", "link-arg=/DEBUG:NONE"]

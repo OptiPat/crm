@@ -7,6 +7,7 @@ export interface TemplateEmail {
   corps: string;
   categorie: string;
   variables: string | null;
+  agenda_link_id: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -17,6 +18,7 @@ export interface NewTemplateEmail {
   corps: string;
   categorie: string;
   variables?: string | null;
+  agenda_link_id?: string | null;
 }
 
 export async function getAllTemplatesEmail(): Promise<TemplateEmail[]> {

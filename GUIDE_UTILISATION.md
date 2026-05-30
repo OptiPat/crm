@@ -56,7 +56,8 @@
   - `{{nom}}` - Nom du contact
   - `{{email}}` - Email du contact
   - `{{telephone}}` - Téléphone du contact
-  - `{{lien_calendly}}` - Lien de prise de RDV
+  - `{{lien_agenda}}` - Lien Google Agenda choisi pour ce template (Paramètres → plusieurs liens)
+  - `{{lien_agenda_<id>}}` - Lien fixe par identifiant (ex. `{{lien_agenda_suivi}}`)
   - `{{cgp_nom}}`, `{{cgp_prenom}}`, etc. - Vos informations
 - ✅ **6 catégories prédéfinies** :
   - Suivi annuel

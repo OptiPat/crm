@@ -255,7 +255,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
           Boîte active :{" "}
           {emailStatus.method === "oauth"
             ? `${emailStatus.provider === "google" ? "Google" : "Microsoft"} — ${emailStatus.email ?? ""}`
-            : "SMTP (avancé)"}
+            : "SMTP (ancienne config — connectez OAuth dans Paramètres)"}
         </p>
       )}
       <Card>

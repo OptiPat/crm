@@ -977,25 +977,28 @@ impl Database {
 
     // ========== TEMPLATES EMAIL ==========
 
+    fn map_template_email_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<super::models::TemplateEmail> {
+        Ok(super::models::TemplateEmail {
+            id: row.get(0)?,
+            nom: row.get(1)?,
+            sujet: row.get(2)?,
+            corps: row.get(3)?,
+            categorie: row.get(4)?,
+            variables: row.get(5)?,
+            agenda_link_id: row.get(6)?,
+            created_at: row.get(7)?,
+            updated_at: row.get(8)?,
+        })
+    }
+
     pub fn get_all_templates_email(&self) -> Result<Vec<super::models::TemplateEmail>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, nom, sujet, corps, categorie, variables, created_at, updated_at
+            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, created_at, updated_at
              FROM templates_email 
              ORDER BY created_at DESC",
         )?;
 
-        let templates = stmt.query_map([], |row| {
-            Ok(super::models::TemplateEmail {
-                id: row.get(0)?,
-                nom: row.get(1)?,
-                sujet: row.get(2)?,
-                corps: row.get(3)?,
-                categorie: row.get(4)?,
-                variables: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
-            })
-        })?;
+        let templates = stmt.query_map([], Self::map_template_email_row)?;
 
         let mut result = Vec::new();
         for template in templates {
@@ -1009,14 +1012,15 @@ impl Database {
         template: super::models::NewTemplateEmail,
     ) -> Result<super::models::TemplateEmail> {
         self.conn.execute(
-            "INSERT INTO templates_email (nom, sujet, corps, categorie, variables) 
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO templates_email (nom, sujet, corps, categorie, variables, agenda_link_id) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 &template.nom,
                 &template.sujet,
                 &template.corps,
                 &template.categorie,
                 &template.variables,
+                &template.agenda_link_id,
             ],
         )?;
 
@@ -1026,22 +1030,11 @@ impl Database {
 
     pub fn get_template_email_by_id(&self, id: i64) -> Result<super::models::TemplateEmail> {
         self.conn.query_row(
-            "SELECT id, nom, sujet, corps, categorie, variables, created_at, updated_at
+            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, created_at, updated_at
              FROM templates_email 
              WHERE id = ?1",
             params![id],
-            |row| {
-                Ok(super::models::TemplateEmail {
-                    id: row.get(0)?,
-                    nom: row.get(1)?,
-                    sujet: row.get(2)?,
-                    corps: row.get(3)?,
-                    categorie: row.get(4)?,
-                    variables: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
-                })
-            },
+            Self::map_template_email_row,
         )
     }
 
@@ -1057,14 +1050,16 @@ impl Database {
                 corps = ?3,
                 categorie = ?4,
                 variables = ?5,
+                agenda_link_id = ?6,
                 updated_at = unixepoch()
-            WHERE id = ?6",
+            WHERE id = ?7",
             params![
                 &template.nom,
                 &template.sujet,
                 &template.corps,
                 &template.categorie,
                 &template.variables,
+                &template.agenda_link_id,
                 id
             ],
         )?;
@@ -1095,9 +1090,10 @@ impl Database {
             NewTemplateEmail {
                 nom: "Relance — client 1 an sans contact".into(),
                 sujet: "{{prenom}}, reprenons contact".into(),
-                corps: "Bonjour {{prenom}} {{nom}},\n\nIl y a plus d'un an que nous n'avons pas échangé. Je serais ravi de faire un point sur votre situation et vos objectifs.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}\n{{lien_calendly}}".into(),
+                corps: "Bonjour {{prenom}} {{nom}},\n\nIl y a plus d'un an que nous n'avons pas échangé. Je serais ravi de faire un point sur votre situation et vos objectifs.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}\n{{lien_agenda}}".into(),
                 categorie: "RELANCE".into(),
                 variables: None,
+                agenda_link_id: Some("principal".into()),
             },
             NewTemplateEmail {
                 nom: "Relance — prospect 6 mois".into(),
@@ -1105,6 +1101,7 @@ impl Database {
                 corps: "Bonjour {{prenom}},\n\nJe me permets de vous recontacter : nous n'avons pas échangé depuis quelques mois. Souhaitez-vous un court appel ?\n\nBien cordialement,\n{{cgp_prenom}} {{cgp_nom}}".into(),
                 categorie: "RELANCE".into(),
                 variables: None,
+                agenda_link_id: None,
             },
             NewTemplateEmail {
                 nom: "Rappel déclaration IR".into(),
@@ -1112,13 +1109,15 @@ impl Database {
                 corps: "Bonjour {{prenom}},\n\nLa période de déclaration d'impôts approche. Je reste disponible si vous souhaitez un échange.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_email}}".into(),
                 categorie: "FISCALITE".into(),
                 variables: None,
+                agenda_link_id: None,
             },
             NewTemplateEmail {
                 nom: "Prise de rendez-vous suivi".into(),
                 sujet: "Prochain rendez-vous de suivi — {{prenom}}".into(),
-                corps: "Bonjour {{prenom}} {{nom}},\n\nVotre prochain rendez-vous de suivi approche. Réservez un créneau ici : {{lien_calendly}}\n\nÀ bientôt,\n{{cgp_prenom}} {{cgp_nom}}".into(),
+                corps: "Bonjour {{prenom}} {{nom}},\n\nVotre prochain rendez-vous de suivi approche. Réservez un créneau sur Google Agenda : {{lien_agenda}}\n\nÀ bientôt,\n{{cgp_prenom}} {{cgp_nom}}".into(),
                 categorie: "SUIVI_ANNUEL".into(),
                 variables: None,
+                agenda_link_id: Some("suivi".into()),
             },
             NewTemplateEmail {
                 nom: "Bienvenue nouveau client".into(),
@@ -1126,6 +1125,7 @@ impl Database {
                 corps: "Bonjour {{prenom}},\n\nJe suis ravi de vous accompagner. N'hésitez pas à me joindre au {{cgp_telephone}} ou par email.\n\nCordialement,\n{{cgp_prenom}} {{cgp_nom}}".into(),
                 categorie: "BIENVENUE".into(),
                 variables: None,
+                agenda_link_id: None,
             },
             NewTemplateEmail {
                 nom: "Relance — échéance patrimoine".into(),
@@ -1133,6 +1133,7 @@ impl Database {
                 corps: "Bonjour {{prenom}},\n\nUne échéance importante approche sur votre patrimoine. Je vous propose d'en discuter rapidement.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}".into(),
                 categorie: "RELANCE".into(),
                 variables: None,
+                agenda_link_id: None,
             },
             NewTemplateEmail {
                 nom: "Rappel assurance-vie 69 ans".into(),
@@ -1140,6 +1141,7 @@ impl Database {
                 corps: "Bonjour {{prenom}} {{nom}},\n\nVous approchez d'une étape clé pour l'organisation de votre assurance-vie. Souhaitez-vous un rendez-vous ?\n\n{{cgp_prenom}} {{cgp_nom}}".into(),
                 categorie: "SUIVI_ANNUEL".into(),
                 variables: None,
+                agenda_link_id: None,
             },
         ];
 
@@ -3313,7 +3315,7 @@ impl Database {
             "ready" => {
                 "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), NULL
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -3330,7 +3332,7 @@ impl Database {
             "incomplete" => {
                 "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''),
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
                         CASE
                           WHEN c.email IS NULL OR TRIM(c.email) = '' THEN 'NO_EMAIL'
                           WHEN e.email_template_id IS NULL THEN 'NO_TEMPLATE'
@@ -3355,7 +3357,7 @@ impl Database {
             "sent" => {
                 "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), NULL
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -3388,7 +3390,8 @@ impl Database {
                 email_date_envoi: row.get(10)?,
                 template_sujet: row.get(11)?,
                 template_corps: row.get(12)?,
-                queue_issue: row.get(13)?,
+                template_agenda_link_id: row.get(13)?,
+                queue_issue: row.get(14)?,
             })
         };
 
@@ -3498,14 +3501,33 @@ impl Database {
         settings.collect()
     }
 
+    fn normalize_cgp_config(mut config: super::models::CgpConfig) -> super::models::CgpConfig {
+        if config.agenda_links.is_empty() {
+            if let Some(url) = config
+                .lien_agenda
+                .as_ref()
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+            {
+                config.agenda_links.push(super::models::AgendaLink {
+                    id: "principal".into(),
+                    label: "Principal".into(),
+                    url: url.to_string(),
+                });
+            }
+        }
+        config
+    }
+
     /// Récupérer la configuration CGP (JSON sérialisé)
     pub fn get_cgp_config(&self) -> Result<super::models::CgpConfig> {
-        match self.get_setting("cgp_config")? {
+        let config = match self.get_setting("cgp_config")? {
             Some(json_str) => serde_json::from_str(&json_str).map_err(|e| {
                 rusqlite::Error::InvalidParameterName(format!("JSON parse error: {}", e))
-            }),
-            None => Ok(super::models::CgpConfig::default()),
-        }
+            })?,
+            None => super::models::CgpConfig::default(),
+        };
+        Ok(Self::normalize_cgp_config(config))
     }
 
     /// Sauvegarder la configuration CGP
@@ -4045,6 +4067,7 @@ mod database_integration_tests {
                 corps: "Corps".into(),
                 categorie: "INFO".into(),
                 variables: None,
+                agenda_link_id: None,
             })
             .unwrap();
 

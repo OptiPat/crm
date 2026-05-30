@@ -224,6 +224,7 @@ impl Database {
                 corps TEXT NOT NULL,
                 categorie TEXT NOT NULL,
                 variables TEXT,
+                agenda_link_id TEXT,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 updated_at INTEGER NOT NULL DEFAULT (unixepoch())
             )",
@@ -345,7 +346,19 @@ impl Database {
         self.migrate_add_email_envoi_prevu()?;
         self.migrate_contact_etiquettes_contact_index()?;
         self.migrate_etiquettes_actif()?;
+        self.migrate_templates_email_agenda_link_id()?;
 
+        Ok(())
+    }
+
+    fn migrate_templates_email_agenda_link_id(&self) -> Result<()> {
+        if !self.table_has_column("templates_email", "agenda_link_id")? {
+            self.conn.execute(
+                "ALTER TABLE templates_email ADD COLUMN agenda_link_id TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne agenda_link_id sur templates_email");
+        }
         Ok(())
     }
 

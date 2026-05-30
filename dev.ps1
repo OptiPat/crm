@@ -4,12 +4,14 @@
 #   .\dev.ps1              App complete (Rust debug = rapide, ~30-90 s apres 1er build)
 #   .\dev.ps1 -Ui          Frontend seul Vite (~2 s) - pas d'API Tauri
 #   .\dev.ps1 -Release     Rust release (lent, 5-15 min) si debug echoue (LNK1318)
+#   .\dev.ps1 -Rust        Force un cargo build avant Tauri (si OOM, faites-le seul)
 #
 # Astuce: gardez ce terminal ouvert ; ne modifiez pas src-tauri/ pendant le 1er build.
 
 param(
     [switch]$Ui,
-    [switch]$Release
+    [switch]$Release,
+    [switch]$Rust
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,7 +44,7 @@ if ($Ui) {
     exit 0
 }
 
-$isWindows = ($IsWindows -or $env:OS -match 'Windows')
+$onWindows = ($IsWindows -or $env:OS -match 'Windows')
 $useRelease = $Release.IsPresent
 
 Write-Host ''
@@ -52,7 +54,7 @@ if ($useRelease) {
 } else {
     Write-Host 'Mode: debug (rapide)' -ForegroundColor Green
     Write-Host '  1er build Rust : ~1-3 min, rebuilds : ~10-40 s' -ForegroundColor Gray
-    if ($isWindows) {
+    if ($onWindows) {
         Write-Host '  LNK1318 contourne via .cargo/config.toml (debuginfo=0)' -ForegroundColor Gray
     }
 }
@@ -60,6 +62,22 @@ Write-Host '  - React/TS : rechargement auto (Vite)' -ForegroundColor Gray
 Write-Host '  - Rust     : rebuild si src-tauri/ modifie' -ForegroundColor Gray
 Write-Host '  - UI seule : .\dev.ps1 -Ui' -ForegroundColor Gray
 Write-Host ''
+
+# Limite la RAM pendant rustc/link (jobs=1 dans .cargo/config.toml aussi)
+$env:CARGO_BUILD_JOBS = '1'
+
+if ($Rust -and -not $useRelease) {
+    Write-Host 'Build Rust seul (option -Rust)...' -ForegroundColor Cyan
+    Push-Location (Join-Path $PSScriptRoot 'src-tauri')
+    try {
+        cargo build --bin patrimoine-crm
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    } finally {
+        Pop-Location
+    }
+    Write-Host 'Rust OK.' -ForegroundColor Green
+    Write-Host ''
+}
 
 if ($useRelease) {
     npm run tauri:dev:release

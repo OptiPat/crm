@@ -78,6 +78,7 @@ export interface EtiquetteEmailQueueItem {
   email_date_envoi: number | null;
   template_sujet: string;
   template_corps: string;
+  template_agenda_link_id: string | null;
   queue_issue: string | null;
 }
 

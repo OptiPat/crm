@@ -7,12 +7,21 @@ export interface Setting {
   updated_at: number;
 }
 
+export interface AgendaLink {
+  id: string;
+  label: string;
+  url: string;
+}
+
 export interface CgpConfig {
   nom?: string;
   prenom?: string;
   cabinet?: string;
   email?: string;
   telephone?: string;
+  agenda_links?: AgendaLink[];
+  /** @deprecated Migré vers agenda_links */
+  lien_agenda?: string;
   lien_calendly?: string;
   logo_path?: string;
   wizard_completed: boolean;

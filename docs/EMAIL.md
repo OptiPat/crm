@@ -23,11 +23,11 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 
 | Brique | Fichiers / écrans |
 |--------|-------------------|
-| SMTP Gmail / Outlook (preset + mot de passe app) | `SmtpConfigForm`, `src-tauri/src/email/` |
+| Connexion OAuth Gmail / Outlook | `EmailOAuthConnect`, `src-tauri/src/email/oauth_*` |
 | Templates | `templates_email`, page Templates email |
 | Variables + aperçu | `etiquette-email-preview.ts` |
 | File d’envoi | `EtiquetteEnvoisTab`, `get_etiquette_email_queue` |
-| Envoi | `send_email` → OAuth (Gmail / Graph) ou repli SMTP |
+| Envoi | `send_email` → OAuth (Gmail API / Microsoft Graph) |
 
 ---
 
@@ -50,9 +50,9 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 ### Étape 3 — Connexion moderne (OAuth) ✅
 
 - Paramètres → **Connecter Google** / **Connecter Microsoft** (PKCE, port local `3847`).
-- Envoi via **Gmail API** ou **Microsoft Graph** ; repli **SMTP** si pas de OAuth.
+- Envoi via **Gmail API** ou **Microsoft Graph** (seule méthode dans l’interface).
 - Identifiants client dans l’app ; guide : `docs/EMAIL_OAUTH_SETUP.md`.
-- `test_email_connection` unifié (OAuth ou SMTP).
+- `test_email_connection` (compte OAuth connecté).
 - Tokens OAuth chiffrés au repos (clé CRM) — voir [EMAIL_OAUTH_SETUP.md](./EMAIL_OAUTH_SETUP.md#sécurité-des-données-locales).
 
 ### Étape 4 — File d’envoi enrichie
@@ -76,7 +76,7 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 
 ## Parcours cible (utilisateur CGP)
 
-1. Connecter la boîte (étape 3) ou configurer SMTP (aujourd’hui).
+1. Connecter la boîte Gmail ou Outlook (étape 3).
 2. Créer ou choisir des templates (étape 2).
 3. Activer campagne email sur une étiquette → contacts entrent dans la file.
 4. Ouvrir **Suivi → Envois** avec le CRM lancé → valider et envoyer.

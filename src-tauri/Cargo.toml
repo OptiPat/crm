@@ -1,6 +1,6 @@
 [package]
 name = "patrimoine-crm"
-version = "0.1.0"
+version = "0.2.0"
 description = "CRM Desktop pour Conseillers en Gestion de Patrimoine"
 authors = ["you"]
 edition = "2021"
@@ -30,9 +30,10 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 url = "2"
 
 [profile.dev]
-# incremental = rapides rebuilds ; debug = 0 évite LNK1318 (limite PDB MSVC sur Windows)
+# debug = 0 évite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)
 incremental = true
 debug = 0
+codegen-units = 1
 
 [profile.release]
 panic = "abort"

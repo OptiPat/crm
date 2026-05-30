@@ -9,6 +9,7 @@ type TemplateEmailPreviewPanelProps = {
   sujet: string;
   corps: string;
   cgp: CgpConfig | null;
+  agendaLinkId?: string | null;
   contact?: Pick<Contact, "prenom" | "nom" | "email" | "telephone"> | null;
   label?: string;
 };
@@ -17,11 +18,19 @@ export function TemplateEmailPreviewPanel({
   sujet,
   corps,
   cgp,
+  agendaLinkId,
   contact,
   label = "Aperçu (exemple)",
 }: TemplateEmailPreviewPanelProps) {
-  const sample = contact ?? SAMPLE_PREVIEW_CONTACT;
-  const preview = renderTemplatePreview(sujet, corps, sample, cgp);
+  const sample = contact
+    ? {
+        prenom: contact.prenom ?? "",
+        nom: contact.nom ?? "",
+        email: contact.email ?? "",
+        telephone: contact.telephone ?? "",
+      }
+    : SAMPLE_PREVIEW_CONTACT;
+  const preview = renderTemplatePreview(sujet, corps, sample, cgp, agendaLinkId);
 
   return (
     <div className="space-y-2">

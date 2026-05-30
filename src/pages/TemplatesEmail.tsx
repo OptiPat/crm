@@ -225,6 +225,7 @@ export function TemplatesEmail() {
                 sujet={previewTemplate.sujet}
                 corps={previewTemplate.corps}
                 cgp={cgp}
+                agendaLinkId={previewTemplate.agenda_link_id}
               />
             ) : (
               <p className="text-sm text-muted-foreground">Sélectionnez un template.</p>

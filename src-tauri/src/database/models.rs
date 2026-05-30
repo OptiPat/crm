@@ -185,6 +185,7 @@ pub struct TemplateEmail {
     pub corps: String,
     pub categorie: String,
     pub variables: Option<String>, // JSON string
+    pub agenda_link_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -196,6 +197,8 @@ pub struct NewTemplateEmail {
     pub corps: String,
     pub categorie: String,
     pub variables: Option<String>, // JSON string
+    #[serde(default)]
+    pub agenda_link_id: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -405,6 +408,7 @@ pub struct EtiquetteEmailQueueItem {
     pub email_date_envoi: Option<i64>,
     pub template_sujet: String,
     pub template_corps: String,
+    pub template_agenda_link_id: Option<String>,
     /// Raison si file « incomplete » : NO_EMAIL, NO_TEMPLATE, NO_DATE, SCHEDULED
     pub queue_issue: Option<String>,
 }
@@ -516,6 +520,14 @@ pub struct Setting {
     pub updated_at: i64,
 }
 
+/// Lien Google Agenda (page de réservation) — plusieurs par CGP.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AgendaLink {
+    pub id: String,
+    pub label: String,
+    pub url: String,
+}
+
 /// Configuration du CGP (stockée en JSON dans settings)
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct CgpConfig {
@@ -524,7 +536,12 @@ pub struct CgpConfig {
     pub cabinet: Option<String>,
     pub email: Option<String>,
     pub telephone: Option<String>,
-    pub lien_calendly: Option<String>,
+    #[serde(default)]
+    pub agenda_links: Vec<AgendaLink>,
+    /// Champs legacy (lecture seule, migrés vers agenda_links).
+    #[serde(default, skip_serializing)]
+    #[serde(alias = "lien_calendly")]
+    pub lien_agenda: Option<String>,
     pub logo_path: Option<String>,
     pub wizard_completed: bool,
     pub wizard_step: i64,

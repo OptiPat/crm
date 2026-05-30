@@ -29,6 +29,8 @@ import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
   EMAIL_TEMPLATE_VARIABLES,
+  getAgendaVariableTokens,
+  normalizeAgendaLinks,
 } from "@/lib/emails/template-email-meta";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import { Badge } from "@/components/ui/badge";
@@ -57,6 +59,7 @@ export function TemplateEmailForm({
     corps: "",
     categorie: "RELANCE",
     variables: null,
+    agenda_link_id: null,
   });
 
   useEffect(() => {
@@ -75,6 +78,7 @@ export function TemplateEmailForm({
         corps: template.corps,
         categorie: template.categorie,
         variables: template.variables,
+        agenda_link_id: template.agenda_link_id,
       });
     } else {
       setFormData({
@@ -83,6 +87,7 @@ export function TemplateEmailForm({
         corps: "",
         categorie: "RELANCE",
         variables: null,
+        agenda_link_id: null,
       });
       setPreviewContactId("sample");
     }
@@ -93,6 +98,9 @@ export function TemplateEmailForm({
     const id = parseInt(previewContactId, 10);
     return contacts.find((c) => c.id === id) ?? null;
   }, [previewContactId, contacts]);
+
+  const agendaLinks = useMemo(() => normalizeAgendaLinks(cgp), [cgp]);
+  const agendaVariables = useMemo(() => getAgendaVariableTokens(agendaLinks), [agendaLinks]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -168,6 +176,36 @@ export function TemplateEmailForm({
             </div>
           </div>
 
+          {agendaLinks.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="agenda-link">Lien Google Agenda pour ce template</Label>
+              <Select
+                value={formData.agenda_link_id ?? "__none__"}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    agenda_link_id: value === "__none__" ? null : value,
+                  })
+                }
+              >
+                <SelectTrigger id="agenda-link">
+                  <SelectValue placeholder="Choisir un lien" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Aucun (lien_agenda vide)</SelectItem>
+                  {agendaLinks.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Utilisé pour la variable <code>{"{{lien_agenda}}"}</code> dans ce modèle.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label>Variables (cliquez pour insérer)</Label>
             <div className="flex flex-wrap gap-2">
@@ -191,9 +229,29 @@ export function TemplateEmailForm({
                   </Badge>
                 </span>
               ))}
+              {agendaVariables.map((v) => (
+                <span key={v.token} className="inline-flex gap-0.5">
+                  <Badge
+                    variant="outline"
+                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground rounded-r-none border-amber-300"
+                    title={`${v.label} — ${v.hint} → message`}
+                    onClick={() => insertVariable(v.token, "corps")}
+                  >
+                    {v.token}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="cursor-pointer rounded-l-none text-[10px] px-1.5"
+                    title="→ objet"
+                    onClick={() => insertVariable(v.token, "sujet")}
+                  >
+                    obj
+                  </Badge>
+                </span>
+              ))}
             </div>
             <p className="text-xs text-muted-foreground">
-              Variable → corps ; « obj » → objet.
+              Variable → corps ; « obj » → objet. Liens agenda : Paramètres → Profil CGP.
             </p>
           </div>
 
@@ -240,6 +298,7 @@ export function TemplateEmailForm({
             sujet={formData.sujet}
             corps={formData.corps}
             cgp={cgp}
+            agendaLinkId={formData.agenda_link_id}
             contact={previewContact}
           />
 

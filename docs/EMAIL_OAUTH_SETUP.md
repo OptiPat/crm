@@ -51,7 +51,7 @@ Déconnexion : bouton **Déconnecter** (ne supprime pas les Client ID).
 |--------|---------|------------|
 | Client ID Google / Microsoft | `email_oauth.json` | En clair (identifiants publics d’application) |
 | Tokens d’accès / refresh | `email_oauth.json` | **Chiffrés** (XOR + nonce, clé = `db_encryption_key` de `auth.json`, même secret que la base CRM) |
-| Mot de passe SMTP | `smtp_config.json` | Encodage base64 (méthode avancée) |
+| Mot de passe SMTP (legacy) | `smtp_config.json` | Plus configurable dans l’app ; remplacé par OAuth |
 
 Les tokens OAuth ne sont **pas** stockés en clair une fois le CRM configuré (mot de passe maître créé). Un ancien fichier non chiffré est **re-sauvegardé automatiquement** au chargement si la clé CRM est disponible.
 
@@ -68,4 +68,4 @@ Recommandations : poste verrouillé, sauvegardes du dossier App Data protégées
 | Gmail API disabled | Activer Gmail API dans Google Cloud |
 | Compte Testing Google | Ajouter l’email dans utilisateurs test de l’écran de consentement |
 
-SMTP (mot de passe d’application) reste disponible en **méthode avancée**.
+L’ancienne méthode SMTP n’est plus proposée dans Paramètres : connectez OAuth pour les nouveaux postes.

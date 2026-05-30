@@ -16,11 +16,7 @@ import {
 } from "@/lib/api/tauri-email-oauth";
 import { toast } from "sonner";
 
-type EmailOAuthConnectProps = {
-  onOpenSmtp: () => void;
-};
-
-export function EmailOAuthConnect({ onOpenSmtp }: EmailOAuthConnectProps) {
+export function EmailOAuthConnect() {
   const [status, setStatus] = useState<EmailConnectionStatus | null>(null);
   const [googleClientId, setGoogleClientId] = useState("");
   const [microsoftClientId, setMicrosoftClientId] = useState("");
@@ -99,18 +95,23 @@ export function EmailOAuthConnect({ onOpenSmtp }: EmailOAuthConnectProps) {
   };
 
   const oauthConnected = status?.method === "oauth" && status.connected;
-  const smtpOnly = status?.method === "smtp";
+  const legacySmtp = status?.method === "smtp";
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Mail className="h-5 w-5 text-primary" />
-          <CardTitle>Connexion email (recommandé)</CardTitle>
+          <CardTitle>Connexion email</CardTitle>
+          {oauthConnected && (
+            <Badge variant="secondary" className="font-normal">
+              {status?.provider === "google" ? "Google" : "Microsoft"} — {status?.email}
+            </Badge>
+          )}
         </div>
         <CardDescription>
-          Connectez Gmail ou Outlook en un clic (OAuth). Les envois depuis Suivi → Envois nécessitent le
-          CRM ouvert. Configuration : <code className="text-xs">docs/EMAIL_OAUTH_SETUP.md</code>.
+          Connectez votre boîte Gmail ou Outlook (OAuth). Les envois depuis Suivi → Envois nécessitent le CRM
+          ouvert. Guide : <code className="text-xs">docs/EMAIL_OAUTH_SETUP.md</code>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -118,23 +119,22 @@ export function EmailOAuthConnect({ onOpenSmtp }: EmailOAuthConnectProps) {
           <p className="text-sm text-muted-foreground">Chargement...</p>
         ) : (
           <>
+            {legacySmtp && (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                Une ancienne configuration SMTP est encore active sur ce poste. Connectez Google ou Microsoft
+                ci-dessous pour la remplacer (recommandé).
+              </p>
+            )}
+
             {oauthConnected && (
               <div className="flex flex-wrap items-center gap-2 p-3 rounded-lg bg-green-50 border border-green-200">
                 <Badge className="bg-green-100 text-green-800">Connecté</Badge>
-                <span className="text-sm">
-                  {status?.provider === "google" ? "Google" : "Microsoft"} — {status?.email}
-                </span>
+                <span className="text-sm">Prêt pour les envois depuis Suivi → Envois</span>
                 <Button variant="outline" size="sm" className="ml-auto" onClick={() => void handleDisconnect()}>
                   <Unplug className="h-4 w-4 mr-1" />
                   Déconnecter
                 </Button>
               </div>
-            )}
-            {smtpOnly && (
-              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                Méthode active : SMTP (avancé). Vous pouvez connecter OAuth ci-dessous pour simplifier
-                l&apos;envoi.
-              </p>
             )}
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -200,13 +200,8 @@ export function EmailOAuthConnect({ onOpenSmtp }: EmailOAuthConnectProps) {
             </div>
 
             <p className="text-xs text-muted-foreground">
-              Redirect URI à configurer dans Google Cloud / Azure :{" "}
-              <code>http://127.0.0.1:3847/callback</code>
+              Redirect URI dans Google Cloud / Azure : <code>http://127.0.0.1:3847/callback</code>
             </p>
-
-            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={onOpenSmtp}>
-              Méthode avancée : configuration SMTP (mot de passe d&apos;application)
-            </Button>
           </>
         )}
       </CardContent>

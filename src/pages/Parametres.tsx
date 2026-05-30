@@ -5,15 +5,15 @@ import { Label } from "@/components/ui/label";
 import { Lock, Database, Bell, User, Mail, Trash2, Search, X, Check, Building2, Phone, Download } from "lucide-react";
 import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { getAppInfo, listDbBackups, type DbBackupEntry } from "@/lib/api/tauri-system";
-import { SmtpConfigForm } from "@/components/emails/SmtpConfigForm";
 import { EmailOAuthConnect } from "@/components/emails/EmailOAuthConnect";
+import { AgendaLinksEditor } from "@/components/settings/AgendaLinksEditor";
+import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 import { useState, useEffect } from "react";
 import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { toast } from "sonner";
 
 export function Parametres() {
-  const [showSmtpConfig, setShowSmtpConfig] = useState(false);
   const [cleaningUp, setCleaningUp] = useState(false);
   
   // Profil CGP
@@ -23,7 +23,7 @@ export function Parametres() {
     cabinet: "",
     email: "",
     telephone: "",
-    lien_calendly: "",
+    agenda_links: [] as AgendaLink[],
     logo_path: "",
     wizard_completed: true,
     wizard_step: 4,
@@ -50,7 +50,7 @@ export function Parametres() {
             cabinet: config.cabinet ?? "",
             email: config.email ?? "",
             telephone: config.telephone ?? "",
-            lien_calendly: config.lien_calendly ?? "",
+            agenda_links: normalizeAgendaLinks(config),
             logo_path: config.logo_path ?? "",
             wizard_completed: config.wizard_completed ?? true,
             wizard_step: config.wizard_step ?? 4,
@@ -216,16 +216,10 @@ export function Parametres() {
               />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="lien_calendly">Lien Calendly (variable {"{{lien_calendly}}"})</Label>
-            <Input
-              id="lien_calendly"
-              type="url"
-              placeholder="https://calendly.com/votre-lien"
-              value={cgpConfig.lien_calendly || ""}
-              onChange={(e) => setCgpConfig({ ...cgpConfig, lien_calendly: e.target.value })}
-            />
-          </div>
+          <AgendaLinksEditor
+            links={cgpConfig.agenda_links ?? []}
+            onChange={(agenda_links) => setCgpConfig({ ...cgpConfig, agenda_links })}
+          />
           <Button onClick={handleSaveProfile} disabled={savingProfile}>
             {savingProfile ? (
               "Enregistrement..."
@@ -396,7 +390,7 @@ export function Parametres() {
         </CardContent>
       </Card>
 
-      <EmailOAuthConnect onOpenSmtp={() => setShowSmtpConfig(true)} />
+      <EmailOAuthConnect />
 
       {/* Notifications */}
       <Card>
@@ -416,11 +410,6 @@ export function Parametres() {
         </CardContent>
       </Card>
 
-      {/* Formulaire de configuration SMTP */}
-      <SmtpConfigForm
-        open={showSmtpConfig}
-        onOpenChange={setShowSmtpConfig}
-      />
     </div>
   );
 }

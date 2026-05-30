@@ -33,23 +33,37 @@ describe("etiquette-email-preview", () => {
       email_date_prevue: null,
       email_date_envoi: null,
       template_sujet: "Bonjour {{prenom}} {{nom}}",
-      template_corps: "Tel {{telephone}} — {{lien_calendly}}",
+      template_corps: "Tel {{telephone}} — {{lien_agenda}}",
+      template_agenda_link_id: "suivi",
       queue_issue: null,
     };
     const vars = buildTemplateVariables(item, {
       nom: "Martin",
       prenom: "Paul",
-      lien_calendly: "https://calendly.com/test",
+      agenda_links: [
+        {
+          id: "suivi",
+          label: "Suivi",
+          url: "https://calendar.google.com/calendar/appointments/test",
+        },
+      ],
       wizard_completed: true,
       wizard_step: 4,
     });
     expect(vars.prenom).toBe("Jean");
     expect(vars.telephone).toBe("0612345678");
-    expect(vars.lien_calendly).toBe("https://calendly.com/test");
+    expect(vars.lien_agenda).toBe("https://calendar.google.com/calendar/appointments/test");
 
     const rendered = renderEtiquetteEmailPreview(item, {
       nom: "Martin",
       prenom: "Paul",
+      agenda_links: [
+        {
+          id: "suivi",
+          label: "Suivi",
+          url: "https://calendar.google.com/calendar/appointments/test",
+        },
+      ],
       wizard_completed: true,
       wizard_step: 4,
     });
