@@ -25,6 +25,7 @@ Logique métier pure, sans Tauri ni UI :
 - **`merge-duplicate-logic`** — fusion champs doublons (extrait de `merge-duplicate-group`)
 - **`etiquette-email-preview`** — date/heure campagne email étiquettes
 - **`etiquettes-filter`** — filtre Contacts (actives + inactives encore assignées)
+- **`template-email-meta`** — suggestion template par étiquette, aperçu variables
 
 Fixtures : `src/lib/contacts/__fixtures__/import-couple-fixtures.ts`
 
@@ -47,3 +48,5 @@ Suite complète recommandée pour les agents : `npm run verify` (voir `AGENTS.md
 ## Hors scope
 
 Pas de tests E2E (Tauri / navigateur).
+
+Le flux **OAuth email** (connexion navigateur, refresh token, Gmail API / Graph) n’est pas couvert par des tests automatisés — validation manuelle via Paramètres → Email et `test_email_connection`.

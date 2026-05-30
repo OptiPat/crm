@@ -1,3 +1,4 @@
+use super::oauth_commands::send_email_unified;
 use super::{EmailSender, SmtpConfig};
 use base64::Engine;
 use tauri::AppHandle;
@@ -92,18 +93,11 @@ pub struct SendEmailInput {
 
 #[tauri::command]
 pub fn send_email(app_handle: AppHandle, email_data: SendEmailInput) -> Result<(), String> {
-    let config = SmtpConfig::load(&app_handle)?.ok_or(
-        "SMTP configuration not found. Please configure your email settings first.".to_string(),
-    )?;
-
-    let sender = EmailSender::new(config);
-
-    sender.send_email(
+    send_email_unified(
+        &app_handle,
         &email_data.to_email,
         email_data.to_name.as_deref(),
         &email_data.subject,
         &email_data.body,
-    )?;
-
-    Ok(())
+    )
 }

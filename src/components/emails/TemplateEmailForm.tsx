@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -24,7 +24,15 @@ import {
   type NewTemplateEmail,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
+import { getCgpConfig } from "@/lib/api/tauri-settings";
+import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import {
+  EMAIL_TEMPLATE_CATEGORIES,
+  EMAIL_TEMPLATE_VARIABLES,
+} from "@/lib/emails/template-email-meta";
+import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 
 interface TemplateEmailFormProps {
   open: boolean;
@@ -40,13 +48,24 @@ export function TemplateEmailForm({
   onSuccess,
 }: TemplateEmailFormProps) {
   const [loading, setLoading] = useState(false);
+  const [cgp, setCgp] = useState<Awaited<ReturnType<typeof getCgpConfig>> | null>(null);
+  const [previewContactId, setPreviewContactId] = useState<string>("sample");
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [formData, setFormData] = useState<NewTemplateEmail>({
     nom: "",
     sujet: "",
     corps: "",
-    categorie: "AUTRE",
+    categorie: "RELANCE",
     variables: null,
   });
+
+  useEffect(() => {
+    if (!open) return;
+    void getCgpConfig().then(setCgp).catch(() => setCgp(null));
+    void getAllContacts()
+      .then((list) => setContacts(list.filter((c) => c.email?.trim())))
+      .catch(() => setContacts([]));
+  }, [open]);
 
   useEffect(() => {
     if (template) {
@@ -62,47 +81,43 @@ export function TemplateEmailForm({
         nom: "",
         sujet: "",
         corps: "",
-        categorie: "AUTRE",
+        categorie: "RELANCE",
         variables: null,
       });
+      setPreviewContactId("sample");
     }
-  }, [template]);
+  }, [template, open]);
+
+  const previewContact = useMemo(() => {
+    if (previewContactId === "sample") return null;
+    const id = parseInt(previewContactId, 10);
+    return contacts.find((c) => c.id === id) ?? null;
+  }, [previewContactId, contacts]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       if (template) {
         await updateTemplateEmail(template.id, formData);
+        toast.success("Template modifié");
       } else {
         await createTemplateEmail(formData);
+        toast.success("Template créé");
       }
       onSuccess();
     } catch (error) {
       console.error("Error saving template:", error);
-      alert("Erreur lors de l'enregistrement: " + String(error));
+      toast.error("Erreur lors de l'enregistrement");
     } finally {
       setLoading(false);
     }
   };
 
-  const variablesList = [
-    "{{prenom}}",
-    "{{nom}}",
-    "{{email}}",
-    "{{telephone}}",
-    "{{lien_calendly}}",
-    "{{cgp_nom}}",
-    "{{cgp_prenom}}",
-    "{{cgp_telephone}}",
-    "{{cgp_email}}",
-  ];
-
-  const insertVariable = (variable: string) => {
+  const insertVariable = (variable: string, field: "sujet" | "corps") => {
     setFormData({
       ...formData,
-      corps: formData.corps + " " + variable,
+      [field]: `${formData[field]} ${variable}`.trim(),
     });
   };
 
@@ -114,12 +129,12 @@ export function TemplateEmailForm({
             {template ? "Modifier le template" : "Nouveau template"}
           </DialogTitle>
           <DialogDescription>
-            Créez un modèle d'email réutilisable avec des variables dynamiques
+            Modèles réutilisables pour les campagnes liées aux étiquettes. Variables documentées
+            ci-dessous.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Nom et Catégorie */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="nom">Nom du template *</Label>
@@ -127,13 +142,12 @@ export function TemplateEmailForm({
                 id="nom"
                 value={formData.nom}
                 onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
-                placeholder="Ex: Email de bienvenue"
+                placeholder="Ex: Relance — client 1 an"
                 required
               />
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="categorie">Catégorie *</Label>
+              <Label htmlFor="categorie">Intention *</Label>
               <Select
                 value={formData.categorie}
                 onValueChange={(value) =>
@@ -144,89 +158,97 @@ export function TemplateEmailForm({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SUIVI_ANNUEL">Suivi annuel</SelectItem>
-                  <SelectItem value="ARBITRAGE">Arbitrage</SelectItem>
-                  <SelectItem value="FISCALITE">Fiscalité</SelectItem>
-                  <SelectItem value="BIENVENUE">Bienvenue</SelectItem>
-                  <SelectItem value="RELANCE">Relance</SelectItem>
-                  <SelectItem value="AUTRE">Autre</SelectItem>
+                  {EMAIL_TEMPLATE_CATEGORIES.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {/* Sujet */}
           <div className="space-y-2">
-            <Label htmlFor="sujet">Sujet de l'email *</Label>
+            <Label>Variables (cliquez pour insérer)</Label>
+            <div className="flex flex-wrap gap-2">
+              {EMAIL_TEMPLATE_VARIABLES.map((v) => (
+                <span key={v.token} className="inline-flex gap-0.5">
+                  <Badge
+                    variant="outline"
+                    className="cursor-pointer hover:bg-primary hover:text-primary-foreground rounded-r-none"
+                    title={`${v.label} — ${v.hint} → message`}
+                    onClick={() => insertVariable(v.token, "corps")}
+                  >
+                    {v.token}
+                  </Badge>
+                  <Badge
+                    variant="secondary"
+                    className="cursor-pointer rounded-l-none text-[10px] px-1.5"
+                    title="→ objet"
+                    onClick={() => insertVariable(v.token, "sujet")}
+                  >
+                    obj
+                  </Badge>
+                </span>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Variable → corps ; « obj » → objet.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="sujet">Objet *</Label>
             <Input
               id="sujet"
               value={formData.sujet}
               onChange={(e) => setFormData({ ...formData, sujet: e.target.value })}
-              placeholder="Ex: Bienvenue {{prenom}} !"
+              placeholder="Ex: {{prenom}}, reprenons contact"
               required
             />
           </div>
 
-          {/* Variables disponibles */}
           <div className="space-y-2">
-            <Label>Variables disponibles</Label>
-            <div className="flex flex-wrap gap-2">
-              {variablesList.map((variable) => (
-                <Badge
-                  key={variable}
-                  variant="outline"
-                  className="cursor-pointer hover:bg-primary hover:text-primary-foreground"
-                  onClick={() => insertVariable(variable)}
-                >
-                  {variable}
-                </Badge>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Cliquez sur une variable pour l'insérer dans le corps de l'email
-            </p>
-          </div>
-
-          {/* Corps */}
-          <div className="space-y-2">
-            <Label htmlFor="corps">Corps de l'email *</Label>
+            <Label htmlFor="corps">Message *</Label>
             <Textarea
               id="corps"
               value={formData.corps}
               onChange={(e) => setFormData({ ...formData, corps: e.target.value })}
-              placeholder="Bonjour {{prenom}},&#10;&#10;Je suis ravi de vous accueillir..."
-              rows={12}
+              rows={10}
               required
             />
           </div>
 
-          {/* Aperçu */}
           <div className="space-y-2">
-            <Label>Aperçu</Label>
-            <div className="p-4 border border-border rounded-lg bg-muted">
-              <p className="text-sm font-medium mb-2">
-                <strong>Sujet :</strong> {formData.sujet || "(vide)"}
-              </p>
-              <div className="text-sm whitespace-pre-wrap">
-                {formData.corps || "(vide)"}
-              </div>
-            </div>
+            <Label>Aperçu sur</Label>
+            <Select value={previewContactId} onValueChange={setPreviewContactId}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="sample">Contact fictif (Marie Dupont)</SelectItem>
+                {contacts.slice(0, 200).map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.prenom} {c.nom}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
+          <TemplateEmailPreviewPanel
+            sujet={formData.sujet}
+            corps={formData.corps}
+            cgp={cgp}
+            contact={previewContact}
+          />
+
           <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Annuler
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading
-                ? "Enregistrement..."
-                : template
-                ? "Modifier"
-                : "Créer"}
+              {loading ? "Enregistrement..." : template ? "Modifier" : "Créer"}
             </Button>
           </DialogFooter>
         </form>

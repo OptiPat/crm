@@ -1078,6 +1078,81 @@ impl Database {
         Ok(())
     }
 
+    fn template_email_nom_exists(&self, nom: &str) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM templates_email WHERE nom = ?1",
+            params![nom],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Crée les modèles par défaut manquants (sans modifier les existants).
+    pub fn ensure_default_email_templates(&self) -> Result<usize> {
+        use super::models::NewTemplateEmail;
+
+        let defaults: Vec<NewTemplateEmail> = vec![
+            NewTemplateEmail {
+                nom: "Relance — client 1 an sans contact".into(),
+                sujet: "{{prenom}}, reprenons contact".into(),
+                corps: "Bonjour {{prenom}} {{nom}},\n\nIl y a plus d'un an que nous n'avons pas échangé. Je serais ravi de faire un point sur votre situation et vos objectifs.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}\n{{lien_calendly}}".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+            },
+            NewTemplateEmail {
+                nom: "Relance — prospect 6 mois".into(),
+                sujet: "{{prenom}}, un échange rapide ?".into(),
+                corps: "Bonjour {{prenom}},\n\nJe me permets de vous recontacter : nous n'avons pas échangé depuis quelques mois. Souhaitez-vous un court appel ?\n\nBien cordialement,\n{{cgp_prenom}} {{cgp_nom}}".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+            },
+            NewTemplateEmail {
+                nom: "Rappel déclaration IR".into(),
+                sujet: "Déclaration d'impôts — {{prenom}}".into(),
+                corps: "Bonjour {{prenom}},\n\nLa période de déclaration d'impôts approche. Je reste disponible si vous souhaitez un échange.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_email}}".into(),
+                categorie: "FISCALITE".into(),
+                variables: None,
+            },
+            NewTemplateEmail {
+                nom: "Prise de rendez-vous suivi".into(),
+                sujet: "Prochain rendez-vous de suivi — {{prenom}}".into(),
+                corps: "Bonjour {{prenom}} {{nom}},\n\nVotre prochain rendez-vous de suivi approche. Réservez un créneau ici : {{lien_calendly}}\n\nÀ bientôt,\n{{cgp_prenom}} {{cgp_nom}}".into(),
+                categorie: "SUIVI_ANNUEL".into(),
+                variables: None,
+            },
+            NewTemplateEmail {
+                nom: "Bienvenue nouveau client".into(),
+                sujet: "Bienvenue {{prenom}}".into(),
+                corps: "Bonjour {{prenom}},\n\nJe suis ravi de vous accompagner. N'hésitez pas à me joindre au {{cgp_telephone}} ou par email.\n\nCordialement,\n{{cgp_prenom}} {{cgp_nom}}".into(),
+                categorie: "BIENVENUE".into(),
+                variables: None,
+            },
+            NewTemplateEmail {
+                nom: "Relance — échéance patrimoine".into(),
+                sujet: "Échéance à venir — {{prenom}}".into(),
+                corps: "Bonjour {{prenom}},\n\nUne échéance importante approche sur votre patrimoine. Je vous propose d'en discuter rapidement.\n\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+            },
+            NewTemplateEmail {
+                nom: "Rappel assurance-vie 69 ans".into(),
+                sujet: "Point assurance-vie — {{prenom}}".into(),
+                corps: "Bonjour {{prenom}} {{nom}},\n\nVous approchez d'une étape clé pour l'organisation de votre assurance-vie. Souhaitez-vous un rendez-vous ?\n\n{{cgp_prenom}} {{cgp_nom}}".into(),
+                categorie: "SUIVI_ANNUEL".into(),
+                variables: None,
+            },
+        ];
+
+        let mut created = 0;
+        for t in defaults {
+            if !self.template_email_nom_exists(&t.nom)? {
+                self.create_template_email(t)?;
+                created += 1;
+            }
+        }
+        Ok(created)
+    }
+
     // ========== ALERTES ==========
 
     pub fn get_all_alertes(&self) -> Result<Vec<super::models::Alerte>> {

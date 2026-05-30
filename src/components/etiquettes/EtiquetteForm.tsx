@@ -45,6 +45,10 @@ import {
   unixToLocalDatetime,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { getAllTemplatesEmail, type TemplateEmail } from "@/lib/api/tauri-templates-email";
+import {
+  getTemplateCategoryMeta,
+  suggestTemplateIdForEtiquette,
+} from "@/lib/emails/template-email-meta";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 
@@ -695,28 +699,65 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   Prépare une file d&apos;envoi ; vous confirmez chaque email dans Suivi → Envois
                 </p>
               </div>
-              <Switch checked={emailActif} onCheckedChange={setEmailActif} />
+              <Switch
+                checked={emailActif}
+                onCheckedChange={(checked) => {
+                  setEmailActif(checked);
+                  if (checked && !emailTemplateId && templates.length > 0 && nom.trim()) {
+                    const suggested = suggestTemplateIdForEtiquette(nom, templates);
+                    if (suggested) setEmailTemplateId(suggested);
+                  }
+                }}
+              />
             </div>
 
             {emailActif && (
               <div className="space-y-4 pt-4 border-t">
                 <div className="space-y-2">
-                  <Label>Template d&apos;email</Label>
-                  <Select 
-                    value={emailTemplateId?.toString() || ""} 
+                  <div className="flex items-center justify-between gap-2">
+                    <Label>Template d&apos;email</Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 text-xs"
+                      disabled={!nom.trim() || templates.length === 0}
+                      onClick={() => {
+                        const id = suggestTemplateIdForEtiquette(nom, templates);
+                        if (id) {
+                          setEmailTemplateId(id);
+                          toast.success("Template suggéré pour cette étiquette");
+                        } else {
+                          toast.info(
+                            "Aucun modèle correspondant — ajoutez-en un dans Templates Email"
+                          );
+                        }
+                      }}
+                    >
+                      Suggérer
+                    </Button>
+                  </div>
+                  <Select
+                    value={emailTemplateId?.toString() || ""}
                     onValueChange={(v) => setEmailTemplateId(v ? parseInt(v) : null)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Sélectionner un template" />
                     </SelectTrigger>
                     <SelectContent>
-                      {templates.map((t) => (
-                        <SelectItem key={t.id} value={t.id.toString()}>
-                          {t.nom}
-                        </SelectItem>
-                      ))}
+                      {templates.map((t) => {
+                        const cat = getTemplateCategoryMeta(t.categorie);
+                        return (
+                          <SelectItem key={t.id} value={t.id.toString()}>
+                            {t.nom} ({cat.label})
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Les modèles « Relance », « IR », etc. sont créés depuis Templates Email.
+                  </p>
                 </div>
 
                 <div className="space-y-2">

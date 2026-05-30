@@ -24,6 +24,10 @@ import {
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { sendEmail } from "@/lib/api/tauri-email";
 import {
+  getEmailConnectionStatus,
+  type EmailConnectionStatus,
+} from "@/lib/api/tauri-email-oauth";
+import {
   formatEtiquetteSendDatetime,
   getIncompleteQueueLabel,
   renderEtiquetteEmailPreview,
@@ -46,20 +50,23 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(null);
 
   const loadQueue = useCallback(async () => {
     try {
       setLoading(true);
-      const [cgp, r, i, s] = await Promise.all([
+      const [cgp, r, i, s, emailConn] = await Promise.all([
         getCgpConfig(),
         getEtiquetteEmailQueue("ready"),
         getEtiquetteEmailQueue("incomplete"),
         getEtiquetteEmailQueue("sent"),
+        getEmailConnectionStatus(),
       ]);
       setCgpConfig(cgp);
       setReady(r);
       setIncomplete(i);
       setSent(s);
+      setEmailStatus(emailConn);
       onQueueChanged?.();
     } catch (error) {
       console.error("Error loading email queue:", error);
@@ -112,9 +119,9 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       await loadQueue();
     } catch (error) {
       console.error("Error sending etiquette email:", error);
-      toast.error(
-        error instanceof Error ? error.message : "Erreur lors de l'envoi (vérifiez la config SMTP)"
-      );
+      const hint =
+        error instanceof Error ? error.message : "Erreur lors de l'envoi";
+      toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Email)`);
     } finally {
       setSending(false);
     }
@@ -229,6 +236,28 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   return (
     <div className="space-y-4">
+      <p className="text-sm text-muted-foreground bg-muted/50 border rounded-lg px-4 py-3">
+        Les envois passent par cette application : gardez le <strong>CRM ouvert</strong>, configurez
+        votre boîte dans Paramètres → Email, puis confirmez chaque message ici. La file se remplit
+        même CRM fermé ; l&apos;envoi réel nécessite l&apos;app lancée.
+      </p>
+      {emailStatus && !emailStatus.connected && (
+        <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>
+            Aucune boîte connectée (OAuth ou SMTP). Configurez l&apos;envoi dans{" "}
+            <strong>Paramètres → Email</strong> avant d&apos;envoyer depuis cette file.
+          </span>
+        </p>
+      )}
+      {emailStatus?.connected && (
+        <p className="text-sm text-green-900 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+          Boîte active :{" "}
+          {emailStatus.method === "oauth"
+            ? `${emailStatus.provider === "google" ? "Google" : "Microsoft"} — ${emailStatus.email ?? ""}`
+            : "SMTP (avancé)"}
+        </p>
+      )}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>

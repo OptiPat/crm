@@ -446,6 +446,16 @@ pub fn delete_template_email(db: State<'_, DbState>, id: i64) -> Result<(), Stri
         .map_err(|e| format!("Failed to delete template: {}", e))
 }
 
+#[tauri::command]
+pub fn seed_default_email_templates(db: State<'_, DbState>) -> Result<usize, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .ensure_default_email_templates()
+        .map_err(|e| format!("Failed to seed email templates: {}", e))
+}
+
 // ========== ALERTES ==========
 
 #[tauri::command]

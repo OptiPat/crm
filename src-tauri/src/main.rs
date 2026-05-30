@@ -14,6 +14,7 @@ use auth::AuthManager;
 use commands::*;
 use database::Database;
 use email::commands::*;
+use email::oauth_commands::*;
 use std::sync::Mutex;
 use system_commands::*;
 use tauri::Manager;
@@ -28,7 +29,6 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .setup(|app| {
@@ -104,6 +104,7 @@ fn main() {
             get_template_email_by_id,
             update_template_email,
             delete_template_email,
+            seed_default_email_templates,
             get_all_alertes,
             get_alertes_non_traitees,
             create_alerte,
@@ -164,6 +165,12 @@ fn main() {
             delete_smtp_config,
             test_smtp_connection,
             send_email,
+            get_email_connection_status,
+            get_oauth_app_settings,
+            save_oauth_app_settings,
+            connect_email_oauth,
+            disconnect_email_oauth,
+            test_email_connection,
             get_app_info,
             list_db_backups,
             get_all_interactions_with_contacts,

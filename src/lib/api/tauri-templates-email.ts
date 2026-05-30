@@ -39,6 +39,11 @@ export async function deleteTemplateEmail(id: number): Promise<void> {
   return invoke<void>("delete_template_email", { id });
 }
 
+/** Modèles métier par défaut (idempotent : n'écrase pas les existants). */
+export async function seedDefaultEmailTemplates(): Promise<number> {
+  return invoke<number>("seed_default_email_templates");
+}
+
 // Fonction utilitaire pour remplacer les variables dans un template
 export function replaceTemplateVariables(text: string, variables: Record<string, string>): string {
   let result = text;
