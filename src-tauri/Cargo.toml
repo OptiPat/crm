@@ -1,6 +1,6 @@
-[package]
+﻿[package]
 name = "patrimoine-crm"
-version = "0.2.0"
+version = "0.3.0"
 description = "CRM Desktop pour Conseillers en Gestion de Patrimoine"
 authors = ["you"]
 edition = "2021"
@@ -13,8 +13,8 @@ tauri = { version = "2.11", features = ["devtools", "protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
-# TEMPORAIRE : SQLCipher désactivé - nécessite OpenSSL sur Windows
-# Pour réactiver le chiffrement : remplacer "bundled" par "bundled-sqlcipher" après installation OpenSSL
+# TEMPORAIRE : SQLCipher dÃ©sactivÃ© - nÃ©cessite OpenSSL sur Windows
+# Pour rÃ©activer le chiffrement : remplacer "bundled" par "bundled-sqlcipher" aprÃ¨s installation OpenSSL
 anyhow = "1.0"
 argon2 = "0.5"
 rand = "0.8"
@@ -30,7 +30,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 url = "2"
 
 [profile.dev]
-# debug = 0 évite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)
+# debug = 0 Ã©vite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)
 incremental = true
 debug = 0
 codegen-units = 1
