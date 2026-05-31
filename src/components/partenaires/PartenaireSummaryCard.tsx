@@ -99,9 +99,6 @@ export function PartenaireSummaryCard({
               <p className="text-sm font-semibold text-primary tabular-nums leading-tight">
                 {formatEuroCentimes(meta.patrimoineAvecMoi)}
               </p>
-              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                avec moi
-              </p>
             </div>
           )}
           <ChevronRight

@@ -83,7 +83,8 @@ export function EtiquetteEmailSendDialog({
           item.contact_etiquette_id,
           sent.gmail_message_id,
           sent.gmail_thread_id,
-          subject.trim()
+          subject.trim(),
+          plainBody
         );
       } catch (markError) {
         console.error(markError);

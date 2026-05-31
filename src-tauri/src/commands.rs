@@ -4,7 +4,8 @@ use crate::database::{
         ContactEtiquetteDetails, DashboardStats, Document, Etiquette, EtiquetteWithCount, Famille,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewPartenaire,
-        Interaction, InteractionWithContact, NewInteraction, NewTemplateEmail, Partenaire,
+        ExchangeHistoryEntry, Interaction, InteractionWithContact, NewInteraction,
+        NewTemplateEmail, Partenaire,
         PipelineStats, ProductStats, Setting, TemplateEmail,
     },
     Database,
@@ -946,6 +947,7 @@ pub fn mark_etiquette_email_sent(
     gmail_message_id: Option<String>,
     gmail_thread_id: Option<String>,
     email_subject: Option<String>,
+    email_body: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -956,6 +958,7 @@ pub fn mark_etiquette_email_sent(
             gmail_message_id.as_deref(),
             gmail_thread_id.as_deref(),
             email_subject.as_deref(),
+            email_body.as_deref(),
         )
         .map_err(|e| format!("Failed to mark email sent: {}", e))
 }
@@ -976,11 +979,16 @@ pub fn sync_email_campaign_responses(
     crate::email::response_sync::sync_email_campaign_responses(
         &app_handle,
         pending,
-        |contact_etiquette_id, response_type| {
+        |contact_etiquette_id, response_type, body, gmail_msg| {
             let db_guard = db.lock().unwrap();
             let database = db_guard.as_ref().ok_or("Database not initialized")?;
             database
-                .mark_email_campaign_response(contact_etiquette_id, response_type)
+                .mark_email_campaign_response(
+                    contact_etiquette_id,
+                    response_type,
+                    body,
+                    gmail_msg,
+                )
                 .map_err(|e| e.to_string())
         },
     )
@@ -991,12 +999,62 @@ pub fn mark_email_campaign_response(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
     response_type: String,
+    reponse_body: Option<String>,
+    reponse_gmail_message_id: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .mark_email_campaign_response(contact_etiquette_id, &response_type)
+        .mark_email_campaign_response(
+            contact_etiquette_id,
+            &response_type,
+            reponse_body.as_deref(),
+            reponse_gmail_message_id.as_deref(),
+        )
         .map_err(|e| format!("Failed to mark response: {}", e))
+}
+
+#[tauri::command]
+pub fn import_campaign_reply_from_gmail(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+) -> Result<String, String> {
+    let item = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database.campaign_response_check_item(contact_etiquette_id)?
+    };
+
+    let store = crate::email::oauth_store::EmailOAuthStore::load(&app_handle)?;
+    let mut conn = store
+        .connection
+        .clone()
+        .ok_or("Connectez Google dans Paramètres → Email.")?;
+    if conn.provider != "google" {
+        return Err("L'import de réponse nécessite un compte Google.".into());
+    }
+    crate::email::oauth_send::refresh_connection_if_needed(&app_handle, &mut conn)?;
+    let client = reqwest::blocking::Client::new();
+    let reply = crate::email::response_sync::gmail_find_contact_reply(
+        &client,
+        &conn.access_token,
+        &item,
+    )?
+    .ok_or("Aucune réponse Gmail trouvée pour ce contact après l'envoi.")?;
+
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_email_campaign_response(
+            contact_etiquette_id,
+            "mail",
+            Some(reply.body_text.as_str()),
+            Some(reply.message_id.as_str()),
+        )
+        .map_err(|e| format!("Failed to mark response: {}", e))?;
+
+    Ok(reply.body_text)
 }
 
 #[tauri::command]
@@ -1155,6 +1213,17 @@ pub fn get_all_interactions_with_contacts(
     database
         .get_all_interactions_with_contacts()
         .map_err(|e| format!("Failed to get interactions: {}", e))
+}
+
+#[tauri::command]
+pub fn get_exchange_history_timeline(
+    db: State<'_, DbState>,
+) -> Result<Vec<ExchangeHistoryEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_exchange_history_timeline()
+        .map_err(|e| format!("Failed to get exchange history: {}", e))
 }
 
 #[tauri::command]

@@ -95,27 +95,44 @@ fn build_rfc2822_plain(
     )
 }
 
-fn build_rfc2822_multipart(
-    from: &str,
-    to: &str,
-    subject: &str,
-    body_plain: &str,
-    body_html: &str,
-) -> String {
-    let boundary = format!("crm_boundary_{}", EmailOAuthStore::now_unix());
+/// Une seule partie HTML (évite que Gmail affiche le source MIME multipart brut).
+fn build_rfc2822_html(from: &str, to: &str, subject: &str, body_html: &str) -> String {
     format!(
-        "From: {}\r\nTo: {}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/alternative; boundary=\"{}\"\r\n\r\n\
---{b}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{plain}\r\n\
---{b}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{html}\r\n\
---{b}--",
-        from,
-        to,
-        subject,
-        boundary,
-        b = boundary,
-        plain = body_plain,
-        html = body_html,
+        "From: {}\r\nTo: {}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{}",
+        from, to, subject, body_html
     )
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct GmailThreadReply {
+    pub thread_id: Option<String>,
+    pub in_reply_to_message_id: Option<String>,
+}
+
+fn append_reply_headers(base: &str, reply: Option<&GmailThreadReply>) -> String {
+    let Some(reply) = reply else {
+        return base.to_string();
+    };
+    let mut extra = String::new();
+    if let Some(ref mid) = reply.in_reply_to_message_id {
+        if !mid.trim().is_empty() {
+            let token = if mid.contains('@') {
+                mid.clone()
+            } else {
+                format!("<{}>", mid.trim())
+            };
+            extra.push_str(&format!("In-Reply-To: {}\r\n", token));
+            extra.push_str(&format!("References: {}\r\n", token));
+        }
+    }
+    if extra.is_empty() {
+        return base.to_string();
+    }
+    if let Some(pos) = base.find("\r\n\r\n") {
+        format!("{}{}{}", &base[..pos], extra, &base[pos..])
+    } else {
+        format!("{}{}", base, extra)
+    }
 }
 
 fn build_rfc2822(
@@ -126,14 +143,16 @@ fn build_rfc2822(
     subject: &str,
     body: &str,
     body_html: Option<&str>,
+    reply: Option<&GmailThreadReply>,
 ) -> String {
     let (from, to) = format_addresses(from_email, from_name, to_email, to_name);
     let subject_hdr = encode_mime_subject(subject);
-    if let Some(html) = body_html.filter(|h| !h.trim().is_empty()) {
-        build_rfc2822_multipart(&from, &to, &subject_hdr, body, html)
+    let core = if let Some(html) = body_html.filter(|h| !h.trim().is_empty()) {
+        build_rfc2822_html(&from, &to, &subject_hdr, html)
     } else {
         build_rfc2822_plain(&from, &to, &subject_hdr, body)
-    }
+    };
+    append_reply_headers(&core, reply)
 }
 
 fn send_via_gmail(
@@ -143,14 +162,23 @@ fn send_via_gmail(
     subject: &str,
     body: &str,
     body_html: Option<&str>,
+    reply: Option<&GmailThreadReply>,
 ) -> Result<Option<(String, String)>, String> {
-    let raw = build_rfc2822(&conn.email, None, to_email, to_name, subject, body, body_html);
+    let raw = build_rfc2822(
+        &conn.email, None, to_email, to_name, subject, body, body_html, reply,
+    );
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.as_bytes());
+    let mut payload = serde_json::json!({ "raw": encoded });
+    if let Some(tid) = reply.and_then(|r| r.thread_id.as_deref()) {
+        if !tid.trim().is_empty() {
+            payload["threadId"] = serde_json::json!(tid);
+        }
+    }
     let client = reqwest::blocking::Client::new();
     let res = client
         .post("https://gmail.googleapis.com/gmail/v1/users/me/messages/send")
         .bearer_auth(&conn.access_token)
-        .json(&serde_json::json!({ "raw": encoded }))
+        .json(&payload)
         .send()
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
@@ -213,6 +241,7 @@ pub fn send_with_oauth(
     subject: &str,
     body: &str,
     body_html: Option<&str>,
+    reply: Option<&GmailThreadReply>,
 ) -> Result<OAuthSendResult, String> {
     let store = EmailOAuthStore::load(app)?;
     let mut conn = store
@@ -224,7 +253,7 @@ pub fn send_with_oauth(
 
     match conn.provider.as_str() {
         "google" => {
-            let ids = send_via_gmail(&conn, to_email, to_name, subject, body, body_html)?;
+            let ids = send_via_gmail(&conn, to_email, to_name, subject, body, body_html, reply)?;
             Ok(OAuthSendResult {
                 gmail_message_id: ids.as_ref().map(|(m, _)| m.clone()),
                 gmail_thread_id: ids.map(|(_, t)| t),
@@ -325,6 +354,7 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
         "Test CRM W.Y.S — connexion OAuth",
         &body,
         body_html.as_deref(),
+        None,
     )?;
     let sig_note = if cgp.email_signature_html.as_deref().is_some_and(|s| !s.trim().is_empty())
         || cgp.email_signature.as_deref().is_some_and(|s| !s.trim().is_empty())
@@ -334,4 +364,31 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
         " (sans signature : configurez-la dans Paramètres → Profil)"
     };
     Ok(format!("Email de test envoyé à {}{}", conn.email, sig_note))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html_message_is_single_part_not_multipart() {
+        let raw = build_rfc2822(
+            "cg@example.com",
+            Some("CGP"),
+            "client@example.com",
+            Some("Client"),
+            "Re: test",
+            "top",
+            Some("<p>top</p><br>sig"),
+            Some(&GmailThreadReply {
+                thread_id: Some("thread1".into()),
+                in_reply_to_message_id: Some("abc123".into()),
+            }),
+        );
+        assert!(raw.contains("Content-Type: text/html; charset=UTF-8"));
+        assert!(!raw.contains("multipart/alternative"));
+        assert!(!raw.contains("crm_boundary"));
+        assert!(raw.contains("In-Reply-To:"));
+        assert!(raw.contains("<p>top</p>"));
+    }
 }

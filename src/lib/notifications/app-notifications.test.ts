@@ -30,7 +30,11 @@ describe("fetchAppNotificationsSummary", () => {
     expect(summary.items).toHaveLength(3);
     expect(summary.totalCount).toBe(4);
     expect(summary.items.find((i) => i.id === "emails_ready")?.count).toBe(1);
+    expect(summary.items.find((i) => i.id === "emails_ready")?.focusContactId).toBe(1);
     expect(summary.items.find((i) => i.id === "emails_followup")?.count).toBe(2);
+    expect(
+      summary.items.find((i) => i.id === "emails_followup")?.focusContactId
+    ).toBeUndefined();
   });
 
   it("retourne vide si rien en attente", async () => {

@@ -1,0 +1,122 @@
+import { cn } from "@/lib/utils";
+import { AlertTriangle, ChevronDown, Mail } from "lucide-react";
+
+export function EnvoisQueueStats({
+  ready,
+  incomplete,
+  sent,
+  followup,
+  active,
+  onSelect,
+}: {
+  ready: number;
+  incomplete: number;
+  sent: number;
+  followup: number;
+  active: "ready" | "incomplete" | "sent" | "followup";
+  onSelect: (tab: "ready" | "incomplete" | "sent" | "followup") => void;
+}) {
+  const items: {
+    id: typeof active;
+    label: string;
+    count: number;
+    accent?: boolean;
+  }[] = [
+    { id: "ready", label: "Prêts", count: ready, accent: ready > 0 },
+    { id: "incomplete", label: "À compléter", count: incomplete, accent: incomplete > 0 },
+    { id: "sent", label: "Envoyés", count: sent },
+    { id: "followup", label: "À relancer", count: followup, accent: followup > 0 },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          onClick={() => onSelect(item.id)}
+          className={cn(
+            "rounded-xl border px-3 py-2.5 text-left transition-all",
+            active === item.id
+              ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+              : "border-border bg-card hover:border-primary/30",
+            item.accent && active !== item.id && "border-amber-200/80"
+          )}
+        >
+          <p className="text-2xl font-semibold tabular-nums leading-none">{item.count}</p>
+          <p className="text-xs text-muted-foreground mt-1">{item.label}</p>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function EnvoisQueueHelp() {
+  return (
+    <details className="group rounded-lg border bg-muted/20 text-sm">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 font-medium text-foreground [&::-webkit-details-marker]:hidden">
+        <Mail className="h-4 w-4 text-primary shrink-0" />
+        Comment fonctionne la file d&apos;envoi ?
+        <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="px-4 pb-4 space-y-2 text-muted-foreground text-xs leading-relaxed border-t border-border/60 pt-3">
+        <p>
+          <strong className="text-foreground">1. Paramétrer</strong> — Sur chaque étiquette (onglet
+          Email) : modèle + planification. Recalculer les étiquettes si la règle auto a changé.
+        </p>
+        <p>
+          <strong className="text-foreground">2. Prêts à envoyer</strong> — Le CRM prépare les
+          emails ; vous les relisez et confirmez un par un (CRM ouvert, boîte connectée dans
+          Paramètres → Email).
+        </p>
+        <p>
+          <strong className="text-foreground">3. Suivi</strong> — Réponses mail et RDV Agenda
+          (Google) : détection automatique. Sans retour après quelques jours → onglet À relancer.
+        </p>
+      </div>
+    </details>
+  );
+}
+
+export function EnvoisEmailConnectionBanner({
+  connected,
+  method,
+  provider,
+  email,
+}: {
+  connected: boolean;
+  method?: string;
+  provider?: string | null;
+  email?: string | null;
+}) {
+  if (!connected) {
+    return (
+      <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+        <span>
+          Connectez votre boîte dans <strong>Paramètres → Email</strong> pour envoyer depuis cette
+          file.
+        </span>
+      </p>
+    );
+  }
+
+  if (method === "smtp") {
+    return (
+      <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+        <span>
+          Config SMTP détectée — pour Gmail, passez par <strong>Connecter Google</strong> dans
+          Paramètres → Email.
+        </span>
+      </p>
+    );
+  }
+
+  return (
+    <p className="text-xs text-green-900 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+      Boîte connectée ({provider === "google" ? "Google" : "Microsoft"}
+      {email ? ` — ${email}` : ""})
+    </p>
+  );
+}

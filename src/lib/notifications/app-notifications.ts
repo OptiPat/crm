@@ -21,6 +21,8 @@ export type AppNotificationItem = {
   severity: NotificationSeverity;
   suiviTab: SuiviMainTab;
   envoisSubTab?: EtiquetteEmailQueueStatus;
+  /** Si une seule action : focus contact dans Suivi (alerte ou file email). */
+  focusContactId?: number;
 };
 
 export type AppNotificationsSummary = {
@@ -47,6 +49,7 @@ export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSu
       severity: "urgent",
       suiviTab: "envois",
       envoisSubTab: "ready",
+      focusContactId: ready.length === 1 ? ready[0].contact_id : undefined,
     });
   }
 
@@ -58,6 +61,7 @@ export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSu
       severity: "warning",
       suiviTab: "envois",
       envoisSubTab: "followup",
+      focusContactId: followup.length === 1 ? followup[0].contact_id : undefined,
     });
   }
 
@@ -69,6 +73,7 @@ export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSu
       severity: "warning",
       suiviTab: "envois",
       envoisSubTab: "incomplete",
+      focusContactId: incomplete.length === 1 ? incomplete[0].contact_id : undefined,
     });
   }
 
@@ -80,6 +85,7 @@ export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSu
       severity: "info",
       suiviTab: "envois",
       envoisSubTab: "sent",
+      focusContactId: sent.length === 1 ? sent[0].contact_id : undefined,
     });
   }
 
@@ -90,6 +96,7 @@ export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSu
       count: alertes.length,
       severity: "warning",
       suiviTab: "alertes",
+      focusContactId: alertes.length === 1 ? alertes[0].contact_id : undefined,
     });
   }
 

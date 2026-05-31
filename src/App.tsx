@@ -125,11 +125,25 @@ function App() {
       case "partenaires":
         return <Partenaires />;
       case "investissements":
-        return <Investissements />;
+        return (
+          <Investissements
+            onOpenContact={() => {
+              setCurrentPage("contacts");
+            }}
+          />
+        );
       case "documents":
         return <Documents />;
       case "interactions":
-        return <Interactions />;
+        return (
+          <Interactions
+            onNavigate={setCurrentPage}
+            onOpenContact={(contactId) => {
+              sessionStorage.setItem("crm_open_contact_id", String(contactId));
+              setCurrentPage("contacts");
+            }}
+          />
+        );
       case "templates-email":
         return <TemplatesEmail />;
       case "suivi":
@@ -145,8 +159,7 @@ function App() {
       case "etiquettes":
         return (
           <Etiquettes
-            onOpenContact={(contactId) => {
-              sessionStorage.setItem("crm_open_contact_id", String(contactId));
+            onOpenContact={() => {
               setCurrentPage("contacts");
             }}
           />

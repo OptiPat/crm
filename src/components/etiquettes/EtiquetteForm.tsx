@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,11 +45,21 @@ import {
   unixToLocalDatetime,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { getAllTemplatesEmail, type TemplateEmail } from "@/lib/api/tauri-templates-email";
-import {
-  getTemplateCategoryMeta,
-  suggestTemplateIdForEtiquette,
-} from "@/lib/emails/template-email-meta";
+import { suggestTemplateIdForEtiquette } from "@/lib/emails/template-email-meta";
+import { EtiquetteEmailCampaignFields } from "@/components/etiquettes/EtiquetteEmailCampaignFields";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import {
+  CONDITION_TYPE_LABELS,
+  type ConditionType,
+} from "@/lib/etiquettes/etiquette-condition-labels";
+import { formatEtiquetteRuleSummary } from "@/lib/etiquettes/etiquette-form-summary";
+import {
+  CategoryTogglePills,
+  EtiquetteFormPanel,
+  EtiquetteFormStatusBadges,
+  EtiquetteRuleSummaryCard,
+} from "@/components/etiquettes/etiquette-form-ui";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 interface EtiquetteFormProps {
@@ -65,11 +75,23 @@ const CATEGORIES_CONTACTS = [
   { value: "PROSPECT_FILLEUL", label: "Prospect filleul" },
   { value: "SUSPECT_CLIENT", label: "Suspect client" },
   { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },
+] as const;
+
+const CONDITION_TYPES_ORDER: ConditionType[] = [
+  "DELAI_SANS_CONTACT",
+  "DATE_APPROCHE",
+  "PERIODE_ANNEE",
+  "TYPE_PRODUIT",
+  "DATE_APPROCHE_INVESTISSEMENT",
+  "AGE_APPROCHE",
 ];
+
+type FormTab = "general" | "rule" | "email";
 
 export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: EtiquetteFormProps) {
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<TemplateEmail[]>([]);
+  const [formTab, setFormTab] = useState<FormTab>("general");
   
   // État du formulaire
   const [nom, setNom] = useState("");
@@ -102,6 +124,44 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [emailEnvoiHeure, setEmailEnvoiHeure] = useState("09:00");
   const [emailEnvoiLocal, setEmailEnvoiLocal] = useState("");
 
+  const ruleSummary = useMemo(
+    () =>
+      formatEtiquetteRuleSummary({
+        isAuto,
+        conditionType,
+        delaiJours,
+        inclureSansDate,
+        ageCible,
+        ageJoursAvant,
+        champDate,
+        joursAvant,
+        moisDebut,
+        moisFin,
+        typesProduitCount: typesProduitSelectionnes.length,
+        invChampDate,
+        invJoursAvant,
+        invTypesProduitCount: invTypesProduit.length,
+        categories: categoriesSelectionnees,
+      }),
+    [
+      isAuto,
+      conditionType,
+      delaiJours,
+      inclureSansDate,
+      ageCible,
+      ageJoursAvant,
+      champDate,
+      joursAvant,
+      moisDebut,
+      moisFin,
+      typesProduitSelectionnes.length,
+      invChampDate,
+      invJoursAvant,
+      invTypesProduit.length,
+      categoriesSelectionnees,
+    ]
+  );
+
   // Charger les templates email
   useEffect(() => {
     if (open) {
@@ -114,6 +174,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   // Initialiser le formulaire quand on ouvre/change d'étiquette
   useEffect(() => {
     if (open) {
+      setFormTab(etiquette?.auto_condition_type ? "rule" : "general");
       if (etiquette) {
         // Mode édition
         setNom(etiquette.nom);
@@ -339,159 +400,186 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+        <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>
             {etiquette ? "Modifier l'étiquette" : "Nouvelle étiquette"}
           </DialogTitle>
           <DialogDescription>
-            Personnalisez l'apparence et le comportement de cette étiquette
+            Apparence, règle automatique et campagne email — un onglet par thème
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Prévisualisation */}
-          <div className="flex items-center justify-center py-4 bg-muted/50 rounded-lg">
+        <div className="px-6 py-4 border-b bg-muted/30 shrink-0 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <span
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium shadow-md"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium shadow-md self-center sm:self-auto"
               style={{
                 backgroundColor: couleur,
-                color: getContrastColor(couleur)
+                color: getContrastColor(couleur),
               }}
             >
-              <span>{nom || "Aperçu"}</span>
+              {nom || "Aperçu"}
             </span>
-          </div>
-
-          <div className="flex items-center justify-between rounded-lg border p-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="actif" className="text-base">Étiquette active</Label>
-              <p className="text-xs text-muted-foreground">
-                Désactivée : plus de règle auto ni campagne email. Les tags manuels restent sur les fiches.
-              </p>
-            </div>
-            <Switch id="actif" checked={actif} onCheckedChange={setActif} />
-          </div>
-
-          {/* Nom */}
-          <div className="space-y-2">
-            <Label htmlFor="nom">Nom de l'étiquette *</Label>
-            <Input
-              id="nom"
-              value={nom}
-              onChange={(e) => setNom(e.target.value)}
-              placeholder="Ex: Suivi urgent, VIP, À rappeler..."
-              required
-              autoFocus
-            />
-          </div>
-
-          {/* Couleur */}
-          <div className="space-y-2">
-            <Label>Couleur</Label>
-            <div className="flex flex-wrap gap-2">
-              {COULEURS_ETIQUETTES.map((c) => (
-                <button
-                  key={c.code}
-                  type="button"
-                  onClick={() => setCouleur(c.code)}
-                  className={`w-8 h-8 rounded-full border-2 transition-all ${
-                    couleur === c.code 
-                      ? "border-primary scale-110 shadow-md" 
-                      : "border-transparent hover:scale-105"
-                  }`}
-                  style={{ backgroundColor: c.code }}
-                  title={c.nom}
-                />
-              ))}
-            </div>
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label htmlFor="description">Description (optionnel)</Label>
-            <Textarea
-              id="description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Description de cette étiquette..."
-              rows={2}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="priorite">Priorité d&apos;affichage</Label>
-            <Input
-              id="priorite"
-              type="number"
-              min={0}
-              max={100}
-              value={priorite}
-              onChange={(e) => setPriorite(Math.min(100, Math.max(0, parseInt(e.target.value, 10) || 0)))}
-            />
-            <p className="text-xs text-muted-foreground">
-              Plus la valeur est élevée, plus le badge apparaît en premier sur les fiches contact (0–100).
-            </p>
-          </div>
-
-          {etiquette?.is_default && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-              Étiquette système : désactivez-la si vous ne l&apos;utilisez pas (les attributions automatiques seront retirées). La suppression reste impossible.
-            </p>
-          )}
-
-          {!actif && (
-            <p className="text-xs text-muted-foreground bg-muted/50 border rounded-md px-3 py-2">
-              Étiquette inactive : vous pouvez préparer les règles ci-dessous ; elles ne s&apos;appliqueront qu&apos;à la réactivation.
-            </p>
-          )}
-
-          {/* Attribution automatique */}
-          <div className={`space-y-4 p-4 border rounded-lg ${!actif ? "opacity-90" : ""}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-base">Attribution automatique</Label>
-                <p className="text-sm text-muted-foreground">
-                  L'étiquette sera attribuée automatiquement selon des conditions
+            <div className="flex items-center justify-between sm:justify-end gap-3 rounded-lg border bg-background px-4 py-2.5 min-w-[200px]">
+              <div className="space-y-0.5">
+                <Label htmlFor="actif" className="text-sm font-medium">
+                  Étiquette active
+                </Label>
+                <p className="text-[11px] text-muted-foreground max-w-[220px]">
+                  Désactivée : plus de règle auto ni email. Tags manuels conservés.
                 </p>
               </div>
-              <Switch checked={isAuto} onCheckedChange={setIsAuto} />
+              <Switch id="actif" checked={actif} onCheckedChange={setActif} />
             </div>
+          </div>
+          <EtiquetteFormStatusBadges
+            actif={actif}
+            isAuto={isAuto}
+            emailActif={emailActif}
+            isSystem={etiquette?.is_default}
+          />
+        </div>
 
-            {isAuto && (
-              <div className="space-y-4 pt-4 border-t">
-                {/* Type de condition */}
-                <div className="space-y-2">
-                  <Label>Condition</Label>
-                  <Select value={conditionType} onValueChange={setConditionType}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="DELAI_SANS_CONTACT">
-                        Délai sans contact
-                      </SelectItem>
-                      <SelectItem value="DATE_APPROCHE">
-                        Date qui approche
-                      </SelectItem>
-                      <SelectItem value="PERIODE_ANNEE">
-                        Période de l'année
-                      </SelectItem>
-                      <SelectItem value="TYPE_PRODUIT">
-                        Détient un type de produit
-                      </SelectItem>
-                      <SelectItem value="DATE_APPROCHE_INVESTISSEMENT">
-                        Date sur un investissement (contact ou foyer)
-                      </SelectItem>
-                      <SelectItem value="AGE_APPROCHE">
-                        Âge approchant (ex. 69 ans)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Les règles « investissement » incluent les produits du contact et ceux du foyer commun.
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          <Tabs
+            value={formTab}
+            onValueChange={(v) => setFormTab(v as FormTab)}
+            className="flex flex-col flex-1 min-h-0"
+          >
+            <TabsList className="mx-6 mt-4 grid w-auto grid-cols-3 shrink-0">
+              <TabsTrigger value="general">Général</TabsTrigger>
+              <TabsTrigger value="rule">
+                Règle auto
+                {isAuto && (
+                  <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="email">
+                Email
+                {emailActif && (
+                  <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
+                )}
+              </TabsTrigger>
+            </TabsList>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
+              <TabsContent value="general" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+                <EtiquetteFormPanel title="Identité" description="Nom, couleur et ordre d'affichage sur les fiches">
+                  <div className="space-y-2">
+                    <Label htmlFor="nom">Nom de l&apos;étiquette *</Label>
+                    <Input
+                      id="nom"
+                      value={nom}
+                      onChange={(e) => setNom(e.target.value)}
+                      placeholder="Ex. Déclaration IR, Suivi urgent…"
+                      required
+                      autoFocus={formTab === "general"}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Couleur</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {COULEURS_ETIQUETTES.map((c) => (
+                        <button
+                          key={c.code}
+                          type="button"
+                          onClick={() => setCouleur(c.code)}
+                          className={`w-8 h-8 rounded-full border-2 transition-all ${
+                            couleur === c.code
+                              ? "border-primary scale-110 shadow-md"
+                              : "border-transparent hover:scale-105"
+                          }`}
+                          style={{ backgroundColor: c.code }}
+                          title={c.nom}
+                        />
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description (optionnel)</Label>
+                    <Textarea
+                      id="description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      placeholder="Ex. Période de déclaration d'impôts (avril–mai)"
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label htmlFor="priorite">Priorité d&apos;affichage</Label>
+                      <span className="text-sm font-semibold tabular-nums text-primary">
+                        {priorite}
+                      </span>
+                    </div>
+                    <input
+                      id="priorite"
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={priorite}
+                      onChange={(e) => setPriorite(parseInt(e.target.value, 10))}
+                      className="w-full accent-primary"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Plus la valeur est élevée, plus le badge apparaît en premier (0–100).
+                    </p>
+                  </div>
+                </EtiquetteFormPanel>
+
+                {etiquette?.is_default && (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    Étiquette préinstallée : désactivez-la si inutilisée. Les attributions auto seront retirées ; la suppression reste impossible.
                   </p>
-                </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="rule" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+                {!actif && (
+                  <p className="text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2">
+                    Étiquette inactive : configurez la règle ici ; elle ne s&apos;appliquera qu&apos;à la réactivation.
+                  </p>
+                )}
+
+                <EtiquetteFormPanel
+                  title="Attribution automatique"
+                  description="L'étiquette est posée sur les fiches qui correspondent aux critères"
+                >
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="is-auto" className="text-sm font-medium">
+                      Activer la règle automatique
+                    </Label>
+                    <Switch id="is-auto" checked={isAuto} onCheckedChange={setIsAuto} />
+                  </div>
+
+                  {isAuto && (
+                    <>
+                      <EtiquetteRuleSummaryCard summary={ruleSummary} />
+
+                      <div className="space-y-2">
+                        <Label>Type de condition</Label>
+                        <Select value={conditionType} onValueChange={setConditionType}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choisir une condition" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {CONDITION_TYPES_ORDER.map((t) => (
+                              <SelectItem key={t} value={t}>
+                                {CONDITION_TYPE_LABELS[t]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {conditionType === "DATE_APPROCHE_INVESTISSEMENT" && (
+                          <p className="text-xs text-muted-foreground">
+                            Produits du contact et du foyer commun pris en compte.
+                          </p>
+                        )}
+                      </div>
 
                 {/* Paramètres selon le type */}
                 {conditionType === "DELAI_SANS_CONTACT" && (
@@ -663,7 +751,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                       <Label>Du mois de</Label>
                       <Select value={moisDebut.toString()} onValueChange={(v) => setMoisDebut(parseInt(v))}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Mois" />
                         </SelectTrigger>
                         <SelectContent>
                           {MOIS_LABELS.map((m) => (
@@ -678,7 +766,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                       <Label>Au mois de</Label>
                       <Select value={moisFin.toString()} onValueChange={(v) => setMoisFin(parseInt(v))}>
                         <SelectTrigger>
-                          <SelectValue />
+                          <SelectValue placeholder="Mois" />
                         </SelectTrigger>
                         <SelectContent>
                           {MOIS_LABELS.map((m) => (
@@ -692,153 +780,54 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   </div>
                 )}
 
-                {/* Catégories concernées */}
-                <div className="space-y-2">
-                  <Label>Catégories de contacts concernées</Label>
-                  <div className="flex flex-wrap gap-3">
-                    {CATEGORIES_CONTACTS.map((cat) => (
-                      <div key={cat.value} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`cat-${cat.value}`}
-                          checked={categoriesSelectionnees.includes(cat.value)}
-                          onCheckedChange={() => handleCategoryToggle(cat.value)}
+                      <div className="space-y-2">
+                        <Label>Catégories de contacts concernées</Label>
+                        <CategoryTogglePills
+                          categories={[...CATEGORIES_CONTACTS]}
+                          selected={categoriesSelectionnees}
+                          onToggle={handleCategoryToggle}
                         />
-                        <Label htmlFor={`cat-${cat.value}`} className="text-sm font-normal cursor-pointer">
-                          {cat.label}
-                        </Label>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
+                    </>
+                  )}
+                </EtiquetteFormPanel>
 
-          {/* Action email */}
-          <div className={`space-y-4 p-4 border rounded-lg ${!actif ? "opacity-90" : ""}`}>
-            <div className="flex items-center justify-between">
-              <div>
-                <Label className="text-base">Campagne email</Label>
-                <p className="text-sm text-muted-foreground">
-                  Prépare une file d&apos;envoi ; vous confirmez chaque email dans Suivi → Envois
-                </p>
-              </div>
-              <Switch
-                checked={emailActif}
-                onCheckedChange={(checked) => {
-                  setEmailActif(checked);
-                  if (checked && isAuto) setEmailEnvoiMode("eligibility");
-                  if (checked && !emailTemplateId && templates.length > 0 && nom.trim()) {
-                    const suggested = suggestTemplateIdForEtiquette(nom, templates);
-                    if (suggested) setEmailTemplateId(suggested);
-                  }
-                }}
-              />
-            </div>
-
-            {emailActif && (
-              <div className="space-y-4 pt-4 border-t">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label>Template d&apos;email</Label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 text-xs"
-                      disabled={!nom.trim() || templates.length === 0}
-                      onClick={() => {
-                        const id = suggestTemplateIdForEtiquette(nom, templates);
-                        if (id) {
-                          setEmailTemplateId(id);
-                          toast.success("Template suggéré pour cette étiquette");
-                        } else {
-                          toast.info(
-                            "Aucun modèle correspondant — ajoutez-en un dans Templates Email"
-                          );
-                        }
-                      }}
-                    >
-                      Suggérer
-                    </Button>
-                  </div>
-                  <Select
-                    value={emailTemplateId?.toString() || ""}
-                    onValueChange={(v) => setEmailTemplateId(v ? parseInt(v) : null)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Sélectionner un template" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {templates.map((t) => {
-                        const cat = getTemplateCategoryMeta(t.categorie);
-                        return (
-                          <SelectItem key={t.id} value={t.id.toString()}>
-                            {t.nom} ({cat.label})
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Les modèles « Relance », « IR », etc. sont créés depuis Templates Email.
+                {!isAuto && (
+                  <p className="text-sm text-muted-foreground text-center py-6 border border-dashed rounded-lg">
+                    Activez la règle automatique pour définir quand cette étiquette est posée sur les fiches.
                   </p>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Planification de l&apos;envoi</Label>
-                  <Select
-                    value={emailEnvoiMode}
-                    onValueChange={(v) => setEmailEnvoiMode(v as "eligibility" | "fixed")}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="eligibility">
-                        Dès éligibilité (règle auto) — heure du jour
-                      </SelectItem>
-                      <SelectItem value="fixed">Date fixe — tous les contacts taggés</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {emailEnvoiMode === "eligibility" ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="email-envoi-heure">Heure d&apos;envoi (jour où le contact devient éligible)</Label>
-                    <Input
-                      id="email-envoi-heure"
-                      type="time"
-                      value={emailEnvoiHeure}
-                      onChange={(e) => setEmailEnvoiHeure(e.target.value)}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Ex. contact « Suivi &gt; 1 an » : le mail est prêt dès que la règle s&apos;applique, à
-                      cette heure (ou tout de suite si l&apos;heure est déjà passée). Pensez à recalculer
-                      les étiquettes après modification.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <Label htmlFor="email-envoi-prevu">Date et heure de campagne (tous les contacts)</Label>
-                    <Input
-                      id="email-envoi-prevu"
-                      type="datetime-local"
-                      value={emailEnvoiLocal}
-                      onChange={(e) => setEmailEnvoiLocal(e.target.value)}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Tous les contacts avec cette étiquette partagent la même date d&apos;entrée en file.
-                    </p>
-                  </div>
                 )}
-              </div>
-            )}
-          </div>
+              </TabsContent>
 
-          <DialogFooter className="pt-4">
+              <TabsContent value="email" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+                <EtiquetteEmailCampaignFields
+                  actif={actif}
+                  emailActif={emailActif}
+                  onEmailActifChange={(checked) => {
+                    setEmailActif(checked);
+                    if (checked && isAuto) setEmailEnvoiMode("eligibility");
+                    if (checked && !emailTemplateId && templates.length > 0 && nom.trim()) {
+                      const suggested = suggestTemplateIdForEtiquette(nom, templates);
+                      if (suggested) setEmailTemplateId(suggested);
+                    }
+                  }}
+                  emailTemplateId={emailTemplateId}
+                  onTemplateIdChange={setEmailTemplateId}
+                  emailEnvoiMode={emailEnvoiMode}
+                  onEnvoiModeChange={setEmailEnvoiMode}
+                  emailEnvoiHeure={emailEnvoiHeure}
+                  onEnvoiHeureChange={setEmailEnvoiHeure}
+                  emailEnvoiLocal={emailEnvoiLocal}
+                  onEnvoiLocalChange={setEmailEnvoiLocal}
+                  templates={templates}
+                  nom={nom}
+                  isAuto={isAuto}
+                />
+              </TabsContent>
+            </div>
+          </Tabs>
+
+          <DialogFooter className="px-6 py-4 border-t bg-background shrink-0 gap-2 sm:gap-0">
             <Button
               type="button"
               variant="outline"
@@ -847,7 +836,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
               Annuler
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? "Enregistrement..." : etiquette ? "Modifier" : "Créer"}
+              {loading ? "Enregistrement..." : etiquette ? "Enregistrer" : "Créer"}
             </Button>
           </DialogFooter>
         </form>

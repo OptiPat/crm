@@ -181,6 +181,7 @@ fn main() {
             get_app_info,
             list_db_backups,
             get_all_interactions_with_contacts,
+            get_exchange_history_timeline,
             get_interactions_by_contact,
             get_contact_relation_status,
             create_interaction,

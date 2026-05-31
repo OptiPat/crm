@@ -349,6 +349,7 @@ impl Database {
         self.migrate_contact_etiquettes_contact_index()?;
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
+        self.migrate_templates_email_relance_template_id()?;
         self.migrate_contact_etiquettes_email_suivi()?;
 
         Ok(())
@@ -389,6 +390,59 @@ impl Database {
                 [],
             )?;
             println!("✅ Migration: email_gmail_message_id sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_relance_active")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_relance_active INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            println!("✅ Migration: email_relance_active sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_sent_subject")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_sent_subject TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_sent_subject sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_sent_body")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_sent_body TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_sent_body sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_sent_template_nom")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_sent_template_nom TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_sent_template_nom sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_reponse_body")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_reponse_body TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_reponse_body sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "email_reponse_gmail_message_id")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_reponse_gmail_message_id TEXT",
+                [],
+            )?;
+            println!("✅ Migration: email_reponse_gmail_message_id sur contact_etiquettes");
+        }
+        Ok(())
+    }
+
+    fn migrate_templates_email_relance_template_id(&self) -> Result<()> {
+        if !self.table_has_column("templates_email", "relance_template_id")? {
+            self.conn.execute(
+                "ALTER TABLE templates_email ADD COLUMN relance_template_id INTEGER REFERENCES templates_email(id)",
+                [],
+            )?;
+            println!("✅ Migration: relance_template_id sur templates_email");
         }
         Ok(())
     }

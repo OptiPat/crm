@@ -1,0 +1,96 @@
+import { MOIS_LABELS } from "@/lib/api/tauri-etiquettes";
+import { CONDITION_TYPE_LABELS, type ConditionType } from "@/lib/etiquettes/etiquette-condition-labels";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  CLIENT: "Clients",
+  PROSPECT_CLIENT: "Prospects client",
+  PROSPECT_FILLEUL: "Prospects filleul",
+  SUSPECT_CLIENT: "Suspects client",
+  SUSPECT_FILLEUL: "Suspects filleul",
+};
+
+export interface EtiquetteRuleSummaryInput {
+  isAuto: boolean;
+  conditionType: string;
+  delaiJours: number;
+  inclureSansDate: boolean;
+  ageCible: number;
+  ageJoursAvant: number;
+  champDate: string;
+  joursAvant: number;
+  moisDebut: number;
+  moisFin: number;
+  typesProduitCount: number;
+  invChampDate: string;
+  invJoursAvant: number;
+  invTypesProduitCount: number;
+  categories: string[];
+}
+
+const CHAMP_DATE_LABELS: Record<string, string> = {
+  date_prochain_suivi: "prochain suivi client",
+  date_prochain_suivi_filleul: "prochain suivi filleul",
+  date_dernier_contact_filleul: "dernier contact filleul",
+  date_naissance: "date de naissance",
+};
+
+const INV_CHAMP_LABELS: Record<string, string> = {
+  date_fin_demembrement: "fin de démembrement",
+  date_fin_pret: "fin de prêt",
+  date_souscription: "souscription",
+};
+
+function monthLabel(m: number): string {
+  return MOIS_LABELS.find((x) => x.value === m)?.label ?? `mois ${m}`;
+}
+
+function formatCategories(categories: string[]): string {
+  if (categories.length === 0) return "aucune catégorie";
+  return categories.map((c) => CATEGORY_LABELS[c] ?? c).join(", ");
+}
+
+export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): string {
+  if (!input.isAuto) {
+    return "Attribution manuelle uniquement — vous posez l'étiquette sur chaque fiche.";
+  }
+
+  const typeLabel =
+    CONDITION_TYPE_LABELS[input.conditionType as ConditionType] ??
+    input.conditionType.replace(/_/g, " ").toLowerCase();
+
+  let detail = "";
+  switch (input.conditionType) {
+    case "DELAI_SANS_CONTACT":
+      detail = `sans contact depuis ${input.delaiJours} jour${input.delaiJours > 1 ? "s" : ""}${
+        input.inclureSansDate ? " (y compris sans date renseignée)" : ""
+      }`;
+      break;
+    case "AGE_APPROCHE":
+      detail = `à ${input.ageCible} ans dans les ${input.ageJoursAvant} prochains jours`;
+      break;
+    case "DATE_APPROCHE":
+      detail = `${CHAMP_DATE_LABELS[input.champDate] ?? input.champDate} dans les ${input.joursAvant} prochains jours`;
+      break;
+    case "PERIODE_ANNEE":
+      detail = `de ${monthLabel(input.moisDebut)} à ${monthLabel(input.moisFin)} (chaque année)`;
+      break;
+    case "TYPE_PRODUIT":
+      detail =
+        input.typesProduitCount > 0
+          ? `détient au moins un parmi ${input.typesProduitCount} type${input.typesProduitCount > 1 ? "s" : ""} de produit`
+          : "aucun type de produit sélectionné";
+      break;
+    case "DATE_APPROCHE_INVESTISSEMENT": {
+      const types =
+        input.invTypesProduitCount > 0
+          ? ` (${input.invTypesProduitCount} type${input.invTypesProduitCount > 1 ? "s" : ""} limités)`
+          : "";
+      detail = `${INV_CHAMP_LABELS[input.invChampDate] ?? input.invChampDate} dans les ${input.invJoursAvant} prochains jours${types} — contact ou foyer`;
+      break;
+    }
+    default:
+      detail = "paramètres à compléter";
+  }
+
+  return `${typeLabel} : ${detail}. Catégories : ${formatCategories(input.categories)}.`;
+}

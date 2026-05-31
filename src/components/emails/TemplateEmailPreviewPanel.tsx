@@ -34,7 +34,7 @@ export function TemplateEmailPreviewPanel({
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium">{label}</p>
+      {label ? <p className="text-sm font-medium">{label}</p> : null}
       {contact && (
         <p className="text-xs text-muted-foreground">
           Contact : {contact.prenom} {contact.nom}

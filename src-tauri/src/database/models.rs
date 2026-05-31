@@ -186,6 +186,8 @@ pub struct TemplateEmail {
     pub categorie: String,
     pub variables: Option<String>, // JSON string
     pub agenda_link_id: Option<String>,
+    /// Template utilisé pour le 2e envoi (À relancer), si défini
+    pub relance_template_id: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -199,6 +201,8 @@ pub struct NewTemplateEmail {
     pub variables: Option<String>, // JSON string
     #[serde(default)]
     pub agenda_link_id: Option<String>,
+    #[serde(default)]
+    pub relance_template_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -419,6 +423,8 @@ pub struct EtiquetteEmailQueueItem {
     pub email_reponse_type: Option<String>,
     /// Dernier contact fiche (indice « contacté » après envoi)
     pub contact_date_dernier_contact: Option<i64>,
+    /// File « Prêts » après un clic Relancer : utiliser le template de relance lié
+    pub email_is_relance: bool,
 }
 
 /// Email campagne en attente pour un contact (fiche relation).
@@ -543,6 +549,38 @@ pub struct InteractionWithContact {
     pub contenu: Option<String>,
     pub date_interaction: i64,
     pub created_at: i64,
+}
+
+/// Une ligne du journal : échange manuel ou fil email campagne (envoi + réponse éventuelle).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ExchangeHistoryEntry {
+    pub entry_kind: String,
+    pub sort_date: i64,
+    pub contact_id: i64,
+    pub contact_nom: String,
+    pub contact_prenom: String,
+    pub contact_email: Option<String>,
+    pub contact_telephone: Option<String>,
+    pub contact_etiquette_id: Option<i64>,
+    pub etiquette_nom: Option<String>,
+    pub sent_at: Option<i64>,
+    pub sent_subject: Option<String>,
+    pub sent_body: Option<String>,
+    pub sent_template_nom: Option<String>,
+    pub template_sujet: Option<String>,
+    pub template_corps: Option<String>,
+    pub template_agenda_link_id: Option<String>,
+    pub email_gmail_message_id: Option<String>,
+    pub email_gmail_thread_id: Option<String>,
+    pub email_reponse_at: Option<i64>,
+    pub email_reponse_type: Option<String>,
+    pub email_reponse_body: Option<String>,
+    pub email_reponse_gmail_message_id: Option<String>,
+    pub interaction_id: Option<i64>,
+    pub type_interaction: Option<String>,
+    pub sujet: Option<String>,
+    pub contenu: Option<String>,
+    pub created_at: Option<i64>,
 }
 
 // ==================== SETTINGS ====================

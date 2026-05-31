@@ -253,7 +253,7 @@ export function PartenaireDetail({
             </CardTitle>
             {patrimoineAvecMoi > 0 && (
               <span className="text-sm font-semibold text-primary tabular-nums">
-                {formatEuroCentimes(patrimoineAvecMoi)} avec moi
+                {formatEuroCentimes(patrimoineAvecMoi)}
               </span>
             )}
           </div>

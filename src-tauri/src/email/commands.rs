@@ -91,6 +91,9 @@ pub struct SendEmailInput {
     pub body: String,
     /// Corps HTML (signature avec logo) — optionnel.
     pub body_html: Option<String>,
+    /// Fil Gmail existant (réponse dans le même fil).
+    pub thread_id: Option<String>,
+    pub in_reply_to_message_id: Option<String>,
 }
 
 #[derive(serde::Serialize)]
@@ -108,6 +111,8 @@ pub fn send_email(app_handle: AppHandle, email_data: SendEmailInput) -> Result<S
         &email_data.subject,
         &email_data.body,
         email_data.body_html.as_deref(),
+        email_data.thread_id.as_deref(),
+        email_data.in_reply_to_message_id.as_deref(),
     )?;
     Ok(SendEmailResult {
         gmail_message_id: sent.gmail_message_id,

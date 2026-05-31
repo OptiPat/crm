@@ -219,7 +219,7 @@ export function Partenaires() {
           iconBgColor="bg-violet-50"
         />
         <StatCard
-          title="Encours « avec moi »"
+          title="Encours"
           value={formatEuroCentimes(patrimoineViaPartenaires)}
           description="Via ces partenaires (origine conseil)"
           icon={Wallet}

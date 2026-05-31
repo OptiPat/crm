@@ -93,13 +93,21 @@ La signature est ajoutée en fin de chaque message dans la file d’envoi (aper�
 
 Après envoi depuis **Suivi → Envois**, si aucun retour n’est enregistré au bout de N jours, l’onglet **À relancer** propose :
 
-- **Relancer** : remet le contact dans **Prêts à envoyer** (même template / étiquette),
+- **Relancer** : remet le contact dans **Prêts à envoyer** avec le **template de relance** lié au modèle initial (Paramètres template → « Template de relance (2e email) »). Sans lien configuré, le même modèle est réutilisé.
 - **Icône mail / calendrier** : marquer réponse par email ou RDV pris,
 - **Ignorer** : ne plus proposer de relance pour cet envoi.
 
 Indice : si la **date de dernier contact** sur la fiche est postérieure à l’envoi, un bandeau bleu signale un contact possible — à confirmer manuellement.
 
-Les envois et réponses campagne créent des **interactions** dans le panneau **Relation client** (fiche contact). Les alertes de suivi se clôturent automatiquement quand une réponse est enregistrée (manuelle ou sync Google). L’interface se rafraîchit sans action manuelle (Suivi, Envois, fiche ouverte).
+**Journal des échanges campagne** (envoi + réponse) : données sur `contact_etiquettes` (`email_sent_template_nom`, `email_reponse_body`, etc.), affichées dans **Historique des échanges** et sur la fiche contact (**Relation client**), avec le **nom du template** (pas le corps de l’envoi) et la **réponse client complète** quand elle est importée ou synchronisée depuis Gmail. Les anciennes traces texte dans `interactions` (« Campagne … — email envoyé », relance…) ne sont plus affichées en double sur la fiche : le fil unifié les remplace.
+
+Les **échanges manuels** (appel, RDV, note saisie à la main) restent des lignes `interactions` éditables dans **Relation client**. Pour **répondre** à un email campagne, utiliser **Historique des échanges** (bouton depuis la fiche : « Répondre dans Historique »).
+
+**Dernier contact** (fiche client) : mis à jour **automatiquement** seulement si la réponse campagne est un **RDV** (bouton calendrier, ou détection Agenda Google). Une **réponse par email** enregistre le fil et sort le contact de « À relancer », mais **ne modifie pas** la date de dernier contact ni les alertes suivi client — à mettre à jour **manuellement** après un vrai échange (RDV, appel noté, champ sur la fiche).
+
+Les étiquettes auto (ex. **Suivi > 1 an**) suivent `date_dernier_contact` : elles restent tant que vous n’avez pas saisi la date de votre dernier RDV / contact réel. **Déclaration IR** dépend de la période fiscale, pas du dernier contact.
+
+L’interface se rafraîchit sans action manuelle (Suivi, Envois, fiche ouverte).
 
 ### Détection automatique (Google)
 

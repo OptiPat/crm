@@ -144,10 +144,29 @@ pub fn send_email_unified(
     subject: &str,
     body: &str,
     body_html: Option<&str>,
+    thread_id: Option<&str>,
+    in_reply_to_message_id: Option<&str>,
 ) -> Result<OAuthSendResult, String> {
     let oauth = EmailOAuthStore::load(app_handle)?;
     if oauth.connection.is_some() {
-        return send_with_oauth(app_handle, to_email, to_name, subject, body, body_html);
+        let reply = super::oauth_send::GmailThreadReply {
+            thread_id: thread_id.map(|s| s.to_string()),
+            in_reply_to_message_id: in_reply_to_message_id.map(|s| s.to_string()),
+        };
+        let reply_ref = if reply.thread_id.is_some() || reply.in_reply_to_message_id.is_some() {
+            Some(&reply)
+        } else {
+            None
+        };
+        return send_with_oauth(
+            app_handle,
+            to_email,
+            to_name,
+            subject,
+            body,
+            body_html,
+            reply_ref,
+        );
     }
     let config = SmtpConfig::load(app_handle)?.ok_or(
         "Aucune connexion email. Paramètres → Email : connectez Google/Microsoft ou SMTP.".to_string(),

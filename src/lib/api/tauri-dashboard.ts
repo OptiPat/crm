@@ -42,7 +42,7 @@ export interface AlerteWithContact {
   date_dernier_contact: number | null;
   type_alerte: string;
   message: string;
-  date_alerte: number;
+  date_alerte: string;
 }
 
 export async function getDashboardStats(): Promise<DashboardStats> {

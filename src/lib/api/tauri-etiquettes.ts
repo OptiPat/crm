@@ -86,6 +86,7 @@ export interface EtiquetteEmailQueueItem {
   email_reponse_at?: number | null;
   email_reponse_type?: string | null;
   contact_date_dernier_contact?: number | null;
+  email_is_relance?: boolean;
 }
 
 export type EtiquetteEmailQueueStatus =
@@ -161,6 +162,7 @@ export const COULEURS_ETIQUETTES = [
   { code: "#EAB308", nom: "Jaune", emoji: "🟡" },
   { code: "#10B981", nom: "Vert", emoji: "🟢" },
   { code: "#3B82F6", nom: "Bleu", emoji: "🔵" },
+  { code: "#06B6D4", nom: "Cyan", emoji: "💠" },
   { code: "#8B5CF6", nom: "Violet", emoji: "🟣" },
   { code: "#374151", nom: "Gris foncé", emoji: "⚫" },
   { code: "#EC4899", nom: "Rose", emoji: "🩷" },
@@ -289,13 +291,15 @@ export async function markEtiquetteEmailSent(
   contactEtiquetteId: number,
   gmailMessageId?: string | null,
   gmailThreadId?: string | null,
-  emailSubject?: string | null
+  emailSubject?: string | null,
+  emailBody?: string | null
 ): Promise<void> {
   return invoke<void>("mark_etiquette_email_sent", {
     contactEtiquetteId,
     gmailMessageId: gmailMessageId ?? null,
     gmailThreadId: gmailThreadId ?? null,
     emailSubject: emailSubject ?? null,
+    emailBody: emailBody ?? null,
   });
 }
 

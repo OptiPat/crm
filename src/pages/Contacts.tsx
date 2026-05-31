@@ -48,6 +48,7 @@ import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contact
 import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import { consumePendingOpenContactId } from "@/lib/investissements/investissement-navigation";
 import { toast } from "sonner";
 
 type MainTab = "clients" | "filleuls";
@@ -87,6 +88,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [needsFollowupOnly, setNeedsFollowupOnly] = useState(false);
   const [alertContactIds, setAlertContactIds] = useState<Set<number>>(new Set());
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const pendingOpenContactIdRef = useRef<number | null>(null);
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
@@ -155,17 +157,21 @@ export function Contacts({ onNavigate }: ContactsProps) {
   });
 
   useEffect(() => {
+    const id = consumePendingOpenContactId();
+    if (id != null) pendingOpenContactIdRef.current = id;
+  }, []);
+
+  useEffect(() => {
     if (loading || contacts.length === 0) return;
-    const raw = sessionStorage.getItem("crm_open_contact_id");
-    if (!raw) return;
-    sessionStorage.removeItem("crm_open_contact_id");
-    const id = parseInt(raw, 10);
+    const id = pendingOpenContactIdRef.current;
+    if (id == null) return;
+
     const contact = contacts.find((c) => c.id === id);
+    pendingOpenContactIdRef.current = null;
+
     if (contact) {
       setSelectedContact(contact);
-      if (!window.matchMedia("(min-width: 1024px)").matches) {
-        setShowDetail(true);
-      }
+      setShowDetail(true);
     } else {
       toast.error("Contact introuvable — il a peut-être été supprimé.");
     }

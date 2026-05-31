@@ -11,6 +11,7 @@ import {
   getTypeAlerteBadgeClass,
   getTypeAlerteLabel,
 } from "@/lib/alertes/alerte-labels";
+import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
 
 interface AlertsPreviewProps {
@@ -45,17 +46,17 @@ export function AlertsPreview({ onNavigate, onOpenContact }: AlertsPreviewProps)
   }, []);
 
   const openAlert = (alerte: AlerteWithContact) => {
-    if (onOpenContact) {
-      onOpenContact(alerte.contact_id);
-    } else {
-      onNavigate?.("suivi");
+    if (onNavigate) {
+      navigateToSuivi(onNavigate, "alertes", undefined, alerte.contact_id);
+      return;
     }
+    onOpenContact?.(alerte.contact_id);
   };
 
   const panelDescription = loading
     ? "Chargement…"
     : alertes.length > 0
-      ? `${alertes.length} contact${alertes.length > 1 ? "s" : ""} — clic pour ouvrir la fiche`
+      ? `${alertes.length} contact${alertes.length > 1 ? "s" : ""} — clic pour traiter dans Suivi`
       : "Rien à traiter pour le moment";
 
   return (

@@ -130,7 +130,12 @@ export function AppNotificationsBar({
               key={item.id}
               item={item}
               onClick={() =>
-                navigateToSuivi(onPageChange, item.suiviTab, item.envoisSubTab)
+                navigateToSuivi(
+                  onPageChange,
+                  item.suiviTab,
+                  item.envoisSubTab,
+                  item.focusContactId
+                )
               }
             />
           ))}

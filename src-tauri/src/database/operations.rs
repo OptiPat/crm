@@ -6,7 +6,10 @@ use super::{
     },
     Database,
 };
+use crate::contact_name::normalize_contact_name;
 use rusqlite::{params, Result};
+
+const REDUCTION_IMPOT_ETIQUETTE_CANONICAL: &str = "Réduction d'impôt fin d'année";
 
 impl Database {
     fn validate_contact_identity(nom: &str, prenom: &str) -> Result<()> {
@@ -987,14 +990,15 @@ impl Database {
             categorie: row.get(4)?,
             variables: row.get(5)?,
             agenda_link_id: row.get(6)?,
-            created_at: row.get(7)?,
-            updated_at: row.get(8)?,
+            relance_template_id: row.get(7)?,
+            created_at: row.get(8)?,
+            updated_at: row.get(9)?,
         })
     }
 
     pub fn get_all_templates_email(&self) -> Result<Vec<super::models::TemplateEmail>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, created_at, updated_at
+            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, created_at, updated_at
              FROM templates_email 
              ORDER BY created_at DESC",
         )?;
@@ -1013,8 +1017,8 @@ impl Database {
         template: super::models::NewTemplateEmail,
     ) -> Result<super::models::TemplateEmail> {
         self.conn.execute(
-            "INSERT INTO templates_email (nom, sujet, corps, categorie, variables, agenda_link_id) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO templates_email (nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 &template.nom,
                 &template.sujet,
@@ -1022,6 +1026,7 @@ impl Database {
                 &template.categorie,
                 &template.variables,
                 &template.agenda_link_id,
+                &template.relance_template_id,
             ],
         )?;
 
@@ -1031,7 +1036,7 @@ impl Database {
 
     pub fn get_template_email_by_id(&self, id: i64) -> Result<super::models::TemplateEmail> {
         self.conn.query_row(
-            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, created_at, updated_at
+            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, created_at, updated_at
              FROM templates_email 
              WHERE id = ?1",
             params![id],
@@ -1044,6 +1049,11 @@ impl Database {
         id: i64,
         template: &super::models::NewTemplateEmail,
     ) -> Result<super::models::TemplateEmail> {
+        if template.relance_template_id == Some(id) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Le template de relance ne peut pas être le modèle lui-même".into(),
+            ));
+        }
         self.conn.execute(
             "UPDATE templates_email SET 
                 nom = ?1,
@@ -1052,8 +1062,9 @@ impl Database {
                 categorie = ?4,
                 variables = ?5,
                 agenda_link_id = ?6,
+                relance_template_id = ?7,
                 updated_at = unixepoch()
-            WHERE id = ?7",
+            WHERE id = ?8",
             params![
                 &template.nom,
                 &template.sujet,
@@ -1061,6 +1072,7 @@ impl Database {
                 &template.categorie,
                 &template.variables,
                 &template.agenda_link_id,
+                &template.relance_template_id,
                 id
             ],
         )?;
@@ -1095,6 +1107,7 @@ impl Database {
                 categorie: "RELANCE".into(),
                 variables: None,
                 agenda_link_id: Some("principal".into()),
+                relance_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Relance — prospect 6 mois".into(),
@@ -1103,6 +1116,7 @@ impl Database {
                 categorie: "RELANCE".into(),
                 variables: None,
                 agenda_link_id: None,
+                relance_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Rappel déclaration IR".into(),
@@ -1111,6 +1125,7 @@ impl Database {
                 categorie: "FISCALITE".into(),
                 variables: None,
                 agenda_link_id: None,
+                relance_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Prise de rendez-vous suivi".into(),
@@ -1119,6 +1134,7 @@ impl Database {
                 categorie: "SUIVI_ANNUEL".into(),
                 variables: None,
                 agenda_link_id: Some("suivi".into()),
+                relance_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Bienvenue nouveau client".into(),
@@ -1127,6 +1143,7 @@ impl Database {
                 categorie: "BIENVENUE".into(),
                 variables: None,
                 agenda_link_id: None,
+                relance_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Relance — échéance patrimoine".into(),
@@ -1135,6 +1152,7 @@ impl Database {
                 categorie: "RELANCE".into(),
                 variables: None,
                 agenda_link_id: None,
+                relance_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Rappel assurance-vie 69 ans".into(),
@@ -1143,6 +1161,16 @@ impl Database {
                 categorie: "SUIVI_ANNUEL".into(),
                 variables: None,
                 agenda_link_id: None,
+                relance_template_id: None,
+            },
+            NewTemplateEmail {
+                nom: "Relance — suite sans réponse".into(),
+                sujet: "{{prenom}}, je me permets de revenir vers vous".into(),
+                corps: "Bonjour {{prenom}} {{nom}},\n\nJe me permets de revenir vers vous suite à mon précédent message. N'hésitez pas à me répondre ou à réserver un créneau : {{lien_agenda}}\n\nBien cordialement,\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+                agenda_link_id: Some("principal".into()),
+                relance_template_id: None,
             },
         ];
 
@@ -1153,7 +1181,31 @@ impl Database {
                 created += 1;
             }
         }
+        created += self.link_default_relance_templates()?;
         Ok(created)
+    }
+
+    /// Lie les modèles initiaux à un template de relance (sans écraser une config existante).
+    fn link_default_relance_templates(&self) -> Result<usize> {
+        let pairs: [(&str, &str); 4] = [
+            ("Prise de rendez-vous suivi", "Relance — suite sans réponse"),
+            ("Relance — client 1 an sans contact", "Relance — suite sans réponse"),
+            ("Rappel déclaration IR", "Relance — suite sans réponse"),
+            ("Rappel assurance-vie 69 ans", "Relance — suite sans réponse"),
+        ];
+        let mut linked = 0;
+        for (initial_nom, relance_nom) in pairs {
+            let updated = self.conn.execute(
+                "UPDATE templates_email SET relance_template_id = (
+                    SELECT id FROM templates_email WHERE nom = ?2 LIMIT 1
+                 )
+                 WHERE nom = ?1 AND relance_template_id IS NULL
+                   AND EXISTS (SELECT 1 FROM templates_email WHERE nom = ?2)",
+                params![initial_nom, relance_nom],
+            )?;
+            linked += updated;
+        }
+        Ok(linked)
     }
 
     // ========== ALERTES ==========
@@ -2959,10 +3011,13 @@ impl Database {
             return Ok(0);
         }
 
-        // Vérifier si des étiquettes existent déjà
         let count = self.count_etiquettes().unwrap_or(0);
+        let mut total = 0;
+
         if count > 0 {
-            return Ok(0); // Des étiquettes existent déjà, ne rien faire
+            total += self.ensure_default_etiquettes()?;
+            total += self.merge_duplicate_reduction_impot_etiquettes()?;
+            return Ok(total);
         }
 
         let mut created = 0;
@@ -3109,11 +3164,11 @@ impl Database {
         })?;
         created += 1;
 
-        // 9. Suivi > 6 mois (orange) - Pour les prospects non contactés depuis plus de 6 mois
+        // 9. Suivi > 6 mois (jaune) - Pour les prospects non contactés depuis plus de 6 mois
         self.create_etiquette(NewEtiquette {
             nom: "Suivi > 6 mois".to_string(),
-            couleur: Some("#F97316".to_string()),
-            icone: Some("🟠".to_string()),
+            couleur: Some("#EAB308".to_string()),
+            icone: Some("🟡".to_string()),
             description: Some("Prospect/Suspect non contacté depuis plus de 6 mois".to_string()),
             priorite: Some(95),
             auto_condition_type: Some("DELAI_SANS_CONTACT".to_string()),
@@ -3132,7 +3187,108 @@ impl Database {
         })?;
         created += 1;
 
-        Ok(created)
+        total += created;
+        total += self.ensure_default_etiquettes()?;
+        total += self.merge_duplicate_reduction_impot_etiquettes()?;
+        Ok(total)
+    }
+
+    fn etiquette_nom_normalized(nom: &str) -> String {
+        normalize_contact_name(nom)
+    }
+
+    fn is_reduction_impot_etiquette_variant(nom: &str) -> bool {
+        let key = Self::etiquette_nom_normalized(nom);
+        if key.is_empty() {
+            return false;
+        }
+        if key == Self::etiquette_nom_normalized(REDUCTION_IMPOT_ETIQUETTE_CANONICAL) {
+            return true;
+        }
+        const ALIASES: &[&str] = &[
+            "RDV FIN D ANNEE",
+            "REDUCTION D IMPOT FIN D ANNEE",
+            "REDUCTION D IMPOT",
+        ];
+        if ALIASES.contains(&key.as_str()) {
+            return true;
+        }
+        if key.starts_with("RDV FIN") {
+            return true;
+        }
+        key.contains("REDUCTION") && key.contains("IMPOT")
+    }
+
+    fn merge_etiquette_assignments(&self, from_id: i64, into_id: i64) -> Result<()> {
+        if from_id == into_id {
+            return Ok(());
+        }
+        self.conn.execute(
+            "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, date_attribution, email_envoye, email_date_prevue, email_date_envoi, notes)
+             SELECT contact_id, ?1, attribue_par, date_attribution, email_envoye, email_date_prevue, email_date_envoi, notes
+             FROM contact_etiquettes WHERE etiquette_id = ?2
+             ON CONFLICT(contact_id, etiquette_id) DO NOTHING",
+            params![into_id, from_id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM contact_etiquettes WHERE etiquette_id = ?1",
+            params![from_id],
+        )?;
+        Ok(())
+    }
+
+    /// Fusionne les doublons « réduction d'impôt » / « RDV fin d'année » vers l'étiquette canonique.
+    pub fn merge_duplicate_reduction_impot_etiquettes(&self) -> Result<usize> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, nom FROM etiquettes ORDER BY id ASC")?;
+        let rows: Vec<(i64, String)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>>>()?;
+
+        let variants: Vec<(i64, String)> = rows
+            .into_iter()
+            .filter(|(_, nom)| Self::is_reduction_impot_etiquette_variant(nom))
+            .collect();
+
+        if variants.len() <= 1 {
+            return Ok(0);
+        }
+
+        let canonical_key = Self::etiquette_nom_normalized(REDUCTION_IMPOT_ETIQUETTE_CANONICAL);
+        let keeper_id = variants
+            .iter()
+            .find(|(_, nom)| Self::etiquette_nom_normalized(nom) == canonical_key)
+            .map(|(id, _)| *id)
+            .unwrap_or(variants[0].0);
+
+        let mut merged = 0;
+        for (dup_id, nom) in &variants {
+            if *dup_id == keeper_id {
+                continue;
+            }
+            self.merge_etiquette_assignments(*dup_id, keeper_id)?;
+            self.conn
+                .execute("DELETE FROM etiquettes WHERE id = ?1", params![dup_id])?;
+            merged += 1;
+            println!(
+                "🏷️ Doublon étiquette fusionné : « {} » (id {}) → « {} » (id {})",
+                nom, dup_id, REDUCTION_IMPOT_ETIQUETTE_CANONICAL, keeper_id
+            );
+        }
+
+        if keeper_id > 0 {
+            let _ = self.conn.execute(
+                "UPDATE etiquettes SET nom = ?1, description = ?2, is_default = 1 WHERE id = ?3",
+                params![
+                    REDUCTION_IMPOT_ETIQUETTE_CANONICAL,
+                    "Période de réduction d'impôt fin d'année (oct-nov)",
+                    keeper_id
+                ],
+            );
+        }
+
+        Ok(merged)
     }
 
     /// Vérifie et crée les étiquettes par défaut manquantes (migration pour bases existantes).
@@ -3169,8 +3325,8 @@ impl Database {
             ),
             (
                 "Suivi > 6 mois",
-                "#F97316",
-                "🟠",
+                "#EAB308",
+                "🟡",
                 "Prospect/Suspect non contacté depuis plus de 6 mois",
                 95,
                 "DELAI_SANS_CONTACT",
@@ -3264,7 +3420,7 @@ impl Database {
             let existing: Option<(i64, Option<String>)> = self
                 .conn
                 .query_row(
-                    "SELECT id, auto_condition_config FROM etiquettes WHERE nom = ?1",
+                    "SELECT id, auto_condition_config FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM(?1))",
                     params![nom],
                     |row| Ok((row.get(0)?, row.get(1)?)),
                 )
@@ -3302,6 +3458,23 @@ impl Database {
                 }
             }
         }
+
+        // Ancienne base : « Suivi > 6 mois » partageait l'orange avec « Suivi à planifier »
+        if self
+            .conn
+            .execute(
+                "UPDATE etiquettes SET couleur = '#EAB308', icone = '🟡'
+                 WHERE LOWER(TRIM(nom)) = LOWER(TRIM('Suivi > 6 mois'))
+                   AND is_default = 1
+                   AND couleur = '#F97316'",
+                [],
+            )
+            .is_ok()
+        {
+            changes += self.conn.changes() as usize;
+        }
+
+        changes += self.merge_duplicate_reduction_impot_etiquettes()?;
 
         if changes > 0 {
             println!("🏷️ Migration: {} étiquettes créées/mises à jour", changes);
@@ -3404,16 +3577,29 @@ impl Database {
             .unwrap_or(5);
         let delai_secs = delai_jours * 86_400;
 
+        const TEMPLATE_JOINS: &str = "
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 LEFT JOIN templates_email t_rel ON t.relance_template_id = t_rel.id";
+        const TEMPLATE_FIELDS: &str = "
+                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
+                             THEN COALESCE(t_rel.sujet, '') ELSE COALESCE(t.sujet, '') END,
+                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
+                             THEN COALESCE(t_rel.corps, '') ELSE COALESCE(t.corps, '') END,
+                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
+                             THEN t_rel.agenda_link_id ELSE t.agenda_link_id END";
+
         let sql = match queue_status {
             "ready" => {
-                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                format!(
+                    "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL,
-                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
+                        {TEMPLATE_FIELDS}, NULL,
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        COALESCE(ce.email_relance_active, 0)
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 {TEMPLATE_JOINS}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 0
                    AND ce.email_date_prevue IS NOT NULL
@@ -3422,11 +3608,13 @@ impl Database {
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
+                )
             }
             "incomplete" => {
-                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                format!(
+                    "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
+                        {TEMPLATE_FIELDS},
                         CASE
                           WHEN c.email IS NULL OR TRIM(c.email) = '' THEN 'NO_EMAIL'
                           WHEN e.email_template_id IS NULL THEN 'NO_TEMPLATE'
@@ -3434,11 +3622,12 @@ impl Database {
                           WHEN ce.email_date_prevue > ?1 THEN 'SCHEDULED'
                           ELSE 'OTHER'
                         END,
-                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        COALESCE(ce.email_relance_active, 0)
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 {TEMPLATE_JOINS}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 0
                    AND (
@@ -3448,30 +3637,36 @@ impl Database {
                      OR ce.email_date_prevue > ?1
                    )
                  ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
+                )
             }
             "sent" => {
-                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                format!(
+                    "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
                         COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL,
-                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        0
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 {TEMPLATE_JOINS}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 1
                  ORDER BY ce.email_date_envoi DESC
                  LIMIT 100"
+                )
             }
             "followup" => {
-                "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                format!(
+                    "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
                         COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, 'FOLLOWUP',
-                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        0
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 {TEMPLATE_JOINS}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 1
                    AND ce.email_date_envoi IS NOT NULL
@@ -3481,6 +3676,7 @@ impl Database {
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom"
+                )
             }
             _ => {
                 return Err(rusqlite::Error::InvalidParameterName(format!(
@@ -3510,22 +3706,23 @@ impl Database {
                 email_reponse_at: row.get(15)?,
                 email_reponse_type: row.get(16)?,
                 contact_date_dernier_contact: row.get(17)?,
+                email_is_relance: row.get::<_, i64>(18)? != 0,
             })
         };
 
         if queue_status == "sent" {
-            let mut stmt = self.conn.prepare(sql)?;
+            let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map([], map_row)?;
             return rows.collect();
         }
 
         if queue_status == "followup" {
-            let mut stmt = self.conn.prepare(sql)?;
+            let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(params![now, delai_secs], map_row)?;
             return rows.collect();
         }
 
-        let mut stmt = self.conn.prepare(sql)?;
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(params![now], map_row)?;
         rows.collect()
     }
@@ -3603,6 +3800,48 @@ impl Database {
         )
     }
 
+    fn resolve_sent_template_nom(&self, contact_etiquette_id: i64) -> Result<String> {
+        let (etiquette_id, relance): (i64, i64) = self.conn.query_row(
+            "SELECT ce.etiquette_id, COALESCE(ce.email_relance_active, 0)
+             FROM contact_etiquettes ce WHERE ce.id = ?1",
+            params![contact_etiquette_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let mut template_id: Option<i64> = self.conn.query_row(
+            "SELECT email_template_id FROM etiquettes WHERE id = ?1",
+            params![etiquette_id],
+            |row| row.get(0),
+        )?;
+        if relance != 0 {
+            if let Some(tid) = template_id {
+                template_id = self
+                    .conn
+                    .query_row(
+                        "SELECT relance_template_id FROM templates_email WHERE id = ?1",
+                        params![tid],
+                        |row| row.get(0),
+                    )
+                    .ok();
+            }
+        }
+        if let Some(tid) = template_id {
+            if let Ok(nom) = self.conn.query_row(
+                "SELECT nom FROM templates_email WHERE id = ?1",
+                params![tid],
+                |row| row.get::<_, String>(0),
+            ) {
+                if !nom.trim().is_empty() {
+                    return Ok(nom);
+                }
+            }
+        }
+        self.conn.query_row(
+            "SELECT nom FROM etiquettes WHERE id = ?1",
+            params![etiquette_id],
+            |row| row.get(0),
+        )
+    }
+
     fn insert_campaign_interaction(
         &self,
         contact_id: i64,
@@ -3656,6 +3895,7 @@ impl Database {
         gmail_message_id: Option<&str>,
         gmail_thread_id: Option<&str>,
         email_subject: Option<&str>,
+        email_body: Option<&str>,
     ) -> Result<()> {
         if self.campaign_email_already_sent(contact_etiquette_id)? {
             return Ok(());
@@ -3668,16 +3908,39 @@ impl Database {
 
         let (contact_id, etiquette_nom, template_sujet) =
             self.get_campaign_context_for_contact_etiquette(contact_etiquette_id)?;
+        let template_nom = self.resolve_sent_template_nom(contact_etiquette_id)?;
+        let is_relance: i64 = self.conn.query_row(
+            "SELECT COALESCE(email_relance_active, 0) FROM contact_etiquettes WHERE id = ?1",
+            params![contact_etiquette_id],
+            |row| row.get(0),
+        )?;
 
         self.conn.execute("BEGIN IMMEDIATE", [])?;
 
         let mark_result = (|| -> Result<()> {
+            let sujet = email_subject
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or(template_sujet.as_str());
+            let body_stored = email_body
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.to_string());
             let updated = self.conn.execute(
                 "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1,
-                 email_reponse_at = NULL, email_reponse_type = NULL, email_suivi_ignore = 0,
-                 email_gmail_message_id = ?3, email_gmail_thread_id = ?4
+                 email_reponse_at = NULL, email_reponse_type = NULL, email_reponse_body = NULL,
+                 email_reponse_gmail_message_id = NULL, email_suivi_ignore = 0,
+                 email_relance_active = 0,
+                 email_gmail_message_id = ?3, email_gmail_thread_id = ?4,
+                 email_sent_subject = ?5, email_sent_body = ?6, email_sent_template_nom = ?7
                  WHERE id = ?2 AND email_envoye = 0",
-                params![now, contact_etiquette_id, gmail_message_id, gmail_thread_id],
+                params![
+                    now,
+                    contact_etiquette_id,
+                    gmail_message_id,
+                    gmail_thread_id,
+                    sujet,
+                    body_stored.as_deref(),
+                    template_nom.as_str(),
+                ],
             )?;
             if updated == 0 {
                 return Err(rusqlite::Error::InvalidParameterName(format!(
@@ -3686,14 +3949,14 @@ impl Database {
                 )));
             }
 
-            let sujet = email_subject
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or(template_sujet.as_str());
-            let contenu = format!(
-                "Campagne « {} » — email envoyé depuis Suivi → Envois.",
-                etiquette_nom
-            );
-            self.insert_campaign_interaction(contact_id, "EMAIL", sujet, &contenu, now)?;
+            // Corps/sujet sur contact_etiquettes ; le journal lit get_exchange_history_timeline.
+            if is_relance != 0 {
+                let contenu = format!(
+                    "Campagne « {} » — relance email (2e envoi) depuis Suivi → Envois.",
+                    etiquette_nom
+                );
+                self.insert_campaign_interaction(contact_id, "EMAIL", sujet, &contenu, now)?;
+            }
             Ok(())
         })();
 
@@ -3709,11 +3972,15 @@ impl Database {
         }
     }
 
-    /// Client a répondu ou pris RDV — clôture le suivi relance (+ historique + date contact).
+    /// Réponse campagne enregistrée (fil email / relance Suivi → Envois).
+    /// `mail` : pas de MAJ `date_dernier_contact` (réponse email ≠ RDV).
+    /// `rdv` : MAJ dernier contact + clôture alertes suivi.
     pub fn mark_email_campaign_response(
         &self,
         contact_etiquette_id: i64,
         response_type: &str,
+        reponse_body: Option<&str>,
+        reponse_gmail_message_id: Option<&str>,
     ) -> Result<()> {
         let allowed = ["mail", "rdv", "autre"];
         if !allowed.contains(&response_type) {
@@ -3722,7 +3989,21 @@ impl Database {
                 response_type
             )));
         }
+
         if self.campaign_response_already_recorded(contact_etiquette_id)? {
+            if reponse_body.is_some() || reponse_gmail_message_id.is_some() {
+                self.conn.execute(
+                    "UPDATE contact_etiquettes SET
+                     email_reponse_body = COALESCE(?1, email_reponse_body),
+                     email_reponse_gmail_message_id = COALESCE(?2, email_reponse_gmail_message_id)
+                     WHERE id = ?3",
+                    params![
+                        reponse_body,
+                        reponse_gmail_message_id,
+                        contact_etiquette_id
+                    ],
+                )?;
+            }
             return Ok(());
         }
 
@@ -3730,16 +4011,23 @@ impl Database {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        let (contact_id, etiquette_nom, template_sujet) =
+        let (contact_id, _, _) =
             self.get_campaign_context_for_contact_etiquette(contact_etiquette_id)?;
 
         self.conn.execute("BEGIN IMMEDIATE", [])?;
 
         let mark_result = (|| -> Result<()> {
             let updated = self.conn.execute(
-                "UPDATE contact_etiquettes SET email_reponse_at = ?1, email_reponse_type = ?2
+                "UPDATE contact_etiquettes SET email_reponse_at = ?1, email_reponse_type = ?2,
+                 email_reponse_body = ?4, email_reponse_gmail_message_id = ?5
                  WHERE id = ?3 AND email_envoye = 1 AND email_reponse_at IS NULL",
-                params![now, response_type, contact_etiquette_id],
+                params![
+                    now,
+                    response_type,
+                    contact_etiquette_id,
+                    reponse_body,
+                    reponse_gmail_message_id
+                ],
             )?;
             if updated == 0 {
                 return Err(rusqlite::Error::InvalidParameterName(format!(
@@ -3748,19 +4036,10 @@ impl Database {
                 )));
             }
 
-            let (type_interaction, label) = match response_type {
-                "mail" => ("EMAIL", "Réponse email"),
-                "rdv" => ("RDV", "RDV pris"),
-                _ => ("AUTRE", "Retour client"),
-            };
-            let sujet = format!("{} — campagne « {} »", label, etiquette_nom);
-            let contenu = format!(
-                "Retour enregistré après envoi « {} ».",
-                template_sujet
-            );
-            self.insert_campaign_interaction(contact_id, type_interaction, &sujet, &contenu, now)?;
-            self.touch_contact_last_contact(contact_id, now)?;
-            self.auto_close_suivi_alertes_after_contact(contact_id)?;
+            if response_type == "rdv" {
+                self.touch_contact_last_contact(contact_id, now)?;
+                self.auto_close_suivi_alertes_after_contact(contact_id)?;
+            }
             Ok(())
         })();
 
@@ -3789,6 +4068,30 @@ impl Database {
             )));
         }
         Ok(())
+    }
+
+    /// Contexte Gmail pour importer ou détecter la réponse d'un envoi.
+    pub fn campaign_response_check_item(
+        &self,
+        contact_etiquette_id: i64,
+    ) -> Result<super::models::PendingCampaignResponseCheck, String> {
+        self.conn
+            .query_row(
+                "SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
+                 FROM contact_etiquettes ce
+                 INNER JOIN contacts c ON ce.contact_id = c.id
+                 WHERE ce.id = ?1 AND ce.email_date_envoi IS NOT NULL",
+                params![contact_etiquette_id],
+                |row| {
+                    Ok(super::models::PendingCampaignResponseCheck {
+                        contact_etiquette_id: row.get(0)?,
+                        contact_email: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                        email_date_envoi: row.get(2)?,
+                        email_gmail_thread_id: row.get(3)?,
+                    })
+                },
+            )
+            .map_err(|e| format!("Envoi introuvable: {}", e))
     }
 
     /// Campagnes envoyées sans réponse enregistrée (pour sync Gmail / Agenda).
@@ -3826,14 +4129,15 @@ impl Database {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
+        // Garde date/sujet/corps du 1er envoi pour l'historique (relance = nouvel envoi en file).
         let updated = self.conn.execute(
             "UPDATE contact_etiquettes SET
                 email_envoye = 0,
-                email_date_envoi = NULL,
                 email_date_prevue = ?1,
                 email_reponse_at = NULL,
                 email_reponse_type = NULL,
                 email_suivi_ignore = 0,
+                email_relance_active = 1,
                 email_gmail_message_id = NULL,
                 email_gmail_thread_id = NULL
              WHERE id = ?2 AND email_envoye = 1",
@@ -3992,6 +4296,585 @@ impl Database {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64)
+    }
+
+    fn is_campaign_response_trace(sujet: &str, contenu: &str) -> bool {
+        contenu.starts_with("Retour enregistré après envoi") || sujet.contains("— campagne «")
+    }
+
+    fn is_campaign_send_trace(contenu: &str) -> bool {
+        contenu.starts_with("Campagne «")
+            && (contenu.contains("— email envoyé") || contenu.contains("— relance email"))
+    }
+
+    fn parse_etiquette_nom_from_send_trace(contenu: &str) -> Option<String> {
+        let start = contenu.strip_prefix("Campagne «")?;
+        let end = start.find('»')?;
+        Some(start[..end].trim().to_string())
+    }
+
+    fn campaign_send_already_in_entries(
+        entries: &[super::models::ExchangeHistoryEntry],
+        contact_id: i64,
+        sent_at: i64,
+    ) -> bool {
+        entries.iter().any(|e| {
+            e.entry_kind == "email_campagne"
+                && e.contact_id == contact_id
+                && e.sent_at == Some(sent_at)
+        })
+    }
+
+    fn timeline_covers_contact_email(
+        entries: &[super::models::ExchangeHistoryEntry],
+        contact_id: i64,
+        date_interaction: i64,
+        interaction_id: i64,
+    ) -> bool {
+        entries.iter().any(|e| {
+            if e.contact_id != contact_id {
+                return false;
+            }
+            if e.interaction_id == Some(interaction_id) {
+                return true;
+            }
+            if e.entry_kind == "email_campagne" {
+                if let Some(sent) = e.sent_at {
+                    if sent == date_interaction {
+                        return true;
+                    }
+                    if (sent - date_interaction).abs() <= 120 {
+                        return true;
+                    }
+                }
+            }
+            if e.entry_kind == "manual" && e.sort_date == date_interaction {
+                return true;
+            }
+            false
+        })
+    }
+
+    fn lookup_campaign_send_meta(
+        &self,
+        contact_id: i64,
+        sent_at: i64,
+    ) -> (Option<i64>, Option<String>, Option<i64>, Option<String>) {
+        self.conn
+            .query_row(
+                "SELECT ce.id, COALESCE(e.nom, 'Campagne email'),
+                        ce.email_reponse_at, ce.email_reponse_type
+                 FROM contact_etiquettes ce
+                 LEFT JOIN etiquettes e ON ce.etiquette_id = e.id
+                 WHERE ce.contact_id = ?1
+                 ORDER BY
+                   CASE WHEN ce.email_date_envoi = ?2 THEN 0 ELSE 1 END,
+                   COALESCE(ce.email_date_envoi, 0) DESC,
+                   ce.id DESC
+                 LIMIT 1",
+                params![contact_id, sent_at],
+                |row| {
+                    Ok((
+                        Some(row.get(0)?),
+                        Some(row.get(1)?),
+                        row.get(2)?,
+                        row.get(3)?,
+                    ))
+                },
+            )
+            .unwrap_or((None, None, None, None))
+    }
+
+    fn interaction_duplicates_campaign_send(
+        &self,
+        contact_id: i64,
+        date_interaction: i64,
+    ) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_etiquettes
+             WHERE contact_id = ?1 AND email_envoye = 1 AND email_date_envoi = ?2",
+            params![contact_id, date_interaction],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    fn exchange_history_email_from_row(
+        row: &rusqlite::Row<'_>,
+        extended: bool,
+    ) -> rusqlite::Result<super::models::ExchangeHistoryEntry> {
+        let sent_subject: Option<String> = row.get(8)?;
+        let sent_body: Option<String> = row.get(9)?;
+        let template_sujet = {
+            let s: String = row.get(10)?;
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        };
+        let template_corps = {
+            let s: String = row.get(11)?;
+            if s.is_empty() {
+                None
+            } else {
+                Some(s)
+            }
+        };
+        Ok(super::models::ExchangeHistoryEntry {
+            entry_kind: "email_campagne".into(),
+            sort_date: 0,
+            contact_id: row.get(1)?,
+            contact_nom: row.get(2)?,
+            contact_prenom: row.get(3)?,
+            contact_email: row.get(4)?,
+            contact_telephone: row.get(5)?,
+            contact_etiquette_id: Some(row.get(0)?),
+            etiquette_nom: Some(row.get(6)?),
+            sent_at: row.get(7)?,
+            sent_subject,
+            sent_body,
+            sent_template_nom: if extended { row.get(15)? } else { None },
+            template_sujet,
+            template_corps,
+            template_agenda_link_id: row.get(12)?,
+            email_gmail_message_id: if extended {
+                row.get(16)?
+            } else {
+                None
+            },
+            email_gmail_thread_id: if extended {
+                row.get(17)?
+            } else {
+                None
+            },
+            email_reponse_at: row.get(13)?,
+            email_reponse_type: row.get(14)?,
+            email_reponse_body: if extended { row.get(18)? } else { None },
+            email_reponse_gmail_message_id: if extended {
+                row.get(19)?
+            } else {
+                None
+            },
+            interaction_id: None,
+            type_interaction: Some("EMAIL".into()),
+            sujet: None,
+            contenu: None,
+            created_at: None,
+        })
+    }
+
+    /// Journal fusionné : échanges manuels + un fil par envoi campagne (envoi + réponse).
+    pub fn get_exchange_history_timeline(
+        &self,
+    ) -> Result<Vec<super::models::ExchangeHistoryEntry>> {
+        let mut entries: Vec<super::models::ExchangeHistoryEntry> = Vec::new();
+
+        let mut manual_stmt = self.conn.prepare(
+            "SELECT i.id, i.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                    i.type_interaction, i.sujet, i.contenu, i.date_interaction, i.created_at
+             FROM interactions i
+             INNER JOIN contacts c ON c.id = i.contact_id",
+        )?;
+        let manual_rows = manual_stmt.query_map([], |row| {
+            let sujet: Option<String> = row.get(7)?;
+            let contenu: Option<String> = row.get(8)?;
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, String>(6)?,
+                sujet,
+                contenu,
+                row.get::<_, i64>(9)?,
+                row.get::<_, i64>(10)?,
+            ))
+        })?;
+        for row in manual_rows {
+            let (
+                id,
+                contact_id,
+                contact_nom,
+                contact_prenom,
+                contact_email,
+                contact_telephone,
+                type_interaction,
+                sujet,
+                contenu,
+                date_interaction,
+                created_at,
+            ) = row?;
+            let sujet_s = sujet.as_deref().unwrap_or("");
+            let contenu_s = contenu.as_deref().unwrap_or("");
+
+            if Self::is_campaign_response_trace(sujet_s, contenu_s) {
+                continue;
+            }
+
+            if Self::is_campaign_send_trace(contenu_s) {
+                if Self::campaign_send_already_in_entries(&entries, contact_id, date_interaction) {
+                    continue;
+                }
+                let etiquette_nom =
+                    Self::parse_etiquette_nom_from_send_trace(contenu_s).or_else(|| {
+                        sujet
+                            .as_deref()
+                            .and_then(|s| Self::parse_etiquette_nom_from_send_trace(s))
+                    });
+                let ce_id: Option<i64> = self
+                    .conn
+                    .query_row(
+                        "SELECT id FROM contact_etiquettes
+                         WHERE contact_id = ?1 AND email_envoye = 1
+                           AND email_date_envoi = ?2
+                         ORDER BY id DESC LIMIT 1",
+                        params![contact_id, date_interaction],
+                        |row| row.get(0),
+                    )
+                    .ok();
+                let (reponse_at, reponse_type): (Option<i64>, Option<String>) = ce_id
+                    .map(|id| {
+                        self.conn
+                            .query_row(
+                                "SELECT email_reponse_at, email_reponse_type
+                                 FROM contact_etiquettes WHERE id = ?1",
+                                params![id],
+                                |row| Ok((row.get(0)?, row.get(1)?)),
+                            )
+                            .unwrap_or((None, None))
+                    })
+                    .unwrap_or((None, None));
+                entries.push(super::models::ExchangeHistoryEntry {
+                    entry_kind: "email_campagne".into(),
+                    sort_date: date_interaction.max(reponse_at.unwrap_or(0)),
+                    contact_id,
+                    contact_nom: contact_nom.clone(),
+                    contact_prenom: contact_prenom.clone(),
+                    contact_email: contact_email.clone(),
+                    contact_telephone: contact_telephone.clone(),
+                    contact_etiquette_id: ce_id,
+                    etiquette_nom,
+                    sent_at: Some(date_interaction),
+                    sent_subject: sujet.clone(),
+                    sent_body: None,
+                    sent_template_nom: None,
+                    template_sujet: None,
+                    template_corps: None,
+                    template_agenda_link_id: None,
+                    email_gmail_message_id: None,
+                    email_gmail_thread_id: None,
+                    email_reponse_at: reponse_at,
+                    email_reponse_type: reponse_type,
+                    email_reponse_body: None,
+                    email_reponse_gmail_message_id: None,
+                    interaction_id: None,
+                    type_interaction: Some("EMAIL".into()),
+                    sujet: None,
+                    contenu: None,
+                    created_at: None,
+                });
+                continue;
+            }
+
+            if self.interaction_duplicates_campaign_send(contact_id, date_interaction)? {
+                continue;
+            }
+            entries.push(super::models::ExchangeHistoryEntry {
+                entry_kind: "manual".into(),
+                sort_date: date_interaction,
+                contact_id,
+                contact_nom,
+                contact_prenom,
+                contact_email,
+                contact_telephone,
+                contact_etiquette_id: None,
+                etiquette_nom: None,
+                sent_at: None,
+                sent_subject: None,
+                sent_body: None,
+                sent_template_nom: None,
+                template_sujet: None,
+                template_corps: None,
+                template_agenda_link_id: None,
+                email_gmail_message_id: None,
+                email_gmail_thread_id: None,
+                email_reponse_at: None,
+                email_reponse_type: None,
+                email_reponse_body: None,
+                email_reponse_gmail_message_id: None,
+                interaction_id: Some(id),
+                type_interaction: Some(type_interaction),
+                sujet,
+                contenu,
+                created_at: Some(created_at),
+            });
+        }
+
+        let has_sent_cols = self.table_has_column("contact_etiquettes", "email_sent_body")?;
+        let email_sql = if has_sent_cols {
+            "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                    COALESCE(e.nom, 'Campagne email'), ce.email_date_envoi,
+                    COALESCE(NULLIF(TRIM(ce.email_sent_subject), ''), NULLIF(TRIM(i.sujet), '')),
+                    COALESCE(NULLIF(TRIM(ce.email_sent_body), ''), NULLIF(TRIM(i.contenu), '')),
+                    COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
+                    ce.email_reponse_at, ce.email_reponse_type,
+                    ce.email_sent_template_nom, ce.email_gmail_message_id, ce.email_gmail_thread_id,
+                    ce.email_reponse_body, ce.email_reponse_gmail_message_id
+             FROM contact_etiquettes ce
+             LEFT JOIN etiquettes e ON ce.etiquette_id = e.id
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             LEFT JOIN templates_email t ON e.email_template_id = t.id
+             LEFT JOIN interactions i ON i.contact_id = ce.contact_id
+               AND i.type_interaction = 'EMAIL'
+               AND i.date_interaction = ce.email_date_envoi
+               AND i.id = (
+                 SELECT i2.id FROM interactions i2
+                 WHERE i2.contact_id = ce.contact_id
+                   AND i2.type_interaction = 'EMAIL'
+                   AND i2.date_interaction = ce.email_date_envoi
+                   AND COALESCE(i2.contenu, '') NOT LIKE 'Campagne «%» — email envoyé%'
+                   AND COALESCE(i2.contenu, '') NOT LIKE 'Campagne «%» — relance email%'
+                   AND COALESCE(i2.contenu, '') NOT LIKE 'Retour enregistré%'
+                   AND COALESCE(i2.sujet, '') NOT LIKE '%— campagne «%'
+                 ORDER BY i2.id DESC
+                 LIMIT 1
+               )
+             WHERE ce.email_envoye = 1
+                OR ce.email_date_envoi IS NOT NULL
+                OR NULLIF(TRIM(ce.email_sent_subject), '') IS NOT NULL
+                OR NULLIF(TRIM(ce.email_sent_body), '') IS NOT NULL
+                OR NULLIF(TRIM(ce.email_sent_template_nom), '') IS NOT NULL"
+        } else {
+            "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                    COALESCE(e.nom, 'Campagne email'), ce.email_date_envoi,
+                    NULLIF(TRIM(i.sujet), ''),
+                    NULLIF(TRIM(i.contenu), ''),
+                    COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
+                    ce.email_reponse_at, ce.email_reponse_type
+             FROM contact_etiquettes ce
+             LEFT JOIN etiquettes e ON ce.etiquette_id = e.id
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             LEFT JOIN templates_email t ON e.email_template_id = t.id
+             LEFT JOIN interactions i ON i.contact_id = ce.contact_id
+               AND i.type_interaction = 'EMAIL'
+               AND i.date_interaction = ce.email_date_envoi
+               AND i.id = (
+                 SELECT i2.id FROM interactions i2
+                 WHERE i2.contact_id = ce.contact_id
+                   AND i2.type_interaction = 'EMAIL'
+                   AND i2.date_interaction = ce.email_date_envoi
+                   AND COALESCE(i2.contenu, '') NOT LIKE 'Campagne «%» — email envoyé%'
+                   AND COALESCE(i2.contenu, '') NOT LIKE 'Campagne «%» — relance email%'
+                   AND COALESCE(i2.contenu, '') NOT LIKE 'Retour enregistré%'
+                   AND COALESCE(i2.sujet, '') NOT LIKE '%— campagne «%'
+                 ORDER BY i2.id DESC
+                 LIMIT 1
+               )
+             WHERE ce.email_envoye = 1
+                OR ce.email_date_envoi IS NOT NULL"
+        };
+        let mut email_stmt = self.conn.prepare(email_sql)?;
+        let email_rows = email_stmt.query_map([], |row| {
+            Self::exchange_history_email_from_row(row, has_sent_cols)
+        })?;
+        for row in email_rows {
+            let mut entry = row?;
+            let sent = entry.sent_at.unwrap_or(0);
+            if sent > 0
+                && Self::campaign_send_already_in_entries(&entries, entry.contact_id, sent)
+            {
+                if let Some(existing) = entries.iter_mut().find(|e| {
+                    e.entry_kind == "email_campagne"
+                        && e.contact_id == entry.contact_id
+                        && e.sent_at == Some(sent)
+                }) {
+                    if existing.sent_subject.is_none() {
+                        existing.sent_subject = entry.sent_subject.clone();
+                    }
+                    if existing.sent_body.is_none() {
+                        existing.sent_body = entry.sent_body.clone();
+                    }
+                    if existing.contact_etiquette_id.is_none() {
+                        existing.contact_etiquette_id = entry.contact_etiquette_id;
+                    }
+                    if existing.template_sujet.is_none() {
+                        existing.template_sujet = entry.template_sujet.clone();
+                    }
+                    if existing.template_corps.is_none() {
+                        existing.template_corps = entry.template_corps.clone();
+                    }
+                    if existing.email_reponse_at.is_none() {
+                        existing.email_reponse_at = entry.email_reponse_at;
+                    }
+                    if existing.email_reponse_type.is_none() {
+                        existing.email_reponse_type = entry.email_reponse_type.clone();
+                    }
+                    if existing.sent_template_nom.is_none() {
+                        existing.sent_template_nom = entry.sent_template_nom.clone();
+                    }
+                    if existing.email_reponse_body.is_none() {
+                        existing.email_reponse_body = entry.email_reponse_body.clone();
+                    }
+                    if existing.email_gmail_thread_id.is_none() {
+                        existing.email_gmail_thread_id = entry.email_gmail_thread_id.clone();
+                    }
+                    if existing.email_gmail_message_id.is_none() {
+                        existing.email_gmail_message_id = entry.email_gmail_message_id.clone();
+                    }
+                    if existing.email_reponse_gmail_message_id.is_none() {
+                        existing.email_reponse_gmail_message_id =
+                            entry.email_reponse_gmail_message_id.clone();
+                    }
+                }
+                continue;
+            }
+            let reponse = entry.email_reponse_at.unwrap_or(0);
+            entry.sort_date = sent.max(reponse);
+            if entry.sort_date == 0 {
+                entry.sort_date = sent;
+            }
+            entries.push(entry);
+        }
+
+        let mut orphan_stmt = self.conn.prepare(
+            "SELECT i.id, i.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                    i.type_interaction, i.sujet, i.contenu, i.date_interaction, i.created_at
+             FROM interactions i
+             INNER JOIN contacts c ON c.id = i.contact_id
+             WHERE i.type_interaction = 'EMAIL'",
+        )?;
+        let orphan_rows = orphan_stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<String>>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, i64>(9)?,
+            ))
+        })?;
+        for row in orphan_rows {
+            let (
+                id,
+                contact_id,
+                contact_nom,
+                contact_prenom,
+                contact_email,
+                contact_telephone,
+                sujet,
+                contenu,
+                date_interaction,
+            ) = row?;
+            let sujet_s = sujet.as_deref().unwrap_or("");
+            let contenu_s = contenu.as_deref().unwrap_or("");
+            if Self::is_campaign_response_trace(sujet_s, contenu_s) {
+                continue;
+            }
+            if Self::timeline_covers_contact_email(&entries, contact_id, date_interaction, id) {
+                continue;
+            }
+            let is_send_trace = Self::is_campaign_send_trace(contenu_s);
+            let has_real_body =
+                !is_send_trace && contenu_s.trim().len() > 40 && !contenu_s.starts_with("Campagne «");
+            let (ce_id, etiquette_nom, reponse_at, reponse_type) =
+                self.lookup_campaign_send_meta(contact_id, date_interaction);
+            let etiquette_nom = etiquette_nom.or_else(|| {
+                if is_send_trace {
+                    Self::parse_etiquette_nom_from_send_trace(contenu_s)
+                } else {
+                    None
+                }
+            });
+            entries.push(super::models::ExchangeHistoryEntry {
+                entry_kind: "email_campagne".into(),
+                sort_date: date_interaction.max(reponse_at.unwrap_or(0)),
+                contact_id,
+                contact_nom,
+                contact_prenom,
+                contact_email,
+                contact_telephone,
+                contact_etiquette_id: ce_id,
+                etiquette_nom,
+                sent_at: Some(date_interaction),
+                sent_subject: sujet.clone(),
+                sent_body: if has_real_body {
+                    contenu.clone()
+                } else {
+                    None
+                },
+                sent_template_nom: None,
+                template_sujet: None,
+                template_corps: None,
+                template_agenda_link_id: None,
+                email_gmail_message_id: None,
+                email_gmail_thread_id: None,
+                email_reponse_at: reponse_at,
+                email_reponse_type: reponse_type,
+                email_reponse_body: None,
+                email_reponse_gmail_message_id: None,
+                interaction_id: Some(id),
+                type_interaction: Some("EMAIL".into()),
+                sujet: None,
+                contenu: None,
+                created_at: None,
+            });
+        }
+
+        if entries.is_empty() {
+            for row in self.get_all_interactions_with_contacts()? {
+                entries.push(super::models::ExchangeHistoryEntry {
+                    entry_kind: "manual".into(),
+                    sort_date: row.date_interaction,
+                    contact_id: row.contact_id,
+                    contact_nom: row.contact_nom,
+                    contact_prenom: row.contact_prenom,
+                    contact_email: None,
+                    contact_telephone: None,
+                    contact_etiquette_id: None,
+                    etiquette_nom: None,
+                    sent_at: None,
+                    sent_subject: None,
+                    sent_body: None,
+                    sent_template_nom: None,
+                    template_sujet: None,
+                    template_corps: None,
+                    template_agenda_link_id: None,
+                    email_gmail_message_id: None,
+                    email_gmail_thread_id: None,
+                    email_reponse_at: None,
+                    email_reponse_type: None,
+                    email_reponse_body: None,
+                    email_reponse_gmail_message_id: None,
+                    interaction_id: Some(row.id),
+                    type_interaction: Some(row.type_interaction),
+                    sujet: row.sujet,
+                    contenu: row.contenu,
+                    created_at: Some(row.created_at),
+                });
+            }
+        }
+
+        entries.sort_by(|a, b| {
+            b.sort_date
+                .cmp(&a.sort_date)
+                .then_with(|| {
+                    b.contact_etiquette_id
+                        .unwrap_or(0)
+                        .cmp(&a.contact_etiquette_id.unwrap_or(0))
+                })
+                .then_with(|| {
+                    b.interaction_id
+                        .unwrap_or(0)
+                        .cmp(&a.interaction_id.unwrap_or(0))
+                })
+        });
+        Ok(entries)
     }
 
     pub fn get_all_interactions_with_contacts(
@@ -4608,8 +5491,33 @@ mod database_integration_tests {
                 categorie: "INFO".into(),
                 variables: None,
                 agenda_link_id: None,
+                relance_template_id: None,
             })
             .unwrap();
+        let relance_tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Relance tpl test".into(),
+                sujet: "RELANCER {{prenom}}".into(),
+                corps: "Suite sans reponse".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+            })
+            .unwrap();
+        db.update_template_email(
+            tpl.id,
+            &NewTemplateEmail {
+                nom: tpl.nom.clone(),
+                sujet: tpl.sujet.clone(),
+                corps: tpl.corps.clone(),
+                categorie: tpl.categorie.clone(),
+                variables: tpl.variables.clone(),
+                agenda_link_id: tpl.agenda_link_id.clone(),
+                relance_template_id: Some(relance_tpl.id),
+            },
+        )
+        .unwrap();
 
         let etiqu = db
             .create_etiquette(sample_etiquette(
@@ -4648,15 +5556,49 @@ mod database_integration_tests {
         assert_eq!(ready[0].contact_telephone.as_deref(), Some("0601020304"));
 
         let ce_id = ready[0].contact_etiquette_id;
-        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet test")).unwrap();
+        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet test"), Some("Corps test"))
+            .unwrap();
         assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
         assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
-        let interactions = db.get_interactions_by_contact(cid).unwrap();
-        assert_eq!(interactions.len(), 1);
-        assert_eq!(interactions[0].type_interaction, "EMAIL");
-        assert!(db.mark_etiquette_email_sent(999_999, None, None, None).is_err());
+        let timeline_after_send = db.get_exchange_history_timeline().unwrap();
+        let sent_row = timeline_after_send
+            .iter()
+            .find(|e| e.entry_kind == "email_campagne" && e.contact_id == cid)
+            .expect("fil après envoi");
+        assert_eq!(sent_row.sent_body.as_deref(), Some("Corps test"));
+        assert_eq!(sent_row.sent_subject.as_deref(), Some("Objet test"));
 
-        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet test")).unwrap();
+        db.prepare_email_campaign_relance(ce_id).unwrap();
+        let timeline_after_relance_prep = db.get_exchange_history_timeline().unwrap();
+        assert!(
+            timeline_after_relance_prep
+                .iter()
+                .any(|e| e.contact_id == cid && e.entry_kind == "email_campagne"),
+            "1er envoi visible après préparation relance (sans réponse)"
+        );
+        let ready_relance = db.get_etiquette_email_queue("ready").unwrap();
+        assert_eq!(ready_relance.len(), 1);
+        assert!(ready_relance[0].email_is_relance);
+        assert!(ready_relance[0].template_sujet.contains("RELANCER"));
+
+        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 0);
+        assert!(db
+            .mark_etiquette_email_sent(999_999, None, None, None, None)
+            .is_err());
+
+        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet relance"), None)
+            .unwrap();
+        let after_relance = db.get_interactions_by_contact(cid).unwrap();
+        assert_eq!(after_relance.len(), 1);
+        assert!(
+            after_relance.iter().any(|i| {
+                i.contenu
+                    .as_deref()
+                    .is_some_and(|c| c.contains("relance email (2e envoi)"))
+            })
+        );
+        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet relance"), None)
+            .unwrap();
         assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
 
         db.create_alerte(crate::database::models::NewAlerte {
@@ -4668,12 +5610,73 @@ mod database_integration_tests {
         .unwrap();
         assert_eq!(db.get_alertes_for_contact(cid).unwrap().len(), 1);
 
-        db.mark_email_campaign_response(ce_id, "mail").unwrap();
-        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 2);
-        assert!(db.get_alertes_for_contact(cid).unwrap().is_empty());
+        let date_before_mail = db.get_contact_by_id(cid).unwrap().date_dernier_contact;
+        db.mark_email_campaign_response(ce_id, "mail", None, None)
+            .unwrap();
+        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
+        assert_eq!(
+            db.get_contact_by_id(cid).unwrap().date_dernier_contact,
+            date_before_mail,
+            "réponse mail ne doit pas mettre à jour le dernier contact"
+        );
+        assert_eq!(
+            db.get_alertes_for_contact(cid).unwrap().len(),
+            1,
+            "réponse mail ne clôture pas les alertes suivi client"
+        );
 
-        db.mark_email_campaign_response(ce_id, "mail").unwrap();
-        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 2);
+        db.mark_email_campaign_response(ce_id, "mail", None, None)
+            .unwrap();
+        assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
+
+        let contact_rdv = db
+            .create_contact(NewContact {
+                email: Some("rdv@example.com".into()),
+                ..sample_contact("Durand", "Paul")
+            })
+            .unwrap();
+        let cid_rdv = contact_rdv.id.unwrap();
+        db.attribuer_etiquette(cid_rdv, etiqu.id, Some("MANUEL".into()))
+            .unwrap();
+        db.update_etiquette(
+            etiqu.id,
+            &sample_etiquette("Campagne test", Some(tpl.id), Some(now - 60), None),
+        )
+        .unwrap();
+        let ce_rdv = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid_rdv)
+            .expect("file prête pour contact RDV")
+            .contact_etiquette_id;
+        db.mark_etiquette_email_sent(ce_rdv, None, None, Some("Objet RDV"), None)
+            .unwrap();
+        db.create_alerte(crate::database::models::NewAlerte {
+            contact_id: cid_rdv,
+            type_alerte: "SUIVI_CLIENT_1AN".into(),
+            message: "Test alerte RDV".into(),
+            date_alerte: Some(now),
+        })
+        .unwrap();
+        assert!(db.get_contact_by_id(cid_rdv).unwrap().date_dernier_contact.is_none());
+        db.mark_email_campaign_response(ce_rdv, "rdv", None, None)
+            .unwrap();
+        assert!(
+            db.get_contact_by_id(cid_rdv)
+                .unwrap()
+                .date_dernier_contact
+                .is_some(),
+            "RDV enregistré met à jour le dernier contact"
+        );
+        assert!(db.get_alertes_for_contact(cid_rdv).unwrap().is_empty());
+
+        let timeline = db.get_exchange_history_timeline().unwrap();
+        let bruno_email = timeline
+            .iter()
+            .find(|e| e.entry_kind == "email_campagne" && e.contact_id == cid)
+            .expect("fil email campagne");
+        assert_eq!(bruno_email.email_reponse_type.as_deref(), Some("mail"));
 
         let no_email = db
             .create_contact(NewContact {
@@ -4769,6 +5772,64 @@ mod database_integration_tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn merge_duplicate_reduction_impot_etiquettes_collapses_aliases() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let a = db
+            .create_etiquette(NewEtiquette {
+                nom: REDUCTION_IMPOT_ETIQUETTE_CANONICAL.into(),
+                couleur: Some("#10B981".into()),
+                icone: None,
+                description: None,
+                priorite: Some(60),
+                auto_condition_type: Some("PERIODE_ANNEE".into()),
+                auto_condition_config: Some(r#"{"mois_debut": 10, "mois_fin": 11}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_actif: Some(false),
+                is_default: Some(true),
+                actif: None,
+            })
+            .unwrap();
+        db.create_etiquette(NewEtiquette {
+            nom: "RDV fin d'année".into(),
+            couleur: Some("#10B981".into()),
+            icone: None,
+            description: None,
+            priorite: Some(50),
+            auto_condition_type: Some("PERIODE_ANNEE".into()),
+            auto_condition_config: Some(r#"{"mois_debut": 10, "mois_fin": 11}"#.into()),
+            auto_categories: Some(r#"["CLIENT"]"#.into()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_envoi_prevu: None,
+            email_envoi_heure: None,
+            email_actif: Some(false),
+            is_default: Some(true),
+            actif: None,
+        })
+        .unwrap();
+
+        let merged = db.merge_duplicate_reduction_impot_etiquettes().unwrap();
+        assert_eq!(merged, 1);
+        assert_eq!(db.count_etiquettes().unwrap(), 1);
+
+        let nom: String = db
+            .conn
+            .query_row(
+                "SELECT nom FROM etiquettes WHERE id = ?1",
+                params![a.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(nom, REDUCTION_IMPOT_ETIQUETTE_CANONICAL);
     }
 
     #[test]

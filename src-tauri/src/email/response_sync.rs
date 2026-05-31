@@ -6,6 +6,12 @@ use crate::database::models::PendingCampaignResponseCheck;
 use serde::Deserialize;
 use tauri::AppHandle;
 
+#[derive(Debug, Clone)]
+pub struct GmailReplyFound {
+    pub message_id: String,
+    pub body_text: String,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct EmailCampaignSyncResult {
     pub checked: u32,
@@ -29,8 +35,30 @@ struct GmailThread {
 #[derive(Debug, Deserialize)]
 struct GmailMessageRef {
     id: String,
-    #[serde(rename = "internalDate")]
-    internal_date: String,
+    #[serde(rename = "threadId", default)]
+    thread_id: Option<String>,
+    #[serde(rename = "internalDate", default, deserialize_with = "deserialize_optional_internal_date")]
+    internal_date: Option<String>,
+}
+
+/// Gmail renvoie `internalDate` en string ou en nombre selon l'endpoint / le format.
+fn deserialize_optional_internal_date<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<serde_json::Value> = Option::deserialize(deserializer)?;
+    Ok(value.and_then(internal_date_value_to_string))
+}
+
+fn internal_date_value_to_string(value: serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::String(s) if !s.is_empty() => Some(s),
+        serde_json::Value::Number(n) => n
+            .as_i64()
+            .or_else(|| n.as_u64().map(|u| u as i64))
+            .map(|i| i.to_string()),
+        _ => None,
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,7 +68,11 @@ struct GmailMessageList {
 
 #[derive(Debug, Deserialize)]
 struct GmailMessageMeta {
-    #[serde(rename = "internalDate")]
+    #[serde(
+        rename = "internalDate",
+        default,
+        deserialize_with = "deserialize_optional_internal_date"
+    )]
     internal_date: Option<String>,
     payload: Option<GmailPayload>,
 }
@@ -53,6 +85,7 @@ struct GmailPayload {
 #[derive(Debug, Deserialize)]
 struct GmailHeader {
     name: String,
+    #[serde(default)]
     value: String,
 }
 
@@ -110,6 +143,118 @@ fn parse_internal_date_ms(internal_date: &str) -> Option<i64> {
     internal_date.parse::<i64>().ok()
 }
 
+#[derive(Debug, Deserialize)]
+struct GmailBodyData {
+    #[serde(default)]
+    data: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GmailPart {
+    #[serde(rename = "mimeType", default)]
+    mime_type: Option<String>,
+    #[serde(default)]
+    body: Option<GmailBodyData>,
+    #[serde(default)]
+    parts: Option<Vec<GmailPart>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GmailMessageFull {
+    #[serde(default)]
+    snippet: Option<String>,
+    payload: Option<GmailPart>,
+}
+
+fn decode_gmail_body_data(data: &str) -> Option<String> {
+    use base64::Engine;
+    let normalized: String = data
+        .chars()
+        .map(|c| match c {
+            '-' => '+',
+            '_' => '/',
+            other => other,
+        })
+        .collect();
+    let pad = (4 - normalized.len() % 4) % 4;
+    let padded = format!("{}{}", normalized, "=".repeat(pad));
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(padded.as_bytes())
+        .ok()?;
+    String::from_utf8(bytes).ok()
+}
+
+fn strip_html_basic(html: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for c in html.chars() {
+        match c {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(c),
+            _ => {}
+        }
+    }
+    out.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn extract_text_from_part(part: &GmailPart, plain: &mut Option<String>, html: &mut Option<String>) {
+    if let Some(ref nested) = part.parts {
+        for p in nested {
+            extract_text_from_part(p, plain, html);
+        }
+        return;
+    }
+    let mime = part.mime_type.as_deref().unwrap_or("");
+    let Some(data) = part.body.as_ref().and_then(|b| b.data.as_deref()) else {
+        return;
+    };
+    let Some(decoded) = decode_gmail_body_data(data) else {
+        return;
+    };
+    if mime.contains("text/plain") {
+        plain.get_or_insert(decoded);
+    } else if mime.contains("text/html") && html.is_none() {
+        *html = Some(strip_html_basic(&decoded));
+    }
+}
+
+pub fn gmail_fetch_message_body(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    message_id: &str,
+) -> Result<String, String> {
+    let res = client
+        .get(format!(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
+            message_id
+        ))
+        .query(&[("format", "full")])
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("Gmail message: {}", res.text().unwrap_or_default()));
+    }
+    let msg: GmailMessageFull = res.json().map_err(|e| e.to_string())?;
+    let mut plain = None;
+    let mut html = None;
+    if let Some(ref payload) = msg.payload {
+        extract_text_from_part(payload, &mut plain, &mut html);
+    }
+    let text = plain
+        .or(html)
+        .or(msg.snippet)
+        .unwrap_or_default()
+        .trim()
+        .to_string();
+    Ok(text)
+}
+
 fn message_from_contact(
     client: &reqwest::blocking::Client,
     token: &str,
@@ -153,14 +298,14 @@ fn message_from_contact(
     Ok(is_reply_from_contact(&from, contact_email))
 }
 
-fn gmail_has_reply(
+fn gmail_find_reply_message_id(
     client: &reqwest::blocking::Client,
     token: &str,
     item: &PendingCampaignResponseCheck,
-) -> Result<bool, String> {
+) -> Result<Option<String>, String> {
     let contact = item.contact_email.trim();
     if contact.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
 
     if let Some(ref thread_id) = item.email_gmail_thread_id {
@@ -177,9 +322,13 @@ fn gmail_has_reply(
             let thread: GmailThread = res.json().map_err(|e| e.to_string())?;
             if let Some(messages) = thread.messages {
                 for msg in messages {
-                    if parse_internal_date_ms(&msg.internal_date)
+                    let after_sent = msg
+                        .internal_date
+                        .as_deref()
+                        .and_then(parse_internal_date_ms)
                         .map(|ms| ms > item.email_date_envoi * 1000)
-                        .unwrap_or(true)
+                        .unwrap_or(true);
+                    if after_sent
                         && message_from_contact(
                             client,
                             token,
@@ -188,7 +337,7 @@ fn gmail_has_reply(
                             item.email_date_envoi,
                         )?
                     {
-                        return Ok(true);
+                        return Ok(Some(msg.id));
                     }
                 }
             }
@@ -204,7 +353,7 @@ fn gmail_has_reply(
         .send()
         .map_err(|e| e.to_string())?;
     if !res.status().is_success() {
-        return Ok(false);
+        return Ok(None);
     }
     let list: GmailMessageList = res.json().map_err(|e| e.to_string())?;
     if let Some(messages) = list.messages {
@@ -216,11 +365,29 @@ fn gmail_has_reply(
                 contact,
                 item.email_date_envoi,
             )? {
-                return Ok(true);
+                return Ok(Some(msg.id));
             }
         }
     }
-    Ok(false)
+    Ok(None)
+}
+
+pub fn gmail_find_contact_reply(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    item: &PendingCampaignResponseCheck,
+) -> Result<Option<GmailReplyFound>, String> {
+    let Some(message_id) = gmail_find_reply_message_id(client, token, item)? else {
+        return Ok(None);
+    };
+    let body_text = gmail_fetch_message_body(client, token, &message_id)?;
+    if body_text.trim().is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(GmailReplyFound {
+        message_id,
+        body_text,
+    }))
 }
 
 fn event_includes_contact(event: &CalendarEvent, contact_email: &str) -> bool {
@@ -311,7 +478,7 @@ fn calendar_has_rdv(
 pub fn sync_email_campaign_responses(
     app: &AppHandle,
     pending: Vec<PendingCampaignResponseCheck>,
-    mark_response: impl Fn(i64, &str) -> Result<(), String>,
+    mark_response: impl Fn(i64, &str, Option<&str>, Option<&str>) -> Result<(), String>,
 ) -> Result<EmailCampaignSyncResult, String> {
     let store = EmailOAuthStore::load(app)?;
     let mut conn = store
@@ -334,15 +501,22 @@ pub fn sync_email_campaign_responses(
     };
 
     for item in pending {
-        match gmail_has_reply(&client, &conn.access_token, &item) {
-            Ok(true) => match mark_response(item.contact_etiquette_id, "mail") {
-                Ok(()) => result.mail_detected += 1,
-                Err(e) if result.errors.len() < 5 => result.errors.push(e),
-                Err(_) => {}
-            },
-            Ok(false) => {
+        match gmail_find_contact_reply(&client, &conn.access_token, &item) {
+            Ok(Some(reply)) => {
+                match mark_response(
+                    item.contact_etiquette_id,
+                    "mail",
+                    Some(reply.body_text.as_str()),
+                    Some(reply.message_id.as_str()),
+                ) {
+                    Ok(()) => result.mail_detected += 1,
+                    Err(e) if result.errors.len() < 5 => result.errors.push(e),
+                    Err(_) => {}
+                }
+            }
+            Ok(None) => {
                 match calendar_has_rdv(&client, &conn.access_token, &item) {
-                    Ok(true) => match mark_response(item.contact_etiquette_id, "rdv") {
+                    Ok(true) => match mark_response(item.contact_etiquette_id, "rdv", None, None) {
                         Ok(()) => result.rdv_detected += 1,
                         Err(e) if result.errors.len() < 5 => result.errors.push(e),
                         Err(_) => {}
@@ -360,4 +534,32 @@ pub fn sync_email_campaign_responses(
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_gmail_thread_minimal_without_internal_date() {
+        let json = r#"{"messages":[{"id":"msg1","threadId":"thr1"}]}"#;
+        let thread: GmailThread = serde_json::from_str(json).expect("thread minimal");
+        let msgs = thread.messages.expect("messages");
+        assert_eq!(msgs[0].id, "msg1");
+        assert!(msgs[0].internal_date.is_none());
+    }
+
+    #[test]
+    fn parses_gmail_messages_list_ids_only() {
+        let json = r#"{"messages":[{"id":"m1","threadId":"t1"}],"resultSizeEstimate":1}"#;
+        let list: GmailMessageList = serde_json::from_str(json).expect("list");
+        assert_eq!(list.messages.as_ref().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn parses_internal_date_as_number() {
+        let json = r#"{"id":"x","internalDate":1700000000000}"#;
+        let msg: GmailMessageRef = serde_json::from_str(json).expect("msg");
+        assert_eq!(msg.internal_date.as_deref(), Some("1700000000000"));
+    }
 }

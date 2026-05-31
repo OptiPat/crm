@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Search, Filter, Trash2, Pencil } from "lucide-react";
+import { StatCard } from "@/components/dashboard/StatCard";
+import { Plus, Search, Filter, Trash2, Pencil, PiggyBank, TrendingUp, Wallet } from "lucide-react";
 import {
   getInvestissementsWithDetails,
   deleteInvestissement,
@@ -17,16 +18,66 @@ import {
 } from "@/lib/api/tauri-investissements";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
+import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import {
+  computePatrimoineStats,
+  type PatrimoineOrigineFilter,
+} from "@/lib/investissements/patrimoine-tab-utils";
+import { prepareOpenContact } from "@/lib/investissements/investissement-navigation";
 import { textMatchesSearch } from "@/lib/search-utils";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
-export function Investissements() {
+type InvestissementsProps = {
+  onOpenContact?: () => void;
+};
+
+function OrigineFilterPill({
+  active,
+  label,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  count?: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border/80 bg-card text-muted-foreground hover:bg-muted/50"
+      )}
+    >
+      {label}
+      {count != null && count > 0 && (
+        <span
+          className={cn(
+            "tabular-nums rounded-full px-1.5 py-0.5 text-[10px]",
+            active ? "bg-primary/15" : "bg-muted"
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  );
+}
+
+export function Investissements({ onOpenContact }: InvestissementsProps) {
   const [investissements, setInvestissements] = useState<InvestissementWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [partenaireFilter, setPartenaireFilter] = useState<string>("ALL");
   const [showForm, setShowForm] = useState(false);
-  const [selectedInvestissement, setSelectedInvestissement] = useState<any>(null);
+  const [selectedInvestissement, setSelectedInvestissement] = useState<InvestissementWithDetails | null>(null);
 
   useEffect(() => {
     loadInvestissements();
@@ -57,9 +108,29 @@ export function Investissements() {
     }
   };
 
-  // Filtrage
-  const filteredInvestissements = investissements
-    .filter((inv) => {
+  const stats = useMemo(
+    () => computePatrimoineStats(investissements),
+    [investissements]
+  );
+
+  const countByOrigine = useMemo(
+    () => ({
+      all: investissements.length,
+      avec_moi: investissements.filter((i) => i.origine === "MON_CONSEIL").length,
+      a_cote: investissements.filter((i) => i.origine !== "MON_CONSEIL").length,
+    }),
+    [investissements]
+  );
+
+  const filteredInvestissements = useMemo(() => {
+    let list = investissements;
+    if (origineFilter === "avec_moi") {
+      list = list.filter((i) => i.origine === "MON_CONSEIL");
+    } else if (origineFilter === "a_cote") {
+      list = list.filter((i) => i.origine !== "MON_CONSEIL");
+    }
+
+    list = list.filter((inv) => {
       const matchesSearch = textMatchesSearch(
         searchQuery,
         inv.nom_produit,
@@ -67,58 +138,157 @@ export function Investissements() {
         inv.contact_prenom,
         inv.partenaire_nom
       );
-
       const matchesType = typeFilter === "ALL" || inv.type_produit === typeFilter;
-      
       const matchesPartenaire =
         partenaireFilter === "ALL" || inv.partenaire_nom === partenaireFilter;
-
       return matchesSearch && matchesType && matchesPartenaire;
-    })
-    .sort((a, b) => {
-      // Tri par date de souscription (récent → ancien)
+    });
+
+    return list.sort((a, b) => {
       if (!a.date_souscription) return 1;
       if (!b.date_souscription) return -1;
       return b.date_souscription - a.date_souscription;
     });
+  }, [investissements, origineFilter, searchQuery, typeFilter, partenaireFilter]);
 
-  // Liste unique des partenaires pour le filtre
+  const filteredTotalCentimes = filteredInvestissements.reduce(
+    (s, i) => s + (i.montant_initial ?? 0),
+    0
+  );
+
+  const hasActiveFilters =
+    origineFilter !== "all" ||
+    searchQuery.trim() !== "" ||
+    typeFilter !== "ALL" ||
+    partenaireFilter !== "ALL";
+
+  const resetFilters = () => {
+    setOrigineFilter("all");
+    setSearchQuery("");
+    setTypeFilter("ALL");
+    setPartenaireFilter("ALL");
+  };
+
   const uniquePartenaires = Array.from(
     new Set(investissements.map((inv) => inv.partenaire_nom).filter(Boolean))
   ).sort();
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-serif font-bold text-primary mb-2">
             Investissements
           </h2>
           <p className="text-muted-foreground">
-            Gérez les investissements de vos clients
+            Vue portefeuille — tous les clients
           </p>
         </div>
-        <Button className="gap-2" onClick={() => setShowForm(true)}>
+        <Button className="gap-2 shrink-0" onClick={() => setShowForm(true)}>
           <Plus className="h-4 w-4" />
           Nouvel investissement
         </Button>
       </div>
 
+      <section className="space-y-2" aria-label="Synthèse du portefeuille">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Synthèse — clic sur une carte pour filtrer la liste
+        </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatCard
+            title="Avec moi"
+            value={formatEuroCentimes(stats.avecMoiCentimes)}
+            description={`${stats.countAvecMoi} support${stats.countAvecMoi > 1 ? "s" : ""} — conseil`}
+            icon={TrendingUp}
+            accentColor="#dc216e"
+            iconColor="text-rose-700"
+            iconBgColor="bg-rose-50"
+            highlight={origineFilter === "avec_moi"}
+            onClick={() =>
+              setOrigineFilter((f) => (f === "avec_moi" ? "all" : "avec_moi"))
+            }
+          />
+          <StatCard
+            title="À côté"
+            value={formatEuroCentimes(stats.aCoteCentimes)}
+            description={`${stats.countACote} support${stats.countACote > 1 ? "s" : ""} — hors conseil`}
+            icon={PiggyBank}
+            accentColor="#6b7280"
+            iconColor="text-gray-600"
+            iconBgColor="bg-gray-50"
+            highlight={origineFilter === "a_cote"}
+            onClick={() =>
+              setOrigineFilter((f) => (f === "a_cote" ? "all" : "a_cote"))
+            }
+          />
+          <StatCard
+            title="Total portefeuille"
+            value={formatEuroCentimes(stats.totalCentimes)}
+            description={`${stats.count} ligne${stats.count > 1 ? "s" : ""} en base`}
+            icon={Wallet}
+            accentColor="#047857"
+            iconColor="text-emerald-700"
+            iconBgColor="bg-emerald-50"
+            onClick={resetFilters}
+            highlight={!hasActiveFilters && origineFilter === "all"}
+          />
+        </div>
+      </section>
+
       <Card>
         <CardHeader>
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
                 <CardTitle>Liste des investissements</CardTitle>
                 <CardDescription>
-                  {filteredInvestissements.length} investissement
-                  {filteredInvestissements.length > 1 ? "s" : ""} sur {investissements.length}
+                  Cliquez sur une ligne (ou sur le nom du client) pour ouvrir la fiche
+                  Contacts → onglet Patrimoine
                 </CardDescription>
               </div>
+              {!loading && investissements.length > 0 && (
+                <p className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                  {filteredInvestissements.length} / {investissements.length}
+                  <span className="text-muted-foreground font-normal ml-2">
+                    {formatEuroCentimes(filteredTotalCentimes)}
+                  </span>
+                </p>
+              )}
             </div>
 
-            {/* Barre de recherche et filtres */}
-            <div className="flex gap-4">
+            <div className="flex flex-wrap gap-2">
+              <OrigineFilterPill
+                active={origineFilter === "all"}
+                label="Tous"
+                count={countByOrigine.all}
+                onClick={() => setOrigineFilter("all")}
+              />
+              <OrigineFilterPill
+                active={origineFilter === "avec_moi"}
+                label="Avec moi"
+                count={countByOrigine.avec_moi}
+                onClick={() => setOrigineFilter("avec_moi")}
+              />
+              <OrigineFilterPill
+                active={origineFilter === "a_cote"}
+                label="À côté"
+                count={countByOrigine.a_cote}
+                onClick={() => setOrigineFilter("a_cote")}
+              />
+              {hasActiveFilters && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={resetFilters}
+                >
+                  Réinitialiser
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -130,8 +300,8 @@ export function Investissements() {
               </div>
 
               <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-[200px]">
-                  <Filter className="h-4 w-4 mr-2" />
+                <SelectTrigger className="w-full sm:w-[200px]">
+                  <Filter className="h-4 w-4 mr-2 shrink-0" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -150,8 +320,8 @@ export function Investissements() {
 
               {uniquePartenaires.length > 0 && (
                 <Select value={partenaireFilter} onValueChange={setPartenaireFilter}>
-                  <SelectTrigger className="w-[200px]">
-                    <Filter className="h-4 w-4 mr-2" />
+                  <SelectTrigger className="w-full sm:w-[200px]">
+                    <Filter className="h-4 w-4 mr-2 shrink-0" />
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -172,11 +342,18 @@ export function Investissements() {
             <div className="text-center py-8 text-muted-foreground">
               Chargement...
             </div>
-          ) : filteredInvestissements.length === 0 ? (
+          ) : investissements.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
-              {searchQuery || typeFilter !== "ALL" || partenaireFilter !== "ALL"
-                ? "Aucun investissement trouvé"
-                : "Aucun investissement. Commencez par en créer un !"}
+              Aucun investissement. Commencez par en créer un !
+            </div>
+          ) : filteredInvestissements.length === 0 ? (
+            <div className="text-center py-8 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Aucun investissement pour ces filtres.
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
+                Tout afficher
+              </Button>
             </div>
           ) : (
             <div className="space-y-3">
@@ -187,6 +364,25 @@ export function Investissements() {
                       .filter(Boolean)
                       .join(" ")
                       .trim();
+                const openContactPatrimoine = () => {
+                  if (!onOpenContact) {
+                    toast.error("Navigation vers la fiche contact indisponible");
+                    return;
+                  }
+                  const contactId = inv.contact_id;
+                  if (contactId == null || contactId <= 0) {
+                    toast.error(
+                      "Ce placement n’est pas lié à un contact — impossible d’ouvrir la fiche"
+                    );
+                    return;
+                  }
+                  prepareOpenContact(contactId, "patrimoine");
+                  onOpenContact();
+                  toast.success(
+                    `Ouverture de ${ownerLabel || "la fiche"} — onglet Patrimoine`
+                  );
+                };
+
                 return (
                   <InvestissementCard
                     key={inv.id}
@@ -194,6 +390,9 @@ export function Investissements() {
                     partenaireNom={inv.partenaire_nom}
                     proprietaireLabel={ownerLabel || undefined}
                     proprietaireVariant={inv.foyer_id ? "foyer" : "member"}
+                    onOpenContactClick={
+                      onOpenContact ? openContactPatrimoine : undefined
+                    }
                     actions={
                       <>
                         <Button
@@ -223,7 +422,6 @@ export function Investissements() {
         </CardContent>
       </Card>
 
-      {/* Formulaire */}
       <InvestissementForm
         open={showForm}
         onOpenChange={(open) => {

@@ -30,7 +30,6 @@ import {
   Trash2,
   User,
   Wallet,
-  Plus,
   Users2,
   Home,
   X,
@@ -59,10 +58,12 @@ import { getEtiquettesByContact, attribuerEtiquette, retirerEtiquette, type Cont
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
-import { InvestissementMetaRow } from "@/components/investissements/InvestissementMetaRow";
-import { InvestissementCard } from "@/components/investissements/InvestissementCard";
+import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
 import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
-import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import {
+  mergeContactPatrimoineRows,
+  type InvestissementWithOwner,
+} from "@/lib/investissements/patrimoine-tab-utils";
 import {
   getContactsForFoyer,
   loadFoyerPatrimoineCentimes,
@@ -99,7 +100,7 @@ export function ContactDetail({
   const [showEditForm, setShowEditForm] = useState(false);
   const [showInvestissementForm, setShowInvestissementForm] = useState(false);
   const [selectedInvestissement, setSelectedInvestissement] = useState<Investissement | null>(null);
-  const [investissements, setInvestissements] = useState<Investissement[]>([]);
+  const [investissements, setInvestissements] = useState<InvestissementWithOwner[]>([]);
   const [loadingInvestissements, setLoadingInvestissements] = useState(false);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [parrain, setParrain] = useState<Contact | null>(null);
@@ -164,7 +165,13 @@ export function ContactDetail({
   const detailActive = embedded || open;
 
   useEffect(() => {
-    setDetailTab("synthese");
+    const tabHint = sessionStorage.getItem("crm_open_contact_tab");
+    if (tabHint === "patrimoine" || tabHint === "relation" || tabHint === "foyer") {
+      setDetailTab(tabHint);
+      sessionStorage.removeItem("crm_open_contact_tab");
+    } else {
+      setDetailTab("synthese");
+    }
   }, [contact?.id]);
 
   // Charger les investissements du contact
@@ -177,6 +184,12 @@ export function ContactDetail({
       loadEtiquettes();
     }
   }, [contact?.id, detailActive]);
+
+  useEffect(() => {
+    if (detailTab === "patrimoine" && contact?.id && detailActive) {
+      loadInvestissements();
+    }
+  }, [detailTab, contact?.id, detailActive]);
 
   const loadEtiquettes = async () => {
     if (!contact?.id) return;
@@ -216,45 +229,57 @@ export function ContactDetail({
 
   const loadInvestissements = async () => {
     if (!contact?.id) return;
-    
+
     setLoadingInvestissements(true);
     try {
-      // Si le contact a un foyer, charger TOUS les investissements du foyer
-      if (contact.foyer_id) {
-        const [foyerInvs, allContacts] = await Promise.all([
-          getInvestissementsByFoyer(contact.foyer_id),
-          getAllContacts()
-        ]);
-        
-        // Récupérer les investissements individuels de chaque membre du foyer
-        const foyerContacts = allContacts.filter(c => c.foyer_id === contact.foyer_id);
-        const membersInvs = await Promise.all(
-          foyerContacts.map(async (member) => {
-            if (!member.id) return [];
-            const invs = await getInvestissementsByContact(member.id);
-            // Ajouter l'info du propriétaire
-            return invs.map(inv => ({
+      const own = await getInvestissementsByContact(contact.id);
+      const contactLabel = `${contact.prenom} ${contact.nom}`.trim();
+
+      if (!contact.foyer_id) {
+        setInvestissements(
+          own.map((inv) => ({
+            ...inv,
+            _proprietaire: contactLabel,
+            _proprietaireId: contact.id,
+          }))
+        );
+        return;
+      }
+
+      const [foyerInvs, allContacts] = await Promise.all([
+        getInvestissementsByFoyer(contact.foyer_id),
+        getAllContacts(),
+      ]);
+
+      const otherMembers = allContacts.filter(
+        (c) => c.foyer_id === contact.foyer_id && c.id && c.id !== contact.id
+      );
+      const memberRows = (
+        await Promise.all(
+          otherMembers.map(async (member) => {
+            const invs = await getInvestissementsByContact(member.id!);
+            return invs.map((inv) => ({
               ...inv,
-              _proprietaire: `${member.prenom} ${member.nom}`,
+              _proprietaire: `${member.prenom} ${member.nom}`.trim(),
               _proprietaireId: member.id,
             }));
           })
-        );
-        
-        // Fusionner et ajouter l'info "Foyer" pour les investissements du foyer
-        const allInvs = [
-          ...foyerInvs.map(inv => ({ ...inv, _proprietaire: "Foyer", _proprietaireId: null })),
-          ...membersInvs.flat(),
-        ];
-        
-        setInvestissements(allInvs as any);
-      } else {
-        // Pas de foyer, juste les investissements du contact
-        const data = await getInvestissementsByContact(contact.id);
-        setInvestissements(data);
-      }
+        )
+      ).flat();
+
+      setInvestissements(
+        mergeContactPatrimoineRows(
+          contact.id,
+          contactLabel,
+          own,
+          foyerInvs,
+          memberRows
+        )
+      );
     } catch (error) {
       console.error("Error loading investissements:", error);
+      toast.error("Impossible de charger le patrimoine");
+      setInvestissements([]);
     } finally {
       setLoadingInvestissements(false);
     }
@@ -334,20 +359,6 @@ export function ContactDetail({
       setLoadingFoyer(false);
     }
   };
-
-  // Calculer le total des encours
-  const totalEncours = investissements.reduce(
-    (total, inv) => total + (inv.montant_initial || 0),
-    0
-  );
-  
-  // Calculer le total "avec moi" (MON_CONSEIL uniquement)
-  const totalEncoursAvecMoi = investissements
-    .filter(inv => inv.origine === "MON_CONSEIL")
-    .reduce((total, inv) => total + (inv.montant_initial || 0), 0);
-
-  // Formatage des montants
-  const formatEuro = formatEuroCentimes;
 
   const getPartenaireNom = (partenaireId?: number): string | null => {
     if (!partenaireId) return null;
@@ -522,6 +533,14 @@ export function ContactDetail({
               <TabsTrigger value="patrimoine" className="gap-1.5 text-xs sm:text-sm py-2">
                 <Wallet className="h-3.5 w-3.5 shrink-0" />
                 Patrimoine
+                {investissements.length > 0 && (
+                  <Badge
+                    variant="secondary"
+                    className="h-4 min-w-4 px-1 text-[10px] font-semibold tabular-nums"
+                  >
+                    {investissements.length}
+                  </Badge>
+                )}
               </TabsTrigger>
               <TabsTrigger value="foyer" className="gap-1.5 text-xs sm:text-sm py-2">
                 <Network className="h-3.5 w-3.5 shrink-0" />
@@ -833,99 +852,22 @@ export function ContactDetail({
             </TabsContent>
 
             <TabsContent value="patrimoine" className="mt-3 focus-visible:outline-none">
-            {/* Investissements */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Wallet className="h-5 w-5" />
-                      Investissements ({investissements.length})
-                    </CardTitle>
-                    {totalEncours > 0 && (
-                      <div className="text-sm text-muted-foreground mt-1">
-                        <p>
-                          <InvestissementMetaRow tone="amount">
-                            Avec moi : {formatEuro(totalEncoursAvecMoi)}
-                          </InvestissementMetaRow>
-                          {totalEncours > totalEncoursAvecMoi && (
-                            <span className="text-gray-400 ml-2">
-                              (Total: {formatEuro(totalEncours)})
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      setSelectedInvestissement(null);
-                      setShowInvestissementForm(true);
-                    }}
-                    className="gap-2"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Ajouter
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {loadingInvestissements ? (
-                  <p className="text-sm text-muted-foreground">Chargement...</p>
-                ) : investissements.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    Aucun investissement enregistré
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {investissements.map((inv) => {
-                      const invExt = inv as Investissement & {
-                        _proprietaire?: string;
-                        _proprietaireId?: number | null;
-                      };
-                      return (
-                        <InvestissementCard
-                          key={inv.id}
-                          inv={inv}
-                          partenaireNom={getPartenaireNom(inv.partenaire_id)}
-                          proprietaireLabel={invExt._proprietaire}
-                          proprietaireVariant={
-                            invExt._proprietaireId === contact?.id
-                              ? "self"
-                              : invExt._proprietaire === "Foyer"
-                                ? "foyer"
-                                : "member"
-                          }
-                          actions={
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleEditInvestissement(inv)}
-                                className="h-8 w-8"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleDeleteInvestissement(inv)}
-                                className="h-8 w-8 text-red-600 hover:text-red-700"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          }
-                        />
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
+              <ContactPatrimoinePanel
+                contactId={contact.id}
+                contactPrenom={contact.prenom}
+                contactNom={contact.nom}
+                hasFoyer={Boolean(contact.foyer_id)}
+                investissements={investissements}
+                loading={loadingInvestissements}
+                getPartenaireNom={getPartenaireNom}
+                onAdd={() => {
+                  setSelectedInvestissement(null);
+                  setShowInvestissementForm(true);
+                }}
+                onEdit={handleEditInvestissement}
+                onDelete={handleDeleteInvestissement}
+                onRefresh={loadInvestissements}
+              />
             </TabsContent>
 
             <TabsContent value="foyer" className="space-y-4 mt-3 focus-visible:outline-none">

@@ -8,10 +8,12 @@ import {
   getTypeProduitTextClass,
   INVESTISSEMENT_META_TONE_CLASS,
 } from "@/lib/investissements/investissement-display";
+import { cn } from "@/lib/utils";
 import {
   ArrowRight,
   Building2,
   Calendar,
+  ChevronRight,
   RefreshCw,
   Repeat,
   Tag,
@@ -26,6 +28,8 @@ export interface InvestissementCardProps {
   partenaireNom?: string | null;
   proprietaireLabel?: string;
   proprietaireVariant?: InvestissementProprietaireVariant;
+  /** Clic sur la ligne → ouvrir la fiche contact (onglet Patrimoine côté appelant). */
+  onOpenContactClick?: () => void;
   actions?: React.ReactNode;
 }
 
@@ -55,10 +59,32 @@ export function InvestissementCard({
   partenaireNom,
   proprietaireLabel,
   proprietaireVariant,
+  onOpenContactClick,
   actions,
 }: InvestissementCardProps) {
+  const interactive = Boolean(onOpenContactClick);
+
   return (
-    <div className="p-3 border border-border/80 rounded-lg bg-card hover:bg-accent/50 transition-colors">
+    <div
+      className={cn(
+        "p-3 border border-border/80 rounded-lg bg-card transition-colors",
+        interactive &&
+          "cursor-pointer hover:bg-accent/50 hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+      )}
+      onClick={onOpenContactClick}
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenContactClick?.();
+              }
+            }
+          : undefined
+      }
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -77,13 +103,16 @@ export function InvestissementCard({
               <span className="text-xs text-gray-500 italic">à côté</span>
             )}
             {proprietaireLabel && (
-              <Badge
-                variant="outline"
-                className={`inline-flex items-center gap-1 text-xs ${proprietaireBadgeClass(proprietaireVariant)}`}
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 text-xs rounded-md border px-2 py-0.5 font-medium",
+                  proprietaireBadgeClass(proprietaireVariant),
+                  interactive && "group-hover:underline"
+                )}
               >
                 <User className="h-3 w-3 shrink-0" aria-hidden />
                 {proprietaireLabel}
-              </Badge>
+              </span>
             )}
           </div>
           {nomProduitDistinctDuType(inv) && (
@@ -174,7 +203,23 @@ export function InvestissementCard({
             )}
           </div>
         </div>
-        {actions ? <div className="flex gap-2 shrink-0">{actions}</div> : null}
+        <div className="flex items-center gap-2 shrink-0">
+          {interactive && (
+            <ChevronRight
+              className="h-4 w-4 text-muted-foreground/50 hidden sm:block"
+              aria-hidden
+            />
+          )}
+          {actions ? (
+            <div
+              className="flex gap-2"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              {actions}
+            </div>
+          ) : null}
+        </div>
       </div>
     </div>
   );
