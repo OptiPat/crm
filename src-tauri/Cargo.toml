@@ -1,4 +1,4 @@
-﻿[package]
+[package]
 name = "patrimoine-crm"
 version = "0.3.0"
 description = "CRM Desktop pour Conseillers en Gestion de Patrimoine"

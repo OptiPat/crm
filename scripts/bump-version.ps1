@@ -11,6 +11,16 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
+function Write-Utf8NoBom {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content
+    )
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    $text = $Content.TrimEnd() + [Environment]::NewLine
+    [System.IO.File]::WriteAllText($Path, $text, $utf8NoBom)
+}
+
 if ($Version -notmatch '^\d+\.\d+\.\d+$') {
     Write-Host "ERREUR: version attendue au format X.Y.Z (ex. 0.1.1)" -ForegroundColor Red
     exit 1
@@ -21,24 +31,21 @@ $pkgPath = Join-Path $Root "package.json"
 $pkgRaw = Get-Content $pkgPath -Raw
 $oldPkg = if ($pkgRaw -match '"version":\s*"([^"]+)"') { $Matches[1] } else { "?" }
 $pkgRaw = $pkgRaw -replace '"version":\s*"[^"]+"', "`"version`": `"$Version`""
-Set-Content $pkgPath $pkgRaw.TrimEnd() -Encoding utf8 -NoNewline
-Add-Content $pkgPath "" -Encoding utf8
+Write-Utf8NoBom -Path $pkgPath -Content $pkgRaw
 
 # tauri.conf.json
 $tauriPath = Join-Path $Root "src-tauri/tauri.conf.json"
 $tauriRaw = Get-Content $tauriPath -Raw
 $oldTauri = if ($tauriRaw -match '"version":\s*"([^"]+)"') { $Matches[1] } else { "?" }
 $tauriRaw = $tauriRaw -replace '"version":\s*"[^"]+"', "`"version`": `"$Version`""
-Set-Content $tauriPath $tauriRaw.TrimEnd() -Encoding utf8 -NoNewline
-Add-Content $tauriPath "" -Encoding utf8
+Write-Utf8NoBom -Path $tauriPath -Content $tauriRaw
 
 # Cargo.toml
 $cargoPath = Join-Path $Root "src-tauri/Cargo.toml"
 $cargo = Get-Content $cargoPath -Raw
 $oldCargo = if ($cargo -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] } else { "?" }
 $cargo = $cargo -replace '(?m)^version\s*=\s*"[^"]+"', "version = `"$Version`""
-Set-Content $cargoPath $cargo.TrimEnd() -Encoding utf8 -NoNewline
-Add-Content $cargoPath "" -Encoding utf8
+Write-Utf8NoBom -Path $cargoPath -Content $cargo
 
 Write-Host "Version $Version appliquee:" -ForegroundColor Green
 Write-Host "  package.json     : $oldPkg -> $Version"
