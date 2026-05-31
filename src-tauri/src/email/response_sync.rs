@@ -127,7 +127,7 @@ fn gmail_after_date(sent_unix: i64) -> String {
     dt.format("%Y/%m/%d").to_string()
 }
 
-fn email_matches(address_header: &str, contact_email: &str) -> bool {
+pub(crate) fn email_matches(address_header: &str, contact_email: &str) -> bool {
     let contact = contact_email.trim().to_lowercase();
     if contact.is_empty() {
         return false;

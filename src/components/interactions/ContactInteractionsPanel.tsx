@@ -28,6 +28,7 @@ import {
   loadContactRelationTimeline,
   type ContactRelationTimelineItem,
 } from "@/lib/interactions/contact-relation-timeline";
+import { ContactGmailHistoryPanel } from "@/components/interactions/ContactGmailHistoryPanel";
 import { ContactRelationTimelineRow } from "@/components/interactions/ContactRelationTimelineRow";
 import { InteractionForm } from "./InteractionForm";
 import { toast } from "sonner";
@@ -35,6 +36,7 @@ import { cn } from "@/lib/utils";
 
 interface ContactInteractionsPanelProps {
   contactId: number;
+  contactEmail?: string | null;
   dateDernierContact?: number | null;
   dateDernierContactFilleul?: number | null;
   onContactUpdated?: () => void;
@@ -133,6 +135,7 @@ function RelationActionLink({
 
 export function ContactInteractionsPanel({
   contactId,
+  contactEmail,
   dateDernierContact,
   dateDernierContactFilleul,
   onContactUpdated,
@@ -233,6 +236,7 @@ export function ContactInteractionsPanel({
 
   return (
     <>
+      <ContactGmailHistoryPanel contactId={contactId} contactEmail={contactEmail} />
       <Card className="border-primary/15 shadow-sm">
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">

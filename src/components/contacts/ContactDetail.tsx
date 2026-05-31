@@ -933,6 +933,7 @@ export function ContactDetail({
             {contact.id && (
               <ContactInteractionsPanel
                 contactId={contact.id}
+                contactEmail={contact.email}
                 dateDernierContact={contact.date_dernier_contact}
                 dateDernierContactFilleul={contact.date_dernier_contact_filleul}
                 onContactUpdated={async () => {

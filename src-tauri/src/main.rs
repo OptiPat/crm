@@ -192,7 +192,9 @@ fn main() {
             get_contact_relation_status,
             create_interaction,
             update_interaction,
-            delete_interaction
+            delete_interaction,
+            sync_contact_gmail_messages,
+            get_contact_gmail_messages
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

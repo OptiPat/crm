@@ -352,7 +352,34 @@ impl Database {
         self.migrate_templates_email_relance_template_id()?;
         self.migrate_contact_etiquettes_email_suivi()?;
         self.migrate_contact_etiquette_auto_exclusions()?;
+        self.migrate_contact_gmail_messages()?;
 
+        Ok(())
+    }
+
+    fn migrate_contact_gmail_messages(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS contact_gmail_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                gmail_message_id TEXT NOT NULL,
+                gmail_thread_id TEXT,
+                direction TEXT NOT NULL,
+                subject TEXT,
+                snippet TEXT,
+                body_text TEXT,
+                sent_at INTEGER NOT NULL,
+                synced_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                UNIQUE (contact_id, gmail_message_id),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_contact_gmail_messages_contact_sent
+             ON contact_gmail_messages(contact_id, sent_at DESC)",
+            [],
+        )?;
         Ok(())
     }
 

@@ -1322,3 +1322,30 @@ pub fn delete_interaction(db: State<'_, DbState>, id: i64) -> Result<(), String>
         .delete_interaction(id)
         .map_err(|e| format!("Failed to delete interaction: {}", e))
 }
+
+#[tauri::command]
+pub fn sync_contact_gmail_messages(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<crate::email::contact_gmail_sync::ContactGmailSyncResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    crate::email::contact_gmail_sync::sync_contact_gmail_history(
+        &app_handle,
+        database,
+        contact_id,
+    )
+}
+
+#[tauri::command]
+pub fn get_contact_gmail_messages(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<crate::database::models::ContactGmailMessage>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_contact_gmail_messages(contact_id)
+        .map_err(|e| format!("Failed to list Gmail messages: {}", e))
+}

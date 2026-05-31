@@ -5230,6 +5230,77 @@ impl Database {
             .execute("DELETE FROM interactions WHERE id = ?1", params![id])?;
         Ok(())
     }
+
+    pub fn contact_gmail_message_exists(
+        &self,
+        contact_id: i64,
+        gmail_message_id: &str,
+    ) -> Result<bool> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_gmail_messages WHERE contact_id = ?1 AND gmail_message_id = ?2",
+            params![contact_id, gmail_message_id],
+            |r| r.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    pub fn insert_contact_gmail_message(
+        &self,
+        contact_id: i64,
+        gmail_message_id: &str,
+        gmail_thread_id: Option<&str>,
+        direction: &str,
+        subject: Option<String>,
+        snippet: Option<String>,
+        body_text: Option<String>,
+        sent_at: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO contact_gmail_messages (
+                contact_id, gmail_message_id, gmail_thread_id, direction,
+                subject, snippet, body_text, sent_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                contact_id,
+                gmail_message_id,
+                gmail_thread_id,
+                direction,
+                subject,
+                snippet,
+                body_text,
+                sent_at,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn list_contact_gmail_messages(
+        &self,
+        contact_id: i64,
+    ) -> Result<Vec<super::models::ContactGmailMessage>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, gmail_message_id, gmail_thread_id, direction,
+                    subject, snippet, body_text, sent_at, synced_at
+             FROM contact_gmail_messages
+             WHERE contact_id = ?1
+             ORDER BY sent_at DESC",
+        )?;
+        let rows = stmt.query_map(params![contact_id], |row| {
+            Ok(super::models::ContactGmailMessage {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                gmail_message_id: row.get(2)?,
+                gmail_thread_id: row.get(3)?,
+                direction: row.get(4)?,
+                subject: row.get(5)?,
+                snippet: row.get(6)?,
+                body_text: row.get(7)?,
+                sent_at: row.get(8)?,
+                synced_at: row.get(9)?,
+            })
+        })?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
 }
 
 #[cfg(test)]

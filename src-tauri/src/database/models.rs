@@ -627,3 +627,19 @@ pub struct CgpConfig {
     #[serde(default)]
     pub email_suivi_delai_jours: Option<i64>,
 }
+
+/// Message Gmail synchronisé pour un contact (historique réel, pas seulement campagnes CRM).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContactGmailMessage {
+    pub id: i64,
+    pub contact_id: i64,
+    pub gmail_message_id: String,
+    pub gmail_thread_id: Option<String>,
+    /// `inbound` (client → vous), `outbound` (vous → client), `unknown`
+    pub direction: String,
+    pub subject: Option<String>,
+    pub snippet: Option<String>,
+    pub body_text: Option<String>,
+    pub sent_at: i64,
+    pub synced_at: i64,
+}
