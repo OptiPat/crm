@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { StatCard } from "@/components/dashboard/StatCard";
@@ -250,9 +250,17 @@ export function ContactPatrimoinePanel({
     [investissements]
   );
 
+  const hasACote = stats.countACote > 0;
+
+  useEffect(() => {
+    if (!hasACote && origineFilter === "a_cote") {
+      setOrigineFilter("all");
+    }
+  }, [hasACote, origineFilter]);
+
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={cn("grid gap-2", hasACote ? "grid-cols-3" : "grid-cols-2")}>
         <StatCard
           title="Avec moi"
           value={formatEuroCentimes(stats.avecMoiCentimes)}
@@ -266,19 +274,21 @@ export function ContactPatrimoinePanel({
             setOrigineFilter((f) => (f === "avec_moi" ? "all" : "avec_moi"))
           }
         />
-        <StatCard
-          title="À côté"
-          value={formatEuroCentimes(stats.aCoteCentimes)}
-          description={`${stats.countACote} support${stats.countACote > 1 ? "s" : ""} — hors conseil`}
-          icon={PiggyBank}
-          accentColor="#6b7280"
-          iconColor="text-gray-600"
-          iconBgColor="bg-gray-50"
-          highlight={origineFilter === "a_cote"}
-          onClick={() =>
-            setOrigineFilter((f) => (f === "a_cote" ? "all" : "a_cote"))
-          }
-        />
+        {hasACote && (
+          <StatCard
+            title="À côté"
+            value={formatEuroCentimes(stats.aCoteCentimes)}
+            description={`${stats.countACote} support${stats.countACote > 1 ? "s" : ""} — hors conseil`}
+            icon={PiggyBank}
+            accentColor="#6b7280"
+            iconColor="text-gray-600"
+            iconBgColor="bg-gray-50"
+            highlight={origineFilter === "a_cote"}
+            onClick={() =>
+              setOrigineFilter((f) => (f === "a_cote" ? "all" : "a_cote"))
+            }
+          />
+        )}
         <StatCard
           title="Total affiché"
           value={formatEuroCentimes(stats.totalCentimes)}
@@ -298,10 +308,6 @@ export function ContactPatrimoinePanel({
                 <Wallet className="h-5 w-5 text-primary" />
                 Patrimoine de {contactPrenom} {contactNom}
               </CardTitle>
-              <CardDescription className="mt-1.5">
-                Encours enregistrés — placements sous conseil et patrimoine « à côté »
-                {hasFoyer ? " (foyer fiscal inclus)." : "."}
-              </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2 shrink-0">
               <Button
@@ -337,10 +343,12 @@ export function ContactPatrimoinePanel({
               />
               Placements financiers
             </span>
-            <span className="inline-flex items-center gap-1">
-              <span className="h-2.5 w-2.5 rounded-sm bg-gray-400" />
-              À côté (badge gris)
-            </span>
+            {hasACote && (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2.5 w-2.5 rounded-sm bg-gray-400" />
+                À côté (badge gris)
+              </span>
+            )}
           </div>
 
           <div className="flex flex-col sm:flex-row gap-2">
@@ -368,7 +376,7 @@ export function ContactPatrimoinePanel({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {ORIGINE_FILTERS.map((f) => (
+            {ORIGINE_FILTERS.filter((f) => f.id !== "a_cote" || hasACote).map((f) => (
               <FilterPill
                 key={f.id}
                 active={origineFilter === f.id}

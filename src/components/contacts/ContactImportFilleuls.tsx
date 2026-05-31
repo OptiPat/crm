@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, ClipboardList, Check, AlertTriangle, Circle } from "lucide-react";
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
@@ -656,8 +656,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
         {step === "upload" && (
           <div className="space-y-4">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-blue-800 font-medium mb-2">
-                📋 Colonnes attendues dans votre fichier Excel :
+              <p className="text-sm text-blue-800 font-medium mb-2 flex items-center gap-1.5">
+                <ClipboardList className="h-4 w-4 shrink-0" aria-hidden />
+                Colonnes attendues dans votre fichier Excel :
               </p>
               <ul className="text-sm text-blue-700 space-y-1 ml-4">
                 <li>• <strong>Nom</strong> * (obligatoire)</li>
@@ -713,7 +714,7 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
                   <Label className="font-medium">
                     {col}
                     {mapping[col] && mapping[col] !== "SKIP" && (
-                      <span className="ml-2 text-xs text-green-600">✓</span>
+                      <Check className="ml-2 inline h-3.5 w-3.5 text-green-600" aria-hidden />
                     )}
                   </Label>
                   <Select
@@ -803,20 +804,25 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
                         {!row.data.nom_parrain && !row.data.prenom_parrain ? (
                           <span className="text-gray-400">-</span>
                         ) : row.parrainPreview?.status === "found" ? (
-                          <span className="text-green-600" title={row.parrainPreview.label}>
-                            ✓ {row.parrainPreview.label}
-                            {row.parrainPreview.swapped ? " ⚠️" : ""}
+                          <span className="text-green-600 inline-flex items-center gap-1" title={row.parrainPreview.label}>
+                            <Check className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            {row.parrainPreview.label}
+                            {row.parrainPreview.swapped && (
+                              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-hidden />
+                            )}
                           </span>
                         ) : row.parrainPreview?.status === "in_file" ? (
-                          <span className="text-blue-600" title="Sera lié à l'import">
-                            ○ {row.parrainPreview.label} (fichier)
+                          <span className="text-blue-600 inline-flex items-center gap-1" title="Sera lié à l'import">
+                            <Circle className="h-3 w-3 shrink-0" aria-hidden />
+                            {row.parrainPreview.label} (fichier)
                           </span>
                         ) : (
                           <span
-                            className="text-orange-600"
+                            className="text-orange-600 inline-flex items-center gap-1"
                             title="Absent du CRM et du fichier importé"
                           >
-                            ⚠️ {row.parrainPreview?.label || "Non trouvé"}
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            {row.parrainPreview?.label || "Non trouvé"}
                           </span>
                         )}
                       </td>

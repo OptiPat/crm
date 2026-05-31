@@ -12,6 +12,7 @@
     "tauri:dev": "tauri dev",
     "tauri:dev:release": "tauri dev --release",
     "tauri:build": "tauri build",
+    "icons:generate": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/crop-app-logo.ps1 ; tauri icon src-tauri/icons/app-logo-square.png -o src-tauri/icons",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx src/lib/db/migrate.ts",
     "db:studio": "drizzle-kit studio",

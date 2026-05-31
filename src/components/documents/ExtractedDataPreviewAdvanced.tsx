@@ -28,6 +28,8 @@ import {
   Euro,
   Home,
   Target,
+  Building2,
+  PiggyBank,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 
@@ -466,7 +468,10 @@ export function ExtractedDataPreviewAdvanced({
                 {hasData([formData.revenusSalaires, formData.revenusTotal]) && (
                   <>
                     <div className="md:col-span-2">
-                      <h4 className="font-medium text-sm mb-3">💰 Revenus annuels</h4>
+                      <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                        <Euro className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                        Revenus annuels
+                      </h4>
                     </div>
 
                     {formData.revenusSalaires !== undefined && (
@@ -633,14 +638,21 @@ export function ExtractedDataPreviewAdvanced({
                 {formData.biensImmobiliers && formData.biensImmobiliers.length > 0 ? (
                   <>
                     <div className="md:col-span-2 mt-4">
-                      <h4 className="font-medium text-sm mb-3">🏠 Immobilier ({formData.biensImmobiliers.length} bien{formData.biensImmobiliers.length > 1 ? 's' : ''})</h4>
+                      <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                        <Home className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                        Immobilier ({formData.biensImmobiliers.length} bien{formData.biensImmobiliers.length > 1 ? "s" : ""})
+                      </h4>
                     </div>
                     {formData.biensImmobiliers.map((bien, _index) => (
                       <div key={bien.id} className="md:col-span-2 p-3 border rounded-lg space-y-2">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">
-                            {bien.type === "RESIDENCE_PRINCIPALE" ? "🏠" : bien.type === "RESIDENCE_SECONDAIRE" ? "🏡" : "🏢"}
-                          </span>
+                          {bien.type === "RESIDENCE_PRINCIPALE" ? (
+                            <Home className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                          ) : bien.type === "RESIDENCE_SECONDAIRE" ? (
+                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                          ) : (
+                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                          )}
                           <span className="font-medium">{bien.nom}</span>
                           <span className="text-muted-foreground text-sm">
                             ({bien.type === "RESIDENCE_PRINCIPALE" || bien.type === "RP" ? "RP" : 
@@ -694,7 +706,10 @@ export function ExtractedDataPreviewAdvanced({
                 ) : formData.residencePrincipale && (
                   <>
                     <div className="md:col-span-2 mt-4">
-                      <h4 className="font-medium text-sm mb-3">🏠 Immobilier</h4>
+                      <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                        <Home className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                        Immobilier
+                      </h4>
                     </div>
                     {formData.residencePrincipale.valeur !== undefined && (
                       <div className="space-y-2">
@@ -780,7 +795,10 @@ export function ExtractedDataPreviewAdvanced({
                 ]) && (
                   <>
                     <div className="md:col-span-2 mt-4">
-                      <h4 className="font-medium text-sm mb-3">💰 Épargne</h4>
+                      <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                        <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                        Épargne
+                      </h4>
                     </div>
 
                     {/* Total épargne */}

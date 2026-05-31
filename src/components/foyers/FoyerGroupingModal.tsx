@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Users2, X } from "lucide-react";
+import { X, Home, AlertTriangle, Ban } from "lucide-react";
 import { type Contact } from "@/lib/api/tauri-contacts";
 import { createFoyer } from "@/lib/api/tauri-foyers";
 import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
@@ -238,15 +238,18 @@ export function FoyerGroupingModal({
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Users2 className="h-5 w-5" />
-            🏠 Composition des foyers fiscaux
+            <Home className="h-5 w-5 shrink-0" aria-hidden />
+            Composition des foyers fiscaux
           </DialogTitle>
           <DialogDescription>
             <strong>Qui déclare ses impôts ensemble ?</strong>
             <br />
             {groups.length} groupe{groups.length > 1 ? "s" : ""} de personnes avec le même nom détecté{groups.length > 1 ? "s" : ""}. 
             <br />
-            <span className="text-amber-600">⚠️ Cochez "Ne pas regrouper" si ces personnes ne vivent PAS ensemble (foyers séparés).</span>
+            <span className="inline-flex items-center gap-1.5 text-amber-600">
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+              Cochez « Ne pas regrouper » si ces personnes ne vivent PAS ensemble (foyers séparés).
+            </span>
           </DialogDescription>
         </DialogHeader>
 
@@ -254,8 +257,9 @@ export function FoyerGroupingModal({
           {groups.map((group, groupIndex) => (
             <div key={groupIndex} className="space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-lg">
-                  🏠 Foyer {group.familyName} ({group.members.length} personnes)
+                <h3 className="font-semibold text-lg flex items-center gap-2">
+                  <Home className="h-5 w-5 shrink-0 text-primary" aria-hidden />
+                  Foyer {group.familyName} ({group.members.length} personnes)
                 </h3>
                 <div className="flex items-center gap-2">
                   <Checkbox
@@ -265,9 +269,10 @@ export function FoyerGroupingModal({
                   />
                   <Label 
                     htmlFor={`skip-${groupIndex}`}
-                    className="text-sm font-normal cursor-pointer text-amber-600"
+                    className="text-sm font-normal cursor-pointer text-amber-600 inline-flex items-center gap-1.5"
                   >
-                    ❌ Ne pas regrouper (foyers séparés)
+                    <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                    Ne pas regrouper (foyers séparés)
                   </Label>
                 </div>
               </div>

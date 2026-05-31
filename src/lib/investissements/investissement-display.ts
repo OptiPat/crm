@@ -123,10 +123,13 @@ export type InvestissementMetaTone =
   | "growth";
 
 export function formatEuroCentimes(centimes?: number): string {
-  if (!centimes) return "-";
+  if (centimes == null || centimes === 0) return "-";
+  const hasFractionalCentimes = Math.abs(centimes % 100) !== 0;
   return new Intl.NumberFormat("fr-FR", {
     style: "currency",
     currency: "EUR",
+    minimumFractionDigits: hasFractionalCentimes ? 2 : 0,
+    maximumFractionDigits: hasFractionalCentimes ? 2 : 0,
   }).format(centimes / 100);
 }
 

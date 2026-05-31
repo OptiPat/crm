@@ -13,11 +13,13 @@ import { getMonthlyStats, MonthlyStats } from "@/lib/api/tauri-dashboard";
 import {
   CHART_AXIS_STROKE,
   CHART_GRID_STROKE,
+  DASHBOARD_PRIMARY,
+} from "./dashboard-format";
+import {
   ChartEmpty,
   ChartLoading,
   ChartTooltipBox,
   DashboardPanel,
-  DASHBOARD_PRIMARY,
 } from "./dashboard-ui";
 
 export function MonthlyChart() {

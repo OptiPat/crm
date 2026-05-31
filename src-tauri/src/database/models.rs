@@ -628,7 +628,7 @@ pub struct CgpConfig {
     pub email_suivi_delai_jours: Option<i64>,
 }
 
-/// Message Gmail synchronisé pour un contact (historique réel, pas seulement campagnes CRM).
+/// Message boîte mail synchronisé pour un contact (hors logique campagne / en attente de réponse).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ContactGmailMessage {
     pub id: i64,
@@ -640,6 +640,21 @@ pub struct ContactGmailMessage {
     pub subject: Option<String>,
     pub snippet: Option<String>,
     pub body_text: Option<String>,
+    pub body_fetched: bool,
+    pub provider: String,
+    pub attachments_json: Option<String>,
     pub sent_at: i64,
     pub synced_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContactMailSyncState {
+    pub contact_id: i64,
+    pub last_sync_at: Option<i64>,
+    pub last_message_sent_at: Option<i64>,
+    pub initial_sync_complete: bool,
+    /// Tous les messages (5 ans) ont été parcourus au moins une fois.
+    pub backfill_complete: bool,
+    /// Reprise de la liste Gmail si l'import a été interrompu.
+    pub list_page_token: Option<String>,
 }

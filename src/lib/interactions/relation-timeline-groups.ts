@@ -1,14 +1,14 @@
-import type { ContactGmailMessage } from "@/lib/api/tauri-contact-gmail";
+import type { ContactRelationTimelineItem } from "@/lib/interactions/contact-relation-timeline";
 
-export interface GmailHistoryMonthGroup {
+export interface RelationTimelineMonthGroup {
   key: string;
   label: string;
-  items: ContactGmailMessage[];
+  items: ContactRelationTimelineItem[];
 }
 
-export interface GmailHistoryYearGroup {
+export interface RelationTimelineYearGroup {
   year: number;
-  months: GmailHistoryMonthGroup[];
+  months: RelationTimelineMonthGroup[];
 }
 
 const MONTH_LABELS = [
@@ -26,19 +26,19 @@ const MONTH_LABELS = [
   "Décembre",
 ];
 
-export function groupContactGmailMessages(
-  messages: ContactGmailMessage[]
-): GmailHistoryYearGroup[] {
-  const byYear = new Map<number, Map<number, ContactGmailMessage[]>>();
+export function groupRelationTimelineByYearMonth(
+  items: ContactRelationTimelineItem[]
+): RelationTimelineYearGroup[] {
+  const byYear = new Map<number, Map<number, ContactRelationTimelineItem[]>>();
 
-  for (const msg of messages) {
-    const d = new Date(msg.sent_at * 1000);
+  for (const item of items) {
+    const d = new Date(item.sort_date * 1000);
     const year = d.getFullYear();
     const month = d.getMonth();
     if (!byYear.has(year)) byYear.set(year, new Map());
     const months = byYear.get(year)!;
     if (!months.has(month)) months.set(month, []);
-    months.get(month)!.push(msg);
+    months.get(month)!.push(item);
   }
 
   return [...byYear.entries()]
@@ -47,10 +47,10 @@ export function groupContactGmailMessages(
       year,
       months: [...monthsMap.entries()]
         .sort(([a], [b]) => b - a)
-        .map(([month, items]) => ({
+        .map(([month, monthItems]) => ({
           key: `${year}-${month + 1}`,
           label: MONTH_LABELS[month] ?? `Mois ${month + 1}`,
-          items: items.sort((a, b) => b.sent_at - a.sent_at),
+          items: monthItems.sort((a, b) => b.sort_date - a.sort_date),
         })),
     }));
 }

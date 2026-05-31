@@ -58,7 +58,7 @@ describe("contact-relation-timeline", () => {
       date_interaction: 1_699_000_000,
       created_at: 1_699_000_000,
     };
-    const items = buildContactRelationTimeline([emailEntry], [legacy, manual]);
+    const items = buildContactRelationTimeline([emailEntry], [legacy, manual], []);
     expect(items).toHaveLength(2);
     expect(items[0].kind).toBe("email");
     expect(items[1].kind).toBe("manual");

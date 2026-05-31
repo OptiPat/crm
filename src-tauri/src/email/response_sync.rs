@@ -184,22 +184,24 @@ fn decode_gmail_body_data(data: &str) -> Option<String> {
     String::from_utf8(bytes).ok()
 }
 
-fn strip_html_basic(html: &str) -> String {
-    let mut out = String::new();
-    let mut in_tag = false;
-    for c in html.chars() {
-        match c {
-            '<' => in_tag = true,
-            '>' => in_tag = false,
-            _ if !in_tag => out.push(c),
-            _ => {}
-        }
+fn looks_like_html_body(s: &str) -> bool {
+    let t = s.trim_start();
+    t.starts_with('<')
+        || t.to_lowercase().contains("<style")
+        || t.to_lowercase().contains("<!doctype")
+        || t.to_lowercase().contains("<html")
+}
+
+fn normalize_email_body_text(s: &str) -> String {
+    let trimmed = s.trim();
+    if trimmed.is_empty() {
+        return String::new();
     }
-    out.lines()
-        .map(str::trim)
-        .filter(|l| !l.is_empty())
-        .collect::<Vec<_>>()
-        .join("\n")
+    if looks_like_html_body(trimmed) {
+        super::signature_html::html_to_plain_email(trimmed)
+    } else {
+        trimmed.to_string()
+    }
 }
 
 fn extract_text_from_part(part: &GmailPart, plain: &mut Option<String>, html: &mut Option<String>) {
@@ -217,9 +219,12 @@ fn extract_text_from_part(part: &GmailPart, plain: &mut Option<String>, html: &m
         return;
     };
     if mime.contains("text/plain") {
-        plain.get_or_insert(decoded);
+        let text = normalize_email_body_text(&decoded);
+        if !text.is_empty() {
+            plain.get_or_insert(text);
+        }
     } else if mime.contains("text/html") && html.is_none() {
-        *html = Some(strip_html_basic(&decoded));
+        *html = Some(super::signature_html::html_to_plain_email(&decoded));
     }
 }
 
@@ -246,12 +251,14 @@ pub fn gmail_fetch_message_body(
     if let Some(ref payload) = msg.payload {
         extract_text_from_part(payload, &mut plain, &mut html);
     }
-    let text = plain
+    let raw = plain
         .or(html)
-        .or(msg.snippet)
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+        .or(msg.snippet.clone())
+        .unwrap_or_default();
+    let text = normalize_email_body_text(&raw);
+    if text.is_empty() {
+        return Ok(msg.snippet.unwrap_or_default().trim().to_string());
+    }
     Ok(text)
 }
 

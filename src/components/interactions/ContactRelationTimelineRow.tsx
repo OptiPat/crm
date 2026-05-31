@@ -1,12 +1,18 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Calendar,
+  ExternalLink,
   FileText,
+  Inbox,
+  Loader2,
   Mail,
   MessageSquareReply,
+  Paperclip,
   Pencil,
   Phone,
+  Send,
   Trash2,
 } from "lucide-react";
 import type { Interaction } from "@/lib/api/tauri-interactions";
@@ -17,6 +23,15 @@ import {
 } from "@/lib/interactions/contact-relation-timeline";
 import { getSentSubjectLabel } from "@/lib/interactions/exchange-history-display";
 import { INTERACTION_TYPES } from "@/lib/api/tauri-interactions";
+import type { ContactGmailMessage } from "@/lib/api/tauri-contact-gmail";
+import {
+  fetchContactGmailMessageBody,
+  openContactMailAttachment,
+  openGmailMessage,
+  parseAttachments,
+  type MailAttachmentMeta,
+} from "@/lib/api/tauri-contact-gmail";
+import { toast } from "sonner";
 
 const TYPE_ICONS: Record<string, typeof Phone> = {
   APPEL: Phone,
@@ -39,6 +54,270 @@ function formatInteractionDate(ts: number): string {
 
 function getTypeLabel(value: string): string {
   return INTERACTION_TYPES.find((t) => t.value === value)?.label || value;
+}
+
+/** Corps déjà importé avant correction HTML → forcer un nouveau fetch Gmail. */
+function isLikelyCssGarbage(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 80) return false;
+  if (t.includes("!important") && t.includes("{")) return true;
+  if (t.includes("@font-face") || t.startsWith("* {") || t.startsWith("*{")) return true;
+  if (t.includes("mso-table-lspace") || t.includes("-webkit-text-size-adjust")) return true;
+  return false;
+}
+
+function formatBytes(size: number | null | undefined): string {
+  if (size == null || size <= 0) return "";
+  if (size < 1024) return `${size} o`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} Ko`;
+  return `${(size / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+function AttachmentsList({
+  items,
+}: {
+  items: { messageRowId: number; attachment: MailAttachmentMeta }[];
+}) {
+  if (items.length === 0) return null;
+
+  const openAttachment = (messageRowId: number, a: MailAttachmentMeta) => {
+    const id = a.attachmentId?.trim();
+    if (!id) {
+      toast.error(
+        "Pièce jointe non enregistrée — relancez « Sync boîte mail » sur ce contact."
+      );
+      return;
+    }
+    void openContactMailAttachment(messageRowId, id).catch((e) => toast.error(String(e)));
+  };
+
+  return (
+    <ul className="mt-1.5 flex flex-wrap gap-1">
+      {items.map(({ messageRowId, attachment: a }, i) => {
+        const canOpen = Boolean(a.attachmentId?.trim());
+        return (
+          <li key={`${messageRowId}-${a.name}-${i}`}>
+            <button
+              type="button"
+              disabled={!canOpen}
+              title={
+                canOpen
+                  ? "Ouvrir la pièce jointe"
+                  : "Resynchronisez la boîte mail pour activer l’ouverture"
+              }
+              onClick={() => openAttachment(messageRowId, a)}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted/50 hover:bg-muted rounded px-1.5 py-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Paperclip className="h-3 w-3 shrink-0" />
+              <span className="max-w-[200px] truncate">{a.name}</span>
+              {a.size_bytes != null && a.size_bytes > 0 && (
+                <span className="opacity-70">({formatBytes(a.size_bytes)})</span>
+              )}
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function MailboxMessageBody({
+  message,
+  onAttachmentsLoaded,
+}: {
+  message: ContactGmailMessage;
+  onAttachmentsLoaded?: (attachmentsJson: string | null) => void;
+}) {
+  const [attachments, setAttachments] = useState(() =>
+    parseAttachments(message.attachments_json)
+  );
+  const [expanded, setExpanded] = useState(false);
+  const [loadingBody, setLoadingBody] = useState(false);
+  const [body, setBody] = useState(message.body_text?.trim() ?? "");
+
+  const preview = message.snippet?.trim() || body.slice(0, 280) || "(aucun aperçu)";
+
+  const loadFull = async () => {
+    if (expanded) {
+      setExpanded(false);
+      return;
+    }
+    const cached = body.trim();
+    const canUseCache =
+      message.body_fetched && cached && !isLikelyCssGarbage(cached);
+    if (canUseCache && attachments.length > 0) {
+      setExpanded(true);
+      return;
+    }
+    setLoadingBody(true);
+    try {
+      const fetched = await fetchContactGmailMessageBody(message.id);
+      setBody(fetched.body);
+      if (fetched.attachmentsJson) {
+        setAttachments(parseAttachments(fetched.attachmentsJson));
+        onAttachmentsLoaded?.(fetched.attachmentsJson);
+      }
+      setExpanded(true);
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setLoadingBody(false);
+    }
+  };
+
+  const attachmentItems = attachments.map((attachment) => ({
+    messageRowId: message.id,
+    attachment,
+  }));
+
+  return (
+    <div className="mt-2 border-t border-border/50 pt-2">
+      {attachmentItems.length > 0 ? (
+        <AttachmentsList items={attachmentItems} />
+      ) : (
+        <p className="text-xs text-muted-foreground italic mt-1">
+          Pièces jointes : cliquez sur « Lire le message » ou relancez Sync boîte mail.
+        </p>
+      )}
+      {!expanded && (
+        <p className="text-muted-foreground line-clamp-2 text-sm mt-1">{preview}</p>
+      )}
+      <div className="flex flex-wrap gap-2 mt-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          disabled={loadingBody}
+          onClick={() => void loadFull()}
+        >
+          {loadingBody ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          {expanded ? "Masquer" : "Lire le message"}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs gap-1"
+          onClick={() =>
+            void openGmailMessage(message.gmail_message_id, message.gmail_thread_id).catch((e) =>
+              toast.error(String(e))
+            )
+          }
+        >
+          <ExternalLink className="h-3.5 w-3.5" />
+          Gmail
+        </Button>
+      </div>
+      {expanded && body && (
+        <div className="mt-2 max-h-48 overflow-y-auto rounded bg-muted/40 p-3 text-sm leading-relaxed text-foreground whitespace-pre-wrap">
+          {body}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MailboxThreadBlock({ item }: { item: Extract<ContactRelationTimelineItem, { kind: "mailbox_thread" }> }) {
+  const { latest, messages } = item;
+  const [threadAttachments, setThreadAttachments] = useState(() => {
+    const items = messages.flatMap((m) =>
+      parseAttachments(m.attachments_json).map((att) => ({ message: m, att }))
+    );
+    return items.filter(
+      (entry, i, arr) =>
+        arr.findIndex(
+          (b) =>
+            b.message.id === entry.message.id &&
+            (b.att.attachmentId ?? b.att.name) ===
+              (entry.att.attachmentId ?? entry.att.name)
+        ) === i
+    );
+  });
+  const isMulti = messages.length > 1;
+  const dirLabel =
+    latest.direction === "outbound" ? "Envoyé" : latest.direction === "inbound" ? "Reçu" : "Email";
+
+  return (
+    <li className="relative flex flex-col gap-2 p-3 pl-1 border border-slate-200/80 rounded-lg bg-card text-sm">
+      <div className="flex items-start gap-3 min-w-0">
+        <span className="p-2 rounded-lg bg-slate-100 shrink-0 h-fit">
+          {latest.direction === "outbound" ? (
+            <Send className="h-4 w-4 text-blue-700" />
+          ) : (
+            <Inbox className="h-4 w-4 text-emerald-700" />
+          )}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <Badge variant="outline" className="text-xs border-slate-300">
+              Boîte mail
+            </Badge>
+            <Badge variant="outline" className="text-xs">
+              {dirLabel}
+            </Badge>
+            {isMulti && (
+              <Badge variant="secondary" className="text-xs">
+                Fil · {messages.length} messages
+              </Badge>
+            )}
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {formatInteractionDate(latest.sent_at)}
+            </span>
+          </div>
+          <p className="font-medium leading-snug">
+            {latest.subject?.trim() || "(sans objet)"}
+          </p>
+          {threadAttachments.length > 0 ? (
+            <AttachmentsList
+              items={threadAttachments.map(({ message: m, att }) => ({
+                messageRowId: m.id,
+                attachment: att,
+              }))}
+            />
+          ) : null}
+          {!isMulti && <MailboxMessageBody message={latest} />}
+        </div>
+      </div>
+      {isMulti && (
+        <details className="ml-11 group">
+          <summary className="cursor-pointer text-xs font-medium text-primary hover:underline list-none">
+            Voir les {messages.length} messages du fil
+          </summary>
+          <ul className="mt-2 space-y-3 border-l-2 border-border/60 pl-3">
+            {messages.map((m) => (
+              <li key={m.id}>
+                <p className="text-xs text-muted-foreground">{formatInteractionDate(m.sent_at)}</p>
+                <p className="font-medium text-sm">{m.subject?.trim() || "(sans objet)"}</p>
+                <MailboxMessageBody
+                  message={m}
+                  onAttachmentsLoaded={(json) => {
+                    const parsed = parseAttachments(json);
+                    if (parsed.length === 0) return;
+                    setThreadAttachments((prev) => {
+                      const next = [
+                        ...prev.filter((p) => p.message.id !== m.id),
+                        ...parsed.map((att) => ({ message: m, att })),
+                      ];
+                      return next.filter(
+                        (entry, i, arr) =>
+                          arr.findIndex(
+                            (b) =>
+                              b.message.id === entry.message.id &&
+                              (b.att.attachmentId ?? b.att.name) ===
+                                (entry.att.attachmentId ?? entry.att.name)
+                          ) === i
+                      );
+                    });
+                  }}
+                />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </li>
+  );
 }
 
 export function ContactRelationTimelineRow({
@@ -131,6 +410,10 @@ export function ContactRelationTimelineRow({
         )}
       </li>
     );
+  }
+
+  if (item.kind === "mailbox_thread") {
+    return <MailboxThreadBlock item={item} />;
   }
 
   const { interaction } = item;

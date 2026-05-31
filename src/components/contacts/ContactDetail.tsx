@@ -25,7 +25,6 @@ import {
   Phone,
   MapPin,
   Calendar,
-  Briefcase,
   Edit,
   Trash2,
   User,
@@ -36,6 +35,10 @@ import {
   LayoutGrid,
   History,
   Network,
+  Briefcase,
+  UserCheck,
+  UserX,
+  AlertTriangle,
 } from "lucide-react";
 import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
 import {
@@ -762,39 +765,6 @@ export function ContactDetail({
                     </div>
                   </div>
                 )}
-                {contact.profession && (
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <span className="text-muted-foreground text-sm">
-                        Profession:{" "}
-                      </span>
-                      {contact.profession}
-                    </div>
-                  </div>
-                )}
-                {contact.source_lead && (
-                  <div className="flex items-start gap-2">
-                    <div className="text-muted-foreground mt-0.5">📦</div>
-                    <div>
-                      <span className="text-muted-foreground text-sm">
-                        Source / Produit:{" "}
-                      </span>
-                      {contact.source_lead}
-                    </div>
-                  </div>
-                )}
-                {contact.profil_risque_sri && (
-                  <div className="flex items-center gap-2">
-                    <div className="text-muted-foreground">📊</div>
-                    <div>
-                      <span className="text-muted-foreground text-sm">
-                        Profil investisseur:{" "}
-                      </span>
-                      {contact.profil_risque_sri}
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 
@@ -934,6 +904,7 @@ export function ContactDetail({
               <ContactInteractionsPanel
                 contactId={contact.id}
                 contactEmail={contact.email}
+                relationTabActive={detailTab === "relation"}
                 dateDernierContact={contact.date_dernier_contact}
                 dateDernierContactFilleul={contact.date_dernier_contact_filleul}
                 onContactUpdated={async () => {
@@ -1165,26 +1136,30 @@ export function ContactDetail({
                         <div className="flex flex-col gap-1 items-end">
                           {/* Badge Client si applicable (basé sur categorie) */}
                           {parrain.categorie === "CLIENT" && (
-                            <Badge className="bg-green-100 text-green-800">
-                              💼 Client
+                            <Badge className="bg-green-100 text-green-800 gap-1">
+                              <Briefcase className="h-3 w-3 shrink-0" aria-hidden />
+                              Client
                             </Badge>
                           )}
                           {/* Badge Filleul (basé sur filleul_categorie - INDÉPENDANT) */}
                           {parrain.filleul_categorie === "FILLEUL_DESINSCRIT" ? (
-                            <Badge className="bg-red-50 text-red-700">
-                              ❌ Filleul désinscrit
+                            <Badge className="bg-red-50 text-red-700 gap-1">
+                              <UserX className="h-3 w-3 shrink-0" aria-hidden />
+                              Filleul désinscrit
                             </Badge>
                           ) : parrain.filleul_categorie ? (
-                            <Badge className="bg-emerald-50 text-emerald-700">
-                              ✅ Filleul inscrit
+                            <Badge className="bg-emerald-50 text-emerald-700 gap-1">
+                              <UserCheck className="h-3 w-3 shrink-0" aria-hidden />
+                              Filleul inscrit
                             </Badge>
                           ) : null}
                         </div>
                       </div>
                     </div>
                   ) : contact.parrain_id ? (
-                    <div className="text-sm text-orange-600">
-                      ⚠️ Parrain introuvable (ID: {contact.parrain_id})
+                    <div className="flex items-center gap-2 text-sm text-orange-600">
+                      <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                      Parrain introuvable (ID: {contact.parrain_id})
                     </div>
                   ) : (
                     <div className="text-sm text-muted-foreground">

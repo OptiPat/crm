@@ -186,15 +186,21 @@ fn main() {
             create_manual_db_backup,
             restore_db_backup,
             open_document_file,
+            open_gmail_message,
+            open_external_url,
             get_all_interactions_with_contacts,
             get_exchange_history_timeline,
+            get_exchange_history_timeline_for_contact,
             get_interactions_by_contact,
             get_contact_relation_status,
             create_interaction,
             update_interaction,
             delete_interaction,
             sync_contact_gmail_messages,
-            get_contact_gmail_messages
+            get_contact_gmail_messages,
+            fetch_contact_gmail_message_body,
+            open_contact_mail_attachment,
+            get_contact_mail_sync_state
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

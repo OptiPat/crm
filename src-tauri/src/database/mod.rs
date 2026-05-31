@@ -353,6 +353,7 @@ impl Database {
         self.migrate_contact_etiquettes_email_suivi()?;
         self.migrate_contact_etiquette_auto_exclusions()?;
         self.migrate_contact_gmail_messages()?;
+        self.migrate_contact_mail_sync_state()?;
 
         Ok(())
     }
@@ -375,11 +376,57 @@ impl Database {
             )",
             [],
         )?;
+        if !self.table_has_column("contact_gmail_messages", "provider")? {
+            self.conn.execute(
+                "ALTER TABLE contact_gmail_messages ADD COLUMN provider TEXT NOT NULL DEFAULT 'google'",
+                [],
+            )?;
+        }
+        if !self.table_has_column("contact_gmail_messages", "attachments_json")? {
+            self.conn.execute(
+                "ALTER TABLE contact_gmail_messages ADD COLUMN attachments_json TEXT",
+                [],
+            )?;
+        }
+        if !self.table_has_column("contact_gmail_messages", "body_fetched")? {
+            self.conn.execute(
+                "ALTER TABLE contact_gmail_messages ADD COLUMN body_fetched INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+        }
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_contact_gmail_messages_contact_sent
              ON contact_gmail_messages(contact_id, sent_at DESC)",
             [],
         )?;
+        Ok(())
+    }
+
+    fn migrate_contact_mail_sync_state(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS contact_mail_sync_state (
+                contact_id INTEGER PRIMARY KEY,
+                last_sync_at INTEGER,
+                last_message_sent_at INTEGER,
+                initial_sync_complete INTEGER NOT NULL DEFAULT 0,
+                backfill_complete INTEGER NOT NULL DEFAULT 0,
+                list_page_token TEXT,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        if !self.table_has_column("contact_mail_sync_state", "backfill_complete")? {
+            self.conn.execute(
+                "ALTER TABLE contact_mail_sync_state ADD COLUMN backfill_complete INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+        }
+        if !self.table_has_column("contact_mail_sync_state", "list_page_token")? {
+            self.conn.execute(
+                "ALTER TABLE contact_mail_sync_state ADD COLUMN list_page_token TEXT",
+                [],
+            )?;
+        }
         Ok(())
     }
 

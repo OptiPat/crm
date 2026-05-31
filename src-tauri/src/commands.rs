@@ -11,7 +11,7 @@ use crate::database::{
     Database,
 };
 use std::sync::Mutex;
-use tauri::State;
+use tauri::{Manager, State};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -1266,6 +1266,38 @@ pub fn get_exchange_history_timeline(
 }
 
 #[tauri::command]
+pub fn get_exchange_history_timeline_for_contact(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<ExchangeHistoryEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_exchange_history_timeline_for_contact(contact_id)
+        .map_err(|e| format!("Failed to get exchange history: {}", e))
+}
+
+#[tauri::command]
+pub async fn open_contact_mail_attachment(
+    app_handle: tauri::AppHandle,
+    message_row_id: i64,
+    attachment_id: String,
+) -> Result<(), String> {
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        crate::email::contact_gmail_sync::open_contact_mail_attachment(
+            &app,
+            db.inner(),
+            message_row_id,
+            attachment_id,
+        )
+    })
+    .await
+    .map_err(|e| format!("Ouverture interrompue: {}", e))?
+}
+
+#[tauri::command]
 pub fn get_interactions_by_contact(
     db: State<'_, DbState>,
     contact_id: i64,
@@ -1324,28 +1356,58 @@ pub fn delete_interaction(db: State<'_, DbState>, id: i64) -> Result<(), String>
 }
 
 #[tauri::command]
-pub fn sync_contact_gmail_messages(
+pub async fn sync_contact_gmail_messages(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
     contact_id: i64,
 ) -> Result<crate::email::contact_gmail_sync::ContactGmailSyncResult, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    crate::email::contact_gmail_sync::sync_contact_gmail_history(
-        &app_handle,
-        database,
-        contact_id,
-    )
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        crate::email::contact_gmail_sync::sync_contact_mail_history(&app, db.inner(), contact_id)
+    })
+    .await
+    .map_err(|e| format!("Sync interrompu: {}", e))?
 }
 
 #[tauri::command]
 pub fn get_contact_gmail_messages(
     db: State<'_, DbState>,
     contact_id: i64,
+    exclude_campaign_duplicates: Option<bool>,
 ) -> Result<Vec<crate::database::models::ContactGmailMessage>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .list_contact_gmail_messages(contact_id)
+        .list_contact_gmail_messages(contact_id, exclude_campaign_duplicates.unwrap_or(true))
         .map_err(|e| format!("Failed to list Gmail messages: {}", e))
+}
+
+#[tauri::command]
+pub async fn fetch_contact_gmail_message_body(
+    app_handle: tauri::AppHandle,
+    message_row_id: i64,
+) -> Result<crate::email::contact_gmail_sync::FetchedContactMailBody, String> {
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        crate::email::contact_gmail_sync::fetch_contact_gmail_message_body(
+            &app,
+            db.inner(),
+            message_row_id,
+        )
+    })
+    .await
+    .map_err(|e| format!("Lecture interrompue: {}", e))?
+}
+
+#[tauri::command]
+pub fn get_contact_mail_sync_state(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Option<crate::database::models::ContactMailSyncState>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_contact_mail_sync_state(contact_id)
+        .map_err(|e| e.to_string())
 }

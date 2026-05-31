@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, Target, Phone, Sparkles, Users2, Gift, Lightbulb, Check, CheckCircle2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
 import { createInvestissement, updateInvestissement, getAllInvestissements, type NewInvestissement, type Investissement } from "@/lib/api/tauri-investissements";
@@ -2460,14 +2460,27 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             </div>
 
             <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-              <p className="text-xs text-green-900 mb-2">
-                <strong>💡 Catégorisation automatique intelligente :</strong>
+              <p className="text-xs text-green-900 mb-2 flex items-center gap-1.5">
+                <Lightbulb className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                <strong>Catégorisation automatique intelligente :</strong>
               </p>
               <ul className="text-xs text-green-800 space-y-1 ml-4">
-                <li>🎯 <strong>CLIENT</strong> = Produit souscrit</li>
-                <li>📞 <strong>PROSPECT</strong> = Déjà contacté (date RDV) mais pas encore investi</li>
-                <li>🆕 <strong>SUSPECT</strong> = Pas encore contacté</li>
-                <li>👥 <strong>FILLEUL</strong> = Colonne « Prospects Filleuls » = OUI → statut réseau (onglet Filleuls), pas client</li>
+                <li className="flex items-center gap-1.5">
+                  <Target className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span><strong>CLIENT</strong> = Produit souscrit</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span><strong>PROSPECT</strong> = Déjà contacté (date RDV) mais pas encore investi</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span><strong>SUSPECT</strong> = Pas encore contacté</span>
+                </li>
+                <li className="flex items-center gap-1.5">
+                  <Users2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                  <span><strong>FILLEUL</strong> = Colonne « Prospects Filleuls » = OUI → statut réseau (onglet Filleuls), pas client</span>
+                </li>
               </ul>
             </div>
 
@@ -2477,7 +2490,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   <Label className="font-medium">
                     {col}
                     {mapping[col] && mapping[col] !== "SKIP" && (
-                      <span className="ml-2 text-xs text-green-600">✓</span>
+                      <Check className="ml-2 inline h-3.5 w-3.5 text-green-600" aria-hidden />
                     )}
                   </Label>
                   <Select
@@ -2593,12 +2606,37 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     }).length;
                     
                     return (
-                      <p className="text-xs text-muted-foreground">
-                        {clientCount > 0 && <span className="mr-3">🎯 {clientCount} CLIENT{clientCount > 1 ? 'S' : ''}</span>}
-                        {prospectClientCount > 0 && <span className="mr-3">📞 {prospectClientCount} PROSPECT CLIENT{prospectClientCount > 1 ? 'S' : ''}</span>}
-                        {suspectClientCount > 0 && <span className="mr-3">🆕 {suspectClientCount} SUSPECT CLIENT{suspectClientCount > 1 ? 'S' : ''}</span>}
-                        {prospectFilleulCount > 0 && <span className="mr-3">👥 {prospectFilleulCount} PROSPECT FILLEUL{prospectFilleulCount > 1 ? 'S' : ''}</span>}
-                        {suspectFilleulCount > 0 && <span>🎁 {suspectFilleulCount} SUSPECT FILLEUL{suspectFilleulCount > 1 ? 'S' : ''}</span>}
+                      <p className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-3 gap-y-1">
+                        {clientCount > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Target className="h-3 w-3 shrink-0" aria-hidden />
+                            {clientCount} CLIENT{clientCount > 1 ? "S" : ""}
+                          </span>
+                        )}
+                        {prospectClientCount > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Phone className="h-3 w-3 shrink-0" aria-hidden />
+                            {prospectClientCount} PROSPECT CLIENT{prospectClientCount > 1 ? "S" : ""}
+                          </span>
+                        )}
+                        {suspectClientCount > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Sparkles className="h-3 w-3 shrink-0" aria-hidden />
+                            {suspectClientCount} SUSPECT CLIENT{suspectClientCount > 1 ? "S" : ""}
+                          </span>
+                        )}
+                        {prospectFilleulCount > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Users2 className="h-3 w-3 shrink-0" aria-hidden />
+                            {prospectFilleulCount} PROSPECT FILLEUL{prospectFilleulCount > 1 ? "S" : ""}
+                          </span>
+                        )}
+                        {suspectFilleulCount > 0 && (
+                          <span className="inline-flex items-center gap-1">
+                            <Gift className="h-3 w-3 shrink-0" aria-hidden />
+                            {suspectFilleulCount} SUSPECT FILLEUL{suspectFilleulCount > 1 ? "S" : ""}
+                          </span>
+                        )}
                       </p>
                     );
                   })()}
@@ -2610,7 +2648,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="consolidate">✅ Consolider (recommandé)</SelectItem>
+                      <SelectItem value="consolidate">
+                        <span className="inline-flex items-center gap-1.5">
+                          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                          Consolider (recommandé)
+                        </span>
+                      </SelectItem>
                       <SelectItem value="skip">Ignorer les doublons</SelectItem>
                       <SelectItem value="merge">Créer des doublons</SelectItem>
                     </SelectContent>

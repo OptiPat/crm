@@ -14,11 +14,13 @@ import { getPipelineStats } from "@/lib/api/tauri-dashboard";
 import {
   CHART_AXIS_STROKE,
   CHART_GRID_STROKE,
+  formatDashboardPercent,
+} from "./dashboard-format";
+import {
   ChartEmpty,
   ChartLoading,
   ChartTooltipBox,
   DashboardPanel,
-  formatDashboardPercent,
 } from "./dashboard-ui";
 
 const COLORS = {

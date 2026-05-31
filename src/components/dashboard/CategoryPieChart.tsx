@@ -1,13 +1,13 @@
 import { useEffect, useState, useMemo } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getCategoryStats } from "@/lib/api/tauri-dashboard";
+import { formatDashboardPercent } from "./dashboard-format";
 import {
   ChartEmpty,
   ChartLegendGrid,
   ChartLoading,
   ChartTooltipBox,
   DashboardPanel,
-  formatDashboardPercent,
 } from "./dashboard-ui";
 
 const COLORS = {

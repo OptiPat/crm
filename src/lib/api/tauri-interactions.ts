@@ -77,6 +77,14 @@ export async function getExchangeHistoryTimeline(): Promise<ExchangeHistoryEntry
   return invoke<ExchangeHistoryEntry[]>("get_exchange_history_timeline");
 }
 
+export async function getExchangeHistoryTimelineForContact(
+  contactId: number
+): Promise<ExchangeHistoryEntry[]> {
+  return invoke<ExchangeHistoryEntry[]>("get_exchange_history_timeline_for_contact", {
+    contactId,
+  });
+}
+
 export async function getInteractionsByContact(contactId: number): Promise<Interaction[]> {
   return invoke<Interaction[]>("get_interactions_by_contact", { contactId });
 }

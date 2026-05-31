@@ -30,7 +30,7 @@ export function StatCard({
   return (
     <Card
       className={cn(
-        "overflow-hidden border-border/70 bg-card/80 shadow-sm transition-all duration-200",
+        "@container overflow-hidden border-border/70 bg-card/80 shadow-sm transition-all duration-200",
         interactive &&
           "hover:shadow-md hover:border-primary/30 hover:bg-card cursor-pointer group focus-visible:ring-2 focus-visible:ring-primary/40",
         highlight && "ring-2 ring-amber-200/90 border-amber-200/70 bg-amber-50/30"
@@ -49,23 +49,36 @@ export function StatCard({
           : undefined
       }
     >
-      <CardContent className="p-4">
-        <div className="flex items-center gap-3">
+      <CardContent className="p-2.5 @min-[11rem]:p-3 @min-[14rem]:p-4">
+        <div className="flex items-center gap-1.5 @min-[11rem]:gap-2 @min-[14rem]:gap-3 min-w-0">
           <div
-            className={cn("p-2.5 rounded-xl shrink-0", iconBgColor)}
+            className={cn(
+              "p-1.5 @min-[11rem]:p-2 @min-[14rem]:p-2.5 rounded-xl shrink-0",
+              iconBgColor
+            )}
             style={{ boxShadow: `inset 0 0 0 1px ${accentColor}22` }}
           >
-            <Icon className={cn("h-5 w-5", iconColor)} strokeWidth={2} />
+            <Icon
+              className={cn(
+                "h-4 w-4 @min-[14rem]:h-5 @min-[14rem]:w-5",
+                iconColor
+              )}
+              strokeWidth={2}
+            />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-foreground/90 leading-tight">{title}</p>
-            <p className="text-xl sm:text-2xl font-serif font-bold text-primary mt-0.5 leading-none tabular-nums tracking-tight">
+            <p className="text-xs @min-[11rem]:text-sm font-medium text-foreground/90 leading-tight truncate">
+              {title}
+            </p>
+            <p className="text-[clamp(0.6875rem,9cqi,1.5rem)] font-serif font-bold text-primary mt-0.5 leading-tight tabular-nums tracking-tight whitespace-nowrap">
               {value}
             </p>
-            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{description}</p>
+            <p className="text-[10px] @min-[11rem]:text-xs text-muted-foreground mt-0.5 @min-[11rem]:mt-1 line-clamp-1">
+              {description}
+            </p>
           </div>
           {interactive && (
-            <ChevronRight className="h-4 w-4 text-muted-foreground/60 shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+            <ChevronRight className="hidden @min-[10rem]:block h-3.5 w-3.5 @min-[14rem]:h-4 @min-[14rem]:w-4 text-muted-foreground/60 shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
           )}
         </div>
       </CardContent>

@@ -26,7 +26,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { APP_DISPLAY_NAME } from "@/lib/app-branding";
+import { APP_DISPLAY_NAME, APP_LOGO_URL } from "@/lib/app-branding";
 import { getAppInfo } from "@/lib/api/tauri-system";
 import { useEffect, useState } from "react";
 
@@ -276,17 +276,40 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
         collapsed ? "w-16" : "w-64"
       )}
     >
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        {!collapsed && (
-          <h2 className="text-lg font-serif font-bold text-primary truncate">
-            {APP_DISPLAY_NAME}
-          </h2>
+      <div
+        className={cn(
+          "p-4 border-b border-border flex gap-2",
+          collapsed ? "flex-col items-center" : "items-center justify-between"
         )}
+      >
+        <div
+          className={cn(
+            "flex items-center min-w-0",
+            collapsed ? "justify-center" : "gap-2.5 flex-1"
+          )}
+        >
+          <img
+            src={APP_LOGO_URL}
+            alt=""
+            width={40}
+            height={40}
+            className={cn(
+              "shrink-0 object-contain",
+              collapsed ? "h-9 w-9" : "h-10 w-10"
+            )}
+          />
+          {!collapsed && (
+            <h2 className="text-lg font-serif font-bold text-primary truncate">
+              {APP_DISPLAY_NAME}
+            </h2>
+          )}
+        </div>
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setCollapsed(!collapsed)}
           className="h-8 w-8 shrink-0"
+          aria-label={collapsed ? "Déplier le menu" : "Replier le menu"}
         >
           {collapsed ? (
             <ChevronRight className="h-4 w-4" />

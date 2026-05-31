@@ -10,8 +10,8 @@ import {
   DashboardPageHeader,
   DashboardSectionTitle,
   StatCardSkeleton,
-  formatDashboardCurrency,
 } from "@/components/dashboard/dashboard-ui";
+import { formatDashboardCurrency } from "@/components/dashboard/dashboard-format";
 import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import {
   Users,

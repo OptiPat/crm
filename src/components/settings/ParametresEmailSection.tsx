@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { FileSignature, Loader2, Sparkles } from "lucide-react";
+import { SETTING_CONTACT_MAIL_AUTO_SYNC } from "@/lib/api/tauri-contact-gmail";
 import { fetchGmailSignatureForCgp, getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { EmailOAuthConnect } from "@/components/emails/EmailOAuthConnect";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import { getSetting, setSetting } from "@/lib/api/tauri-settings";
 import { toast } from "sonner";
 
 type ParametresEmailSectionProps = {
@@ -16,6 +19,13 @@ type ParametresEmailSectionProps = {
 
 export function ParametresEmailSection({ cgpConfig, onConfigChange }: ParametresEmailSectionProps) {
   const [importingSignature, setImportingSignature] = useState(false);
+  const [autoMailSync, setAutoMailSync] = useState(false);
+
+  useEffect(() => {
+    getSetting(SETTING_CONTACT_MAIL_AUTO_SYNC)
+      .then((v) => setAutoMailSync(v === "1"))
+      .catch(() => setAutoMailSync(false));
+  }, []);
 
   const handleImportGmailSignature = async () => {
     setImportingSignature(true);
@@ -43,6 +53,30 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
   return (
     <div className="space-y-6">
       <EmailOAuthConnect variant="embedded" />
+
+      <SettingsPanel
+        title="Historique boîte mail (fiche contact)"
+        description="Synchronisation légère et incrémentale — n’impacte pas la détection « en attente de réponse » des campagnes."
+      >
+        <div className="flex items-center justify-between gap-4 rounded-lg border border-border/80 px-4 py-3">
+          <div>
+            <p className="text-sm font-medium">Sync auto à l’ouverture de Relation client</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Une passe incrémentale à l’ouverture de Relation client. Utilisez « Sync Gmail » sur
+              la fiche pour l’import complet (5 ans), repris automatiquement par lots jusqu’à la fin.
+            </p>
+          </div>
+          <Switch
+            checked={autoMailSync}
+            onCheckedChange={(checked) => {
+              setAutoMailSync(checked);
+              void setSetting(SETTING_CONTACT_MAIL_AUTO_SYNC, checked ? "1" : "0").catch(() =>
+                toast.error("Impossible d’enregistrer le réglage")
+              );
+            }}
+          />
+        </div>
+      </SettingsPanel>
 
       <SettingsPanel
         title="Signature des emails"

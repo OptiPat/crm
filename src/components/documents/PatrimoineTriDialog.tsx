@@ -18,6 +18,8 @@ import {
   CheckCircle2,
   XCircle,
   HelpCircle,
+  Target,
+  ClipboardList,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import type { OrigineInvestissement, NewInvestissement } from "@/lib/api/tauri-investissements";
@@ -319,8 +321,9 @@ export function PatrimoineTriDialog({
                         <p className="text-sm text-muted-foreground">{formatEuro(item.montant)}</p>
                       </div>
                     </div>
-                    <Badge variant="outline" className="text-gray-500">
-                      📋 À côté
+                    <Badge variant="outline" className="text-gray-500 gap-1">
+                      <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
+                      À côté
                     </Badge>
                   </div>
                 ))}
@@ -367,7 +370,7 @@ export function PatrimoineTriDialog({
                         onClick={() => setOrigine(item.id, "MON_CONSEIL")}
                       >
                         <CheckCircle2 className="h-4 w-4 mr-2" />
-                        🎯 Avec moi
+                        Avec moi
                       </Button>
                       <Button
                         variant={item.origine === "EXISTANT_CLIENT" ? "default" : "outline"}
@@ -376,7 +379,7 @@ export function PatrimoineTriDialog({
                         onClick={() => setOrigine(item.id, "EXISTANT_CLIENT")}
                       >
                         <XCircle className="h-4 w-4 mr-2" />
-                        📋 À côté
+                        À côté
                       </Button>
                     </div>
                   </div>
@@ -399,12 +402,18 @@ export function PatrimoineTriDialog({
               <h3 className="text-sm font-semibold mb-3">Résumé</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                  <p className="text-sm text-green-700 font-medium">🎯 Avec moi</p>
+                  <p className="text-sm text-green-700 font-medium flex items-center gap-1.5">
+                    <Target className="h-4 w-4 shrink-0" aria-hidden />
+                    Avec moi
+                  </p>
                   <p className="text-xl font-bold text-green-800">{formatEuro(totalAvecMoi)}</p>
                   <p className="text-xs text-green-600">{avecMoiCount} investissement(s)</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
-                  <p className="text-sm text-gray-700 font-medium">📋 À côté</p>
+                  <p className="text-sm text-gray-700 font-medium flex items-center gap-1.5">
+                    <ClipboardList className="h-4 w-4 shrink-0" aria-hidden />
+                    À côté
+                  </p>
                   <p className="text-xl font-bold text-gray-800">{formatEuro(totalACote)}</p>
                   <p className="text-xs text-gray-600">{aCoteCount} élément(s)</p>
                 </div>

@@ -6,6 +6,7 @@ pub mod oauth_flow;
 pub mod oauth_secrets;
 pub mod oauth_send;
 pub mod contact_gmail_sync;
+pub mod contact_outlook_sync;
 pub mod response_sync;
 pub mod oauth_store;
 pub mod sender;

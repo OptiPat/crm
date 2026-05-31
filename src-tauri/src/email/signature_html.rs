@@ -52,16 +52,30 @@ pub fn decode_html_entities(s: &str) -> String {
 }
 
 pub fn html_to_plain_signature(html: &str) -> String {
-    let decoded = decode_html_entities(html);
-    let s = decoded
+    html_to_plain_email(html)
+}
+
+/// Convertit le HTML d'un email reçu en texte lisible (supprime CSS, scripts, mise en page).
+pub fn html_to_plain_email(html: &str) -> String {
+    let mut s = remove_html_comments(html);
+    for tag in ["style", "script", "head", "noscript", "svg"] {
+        s = remove_tag_block(&s, tag);
+    }
+    let decoded = decode_html_entities(&s);
+    let with_breaks = decoded
         .replace("<br>", "\n")
         .replace("<br/>", "\n")
         .replace("<br />", "\n")
         .replace("</p>", "\n")
-        .replace("</div>", "\n");
+        .replace("</div>", "\n")
+        .replace("</tr>", "\n")
+        .replace("</li>", "\n")
+        .replace("</h1>", "\n")
+        .replace("</h2>", "\n")
+        .replace("</h3>", "\n");
     let mut out = String::new();
     let mut in_tag = false;
-    for c in s.chars() {
+    for c in with_breaks.chars() {
         match c {
             '<' => in_tag = true,
             '>' => in_tag = false,
@@ -69,12 +83,94 @@ pub fn html_to_plain_signature(html: &str) -> String {
             _ => {}
         }
     }
-    out.lines()
-        .map(|l| l.trim_end())
-        .collect::<Vec<_>>()
-        .join("\n")
-        .trim()
-        .to_string()
+    let lines: Vec<String> = out
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !is_css_noise_line(l))
+        .map(|l| l.to_string())
+        .collect();
+    collapse_blank_lines(&lines).join("\n").trim().to_string()
+}
+
+fn remove_html_comments(html: &str) -> String {
+    let mut result = html.to_string();
+    loop {
+        let lower = result.to_lowercase();
+        let Some(start) = lower.find("<!--") else {
+            break;
+        };
+        let Some(end_rel) = lower[start + 4..].find("-->") else {
+            result.truncate(start);
+            break;
+        };
+        let end = start + 4 + end_rel + 3;
+        result = format!("{}{}", &result[..start], &result[end..]);
+    }
+    result
+}
+
+fn remove_tag_block(html: &str, tag: &str) -> String {
+    let open = format!("<{tag}");
+    let close = format!("</{tag}>");
+    let mut result = html.to_string();
+    loop {
+        let lower = result.to_lowercase();
+        let Some(start) = lower.find(&open) else {
+            break;
+        };
+        let after = start + open.len();
+        if after >= result.len() {
+            result.truncate(start);
+            break;
+        }
+        let next = result.as_bytes()[after];
+        if next != b'>' && next != b' ' && next != b'\t' && next != b'\n' && next != b'/' {
+            result = format!("{}{}", &result[..start], &result[start + 1..]);
+            continue;
+        }
+        let Some(close_rel) = lower[after..].find(&close) else {
+            result.truncate(start);
+            break;
+        };
+        let end = after + close_rel + close.len();
+        result = format!("{}{}", &result[..start], &result[end..]);
+    }
+    result
+}
+
+fn is_css_noise_line(line: &str) -> bool {
+    let t = line.trim();
+    if t.is_empty() {
+        return false;
+    }
+    if t.starts_with('@')
+        || t.starts_with("*{")
+        || t.starts_with("* {")
+        || t.contains("@font-face")
+        || t.contains("!important")
+    {
+        return true;
+    }
+    if !(t.contains('{') && t.contains('}')) {
+        return false;
+    }
+    let word_chars = t.chars().filter(|c| c.is_alphabetic()).count();
+    let punct = t
+        .chars()
+        .filter(|c| "{}:;#.%!-".contains(*c))
+        .count();
+    word_chars < 8 && punct > word_chars
+}
+
+fn collapse_blank_lines(lines: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in lines {
+        if line.is_empty() && out.last().is_some_and(|s| s.is_empty()) {
+            continue;
+        }
+        out.push(line.clone());
+    }
+    out
 }
 
 pub fn normalize_signature_html(html: &str) -> String {
@@ -144,5 +240,22 @@ mod tests {
     fn decode_entities() {
         assert_eq!(decode_html_entities("l&#39;Orias"), "l'Orias");
         assert_eq!(decode_html_entities("a &amp; b"), "a & b");
+    }
+
+    #[test]
+    fn html_to_plain_email_strips_style_blocks() {
+        let html = r#"<html><head><style>
+* { margin: 0; padding: 0; }
+@media only screen { .hide { display: none !important; } }
+</style></head><body>
+<p>Bonjour Bruno,</p>
+<p>Merci pour votre message.</p>
+</body></html>"#;
+        let plain = html_to_plain_email(html);
+        assert!(plain.contains("Bonjour Bruno"));
+        assert!(plain.contains("Merci pour votre message"));
+        assert!(!plain.contains("margin: 0"));
+        assert!(!plain.contains("@media"));
+        assert!(!plain.contains("!important"));
     }
 }

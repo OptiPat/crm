@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Search, Trash2, Filter, ExternalLink } from "lucide-react";
+import { Upload, Search, Trash2, Filter, ExternalLink, FileText, FileSpreadsheet, Image, Paperclip } from "lucide-react";
 import {
   getAllDocuments,
   deleteDocument,
@@ -126,11 +126,14 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
 
   const getTypeIcon = (type: string) => {
     const mimeType = type || "";
-    if (mimeType.includes("pdf")) return "📄";
-    if (mimeType.includes("word") || mimeType.includes("doc")) return "📝";
-    if (mimeType.includes("excel") || mimeType.includes("spreadsheet")) return "📊";
-    if (mimeType.includes("image")) return "🖼️";
-    return "📎";
+    const className = "h-8 w-8 text-muted-foreground";
+    if (mimeType.includes("pdf")) return <FileText className={className} aria-hidden />;
+    if (mimeType.includes("word") || mimeType.includes("doc")) return <FileText className={className} aria-hidden />;
+    if (mimeType.includes("excel") || mimeType.includes("spreadsheet")) {
+      return <FileSpreadsheet className={className} aria-hidden />;
+    }
+    if (mimeType.includes("image")) return <Image className={className} aria-hidden />;
+    return <Paperclip className={className} aria-hidden />;
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -240,7 +243,7 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3 flex-1 min-w-0">
-                        <div className="text-3xl shrink-0">
+                        <div className="shrink-0">
                           {getTypeIcon(doc.mime_type || "")}
                         </div>
                         <div className="flex-1 min-w-0">

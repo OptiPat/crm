@@ -20,6 +20,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Wallet,
+  StickyNote,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import type { Investissement, NewInvestissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
@@ -798,7 +799,7 @@ export function RioUpdateComparisonDialog({
                 }}
                 className="text-sm border rounded px-2 py-1 flex-1"
               >
-                <option value="new">🆕 Créer nouvel investissement</option>
+                <option value="new">Créer nouvel investissement</option>
                 {comp.compatibleExisting.length > 0 && (
                   <optgroup label="Investissements existants">
                     {comp.compatibleExisting.map(existing => {
@@ -813,7 +814,7 @@ export function RioUpdateComparisonDialog({
                           {existing.type_produit} - {existing.nom_produit} ({formatEuro(existing.montant_initial ? existing.montant_initial / 100 : 0)})
                           {partenaireNom ? ` | ${partenaireNom}` : ""}
                           {dateStr ? ` | ${dateStr}` : ""}
-                          {existing.origine === "MON_CONSEIL" ? " 🎯" : " 📋"}
+                          {existing.origine === "MON_CONSEIL" ? " · Avec moi" : " · À côté"}
                         </option>
                       );
                     })}
@@ -1432,8 +1433,9 @@ export function RioUpdateComparisonDialog({
 
         {/* Section Notes / Commentaires */}
         <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
-          <label className="text-sm font-medium text-slate-700 mb-2 block">
-            📝 Notes / Commentaires (mise à jour RIO)
+          <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1.5">
+            <StickyNote className="h-4 w-4 shrink-0" aria-hidden />
+            Notes / Commentaires (mise à jour RIO)
           </label>
           <textarea
             value={notesRio}

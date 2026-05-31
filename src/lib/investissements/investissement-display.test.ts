@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatEuroCentimes,
   formatNomProduit,
   getTypeProduitBgColor,
   getTypeProduitTextClass,
@@ -32,5 +33,22 @@ describe("getTypeProduitTextClass", () => {
   it("texte gris si existant client", () => {
     expect(getTypeProduitTextClass("SCPI", "EXISTANT_CLIENT")).toContain("gray");
     expect(getTypeProduitTextClass("SCPI")).toBe("text-white");
+  });
+});
+
+describe("formatEuroCentimes", () => {
+  it("masque les centimes nulles", () => {
+    expect(formatEuroCentimes(2_000_000)).toBe("20\u202f000\u00a0€");
+    expect(formatEuroCentimes(100)).toBe("1\u00a0€");
+  });
+
+  it("affiche les centimes non nulles", () => {
+    expect(formatEuroCentimes(2_000_056)).toBe("20\u202f000,56\u00a0€");
+    expect(formatEuroCentimes(150)).toBe("1,50\u00a0€");
+  });
+
+  it("retourne un tiret si absent ou nul", () => {
+    expect(formatEuroCentimes(undefined)).toBe("-");
+    expect(formatEuroCentimes(0)).toBe("-");
   });
 });
