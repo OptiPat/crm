@@ -5,10 +5,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { importCampaignReplyFromGmail, sendEmail } from "@/lib/api/tauri-email";
+import { dismissEmailCampaignFollowup } from "@/lib/api/tauri-etiquettes";
 import type { ExchangeHistoryEntry } from "@/lib/api/tauri-interactions";
 import { getSentSubjectLabel } from "@/lib/interactions/exchange-history-display";
 import { buildSendEmailBodies } from "@/lib/emails/email-signature";
 import { exchangeContactName } from "@/lib/interactions/exchange-history-display";
+import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { Loader2, Mail, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -80,6 +82,11 @@ export function ExchangeEmailReplyForm({
           entry.email_gmail_message_id ??
           null,
       });
+      // Réponse libre CGP : on n'attend plus une réponse au template initial.
+      if (entry.contact_etiquette_id != null) {
+        await dismissEmailCampaignFollowup(entry.contact_etiquette_id);
+        notifyRelationChanged(entry.contact_id);
+      }
       toast.success(`Réponse envoyée à ${entry.contact_prenom} ${entry.contact_nom}`);
       setBody("");
       onSent?.();

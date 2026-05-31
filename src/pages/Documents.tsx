@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,42 +10,70 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Search, Trash2, Filter } from "lucide-react";
-import { getAllDocuments, deleteDocument, type Document } from "@/lib/api/tauri-documents";
+import { Upload, Search, Trash2, Filter, ExternalLink } from "lucide-react";
+import {
+  getAllDocuments,
+  deleteDocument,
+  type Document,
+} from "@/lib/api/tauri-documents";
+import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { openDocumentFile } from "@/lib/api/tauri-system";
 import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import { textMatchesSearch } from "@/lib/search-utils";
+import { requestOpenContact } from "@/lib/navigation/app-navigation";
+import { toast } from "sonner";
 
-export function Documents() {
+type DocumentsProps = {
+  onNavigate?: (page: string) => void;
+  onOpenContact?: (contactId: number) => void;
+};
+
+export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [contactsById, setContactsById] = useState<Record<number, Contact>>({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [showUpload, setShowUpload] = useState(false);
 
-  useEffect(() => {
-    loadDocuments();
-  }, []);
-
-  const loadDocuments = async () => {
+  const loadDocuments = useCallback(async () => {
     try {
-      const data = await getAllDocuments();
+      const [data, contacts] = await Promise.all([
+        getAllDocuments(),
+        getAllContacts(),
+      ]);
       setDocuments(data);
+      const map: Record<number, Contact> = {};
+      for (const c of contacts) {
+        if (c.id) map[c.id] = c;
+      }
+      setContactsById(map);
     } catch (error) {
       console.error("Error loading documents:", error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const filteredDocuments = documents.filter((doc) => {
-    // Filtre de recherche textuelle
-    const matchesSearch = textMatchesSearch(searchQuery, doc.nom_fichier);
+  useEffect(() => {
+    void loadDocuments();
+  }, [loadDocuments]);
 
-    // Filtre par type
-    const matchesType = typeFilter === "ALL" || doc.type_document === typeFilter;
-
-    return matchesSearch && matchesType;
-  });
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((doc) => {
+      const client = doc.contact_id ? contactsById[doc.contact_id] : undefined;
+      const clientLabel = client
+        ? `${client.prenom} ${client.nom}`
+        : "";
+      const matchesSearch = textMatchesSearch(
+        searchQuery,
+        doc.nom_fichier,
+        clientLabel
+      );
+      const matchesType = typeFilter === "ALL" || doc.type_document === typeFilter;
+      return matchesSearch && matchesType;
+    });
+  }, [documents, searchQuery, typeFilter, contactsById]);
 
   const handleDeleteDocument = async (id: number) => {
     if (window.confirm("Êtes-vous sûr de vouloir supprimer ce document ?")) {
@@ -54,8 +82,28 @@ export function Documents() {
         await loadDocuments();
       } catch (error) {
         console.error("Error deleting document:", error);
-        alert("Erreur lors de la suppression: " + String(error));
+        toast.error("Erreur lors de la suppression");
       }
+    }
+  };
+
+  const handleOpenFile = async (doc: Document) => {
+    try {
+      await openDocumentFile(doc.chemin_fichier);
+    } catch (error) {
+      console.error(error);
+      toast.error("Impossible d'ouvrir le fichier");
+    }
+  };
+
+  const openClient = (contactId: number) => {
+    if (onOpenContact) {
+      onOpenContact(contactId);
+    } else if (onNavigate) {
+      requestOpenContact(contactId, {
+        setCurrentPage: onNavigate,
+        currentPage: "documents",
+      });
     }
   };
 
@@ -124,12 +172,11 @@ export function Documents() {
               </div>
             </div>
 
-            {/* Barre de recherche et filtres */}
             <div className="flex gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Rechercher un document..."
+                  placeholder="Rechercher un document ou un client..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -183,54 +230,77 @@ export function Documents() {
             </div>
           ) : (
             <div className="space-y-3">
-              {filteredDocuments.map((doc) => (
-                <div
-                  key={doc.id}
-                  className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-3 flex-1">
-                      <div className="text-3xl">{getTypeIcon(doc.mime_type || "")}</div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <h3 className="font-semibold">{doc.nom_fichier}</h3>
-                          <Badge className={getTypeColor(doc.type_document)}>
-                            {doc.type_document}
-                          </Badge>
+              {filteredDocuments.map((doc) => {
+                const client =
+                  doc.contact_id != null ? contactsById[doc.contact_id] : undefined;
+                return (
+                  <div
+                    key={doc.id}
+                    className="p-4 border border-border rounded-lg hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="text-3xl shrink-0">
+                          {getTypeIcon(doc.mime_type || "")}
                         </div>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <span>{formatFileSize(doc.taille_fichier)}</span>
-                          <span>Ajouté le {formatDate(doc.created_at)}</span>
-                          {doc.date_document && (
-                            <span>Date: {new Date(doc.date_document).toLocaleDateString("fr-FR")}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <h3 className="font-semibold truncate">{doc.nom_fichier}</h3>
+                            <Badge className={getTypeColor(doc.type_document)}>
+                              {doc.type_document}
+                            </Badge>
+                          </div>
+                          {client && doc.contact_id != null && (
+                            <button
+                              type="button"
+                              className="text-sm text-primary hover:underline mb-1"
+                              onClick={() => openClient(doc.contact_id!)}
+                            >
+                              Client : {client.prenom} {client.nom}
+                            </button>
+                          )}
+                          {!client && doc.contact_id == null && (
+                            <p className="text-sm text-muted-foreground mb-1">
+                              Sans client lié
+                            </p>
+                          )}
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                            <span>{formatFileSize(doc.taille_fichier)}</span>
+                            <span>Ajouté le {formatDate(doc.created_at)}</span>
+                          </div>
+                          {doc.notes && (
+                            <p className="text-sm text-muted-foreground mt-2">{doc.notes}</p>
                           )}
                         </div>
-                        {doc.notes && (
-                          <p className="text-sm text-muted-foreground mt-2">
-                            {doc.notes}
-                          </p>
-                        )}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          title="Ouvrir le fichier"
+                          onClick={() => void handleOpenFile(doc)}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => void handleDeleteDocument(doc.id)}
+                          className="text-red-600 hover:text-red-700"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleDeleteDocument(doc.id)}
-                        className="text-red-600 hover:text-red-700"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Composant d'upload */}
       <DocumentUpload
         open={showUpload}
         onOpenChange={setShowUpload}

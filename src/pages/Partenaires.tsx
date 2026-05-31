@@ -33,8 +33,14 @@ import { textMatchesSearch } from "@/lib/search-utils";
 import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import { requestOpenContact } from "@/lib/navigation/app-navigation";
 
-export function Partenaires() {
+type PartenairesProps = {
+  currentPage?: string;
+  onNavigate?: (page: string) => void;
+};
+
+export function Partenaires({ onNavigate }: PartenairesProps) {
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [metaParId, setMetaParId] = useState<Record<number, PartenaireListMeta>>({});
   const [totalProduitsLies, setTotalProduitsLies] = useState(0);
@@ -47,6 +53,15 @@ export function Partenaires() {
 
   const isWideLayout = useMediaQuery("(min-width: 1024px)");
   const showSplit = isWideLayout && selectedPartenaireId != null;
+
+  const handleOpenContact = (contactId: number) => {
+    if (onNavigate) {
+      requestOpenContact(contactId, {
+        setCurrentPage: onNavigate,
+        currentPage: "partenaires",
+      });
+    }
+  };
 
   const loadPartenaires = useCallback(async () => {
     try {
@@ -350,6 +365,7 @@ export function Partenaires() {
                   }}
                   onDelete={handleDeletePartenaire}
                   onUpdate={() => void loadPartenaires()}
+                  onOpenContact={handleOpenContact}
                 />
               </div>
             )}
@@ -374,6 +390,7 @@ export function Partenaires() {
           partenaire={selectedPartenaire}
           onDelete={handleDeletePartenaire}
           onUpdate={() => void loadPartenaires()}
+          onOpenContact={handleOpenContact}
         />
       )}
     </div>

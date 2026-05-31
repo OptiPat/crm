@@ -6,7 +6,9 @@ import { Search, Users, ChevronDown, ChevronUp, Share2, TrendingUp, Plus, X, Arr
 import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
-import { getInvestissementsByContact, getInvestissementsByFoyer, type Investissement } from "@/lib/api/tauri-investissements";
+import { getAllInvestissements, type Investissement } from "@/lib/api/tauri-investissements";
+import { indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
+import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import {
   buildFoyersInfo,
   buildPrescripteurTree,
@@ -55,31 +57,18 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
       const dataContacts = await getAllContacts();
       setContacts(dataContacts);
 
+      const allInv = await getAllInvestissements();
+      const { byContactId, byFoyerId } = indexInvestissementsByOwner(allInv);
       const investsByContact: Record<number, Investissement[]> = {};
       const investsByFoyer: Record<number, Investissement[]> = {};
-
-      await Promise.all(
-        dataContacts.map(async (contact) => {
-          try {
-            investsByContact[contact.id] = await getInvestissementsByContact(contact.id);
-          } catch {
-            investsByContact[contact.id] = [];
-          }
-        })
-      );
-
-      const foyerIds = new Set(dataContacts.map((c) => c.foyer_id).filter(Boolean));
-      await Promise.all(
-        Array.from(foyerIds).map(async (foyerId) => {
-          if (foyerId) {
-            try {
-              investsByFoyer[foyerId] = await getInvestissementsByFoyer(foyerId);
-            } catch {
-              investsByFoyer[foyerId] = [];
-            }
-          }
-        })
-      );
+      for (const contact of dataContacts) {
+        investsByContact[contact.id] = byContactId[contact.id] ?? [];
+      }
+      for (const contact of dataContacts) {
+        if (contact.foyer_id != null && investsByFoyer[contact.foyer_id] == null) {
+          investsByFoyer[contact.foyer_id] = byFoyerId[contact.foyer_id] ?? [];
+        }
+      }
 
       setInvestissementsByContact(investsByContact);
       setInvestissementsByFoyer(investsByFoyer);
@@ -189,6 +178,13 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
   };
 
   const openMember = (contact: Contact) => {
+    if (onNavigate && contact.id) {
+      requestOpenContact(contact.id, {
+        setCurrentPage: onNavigate,
+        currentPage: "prescripteurs",
+      });
+      return;
+    }
     setSelectedContact(contact);
     if (!isWideLayout) {
       setShowContactDetail(true);

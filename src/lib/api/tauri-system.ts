@@ -18,3 +18,22 @@ export async function listDbBackups(): Promise<DbBackupEntry[]> {
   const rows = await invoke<[string, number][]>("list_db_backups");
   return rows.map(([name, size]) => ({ name, size }));
 }
+
+export async function createManualDbBackup(): Promise<string> {
+  return invoke<string>("create_manual_db_backup");
+}
+
+export async function openDocumentFile(path: string): Promise<void> {
+  return invoke<void>("open_document_file", { path });
+}
+
+export interface RestoreDbBackupResult {
+  restored_from: string;
+  safety_backup: string | null;
+}
+
+export async function restoreDbBackup(
+  backupFilename: string
+): Promise<RestoreDbBackupResult> {
+  return invoke<RestoreDbBackupResult>("restore_db_backup", { backupFilename });
+}

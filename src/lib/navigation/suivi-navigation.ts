@@ -1,4 +1,5 @@
 import type { EtiquetteEmailQueueStatus } from "@/lib/api/tauri-etiquettes";
+import { dispatchAppNavigation } from "@/lib/navigation/app-navigation";
 
 export type SuiviMainTab = "alertes" | "etiquettes" | "envois";
 
@@ -79,8 +80,12 @@ export function navigateToSuivi(
   onPageChange: (page: string) => void,
   tab: SuiviMainTab,
   envoisSubTab?: EtiquetteEmailQueueStatus,
-  contactId?: number
+  contactId?: number,
+  currentPage?: string
 ): void {
   setSuiviNavigationIntent(tab, envoisSubTab, contactId);
-  onPageChange("suivi");
+  dispatchAppNavigation({ type: "suivi", tab, envoisSubTab, contactId });
+  if (currentPage !== "suivi") {
+    onPageChange("suivi");
+  }
 }

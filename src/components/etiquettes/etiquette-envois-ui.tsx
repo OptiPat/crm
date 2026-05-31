@@ -70,8 +70,10 @@ export function EnvoisQueueHelp() {
           Paramètres → Email).
         </p>
         <p>
-          <strong className="text-foreground">3. Suivi</strong> — Réponses mail et RDV Agenda
-          (Google) : détection automatique. Sans retour après quelques jours → onglet À relancer.
+          <strong className="text-foreground">3. Suivi</strong> — « En attente de réponse client »
+          concerne uniquement le retour au <strong>mail template</strong> (pas vos réponses libres
+          ensuite). Réponses mail et RDV Agenda (Google) : détection automatique. Sans retour après
+          quelques jours → onglet À relancer.
         </p>
       </div>
     </details>

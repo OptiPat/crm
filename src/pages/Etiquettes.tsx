@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   getAllEtiquettesWithCount,
+  getAllContactEtiquettesDetails,
   deleteEtiquette,
   seedDefaultEtiquettes,
   type EtiquetteWithCount,
@@ -41,8 +42,8 @@ import {
   filterEtiquettesSearch,
   type EtiquettePageFilter,
 } from "@/lib/etiquettes/etiquettes-page-utils";
-import { prepareOpenContact } from "@/lib/investissements/investissement-navigation";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
+import { countUniqueTaggedContacts } from "@/lib/etiquettes/etiquettes-unique-count";
 import {
   notifyEtiquettesChanged,
   subscribeEtiquettesChanged,
@@ -96,7 +97,7 @@ function FilterPill({
 }
 
 interface EtiquettesProps {
-  onOpenContact?: () => void;
+  onOpenContact?: (contactId: number) => void;
 }
 
 export function Etiquettes({ onOpenContact }: EtiquettesProps) {
@@ -111,6 +112,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [etiquetteToDelete, setEtiquetteToDelete] = useState<EtiquetteWithCount | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [uniqueContactsTagged, setUniqueContactsTagged] = useState(0);
 
   const sortEtiquettes = useCallback((data: EtiquetteWithCount[]) => {
     return [...data].sort((a, b) => {
@@ -121,8 +123,12 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
 
   const refreshEtiquetteCounts = useCallback(async () => {
     try {
-      const data = sortEtiquettes(await getAllEtiquettesWithCount());
+      const [data, details] = await Promise.all([
+        sortEtiquettes(await getAllEtiquettesWithCount()),
+        getAllContactEtiquettesDetails(),
+      ]);
       setEtiquettes(data);
+      setUniqueContactsTagged(countUniqueTaggedContacts(details));
       setViewingContacts((prev) => {
         if (!prev) return prev;
         return data.find((e) => e.id === prev.id) ?? prev;
@@ -153,7 +159,14 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
         }
       }
 
-      setEtiquettes(sortEtiquettes(data));
+      const sorted = sortEtiquettes(data);
+      setEtiquettes(sorted);
+      try {
+        const details = await getAllContactEtiquettesDetails();
+        setUniqueContactsTagged(countUniqueTaggedContacts(details));
+      } catch {
+        setUniqueContactsTagged(0);
+      }
     } catch (error) {
       console.error("Error loading etiquettes:", error);
       toast.error("Erreur lors du chargement des étiquettes");
@@ -172,7 +185,10 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     });
   }, [refreshEtiquetteCounts]);
 
-  const stats = useMemo(() => computeEtiquettesPageStats(etiquettes), [etiquettes]);
+  const stats = useMemo(
+    () => computeEtiquettesPageStats(etiquettes, uniqueContactsTagged),
+    [etiquettes, uniqueContactsTagged]
+  );
   const countByFilter = useMemo(() => countEtiquettesByFilter(etiquettes), [etiquettes]);
 
   const filteredEtiquettes = useMemo(() => {
@@ -249,8 +265,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
       toast.error("Navigation vers la fiche contact indisponible");
       return;
     }
-    prepareOpenContact(contactId, "synthese");
-    onOpenContact();
+    onOpenContact(contactId);
     toast.success(`Ouverture de ${label}`);
   };
 

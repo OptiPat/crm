@@ -242,8 +242,36 @@ export async function attribuerEtiquette(
 /**
  * Retire une étiquette d'un contact
  */
-export async function retirerEtiquette(contactId: number, etiquetteId: number): Promise<void> {
-  return invoke<void>("retirer_etiquette", { contactId, etiquetteId });
+export async function retirerEtiquette(
+  contactId: number,
+  etiquetteId: number,
+  excludeFromAuto?: boolean
+): Promise<void> {
+  return invoke<void>("retirer_etiquette", {
+    contactId,
+    etiquetteId,
+    excludeFromAuto,
+  });
+}
+
+export async function excludeContactAutoEtiquette(
+  contactId: number,
+  etiquetteId: number
+): Promise<void> {
+  return invoke<void>("exclude_contact_auto_etiquette", { contactId, etiquetteId });
+}
+
+export async function clearAutoEtiquetteExclusion(
+  contactId: number,
+  etiquetteId: number
+): Promise<void> {
+  return invoke<void>("clear_auto_etiquette_exclusion", { contactId, etiquetteId });
+}
+
+export async function getAutoEtiquetteExclusionIds(
+  contactId: number
+): Promise<number[]> {
+  return invoke<number[]>("get_auto_etiquette_exclusion_ids", { contactId });
 }
 
 /**

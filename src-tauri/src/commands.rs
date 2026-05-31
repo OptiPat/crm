@@ -873,13 +873,52 @@ pub fn retirer_etiquette(
     db: State<'_, DbState>,
     contact_id: i64,
     etiquette_id: i64,
+    exclude_from_auto: Option<bool>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .retirer_etiquette(contact_id, etiquette_id)
+        .retirer_etiquette(contact_id, etiquette_id, exclude_from_auto.unwrap_or(false))
         .map_err(|e| format!("Failed to remove etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn exclude_contact_auto_etiquette(
+    db: State<'_, DbState>,
+    contact_id: i64,
+    etiquette_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .exclude_contact_from_auto_etiquette(contact_id, etiquette_id)
+        .map_err(|e| format!("Failed to exclude auto etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn clear_auto_etiquette_exclusion(
+    db: State<'_, DbState>,
+    contact_id: i64,
+    etiquette_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .clear_auto_etiquette_exclusion(contact_id, etiquette_id)
+        .map_err(|e| format!("Failed to clear auto exclusion: {}", e))
+}
+
+#[tauri::command]
+pub fn get_auto_etiquette_exclusion_ids(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<i64>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_auto_etiquette_exclusion_ids_for_contact(contact_id)
+        .map_err(|e| format!("Failed to list auto exclusions: {}", e))
 }
 
 #[tauri::command]

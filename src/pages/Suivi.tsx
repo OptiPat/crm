@@ -24,7 +24,6 @@ import {
   type AlerteCategoryFilter,
 } from "@/lib/alertes/alerte-category";
 import { navigateToInteractions } from "@/lib/navigation/interactions-navigation";
-import type { SuiviMainTab } from "@/lib/navigation/suivi-navigation";
 import { getContactById, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import {
   addMonthsLocal,
@@ -46,6 +45,7 @@ import { Label } from "@/components/ui/label";
 import {
   getAllEtiquettesWithCount,
   getContactsByEtiquette,
+  getAllContactEtiquettesDetails,
   retirerEtiquette,
   getContrastColor,
   getEtiquetteEmailQueue,
@@ -53,10 +53,17 @@ import {
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
+import {
+  isAutoEtiquetteAttribution,
+  RemoveAutoEtiquetteDialog,
+  type RemoveAutoEtiquetteTarget,
+} from "@/components/etiquettes/RemoveAutoEtiquetteDialog";
+import { buildEtiquetteAttributionMap } from "@/lib/etiquettes/etiquette-attribution-map";
 import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
   notifyRelationChanged,
+  notifyEtiquettesChanged,
   subscribeEtiquettesChanged,
   subscribeRelationChanged,
 } from "@/lib/etiquettes/etiquette-events";
@@ -69,20 +76,30 @@ import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmail
 import {
   consumeSuiviNavigationIntent,
   setEnvoisContactFocus,
+  setSuiviNavigationIntent,
+  type SuiviMainTab,
 } from "@/lib/navigation/suivi-navigation";
 import { toast } from "sonner";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { countUniqueTaggedContacts } from "@/lib/etiquettes/etiquettes-unique-count";
 
 interface SuiviProps {
+  currentPage?: string;
   onNavigate?: (page: string) => void;
   onOpenContact?: (contactId: number) => void;
 }
 
-export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
+export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   const [alertes, setAlertes] = useState<AlerteWithContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [etiquettes, setEtiquettes] = useState<EtiquetteWithCount[]>([]);
   const [selectedEtiquette, setSelectedEtiquette] = useState<EtiquetteWithCount | null>(null);
   const [etiquetteContacts, setEtiquetteContacts] = useState<Contact[]>([]);
+  const [etiquetteContactAttribuePar, setEtiquetteContactAttribuePar] = useState<
+    Record<number, string>
+  >({});
+  const [etiquetteRemoveTarget, setEtiquetteRemoveTarget] =
+    useState<RemoveAutoEtiquetteTarget | null>(null);
   const [loadingContacts, setLoadingContacts] = useState(false);
   const [activeTab, setActiveTab] = useState<SuiviMainTab>("alertes");
   const [reporterSelectKeys, setReporterSelectKeys] = useState<Record<number, number>>({});
@@ -95,6 +112,7 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
   const [alertEmailLoadingId, setAlertEmailLoadingId] = useState<number | null>(null);
   const [loadingEtiquettes, setLoadingEtiquettes] = useState(true);
   const [pendingSuiviContactId, setPendingSuiviContactId] = useState<number | null>(null);
+  const [uniqueContactsTagged, setUniqueContactsTagged] = useState(0);
   const [alerteCategoryFilter, setAlerteCategoryFilter] =
     useState<AlerteCategoryFilter>("all");
 
@@ -111,23 +129,40 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
     [alertes, alerteCategoryFilter]
   );
 
+  const applySuiviNavigation = useCallback(
+    (tab: SuiviMainTab | null, envoisSubTab: string | null, contactId: number | null) => {
+      if (tab) setActiveTab(tab);
+      if (envoisSubTab) {
+        sessionStorage.setItem("crm_nav_suivi_envois_subtab", envoisSubTab);
+      }
+      if (contactId != null) {
+        if (tab === "envois") {
+          setEnvoisContactFocus(contactId);
+        } else {
+          setPendingSuiviContactId(contactId);
+        }
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const { tab, envoisSubTab, contactId } = consumeSuiviNavigationIntent();
-    if (tab) setActiveTab(tab);
-    if (envoisSubTab) {
-      sessionStorage.setItem("crm_nav_suivi_envois_subtab", envoisSubTab);
-    }
-    if (contactId != null) {
-      if (tab === "envois") {
-        setEnvoisContactFocus(contactId);
-      } else {
-        setPendingSuiviContactId(contactId);
-      }
-    }
+    applySuiviNavigation(tab, envoisSubTab, contactId);
     void loadAlertes();
     loadEtiquettes();
     void loadEmailQueueCount();
   }, []);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type !== "suivi") return;
+    setSuiviNavigationIntent(detail.tab, detail.envoisSubTab, detail.contactId);
+    applySuiviNavigation(
+      detail.tab,
+      detail.envoisSubTab ?? null,
+      detail.contactId ?? null
+    );
+  }, [applySuiviNavigation]);
 
   useEffect(() => {
     if (pendingSuiviContactId == null || loading || activeTab !== "alertes") return;
@@ -213,8 +248,12 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
 
   const refreshEtiquetteCounts = useCallback(async () => {
     try {
-      const sorted = sortEtiquettes(await getAllEtiquettesWithCount());
+      const [sorted, details] = await Promise.all([
+        sortEtiquettes(await getAllEtiquettesWithCount()),
+        getAllContactEtiquettesDetails(),
+      ]);
       setEtiquettes(sorted);
+      setUniqueContactsTagged(countUniqueTaggedContacts(details));
       setSelectedEtiquette((prev) => {
         if (!prev) return prev;
         return sorted.find((e) => e.id === prev.id) ?? prev;
@@ -266,30 +305,56 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
     setSelectedEtiquette(etiquette);
     setLoadingContacts(true);
     try {
-      const contacts = await getContactsByEtiquette(etiquette.id);
+      const [contacts, details] = await Promise.all([
+        getContactsByEtiquette(etiquette.id),
+        getAllContactEtiquettesDetails(),
+      ]);
       setEtiquetteContacts(contacts);
+      setEtiquetteContactAttribuePar(buildEtiquetteAttributionMap(details, etiquette.id));
     } catch (error) {
       console.error("Error loading contacts for etiquette:", error);
       setEtiquetteContacts([]);
+      setEtiquetteContactAttribuePar({});
     } finally {
       setLoadingContacts(false);
     }
   };
 
-  const handleRetirerEtiquetteContact = async (contactId: number) => {
+  const confirmRetirerEtiquetteContact = async (
+    contactId: number,
+    excludeFromAuto: boolean
+  ) => {
     if (!selectedEtiquette) return;
-    
     try {
-      await retirerEtiquette(contactId, selectedEtiquette.id);
-      toast.success("Étiquette retirée");
-      
-      // Recharger les contacts et les étiquettes
+      await retirerEtiquette(contactId, selectedEtiquette.id, excludeFromAuto);
+      toast.success(
+        excludeFromAuto
+          ? "Étiquette retirée — ne sera plus appliquée automatiquement"
+          : "Étiquette retirée"
+      );
       await handleSelectEtiquette(selectedEtiquette);
       await loadEtiquettes();
+      notifyEtiquettesChanged();
     } catch (error) {
       console.error("Error removing etiquette:", error);
       toast.error("Erreur lors du retrait de l'étiquette");
+    } finally {
+      setEtiquetteRemoveTarget(null);
     }
+  };
+
+  const handleRetirerEtiquetteContact = (contactId: number) => {
+    if (!selectedEtiquette) return;
+    const attribuePar = etiquetteContactAttribuePar[contactId];
+    if (isAutoEtiquetteAttribution(attribuePar)) {
+      setEtiquetteRemoveTarget({
+        contactId,
+        etiquetteId: selectedEtiquette.id,
+        etiquetteNom: selectedEtiquette.nom,
+      });
+      return;
+    }
+    void confirmRetirerEtiquetteContact(contactId, false);
   };
 
   const openTraiterDialog = (alerte: AlerteWithContact) => {
@@ -422,12 +487,13 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
   const handleSyncEtiquettes = async () => {
     setSyncingEtiquettes(true);
     try {
+      toast.info("Recalcul des règles automatiques en cours…");
       const n = await runFullEtiquettesRecalc();
       await refreshEtiquetteCounts();
       toast.success(
         n > 0
-          ? `${n} attribution${n > 1 ? "s" : ""} automatique${n > 1 ? "s" : ""} appliquée${n > 1 ? "s" : ""}`
-          : "Étiquettes à jour"
+          ? `Recalcul terminé — ${n} attribution${n > 1 ? "s" : ""} automatique${n > 1 ? "s" : ""}`
+          : "Recalcul terminé — étiquettes à jour"
       );
     } catch {
       toast.error("Erreur lors de la synchronisation des étiquettes");
@@ -436,8 +502,7 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
     }
   };
 
-  // Compter le total de contacts avec étiquettes
-  const totalContactsAvecEtiquettes = etiquettes.reduce((sum, e) => sum + e.contact_count, 0);
+  const totalContactsAvecEtiquettes = uniqueContactsTagged;
 
   const openContact = (contactId: number) => {
     if (onOpenContact) {
@@ -450,7 +515,7 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
 
   const openHistorique = (contactId: number) => {
     if (onNavigate) {
-      navigateToInteractions(onNavigate, contactId);
+      navigateToInteractions(onNavigate, contactId, currentPage);
     } else {
       toast.info("Ouvrez l'historique depuis le menu Relation client.");
     }
@@ -769,6 +834,18 @@ export function Suivi({ onNavigate, onOpenContact }: SuiviProps) {
           notifyRelationChanged(contactId);
           void loadEmailQueueCount();
           void loadAlertes({ silent: true });
+        }}
+      />
+
+      <RemoveAutoEtiquetteDialog
+        target={etiquetteRemoveTarget}
+        onOpenChange={(open) => !open && setEtiquetteRemoveTarget(null)}
+        onConfirm={(excludeFromAuto) => {
+          if (!etiquetteRemoveTarget) return;
+          void confirmRetirerEtiquetteContact(
+            etiquetteRemoveTarget.contactId,
+            excludeFromAuto
+          );
         }}
       />
     </div>

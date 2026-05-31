@@ -22,10 +22,10 @@ import {
 } from "lucide-react";
 import { getAllFoyers, deleteFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { cleanupOrphanedData, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import {
-  getContactsForFoyer,
-  loadFoyerPatrimoineCentimes,
-} from "@/lib/foyers/foyer-utils";
+import { getContactsForFoyer } from "@/lib/foyers/foyer-utils";
+import { getAllInvestissements } from "@/lib/api/tauri-investissements";
+import { buildPatrimoineMaps } from "@/lib/investissements/bulk-patrimoine";
+import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { FoyerForm } from "@/components/foyers/FoyerForm";
@@ -69,21 +69,14 @@ export function Foyers({ onNavigate }: FoyersProps) {
       ]);
       setContacts(contactsData);
 
+      const allInv = await getAllInvestissements();
+      const maps = buildPatrimoineMaps(contactsData, foyersData, allInv);
       const patrimoines: Record<number, number> = {};
-      await Promise.all(
-        foyersData.map(async (foyer) => {
-          const membres = getContactsForFoyer(contactsData, foyer.id);
-          try {
-            patrimoines[foyer.id] = await loadFoyerPatrimoineCentimes(
-              foyer.id,
-              membres,
-              { avecMoiOnly: true }
-            );
-          } catch {
-            patrimoines[foyer.id] = 0;
-          }
-        })
-      );
+      for (const foyer of foyersData) {
+        patrimoines[foyer.id] = Math.round(
+          (maps.patrimoinesAvecMoi[`foyer_${foyer.id}`] ?? 0) * 100
+        );
+      }
 
       setFoyers(foyersData);
       setPatrimoineParFoyer(patrimoines);
@@ -158,6 +151,13 @@ export function Foyers({ onNavigate }: FoyersProps) {
   };
 
   const openMember = (contact: Contact) => {
+    if (onNavigate && contact.id) {
+      requestOpenContact(contact.id, {
+        setCurrentPage: onNavigate,
+        currentPage: "foyers",
+      });
+      return;
+    }
     setSelectedContact(contact);
     if (!isWideLayout) {
       setShowContactDetail(true);

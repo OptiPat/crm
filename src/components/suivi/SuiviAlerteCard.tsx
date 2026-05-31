@@ -20,7 +20,8 @@ import {
 import type { AlerteWithContact } from "@/lib/api/tauri-dashboard";
 import type { EtiquetteWithCount } from "@/lib/api/tauri-etiquettes";
 import { formatAlerteContactLabel } from "@/lib/api/tauri-alertes";
-import { Check, Clock, ExternalLink, History, Mail, X } from "lucide-react";
+import { getAlerteTraceInfo } from "@/lib/alertes/alerte-trace";
+import { Check, Clock, ExternalLink, History, Info, Mail, X } from "lucide-react";
 
 function formatLastContact(timestamp: number | null) {
   if (!timestamp) return null;
@@ -76,6 +77,7 @@ export function SuiviAlerteCard({
   const detailLabel = formatAlerteContactLabel(alerte.message, alerte.type_alerte);
   const showMessageDetail =
     detailLabel !== name && alerte.message.trim().length > 0;
+  const trace = getAlerteTraceInfo(alerte);
 
   return (
     <article className="rounded-xl border border-border/70 bg-card overflow-hidden">
@@ -100,11 +102,27 @@ export function SuiviAlerteCard({
             >
               {typeLabel}
             </Badge>
+            {trace.daysOpen != null && trace.daysOpen > 0 && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-5 shrink-0 border-amber-300 text-amber-900 bg-amber-50"
+              >
+                +{trace.daysOpen} j
+              </Badge>
+            )}
             {alerteDate && (
               <span className="text-xs text-muted-foreground ml-auto shrink-0">
                 {alerteDate}
               </span>
             )}
+          </div>
+          <div className="mt-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1">
+            <p className="flex items-start gap-1.5 font-medium text-foreground/90">
+              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+              {trace.rule}
+            </p>
+            <p>{trace.detail}</p>
+            <p className="text-[10px] opacity-80">Source : {trace.source}</p>
           </div>
           {lastContact && (
             <p className="text-xs text-muted-foreground mt-1">

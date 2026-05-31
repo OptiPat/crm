@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { APP_DISPLAY_NAME } from "@/lib/app-branding";
+import { getAppInfo } from "@/lib/api/tauri-system";
 import { useEffect, useState } from "react";
 
 interface SidebarProps {
@@ -127,9 +128,24 @@ function useGroupOpen(page: string, groups: NavGroup[]) {
   return [open, setOpen] as const;
 }
 
+function formatSidebarVersion(version: string, collapsed: boolean): string {
+  if (collapsed) {
+    const parts = version.split(".");
+    return parts.length >= 2 ? `v${parts[0]}.${parts[1]}` : `v${version}`;
+  }
+  return `Version ${version}`;
+}
+
 export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [groupsOpen, setGroupsOpen] = useGroupOpen(currentPage, navGroups);
+
+  useEffect(() => {
+    void getAppInfo()
+      .then((info) => setAppVersion(info.version))
+      .catch(() => setAppVersion(null));
+  }, []);
 
   const navButtonClass = (active: boolean, extra?: string) =>
     cn(
@@ -297,7 +313,11 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
             collapsed ? "text-center" : ""
           )}
         >
-          {collapsed ? "v0.1" : "Version 0.1.0"}
+          {appVersion
+            ? formatSidebarVersion(appVersion, collapsed)
+            : collapsed
+              ? "v…"
+              : "Version …"}
         </div>
       </div>
     </aside>

@@ -6,11 +6,12 @@ import { Search, Users, ChevronDown, ChevronUp, Home, ArrowLeft, X, TreePine } f
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
-  getInvestissementsByContact,
-  getInvestissementsByFoyer,
+  getAllInvestissements,
   type Investissement,
 } from "@/lib/api/tauri-investissements";
 import { textMatchesSearch } from "@/lib/search-utils";
+import { indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
+import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { buildFamilleGroups } from "@/lib/familles/build-famille-groups";
 import type { FamilleGroup } from "@/lib/familles/famille-types";
@@ -57,28 +58,16 @@ export function Familles({ onNavigate }: FamillesProps) {
       setContacts(dataContacts);
       setFoyers(dataFoyers);
 
+      const allInv = await getAllInvestissements();
+      const { byContactId, byFoyerId } = indexInvestissementsByOwner(allInv);
       const investsByContact: Record<number, Investissement[]> = {};
       const investsByFoyer: Record<number, Investissement[]> = {};
-
-      await Promise.all(
-        dataContacts.map(async (contact) => {
-          try {
-            investsByContact[contact.id] = await getInvestissementsByContact(contact.id);
-          } catch {
-            investsByContact[contact.id] = [];
-          }
-        })
-      );
-
-      await Promise.all(
-        dataFoyers.map(async (foyer) => {
-          try {
-            investsByFoyer[foyer.id] = await getInvestissementsByFoyer(foyer.id);
-          } catch {
-            investsByFoyer[foyer.id] = [];
-          }
-        })
-      );
+      for (const contact of dataContacts) {
+        investsByContact[contact.id] = byContactId[contact.id] ?? [];
+      }
+      for (const foyer of dataFoyers) {
+        investsByFoyer[foyer.id] = byFoyerId[foyer.id] ?? [];
+      }
 
       setInvestissementsByContact(investsByContact);
       setInvestissementsByFoyer(investsByFoyer);
@@ -168,6 +157,13 @@ export function Familles({ onNavigate }: FamillesProps) {
   };
 
   const openMember = (contact: Contact) => {
+    if (onNavigate && contact.id) {
+      requestOpenContact(contact.id, {
+        setCurrentPage: onNavigate,
+        currentPage: "familles",
+      });
+      return;
+    }
     setSelectedContact(contact);
     if (!isWideLayout) {
       setShowContactDetail(true);

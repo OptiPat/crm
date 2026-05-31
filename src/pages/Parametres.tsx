@@ -236,7 +236,13 @@ export function Parametres() {
           <ParametresSuiviSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
         );
       case "donnees":
-        return <ParametresDatabaseSection dbPath={dbPath} backups={backups} />;
+        return (
+          <ParametresDatabaseSection
+            dbPath={dbPath}
+            backups={backups}
+            onBackupsChanged={setBackups}
+          />
+        );
       case "application":
         return <ParametresApplicationSection />;
       default:

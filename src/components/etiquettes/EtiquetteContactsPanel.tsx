@@ -5,11 +5,18 @@ import { Input } from "@/components/ui/input";
 import { Users, X, ChevronRight, Search } from "lucide-react";
 import {
   getContactsByEtiquette,
+  getAllContactEtiquettesDetails,
   retirerEtiquette,
   getContrastColor,
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { buildEtiquetteAttributionMap } from "@/lib/etiquettes/etiquette-attribution-map";
+import {
+  isAutoEtiquetteAttribution,
+  RemoveAutoEtiquetteDialog,
+  type RemoveAutoEtiquetteTarget,
+} from "@/components/etiquettes/RemoveAutoEtiquetteDialog";
 import { getClientLabel, getFilleulLabel } from "@/lib/contacts/contact-form-utils";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { textMatchesSearch } from "@/lib/search-utils";
@@ -32,15 +39,23 @@ export function EtiquetteContactsPanel({
   className,
 }: EtiquetteContactsPanelProps) {
   const [contacts, setContacts] = useState<Contact[]>([]);
+  const [contactAttribuePar, setContactAttribuePar] = useState<Record<number, string>>({});
+  const [removeTarget, setRemoveTarget] = useState<RemoveAutoEtiquetteTarget | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
   const loadContacts = useCallback(async () => {
     setLoading(true);
     try {
-      setContacts(await getContactsByEtiquette(etiquette.id));
+      const [rows, details] = await Promise.all([
+        getContactsByEtiquette(etiquette.id),
+        getAllContactEtiquettesDetails(),
+      ]);
+      setContacts(rows);
+      setContactAttribuePar(buildEtiquetteAttributionMap(details, etiquette.id));
     } catch {
       setContacts([]);
+      setContactAttribuePar({});
       toast.error("Impossible de charger les contacts");
     } finally {
       setLoading(false);
@@ -68,17 +83,36 @@ export function EtiquetteContactsPanel({
     [contacts, searchQuery]
   );
 
-  const handleRetirer = async (contactId: number, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const confirmRetirer = async (contactId: number, excludeFromAuto: boolean) => {
     try {
-      await retirerEtiquette(contactId, etiquette.id);
-      toast.success("Étiquette retirée");
+      await retirerEtiquette(contactId, etiquette.id, excludeFromAuto);
+      toast.success(
+        excludeFromAuto
+          ? "Étiquette retirée — ne sera plus appliquée automatiquement"
+          : "Étiquette retirée"
+      );
       await loadContacts();
       notifyEtiquettesChanged();
       onContactsChanged?.();
     } catch {
       toast.error("Erreur lors du retrait");
+    } finally {
+      setRemoveTarget(null);
     }
+  };
+
+  const handleRetirer = (contactId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const attribuePar = contactAttribuePar[contactId];
+    if (isAutoEtiquetteAttribution(attribuePar)) {
+      setRemoveTarget({
+        contactId,
+        etiquetteId: etiquette.id,
+        etiquetteNom: etiquette.nom,
+      });
+      return;
+    }
+    void confirmRetirer(contactId, false);
   };
 
   return (
@@ -205,7 +239,7 @@ export function EtiquetteContactsPanel({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={(e) => contact.id && void handleRetirer(contact.id, e)}
+                      onClick={(e) => contact.id && handleRetirer(contact.id, e)}
                       title="Retirer l'étiquette"
                       aria-label="Retirer l'étiquette"
                     >
@@ -218,6 +252,15 @@ export function EtiquetteContactsPanel({
           </div>
         )}
       </CardContent>
+
+      <RemoveAutoEtiquetteDialog
+        target={removeTarget}
+        onOpenChange={(open) => !open && setRemoveTarget(null)}
+        onConfirm={(excludeFromAuto) => {
+          if (!removeTarget) return;
+          void confirmRetirer(removeTarget.contactId, excludeFromAuto);
+        }}
+      />
     </Card>
   );
 }

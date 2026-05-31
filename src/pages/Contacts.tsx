@@ -11,15 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Filter, Users2, Tag } from "lucide-react";
+import { Search, Filter, Users2, Tag, Download } from "lucide-react";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAlertesNonTraitees } from "@/lib/api/tauri-alertes";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
-import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
-import {
-  getContactsForFoyer,
-  loadFoyerPatrimoineCentimes,
-} from "@/lib/foyers/foyer-utils";
+import { getAllInvestissements } from "@/lib/api/tauri-investissements";
+import { buildPatrimoineMaps } from "@/lib/investissements/bulk-patrimoine";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { requestOpenContact } from "@/lib/navigation/app-navigation";
+import { downloadCsvFile } from "@/lib/export/csv-export";
+import { buildContactsCsv } from "@/lib/export/contacts-csv";
 import { getAllEtiquettes, getAllContactEtiquettesDetails, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { groupEtiquettesByContactId } from "@/lib/etiquettes/etiquette-condition-labels";
 import { buildEtiquettesPourFiltre } from "@/lib/etiquettes/etiquettes-filter";
@@ -317,47 +318,29 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const useFoyerVirtual = groupByFoyer && foyerFlatRows.length > 40;
 
   useEffect(() => {
-    const calculatePatrimoines = async () => {
-      const newPatrimoines: Record<string, number> = {};
-      const newPatrimoinesAvecMoi: Record<string, number> = {};
-
-      for (const contact of contacts) {
-        try {
-          const investissements = await getInvestissementsByContact(contact.id!);
-          const total = investissements.reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-          const avecMoi = investissements
-            .filter(inv => inv.origine === "MON_CONSEIL")
-            .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-          newPatrimoines[`contact_${contact.id}`] = total / 100;
-          newPatrimoinesAvecMoi[`contact_${contact.id}`] = avecMoi / 100;
-        } catch (error) {
-          newPatrimoines[`contact_${contact.id}`] = 0;
-          newPatrimoinesAvecMoi[`contact_${contact.id}`] = 0;
-        }
-      }
-
-      for (const foyer of foyers) {
-        try {
-          const membres = getContactsForFoyer(contacts, foyer.id);
-          const total = await loadFoyerPatrimoineCentimes(foyer.id, membres);
-          const avecMoi = await loadFoyerPatrimoineCentimes(foyer.id, membres, {
-            avecMoiOnly: true,
-          });
-          newPatrimoines[`foyer_${foyer.id}`] = total / 100;
-          newPatrimoinesAvecMoi[`foyer_${foyer.id}`] = avecMoi / 100;
-        } catch (error) {
-          newPatrimoines[`foyer_${foyer.id}`] = 0;
-          newPatrimoinesAvecMoi[`foyer_${foyer.id}`] = 0;
-        }
-      }
-
-      setPatrimoines(newPatrimoines);
-      setPatrimoinesAvecMoi(newPatrimoinesAvecMoi);
-    };
-
-    if (contacts.length > 0) {
-      calculatePatrimoines();
+    if (contacts.length === 0) {
+      setPatrimoines({});
+      setPatrimoinesAvecMoi({});
+      return;
     }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const allInv = await getAllInvestissements();
+        if (cancelled) return;
+        const maps = buildPatrimoineMaps(contacts, foyers, allInv);
+        setPatrimoines(maps.patrimoines);
+        setPatrimoinesAvecMoi(maps.patrimoinesAvecMoi);
+      } catch {
+        if (!cancelled) {
+          setPatrimoines({});
+          setPatrimoinesAvecMoi({});
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [contacts, foyers]);
 
   const reloadEtiquettesAttributions = useCallback(async () => {
@@ -396,11 +379,54 @@ export function Contacts({ onNavigate }: ContactsProps) {
   /** Grand écran : liste pleine largeur, split 50/50 seulement après sélection d’un contact */
   const showSplit = isWideLayout && selectedContact != null;
 
-  const openContactDetail = (contact: Contact) => {
-    setSelectedContact(contact);
-    if (!isWideLayout) {
-      setShowDetail(true);
-    }
+  const openContactDetail = useCallback(
+    (contact: Contact) => {
+      setSelectedContact(contact);
+      if (!isWideLayout) setShowDetail(true);
+    },
+    [isWideLayout]
+  );
+
+  useAppNavigationListener(
+    (detail) => {
+      if (detail.type !== "open-contact") return;
+      const contact = contacts.find((c) => c.id === detail.contactId);
+      if (contact) {
+        openContactDetail(contact);
+      } else {
+        pendingOpenContactIdRef.current = detail.contactId;
+      }
+    },
+    [contacts, openContactDetail]
+  );
+
+  const openLinkedContact = useCallback(
+    (linked: Contact) => {
+      if (onNavigate && linked.id) {
+        requestOpenContact(linked.id, {
+          setCurrentPage: onNavigate,
+          currentPage: "contacts",
+        });
+      } else {
+        openContactDetail(linked);
+      }
+    },
+    [onNavigate, openContactDetail]
+  );
+
+  const handleExportCsv = () => {
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsvFile(
+      `contacts_${date}.csv`,
+      buildContactsCsv(
+        filteredContacts,
+        foyers,
+        patrimoines,
+        patrimoinesAvecMoi,
+        etiquettesParContact
+      )
+    );
+    toast.success(`${filteredContacts.length} contact(s) exporté(s)`);
   };
 
   const closeContactDetail = () => {
@@ -566,16 +592,28 @@ export function Contacts({ onNavigate }: ContactsProps) {
         showSplit ? "max-w-[1800px]" : "max-w-[1600px]"
       )}
     >
-      <ContactsPageHeader
-        mainTab={mainTab}
-        filteredCount={filteredContacts.length}
-        onNewContact={() => setShowForm(true)}
-        onImport={() =>
-          mainTab === "filleuls" ? setShowImportFilleuls(true) : setShowImport(true)
-        }
-        onDeduplicate={() => setShowDeduplicate(true)}
-        onDeleteAll={() => void handleDeleteAllContacts()}
-      />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <ContactsPageHeader
+          mainTab={mainTab}
+          filteredCount={filteredContacts.length}
+          onNewContact={() => setShowForm(true)}
+          onImport={() =>
+            mainTab === "filleuls" ? setShowImportFilleuls(true) : setShowImport(true)
+          }
+          onDeduplicate={() => setShowDeduplicate(true)}
+          onDeleteAll={() => void handleDeleteAllContacts()}
+        />
+        {filteredContacts.length > 0 && (
+          <Button
+            variant="outline"
+            className="gap-2 shrink-0"
+            onClick={handleExportCsv}
+          >
+            <Download className="h-4 w-4" />
+            Exporter CSV
+          </Button>
+        )}
+      </div>
 
       <div className={cn("grid gap-4 items-start", showSplit && "lg:grid-cols-2")}>
       <Card className={cn("border-border/70 shadow-sm min-w-0", showSplit && "min-h-0")}>
@@ -847,7 +885,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
             onUpdate={loadContacts}
             onContactRefreshed={setSelectedContact}
             onNavigate={onNavigate}
-            onOpenContact={openContactDetail}
+            onOpenContact={openLinkedContact}
           />
         </div>
       )}
@@ -859,7 +897,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
         onOpenChange={setShowForm}
         onSuccess={loadContacts}
         createContext={mainTab === "filleuls" ? "filleuls" : "clients"}
-        onOpenContact={openContactDetail}
+        onOpenContact={openLinkedContact}
       />
 
       {/* Import de contacts clients */}
@@ -901,7 +939,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
           onUpdate={loadContacts}
           onContactRefreshed={setSelectedContact}
           onNavigate={onNavigate}
-          onOpenContact={openContactDetail}
+          onOpenContact={openLinkedContact}
         />
       )}
     </div>

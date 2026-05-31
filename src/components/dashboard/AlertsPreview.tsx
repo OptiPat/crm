@@ -12,9 +12,11 @@ import {
   getTypeAlerteLabel,
 } from "@/lib/alertes/alerte-labels";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
+import { getAlerteTraceInfo } from "@/lib/alertes/alerte-trace";
 import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
 
 interface AlertsPreviewProps {
+  currentPage?: string;
   onNavigate?: (page: string) => void;
   onOpenContact?: (contactId: number) => void;
 }
@@ -28,7 +30,7 @@ function formatLastContact(timestamp: number | null) {
   }).format(new Date(timestamp * 1000));
 }
 
-export function AlertsPreview({ onNavigate, onOpenContact }: AlertsPreviewProps) {
+export function AlertsPreview({ currentPage, onNavigate, onOpenContact }: AlertsPreviewProps) {
   const [alertes, setAlertes] = useState<AlerteWithContact[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -47,7 +49,7 @@ export function AlertsPreview({ onNavigate, onOpenContact }: AlertsPreviewProps)
 
   const openAlert = (alerte: AlerteWithContact) => {
     if (onNavigate) {
-      navigateToSuivi(onNavigate, "alertes", undefined, alerte.contact_id);
+      navigateToSuivi(onNavigate, "alertes", undefined, alerte.contact_id, currentPage);
       return;
     }
     onOpenContact?.(alerte.contact_id);
@@ -99,6 +101,7 @@ export function AlertsPreview({ onNavigate, onOpenContact }: AlertsPreviewProps)
           {alertes.map((alerte) => {
             const lastContact = formatLastContact(alerte.date_dernier_contact);
             const typeLabel = getTypeAlerteLabel(alerte.type_alerte);
+            const trace = getAlerteTraceInfo(alerte);
 
             return (
               <li key={alerte.alerte_id}>
@@ -130,8 +133,14 @@ export function AlertsPreview({ onNavigate, onOpenContact }: AlertsPreviewProps)
                         {typeLabel}
                       </Badge>
                     </div>
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                      {trace.rule}
+                      {trace.daysOpen != null && trace.daysOpen > 0
+                        ? ` · +${trace.daysOpen} j`
+                        : ""}
+                    </p>
                     {lastContact ? (
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="text-xs text-muted-foreground/80 mt-0.5">
                         Dernier contact : {lastContact}
                       </p>
                     ) : null}

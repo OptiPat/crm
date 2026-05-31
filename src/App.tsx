@@ -23,6 +23,8 @@ import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
+import { requestOpenContact } from "@/lib/navigation/app-navigation";
+import type { ContactDetailTabHint } from "@/lib/investissements/investissement-navigation";
 
 function App() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -98,16 +100,22 @@ function App() {
     })();
   }, [isAuthenticated, showWizard]);
 
+  const openContact = (contactId: number, tab?: ContactDetailTabHint) => {
+    requestOpenContact(contactId, {
+      tab,
+      currentPage,
+      setCurrentPage,
+    });
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
         return (
           <Dashboard
+            currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => {
-              sessionStorage.setItem("crm_open_contact_id", String(contactId));
-              setCurrentPage("contacts");
-            }}
+            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
       case "contacts":
@@ -123,25 +131,24 @@ function App() {
       case "prescripteurs":
         return <Prescripteurs onNavigate={setCurrentPage} />;
       case "partenaires":
-        return <Partenaires />;
+        return (
+          <Partenaires
+            currentPage={currentPage}
+            onNavigate={setCurrentPage}
+          />
+        );
       case "investissements":
         return (
           <Investissements
-            onOpenContact={() => {
-              setCurrentPage("contacts");
-            }}
+            onOpenContact={(contactId) => openContact(contactId, "patrimoine")}
           />
         );
-      case "documents":
-        return <Documents />;
       case "interactions":
         return (
           <Interactions
+            currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => {
-              sessionStorage.setItem("crm_open_contact_id", String(contactId));
-              setCurrentPage("contacts");
-            }}
+            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
       case "templates-email":
@@ -149,19 +156,22 @@ function App() {
       case "suivi":
         return (
           <Suivi
+            currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => {
-              sessionStorage.setItem("crm_open_contact_id", String(contactId));
-              setCurrentPage("contacts");
-            }}
+            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
       case "etiquettes":
         return (
           <Etiquettes
-            onOpenContact={() => {
-              setCurrentPage("contacts");
-            }}
+            onOpenContact={(contactId) => openContact(contactId)}
+          />
+        );
+      case "documents":
+        return (
+          <Documents
+            onNavigate={setCurrentPage}
+            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
       case "parametres":
@@ -169,11 +179,9 @@ function App() {
       default:
         return (
           <Dashboard
+            currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => {
-              sessionStorage.setItem("crm_open_contact_id", String(contactId));
-              setCurrentPage("contacts");
-            }}
+            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
     }

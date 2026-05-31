@@ -228,7 +228,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             ? "Aucun contact bloqué — parfait. Les manques (email, modèle, date) apparaîtront ici."
             : options.mode === "followup"
               ? `Aucune relance suggérée (${suiviJours} j sans réponse mail ou RDV).`
-              : "Aucun envoi enregistré récemment.";
+              : "Aucun envoi en attente de réponse client.";
       return <div className="text-center py-8 text-muted-foreground">{empty}</div>;
     }
 

@@ -18,16 +18,15 @@ export interface EtiquettesPageStats {
 }
 
 export function computeEtiquettesPageStats(
-  etiquettes: EtiquetteWithCount[]
+  etiquettes: EtiquetteWithCount[],
+  uniqueContactsTagged?: number
 ): EtiquettesPageStats {
   let activeCount = 0;
   let autoCount = 0;
   let manualCount = 0;
   let emailCount = 0;
-  let contactsTagged = 0;
 
   for (const e of etiquettes) {
-    contactsTagged += e.contact_count;
     if (e.actif !== false) activeCount += 1;
     if (e.auto_condition_type) autoCount += 1;
     else manualCount += 1;
@@ -40,7 +39,9 @@ export function computeEtiquettesPageStats(
     autoCount,
     manualCount,
     emailCount,
-    contactsTagged,
+    contactsTagged:
+      uniqueContactsTagged ??
+      etiquettes.reduce((s, e) => s + e.contact_count, 0),
   };
 }
 

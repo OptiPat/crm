@@ -10,7 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { Plus, Search, Filter, Trash2, Pencil, PiggyBank, TrendingUp, Wallet } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Pencil, PiggyBank, TrendingUp, Wallet, Download } from "lucide-react";
+import { rowsToCsv, downloadCsvFile } from "@/lib/export/csv-export";
 import {
   getInvestissementsWithDetails,
   deleteInvestissement,
@@ -23,13 +24,12 @@ import {
   computePatrimoineStats,
   type PatrimoineOrigineFilter,
 } from "@/lib/investissements/patrimoine-tab-utils";
-import { prepareOpenContact } from "@/lib/investissements/investissement-navigation";
 import { textMatchesSearch } from "@/lib/search-utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type InvestissementsProps = {
-  onOpenContact?: () => void;
+  onOpenContact?: (contactId: number) => void;
 };
 
 function OrigineFilterPill({
@@ -169,6 +169,47 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
     setPartenaireFilter("ALL");
   };
 
+  const handleExportCsv = () => {
+    const headers = [
+      "Produit",
+      "Type",
+      "Montant (€)",
+      "Client prénom",
+      "Client nom",
+      "ID contact",
+      "Foyer",
+      "Partenaire",
+      "Origine",
+      "Date souscription",
+      "Fin démembrement",
+      "Notes",
+    ];
+    const rows = filteredInvestissements.map((inv) => [
+      inv.nom_produit,
+      inv.type_produit,
+      ((inv.montant_initial ?? 0) / 100).toFixed(2),
+      inv.contact_id ? inv.contact_prenom : "Commun",
+      inv.contact_id ? inv.contact_nom : inv.foyer_nom ?? "",
+      inv.contact_id ?? "",
+      inv.foyer_nom ?? "",
+      inv.partenaire_nom ?? "",
+      inv.origine === "MON_CONSEIL" ? "Avec moi" : "À côté",
+      inv.date_souscription
+        ? new Date(inv.date_souscription * 1000).toLocaleDateString("fr-FR")
+        : "",
+      inv.date_fin_demembrement
+        ? new Date(inv.date_fin_demembrement * 1000).toLocaleDateString("fr-FR")
+        : "",
+      inv.notes ?? "",
+    ]);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadCsvFile(
+      `investissements_${date}.csv`,
+      rowsToCsv(headers, rows)
+    );
+    toast.success(`${filteredInvestissements.length} ligne(s) exportée(s)`);
+  };
+
   const uniquePartenaires = Array.from(
     new Set(investissements.map((inv) => inv.partenaire_nom).filter(Boolean))
   ).sort();
@@ -184,10 +225,18 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
             Vue portefeuille — tous les clients
           </p>
         </div>
-        <Button className="gap-2 shrink-0" onClick={() => setShowForm(true)}>
-          <Plus className="h-4 w-4" />
-          Nouvel investissement
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          {filteredInvestissements.length > 0 && (
+            <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
+              <Download className="h-4 w-4" />
+              Exporter CSV
+            </Button>
+          )}
+          <Button className="gap-2" onClick={() => setShowForm(true)}>
+            <Plus className="h-4 w-4" />
+            Nouvel investissement
+          </Button>
+        </div>
       </div>
 
       <section className="space-y-2" aria-label="Synthèse du portefeuille">
@@ -376,11 +425,7 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
                     );
                     return;
                   }
-                  prepareOpenContact(contactId, "patrimoine");
-                  onOpenContact();
-                  toast.success(
-                    `Ouverture de ${ownerLabel || "la fiche"} — onglet Patrimoine`
-                  );
+                  onOpenContact(contactId);
                 };
 
                 return (

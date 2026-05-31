@@ -323,16 +323,25 @@ impl Database {
             Some(id) => id,
             None => return Ok(0),
         };
+        if self.is_auto_etiquette_excluded(contact_id, etiquette.id)? {
+            return Ok(0);
+        }
         let condition_type = match etiquette.auto_condition_type.as_ref() {
             Some(t) => t.as_str(),
             None => return Ok(0),
         };
         let categories = Self::parse_auto_categories(etiquette);
-        if !Self::contact_matches_auto_categories(contact, &categories) {
-            return Ok(0);
-        }
         let assignment_info =
             self.lookup_assignment(contact_id, etiquette.id, assignments.as_deref());
+        if !Self::contact_matches_auto_categories(contact, &categories) {
+            return self.apply_auto_etiquette_decision(
+                contact_id,
+                etiquette.id,
+                false,
+                assignment_info,
+                assignments,
+            );
+        }
         let should_assign = self.evaluate_auto_etiquette_condition(
             contact,
             contact_id,

@@ -351,7 +351,23 @@ impl Database {
         self.migrate_templates_email_agenda_link_id()?;
         self.migrate_templates_email_relance_template_id()?;
         self.migrate_contact_etiquettes_email_suivi()?;
+        self.migrate_contact_etiquette_auto_exclusions()?;
 
+        Ok(())
+    }
+
+    fn migrate_contact_etiquette_auto_exclusions(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS contact_etiquette_auto_exclusions (
+                contact_id INTEGER NOT NULL,
+                etiquette_id INTEGER NOT NULL,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                PRIMARY KEY (contact_id, etiquette_id),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+                FOREIGN KEY (etiquette_id) REFERENCES etiquettes(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
         Ok(())
     }
 

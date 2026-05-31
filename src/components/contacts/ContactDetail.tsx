@@ -54,7 +54,21 @@ import { FoyerCreateModal } from "@/components/foyers/FoyerCreateModal";
 import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
 import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
 import { EtiquetteSelector } from "@/components/etiquettes/EtiquetteSelector";
-import { getEtiquettesByContact, attribuerEtiquette, retirerEtiquette, type ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
+import {
+  isAutoEtiquetteAttribution,
+  RemoveAutoEtiquetteDialog,
+  type RemoveAutoEtiquetteTarget,
+} from "@/components/etiquettes/RemoveAutoEtiquetteDialog";
+import {
+  getEtiquettesByContact,
+  attribuerEtiquette,
+  retirerEtiquette,
+  getAllEtiquettes,
+  getAutoEtiquetteExclusionIds,
+  clearAutoEtiquetteExclusion,
+  type ContactEtiquetteDetails,
+  type Etiquette,
+} from "@/lib/api/tauri-etiquettes";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
@@ -104,6 +118,12 @@ export function ContactDetail({
   const [loadingInvestissements, setLoadingInvestissements] = useState(false);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [parrain, setParrain] = useState<Contact | null>(null);
+  const [prescripteur, setPrescripteur] = useState<Contact | null>(null);
+  const [loadingPrescripteur, setLoadingPrescripteur] = useState(false);
+  const [allEtiquettes, setAllEtiquettes] = useState<Etiquette[]>([]);
+  const [autoExcludedIds, setAutoExcludedIds] = useState<number[]>([]);
+  const [etiquetteRemoveTarget, setEtiquetteRemoveTarget] =
+    useState<RemoveAutoEtiquetteTarget | null>(null);
   const [filleuls, setFilleuls] = useState<Contact[]>([]);
   const [loadingParrain, setLoadingParrain] = useState(false);
   const [loadingFilleuls, setLoadingFilleuls] = useState(false);
@@ -179,6 +199,7 @@ export function ContactDetail({
     if (contact?.id && detailActive) {
       loadInvestissements();
       loadParrain();
+      loadPrescripteur();
       loadFilleuls();
       loadFoyer();
       loadEtiquettes();
@@ -194,12 +215,20 @@ export function ContactDetail({
   const loadEtiquettes = async () => {
     if (!contact?.id) return;
     try {
-      const data = await getEtiquettesByContact(contact.id);
+      const [data, excluded] = await Promise.all([
+        getEtiquettesByContact(contact.id),
+        getAutoEtiquetteExclusionIds(contact.id),
+      ]);
       setEtiquettes(data);
+      setAutoExcludedIds(excluded);
     } catch (error) {
       console.error("Error loading etiquettes:", error);
     }
   };
+
+  useEffect(() => {
+    void getAllEtiquettes().then(setAllEtiquettes).catch(() => setAllEtiquettes([]));
+  }, []);
 
   const handleAddEtiquette = async (etiquetteId: number) => {
     if (!contact?.id) return;
@@ -214,18 +243,59 @@ export function ContactDetail({
     }
   };
 
-  const handleRemoveEtiquette = async (etiquetteId: number) => {
+  const handleRemoveEtiquetteClick = (etiquetteId: number) => {
+    if (!contact?.id) return;
+    const row = etiquettes.find((e) => e.etiquette_id === etiquetteId);
+    if (row && isAutoEtiquetteAttribution(row.attribue_par)) {
+      setEtiquetteRemoveTarget({
+        contactId: contact.id,
+        etiquetteId,
+        etiquetteNom: row.etiquette_nom,
+      });
+      return;
+    }
+    void confirmRemoveEtiquette(etiquetteId, false);
+  };
+
+  const confirmRemoveEtiquette = async (
+    etiquetteId: number,
+    excludeFromAuto: boolean
+  ) => {
     if (!contact?.id) return;
     try {
-      await retirerEtiquette(contact.id, etiquetteId);
+      await retirerEtiquette(contact.id, etiquetteId, excludeFromAuto);
       await loadEtiquettes();
       notifyEtiquettesChanged();
-      toast.success("Étiquette retirée");
+      toast.success(
+        excludeFromAuto
+          ? "Étiquette retirée — ne sera plus appliquée automatiquement"
+          : "Étiquette retirée"
+      );
     } catch (error) {
       console.error("Error removing etiquette:", error);
       toast.error("Erreur lors du retrait de l'étiquette");
+    } finally {
+      setEtiquetteRemoveTarget(null);
     }
   };
+
+  const handleClearAutoExclusion = async (etiquetteId: number) => {
+    if (!contact?.id) return;
+    try {
+      await clearAutoEtiquetteExclusion(contact.id, etiquetteId);
+      await loadEtiquettes();
+      notifyEtiquettesChanged();
+      toast.success("Exclusion levée — le recalcul auto pourra réappliquer cette étiquette");
+    } catch (error) {
+      toast.error("Erreur lors de la mise à jour");
+    }
+  };
+
+  const excludedEtiquettes = allEtiquettes.filter(
+    (e) =>
+      autoExcludedIds.includes(e.id) &&
+      !etiquettes.some((ce) => ce.etiquette_id === e.id)
+  );
 
   const loadInvestissements = async () => {
     if (!contact?.id) return;
@@ -282,6 +352,23 @@ export function ContactDetail({
       setInvestissements([]);
     } finally {
       setLoadingInvestissements(false);
+    }
+  };
+
+  const loadPrescripteur = async () => {
+    if (!contact?.prescripteur_id) {
+      setPrescripteur(null);
+      return;
+    }
+    setLoadingPrescripteur(true);
+    try {
+      const data = await getContactById(contact.prescripteur_id);
+      setPrescripteur(data);
+    } catch (error) {
+      console.error("Error loading prescripteur:", error);
+      setPrescripteur(null);
+    } finally {
+      setLoadingPrescripteur(false);
     }
   };
 
@@ -469,15 +556,32 @@ export function ContactDetail({
               id: e.etiquette_id,
               nom: e.etiquette_nom,
               couleur: e.etiquette_couleur,
+              attribue_par: e.attribue_par,
             }))}
-            onRemove={handleRemoveEtiquette}
+            onRemove={handleRemoveEtiquetteClick}
             size="sm"
           />
           <EtiquetteSelector
             selectedIds={etiquettes.map((e) => e.etiquette_id)}
             onAdd={handleAddEtiquette}
-            onRemove={handleRemoveEtiquette}
+            onRemove={handleRemoveEtiquetteClick}
           />
+          {excludedEtiquettes.length > 0 && (
+            <p className="text-xs text-muted-foreground w-full mt-1">
+              Exclues du calcul auto :{" "}
+              {excludedEtiquettes.map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  className="text-primary hover:underline mr-2"
+                  title="Réautoriser l'application automatique"
+                  onClick={() => void handleClearAutoExclusion(e.id)}
+                >
+                  {e.nom} (réactiver)
+                </button>
+              ))}
+            </p>
+          )}
         </div>
       </div>
       <div className="flex shrink-0 gap-1">
@@ -974,6 +1078,45 @@ export function ContactDetail({
               </CardContent>
             </Card>
 
+            {/* Prescripteur */}
+            {contact.prescripteur_id != null && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Prescripteur</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {loadingPrescripteur ? (
+                    <div className="text-sm text-muted-foreground">Chargement…</div>
+                  ) : prescripteur ? (
+                    <div
+                      className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                      onClick={() => handleOpenLinkedContact(prescripteur)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          handleOpenLinkedContact(prescripteur);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <p className="font-medium">
+                        {prescripteur.prenom} {prescripteur.nom}
+                      </p>
+                      {prescripteur.email && (
+                        <p className="text-sm text-muted-foreground">{prescripteur.email}</p>
+                      )}
+                      <p className="text-xs text-primary mt-1">Voir la fiche prescripteur</p>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Prescripteur introuvable (ID: {contact.prescripteur_id})
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Parrain (uniquement pour les catégories filleul) */}
             {/* 🔥 FIX: Vérifier filleul_categorie OU parrain_id (indépendant de categorie) */}
             {(contact.filleul_categorie === "FILLEUL" || 
@@ -1198,6 +1341,18 @@ export function ContactDetail({
           />
         </>
       )}
+
+      <RemoveAutoEtiquetteDialog
+        target={etiquetteRemoveTarget}
+        onOpenChange={(open) => !open && setEtiquetteRemoveTarget(null)}
+        onConfirm={(excludeFromAuto) => {
+          if (!etiquetteRemoveTarget) return;
+          void confirmRemoveEtiquette(
+            etiquetteRemoveTarget.etiquetteId,
+            excludeFromAuto
+          );
+        }}
+      />
 
       <AlertDialog
         open={showDeleteContactDialog}

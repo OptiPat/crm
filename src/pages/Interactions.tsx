@@ -23,7 +23,11 @@ import { InteractionForm } from "@/components/interactions/InteractionForm";
 import { ExchangeHistoryListRow } from "@/components/interactions/ExchangeHistoryListRow";
 import { ExchangeHistoryDetailPanel } from "@/components/interactions/ExchangeHistoryDetailPanel";
 import { InteractionsPageHeader } from "@/components/interactions/InteractionsPageHeader";
-import { consumeInteractionsContactFocus } from "@/lib/navigation/interactions-navigation";
+import {
+  consumeInteractionsContactFocus,
+  setInteractionsContactFocus,
+} from "@/lib/navigation/interactions-navigation";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import {
   exchangeContactName,
   exchangeEntryKey,
@@ -36,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { textMatchesSearch } from "@/lib/search-utils";
 
 interface InteractionsProps {
+  currentPage?: string;
   onNavigate?: (page: string) => void;
   onOpenContact?: (contactId: number) => void;
 }
@@ -84,6 +89,14 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
       }
     }
   }, [load]);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type !== "interactions") return;
+    if (detail.contactId != null) {
+      setInteractionsContactFocus(detail.contactId);
+      setContactFilterId(detail.contactId);
+    }
+  }, []);
 
   useAppAutoRefresh(() => load());
 

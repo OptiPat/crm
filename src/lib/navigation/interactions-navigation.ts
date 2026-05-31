@@ -1,3 +1,5 @@
+import { dispatchAppNavigation } from "@/lib/navigation/app-navigation";
+
 const CONTACT_KEY = "crm_nav_interactions_contact_id";
 
 export function setInteractionsContactFocus(contactId: number): void {
@@ -14,10 +16,14 @@ export function consumeInteractionsContactFocus(): number | null {
 
 export function navigateToInteractions(
   onPageChange: (page: string) => void,
-  contactId?: number
+  contactId?: number,
+  currentPage?: string
 ): void {
   if (contactId != null) {
     setInteractionsContactFocus(contactId);
   }
-  onPageChange("interactions");
+  dispatchAppNavigation({ type: "interactions", contactId });
+  if (currentPage !== "interactions") {
+    onPageChange("interactions");
+  }
 }

@@ -25,9 +25,12 @@ export function ContactRowEtiquettes({
             backgroundColor: etiq.etiquette_couleur,
             color: getContrastColor(etiq.etiquette_couleur),
           }}
-          title={etiq.etiquette_nom}
+          title={`${etiq.etiquette_nom} (${etiq.attribue_par === "AUTO" ? "automatique" : "manuel"})`}
         >
           <span className="truncate">{etiq.etiquette_nom}</span>
+          <span className="opacity-80 text-[10px] font-normal shrink-0">
+            {etiq.attribue_par === "AUTO" ? "A" : "M"}
+          </span>
         </span>
       ))}
       {extra > 0 && (

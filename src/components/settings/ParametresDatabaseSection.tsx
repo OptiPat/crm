@@ -17,18 +17,26 @@ import {
   Archive,
   HardDrive,
   HelpCircle,
+  RotateCcw,
   Search,
   Trash2,
   Wrench,
   X,
 } from "lucide-react";
 import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
-import type { DbBackupEntry } from "@/lib/api/tauri-system";
+import {
+  createManualDbBackup,
+  restoreDbBackup,
+  listDbBackups,
+  type DbBackupEntry,
+} from "@/lib/api/tauri-system";
+import { relaunch } from "@tauri-apps/plugin-process";
 import { toast } from "sonner";
 
 type ParametresDatabaseSectionProps = {
   dbPath: string;
   backups: DbBackupEntry[];
+  onBackupsChanged?: (backups: DbBackupEntry[]) => void;
 };
 
 function Explainer({ children }: { children: ReactNode }) {
@@ -40,8 +48,15 @@ function Explainer({ children }: { children: ReactNode }) {
   );
 }
 
-export function ParametresDatabaseSection({ dbPath, backups }: ParametresDatabaseSectionProps) {
+export function ParametresDatabaseSection({
+  dbPath,
+  backups,
+  onBackupsChanged,
+}: ParametresDatabaseSectionProps) {
   const [cleaningUp, setCleaningUp] = useState(false);
+  const [creatingBackup, setCreatingBackup] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<DbBackupEntry | null>(null);
+  const [restoring, setRestoring] = useState(false);
   const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -49,6 +64,48 @@ export function ParametresDatabaseSection({ dbPath, backups }: ParametresDatabas
   const [searching, setSearching] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<Contact | null>(null);
   const [deletingContact, setDeletingContact] = useState(false);
+
+  const handleConfirmRestore = async () => {
+    if (!restoreTarget) return;
+    setRestoring(true);
+    try {
+      const result = await restoreDbBackup(restoreTarget.name);
+      toast.success("Base restaurée", {
+        description: result.safety_backup
+          ? `Sauvegarde de sécurité : ${result.safety_backup}. Redémarrage…`
+          : "Redémarrage de l'application…",
+        duration: 8000,
+      });
+      setRestoreTarget(null);
+      await relaunch();
+    } catch (error) {
+      console.error("Erreur restauration:", error);
+      toast.error(
+        typeof error === "string"
+          ? error
+          : "Restauration impossible. Fermez le CRM et réessayez."
+      );
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    setCreatingBackup(true);
+    try {
+      const path = await createManualDbBackup();
+      const updated = await listDbBackups();
+      onBackupsChanged?.(updated);
+      toast.success("Copie de secours créée", {
+        description: path.split(/[\\/]/).pop() ?? path,
+      });
+    } catch (error) {
+      console.error("Erreur backup:", error);
+      toast.error("Impossible de créer la copie de secours");
+    } finally {
+      setCreatingBackup(false);
+    }
+  };
 
   const handleSearchContacts = async () => {
     if (!searchQuery.trim()) return;
@@ -127,14 +184,26 @@ export function ParametresDatabaseSection({ dbPath, backups }: ParametresDatabas
             le sauvegarder vous-même en copiant ce fichier (pendant que le CRM est fermé).
           </Explainer>
 
-          <div className="rounded-xl border bg-muted/30 p-4">
-            <div className="flex items-center gap-2 text-sm font-medium mb-2">
-              <HardDrive className="h-4 w-4 text-primary" />
-              Fichier principal
+          <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium mb-2">
+                <HardDrive className="h-4 w-4 text-primary" />
+                Fichier principal
+              </div>
+              <p className="text-xs font-mono text-muted-foreground break-all leading-relaxed">
+                {dbPath || "Chargement…"}
+              </p>
             </div>
-            <p className="text-xs font-mono text-muted-foreground break-all leading-relaxed">
-              {dbPath || "Chargement…"}
-            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={creatingBackup || !dbPath}
+              onClick={() => void handleCreateBackup()}
+            >
+              <Archive className="h-4 w-4" />
+              {creatingBackup ? "Copie en cours…" : "Créer une copie de secours maintenant"}
+            </Button>
           </div>
 
           {backups.length > 0 && (
@@ -145,23 +214,34 @@ export function ParametresDatabaseSection({ dbPath, backups }: ParametresDatabas
                 Excel : ce sont des fichiers techniques pour revenir en arrière en cas de problème. Vous n&apos;avez
                 normalement <strong>rien à faire</strong> avec cette liste.
               </Explainer>
-              <ul className="rounded-xl border divide-y max-h-36 overflow-y-auto text-xs font-mono bg-background">
-                {backups.slice(0, 8).map((b) => (
+              <ul className="rounded-xl border divide-y max-h-48 overflow-y-auto text-xs font-mono bg-background">
+                {backups.slice(0, 12).map((b) => (
                   <li
                     key={b.name}
                     className="flex items-center justify-between gap-2 px-3 py-2.5 text-muted-foreground"
                   >
-                    <span className="truncate">{b.name}</span>
+                    <span className="truncate flex-1">{b.name}</span>
                     <span className="shrink-0 tabular-nums">{formatBackupSize(b.size)}</span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs shrink-0"
+                      disabled={restoring || creatingBackup}
+                      onClick={() => setRestoreTarget(b)}
+                    >
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Restaurer
+                    </Button>
                   </li>
                 ))}
               </ul>
+              <Explainer>
+                La restauration remplace votre base actuelle par la copie choisie. Une sauvegarde
+                de sécurité est créée juste avant, puis l&apos;application redémarre automatiquement.
+              </Explainer>
             </div>
           )}
-
-          <p className="text-xs text-muted-foreground border-t pt-3">
-            Export / import complet de la base — fonctionnalité prévue ultérieurement.
-          </p>
         </div>
       </SettingsPanel>
 
@@ -275,6 +355,44 @@ export function ParametresDatabaseSection({ dbPath, backups }: ParametresDatabas
           </Button>
         </div>
       </SettingsPanel>
+
+      <AlertDialog
+        open={restoreTarget != null}
+        onOpenChange={(open) => !open && !restoring && setRestoreTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restaurer cette copie de secours ?</AlertDialogTitle>
+            <AlertDialogDescription className="text-left space-y-2">
+              {restoreTarget && (
+                <>
+                  <span className="block font-mono text-xs break-all">{restoreTarget.name}</span>
+                  <span className="block">
+                    Toutes les données actuelles seront remplacées par cette version ({formatBackupSize(restoreTarget.size)}).
+                  </span>
+                  <span className="block text-sm font-medium text-amber-800">
+                    Une copie de la base actuelle sera créée avant la restauration, puis le CRM
+                    redémarrera.
+                  </span>
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={restoring}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={restoring}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleConfirmRestore();
+              }}
+            >
+              {restoring ? "Restauration…" : "Restaurer et redémarrer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={cleanupDialogOpen} onOpenChange={setCleanupDialogOpen}>
         <AlertDialogContent>

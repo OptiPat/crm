@@ -180,7 +180,7 @@ export function ContactInteractionsPanel({
       toast.info("Ouvrez l'écran Suivi depuis le menu latéral.");
       return;
     }
-    navigateToSuivi(onNavigate, "alertes", undefined, contactId);
+    navigateToSuivi(onNavigate, "alertes", undefined, contactId, "contacts");
   };
 
   const goToSuiviEnvois = (subTab: EtiquetteEmailQueueStatus) => {
@@ -188,7 +188,7 @@ export function ContactInteractionsPanel({
       toast.info("Ouvrez l'écran Suivi → Envois depuis le menu latéral.");
       return;
     }
-    navigateToSuivi(onNavigate, "envois", subTab, contactId);
+    navigateToSuivi(onNavigate, "envois", subTab, contactId, "contacts");
   };
 
   const goToHistorique = () => {
@@ -196,7 +196,7 @@ export function ContactInteractionsPanel({
       toast.info("Ouvrez Relation client → Historique des échanges depuis le menu.");
       return;
     }
-    navigateToInteractions(onNavigate, contactId);
+    navigateToInteractions(onNavigate, contactId, "contacts");
   };
 
   const handleDelete = async (id: number) => {

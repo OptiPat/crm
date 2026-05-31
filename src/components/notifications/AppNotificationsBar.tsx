@@ -11,7 +11,6 @@ import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 
 type AppNotificationsBarProps = {
   onPageChange: (page: string) => void;
-  /** Sur le tableau de bord, les alertes suivi sont déjà listées en détail. */
   currentPage?: string;
 };
 
@@ -41,21 +40,12 @@ export function AppNotificationsBar({
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const applyPageFilter = useCallback(
-    (rawItems: AppNotificationItem[]) => {
-      if (currentPage !== "dashboard") return rawItems;
-      return rawItems.filter((i) => i.id !== "alertes_suivi");
-    },
-    [currentPage]
-  );
-
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
       const summary = await fetchAppNotificationsSummary();
-      const filtered = applyPageFilter(summary.items);
-      setItems(filtered);
-      setTotalCount(filtered.reduce((s, i) => s + i.count, 0));
+      setItems(summary.items);
+      setTotalCount(summary.totalCount);
     } catch (error) {
       console.error("Notifications:", error);
       setItems([]);
@@ -63,7 +53,7 @@ export function AppNotificationsBar({
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [applyPageFilter]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -134,7 +124,8 @@ export function AppNotificationsBar({
                   onPageChange,
                   item.suiviTab,
                   item.envoisSubTab,
-                  item.focusContactId
+                  item.focusContactId,
+                  currentPage
                 )
               }
             />

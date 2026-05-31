@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 interface EtiquetteBadgeProps {
   nom: string;
   couleur: string;
+  /** "AUTO" ou "MANUEL" — affiché en sous-texte si présent */
+  attribuePar?: string;
   onRemove?: () => void;
   size?: "sm" | "md" | "lg";
   className?: string;
@@ -24,6 +26,7 @@ interface EtiquetteBadgeProps {
 export function EtiquetteBadge({
   nom,
   couleur,
+  attribuePar,
   onRemove,
   size = "md",
   className,
@@ -61,7 +64,14 @@ export function EtiquetteBadge({
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
     >
-      <span>{nom}</span>
+      <span>
+        {nom}
+        {attribuePar && (
+          <span className="opacity-75 font-normal text-[10px] ml-1">
+            {attribuePar === "AUTO" ? "· auto" : "· manuel"}
+          </span>
+        )}
+      </span>
       {onRemove && (
         <button
           type="button"
@@ -92,6 +102,7 @@ interface EtiquetteListProps {
     id: number;
     nom: string;
     couleur: string;
+    attribue_par?: string;
   }>;
   onRemove?: (id: number) => void;
   size?: "sm" | "md" | "lg";
@@ -120,6 +131,7 @@ export function EtiquetteList({
           key={etiquette.id}
           nom={etiquette.nom}
           couleur={etiquette.couleur}
+          attribuePar={etiquette.attribue_par}
           size={size}
           onRemove={onRemove ? () => onRemove(etiquette.id) : undefined}
         />

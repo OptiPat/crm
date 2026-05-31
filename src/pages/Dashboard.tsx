@@ -25,11 +25,12 @@ import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
 
 interface DashboardProps {
+  currentPage?: string;
   onNavigate?: (page: string) => void;
   onOpenContact?: (contactId: number) => void;
 }
 
-export function Dashboard({ onNavigate, onOpenContact }: DashboardProps) {
+export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -152,6 +153,7 @@ export function Dashboard({ onNavigate, onOpenContact }: DashboardProps) {
           <div className="lg:col-span-8 min-h-[280px]">
             <AlertsPreview
               key={`alerts-${refreshKey}`}
+              currentPage={currentPage}
               onNavigate={onNavigate}
               onOpenContact={onOpenContact}
             />

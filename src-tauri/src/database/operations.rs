@@ -1930,24 +1930,41 @@ impl Database {
         &self,
     ) -> Result<Vec<super::models::InvestissementWithDetails>> {
         let mut stmt = self.conn.prepare(
-            "SELECT i.id, i.contact_id, c.nom, c.prenom, i.foyer_id, f.nom as foyer_nom,
+            "SELECT i.id, i.contact_id,
+                    COALESCE(c.nom, '') as contact_nom,
+                    COALESCE(c.prenom, CASE WHEN i.contact_id IS NULL AND f.nom IS NOT NULL THEN 'Commun' ELSE '' END) as contact_prenom,
+                    i.foyer_id, f.nom as foyer_nom,
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
                     i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at
              FROM investissements i
-             INNER JOIN contacts c ON i.contact_id = c.id
+             LEFT JOIN contacts c ON i.contact_id = c.id
              LEFT JOIN foyers f ON i.foyer_id = f.id
              LEFT JOIN partenaires p ON i.partenaire_id = p.id
+             WHERE i.contact_id IS NOT NULL OR i.foyer_id IS NOT NULL
              ORDER BY i.date_souscription DESC"
         )?;
 
         let investissements = stmt.query_map([], |row| {
+            let contact_nom: String = row.get(2)?;
+            let contact_prenom: String = row.get(3)?;
+            let foyer_nom: Option<String> = row.get(5)?;
+            let display_nom = if contact_nom.trim().is_empty() && foyer_nom.is_some() {
+                foyer_nom.clone().unwrap_or_default()
+            } else {
+                contact_nom
+            };
+            let display_prenom = if contact_prenom.trim().is_empty() && foyer_nom.is_some() {
+                "Foyer".to_string()
+            } else {
+                contact_prenom
+            };
             Ok(super::models::InvestissementWithDetails {
                 id: row.get(0)?,
                 contact_id: row.get(1)?,
-                contact_nom: row.get(2)?,
-                contact_prenom: row.get(3)?,
+                contact_nom: display_nom,
+                contact_prenom: display_prenom,
                 foyer_id: row.get(4)?,
                 foyer_nom: row.get(5)?,
                 type_produit: row.get(6)?,
@@ -2929,12 +2946,78 @@ impl Database {
     }
 
     /// Retirer une étiquette d'un contact
-    pub fn retirer_etiquette(&self, contact_id: i64, etiquette_id: i64) -> Result<()> {
+    pub fn retirer_etiquette(
+        &self,
+        contact_id: i64,
+        etiquette_id: i64,
+        exclude_from_auto: bool,
+    ) -> Result<()> {
+        if exclude_from_auto {
+            self.exclude_contact_from_auto_etiquette(contact_id, etiquette_id)?;
+        }
         self.conn.execute(
             "DELETE FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
             params![contact_id, etiquette_id],
         )?;
         Ok(())
+    }
+
+    pub fn is_auto_etiquette_excluded(&self, contact_id: i64, etiquette_id: i64) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_etiquette_auto_exclusions
+             WHERE contact_id = ?1 AND etiquette_id = ?2",
+            params![contact_id, etiquette_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Le contact ne recevra plus cette étiquette au recalcul auto (supprime l'attribution AUTO si présente).
+    pub fn exclude_contact_from_auto_etiquette(
+        &self,
+        contact_id: i64,
+        etiquette_id: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO contact_etiquette_auto_exclusions (contact_id, etiquette_id)
+             VALUES (?1, ?2)
+             ON CONFLICT(contact_id, etiquette_id) DO NOTHING",
+            params![contact_id, etiquette_id],
+        )?;
+        self.conn.execute(
+            "DELETE FROM contact_etiquettes
+             WHERE contact_id = ?1 AND etiquette_id = ?2 AND UPPER(TRIM(attribue_par)) = 'AUTO'",
+            params![contact_id, etiquette_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_auto_etiquette_exclusion(
+        &self,
+        contact_id: i64,
+        etiquette_id: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM contact_etiquette_auto_exclusions
+             WHERE contact_id = ?1 AND etiquette_id = ?2",
+            params![contact_id, etiquette_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn get_auto_etiquette_exclusion_ids_for_contact(
+        &self,
+        contact_id: i64,
+    ) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT etiquette_id FROM contact_etiquette_auto_exclusions WHERE contact_id = ?1",
+        )?;
+        let rows = stmt.query_map(params![contact_id], |row| row.get(0))?;
+        let mut ids = Vec::new();
+        for row in rows {
+            ids.push(row?);
+        }
+        Ok(ids)
     }
 
     /// Récupérer tous les contacts ayant une étiquette spécifique
@@ -3652,6 +3735,12 @@ impl Database {
                  {TEMPLATE_JOINS}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 1
+                   AND ce.email_date_envoi IS NOT NULL
+                   AND ce.email_date_envoi + ?2 > ?1
+                   AND ce.email_reponse_at IS NULL
+                   AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                   AND c.email IS NOT NULL
+                   AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_envoi DESC
                  LIMIT 100"
                 )
@@ -3710,13 +3799,7 @@ impl Database {
             })
         };
 
-        if queue_status == "sent" {
-            let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map([], map_row)?;
-            return rows.collect();
-        }
-
-        if queue_status == "followup" {
+        if queue_status == "sent" || queue_status == "followup" {
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(params![now, delai_secs], map_row)?;
             return rows.collect();
@@ -5004,6 +5087,11 @@ impl Database {
                      AND ce.email_date_envoi IS NOT NULL
                      AND ce.email_date_envoi + ?3 <= ?2
                      AND c.email IS NOT NULL AND TRIM(c.email) != '')
+                 OR (ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
+                     AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                     AND ce.email_date_envoi IS NOT NULL
+                     AND ce.email_date_envoi + ?3 > ?2
+                     AND c.email IS NOT NULL AND TRIM(c.email) != '')
                )
              ORDER BY
                CASE
@@ -5012,7 +5100,10 @@ impl Database {
                  WHEN ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
                       AND COALESCE(ce.email_suivi_ignore, 0) = 0
                       AND ce.email_date_envoi IS NOT NULL AND ce.email_date_envoi + ?3 <= ?2 THEN 1
-                 ELSE 2
+                 WHEN ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
+                      AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                      AND ce.email_date_envoi IS NOT NULL AND ce.email_date_envoi + ?3 > ?2 THEN 2
+                 ELSE 3
                END,
                ce.email_date_prevue ASC
              LIMIT 1",
@@ -5040,6 +5131,13 @@ impl Database {
                     .unwrap_or(false)
             {
                 "followup".to_string()
+            } else if email_reponse_at.is_none()
+                && email_suivi_ignore == 0
+                && email_date_envoi
+                    .map(|d| d + delai_secs > now)
+                    .unwrap_or(false)
+            {
+                "sent".to_string()
             } else {
                 "incomplete".to_string()
             };
@@ -5560,6 +5658,10 @@ mod database_integration_tests {
             .unwrap();
         assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
         assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
+        assert!(
+            db.get_etiquette_email_queue("followup").unwrap().is_empty(),
+            "envoi récent : pas encore en relance"
+        );
         let timeline_after_send = db.get_exchange_history_timeline().unwrap();
         let sent_row = timeline_after_send
             .iter()
@@ -5613,6 +5715,14 @@ mod database_integration_tests {
         let date_before_mail = db.get_contact_by_id(cid).unwrap().date_dernier_contact;
         db.mark_email_campaign_response(ce_id, "mail", None, None)
             .unwrap();
+        assert!(
+            db.get_etiquette_email_queue("sent").unwrap().is_empty(),
+            "réponse client : plus en attente dans sent"
+        );
+        assert!(
+            db.get_etiquette_email_queue("followup").unwrap().is_empty(),
+            "réponse client : plus en relance"
+        );
         assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
         assert_eq!(
             db.get_contact_by_id(cid).unwrap().date_dernier_contact,
@@ -5692,6 +5802,96 @@ mod database_integration_tests {
                 .iter()
                 .any(|i| i.queue_issue.as_deref() == Some("NO_EMAIL"))
         );
+    }
+
+    #[test]
+    fn etiquette_email_queue_sent_excludes_after_response_and_followup_after_delay() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Tpl attente".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+            })
+            .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Campagne attente".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 60),
+                email_envoi_heure: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("attente@example.com".into()),
+                ..sample_contact("Attente", "Bob")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()))
+            .unwrap();
+
+        let ce_id = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("file prête")
+            .contact_etiquette_id;
+
+        db.mark_etiquette_email_sent(ce_id, None, None, Some("Objet"), None)
+            .unwrap();
+
+        assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
+        assert!(db.get_etiquette_email_queue("followup").unwrap().is_empty());
+
+        let old_send = now - 10 * 86_400;
+        db.get_connection()
+            .execute(
+                "UPDATE contact_etiquettes SET email_date_envoi = ?1 WHERE id = ?2",
+                params![old_send, ce_id],
+            )
+            .unwrap();
+
+        assert!(
+            db.get_etiquette_email_queue("sent").unwrap().is_empty(),
+            "délai dépassé : plus en attente"
+        );
+        assert_eq!(
+            db.get_etiquette_email_queue("followup").unwrap().len(),
+            1,
+            "délai dépassé : bascule en relance"
+        );
+
+        db.mark_email_campaign_response(ce_id, "mail", None, None)
+            .unwrap();
+        assert!(db.get_etiquette_email_queue("sent").unwrap().is_empty());
+        assert!(db.get_etiquette_email_queue("followup").unwrap().is_empty());
     }
 
     #[test]
@@ -6074,5 +6274,121 @@ mod database_integration_tests {
             "unexpected: {}",
             err
         );
+    }
+
+    #[test]
+    fn auto_etiquette_exclusion_blocks_reassignment_after_retirer() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Exclu", "Alice")).unwrap();
+        let cid = contact.id.unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Auto exclu test".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: Some("DELAI_SANS_CONTACT".into()),
+                auto_condition_config: Some(r#"{"jours": 0, "inclure_sans_date": true}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+            })
+            .unwrap();
+
+        db.check_auto_etiquettes_for_contact(cid).unwrap();
+        let count_before: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count_before, 1);
+
+        db.retirer_etiquette(cid, etiqu.id, true).unwrap();
+
+        let excluded: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquette_auto_exclusions WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(excluded, 1);
+
+        db.check_auto_etiquettes_for_contact(cid).unwrap();
+        let count_after: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count_after, 0);
+    }
+
+    #[test]
+    fn auto_etiquette_removed_when_contact_category_no_longer_matches() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("CatChange", "Bob")).unwrap();
+        let cid = contact.id.unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Clients seulement".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: Some("DELAI_SANS_CONTACT".into()),
+                auto_condition_config: Some(r#"{"jours": 0, "inclure_sans_date": true}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+            })
+            .unwrap();
+
+        db.attribuer_etiquette(cid, etiqu.id, Some("AUTO".into()))
+            .unwrap();
+
+        db.update_contact(
+            cid,
+            &NewContact {
+                categorie: "PROSPECT".into(),
+                ..sample_contact("CatChange", "Bob")
+            },
+        )
+        .unwrap();
+
+        db.check_auto_etiquettes_for_contact(cid).unwrap();
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }

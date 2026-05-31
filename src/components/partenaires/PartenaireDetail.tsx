@@ -42,6 +42,7 @@ interface PartenaireDetailProps {
   onDelete: (id: number) => void;
   onUpdate: () => void;
   embedded?: boolean;
+  onOpenContact?: (contactId: number) => void;
 }
 
 function DetailField({
@@ -67,6 +68,7 @@ export function PartenaireDetail({
   onDelete,
   onUpdate,
   embedded = false,
+  onOpenContact,
 }: PartenaireDetailProps) {
   const [showEditForm, setShowEditForm] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -272,6 +274,11 @@ export function PartenaireDetail({
                   key={inv.id}
                   inv={inv}
                   partenaireNom={partenaire.raison_sociale}
+                  onOpenContactClick={
+                    onOpenContact && inv.contact_id
+                      ? () => onOpenContact(inv.contact_id!)
+                      : undefined
+                  }
                 />
               ))}
             </div>
