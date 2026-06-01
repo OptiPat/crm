@@ -22,6 +22,7 @@ import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
+import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import type { ContactDetailTabHint } from "@/lib/investissements/investissement-navigation";
@@ -89,6 +90,11 @@ function App() {
     void (async () => {
       try {
         await seedDefaultEtiquettes();
+      } catch {
+        /* déjà initialisé */
+      }
+      try {
+        await seedDefaultEmailTemplates();
       } catch {
         /* déjà initialisé */
       }

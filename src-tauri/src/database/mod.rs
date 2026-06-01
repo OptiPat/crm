@@ -354,7 +354,26 @@ impl Database {
         self.migrate_contact_etiquette_auto_exclusions()?;
         self.migrate_contact_gmail_messages()?;
         self.migrate_contact_mail_sync_state()?;
+        self.migrate_drop_emails_message_id_smtp()?;
 
+        Ok(())
+    }
+
+    /// Table `emails` (schéma Drizzle legacy) — colonne SMTP inutilisée.
+    fn migrate_drop_emails_message_id_smtp(&self) -> Result<()> {
+        let table_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='emails'",
+            [],
+            |row| row.get(0),
+        )?;
+        if table_exists == 0 {
+            return Ok(());
+        }
+        if self.table_has_column("emails", "message_id_smtp")? {
+            self.conn
+                .execute("ALTER TABLE emails DROP COLUMN message_id_smtp", [])?;
+            println!("✅ Migration: message_id_smtp supprimée de emails");
+        }
         Ok(())
     }
 

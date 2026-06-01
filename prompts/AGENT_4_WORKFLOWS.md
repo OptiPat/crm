@@ -324,6 +324,9 @@ Commence par la phase V1.5 (Pipelines par étiquette).
 
 ## 🔧 Configuration n8n existante
 
+> **CRM Patrimoine** : envoi et connexion boîte mail via **OAuth** (Gmail API / Microsoft Graph), pas SMTP — voir `docs/EMAIL.md`.  
+> La section ci-dessous décrit une stack **n8n optionnelle** (automatisations externes), distincte de l’app desktop.
+
 > **n8n local** : `http://localhost:5678`
 > **Webhook callback** : `http://localhost:5678/rest/oauth2-credential/callback`
 
@@ -332,7 +335,7 @@ Commence par la phase V1.5 (Pipelines par étiquette).
 | Credential | Type | Usage CRM |
 |------------|------|-----------|
 | **Google OAuth2** | OAuth2 | Gmail (lecture/envoi), Calendar (détection RDV), Contacts |
-| **SMTP Gmail** | SMTP (port 465 SSL) | Envoi d'emails via n8n |
+| **SMTP Gmail** | SMTP (port 465 SSL) | Envoi via n8n uniquement (hors CRM) |
 | **Mistral API** | Header Auth (Bearer) | Personnalisation IA des emails, newsletters |
 
 ### Scopes Google disponibles
@@ -348,7 +351,7 @@ contacts.readonly   → Sync contacts Google (bonus)
 ### Notifications
 
 - ❌ Pas de Telegram
-- ✅ Par email (SMTP Gmail)
+- ✅ Par email (n8n / SMTP ou Gmail API selon workflow)
 - ✅ Dans le CRM (alertes/notifications internes)
 
 ### Exemple de workflow n8n pour V2
@@ -384,7 +387,7 @@ contacts.readonly   → Sync contacts Google (bonus)
 │                                                                             │
 │  [Mistral: Générer contenu personnalisé selon profil]  →                   │
 │                                                                             │
-│  [Gmail Send via SMTP]  →                                                  │
+│  [Gmail Send]  →                                                           │
 │                                                                             │
 │  [HTTP Request: POST CRM/api/contacts/:id/historique (mail envoyé)]        │
 │                                                                             │

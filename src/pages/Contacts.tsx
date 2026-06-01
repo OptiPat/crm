@@ -27,6 +27,7 @@ import { buildEtiquettesPourFiltre } from "@/lib/etiquettes/etiquettes-filter";
 import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { buildFoyerFlatRows } from "@/lib/foyers/foyer-list-rows";
 import { VirtualizedContactList } from "@/components/contacts/VirtualizedContactList";
+import { estimateContactListRowHeight } from "@/lib/contacts/contact-list-row-height";
 import { VirtualizedFoyerContactList } from "@/components/contacts/VirtualizedFoyerContactList";
 import { FoyerFlatRowRenderer } from "@/components/contacts/FoyerFlatRowRenderer";
 import { ContactListRow } from "@/components/contacts/ContactListRow";
@@ -49,7 +50,7 @@ import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contact
 import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
-import { consumePendingOpenContactId } from "@/lib/investissements/investissement-navigation";
+import { consumePendingOpenContactId, prepareOpenContactWithInvestissement } from "@/lib/investissements/investissement-navigation";
 import { toast } from "sonner";
 
 type MainTab = "clients" | "filleuls";
@@ -845,6 +846,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
             <VirtualizedContactList
               items={filteredContacts}
               getKey={(contact) => contact.id ?? `${contact.nom}-${contact.prenom}`}
+              getItemHeight={(contact) =>
+                estimateContactListRowHeight(contact, etiquettesParContact)
+              }
               renderItem={(contact) => (
                 <ContactListRow
                   contact={contact}
@@ -896,6 +900,12 @@ export function Contacts({ onNavigate }: ContactsProps) {
         open={showForm}
         onOpenChange={setShowForm}
         onSuccess={loadContacts}
+        onCreated={(contact, { addInvestissement }) => {
+          if (addInvestissement && contact.id) {
+            prepareOpenContactWithInvestissement(contact.id);
+            openContactDetail(contact);
+          }
+        }}
         createContext={mainTab === "filleuls" ? "filleuls" : "clients"}
         onOpenContact={openLinkedContact}
       />

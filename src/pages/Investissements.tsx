@@ -19,6 +19,7 @@ import {
 } from "@/lib/api/tauri-investissements";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
+import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
   computePatrimoineStats,
@@ -194,12 +195,8 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
       inv.foyer_nom ?? "",
       inv.partenaire_nom ?? "",
       inv.origine === "MON_CONSEIL" ? "Avec moi" : "À côté",
-      inv.date_souscription
-        ? new Date(inv.date_souscription * 1000).toLocaleDateString("fr-FR")
-        : "",
-      inv.date_fin_demembrement
-        ? new Date(inv.date_fin_demembrement * 1000).toLocaleDateString("fr-FR")
-        : "",
+      inv.date_souscription ? formatCalendarDateFr(inv.date_souscription) : "",
+      inv.date_fin_demembrement ? formatCalendarDateFr(inv.date_fin_demembrement) : "",
       inv.notes ?? "",
     ]);
     const date = new Date().toISOString().slice(0, 10);

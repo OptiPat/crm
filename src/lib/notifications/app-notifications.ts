@@ -3,6 +3,7 @@ import {
   getEtiquetteEmailQueue,
   type EtiquetteEmailQueueStatus,
 } from "@/lib/api/tauri-etiquettes";
+import { getStelliumExceltisSignals } from "@/lib/api/tauri-stellium-exceltis";
 import type { SuiviMainTab } from "@/lib/navigation/suivi-navigation";
 
 export type NotificationSeverity = "info" | "warning" | "urgent";
@@ -12,10 +13,11 @@ export type AppNotificationKind =
   | "emails_followup"
   | "emails_incomplete"
   | "emails_sent"
-  | "alertes_suivi";
+  | "alertes_suivi"
+  | "exceltis_stellium";
 
 export type AppNotificationItem = {
-  id: AppNotificationKind;
+  id: AppNotificationKind | `exceltis_stellium:${string}`;
   label: string;
   count: number;
   severity: NotificationSeverity;
@@ -23,6 +25,10 @@ export type AppNotificationItem = {
   envoisSubTab?: EtiquetteEmailQueueStatus;
   /** Si une seule action : focus contact dans Suivi (alerte ou file email). */
   focusContactId?: number;
+  /** Onglet Étiquettes : présélectionner cette étiquette (signal Stellium). */
+  focusEtiquetteId?: number;
+  /** Pour masquer un signal Stellium après traitement. */
+  stelliumMessageId?: string;
 };
 
 export type AppNotificationsSummary = {
@@ -31,13 +37,15 @@ export type AppNotificationsSummary = {
 };
 
 export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSummary> {
-  const [alertes, ready, followup, incomplete, sent] = await Promise.all([
-    getAlertesNonTraitees(),
-    getEtiquetteEmailQueue("ready"),
-    getEtiquetteEmailQueue("followup"),
-    getEtiquetteEmailQueue("incomplete"),
-    getEtiquetteEmailQueue("sent"),
-  ]);
+  const [alertes, ready, followup, incomplete, sent, stelliumSignals] =
+    await Promise.all([
+      getAlertesNonTraitees(),
+      getEtiquetteEmailQueue("ready"),
+      getEtiquetteEmailQueue("followup"),
+      getEtiquetteEmailQueue("incomplete"),
+      getEtiquetteEmailQueue("sent"),
+      getStelliumExceltisSignals().catch(() => []),
+    ]);
 
   const items: AppNotificationItem[] = [];
 
@@ -97,6 +105,23 @@ export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSu
       severity: "warning",
       suiviTab: "alertes",
       focusContactId: alertes.length === 1 ? alertes[0].contact_id : undefined,
+    });
+  }
+
+  for (const sig of stelliumSignals) {
+    const clients = sig.contact_count;
+    const disinvestFrom = sig.operation_from_label?.trim();
+    const disinvestSuffix = disinvestFrom
+      ? ` — fond désinvesti à partir du ${disinvestFrom}`
+      : "";
+    items.push({
+      id: `exceltis_stellium:${sig.gmail_message_id}`,
+      label: `Exceltis remboursé — ${sig.millesime_label}${disinvestSuffix}`,
+      count: clients > 0 ? clients : 1,
+      severity: clients > 0 ? "urgent" : "warning",
+      suiviTab: "etiquettes",
+      focusEtiquetteId: sig.etiquette_id ?? undefined,
+      stelliumMessageId: sig.gmail_message_id,
     });
   }
 

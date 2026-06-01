@@ -39,7 +39,9 @@ Scopes utilisés : envoi Gmail, lecture Gmail (réponses), signature d’envoi, 
 1. Enregistrer les Client ID.
 2. **Connecter Google** ou **Connecter Microsoft** → navigateur → autoriser.
 3. **Tester la connexion** envoie un email à votre propre adresse.
-4. Les envois **Suivi → Envois** utilisent le compte connecté (sinon repli SMTP).
+4. Les envois **Suivi → Envois** utilisent le compte connecté (OAuth obligatoire).
+
+Guide pas à pas pour l’utilisatrice : [GUIDE_CONNEXION_GMAIL.md](./GUIDE_CONNEXION_GMAIL.md).
 
 Déconnexion : bouton **Déconnecter** (ne supprime pas les Client ID).
 
@@ -51,7 +53,6 @@ Déconnexion : bouton **Déconnecter** (ne supprime pas les Client ID).
 |--------|---------|------------|
 | Client ID Google / Microsoft | `email_oauth.json` | En clair (identifiants publics d’application) |
 | Tokens d’accès / refresh | `email_oauth.json` | **Chiffrés** (XOR + nonce, clé = `db_encryption_key` de `auth.json`, même secret que la base CRM) |
-| Mot de passe SMTP (legacy) | `smtp_config.json` | Plus configurable dans l’app ; remplacé par OAuth |
 
 Les tokens OAuth ne sont **pas** stockés en clair une fois le CRM configuré (mot de passe maître créé). Un ancien fichier non chiffré est **re-sauvegardé automatiquement** au chargement si la clé CRM est disponible.
 
@@ -72,4 +73,4 @@ Recommandations : poste verrouillé, sauvegardes du dossier App Data protégées
 | `invalid_grant` à l'échange | Ne pas recharger la page de succès ; une seule tentative — recliquer **Connecter Google** après 5 s |
 | `client_secret is missing` | Collez le **code secret** Google (Clients → CRM Bureau) dans Paramètres → Email, puis **Enregistrer** |
 
-L’ancienne méthode SMTP n’est plus proposée dans Paramètres : connectez OAuth pour les nouveaux postes.
+Seule la connexion OAuth (Google / Microsoft) est supportée dans le CRM.

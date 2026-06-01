@@ -1,5 +1,7 @@
 # 📊 État du Projet - 16 janvier 2026
 
+> **Mise à jour doc (2026)** : email via **OAuth** (plus SMTP). Voir [`docs/EMAIL.md`](docs/EMAIL.md).
+
 ## 🎉 Progression : 60%
 
 **3 modules majeurs terminés en 2 jours !**
@@ -17,7 +19,7 @@
 - ✅ CRUD Foyers
 - ✅ CRUD Partenaires
 - ✅ Templates d'emails avec variables dynamiques
-- ✅ Configuration SMTP + envoi d'emails
+- ✅ Connexion email OAuth + envoi d'emails
 - ✅ Système d'alertes automatiques + page Suivi
 - ✅ Upload de documents
 

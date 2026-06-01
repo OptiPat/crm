@@ -27,9 +27,7 @@ import {
   ChevronRight,
   ChevronLeft,
   SkipForward,
-  TestTube,
   Upload,
-  X,
 } from "lucide-react";
 import {
   getCgpConfig,
@@ -38,12 +36,7 @@ import {
   updateWizardStep,
   type CgpConfig,
 } from "@/lib/api/tauri-settings";
-import {
-  getSmtpConfig,
-  saveSmtpConfig,
-  testSmtpConnection,
-  type SmtpConfigInput,
-} from "@/lib/api/tauri-email";
+import { EmailOAuthConnect } from "@/components/emails/EmailOAuthConnect";
 import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenaire } from "@/lib/api/tauri-partenaires";
 
 interface SetupWizardProps {
@@ -89,20 +82,6 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
     wizard_step: 1,
   });
   
-  // Étape 2 : Configuration SMTP
-  const [smtpConfig, setSmtpConfig] = useState<SmtpConfigInput>({
-    provider: "other",
-    smtp_server: "",
-    smtp_port: 587,
-    username: "",
-    password: "",
-    from_name: "",
-    from_email: "",
-    use_tls: true,
-  });
-  const [smtpTesting, setSmtpTesting] = useState(false);
-  const [smtpTestResult, setSmtpTestResult] = useState<{ success: boolean; message: string } | null>(null);
-  
   // Étape 3 : Partenaires
   const [existingPartenaires, setExistingPartenaires] = useState<Partenaire[]>([]);
   const [selectedPartenaires, setSelectedPartenaires] = useState<string[]>([]);
@@ -124,15 +103,6 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
             wizard_step: config.wizard_step || 1,
           });
           setCurrentStep(config.wizard_step || 1);
-        }
-        
-        // Charger la config SMTP
-        const smtp = await getSmtpConfig();
-        if (smtp) {
-          setSmtpConfig({
-            ...smtp,
-            password: "", // Ne pas afficher le mot de passe
-          });
         }
         
         // Charger les partenaires existants
@@ -168,67 +138,13 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
     }
   };
 
-  const handleProviderChange = (provider: string) => {
-    if (provider === "gmail") {
-      setSmtpConfig({
-        ...smtpConfig,
-        provider,
-        smtp_server: "smtp.gmail.com",
-        smtp_port: 587,
-        use_tls: true,
-      });
-    } else if (provider === "outlook") {
-      setSmtpConfig({
-        ...smtpConfig,
-        provider,
-        smtp_server: "smtp-mail.outlook.com",
-        smtp_port: 587,
-        use_tls: true,
-      });
-    } else if (provider === "ovh") {
-      setSmtpConfig({
-        ...smtpConfig,
-        provider,
-        smtp_server: "ssl0.ovh.net",
-        smtp_port: 465,
-        use_tls: true,
-      });
-    } else {
-      setSmtpConfig({
-        ...smtpConfig,
-        provider,
-      });
-    }
-  };
-
-  const handleTestSmtp = async () => {
-    setSmtpTesting(true);
-    setSmtpTestResult(null);
-    
-    try {
-      // Sauvegarder d'abord
-      await saveSmtpConfig(smtpConfig);
-      // Puis tester
-      const message = await testSmtpConnection();
-      setSmtpTestResult({ success: true, message });
-    } catch (error) {
-      setSmtpTestResult({ success: false, message: String(error) });
-    } finally {
-      setSmtpTesting(false);
-    }
-  };
-
   const handleStep2Next = async () => {
     setLoading(true);
     try {
-      // Sauvegarder la config SMTP si remplie
-      if (smtpConfig.smtp_server && smtpConfig.username) {
-        await saveSmtpConfig(smtpConfig);
-      }
       await updateWizardStep(3);
       setCurrentStep(3);
     } catch (error) {
-      console.error("Error saving SMTP config:", error);
+      console.error("Error advancing wizard:", error);
     } finally {
       setLoading(false);
     }
@@ -411,138 +327,21 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
         </Card>
       )}
 
-      {/* Étape 2 : Configuration Email */}
+      {/* Étape 2 : Connexion email (OAuth) */}
       {currentStep === 2 && (
         <Card className="max-w-2xl w-full">
           <CardHeader className="text-center">
             <div className="mx-auto p-3 bg-primary/10 rounded-full w-fit mb-2">
               <Mail className="h-6 w-6 text-primary" />
             </div>
-            <CardTitle>Configuration email</CardTitle>
+            <CardTitle>Connexion email</CardTitle>
             <CardDescription>
-              Configurez votre email pour envoyer des messages depuis l'application
+              Connectez Google ou Microsoft pour envoyer depuis Suivi → Envois (configurable aussi
+              dans Paramètres)
             </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="provider">Fournisseur</Label>
-              <Select value={smtpConfig.provider} onValueChange={handleProviderChange}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="gmail">Gmail</SelectItem>
-                  <SelectItem value="outlook">Outlook / Office 365</SelectItem>
-                  <SelectItem value="ovh">OVH</SelectItem>
-                  <SelectItem value="other">Autre (manuel)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="smtp_server">Serveur SMTP</Label>
-                <Input
-                  id="smtp_server"
-                  value={smtpConfig.smtp_server}
-                  onChange={(e) => setSmtpConfig({ ...smtpConfig, smtp_server: e.target.value })}
-                  placeholder="smtp.gmail.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="smtp_port">Port</Label>
-                <Input
-                  id="smtp_port"
-                  type="number"
-                  value={smtpConfig.smtp_port}
-                  onChange={(e) => setSmtpConfig({ ...smtpConfig, smtp_port: parseInt(e.target.value) })}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="username">Nom d'utilisateur / Email</Label>
-              <Input
-                id="username"
-                value={smtpConfig.username}
-                onChange={(e) => setSmtpConfig({ ...smtpConfig, username: e.target.value })}
-                placeholder="votre@email.com"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password">Mot de passe</Label>
-              <Input
-                id="password"
-                type="password"
-                value={smtpConfig.password}
-                onChange={(e) => setSmtpConfig({ ...smtpConfig, password: e.target.value })}
-                placeholder="Votre mot de passe"
-              />
-              {smtpConfig.provider === "gmail" && (
-                <p className="text-xs text-yellow-600">
-                  Pour Gmail, utilisez un "mot de passe d'application"
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="from_name">Nom d'expéditeur</Label>
-                <Input
-                  id="from_name"
-                  value={smtpConfig.from_name}
-                  onChange={(e) => setSmtpConfig({ ...smtpConfig, from_name: e.target.value })}
-                  placeholder="Votre nom"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="from_email">Email d'expéditeur</Label>
-                <Input
-                  id="from_email"
-                  type="email"
-                  value={smtpConfig.from_email}
-                  onChange={(e) => setSmtpConfig({ ...smtpConfig, from_email: e.target.value })}
-                  placeholder="votre@email.com"
-                />
-              </div>
-            </div>
-
-            {smtpTestResult && (
-              <div
-                className={`p-3 rounded-lg flex items-start gap-2 ${
-                  smtpTestResult.success
-                    ? "bg-green-50 border border-green-200"
-                    : "bg-red-50 border border-red-200"
-                }`}
-              >
-                {smtpTestResult.success ? (
-                  <Check className="h-5 w-5 text-green-600 mt-0.5" />
-                ) : (
-                  <X className="h-5 w-5 text-red-600 mt-0.5" />
-                )}
-                <p
-                  className={`text-sm ${
-                    smtpTestResult.success ? "text-green-800" : "text-red-800"
-                  }`}
-                >
-                  {smtpTestResult.message}
-                </p>
-              </div>
-            )}
-
-            {smtpConfig.smtp_server && smtpConfig.username && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleTestSmtp}
-                disabled={smtpTesting}
-                className="w-full"
-              >
-                <TestTube className="h-4 w-4 mr-2" />
-                {smtpTesting ? "Test en cours..." : "Tester la connexion"}
-              </Button>
-            )}
+          <CardContent>
+            <EmailOAuthConnect variant="embedded" />
           </CardContent>
           <CardFooter className="flex justify-between">
             <Button variant="ghost" onClick={() => setCurrentStep(1)}>

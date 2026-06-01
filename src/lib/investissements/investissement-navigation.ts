@@ -19,6 +19,20 @@ export function prepareOpenContactPatrimoine(contactId: number): void {
   prepareOpenContact(contactId, "patrimoine");
 }
 
+export const CRM_OPEN_CONTACT_INVESTISSEMENT_KEY = "crm_open_contact_investissement";
+
+/** Ouvre la fiche contact (onglet Patrimoine) + formulaire investissement. */
+export function prepareOpenContactWithInvestissement(contactId: number): void {
+  prepareOpenContactPatrimoine(contactId);
+  sessionStorage.setItem(CRM_OPEN_CONTACT_INVESTISSEMENT_KEY, "1");
+}
+
+export function consumeOpenContactInvestissementFlag(): boolean {
+  const raw = sessionStorage.getItem(CRM_OPEN_CONTACT_INVESTISSEMENT_KEY);
+  sessionStorage.removeItem(CRM_OPEN_CONTACT_INVESTISSEMENT_KEY);
+  return raw === "1";
+}
+
 export function consumePendingOpenContactId(): number | null {
   const raw = sessionStorage.getItem(CRM_OPEN_CONTACT_ID_KEY);
   if (!raw) return null;

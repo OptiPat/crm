@@ -1,4 +1,5 @@
 import type { Contact, NewContact } from "@/lib/api/tauri-contacts";
+import { unixToDateInput } from "@/lib/dates/calendar-date";
 
 export const CLIENT_STATUTS = ["AUCUN", "CLIENT", "PROSPECT_CLIENT", "SUSPECT_CLIENT"] as const;
 export const FILLEUL_STATUTS = [
@@ -44,12 +45,7 @@ export function toDateInput(dateValue: string | number | undefined | null): stri
   if (!dateValue) return "";
   try {
     if (typeof dateValue === "number") {
-      const date = new Date(dateValue * 1000);
-      if (isNaN(date.getTime())) return "";
-      const year = date.getUTCFullYear();
-      const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-      const day = String(date.getUTCDate()).padStart(2, "0");
-      return `${year}-${month}-${day}`;
+      return unixToDateInput(dateValue);
     }
     if (typeof dateValue === "string") {
       const date = new Date(dateValue);
@@ -73,10 +69,31 @@ export function todayLocal(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export function addMonthsLocal(months: number): string {
-  const d = new Date();
+export function addMonthsLocal(months: number, referenceDate: Date = new Date()): string {
+  const d = new Date(referenceDate);
   d.setMonth(d.getMonth() + months);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** Prochain suivi client : J+1 an. */
+export function defaultProchainSuiviClient(referenceDate: Date = new Date()): string {
+  return addMonthsLocal(12, referenceDate);
+}
+
+/** Prochain suivi filleul, prospect ou suspect client : J+6 mois. */
+export function defaultProchainSuiviSixMois(referenceDate: Date = new Date()): string {
+  return addMonthsLocal(6, referenceDate);
+}
+
+export function defaultProchainSuiviForClientStatut(
+  categorie: string | undefined,
+  referenceDate: Date = new Date()
+): string {
+  if (categorie === "CLIENT") return defaultProchainSuiviClient(referenceDate);
+  if (categorie === "PROSPECT_CLIENT" || categorie === "SUSPECT_CLIENT") {
+    return defaultProchainSuiviSixMois(referenceDate);
+  }
+  return "";
 }
 
 export function formatPhoneFR(value: string): string {
@@ -112,6 +129,7 @@ export function getEmptyForm(context: ContactFormContext): NewContact {
       ...BASE_EMPTY,
       categorie: "AUCUN",
       filleul_categorie: "SUSPECT_FILLEUL",
+      date_prochain_suivi_filleul: defaultProchainSuiviSixMois(),
     };
   }
   if (context === "prescripteurs") {
@@ -125,6 +143,7 @@ export function getEmptyForm(context: ContactFormContext): NewContact {
     ...BASE_EMPTY,
     categorie: "SUSPECT_CLIENT",
     filleul_categorie: undefined,
+    date_prochain_suivi: defaultProchainSuiviSixMois(),
   };
 }
 

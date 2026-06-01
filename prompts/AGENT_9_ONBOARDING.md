@@ -22,7 +22,7 @@
 ### Fonctionnalités implémentées
 
 - **Étape 1** : Informations CGP (nom, prénom, cabinet, email, téléphone)
-- **Étape 2** : Configuration SMTP (presets Gmail/Outlook/OVH + test connexion)
+- **Étape 2** : Connexion email OAuth (Google / Microsoft + test connexion)
 - **Étape 3** : Partenaires (populaires pré-remplis + ajout manuel)
 - **Étape 4** : Import de données (Excel ou vide)
 - Progress bar visuelle
@@ -48,7 +48,7 @@ Patrimoine CRM est un logiciel desktop Tauri pour CGP (Conseillers en Gestion de
 
 ## Ce qui est DÉJÀ FAIT
 - ✅ Setup mot de passe au premier lancement (SetupPassword.tsx)
-- ✅ Page Paramètres avec config SMTP
+- ✅ Page Paramètres avec connexion OAuth (`EmailOAuthConnect`)
 - ✅ Page Partenaires avec CRUD complet
 - ✅ Import Excel fonctionnel
 
@@ -65,8 +65,8 @@ Après le setup mot de passe, afficher un wizard en 4 étapes :
 - Téléphone
 - Logo (optionnel)
 
-**Étape 2 : Configuration email**
-- Serveur SMTP (ou presets : Gmail, Outlook, OVH...)
+**Étape 2 : Connexion email**
+- OAuth Google ou Microsoft (voir `docs/EMAIL_OAUTH_SETUP.md`)
 - Test d'envoi
 - Possibilité de passer ("Je configurerai plus tard")
 

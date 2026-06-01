@@ -1,9 +1,41 @@
 import { describe, expect, it } from "vitest";
 import {
+  defaultProchainSuiviClient,
+  defaultProchainSuiviForClientStatut,
+  defaultProchainSuiviSixMois,
+  getEmptyForm,
   isAlerteSuiviFilleul,
   resolveImportContactCategories,
   suiviDatesOverrides,
 } from "./contact-form-utils";
+
+describe("defaultProchainSuiviClient", () => {
+  it("propose J+1 an", () => {
+    const ref = new Date(2026, 5, 1);
+    expect(defaultProchainSuiviClient(ref)).toBe("2027-06-01");
+  });
+});
+
+describe("getEmptyForm", () => {
+  it("préremplit le prochain suivi suspect client à J+6 mois", () => {
+    const form = getEmptyForm("clients");
+    expect(form.date_prochain_suivi).toBe(defaultProchainSuiviSixMois());
+  });
+
+  it("préremplit le prochain suivi filleul à J+6 mois", () => {
+    const form = getEmptyForm("filleuls");
+    expect(form.date_prochain_suivi_filleul).toBe(defaultProchainSuiviSixMois());
+  });
+});
+
+describe("defaultProchainSuiviForClientStatut", () => {
+  it("1 an pour client, 6 mois pour prospect/suspect", () => {
+    const ref = new Date(2026, 5, 1);
+    expect(defaultProchainSuiviForClientStatut("CLIENT", ref)).toBe("2027-06-01");
+    expect(defaultProchainSuiviForClientStatut("PROSPECT_CLIENT", ref)).toBe("2026-12-01");
+    expect(defaultProchainSuiviForClientStatut("SUSPECT_CLIENT", ref)).toBe("2026-12-01");
+  });
+});
 
 describe("resolveImportContactCategories", () => {
   it("client si produit", () => {

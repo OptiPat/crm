@@ -22,7 +22,6 @@ chrono = "0.4"
 tauri-plugin-dialog = "2.7"
 tauri-plugin-fs = "2.5"
 hex = "0.4"
-lettre = "0.11"
 base64 = "0.21"
 tauri-plugin-process = "2"
 oauth2 = { version = "4.4", features = ["reqwest"] }

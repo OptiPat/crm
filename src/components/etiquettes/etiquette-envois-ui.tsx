@@ -82,12 +82,10 @@ export function EnvoisQueueHelp() {
 
 export function EnvoisEmailConnectionBanner({
   connected,
-  method,
   provider,
   email,
 }: {
   connected: boolean;
-  method?: string;
   provider?: string | null;
   email?: string | null;
 }) {
@@ -98,18 +96,6 @@ export function EnvoisEmailConnectionBanner({
         <span>
           Connectez votre boîte dans <strong>Paramètres → Email</strong> pour envoyer depuis cette
           file.
-        </span>
-      </p>
-    );
-  }
-
-  if (method === "smtp") {
-    return (
-      <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-        <span>
-          Config SMTP détectée — pour Gmail, passez par <strong>Connecter Google</strong> dans
-          Paramètres → Email.
         </span>
       </p>
     );

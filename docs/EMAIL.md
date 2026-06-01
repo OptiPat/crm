@@ -1,7 +1,7 @@
 # Module email — feuille de route
 
 Guide produit et technique pour le module mail du CRM Patrimoine.  
-État initial commité : SMTP + templates + file Suivi → Envois (confirmation manuelle).
+État actuel : **OAuth Gmail / Microsoft** + templates + file Suivi → Envois (confirmation manuelle). L’ancienne connexion SMTP a été retirée.
 
 ---
 
@@ -42,7 +42,7 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 ### Étape 2 — Templates métier ✅
 
 - Bibliothèque par **intention** (`RELANCE`, `FISCALITE`, `SUIVI_ANNUEL`, …) — page Templates Email.
-- **7 modèles par défaut** (`seed_default_email_templates`, bouton « Modèles par défaut »).
+- **9 modèles par défaut** (dont Exceltis) — complétés au démarrage du CRM et via le bouton « Modèles par défaut ».
 - Variables documentées : `src/lib/emails/template-email-meta.ts`.
 - Suggestion **étiquette → template** (`suggestTemplateIdForEtiquette`, bouton Suggérer dans EtiquetteForm).
 - Aperçu live (contact fictif ou réel), **duplication**, regroupement par catégorie.
@@ -120,7 +120,7 @@ Nécessite **Google connecté** avec les droits Gmail (lecture) et **Google Cale
 
 Déclenchement : à l’**actualisation** de la file, ou bouton **Vérifier réponses** (Suivi → Envois). Les contacts détectés sont marqués « répondu » (mail ou RDV) et sortent de **À relancer**.
 
-Limite : envois **avant** cette version sans thread Gmail enregistré — la recherche par expéditeur compense en partie. Microsoft / SMTP : pas de sync auto (marquage manuel).
+Limite : envois **avant** cette version sans thread Gmail enregistré — la recherche par expéditeur compense en partie. Microsoft : pas de sync auto Gmail (marquage manuel).
 
 ---
 

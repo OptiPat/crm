@@ -23,7 +23,6 @@ import {
   testEmailConnection,
   type EmailConnectionStatus,
 } from "@/lib/api/tauri-email-oauth";
-import { deleteSmtpConfig } from "@/lib/api/tauri-email";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -40,7 +39,6 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState<"google" | "microsoft" | null>(null);
   const [testing, setTesting] = useState(false);
-  const [removingSmtp, setRemovingSmtp] = useState(false);
   const [showReplaceGoogleSecret, setShowReplaceGoogleSecret] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -100,19 +98,6 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
     }
   };
 
-  const handleRemoveLegacySmtp = async () => {
-    setRemovingSmtp(true);
-    try {
-      await deleteSmtpConfig();
-      await refresh();
-      toast.success("Ancienne configuration SMTP supprimée");
-    } catch {
-      toast.error("Impossible de supprimer la config SMTP");
-    } finally {
-      setRemovingSmtp(false);
-    }
-  };
-
   const handleDisconnect = async () => {
     try {
       await disconnectEmailOAuth();
@@ -136,7 +121,6 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
   };
 
   const oauthConnected = status?.method === "oauth" && status.connected;
-  const legacySmtp = status?.method === "smtp";
 
   const body = loading ? (
     <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground">
@@ -145,24 +129,6 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
     </div>
   ) : (
     <div className="space-y-5">
-      {legacySmtp && (
-        <div className="text-sm text-amber-950 bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-3">
-          <p>
-            Une ancienne configuration SMTP bloque l&apos;usage de Gmail dans Suivi → Envois.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={removingSmtp}
-            onClick={() => void handleRemoveLegacySmtp()}
-          >
-            {removingSmtp ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : null}
-            Supprimer l&apos;ancienne config SMTP
-          </Button>
-        </div>
-      )}
-
       {oauthConnected ? (
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4">
           <div className="flex items-start gap-3 flex-1 min-w-0">

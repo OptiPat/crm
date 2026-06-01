@@ -62,8 +62,8 @@ struct GmailListResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct GmailIdRef {
-    id: String,
+pub(crate) struct GmailIdRef {
+    pub(crate) id: String,
     #[serde(rename = "threadId", default)]
     thread_id: Option<String>,
 }
@@ -132,7 +132,7 @@ fn parse_internal_date_sec(internal_date: &str) -> Option<i64> {
         .map(|ms| ms / 1000)
 }
 
-fn header_value<'a>(headers: Option<&'a [GmailHeader]>, name: &str) -> String {
+pub(crate) fn header_value<'a>(headers: Option<&'a [GmailHeader]>, name: &str) -> String {
     headers
         .and_then(|hs| {
             hs.iter()
@@ -334,7 +334,7 @@ fn fetch_message_metadata(
     res.json().map_err(|e| e.to_string())
 }
 
-fn list_message_ids(
+pub(crate) fn list_message_ids(
     client: &reqwest::blocking::Client,
     token: &str,
     q: &str,

@@ -1,5 +1,7 @@
 # 📊 Rapport d'implémentation - Patrimoine CRM
 
+> **Mise à jour doc (2026)** : la connexion email utilise désormais **OAuth** (Gmail API / Microsoft Graph), plus SMTP. Référence : [`docs/EMAIL.md`](docs/EMAIL.md).
+
 **Date** : 16 janvier 2026
 **Version** : 0.1.0
 **Dernière mise à jour** : Module Investissements terminé
@@ -22,7 +24,7 @@
 |-------|--------|---------|
 | **2.1** Import Excel/CSV | ✅ FAIT | Mapping intelligent, détection doublons |
 | **2.2** Templates d'emails | ✅ FAIT | Variables dynamiques, 6 catégories |
-| **2.3** Configuration SMTP | ✅ FAIT | Gmail, Outlook, autre + envoi |
+| **2.3** Connexion email | ✅ FAIT | OAuth Gmail / Microsoft + envoi |
 | **2.4** Alertes automatiques | ✅ FAIT | Génération, page de suivi, actions rapides |
 
 ---
@@ -97,34 +99,15 @@
 
 ---
 
-### 4️⃣ Configuration SMTP et envoi d'emails ✅
+### 4️⃣ Connexion email et envoi ✅
 
-**Fichiers créés** :
-- `src-tauri/src/email/mod.rs` - Module email
-- `src-tauri/src/email/smtp_config.rs` - Configuration SMTP
-- `src-tauri/src/email/sender.rs` - Envoi d'emails
-- `src-tauri/src/email/commands.rs` - Commandes Tauri
-- `src/components/emails/SmtpConfigForm.tsx` - Formulaire config
-- `src/lib/api/tauri-email.ts` - API TypeScript
+*À la date du rapport : implémentation **SMTP** (`smtp_config.rs`, `SmtpConfigForm`). **Remplacé depuis** par **OAuth** (Gmail API / Microsoft Graph) — voir [`docs/EMAIL.md`](docs/EMAIL.md).*
 
-**Dépendances ajoutées** :
-- `lettre` (Rust) - Client SMTP
-- `base64` (Rust) - Encodage des mots de passe
-
-**Fichiers modifiés** :
-- `src/pages/Parametres.tsx` - Ajout section SMTP
-- `src-tauri/Cargo.toml` - Dépendances
-- `src-tauri/src/main.rs` - Enregistrement des commandes
-
-**Fonctionnalités** :
-- **3 modes de configuration** :
-  - Gmail (configuration automatique)
-  - Outlook / Office 365 (configuration automatique)
-  - Autre fournisseur (manuel)
-- **Test de connexion** intégré avec envoi d'email test
-- Stockage sécurisé de la configuration (mots de passe encodés en base64)
-- Support TLS/STARTTLS
-- Fonction d'envoi depuis l'application
+**État actuel** :
+- `EmailOAuthConnect`, `oauth_store.rs`, `oauth_send.rs`
+- Paramètres → Email : Connecter Google / Microsoft, test de connexion
+- Envoi : Suivi → Envois, campagnes par étiquette (CRM ouvert)
+- Fichier local : `email_oauth.json` (tokens chiffrés) ; `smtp_config.json` supprimé au démarrage
 
 **⚠️ Important pour Gmail** :
 - Nécessite un "mot de passe d'application" (pas le mot de passe principal)
@@ -302,8 +285,8 @@
 src-tauri/src/
 ├── email/
 │   ├── mod.rs              ✨ NOUVEAU
-│   ├── smtp_config.rs      ✨ NOUVEAU
-│   ├── sender.rs           ✨ NOUVEAU
+│   ├── oauth_*.rs          ✨ (remplace smtp_config / sender)
+│   ├── …                   ✨
 │   └── commands.rs         ✨ NOUVEAU
 ├── database/
 │   ├── models.rs           📝 MODIFIÉ (+TemplateEmail, +Alerte)
@@ -321,14 +304,14 @@ src/
 │   ├── TemplatesEmail.tsx  ✨ NOUVEAU
 │   ├── Suivi.tsx           ✨ NOUVEAU
 │   ├── Contacts.tsx        📝 MODIFIÉ (code couleur, import)
-│   └── Parametres.tsx      📝 MODIFIÉ (config SMTP)
+│   └── Parametres.tsx      📝 MODIFIÉ (email OAuth)
 ├── components/
 │   ├── contacts/
 │   │   ├── ContactImport.tsx    ✨ NOUVEAU
 │   │   └── ContactForm.tsx      📝 MODIFIÉ (catégories)
 │   └── emails/
 │       ├── TemplateEmailForm.tsx    ✨ NOUVEAU
-│       └── SmtpConfigForm.tsx       ✨ NOUVEAU
+│       └── EmailOAuthConnect.tsx    ✨ (remplace SmtpConfigForm)
 ├── lib/api/
 │   ├── tauri-templates-email.ts    ✨ NOUVEAU
 │   ├── tauri-alertes.ts            ✨ NOUVEAU
@@ -357,7 +340,7 @@ src/
 
 ### Cargo (Backend)
 ```toml
-lettre = "0.11"      # Client SMTP
+# lettre (SMTP) retiré — envoi via reqwest + APIs OAuth
 hex = "0.4"          # Encodage clé chiffrement
 base64 = "0.21"      # Encodage mots de passe
 rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }  # SQLite + chiffrement
@@ -413,7 +396,7 @@ rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }  # SQLite + ch
 - Ajout de 18 nouvelles commandes :
   - 5 pour templates email
   - 8 pour alertes
-  - 5 pour SMTP/email
+  - 5 pour email OAuth
 
 ### Base de données
 - **10 tables** (conformes au prompt)
@@ -453,7 +436,7 @@ rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }  # SQLite + ch
 - [x] Import contacts (Excel/CSV)
 - [x] Gestion contacts avec catégorisation
 - [x] Templates d'emails
-- [⚠️] Connexion boîte mail (SMTP OK, IMAP à faire)
+- [x] Connexion boîte mail OAuth (Gmail / Microsoft)
 - [x] Alertes de suivi automatiques
 
 ---
@@ -490,7 +473,7 @@ rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }  # SQLite + ch
 
 ### Sécurité
 - Mots de passe hachés avec Argon2
-- Mots de passe SMTP encodés en base64 (à améliorer avec chiffrement symétrique)
+- Tokens OAuth chiffrés au repos (`email_oauth.json`)
 - Base de données locale (aucune donnée cloud)
 
 ---
@@ -506,7 +489,7 @@ rusqlite = { version = "0.32", features = ["bundled-sqlcipher"] }  # SQLite + ch
 
 ### ⚠️ Partiellement conforme
 - SQLCipher (implémenté mais désactivé temporairement)
-- Import IMAP (pas encore fait, seulement SMTP)
+- Sync Gmail/Outlook contact (OAuth) ; pas d’IMAP générique
 
 ### ❌ Non fait (hors priorités 1 & 2)
 - OCR / PDF

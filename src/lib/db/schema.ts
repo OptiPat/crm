@@ -297,8 +297,7 @@ export const emails = sqliteTable("emails", {
     .references(() => contacts.id, { onDelete: "cascade" })
     .notNull(),
   interactionId: integer("interaction_id"),
-  
-  messageIdSmtp: text("message_id_smtp"),
+
   sujet: text("sujet").notNull(),
   corps: text("corps").notNull(),
   de: text("de").notNull(),

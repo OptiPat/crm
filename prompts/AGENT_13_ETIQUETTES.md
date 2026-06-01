@@ -71,8 +71,8 @@ Patrimoine CRM est un logiciel desktop Tauri pour CGP (Conseillers en Gestion de
 @prompts/PROMPT_DASHBOARD.md (pour le style des alertes existantes)
 
 ## Ce qui est DÉJÀ FAIT
-- Configuration SMTP : `src-tauri/src/email/smtp_config.rs`
-- Envoi d'email : `src-tauri/src/email/sender.rs`
+- Connexion email OAuth : `src-tauri/src/email/oauth_*`, `EmailOAuthConnect.tsx`
+- Envoi d'email : `src-tauri/src/email/oauth_send.rs` (Gmail API / Microsoft Graph)
 - Templates d'email : Page + API (`tauri-templates-email.ts`)
 - Alertes basiques : `src/pages/Suivi.tsx` + `tauri-alertes.ts`
 
@@ -389,7 +389,7 @@ Commence par l'étape 1 (migration SQL table etiquettes).
 3-4 sessions
 
 ## Dépendances
-- ✅ Configuration SMTP (existe)
+- ✅ Connexion email OAuth (existe)
 - ✅ Templates email (existe)
 - ✅ Alertes basiques (existe, sera amélioré)
 

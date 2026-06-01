@@ -8,6 +8,7 @@ import {
   getTypeProduitTextClass,
   INVESTISSEMENT_META_TONE_CLASS,
 } from "@/lib/investissements/investissement-display";
+import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
@@ -131,9 +132,7 @@ export function InvestissementCard({
             </InvestissementMetaRow>
             {inv.date_souscription && (
               <InvestissementMetaRow icon={Calendar}>
-                {new Date(inv.date_souscription * 1000).toLocaleDateString(
-                  "fr-FR"
-                )}
+                {formatCalendarDateFr(inv.date_souscription)}
               </InvestissementMetaRow>
             )}
             {inv.montant_versement_programme &&
@@ -166,9 +165,7 @@ export function InvestissementCard({
                 }
                 const dureeMatch = dureeStr?.match(/(\d+)\s*ans/i);
                 if (dureeMatch?.[1] && inv.date_fin_demembrement) {
-                  const dateFin = new Date(
-                    inv.date_fin_demembrement * 1000
-                  ).toLocaleDateString("fr-FR");
+                  const dateFin = formatCalendarDateFr(inv.date_fin_demembrement);
                   return (
                     <span
                       className={`text-sm ${INVESTISSEMENT_META_TONE_CLASS.term}`}

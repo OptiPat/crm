@@ -1,6 +1,7 @@
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import { appendEmailSignature } from "@/lib/emails/email-signature";
 import { buildVariablesFromContact } from "@/lib/emails/template-email-meta";
+import { parseMillesimeLabelFromEtiquetteNom } from "@/lib/etiquettes/exceltis";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 
@@ -8,16 +9,21 @@ export function buildTemplateVariables(
   item: EtiquetteEmailQueueItem,
   cgp: CgpConfig | null
 ): Record<string, string> {
-  return buildVariablesFromContact(
-    {
-      prenom: item.contact_prenom,
-      nom: item.contact_nom,
-      email: item.contact_email,
-      telephone: item.contact_telephone,
-    },
-    cgp,
-    item.template_agenda_link_id
-  );
+  const millesime = parseMillesimeLabelFromEtiquetteNom(item.etiquette_nom) ?? "";
+  return {
+    ...buildVariablesFromContact(
+      {
+        prenom: item.contact_prenom,
+        nom: item.contact_nom,
+        email: item.contact_email,
+        telephone: item.contact_telephone,
+      },
+      cgp,
+      item.template_agenda_link_id
+    ),
+    millesime,
+    etiquette_nom: item.etiquette_nom,
+  };
 }
 
 export function renderEtiquetteEmailPreview(

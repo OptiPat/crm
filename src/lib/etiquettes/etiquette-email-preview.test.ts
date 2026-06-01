@@ -71,6 +71,29 @@ describe("etiquette-email-preview", () => {
     expect(rendered.body).toContain("0612345678");
   });
 
+  it("injecte le millésime Exceltis depuis le nom d'étiquette", () => {
+    const item: EtiquetteEmailQueueItem = {
+      contact_etiquette_id: 1,
+      contact_id: 2,
+      contact_nom: "Dupont",
+      contact_prenom: "Marie",
+      contact_email: "marie@example.com",
+      contact_telephone: null,
+      etiquette_id: 3,
+      etiquette_nom: "Exceltis — Février 2025",
+      etiquette_couleur: "#EAB308",
+      email_date_prevue: null,
+      email_date_envoi: null,
+      template_sujet: "Exceltis {{millesime}} — {{prenom}}",
+      template_corps: "Étiquette : {{etiquette_nom}}",
+      template_agenda_link_id: null,
+      queue_issue: null,
+    };
+    const rendered = renderEtiquetteEmailPreview(item, null);
+    expect(rendered.subject).toBe("Exceltis Février 2025 — Marie");
+    expect(rendered.body).toContain("Exceltis — Février 2025");
+  });
+
   it("ajoute la signature CGP en fin de corps", () => {
     const item: EtiquetteEmailQueueItem = {
       contact_etiquette_id: 1,

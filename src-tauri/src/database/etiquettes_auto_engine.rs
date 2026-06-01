@@ -102,9 +102,7 @@ impl Database {
                                 c == "CLIENT" || c == "PROSPECT_CLIENT" || c == "SUSPECT_CLIENT"
                             });
                         let last_contact = if filleul_only {
-                            contact
-                                .date_dernier_contact_filleul
-                                .or(contact.date_dernier_contact)
+                            contact.date_dernier_contact_filleul
                         } else {
                             contact.date_dernier_contact
                         };

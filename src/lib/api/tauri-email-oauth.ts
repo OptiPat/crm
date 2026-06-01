@@ -4,7 +4,7 @@ export interface EmailConnectionStatus {
   connected: boolean;
   provider: string | null;
   email: string | null;
-  method: "oauth" | "smtp" | "none";
+  method: "oauth" | "none";
 }
 
 export interface OAuthAppSettings {

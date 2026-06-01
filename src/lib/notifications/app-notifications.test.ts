@@ -9,6 +9,10 @@ vi.mock("@/lib/api/tauri-etiquettes", () => ({
   getEtiquetteEmailQueue: vi.fn(),
 }));
 
+vi.mock("@/lib/api/tauri-stellium-exceltis", () => ({
+  getStelliumExceltisSignals: vi.fn().mockResolvedValue([]),
+}));
+
 import { getAlertesNonTraitees } from "@/lib/api/tauri-alertes";
 import { getEtiquetteEmailQueue } from "@/lib/api/tauri-etiquettes";
 

@@ -383,7 +383,6 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       {emailStatus && (
         <EnvoisEmailConnectionBanner
           connected={emailStatus.connected}
-          method={emailStatus.method}
           provider={emailStatus.provider}
           email={emailStatus.email}
         />

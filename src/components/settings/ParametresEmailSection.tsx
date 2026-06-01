@@ -7,6 +7,10 @@ import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { FileSignature, Loader2, Sparkles } from "lucide-react";
 import { SETTING_CONTACT_MAIL_AUTO_SYNC } from "@/lib/api/tauri-contact-gmail";
 import { fetchGmailSignatureForCgp, getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
+import {
+  notifyStelliumExceltisChanged,
+  scanStelliumExceltisEmails,
+} from "@/lib/api/tauri-stellium-exceltis";
 import { EmailOAuthConnect } from "@/components/emails/EmailOAuthConnect";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { getSetting, setSetting } from "@/lib/api/tauri-settings";
@@ -19,6 +23,7 @@ type ParametresEmailSectionProps = {
 
 export function ParametresEmailSection({ cgpConfig, onConfigChange }: ParametresEmailSectionProps) {
   const [importingSignature, setImportingSignature] = useState(false);
+  const [scanningStellium, setScanningStellium] = useState(false);
   const [autoMailSync, setAutoMailSync] = useState(false);
 
   useEffect(() => {
@@ -53,6 +58,51 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
   return (
     <div className="space-y-6">
       <EmailOAuthConnect variant="embedded" />
+
+      <SettingsPanel
+        title="Signaux Stellium / Exceltis"
+        description="Détection des emails « Remboursement Exceltis » (marketplacement@stellium.fr). Nécessite Gmail connecté et le CRM ouvert."
+      >
+        <Button
+          type="button"
+          variant="outline"
+          disabled={scanningStellium}
+          onClick={async () => {
+            setScanningStellium(true);
+            try {
+              const status = await getEmailConnectionStatus();
+              if (status.provider !== "google" || !status.connected) {
+                toast.error("Connectez Google dans la section Connexion.");
+                return;
+              }
+              const result = await scanStelliumExceltisEmails();
+              notifyStelliumExceltisChanged();
+              if (result.new_signals > 0) {
+                toast.success(
+                  `${result.new_signals} nouveau(x) signal(aux) Exceltis détecté(s).`
+                );
+              } else {
+                toast.info(
+                  `Scan terminé (${result.scanned} mail(s) analysé(s), aucun nouveau signal).`
+                );
+              }
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Scan Stellium impossible");
+            } finally {
+              setScanningStellium(false);
+            }
+          }}
+        >
+          {scanningStellium ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Vérification…
+            </>
+          ) : (
+            "Vérifier les mails Stellium (Exceltis)"
+          )}
+        </Button>
+      </SettingsPanel>
 
       <SettingsPanel
         title="Historique boîte mail (fiche contact)"

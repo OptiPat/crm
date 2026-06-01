@@ -1,4 +1,5 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
+import { daysSinceUnix, JOURS_1_AN, JOURS_6_MOIS } from "@/lib/dates/calendar-date";
 
 export type ContactPriorite = {
   rowClass: string;
@@ -36,10 +37,9 @@ export function getPrioriteContact(contact: Contact): ContactPriorite {
     return { rowClass: "", priorite: 3, label: "", dotClass: "bg-muted" };
   }
 
-  const diffMonths =
-    (Date.now() - contact.date_dernier_contact * 1000) / (1000 * 60 * 60 * 24 * 30);
+  const diffDays = daysSinceUnix(contact.date_dernier_contact);
 
-  if (contact.categorie === "CLIENT" && diffMonths > 12) {
+  if (contact.categorie === "CLIENT" && diffDays >= JOURS_1_AN) {
     return {
       rowClass: "border-l-4 border-l-red-500 bg-red-50/40",
       priorite: 1,
@@ -50,7 +50,7 @@ export function getPrioriteContact(contact: Contact): ContactPriorite {
 
   if (
     (contact.categorie.includes("SUSPECT") || contact.categorie.includes("PROSPECT")) &&
-    diffMonths > 6
+    diffDays >= JOURS_6_MOIS
   ) {
     return {
       rowClass: "border-l-4 border-l-orange-500 bg-orange-50/35",
@@ -86,31 +86,29 @@ export function getPrioriteFilleul(contact: Contact): ContactPriorite {
     };
   }
 
-  const diffMonths =
-    (Date.now() - contact.date_dernier_contact_filleul * 1000) /
-    (1000 * 60 * 60 * 24 * 30);
+  const diffDays = daysSinceUnix(contact.date_dernier_contact_filleul);
 
-  if (diffMonths > 6) {
+  if (diffDays >= JOURS_1_AN) {
     return {
       rowClass: "border-l-4 border-l-red-500 bg-red-50/40",
       priorite: 1,
-      label: "Suivi +6 mois",
+      label: "Suivi +1 an",
       dotClass: "bg-red-500",
     };
   }
 
-  if (diffMonths > 3) {
+  if (diffDays >= JOURS_6_MOIS) {
     return {
       rowClass: "border-l-4 border-l-orange-500 bg-orange-50/35",
       priorite: 2,
-      label: "Suivi > 3 mois",
+      label: "Suivi +6 mois",
       dotClass: "bg-orange-500",
     };
   }
 
   return {
     ...PRIORITE_OK,
-    label: "Suivi < 3 mois",
+    label: "Suivi < 6 mois",
   };
 }
 

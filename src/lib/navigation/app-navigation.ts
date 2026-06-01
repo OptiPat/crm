@@ -15,6 +15,7 @@ export type AppNavigationDetail =
       tab: SuiviMainTab;
       envoisSubTab?: EtiquetteEmailQueueStatus;
       contactId?: number;
+      etiquetteId?: number;
     }
   | { type: "interactions"; contactId?: number }
   | { type: "page"; page: string };
@@ -39,6 +40,13 @@ function persistNavigationDetail(detail: AppNavigationDetail): void {
         if (detail.tab === "envois") {
           sessionStorage.setItem("crm_nav_suivi_envois_contact_id", String(detail.contactId));
         }
+      } else {
+        sessionStorage.removeItem("crm_nav_suivi_contact_id");
+      }
+      if (detail.etiquetteId != null) {
+        sessionStorage.setItem("crm_nav_suivi_etiquette_id", String(detail.etiquetteId));
+      } else {
+        sessionStorage.removeItem("crm_nav_suivi_etiquette_id");
       }
       break;
     case "interactions":

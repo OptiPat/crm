@@ -77,6 +77,7 @@ import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
 import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
+import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import {
   mergeContactPatrimoineRows,
   type InvestissementWithOwner,
@@ -85,6 +86,7 @@ import {
   getContactsForFoyer,
   loadFoyerPatrimoineCentimes,
 } from "@/lib/foyers/foyer-utils";
+import { consumeOpenContactInvestissementFlag } from "@/lib/investissements/investissement-navigation";
 
 interface ContactDetailProps {
   open: boolean;
@@ -194,6 +196,10 @@ export function ContactDetail({
       sessionStorage.removeItem("crm_open_contact_tab");
     } else {
       setDetailTab("synthese");
+    }
+    if (consumeOpenContactInvestissementFlag()) {
+      setDetailTab("patrimoine");
+      setShowInvestissementForm(true);
     }
   }, [contact?.id]);
 
@@ -511,9 +517,17 @@ export function ContactDetail({
     setSelectedInvestissement(null);
   };
 
-  const handleInvestissementSuccess = () => {
+  const handleInvestissementSuccess = async () => {
     loadInvestissements();
     notifyEtiquettesChanged();
+    if (contact?.id) {
+      try {
+        const fresh = await getContactById(contact.id);
+        onContactRefreshed?.(fresh);
+      } catch (error) {
+        console.error("Erreur rechargement contact:", error);
+      }
+    }
     handleInvestissementFormClose();
   };
 
@@ -750,14 +764,13 @@ export function ContactDetail({
                       </span>
                       {(() => {
                         try {
-                          if (typeof contact.date_naissance === 'number') {
-                            const date = new Date(contact.date_naissance * 1000);
-                            // Utiliser UTC pour éviter décalage
-                            return `${String(date.getUTCDate()).padStart(2, '0')}/${String(date.getUTCMonth() + 1).padStart(2, '0')}/${date.getUTCFullYear()}`;
-                          } else {
-                            const date = new Date(contact.date_naissance);
-                            return isNaN(date.getTime()) ? "Non renseignée" : date.toLocaleDateString("fr-FR");
+                          if (typeof contact.date_naissance === "number") {
+                            return formatCalendarDateFr(contact.date_naissance);
                           }
+                          const date = new Date(contact.date_naissance);
+                          return isNaN(date.getTime())
+                            ? "Non renseignée"
+                            : formatCalendarDateFr(Math.floor(date.getTime() / 1000));
                         } catch {
                           return "Non renseignée";
                         }
@@ -781,14 +794,7 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Dernier contact :</span>
                         <p className="font-medium text-blue-700">
-                          {(() => {
-                            try {
-                              const date = new Date(contact.date_dernier_contact * 1000);
-                              return isNaN(date.getTime()) ? "Aucun" : date.toLocaleDateString('fr-FR');
-                            } catch {
-                              return "Aucun";
-                            }
-                          })()}
+                          {formatCalendarDateFr(contact.date_dernier_contact)}
                         </p>
                       </div>
                     </div>
@@ -799,14 +805,7 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Prochain suivi prévu le :</span>
                         <p className="font-medium text-orange-700">
-                          {(() => {
-                            try {
-                              const date = new Date(contact.date_prochain_suivi * 1000);
-                              return isNaN(date.getTime()) ? "Aucune date" : date.toLocaleDateString('fr-FR');
-                            } catch {
-                              return "Aucune date";
-                            }
-                          })()}
+                          {formatCalendarDateFr(contact.date_prochain_suivi)}
                         </p>
                       </div>
                     </div>
@@ -828,14 +827,7 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Dernier contact filleul :</span>
                         <p className="font-medium text-indigo-700">
-                          {(() => {
-                            try {
-                              const date = new Date(contact.date_dernier_contact_filleul! * 1000);
-                              return isNaN(date.getTime()) ? "Aucun" : date.toLocaleDateString("fr-FR");
-                            } catch {
-                              return "Aucun";
-                            }
-                          })()}
+                          {formatCalendarDateFr(contact.date_dernier_contact_filleul!)}
                         </p>
                       </div>
                     </div>
@@ -846,14 +838,7 @@ export function ContactDetail({
                       <div>
                         <span className="text-muted-foreground text-sm">Prochain suivi filleul :</span>
                         <p className="font-medium text-orange-700">
-                          {(() => {
-                            try {
-                              const date = new Date(contact.date_prochain_suivi_filleul! * 1000);
-                              return isNaN(date.getTime()) ? "Aucune date" : date.toLocaleDateString("fr-FR");
-                            } catch {
-                              return "Aucune date";
-                            }
-                          })()}
+                          {formatCalendarDateFr(contact.date_prochain_suivi_filleul!)}
                         </p>
                       </div>
                     </div>
@@ -1210,20 +1195,12 @@ export function ContactDetail({
                               <p className="font-medium">
                                 {filleul.prenom} {filleul.nom}
                               </p>
-                              {filleul.date_dernier_contact_filleul && (() => {
-                                try {
-                                  const date = new Date(
-                                    filleul.date_dernier_contact_filleul * 1000
-                                  );
-                                  return !isNaN(date.getTime()) ? (
+                              {filleul.date_dernier_contact_filleul && (
                                     <p className="text-xs text-muted-foreground">
-                                      Dernier suivi : {date.toLocaleDateString("fr-FR")}
+                                      Dernier suivi :{" "}
+                                      {formatCalendarDateFr(filleul.date_dernier_contact_filleul)}
                                     </p>
-                                  ) : null;
-                                } catch {
-                                  return null;
-                                }
-                              })()}
+                              )}
                             </div>
                             <Badge 
                               className={

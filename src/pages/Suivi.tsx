@@ -53,6 +53,7 @@ import {
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
+import { StelliumExceltisAlerts } from "@/components/etiquettes/StelliumExceltisAlerts";
 import {
   isAutoEtiquetteAttribution,
   RemoveAutoEtiquetteDialog,
@@ -129,8 +130,15 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     [alertes, alerteCategoryFilter]
   );
 
+  const [pendingEtiquetteId, setPendingEtiquetteId] = useState<number | null>(null);
+
   const applySuiviNavigation = useCallback(
-    (tab: SuiviMainTab | null, envoisSubTab: string | null, contactId: number | null) => {
+    (
+      tab: SuiviMainTab | null,
+      envoisSubTab: string | null,
+      contactId: number | null,
+      etiquetteId: number | null
+    ) => {
       if (tab) setActiveTab(tab);
       if (envoisSubTab) {
         sessionStorage.setItem("crm_nav_suivi_envois_subtab", envoisSubTab);
@@ -142,13 +150,16 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           setPendingSuiviContactId(contactId);
         }
       }
+      if (etiquetteId != null) {
+        setPendingEtiquetteId(etiquetteId);
+      }
     },
     []
   );
 
   useEffect(() => {
-    const { tab, envoisSubTab, contactId } = consumeSuiviNavigationIntent();
-    applySuiviNavigation(tab, envoisSubTab, contactId);
+    const { tab, envoisSubTab, contactId, etiquetteId } = consumeSuiviNavigationIntent();
+    applySuiviNavigation(tab, envoisSubTab, contactId, etiquetteId);
     void loadAlertes();
     loadEtiquettes();
     void loadEmailQueueCount();
@@ -156,11 +167,17 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
 
   useAppNavigationListener((detail) => {
     if (detail.type !== "suivi") return;
-    setSuiviNavigationIntent(detail.tab, detail.envoisSubTab, detail.contactId);
+    setSuiviNavigationIntent(
+      detail.tab,
+      detail.envoisSubTab,
+      detail.contactId,
+      detail.etiquetteId
+    );
     applySuiviNavigation(
       detail.tab,
       detail.envoisSubTab ?? null,
-      detail.contactId ?? null
+      detail.contactId ?? null,
+      detail.etiquetteId ?? null
     );
   }, [applySuiviNavigation]);
 
@@ -319,6 +336,17 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       setLoadingContacts(false);
     }
   };
+
+  useEffect(() => {
+    if (pendingEtiquetteId == null || loadingEtiquettes) return;
+    const etiqu = etiquettes.find((e) => e.id === pendingEtiquetteId);
+    if (etiqu) {
+      void handleSelectEtiquette(etiqu);
+      setPendingEtiquetteId(null);
+    }
+    // handleSelectEtiquette : stable enough pour une sélection ponctuelle via navigation
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pendingEtiquetteId consommé une fois
+  }, [pendingEtiquetteId, loadingEtiquettes, etiquettes]);
 
   const confirmRetirerEtiquetteContact = async (
     contactId: number,
@@ -643,6 +671,12 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
         </TabsContent>
 
         <TabsContent value="etiquettes" className="mt-4">
+          <StelliumExceltisAlerts
+            onOpenEtiquette={(id) => {
+              const etiqu = etiquettes.find((e) => e.id === id);
+              if (etiqu) void handleSelectEtiquette(etiqu);
+            }}
+          />
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <Card className="lg:col-span-1">
               <CardHeader>

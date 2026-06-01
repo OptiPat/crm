@@ -6,6 +6,10 @@ import {
   normalizeAgendaLinks,
   type AgendaLink,
 } from "@/lib/emails/agenda-links";
+import {
+  EXCELITIS_EMAIL_TEMPLATE_NOM,
+  isExceltisEtiquetteNom,
+} from "@/lib/etiquettes/exceltis";
 
 export type EmailTemplateCategory =
   | "RELANCE"
@@ -43,6 +47,18 @@ export const EMAIL_TEMPLATE_VARIABLES: {
   { token: "{{cgp_nom}}", key: "cgp_nom", label: "Nom conseiller", hint: "Profil CGP" },
   { token: "{{cgp_email}}", key: "cgp_email", label: "Email conseiller", hint: "Profil CGP" },
   { token: "{{cgp_telephone}}", key: "cgp_telephone", label: "Téléphone conseiller", hint: "Profil CGP" },
+  {
+    token: "{{millesime}}",
+    key: "millesime",
+    label: "Millésime Exceltis",
+    hint: "Ex. Février 2025 — extrait du nom d'étiquette",
+  },
+  {
+    token: "{{etiquette_nom}}",
+    key: "etiquette_nom",
+    label: "Nom de l'étiquette",
+    hint: "Campagne liée (ex. Exceltis — Août 2026)",
+  },
 ];
 
 export function getAgendaVariableTokens(links: AgendaLink[]) {
@@ -113,6 +129,12 @@ export const SAMPLE_PREVIEW_CONTACT = {
   telephone: "06 12 34 56 78",
 };
 
+/** Valeurs d'exemple pour l'aperçu des modèles Exceltis. */
+export const SAMPLE_EXCELITIS_TEMPLATE_VARS = {
+  millesime: "Février 2025",
+  etiquette_nom: "Exceltis — Février 2025",
+} as const;
+
 export function renderTemplatePreview(
   sujet: string,
   corps: string,
@@ -120,7 +142,10 @@ export function renderTemplatePreview(
   cgp: CgpConfig | null,
   templateAgendaLinkId?: string | null
 ): { subject: string; body: string } {
-  const vars = buildVariablesFromContact(contact, cgp, templateAgendaLinkId);
+  const vars = {
+    ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
+    ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
+  };
   return {
     subject: replaceTemplateVariables(sujet, vars),
     body: replaceTemplateVariables(corps, vars),
@@ -131,6 +156,10 @@ export function suggestTemplateIdForEtiquette(
   etiquetteNom: string,
   templates: TemplateEmail[]
 ): number | null {
+  if (isExceltisEtiquetteNom(etiquetteNom)) {
+    const exceltis = templates.find((t) => t.nom === EXCELITIS_EMAIL_TEMPLATE_NOM);
+    if (exceltis) return exceltis.id;
+  }
   const targetNom = ETIQUETTE_NOM_TO_TEMPLATE_NOM[etiquetteNom];
   if (!targetNom) return null;
   const found = templates.find((t) => t.nom === targetNom);

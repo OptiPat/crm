@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bell, ChevronRight, Loader2, Mail } from "lucide-react";
+import { Bell, ChevronRight, Loader2, Mail, X } from "lucide-react";
+import {
+  dismissStelliumExceltisSignal,
+  notifyStelliumExceltisChanged,
+} from "@/lib/api/tauri-stellium-exceltis";
 import { cn } from "@/lib/utils";
 import {
   fetchAppNotificationsSummary,
@@ -7,6 +11,7 @@ import {
   type NotificationSeverity,
 } from "@/lib/notifications/app-notifications";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
+import { STELLIUM_EXCELTIS_CHANGED_EVENT } from "@/lib/api/tauri-stellium-exceltis";
 import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 
 type AppNotificationsBarProps = {
@@ -57,6 +62,13 @@ export function AppNotificationsBar({
 
   useEffect(() => {
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    const onStellium = () => void load(true);
+    window.addEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onStellium);
+    return () =>
+      window.removeEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onStellium);
   }, [load]);
 
   useAppAutoRefresh(() => load(true));
@@ -125,8 +137,24 @@ export function AppNotificationsBar({
                   item.suiviTab,
                   item.envoisSubTab,
                   item.focusContactId,
-                  currentPage
+                  currentPage,
+                  item.focusEtiquetteId
                 )
+              }
+              onDismiss={
+                item.stelliumMessageId
+                  ? async () => {
+                      try {
+                        await dismissStelliumExceltisSignal(
+                          item.stelliumMessageId!
+                        );
+                        notifyStelliumExceltisChanged();
+                        await load(true);
+                      } catch (error) {
+                        console.error("Dismiss Stellium:", error);
+                      }
+                    }
+                  : undefined
               }
             />
           ))}
@@ -139,24 +167,44 @@ export function AppNotificationsBar({
 function NotificationPill({
   item,
   onClick,
+  onDismiss,
 }: {
   item: AppNotificationItem;
   onClick: () => void;
+  onDismiss?: () => void | Promise<void>;
 }) {
   const styles = SEVERITY_STYLES[item.severity];
   return (
-    <button
-      type="button"
-      onClick={onClick}
+    <div
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+        "inline-flex items-center rounded-full border text-xs font-medium transition-colors overflow-hidden",
         styles.pill
       )}
     >
-      <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", styles.dot)} />
-      <span className="tabular-nums font-semibold">{item.count}</span>
-      <span>{item.label}</span>
-      <ChevronRight className="h-3.5 w-3.5 opacity-70" />
-    </button>
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-1.5 px-3 py-1 hover:opacity-90"
+      >
+        <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", styles.dot)} />
+        <span className="tabular-nums font-semibold">{item.count}</span>
+        <span>{item.label}</span>
+        <ChevronRight className="h-3.5 w-3.5 opacity-70" />
+      </button>
+      {onDismiss ? (
+        <button
+          type="button"
+          title="Masquer ce signal"
+          aria-label="Masquer ce signal Stellium"
+          className="px-1.5 py-1 border-l border-current/20 hover:bg-black/10"
+          onClick={(e) => {
+            e.stopPropagation();
+            void onDismiss();
+          }}
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      ) : null}
+    </div>
   );
 }

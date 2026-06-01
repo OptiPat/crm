@@ -6,6 +6,7 @@ export type SuiviMainTab = "alertes" | "etiquettes" | "envois";
 const TAB_KEY = "crm_nav_suivi_tab";
 const ENVOIS_SUBTAB_KEY = "crm_nav_suivi_envois_subtab";
 const CONTACT_KEY = "crm_nav_suivi_contact_id";
+const ETIQUETTE_KEY = "crm_nav_suivi_etiquette_id";
 /** Conservé pour l’onglet Envois après consommation globale sur Suivi */
 export const ENVOIS_CONTACT_KEY = "crm_nav_suivi_envois_contact_id";
 
@@ -25,12 +26,14 @@ export type SuiviNavigationIntent = {
   tab: SuiviMainTab | null;
   envoisSubTab: EtiquetteEmailQueueStatus | null;
   contactId: number | null;
+  etiquetteId: number | null;
 };
 
 export function setSuiviNavigationIntent(
   tab: SuiviMainTab,
   envoisSubTab?: EtiquetteEmailQueueStatus,
-  contactId?: number
+  contactId?: number,
+  etiquetteId?: number
 ): void {
   sessionStorage.setItem(TAB_KEY, tab);
   if (envoisSubTab) {
@@ -42,6 +45,11 @@ export function setSuiviNavigationIntent(
     sessionStorage.setItem(CONTACT_KEY, String(contactId));
   } else {
     sessionStorage.removeItem(CONTACT_KEY);
+  }
+  if (etiquetteId != null) {
+    sessionStorage.setItem(ETIQUETTE_KEY, String(etiquetteId));
+  } else {
+    sessionStorage.removeItem(ETIQUETTE_KEY);
   }
 }
 
@@ -69,10 +77,18 @@ export function consumeSuiviNavigationIntent(): SuiviNavigationIntent {
   const contactId =
     rawContact != null && rawContact !== "" ? parseInt(rawContact, 10) : null;
 
+  const rawEtiquette = sessionStorage.getItem(ETIQUETTE_KEY);
+  sessionStorage.removeItem(ETIQUETTE_KEY);
+  const etiquetteId =
+    rawEtiquette != null && rawEtiquette !== ""
+      ? parseInt(rawEtiquette, 10)
+      : null;
+
   return {
     tab,
     envoisSubTab,
     contactId: Number.isFinite(contactId) ? contactId : null,
+    etiquetteId: Number.isFinite(etiquetteId) ? etiquetteId : null,
   };
 }
 
@@ -81,10 +97,11 @@ export function navigateToSuivi(
   tab: SuiviMainTab,
   envoisSubTab?: EtiquetteEmailQueueStatus,
   contactId?: number,
-  currentPage?: string
+  currentPage?: string,
+  etiquetteId?: number
 ): void {
-  setSuiviNavigationIntent(tab, envoisSubTab, contactId);
-  dispatchAppNavigation({ type: "suivi", tab, envoisSubTab, contactId });
+  setSuiviNavigationIntent(tab, envoisSubTab, contactId, etiquetteId);
+  dispatchAppNavigation({ type: "suivi", tab, envoisSubTab, contactId, etiquetteId });
   if (currentPage !== "suivi") {
     onPageChange("suivi");
   }

@@ -60,8 +60,15 @@ export function TemplatesEmail() {
   };
 
   useEffect(() => {
-    void loadTemplates();
-    void getCgpConfig().then(setCgp).catch(() => setCgp(null));
+    void (async () => {
+      try {
+        await seedDefaultEmailTemplates();
+      } catch {
+        /* ignore */
+      }
+      await loadTemplates();
+      void getCgpConfig().then(setCgp).catch(() => setCgp(null));
+    })();
   }, []);
 
   const linkCountByTemplate = useMemo(() => {

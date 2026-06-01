@@ -483,6 +483,7 @@ impl Database {
             ],
         )?;
 
+        self.auto_close_obsolete_suivi_alertes_for_contact(id)?;
         self.get_contact_by_id(id)
     }
 
@@ -1172,6 +1173,24 @@ impl Database {
                 agenda_link_id: Some("principal".into()),
                 relance_template_id: None,
             },
+            NewTemplateEmail {
+                nom: "Exceltis — remboursement et arbitrage".into(),
+                sujet: "Exceltis {{millesime}} — remboursement et prochaines étapes, {{prenom}}".into(),
+                corps: "Bonjour {{prenom}} {{nom}},\n\n\
+Stellium vient de procéder au remboursement de votre support Exceltis {{millesime}}.\n\n\
+Concrètement :\n\
+• les fonds sont de nouveau disponibles sur votre contrat ;\n\
+• c'est le moment de faire le point : réinvestissement, arbitrage vers d'autres supports, ou maintien en trésorerie selon votre stratégie.\n\n\
+Je vous propose d'en discuter lors d'un court échange. Vous pouvez réserver un créneau ici : {{lien_agenda}}\n\n\
+Si vous préférez, répondez à ce message ou appelez-moi au {{cgp_telephone}}.\n\n\
+Bien cordialement,\n\
+{{cgp_prenom}} {{cgp_nom}}\n\
+{{cgp_email}}".into(),
+                categorie: "ARBITRAGE".into(),
+                variables: None,
+                agenda_link_id: Some("principal".into()),
+                relance_template_id: None,
+            },
         ];
 
         let mut created = 0;
@@ -1187,11 +1206,12 @@ impl Database {
 
     /// Lie les modèles initiaux à un template de relance (sans écraser une config existante).
     fn link_default_relance_templates(&self) -> Result<usize> {
-        let pairs: [(&str, &str); 4] = [
+        let pairs: [(&str, &str); 5] = [
             ("Prise de rendez-vous suivi", "Relance — suite sans réponse"),
             ("Relance — client 1 an sans contact", "Relance — suite sans réponse"),
             ("Rappel déclaration IR", "Relance — suite sans réponse"),
             ("Rappel assurance-vie 69 ans", "Relance — suite sans réponse"),
+            ("Exceltis — remboursement et arbitrage", "Relance — suite sans réponse"),
         ];
         let mut linked = 0;
         for (initial_nom, relance_nom) in pairs {
@@ -1357,6 +1377,103 @@ impl Database {
         Ok(true)
     }
 
+    fn close_open_suivi_alerte(&self, contact_id: i64, type_alerte: &str) -> Result<bool> {
+        let updated = self.conn.execute(
+            "UPDATE alertes SET traitee = 1, lue = 1
+             WHERE contact_id = ?1 AND type_alerte = ?2 AND traitee = 0",
+            params![contact_id, type_alerte],
+        )?;
+        Ok(updated > 0)
+    }
+
+    /// Ferme les alertes suivi devenues obsolètes (date remontée, saisie manuelle, etc.).
+    pub fn auto_close_obsolete_suivi_alertes_for_contact(&self, contact_id: i64) -> Result<usize> {
+        let contact = self.get_contact_by_id(contact_id)?;
+
+        if contact.statut_suivi == "ARCHIVE" || contact.statut_suivi == "EN_PAUSE" {
+            let n = self.conn.execute(
+                "UPDATE alertes SET traitee = 1, lue = 1
+                 WHERE contact_id = ?1 AND traitee = 0
+                   AND type_alerte NOT IN ('FIN_DEMEMBREMENT')",
+                params![contact_id],
+            )?;
+            return Ok(n);
+        }
+
+        const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
+        const JOURS_6_MOIS: i64 = 180;
+        const JOURS_1_AN: i64 = 365;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let days_since = |last: i64| (now - last) / SECONDS_PER_DAY;
+        let mut closed = 0usize;
+
+        let mut maybe_close = |type_alerte: &str, still_applies: bool| -> Result<()> {
+            if !still_applies && self.close_open_suivi_alerte(contact_id, type_alerte)? {
+                closed += 1;
+            }
+            Ok(())
+        };
+
+        if contact.categorie == "CLIENT" {
+            let last = contact.date_dernier_contact;
+            maybe_close(
+                "SUIVI_CLIENT_1AN",
+                last.map(|l| days_since(l) >= JOURS_1_AN).unwrap_or(false),
+            )?;
+            maybe_close("CLIENT_JAMAIS_SUIVI", last.is_none())?;
+        } else {
+            maybe_close("SUIVI_CLIENT_1AN", false)?;
+            maybe_close("CLIENT_JAMAIS_SUIVI", false)?;
+        }
+
+        if contact.categorie == "SUSPECT_CLIENT" || contact.categorie == "PROSPECT_CLIENT" {
+            let last = contact.date_dernier_contact;
+            maybe_close(
+                "LEAD_SUIVI_6MOIS",
+                last.map(|l| days_since(l) >= JOURS_6_MOIS).unwrap_or(false),
+            )?;
+            maybe_close("LEAD_JAMAIS_CONTACTE", last.is_none())?;
+        } else {
+            maybe_close("LEAD_SUIVI_6MOIS", false)?;
+            maybe_close("LEAD_JAMAIS_CONTACTE", false)?;
+        }
+
+        if let Some(fc) = contact.filleul_categorie.as_deref() {
+            if fc == "FILLEUL_DESINSCRIT" {
+                maybe_close("SUIVI_FILLEUL_1AN", false)?;
+                maybe_close("FILLEUL_SUIVI_6MOIS", false)?;
+                maybe_close("FILLEUL_JAMAIS_CONTACTE", false)?;
+            } else if fc == "FILLEUL" {
+                let last = contact.date_dernier_contact_filleul;
+                maybe_close(
+                    "SUIVI_FILLEUL_1AN",
+                    last.map(|l| days_since(l) >= JOURS_1_AN).unwrap_or(false),
+                )?;
+                maybe_close("FILLEUL_SUIVI_6MOIS", false)?;
+                maybe_close("FILLEUL_JAMAIS_CONTACTE", false)?;
+            } else if fc == "PROSPECT_FILLEUL" || fc == "SUSPECT_FILLEUL" {
+                let last = contact.date_dernier_contact_filleul;
+                maybe_close(
+                    "FILLEUL_SUIVI_6MOIS",
+                    last.map(|l| days_since(l) >= JOURS_6_MOIS).unwrap_or(false),
+                )?;
+                maybe_close("FILLEUL_JAMAIS_CONTACTE", last.is_none())?;
+                maybe_close("SUIVI_FILLEUL_1AN", false)?;
+            }
+        } else {
+            maybe_close("SUIVI_FILLEUL_1AN", false)?;
+            maybe_close("FILLEUL_SUIVI_6MOIS", false)?;
+            maybe_close("FILLEUL_JAMAIS_CONTACTE", false)?;
+        }
+
+        Ok(closed)
+    }
+
     // Génération automatique des alertes (alignée sur les étiquettes DELAI_SANS_CONTACT)
     pub fn generer_alertes_automatiques(&self) -> Result<usize> {
         const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
@@ -1438,7 +1555,7 @@ impl Database {
                 if fc == "FILLEUL_DESINSCRIT" {
                     continue;
                 }
-                let last_filleul = date_dernier_contact_filleul.or(date_dernier_contact);
+                let last_filleul = date_dernier_contact_filleul;
                 if fc == "FILLEUL" {
                     if let Some(last_contact) = last_filleul {
                         if days_since(last_contact) >= JOURS_1_AN {
@@ -1995,6 +2112,50 @@ impl Database {
         Ok(result)
     }
 
+    /// Aligne `date_dernier_contact` sur la dernière `date_souscription` si vide,
+    /// ou si la date actuelle correspond déjà à une souscription (pas une saisie manuelle).
+    fn sync_dernier_contact_from_investissements(&self, contact_id: i64) -> Result<()> {
+        let latest_souscription: Option<i64> = self.conn.query_row(
+            "SELECT MAX(date_souscription) FROM investissements
+             WHERE contact_id = ?1 AND date_souscription IS NOT NULL",
+            params![contact_id],
+            |row| row.get(0),
+        )?;
+
+        let Some(latest) = latest_souscription else {
+            return Ok(());
+        };
+
+        let date_dernier: Option<i64> = self.conn.query_row(
+            "SELECT date_dernier_contact FROM contacts WHERE id = ?1",
+            params![contact_id],
+            |row| row.get(0),
+        )?;
+
+        let should_update = match date_dernier {
+            None => true,
+            Some(cur) if cur >= latest => false,
+            Some(cur) => {
+                let matches_subscription: i64 = self.conn.query_row(
+                    "SELECT COUNT(*) FROM investissements
+                     WHERE contact_id = ?1 AND date_souscription = ?2",
+                    params![contact_id, cur],
+                    |row| row.get(0),
+                )?;
+                matches_subscription > 0
+            }
+        };
+
+        if should_update {
+            self.conn.execute(
+                "UPDATE contacts SET date_dernier_contact = ?1, updated_at = unixepoch() WHERE id = ?2",
+                params![latest, contact_id],
+            )?;
+        }
+        self.auto_close_obsolete_suivi_alertes_for_contact(contact_id)?;
+        Ok(())
+    }
+
     pub fn create_investissement(
         &self,
         investissement: super::models::NewInvestissement,
@@ -2062,6 +2223,10 @@ impl Database {
                 &origine,
             ],
         )?;
+
+        if let Some(contact_id) = investissement.contact_id {
+            self.sync_dernier_contact_from_investissements(contact_id)?;
+        }
 
         let id = self.conn.last_insert_rowid();
         self.get_investissement_by_id(id)
@@ -2184,6 +2349,10 @@ impl Database {
                 id
             ],
         )?;
+
+        if let Some(contact_id) = investissement.contact_id {
+            self.sync_dernier_contact_from_investissements(contact_id)?;
+        }
 
         self.get_investissement_by_id(id)
     }
@@ -2885,6 +3054,27 @@ impl Database {
             )?
         };
         Ok(count > 0)
+    }
+
+    pub fn get_etiquette_id_by_nom_insensitive(&self, nom: &str) -> Result<Option<i64>> {
+        match self.conn.query_row(
+            "SELECT id FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM(?1))",
+            params![nom],
+            |r| r.get(0),
+        ) {
+            Ok(id) => Ok(Some(id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn count_contacts_for_etiquette(&self, etiquette_id: i64) -> Result<u32> {
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT contact_id) FROM contact_etiquettes WHERE etiquette_id = ?1",
+            params![etiquette_id],
+            |r| r.get(0),
+        )?;
+        Ok(count.max(0) as u32)
     }
 
     /// Attribuer une étiquette à un contact
@@ -5498,6 +5688,7 @@ impl Database {
 #[cfg(test)]
 mod database_integration_tests {
     use super::*;
+    use chrono::TimeZone;
     use crate::database::models::{NewContact, NewFoyer, NewInvestissement};
     use crate::database::Database;
 
@@ -5535,6 +5726,292 @@ mod database_integration_tests {
             date_prochain_suivi_filleul: None,
             notes: None,
         }
+    }
+
+    #[test]
+    fn create_investissement_sets_dernier_contact_from_souscription_when_empty() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let souscription_ts = chrono::Utc.with_ymd_and_hms(2025, 3, 15, 0, 0, 0).unwrap().timestamp();
+        let iso = chrono::DateTime::from_timestamp(souscription_ts, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: contact.id,
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Contrat test".into(),
+            montant_initial: Some(100_000),
+            date_souscription: Some(iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let updated = db.get_contact_by_id(contact.id.unwrap()).unwrap();
+        assert_eq!(updated.date_dernier_contact, Some(souscription_ts));
+    }
+
+    #[test]
+    fn create_investissement_does_not_overwrite_existing_dernier_contact() {
+        let db = test_db();
+        let existing_ts = chrono::Utc.with_ymd_and_hms(2024, 1, 10, 0, 0, 0).unwrap().timestamp();
+        let existing_iso = chrono::DateTime::from_timestamp(existing_ts, 0)
+            .unwrap()
+            .to_rfc3339();
+        let contact = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(existing_iso),
+                ..sample_contact("Martin", "Paul")
+            })
+            .unwrap();
+
+        let souscription_ts = chrono::Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap().timestamp();
+        let souscription_iso = chrono::DateTime::from_timestamp(souscription_ts, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: contact.id,
+            foyer_id: None,
+            type_produit: "PER".into(),
+            partenaire_id: None,
+            nom_produit: "PER test".into(),
+            montant_initial: None,
+            date_souscription: Some(souscription_iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let updated = db.get_contact_by_id(contact.id.unwrap()).unwrap();
+        assert_eq!(updated.date_dernier_contact, Some(existing_ts));
+    }
+
+    #[test]
+    fn sync_dernier_contact_bumps_to_newer_souscription_when_linked_to_old_one() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Bernard", "Luc")).unwrap();
+        let older_ts = chrono::Utc.with_ymd_and_hms(2024, 1, 10, 0, 0, 0).unwrap().timestamp();
+        let newer_ts = chrono::Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap().timestamp();
+        let older_iso = chrono::DateTime::from_timestamp(older_ts, 0).unwrap().to_rfc3339();
+        let newer_iso = chrono::DateTime::from_timestamp(newer_ts, 0).unwrap().to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: contact.id,
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "AV 1".into(),
+            montant_initial: None,
+            date_souscription: Some(older_iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        assert_eq!(
+            db.get_contact_by_id(contact.id.unwrap()).unwrap().date_dernier_contact,
+            Some(older_ts)
+        );
+
+        db.create_investissement(NewInvestissement {
+            contact_id: contact.id,
+            foyer_id: None,
+            type_produit: "PER".into(),
+            partenaire_id: None,
+            nom_produit: "PER 2".into(),
+            montant_initial: None,
+            date_souscription: Some(newer_iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        assert_eq!(
+            db.get_contact_by_id(contact.id.unwrap()).unwrap().date_dernier_contact,
+            Some(newer_ts)
+        );
+    }
+
+    #[test]
+    fn sync_dernier_contact_when_first_investissement_has_no_souscription() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Durand", "Anne")).unwrap();
+        let souscription_ts = chrono::Utc.with_ymd_and_hms(2025, 6, 1, 0, 0, 0).unwrap().timestamp();
+        let souscription_iso = chrono::DateTime::from_timestamp(souscription_ts, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: contact.id,
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Sans date".into(),
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        assert!(db.get_contact_by_id(contact.id.unwrap()).unwrap().date_dernier_contact.is_none());
+
+        db.create_investissement(NewInvestissement {
+            contact_id: contact.id,
+            foyer_id: None,
+            type_produit: "PER".into(),
+            partenaire_id: None,
+            nom_produit: "Avec date".into(),
+            montant_initial: None,
+            date_souscription: Some(souscription_iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let updated = db.get_contact_by_id(contact.id.unwrap()).unwrap();
+        assert_eq!(updated.date_dernier_contact, Some(souscription_ts));
+    }
+
+    #[test]
+    fn sync_dernier_contact_closes_obsolete_suivi_alerte_after_newer_souscription() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Bernard", "Luc")).unwrap();
+        let contact_id = contact.id.unwrap();
+        let older_ts = chrono::Utc.with_ymd_and_hms(2022, 1, 10, 0, 0, 0).unwrap().timestamp();
+        let newer_ts = chrono::Utc::now().timestamp() - 30 * 24 * 3600;
+        let older_iso = chrono::DateTime::from_timestamp(older_ts, 0).unwrap().to_rfc3339();
+        let newer_iso = chrono::DateTime::from_timestamp(newer_ts, 0).unwrap().to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "AV 1".into(),
+            montant_initial: None,
+            date_souscription: Some(older_iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_alerte(crate::database::models::NewAlerte {
+            contact_id,
+            type_alerte: "SUIVI_CLIENT_1AN".into(),
+            message: "Suivi client".into(),
+            date_alerte: Some(chrono::Utc::now().timestamp()),
+        })
+        .unwrap();
+        assert_eq!(db.get_alertes_for_contact(contact_id).unwrap().len(), 1);
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "PER".into(),
+            partenaire_id: None,
+            nom_produit: "PER 2".into(),
+            montant_initial: None,
+            date_souscription: Some(newer_iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        assert!(
+            db.get_alertes_for_contact(contact_id).unwrap().is_empty(),
+            "alerte suivi client doit être clôturée après remontée du dernier contact"
+        );
+    }
+
+    #[test]
+    fn update_contact_closes_obsolete_suivi_alerte_when_dernier_contact_recent() {
+        let db = test_db();
+        let old_ts = chrono::Utc::now().timestamp() - 400 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let recent_iso = chrono::Utc::now().to_rfc3339();
+        let contact = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                ..sample_contact("Martin", "Paul")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.create_alerte(crate::database::models::NewAlerte {
+            contact_id,
+            type_alerte: "SUIVI_CLIENT_1AN".into(),
+            message: "Suivi client".into(),
+            date_alerte: Some(chrono::Utc::now().timestamp()),
+        })
+        .unwrap();
+        assert_eq!(db.get_alertes_for_contact(contact_id).unwrap().len(), 1);
+
+        db.update_contact(
+            contact_id,
+            &NewContact {
+                date_dernier_contact: Some(recent_iso),
+                ..sample_contact("Martin", "Paul")
+            },
+        )
+        .unwrap();
+
+        assert!(
+            db.get_alertes_for_contact(contact_id).unwrap().is_empty(),
+            "alerte suivi client doit être clôturée après saisie d'un dernier contact récent"
+        );
     }
 
     #[test]

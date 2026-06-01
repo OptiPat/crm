@@ -247,7 +247,7 @@ pub fn send_with_oauth(
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Aucun compte connecté (Google/Microsoft). Utilisez Paramètres → Email ou configurez le SMTP.")?;
+        .ok_or("Aucun compte connecté (Google/Microsoft). Paramètres → Email : connectez votre boîte.")?;
 
     refresh_connection_if_needed(app, &mut conn)?;
 

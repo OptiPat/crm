@@ -77,33 +77,22 @@
 
 ---
 
-#### 3. Configuration SMTP et envoi d'emails
-**Accès** : Paramètres > "Configuration Email (SMTP)"
+#### 3. Connexion email (OAuth) et envoi
+**Accès** : Paramètres → **Email** (ou étape 2 du wizard de première configuration)
 
 **Fonctionnalités** :
-- ✅ Support **Gmail** (configuration automatique)
-- ✅ Support **Outlook / Office 365** (configuration automatique)
-- ✅ Support **autre fournisseur SMTP** (configuration manuelle)
-- ✅ **Test de connexion** intégré
-- ✅ Fonction d'envoi d'emails depuis l'application
+- ✅ **Google (Gmail)** — connexion OAuth (Gmail API pour l’envoi, lecture pour les réponses campagne)
+- ✅ **Microsoft (Outlook / Office 365)** — connexion OAuth (Microsoft Graph)
+- ✅ **Test de connexion** (email de test)
+- ✅ Envoi depuis **Suivi → Envois** (CRM ouvert) et campagnes par étiquette
 
-**Configuration Gmail** :
-1. Allez dans Paramètres > "Configurer mon compte email"
-2. Sélectionnez "Gmail"
-3. Entrez votre email Gmail
-4. ⚠️ **IMPORTANT** : Utilisez un "mot de passe d'application" :
-   - Allez sur https://myaccount.google.com/apppasswords
-   - Créez un mot de passe d'application
-   - Utilisez ce mot de passe (pas votre mot de passe Gmail principal)
-5. Remplissez votre nom d'expéditeur
-6. Cliquez sur "Tester" pour vérifier
-7. Enregistrez
+**Configuration (résumé)** :
+1. Créer un client OAuth dans Google Cloud ou Azure (voir `docs/EMAIL_OAUTH_SETUP.md`).
+2. Dans Paramètres → Email : renseigner l’**ID client** (et secret Google si requis).
+3. Cliquer sur **Connecter Google** ou **Connecter Microsoft** et valider dans le navigateur.
+4. **Tester la connexion**, puis envoyer depuis Suivi → Envois.
 
-**Configuration Outlook** :
-1. Sélectionnez "Outlook / Office 365"
-2. Entrez votre email Outlook
-3. Entrez votre mot de passe
-4. Testez et enregistrez
+> L’ancienne configuration SMTP (mot de passe d’application, `smtp_config.json`) n’existe plus ; le fichier est supprimé automatiquement au démarrage si présent.
 
 ---
 
@@ -160,7 +149,7 @@
 %APPDATA%\com.patrimoine-crm.app\
 ├── patrimoine-crm.db      # Base de données
 ├── auth.json              # Configuration authentification
-└── smtp_config.json       # Configuration email
+└── email_oauth.json       # Connexion OAuth (tokens chiffrés)
 ```
 
 ---
@@ -203,10 +192,10 @@
 - [ ] Prévisualiser le template
 - [ ] Modifier un template existant
 
-### Test SMTP
-- [ ] Configurer votre compte email (Gmail ou Outlook)
-- [ ] Tester la connexion
-- [ ] Vérifier la réception de l'email de test
+### Test connexion email (OAuth)
+- [ ] Configurer les identifiants OAuth (voir `docs/EMAIL_OAUTH_SETUP.md`)
+- [ ] Connecter Google ou Microsoft dans Paramètres → Email
+- [ ] Tester la connexion et vérifier l’email de test
 
 ### Test des alertes
 - [ ] Créer un contact "Client" avec une date de dernier contact > 12 mois

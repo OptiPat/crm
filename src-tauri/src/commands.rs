@@ -1120,6 +1120,29 @@ pub fn prepare_email_campaign_relance(
         .map_err(|e| format!("Failed to prepare relance: {}", e))
 }
 
+#[tauri::command]
+pub fn scan_stellium_exceltis_emails(
+    app: tauri::AppHandle,
+    db: State<'_, DbState>,
+) -> Result<crate::email::stellium_exceltis::StelliumExceltisScanResult, String> {
+    crate::email::stellium_exceltis::scan_stellium_exceltis_emails(&app, &db)
+}
+
+#[tauri::command]
+pub fn get_stellium_exceltis_signals(
+    db: State<'_, DbState>,
+) -> Result<Vec<crate::email::stellium_exceltis::StelliumExceltisSignal>, String> {
+    crate::email::stellium_exceltis::get_stellium_exceltis_signals(&db)
+}
+
+#[tauri::command]
+pub fn dismiss_stellium_exceltis_signal(
+    db: State<'_, DbState>,
+    gmail_message_id: String,
+) -> Result<(), String> {
+    crate::email::stellium_exceltis::dismiss_stellium_exceltis_signal(&db, &gmail_message_id)
+}
+
 // ========== SETTINGS ==========
 
 #[tauri::command]

@@ -44,8 +44,6 @@ export function ParametresOverview({ cgpConfig, backups, onNavigate }: Parametre
         setEmailConnected(ok);
         if (ok && st.email) {
           setEmailLabel(st.email);
-        } else if (st.method === "smtp") {
-          setEmailLabel("SMTP (ancien mode)");
         } else {
           setEmailLabel("Non connecté");
         }

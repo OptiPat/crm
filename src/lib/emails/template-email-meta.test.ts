@@ -31,12 +31,28 @@ const templates: TemplateEmail[] = [
     created_at: 0,
     updated_at: 0,
   },
+  {
+    id: 3,
+    nom: "Exceltis — remboursement et arbitrage",
+    sujet: "Exceltis",
+    corps: "Corps",
+    categorie: "ARBITRAGE",
+    variables: null,
+    agenda_link_id: null,
+    relance_template_id: null,
+    created_at: 0,
+    updated_at: 0,
+  },
 ];
 
 describe("suggestTemplateIdForEtiquette", () => {
   it("mappe les noms d'étiquettes système", () => {
     expect(suggestTemplateIdForEtiquette("Suivi > 1 an", templates)).toBe(1);
     expect(suggestTemplateIdForEtiquette("Déclaration IR", templates)).toBe(2);
+  });
+
+  it("propose le modèle Exceltis pour les étiquettes millésime", () => {
+    expect(suggestTemplateIdForEtiquette("Exceltis — Février 2025", templates)).toBe(3);
   });
 });
 

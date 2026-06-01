@@ -1,5 +1,7 @@
 # 🎉 RÉSUMÉ FINAL - Priorités 1 & 2 Complétées
 
+> **Mise à jour doc (2026)** : email via **OAuth** (plus SMTP). Voir [`docs/EMAIL.md`](docs/EMAIL.md).
+
 **Date** : 15 janvier 2026  
 **Status** : ✅ **TOUTES LES PRIORITÉS 1 & 2 TERMINÉES !**
 
@@ -15,7 +17,7 @@
 ### **PRIORITÉ 2** ✅
 4. ✅ Import Excel/CSV avec mapping intelligent et détection de doublons
 5. ✅ Système de templates d'emails avec variables dynamiques
-6. ✅ Configuration SMTP (Gmail, Outlook, autre) + envoi d'emails  
+6. ✅ Connexion email OAuth (Gmail / Microsoft) + envoi d'emails  
 7. ✅ Système d'alertes automatiques avec page de suivi
 
 ---
@@ -23,16 +25,16 @@
 ## 📦 **LIVRABLES**
 
 ### Fichiers créés (nouveaux)
-- **9 nouveaux composants React** (ContactImport, TemplateEmailForm, SmtpConfigForm, etc.)
+- **9 nouveaux composants React** (ContactImport, TemplateEmailForm, EmailOAuthConnect, etc.)
 - **3 nouvelles pages** (TemplatesEmail, Suivi, améliorations)
 - **4 fichiers API TypeScript** (tauri-templates-email, tauri-alertes, tauri-email)
-- **4 modules Rust** (email/mod.rs, smtp_config.rs, sender.rs, commands.rs)
+- **4 modules Rust** (email/mod.rs, oauth_*, commands.rs)
 - **3 docs** (GUIDE_UTILISATION, INSTALLATION_OPENSSL, RAPPORT_IMPLEMENTATION)
 
 ### Modifications majeures
 - Base de données : catégories corrigées, support chiffrement
 - Backend : +18 nouvelles commandes Tauri (42 au total)
-- Frontend : code couleur, import, templates, alertes, SMTP
+- Frontend : code couleur, import, templates, alertes, email OAuth
 
 ---
 
@@ -43,9 +45,9 @@
 | Import Excel/CSV | ✅ PRÊT | OUI |
 | Code couleur contacts | ✅ PRÊT | OUI |
 | Templates emails | ✅ PRÊT | OUI |
-| Configuration SMTP | ✅ PRÊT | OUI (nécessite compte email) |
+| Connexion email OAuth | ✅ PRÊT | OUI (compte Google ou Microsoft) |
 | Alertes automatiques | ✅ PRÊT | OUI |
-| Envoi d'emails | ✅ PRÊT | OUI (après config SMTP) |
+| Envoi d'emails | ✅ PRÊT | OUI (après connexion OAuth) |
 
 ---
 
@@ -94,7 +96,7 @@ L'application s'ouvrira automatiquement et vous pourrez tester toutes les foncti
 ### Test complet (20 minutes)
 1. Import d'un fichier Excel avec des contacts
 2. Création de templates d'emails
-3. Configuration SMTP (Gmail ou Outlook)
+3. Connexion email OAuth (Google ou Microsoft)
 4. Test d'envoi d'email
 5. Génération d'alertes automatiques
 6. Actions sur les alertes (marquer traité, reporter)

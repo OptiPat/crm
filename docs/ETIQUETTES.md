@@ -169,6 +169,23 @@ Tests frontend : `src/lib/etiquettes/etiquettes-filter.test.ts`, `etiquette-emai
 
 ---
 
+## Exceltis (UC Stellium)
+
+| Étape | Comportement |
+|-------|----------------|
+| **Création client** | Question Exceltis → millésimes M+1…M+3 → étiquette `Exceltis — {Mois} {Année}` (manuelle). |
+| **Mail Stellium** | Gmail `marketplacement@stellium.fr`, sujet contenant **Remboursement Exceltis** (un signal **par message**). |
+| **Millésime** | Parsé depuis le sujet ou le corps (mot « Rendement » optionnel). |
+| **Date « à partir du … »** | Indique quand le fond se désinvestit ; ensuite arbitrage / réinvestissement possible. Affichée dans Suivi et notifications. |
+| **Fin de cycle** | Retrait d’étiquette **manuel** ; le mail ne retire rien automatiquement. |
+| **Campagne email** | Modèle **Exceltis — remboursement et arbitrage** (`{{millesime}}`, `{{etiquette_nom}}`) — suggéré à la création de l’étiquette ; relance = modèle « suite sans réponse ». |
+
+Scan automatique au démarrage du CRM (compte Google connecté), puis environ toutes les 5 minutes. Paramètres → Email : scan manuel possible.
+
+**Limites scan Gmail :** requête limitée aux **400 derniers jours** ; pagination jusqu’à **200 messages** par scan (largement suffisant en usage normal). Millésime illisible : **3 tentatives** puis le message est ignoré.
+
+---
+
 ## Historique doc
 
 - Janvier 2026 : module initial (`prompts/AGENT_13_ETIQUETTES.md`).

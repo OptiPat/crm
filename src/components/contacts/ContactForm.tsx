@@ -48,6 +48,10 @@ import {
   type Contact,
 } from "@/lib/api/tauri-contacts";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import {
+  ContactFormInvestissementSection,
+  type InvestissementFormChoice,
+} from "@/components/contacts/ContactFormInvestissementSection";
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
@@ -58,9 +62,11 @@ import {
   type FieldErrors,
   type SituationFamiliale,
   SELECT_NONE,
-  addMonthsLocal,
   buildSubmitPayload,
   contactToFormData,
+  defaultProchainSuiviClient,
+  defaultProchainSuiviForClientStatut,
+  defaultProchainSuiviSixMois,
   serializeFormSnapshot,
   formatPhoneFR,
   getClientLabel,
@@ -79,6 +85,11 @@ interface ContactFormProps {
   onOpenChange: (open: boolean) => void;
   contact?: Contact | null;
   onSuccess: () => void;
+  /** Après création uniquement (pas édition). */
+  onCreated?: (
+    contact: Contact,
+    options: { addInvestissement: boolean }
+  ) => void;
   createContext?: ContactFormContext;
   onOpenContact?: (contact: Contact) => void;
 }
@@ -106,12 +117,15 @@ function DateFieldWithShortcuts({
   value,
   onChange,
   showFollowUpShortcuts,
+  followUpMonths,
 }: {
   id: string;
   label: string;
   value?: string;
   onChange: (v: string) => void;
   showFollowUpShortcuts?: boolean;
+  /** Mois ajoutés par le raccourci prochain suivi (6 ou 12). */
+  followUpMonths?: 6 | 12;
 }) {
   return (
     <div className="space-y-2">
@@ -121,15 +135,21 @@ function DateFieldWithShortcuts({
         <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onChange(todayLocal())}>
           Aujourd&apos;hui
         </Button>
-        {showFollowUpShortcuts && (
+        {showFollowUpShortcuts && followUpMonths && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="h-7 text-xs"
-            onClick={() => onChange(addMonthsLocal(3))}
+            onClick={() =>
+              onChange(
+                followUpMonths === 12
+                  ? defaultProchainSuiviClient()
+                  : defaultProchainSuiviSixMois()
+              )
+            }
           >
-            +3 mois
+            {followUpMonths === 12 ? "+1 an" : "+6 mois"}
           </Button>
         )}
       </div>
@@ -200,6 +220,7 @@ export function ContactForm({
   onOpenChange,
   contact,
   onSuccess,
+  onCreated,
   createContext = "clients",
   onOpenContact,
 }: ContactFormProps) {
@@ -213,6 +234,8 @@ export function ContactForm({
   const [dirty, setDirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [showAddress, setShowAddress] = useState(false);
+  const [investissementChoice, setInvestissementChoice] =
+    useState<InvestissementFormChoice>({ addAfterCreate: false });
   const initialSnapshot = useRef("");
 
   useEffect(() => {
@@ -239,6 +262,7 @@ export function ContactForm({
     setDirty(false);
     setFieldErrors({});
     setShowAddress(!!(data.adresse || data.code_postal || data.ville));
+    setInvestissementChoice({ addAfterCreate: false });
 
     if (contact) {
       getFilleulsByParrain(contact.id)
@@ -324,14 +348,18 @@ export function ContactForm({
         initialSnapshot.current = serializeFormSnapshot(contactToFormData(updated));
         toast.success("Contact modifié");
       } else {
-        await createContact(dataToSubmit);
+        const created = await createContact(dataToSubmit);
         toast.success("Contact créé");
+        onCreated?.(created, {
+          addInvestissement: investissementChoice.addAfterCreate,
+        });
       }
       setDirty(false);
       notifyEtiquettesChanged();
       onSuccess();
       onOpenChange(false);
       setFormData(getEmptyForm(createContext));
+      setInvestissementChoice({ addAfterCreate: false });
     } catch (error) {
       toast.error("Erreur lors de l'enregistrement: " + String(error));
     } finally {
@@ -341,6 +369,7 @@ export function ContactForm({
 
   const filleulActif = isFilleulStatut(formData.filleul_categorie);
   const clientActif = isClientActif(formData.categorie);
+  const isClientStatut = formData.categorie === "CLIENT";
   const isPrescripteurForm =
     createContext === "prescripteurs" || formData.categorie === "PRESCRIPTEUR";
 
@@ -354,7 +383,12 @@ export function ContactForm({
         date_prochain_suivi_filleul: "",
       }));
     } else {
-      setFormData((prev) => ({ ...prev, filleul_categorie: value }));
+      setFormData((prev) => ({
+        ...prev,
+        filleul_categorie: value,
+        date_prochain_suivi_filleul:
+          prev.date_prochain_suivi_filleul || defaultProchainSuiviSixMois(),
+      }));
     }
   };
 
@@ -368,7 +402,12 @@ export function ContactForm({
         date_prochain_suivi: "",
       }));
     } else {
-      setFormData((prev) => ({ ...prev, categorie: value }));
+      setFormData((prev) => ({
+        ...prev,
+        categorie: value,
+        date_prochain_suivi:
+          prev.date_prochain_suivi || defaultProchainSuiviForClientStatut(value),
+      }));
     }
   };
 
@@ -729,6 +768,7 @@ export function ContactForm({
                   value={formData.date_prochain_suivi}
                   onChange={(v) => setFormData((prev) => ({ ...prev, date_prochain_suivi: v }))}
                   showFollowUpShortcuts
+                  followUpMonths={formData.categorie === "CLIENT" ? 12 : 6}
                 />
               </div>
             )}
@@ -750,6 +790,7 @@ export function ContactForm({
                     setFormData((prev) => ({ ...prev, date_prochain_suivi_filleul: v }))
                   }
                   showFollowUpShortcuts
+                  followUpMonths={6}
                 />
               </div>
             )}
@@ -767,6 +808,18 @@ export function ContactForm({
           rows={3}
         />
       </FormSection>
+
+      {!isEdit && isClientStatut && !isPrescripteurForm && (
+        <>
+          <Separator />
+          <FormSection title="Patrimoine">
+            <ContactFormInvestissementSection
+              value={investissementChoice}
+              onChange={setInvestissementChoice}
+            />
+          </FormSection>
+        </>
+      )}
 
       {isEdit ? (
         <SheetFooter className="pt-2">

@@ -2,6 +2,7 @@ import { ReactNode } from "react";
 import { AppUpdateBanner } from "@/components/system/AppUpdateBanner";
 import { AppNotificationsBar } from "@/components/notifications/AppNotificationsBar";
 import { useEmailCampaignAutoSync } from "@/hooks/useEmailCampaignAutoSync";
+import { useStelliumExceltisScan } from "@/hooks/useStelliumExceltisScan";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 
@@ -14,6 +15,7 @@ interface LayoutProps {
 
 export function Layout({ children, currentPage, onPageChange, onLogout }: LayoutProps) {
   useEmailCampaignAutoSync();
+  useStelliumExceltisScan();
 
   return (
     <div className="min-h-screen bg-background flex">

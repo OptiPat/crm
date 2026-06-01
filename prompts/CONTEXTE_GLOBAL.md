@@ -41,7 +41,7 @@ patrimoine-crm/
 │   │   ├── commands.rs     # Commandes CRUD principales
 │   │   ├── auth/           # Authentification (mot de passe, clé récupération)
 │   │   ├── database/       # SQLite (models.rs, operations.rs)
-│   │   └── email/          # SMTP (config, envoi)
+│   │   └── email/          # OAuth Gmail / Microsoft Graph (envoi, sync)
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── src/                    # Frontend React
@@ -54,7 +54,7 @@ patrimoine-crm/
 │   │   ├── documents/      # DocumentUpload, PatrimoineTriDialog, ExtractedDataPreview
 │   │   ├── dashboard/      # StatCard, CategoryPieChart, ProductPieChart, etc.
 │   │   ├── investissements/ # InvestissementForm
-│   │   └── emails/         # SmtpConfigForm, TemplateEmailForm
+│   │   └── emails/         # EmailOAuthConnect, TemplateEmailForm
 │   ├── pages/              # Dashboard, Contacts, Foyers, Documents, Investissements, etc.
 │   ├── lib/
 │   │   ├── api/            # Appels Tauri (tauri-contacts.ts, tauri-alertes.ts...)
@@ -83,7 +83,7 @@ patrimoine-crm/
 | `emails` | Emails envoyés |
 | `templates_email` | Modèles d'emails avec variables |
 | `alertes` | Alertes de suivi automatiques |
-| `parametres` | Configuration (SMTP, etc.) |
+| `parametres` | Configuration CGP (profil, délais, etc.) |
 
 ### Catégories de contacts
 - `CLIENT`, `PROSPECT_CLIENT`, `SUSPECT_CLIENT` (côté client)
@@ -122,7 +122,7 @@ patrimoine-crm/
 | CRUD Foyers | ✅ |
 | CRUD Partenaires (simplifié) | ✅ |
 | Templates d'emails avec variables | ✅ |
-| Configuration SMTP + envoi emails | ✅ |
+| Connexion email OAuth + envoi emails | ✅ |
 | Alertes automatiques + page Suivi | ✅ |
 | Upload de documents (basique) | ✅ |
 

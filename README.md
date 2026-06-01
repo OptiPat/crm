@@ -88,8 +88,8 @@ Actuellement : **Tauri 2.11** (api/cli) + plugins dialog 2.7, fs 2.5, shell 2.3.
 | Document | Contenu |
 |----------|---------|
 | [docs/ETIQUETTES.md](docs/ETIQUETTES.md) | Étiquettes, règles auto, alertes, perf |
-| [docs/EMAIL.md](docs/EMAIL.md) | Email : SMTP, templates, file d'envoi, feuille de route |
-| [docs/EMAIL_OAUTH_SETUP.md](docs/EMAIL_OAUTH_SETUP.md) | OAuth Gmail / Microsoft (Client ID, redirect URI) |
+| [docs/EMAIL.md](docs/EMAIL.md) | Email : OAuth, templates, file d'envoi |
+| [docs/GUIDE_CONNEXION_GMAIL.md](docs/GUIDE_CONNEXION_GMAIL.md) | Guide utilisateur : connecter Gmail dans le CRM |
 | [docs/TESTS.md](docs/TESTS.md) | Tests Vitest / Cargo |
 | [AGENTS.md](AGENTS.md) | Vérification automatique pour Cursor |
 

@@ -28,6 +28,19 @@ import {
   type Investissement,
   type NewInvestissement,
 } from "@/lib/api/tauri-investissements";
+import {
+  ContactFormExceltisSection,
+  type ExceltisFormChoice,
+} from "@/components/contacts/ContactFormExceltisSection";
+import {
+  ensureExceltisEtiquetteAndAssign,
+  getExceltisMillesimeProposals,
+  isExceltisEligibleProductType,
+} from "@/lib/etiquettes/exceltis";
+import { dateFieldToIso } from "@/lib/contacts/contact-form-utils";
+import { unixToDateInput } from "@/lib/dates/calendar-date";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { toast } from "sonner";
 
 interface InvestissementFormProps {
   open: boolean;
@@ -68,6 +81,15 @@ export function InvestissementForm({
   const [reinvestissementDividendes, setReinvestissementDividendes] = useState(false);
   const [pourcentageReinvestissement, setPourcentageReinvestissement] = useState("100");
   const [notes, setNotes] = useState("");
+  const [exceltisChoice, setExceltisChoice] = useState<ExceltisFormChoice>({
+    hasExceltis: false,
+  });
+
+  const showExceltisSection =
+    !investissement &&
+    !investissementCommun &&
+    !!contactId &&
+    isExceltisEligibleProductType(typeProduit);
 
   // Produits acceptant le versement programmé
   const accepteVersementProgramme = [
@@ -91,6 +113,9 @@ export function InvestissementForm({
     if (!accepteReinvestissement) {
       setReinvestissementDividendes(false);
       setPourcentageReinvestissement("100");
+    }
+    if (!isExceltisEligibleProductType(typeProduit)) {
+      setExceltisChoice({ hasExceltis: false });
     }
   }, [typeProduit, accepteVersementProgramme, accepteReinvestissement]);
 
@@ -117,9 +142,19 @@ export function InvestissementForm({
         setPartenaireId(investissement.partenaire_id?.toString() || "");
         setNomProduit(investissement.nom_produit);
         setMontantInitial(investissement.montant_initial ? (investissement.montant_initial / 100).toString() : "");
-        setDateSouscription(investissement.date_souscription ? new Date(investissement.date_souscription * 1000).toISOString().split('T')[0] : "");
-        setDateFinDemembrement(investissement.date_fin_demembrement ? new Date(investissement.date_fin_demembrement * 1000).toISOString().split('T')[0] : "");
-        setDateFinPret(investissement.date_fin_pret ? new Date(investissement.date_fin_pret * 1000).toISOString().split('T')[0] : "");
+        setDateSouscription(
+          investissement.date_souscription
+            ? unixToDateInput(investissement.date_souscription)
+            : ""
+        );
+        setDateFinDemembrement(
+          investissement.date_fin_demembrement
+            ? unixToDateInput(investissement.date_fin_demembrement)
+            : ""
+        );
+        setDateFinPret(
+          investissement.date_fin_pret ? unixToDateInput(investissement.date_fin_pret) : ""
+        );
         setVersementProgramme(investissement.versement_programme);
         setMontantVersementProgramme(investissement.montant_versement_programme ? (investissement.montant_versement_programme / 100).toString() : "");
         setFrequenceVersement(investissement.frequence_versement || "");
@@ -174,6 +209,7 @@ export function InvestissementForm({
     setReinvestissementDividendes(false);
     setPourcentageReinvestissement("100");
     setNotes("");
+    setExceltisChoice({ hasExceltis: false });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -189,6 +225,24 @@ export function InvestissementForm({
     setLoading(true);
 
     try {
+      let exceltisOption:
+        | ReturnType<typeof getExceltisMillesimeProposals>[number]
+        | undefined;
+      if (
+        !investissement &&
+        exceltisChoice.hasExceltis &&
+        contactId &&
+        isExceltisEligibleProductType(typeProduit)
+      ) {
+        const proposals = getExceltisMillesimeProposals();
+        exceltisOption = proposals.find((p) => p.key === exceltisChoice.millesimeKey);
+        if (!exceltisOption) {
+          toast.error("Choisissez un millésime Exceltis");
+          setLoading(false);
+          return;
+        }
+      }
+
       // Stocker le pourcentage dans les notes si réinvestissement activé
       let finalNotes = notes || "";
       if (reinvestissementDividendes && accepteReinvestissement) {
@@ -203,9 +257,9 @@ export function InvestissementForm({
         partenaire_id: partenaireId ? parseInt(partenaireId) : undefined,
         nom_produit: nomProduit,
         montant_initial: montantInitial ? Math.round(parseFloat(montantInitial) * 100) : undefined,
-        date_souscription: dateSouscription ? new Date(dateSouscription).toISOString() : undefined,
-        date_fin_demembrement: dateFinDemembrement ? new Date(dateFinDemembrement).toISOString() : undefined,
-        date_fin_pret: dateFinPret ? new Date(dateFinPret).toISOString() : undefined,
+        date_souscription: dateFieldToIso(dateSouscription),
+        date_fin_demembrement: dateFieldToIso(dateFinDemembrement),
+        date_fin_pret: dateFieldToIso(dateFinPret),
         versement_programme: accepteVersementProgramme ? versementProgramme : false,
         montant_versement_programme: montantVersementProgramme ? Math.round(parseFloat(montantVersementProgramme) * 100) : undefined,
         frequence_versement: frequenceVersement || undefined,
@@ -215,8 +269,20 @@ export function InvestissementForm({
 
       if (investissement) {
         await updateInvestissement(investissement.id, newInvestissement);
+        toast.success("Investissement modifié");
       } else {
         await createInvestissement(newInvestissement);
+
+        if (exceltisOption) {
+          const etiquetteNom = await ensureExceltisEtiquetteAndAssign(
+            parseInt(contactId, 10),
+            exceltisOption
+          );
+          notifyEtiquettesChanged();
+          toast.success(`Investissement créé — étiquette « ${etiquetteNom} »`);
+        } else {
+          toast.success("Investissement créé");
+        }
       }
 
       onSuccess();
@@ -344,6 +410,13 @@ export function InvestissementForm({
               </SelectContent>
             </Select>
           </div>
+
+          {showExceltisSection && (
+            <ContactFormExceltisSection
+              value={exceltisChoice}
+              onChange={setExceltisChoice}
+            />
+          )}
 
           {/* Partenaire */}
           <div className="space-y-2">

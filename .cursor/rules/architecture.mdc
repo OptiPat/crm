@@ -51,4 +51,4 @@ Doc étiquettes : `docs/ETIQUETTES.md`.
 
 ## Fichiers sensibles
 
-- `.env`, credentials SMTP, `patrimoine-crm.db` prod → voir `donnees-sensibles.mdc`.
+- `.env`, tokens OAuth / `email_oauth.json`, `patrimoine-crm.db` prod → voir `donnees-sensibles.mdc`.

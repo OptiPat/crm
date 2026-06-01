@@ -1,0 +1,29 @@
+﻿{
+  "terminalAllowlist": [
+    "npm run verify",
+    "npm run verify:quick",
+    "npm run verify:full",
+    "npm run test",
+    "npm run test:rust",
+    "npm run test:all",
+    "npx vitest",
+    "npx tsc",
+    "cargo test",
+    "powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1",
+    "cd D:\\crm",
+    "cd D:/crm",
+    "git status",
+    "git diff",
+    "git log"
+  ],
+  "autoRun": {
+    "allow_instructions": [
+      "Autoriser npm run verify, npm run verify:quick, npm run test et cargo test pour la verification Patrimoine CRM.",
+      "Autoriser verify.ps1 et les commandes git en lecture seule (status, diff, log)."
+    ],
+    "block_instructions": [
+      "Bloquer git push, git reset --hard et git clean sans approbation explicite.",
+      "Bloquer toute ecriture sur .env, *.db ou auth.json."
+    ]
+  }
+}

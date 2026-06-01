@@ -3,7 +3,6 @@ use super::oauth_send::{
     fetch_gmail_signature, send_test_to_self, send_with_oauth, ImportedGmailSignature, OAuthSendResult,
 };
 use super::oauth_store::EmailOAuthStore;
-use super::{EmailSender, SmtpConfig};
 use serde::Serialize;
 use tauri::AppHandle;
 
@@ -39,14 +38,6 @@ pub fn get_email_connection_status(app_handle: AppHandle) -> Result<EmailConnect
             provider: Some(c.provider.clone()),
             email: Some(c.email.clone()),
             method: "oauth".into(),
-        });
-    }
-    if SmtpConfig::load(&app_handle)?.is_some() {
-        return Ok(EmailConnectionStatus {
-            connected: true,
-            provider: None,
-            email: None,
-            method: "smtp".into(),
         });
     }
     Ok(EmailConnectionStatus {
@@ -125,16 +116,7 @@ pub fn test_email_connection(app_handle: AppHandle) -> Result<String, String> {
     if oauth.connection.is_some() {
         return send_test_to_self(&app_handle);
     }
-    let config =
-        SmtpConfig::load(&app_handle)?.ok_or("Aucune connexion email (OAuth ou SMTP).".to_string())?;
-    let sender = EmailSender::new(config.clone());
-    sender.send_email(
-        &config.from_email,
-        Some(&config.from_name),
-        "Test de connexion SMTP - CRM W.Y.S",
-        "Ceci est un email de test SMTP.\n\nSi vous recevez cet email, la configuration est correcte.",
-    )?;
-    Ok("Email de test SMTP envoyé".into())
+    Err("Aucune connexion email. Paramètres → Email : connectez Google ou Microsoft.".into())
 }
 
 pub fn send_email_unified(
@@ -168,10 +150,5 @@ pub fn send_email_unified(
             reply_ref,
         );
     }
-    let config = SmtpConfig::load(app_handle)?.ok_or(
-        "Aucune connexion email. Paramètres → Email : connectez Google/Microsoft ou SMTP.".to_string(),
-    )?;
-    let _ = body_html;
-    EmailSender::new(config).send_email(to_email, to_name, subject, body)?;
-    Ok(OAuthSendResult::default())
+    Err("Aucune connexion email. Paramètres → Email : connectez Google ou Microsoft.".into())
 }

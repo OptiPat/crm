@@ -60,6 +60,8 @@ fn main() {
 
             app.manage(Mutex::new(Some(db)));
 
+            email::legacy_cleanup::remove_legacy_smtp_config(&app.handle());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -154,6 +156,9 @@ fn main() {
             mark_email_campaign_response,
             dismiss_email_campaign_followup,
             prepare_email_campaign_relance,
+            scan_stellium_exceltis_emails,
+            get_stellium_exceltis_signals,
+            dismiss_stellium_exceltis_signal,
             // Settings
             get_setting,
             set_setting,
@@ -169,10 +174,6 @@ fn main() {
             create_master_password,
             verify_master_password,
             get_recovery_key,
-            get_smtp_config,
-            save_smtp_config,
-            delete_smtp_config,
-            test_smtp_connection,
             send_email,
             get_email_connection_status,
             get_oauth_app_settings,

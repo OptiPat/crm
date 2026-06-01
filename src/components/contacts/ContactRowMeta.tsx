@@ -1,5 +1,6 @@
 import { Mail, Phone } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { cn } from "@/lib/utils";
 
 export function ContactRowMeta({
@@ -17,14 +18,7 @@ export function ContactRowMeta({
 
   let dernierContact: string | null = null;
   if (dateToUse) {
-    try {
-      const date = new Date(dateToUse * 1000);
-      if (!isNaN(date.getTime())) {
-        dernierContact = date.toLocaleDateString("fr-FR");
-      }
-    } catch {
-      /* ignore */
-    }
+    dernierContact = formatCalendarDateFr(dateToUse);
   }
 
   if (!contact.email && !contact.telephone && !dernierContact) return null;

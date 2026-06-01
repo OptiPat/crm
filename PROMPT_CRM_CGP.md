@@ -27,7 +27,7 @@
 | CRUD Foyers | ✅ | `Foyers.tsx`, `FoyerForm.tsx` |
 | CRUD Partenaires | ✅ | `Partenaires.tsx`, `PartenaireForm.tsx` |
 | Templates d'emails avec variables | ✅ | `TemplatesEmail.tsx`, `TemplateEmailForm.tsx` |
-| Configuration SMTP + envoi emails | ✅ | `email/`, `SmtpConfigForm.tsx` |
+| Connexion email OAuth + envoi (Gmail / Graph) | ✅ | `email/oauth_*`, `EmailOAuthConnect.tsx` |
 | Alertes automatiques + page Suivi | ✅ | `Suivi.tsx`, `tauri-alertes.ts` |
 | Upload de documents (basique) | ✅ | `DocumentUpload.tsx` |
 | Dashboard avec KPIs et graphiques | ✅ | `Dashboard.tsx`, tous composants dashboard/ |
@@ -35,7 +35,7 @@
 
 ### ⚠️ Partiellement fait
 - **SQLCipher** : Implémenté mais désactivé (nécessite OpenSSL)
-- **Import IMAP** : Non fait (seulement SMTP)
+- **Sync boîte contact** : Gmail / Outlook via OAuth (pas IMAP générique)
 
 ---
 
@@ -78,10 +78,9 @@ patrimoine-crm/
 │   │   │   ├── mod.rs
 │   │   │   ├── models.rs       # Structs Rust
 │   │   │   └── operations.rs   # Fonctions CRUD
-│   │   └── email/              # SMTP
-│   │       ├── mod.rs
-│   │       ├── smtp_config.rs
-│   │       ├── sender.rs
+│   │   └── email/              # OAuth (Gmail API, Microsoft Graph)
+│   │       ├── oauth_flow.rs, oauth_send.rs, oauth_store.rs
+│   │       ├── contact_gmail_sync.rs, response_sync.rs
 │   │       └── commands.rs
 │   ├── Cargo.toml
 │   └── tauri.conf.json
@@ -93,7 +92,7 @@ patrimoine-crm/
 │   │   ├── foyers/             # FoyerForm, FoyerDetail
 │   │   ├── partenaires/        # PartenaireForm, PartenaireDetail
 │   │   ├── documents/          # DocumentUpload
-│   │   └── emails/             # SmtpConfigForm, TemplateEmailForm
+│   │   └── emails/             # EmailOAuthConnect, TemplateEmailForm
 │   ├── pages/
 │   │   ├── Dashboard.tsx       # 🔄 À améliorer (KPIs + graphiques)
 │   │   ├── Contacts.tsx        # ✅ Complet
@@ -102,7 +101,7 @@ patrimoine-crm/
 │   │   ├── Documents.tsx       # ⚠️ Basique
 │   │   ├── TemplatesEmail.tsx  # ✅ Complet
 │   │   ├── Suivi.tsx           # ✅ Complet
-│   │   ├── Parametres.tsx      # ✅ Config SMTP
+│   │   ├── Parametres.tsx      # ✅ Profil + email OAuth
 │   │   ├── SetupPassword.tsx   # ✅ Premier lancement
 │   │   └── UnlockScreen.tsx    # ✅ Déverrouillage
 │   ├── lib/

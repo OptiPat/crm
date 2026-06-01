@@ -45,7 +45,7 @@ Lancer `.\dev.ps1` et vérifier visuellement :
 - [ ] **Contacts** — liste, badges couleur, modals
 - [ ] **Documents** — upload PDF + extraction texte (worker)
 - [ ] **Dialogs / Selects** — animations ouverture/fermeture
-- [ ] **Paramètres** — formulaire SMTP
+- [ ] **Paramètres** — connexion email OAuth (Google / Microsoft)
 
 ## Breaking changes non bloquants (connus)
 
