@@ -1,6 +1,6 @@
 [package]
 name = "patrimoine-crm"
-version = "0.3.2"
+version = "0.3.3"
 description = "CRM Desktop pour Conseillers en Gestion de Patrimoine"
 authors = ["you"]
 edition = "2021"
@@ -13,8 +13,8 @@ tauri = { version = "2.11", features = ["devtools", "protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rusqlite = { version = "0.32", features = ["bundled"] }
-# TEMPORAIRE : SQLCipher dÃƒÆ’Ã‚Â©sactivÃƒÆ’Ã‚Â© - nÃƒÆ’Ã‚Â©cessite OpenSSL sur Windows
-# Pour rÃƒÆ’Ã‚Â©activer le chiffrement : remplacer "bundled" par "bundled-sqlcipher" aprÃƒÆ’Ã‚Â¨s installation OpenSSL
+# TEMPORAIRE : SQLCipher dÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©sactivÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â© - nÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©cessite OpenSSL sur Windows
+# Pour rÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©activer le chiffrement : remplacer "bundled" par "bundled-sqlcipher" aprÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¨s installation OpenSSL
 anyhow = "1.0"
 argon2 = "0.5"
 rand = "0.8"
@@ -29,7 +29,7 @@ reqwest = { version = "0.12", default-features = false, features = ["blocking", 
 url = "2"
 
 [profile.dev]
-# debug = 0 ÃƒÆ’Ã‚Â©vite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)
+# debug = 0 ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â©vite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)
 incremental = true
 debug = 0
 codegen-units = 1
