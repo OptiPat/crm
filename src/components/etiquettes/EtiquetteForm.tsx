@@ -22,7 +22,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   createEtiquette, 
-  updateEtiquette, 
+  updateEtiquette,
+  getAllEtiquettes,
   getContrastColor,
   stringifyConditionConfig,
   stringifyCategories,
@@ -53,6 +54,15 @@ import {
   type ConditionType,
 } from "@/lib/etiquettes/etiquette-condition-labels";
 import { formatEtiquetteRuleSummary } from "@/lib/etiquettes/etiquette-form-summary";
+import { getAllSegments, type Segment } from "@/lib/api/tauri-segments";
+import { ConditionBuilder } from "@/components/etiquettes/ConditionBuilder";
+import {
+  leafFromLegacy,
+  parseRuleTree,
+  toRuleTreeSave,
+  type RuleLeaf,
+  type RuleOp,
+} from "@/lib/etiquettes/rule-ast";
 import {
   CategoryTogglePills,
   EtiquetteFormPanel,
@@ -116,6 +126,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [invJoursAvant, setInvJoursAvant] = useState(180);
   const [invTypesProduit, setInvTypesProduit] = useState<string[]>([]);
   const [categoriesSelectionnees, setCategoriesSelectionnees] = useState<string[]>(["CLIENT"]);
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [allEtiquettes, setAllEtiquettes] = useState<{ id: number; nom: string }[]>([]);
+  const [segmentId, setSegmentId] = useState<number | null>(null);
+  const [useComboRule, setUseComboRule] = useState(false);
+  const [ruleOp, setRuleOp] = useState<RuleOp>("and");
+  const [ruleChildren, setRuleChildren] = useState<RuleLeaf[]>([]);
   
   // Email
   const [emailActif, setEmailActif] = useState(false);
@@ -168,6 +184,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       getAllTemplatesEmail()
         .then(setTemplates)
         .catch(console.error);
+      getAllSegments()
+        .then(setSegments)
+        .catch(console.error);
+      getAllEtiquettes()
+        .then((list) => setAllEtiquettes(list.map((e) => ({ id: e.id, nom: e.nom }))))
+        .catch(console.error);
     }
   }, [open]);
 
@@ -184,8 +206,20 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setActif(etiquette.actif !== false);
 
         // Attribution automatique
+        setSegmentId(etiquette.segment_id ?? null);
+        const tree = parseRuleTree(etiquette.auto_condition_config);
+        if (etiquette.segment_id) {
+          setIsAuto(true);
+          setUseComboRule(false);
+        } else if (tree && tree.children.length > 0) {
+          setIsAuto(true);
+          setUseComboRule(true);
+          setRuleOp(tree.op);
+          setRuleChildren(tree.children);
+        } else {
         setIsAuto(!!etiquette.auto_condition_type);
-        if (etiquette.auto_condition_type) {
+        setUseComboRule(false);
+        if (etiquette.auto_condition_type && etiquette.auto_condition_type !== "RULE_TREE") {
           setConditionType(etiquette.auto_condition_type);
           
           // Parser la config selon le type
@@ -229,6 +263,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
           
           setCategoriesSelectionnees(parseCategories(etiquette.auto_categories));
         }
+        }
         
         // Email
         setEmailActif(etiquette.email_actif);
@@ -267,6 +302,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setInvJoursAvant(180);
         setInvTypesProduit([]);
         setCategoriesSelectionnees(["CLIENT"]);
+        setSegmentId(null);
+        setUseComboRule(false);
+        setRuleChildren([]);
         setEmailActif(false);
         setEmailTemplateId(null);
         setEmailEnvoiMode("eligibility");
@@ -299,12 +337,17 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       }
     }
 
-    if (actif && isAuto && categoriesSelectionnees.length === 0) {
+    if (actif && isAuto && !segmentId && !useComboRule && categoriesSelectionnees.length === 0) {
       toast.error("Sélectionnez au moins une catégorie de contact");
       return;
     }
 
-    if (actif && isAuto && conditionType === "TYPE_PRODUIT" && typesProduitSelectionnes.length === 0) {
+    if (actif && isAuto && useComboRule && ruleChildren.some((c) => c.categories.length === 0)) {
+      toast.error("Chaque condition combinée doit avoir une catégorie");
+      return;
+    }
+
+    if (actif && isAuto && !segmentId && !useComboRule && conditionType === "TYPE_PRODUIT" && typesProduitSelectionnes.length === 0) {
       toast.error("Sélectionnez au moins un type de produit");
       return;
     }
@@ -312,9 +355,20 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
     setLoading(true);
 
     try {
-      // Construire la configuration de condition
+      let autoConditionType: string | null = null;
       let autoConditionConfig: string | null = null;
-      if (isAuto) {
+      let autoCategories: string | null = null;
+      let linkedSegmentId: number | null = null;
+
+      if (isAuto && segmentId) {
+        linkedSegmentId = segmentId;
+      } else if (isAuto && useComboRule && ruleChildren.length > 0) {
+        const saved = toRuleTreeSave(ruleOp, ruleChildren);
+        autoConditionType = saved.auto_condition_type;
+        autoConditionConfig = saved.auto_condition_config;
+        autoCategories = saved.auto_categories;
+      } else if (isAuto) {
+        autoConditionType = conditionType;
         if (conditionType === "DELAI_SANS_CONTACT") {
           autoConditionConfig = stringifyConditionConfig({
             jours: delaiJours,
@@ -338,6 +392,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             types_produit: invTypesProduit.length > 0 ? invTypesProduit : undefined,
           });
         }
+        autoCategories = stringifyCategories(categoriesSelectionnees);
       }
       
       const data: NewEtiquette = {
@@ -346,9 +401,10 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         icone: null,
         description: description.trim() || null,
         priorite,
-        auto_condition_type: isAuto ? conditionType : null,
-        auto_condition_config: autoConditionConfig,
-        auto_categories: isAuto ? stringifyCategories(categoriesSelectionnees) : null,
+        auto_condition_type: isAuto && !linkedSegmentId ? autoConditionType : linkedSegmentId ? null : autoConditionType,
+        auto_condition_config: isAuto && !linkedSegmentId ? autoConditionConfig : null,
+        auto_categories: isAuto && !linkedSegmentId ? autoCategories : null,
+        segment_id: linkedSegmentId,
         email_template_id: emailActif ? emailTemplateId : null,
         email_delai_jours: 0,
         email_envoi_prevu:
@@ -557,6 +613,74 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   </div>
 
                   {isAuto && (
+                    <>
+                      <div className="space-y-2">
+                        <Label>Segment réutilisable (optionnel)</Label>
+                        <Select
+                          value={segmentId != null ? String(segmentId) : "_none"}
+                          onValueChange={(v) => {
+                            if (v === "_none") {
+                              setSegmentId(null);
+                            } else {
+                              setSegmentId(parseInt(v, 10));
+                              setUseComboRule(false);
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Règle sur l'étiquette" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="_none">Règle définie ci-dessous</SelectItem>
+                            {segments.map((s) => (
+                              <SelectItem key={s.id} value={String(s.id)}>
+                                {s.nom}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {!segmentId && (
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="combo-rule" className="text-sm">
+                            Combiner plusieurs conditions (ET / OU)
+                          </Label>
+                          <Switch
+                            id="combo-rule"
+                            checked={useComboRule}
+                            onCheckedChange={(c) => {
+                              setUseComboRule(c);
+                              if (c && ruleChildren.length === 0) {
+                                setRuleChildren([
+                                  leafFromLegacy(
+                                    conditionType,
+                                    JSON.parse(
+                                      stringifyConditionConfig(
+                                        conditionType === "DELAI_SANS_CONTACT"
+                                          ? { jours: delaiJours, inclure_sans_date: inclureSansDate }
+                                          : { types: typesProduitSelectionnes }
+                                      ) || "{}"
+                                    ) as Record<string, unknown>,
+                                    categoriesSelectionnees
+                                  ),
+                                ]);
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {useComboRule && !segmentId ? (
+                        <ConditionBuilder
+                          op={ruleOp}
+                          onOpChange={setRuleOp}
+                          children={ruleChildren}
+                          onChange={setRuleChildren}
+                          etiquettesOptions={allEtiquettes}
+                          showPreview
+                        />
+                      ) : !segmentId ? (
                     <>
                       <EtiquetteRuleSummaryCard summary={ruleSummary} />
 
@@ -788,6 +912,13 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                           onToggle={handleCategoryToggle}
                         />
                       </div>
+                    </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground border rounded-lg px-3 py-2">
+                          Règle fournie par le segment «{" "}
+                          {segments.find((s) => s.id === segmentId)?.nom ?? "…"} ».
+                        </p>
+                      )}
                     </>
                   )}
                 </EtiquetteFormPanel>

@@ -174,10 +174,10 @@ export function ParametresNewsletterSection({
         </div>
       </SettingsPanel>
 
-      <SettingsPanel title="Campagne" description="Étiquette des abonnés et espacement des envois">
+      <SettingsPanel title="Campagne" description="Étiquette technique pour la file d'envoi et espacement entre emails">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="param-nl-etiquette">Nom de l&apos;étiquette abonnés</Label>
+            <Label htmlFor="param-nl-etiquette">Nom de l&apos;étiquette (file d&apos;envoi)</Label>
             <Input
               id="param-nl-etiquette"
               value={etiquetteNom}
@@ -186,7 +186,8 @@ export function ParametresNewsletterSection({
             {subscriberCount != null && (
               <p className="text-xs text-muted-foreground">
                 {subscriberCount} contact{subscriberCount !== 1 ? "s" : ""} tagué
-                {subscriberCount !== 1 ? "s" : ""} actuellement
+                {subscriberCount !== 1 ? "s" : ""} manuellement (optionnel — l&apos;audience inclut
+                toute la base par défaut)
               </p>
             )}
           </div>
@@ -217,7 +218,7 @@ export function ParametresNewsletterSection({
 
       <SettingsPanel title="Bonnes pratiques anti-spam">
         <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-5">
-          <li>Destinataires = clients qui vous connaissent (étiquette Newsletter)</li>
+          <li>Destinataires = contacts avec email (toute la base, sauf désinscrits)</li>
           <li>Un seul lien principal (bouton agenda)</li>
           <li>Envoi via Gmail connecté (Paramètres → Email)</li>
           <li>Testez avec « M&apos;envoyer un test » avant la campagne</li>

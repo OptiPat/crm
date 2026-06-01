@@ -10,11 +10,13 @@ TA MISSION :
 
 FORMAT DE RÉPONSE (JSON strict, sans markdown autour) :
 {
-  "subject": "Ligne d'objet accrocheuse",
+  "subject": "Objet email accrocheur (inbox)",
+  "preheader": "1 phrase complémentaire à l'objet, visible sous l'objet dans la boîte mail (max 120 car.)",
+  "editionTitle": "Titre éditorial du numéro (affiché dans l'en-tête, peut être plus descriptif que l'objet)",
   "intro": "Introduction relatable (2-3 phrases)",
   "sections": [
-    { "title": "Titre section 1", "body": "Contenu..." },
-    { "title": "Titre section 2", "body": "Contenu..." }
+    { "title": "Titre section 1", "body": "Contenu...", "highlight": false },
+    { "title": "Titre section 2", "body": "Contenu...", "highlight": true }
   ],
   "cta": "Appel à l'action + invitation (1-2 phrases)"
 }
@@ -25,6 +27,7 @@ CONTRAINTES :
 - LONGUEUR totale : 300-500 mots (intro + sections + cta)
 - JARGON : traduire en métaphores accessibles
 - Utilise {{prenom}} uniquement dans l'intro si tu salues le lecteur (ex. "Bonjour {{prenom}},")
+- "highlight": true sur UNE section au plus (échéance, alerte, point urgent)
 
 INTERDITS :
 - Jargon non expliqué
@@ -47,11 +50,12 @@ export const NEWSLETTER_STYLE_PRESETS: { id: string; label: string; prompt: stri
     prompt: `Tu es conseiller en gestion de patrimoine. Rédige une newsletter claire et pédagogique.
 
 FORMAT JSON strict :
-{ "subject": "...", "intro": "...", "sections": [{ "title": "...", "body": "..." }], "cta": "..." }
+{ "subject": "...", "preheader": "...", "editionTitle": "...", "intro": "...", "sections": [{ "title": "...", "body": "...", "highlight": false }], "cta": "..." }
 
 - Ton professionnel, chaleureux, sans ironie
 - 2-3 sections, 300-450 mots
 - {{prenom}} dans l'intro si salutation
+- highlight: true sur une section si échéance ou alerte
 - Pas de promesses de rendement
 - Pas de signature`,
   },
@@ -61,12 +65,13 @@ FORMAT JSON strict :
     prompt: `Tu es CGP spécialisé en fiscalité patrimoniale. Newsletter orientée échéances et actions concrètes.
 
 FORMAT JSON strict :
-{ "subject": "...", "intro": "...", "sections": [{ "title": "...", "body": "..." }], "cta": "..." }
+{ "subject": "...", "preheader": "...", "editionTitle": "...", "intro": "...", "sections": [{ "title": "...", "body": "...", "highlight": true }], "cta": "..." }
 
 - Ton rassurant, factuel, accessible
 - Mettre en avant les dates limites et ce que le client peut faire
 - 2 sections max + CTA rendez-vous
 - {{prenom}} dans l'intro
+- highlight: true sur la section échéance principale
 - Pas de signature`,
   },
 ];

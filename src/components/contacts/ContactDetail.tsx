@@ -73,6 +73,7 @@ import {
   type Etiquette,
 } from "@/lib/api/tauri-etiquettes";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { ContactAutoEtiquetteLog } from "@/components/contacts/ContactAutoEtiquetteLog";
 import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
@@ -583,6 +584,7 @@ export function ContactDetail({
             onAdd={handleAddEtiquette}
             onRemove={handleRemoveEtiquetteClick}
           />
+          {contact.id != null && <ContactAutoEtiquetteLog contactId={contact.id} />}
           {excludedEtiquettes.length > 0 && (
             <p className="text-xs text-muted-foreground w-full mt-1">
               Exclues du calcul auto :{" "}

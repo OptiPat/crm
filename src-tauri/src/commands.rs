@@ -5,8 +5,9 @@ use crate::database::{
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewPartenaire,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, NewInteraction,
-        NewTemplateEmail, Partenaire,
-        PipelineStats, ProductStats, Setting, TemplateEmail,
+        NewTemplateEmail, NewSegment, Partenaire,
+        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, TemplateEmail,
+        YearlyActivityStats,
     },
     Database,
 };
@@ -592,6 +593,18 @@ pub fn get_monthly_stats(db: State<'_, DbState>) -> Result<Vec<MonthlyStats>, St
 }
 
 #[tauri::command]
+pub fn get_yearly_activity_stats(
+    db: State<'_, DbState>,
+) -> Result<Vec<YearlyActivityStats>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_yearly_activity_stats()
+        .map_err(|e| format!("Failed to get yearly activity stats: {}", e))
+}
+
+#[tauri::command]
 pub fn get_product_stats(db: State<'_, DbState>) -> Result<Vec<ProductStats>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -794,7 +807,7 @@ pub fn create_etiquette(
     let etiqu = database
         .create_etiquette(new_etiquette)
         .map_err(|e| format!("Failed to create etiquette: {}", e))?;
-    if etiqu.actif && etiqu.auto_condition_type.is_some() {
+    if etiqu.actif && Database::etiquette_has_auto_rule(&etiqu) {
         let _ = database.check_auto_etiquettes_for_etiquette(etiqu.id);
     }
     Ok(etiqu)
@@ -812,7 +825,7 @@ pub fn update_etiquette(
     let etiqu = database
         .update_etiquette(id, &etiquette)
         .map_err(|e| format!("Failed to update etiquette: {}", e))?;
-    if etiqu.actif && etiqu.auto_condition_type.is_some() {
+    if etiqu.actif && Database::etiquette_has_auto_rule(&etiqu) {
         let _ = database.check_auto_etiquettes_for_etiquette(etiqu.id);
     }
     Ok(etiqu)
@@ -955,6 +968,120 @@ pub fn check_and_apply_auto_etiquettes(db: State<'_, DbState>) -> Result<usize, 
 }
 
 #[tauri::command]
+pub fn get_all_segments(db: State<'_, DbState>) -> Result<Vec<Segment>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_all_segments()
+        .map_err(|e| format!("Failed to get segments: {}", e))
+}
+
+#[tauri::command]
+pub fn get_all_segments_with_count(db: State<'_, DbState>) -> Result<Vec<SegmentWithCount>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_all_segments_with_count()
+        .map_err(|e| format!("Failed to get segments: {}", e))
+}
+
+#[tauri::command]
+pub fn create_segment(db: State<'_, DbState>, segment: NewSegment) -> Result<Segment, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_segment(segment)
+        .map_err(|e| format!("Failed to create segment: {}", e))
+}
+
+#[tauri::command]
+pub fn update_segment(
+    db: State<'_, DbState>,
+    id: i64,
+    segment: NewSegment,
+) -> Result<Segment, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let updated = database
+        .update_segment(id, &segment)
+        .map_err(|e| format!("Failed to update segment: {}", e))?;
+    let _ = database.sync_auto_etiquettes_after_segment_update(id);
+    Ok(updated)
+}
+
+#[tauri::command]
+pub fn delete_segment(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .delete_segment(id)
+        .map_err(|e| format!("Failed to delete segment: {}", e))
+}
+
+#[tauri::command]
+pub fn evaluate_segment_for_contact(
+    db: State<'_, DbState>,
+    segment_id: i64,
+    contact_id: i64,
+) -> Result<bool, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let contact = database
+        .get_contact_by_id(contact_id)
+        .map_err(|e| format!("Contact: {}", e))?;
+    database
+        .contact_matches_segment(&contact, segment_id)
+        .map_err(|e| format!("Evaluate segment: {}", e))
+}
+
+#[tauri::command]
+pub fn get_contacts_matching_segment(
+    db: State<'_, DbState>,
+    segment_id: i64,
+) -> Result<Vec<Contact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let contacts = database
+        .get_all_contacts()
+        .map_err(|e| format!("Contacts: {}", e))?;
+    let mut out = Vec::new();
+    for c in contacts {
+        if database
+            .contact_matches_segment(&c, segment_id)
+            .map_err(|e| format!("Segment: {}", e))?
+        {
+            out.push(c);
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+pub fn preview_segment_rule_count(
+    db: State<'_, DbState>,
+    rule_json: String,
+) -> Result<i64, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .count_contacts_for_rule_json(&rule_json)
+        .map_err(|e| format!("Preview: {}", e))
+}
+
+#[tauri::command]
+pub fn get_contact_auto_etiquette_log(
+    db: State<'_, DbState>,
+    contact_id: i64,
+    limit: Option<i64>,
+) -> Result<Vec<(i64, String, bool, String, i64)>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_auto_log_for_contact(contact_id, limit.unwrap_or(20))
+        .map_err(|e| format!("Log: {}", e))
+}
+
+#[tauri::command]
 pub fn get_pending_etiquette_emails(
     db: State<'_, DbState>,
 ) -> Result<Vec<(i64, i64, i64, String, String)>, String> {
@@ -1018,7 +1145,7 @@ pub fn sync_email_campaign_responses(
     crate::email::response_sync::sync_email_campaign_responses(
         &app_handle,
         pending,
-        |contact_etiquette_id, response_type, body, gmail_msg| {
+        |contact_etiquette_id, response_type, body, gmail_msg, subject| {
             let db_guard = db.lock().unwrap();
             let database = db_guard.as_ref().ok_or("Database not initialized")?;
             database
@@ -1027,6 +1154,7 @@ pub fn sync_email_campaign_responses(
                     response_type,
                     body,
                     gmail_msg,
+                    subject,
                 )
                 .map_err(|e| e.to_string())
         },
@@ -1049,6 +1177,7 @@ pub fn mark_email_campaign_response(
             &response_type,
             reponse_body.as_deref(),
             reponse_gmail_message_id.as_deref(),
+            None,
         )
         .map_err(|e| format!("Failed to mark response: {}", e))
 }
@@ -1090,6 +1219,7 @@ pub fn import_campaign_reply_from_gmail(
             "mail",
             Some(reply.body_text.as_str()),
             Some(reply.message_id.as_str()),
+            reply.subject.as_deref(),
         )
         .map_err(|e| format!("Failed to mark response: {}", e))?;
 

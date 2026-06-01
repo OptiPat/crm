@@ -22,6 +22,7 @@ import {
 import { EtiquetteForm } from "@/components/etiquettes/EtiquetteForm";
 import { EtiquetteContactsPanel } from "@/components/etiquettes/EtiquetteContactsPanel";
 import { EtiquetteListCard } from "@/components/etiquettes/EtiquetteListCard";
+import { SegmentsSection } from "@/components/etiquettes/SegmentsSection";
 import { StatCard } from "@/components/dashboard/StatCard";
 import {
   AlertDialog,
@@ -212,7 +213,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
 
   const handleDeleteClick = (etiquette: EtiquetteWithCount) => {
     if (etiquette.is_default) {
-      toast.error("Les étiquettes par défaut ne peuvent pas être supprimées");
+      toast.error("Les étiquettes système ne peuvent pas être supprimées");
       return;
     }
     setEtiquetteToDelete(etiquette);
@@ -491,6 +492,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
       ) : (
         listBlock
       )}
+
+      <SegmentsSection />
 
       <EtiquetteForm
         open={showForm}

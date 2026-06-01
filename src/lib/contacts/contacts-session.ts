@@ -8,6 +8,7 @@ export type ContactsUiState = {
     | "FILLEUL_DESINSCRIT";
   statutFilter: string;
   etiquetteFilter: string;
+  segmentFilter: string;
   groupByFoyer: boolean;
 };
 

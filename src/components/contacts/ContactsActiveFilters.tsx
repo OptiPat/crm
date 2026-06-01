@@ -11,6 +11,9 @@ export function ContactsActiveFilters({
   etiquetteFilter,
   etiquetteLabel,
   onClearEtiquette,
+  segmentFilter,
+  segmentLabel,
+  onClearSegment,
   needsFollowupOnly,
   onToggleNeedsFollowup,
   followupCount,
@@ -23,6 +26,9 @@ export function ContactsActiveFilters({
   etiquetteFilter: string;
   etiquetteLabel?: string;
   onClearEtiquette: () => void;
+  segmentFilter?: string;
+  segmentLabel?: string;
+  onClearSegment?: () => void;
   needsFollowupOnly: boolean;
   onToggleNeedsFollowup: () => void;
   followupCount: number;
@@ -31,6 +37,7 @@ export function ContactsActiveFilters({
     searchQuery.trim() ||
     statutFilter !== "ALL" ||
     etiquetteFilter !== "ALL" ||
+    (segmentFilter != null && segmentFilter !== "ALL") ||
     needsFollowupOnly;
 
   return (
@@ -61,6 +68,12 @@ export function ContactsActiveFilters({
           {etiquetteFilter !== "ALL" && etiquetteLabel && (
             <FilterChip label={etiquetteLabel} onRemove={onClearEtiquette} />
           )}
+          {segmentFilter != null &&
+            segmentFilter !== "ALL" &&
+            segmentLabel &&
+            onClearSegment && (
+              <FilterChip label={segmentLabel} onRemove={onClearSegment} />
+            )}
         </div>
       )}
     </div>

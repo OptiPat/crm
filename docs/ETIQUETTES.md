@@ -62,6 +62,9 @@ Champ **0–100** sur l’étiquette : plus la valeur est haute, plus le badge a
 
 | Type | Usage |
 |------|--------|
+| `RULE_TREE` | Plusieurs conditions combinées (ET / OU) — JSON v1 dans `auto_condition_config` |
+| `JAMAIS_CONTACT` | Pas de date de dernier contact (client ou filleul selon catégories) |
+| `A_ETIQUETTE` | Possède (ou non) une autre étiquette |
 | `DELAI_SANS_CONTACT` | X jours sans contact (selon catégories cochées) |
 | `DATE_APPROCHE` | Champ **contact** (ex. `date_prochain_suivi`) dans les X prochains jours |
 | `DATE_APPROCHE_INVESTISSEMENT` | Champ sur **investissement** (ex. fin démembrement, fin de prêt) |
@@ -126,8 +129,11 @@ Traiter une alerte (date de suivi) peut faire évoluer les étiquettes au procha
 
 ### Modèle de données
 
-- **`etiquettes`** : définition + `actif`, `priorite`, `is_default`, règle auto, email.
+- **`etiquettes`** : définition + `actif`, `priorite`, `is_default`, règle auto, email, `segment_id` (optionnel).
+- **`segments`** : règle réutilisable (`rule_json` arbre v1) — liée aux étiquettes, filtres Contacts, alertes.
+- **`alerte_segment_links`** : type d’alerte → segment (génération alertes unifiée).
 - **`contact_etiquettes`** : liaison contact ↔ étiquette, `attribue_par` (`AUTO` | `MANUEL`), suivi email.
+- **`contact_etiquette_auto_log`** : journal des évaluations AUTO (debug / transparence).
 
 ### Performance
 

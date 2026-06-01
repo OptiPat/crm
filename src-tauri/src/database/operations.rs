@@ -7,6 +7,12 @@ use super::{
     Database,
 };
 use crate::contact_name::normalize_contact_name;
+use crate::newsletter::db::{
+    is_newsletter_unsubscribe_request, ContactAudienceRow, LastNewsletterEditionDuplicate,
+    NewsletterAudienceFilters, NewsletterAudienceMember, NewsletterAudiencePreview,
+    NewsletterEditionDetail, NewsletterEditionRecipient, NewsletterEditionSummary,
+    NewsletterEligibleContact, NewsletterUnsubscribedContact, QueuedNewsletterContact,
+};
 use rusqlite::{params, Result};
 
 const REDUCTION_IMPOT_ETIQUETTE_CANONICAL: &str = "Réduction d'impôt fin d'année";
@@ -1474,16 +1480,29 @@ Bien cordialement,\n\
         Ok(closed)
     }
 
-    // Génération automatique des alertes (alignée sur les étiquettes DELAI_SANS_CONTACT)
+    // Génération automatique des alertes — via segments (même logique que les étiquettes).
     pub fn generer_alertes_automatiques(&self) -> Result<usize> {
-        const SECONDS_PER_DAY: i64 = 24 * 60 * 60;
-        const JOURS_6_MOIS: i64 = 180;
-        const JOURS_1_AN: i64 = 365;
+        let _ = self.ensure_default_segments_and_alerte_links();
 
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
+
+        let mut links: Vec<(String, i64)> = Vec::new();
+        if self.segments_table_exists() {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT type_alerte, segment_id FROM alerte_segment_links")?;
+            let rows = stmt.query_map([], |row| Ok((row.get::<_, String>(0)?, row.get(1)?)))?;
+            for row in rows {
+                links.push(row?);
+            }
+        }
+
+        if links.is_empty() {
+            return Ok(0);
+        }
 
         let contacts = self.get_all_contacts()?;
         let mut count = 0;
@@ -1498,95 +1517,15 @@ Bien cordialement,\n\
                 continue;
             }
 
-            let date_dernier_contact = contact.date_dernier_contact;
-            let date_dernier_contact_filleul = contact.date_dernier_contact_filleul;
-            let filleul_cat = contact.filleul_categorie.as_deref();
-
-            let days_since = |last: i64| (now - last) / SECONDS_PER_DAY;
-
-            // ========== CLIENTS ==========
-            if contact.categorie == "CLIENT" {
-                if let Some(last_contact) = date_dernier_contact {
-                    if days_since(last_contact) >= JOURS_1_AN {
-                        if self.try_create_alerte_suivi(
-                            contact_id,
-                            "SUIVI_CLIENT_1AN",
-                            format!("{} {}", contact.prenom, contact.nom),
-                            now,
-                        )? {
-                            count += 1;
-                        }
-                    }
-                } else if self.try_create_alerte_suivi(
-                    contact_id,
-                    "CLIENT_JAMAIS_SUIVI",
-                    format!("{} {}", contact.prenom, contact.nom),
-                    now,
-                )? {
-                    count += 1;
-                }
+            if contact.filleul_categorie.as_deref() == Some("FILLEUL_DESINSCRIT") {
+                continue;
             }
 
-            // ========== PROSPECTS & SUSPECTS CLIENT ==========
-            if contact.categorie == "SUSPECT_CLIENT" || contact.categorie == "PROSPECT_CLIENT" {
-                if let Some(last_contact) = date_dernier_contact {
-                    if days_since(last_contact) >= JOURS_6_MOIS {
-                        if self.try_create_alerte_suivi(
-                            contact_id,
-                            "LEAD_SUIVI_6MOIS",
-                            format!("{} {}", contact.prenom, contact.nom),
-                            now,
-                        )? {
-                            count += 1;
-                        }
-                    }
-                } else if self.try_create_alerte_suivi(
-                    contact_id,
-                    "LEAD_JAMAIS_CONTACTE",
-                    format!("{} {}", contact.prenom, contact.nom),
-                    now,
-                )? {
-                    count += 1;
-                }
-            }
+            let label = format!("{} {}", contact.prenom, contact.nom);
 
-            // ========== RÉSEAU FILLEUL ==========
-            if let Some(fc) = filleul_cat {
-                if fc == "FILLEUL_DESINSCRIT" {
-                    continue;
-                }
-                let last_filleul = date_dernier_contact_filleul;
-                if fc == "FILLEUL" {
-                    if let Some(last_contact) = last_filleul {
-                        if days_since(last_contact) >= JOURS_1_AN {
-                            if self.try_create_alerte_suivi(
-                                contact_id,
-                                "SUIVI_FILLEUL_1AN",
-                                format!("{} {}", contact.prenom, contact.nom),
-                                now,
-                            )? {
-                                count += 1;
-                            }
-                        }
-                    }
-                } else if fc == "PROSPECT_FILLEUL" || fc == "SUSPECT_FILLEUL" {
-                    if let Some(last_contact) = last_filleul {
-                        if days_since(last_contact) >= JOURS_6_MOIS {
-                            if self.try_create_alerte_suivi(
-                                contact_id,
-                                "FILLEUL_SUIVI_6MOIS",
-                                format!("{} {}", contact.prenom, contact.nom),
-                                now,
-                            )? {
-                                count += 1;
-                            }
-                        }
-                    } else if self.try_create_alerte_suivi(
-                        contact_id,
-                        "FILLEUL_JAMAIS_CONTACTE",
-                        format!("{} {}", contact.prenom, contact.nom),
-                        now,
-                    )? {
+            for (type_alerte, segment_id) in &links {
+                if self.contact_matches_segment(&contact, *segment_id)? {
+                    if self.try_create_alerte_suivi(contact_id, type_alerte, label.clone(), now)? {
                         count += 1;
                     }
                 }
@@ -1773,6 +1712,47 @@ Bien cordialement,\n\
                 nouveaux: count,
             });
         }
+
+        Ok(stats)
+    }
+
+    /// Clients et panier moyen par année calendaire de souscription (origine MON_CONSEIL).
+    pub fn get_yearly_activity_stats(&self) -> Result<Vec<super::models::YearlyActivityStats>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT
+                CAST(strftime('%Y', datetime(i.date_souscription, 'unixepoch')) AS INTEGER) AS year,
+                COUNT(DISTINCT i.contact_id) AS clients,
+                COALESCE(SUM(i.montant_initial), 0) AS total_centimes
+             FROM investissements i
+             WHERE i.origine = 'MON_CONSEIL'
+               AND i.date_souscription IS NOT NULL
+               AND i.contact_id IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM contacts c
+                   WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
+               )
+             GROUP BY year
+             ORDER BY year ASC",
+        )?;
+
+        let stats = stmt
+            .query_map([], |row| {
+                let year: i32 = row.get(0)?;
+                let clients: i64 = row.get(1)?;
+                let total_centimes: i64 = row.get(2)?;
+                let total_euros = total_centimes as f64 / 100.0;
+                let panier_moyen = if clients > 0 {
+                    total_euros / clients as f64
+                } else {
+                    0.0
+                };
+                Ok(super::models::YearlyActivityStats {
+                    year,
+                    clients,
+                    panier_moyen,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
 
         Ok(stats)
     }
@@ -2593,6 +2573,11 @@ Bien cordialement,\n\
 
     // ==================== ETIQUETTES ====================
 
+    const ETIQUETTE_SELECT_COLS: &'static str = "id, nom, couleur, icone, description, priorite,
+                    auto_condition_type, auto_condition_config, auto_categories,
+                    email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
+                    email_actif, is_default, actif, segment_id, created_at, updated_at";
+
     fn map_etiquette_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Etiquette> {
         Ok(Etiquette {
             id: row.get(0)?,
@@ -2611,8 +2596,9 @@ Bien cordialement,\n\
             email_actif: row.get::<_, i64>(13)? != 0,
             is_default: row.get::<_, i64>(14)? != 0,
             actif: row.get::<_, i64>(15)? != 0,
-            created_at: row.get(16)?,
-            updated_at: row.get(17)?,
+            segment_id: row.get(16)?,
+            created_at: row.get(17)?,
+            updated_at: row.get(18)?,
         })
     }
 
@@ -2704,14 +2690,11 @@ Bien cordialement,\n\
 
     /// Récupérer toutes les étiquettes
     pub fn get_all_etiquettes(&self) -> Result<Vec<Etiquette>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, nom, couleur, icone, description, priorite,
-                    auto_condition_type, auto_condition_config, auto_categories,
-                    email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
-                    email_actif, is_default, actif, created_at, updated_at
-             FROM etiquettes 
-             ORDER BY priorite DESC, nom ASC",
-        )?;
+        let sql = format!(
+            "SELECT {} FROM etiquettes ORDER BY priorite DESC, nom ASC",
+            Self::ETIQUETTE_SELECT_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
         let etiquettes = stmt.query_map([], Self::map_etiquette_from_row)?;
         etiquettes.collect()
@@ -2723,7 +2706,7 @@ Bien cordialement,\n\
             "SELECT e.id, e.nom, e.couleur, e.icone, e.description, e.priorite,
                     e.auto_condition_type, e.auto_condition_config, e.auto_categories,
                     e.email_template_id, e.email_delai_jours, e.email_envoi_prevu, e.email_envoi_heure,
-                    e.email_actif, e.is_default, e.actif, e.created_at, e.updated_at,
+                    e.email_actif, e.is_default, e.actif, e.segment_id, e.created_at, e.updated_at,
                     COALESCE((SELECT COUNT(*) FROM contact_etiquettes ce WHERE ce.etiquette_id = e.id), 0) as contact_count
              FROM etiquettes e
              ORDER BY e.priorite DESC, e.nom ASC"
@@ -2747,9 +2730,10 @@ Bien cordialement,\n\
                 email_actif: row.get::<_, i64>(13)? != 0,
                 is_default: row.get::<_, i64>(14)? != 0,
                 actif: row.get::<_, i64>(15)? != 0,
-                created_at: row.get(16)?,
-                updated_at: row.get(17)?,
-                contact_count: row.get(18)?,
+                segment_id: row.get(16)?,
+                created_at: row.get(17)?,
+                updated_at: row.get(18)?,
+                contact_count: row.get(19)?,
             })
         })?;
 
@@ -2758,41 +2742,58 @@ Bien cordialement,\n\
 
     /// Récupérer une étiquette par son ID
     pub fn get_etiquette_by_id(&self, id: i64) -> Result<Etiquette> {
-        self.conn.query_row(
-            "SELECT id, nom, couleur, icone, description, priorite,
-                    auto_condition_type, auto_condition_config, auto_categories,
-                    email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
-                    email_actif, is_default, actif, created_at, updated_at
-             FROM etiquettes 
-             WHERE id = ?1",
-            params![id],
-            Self::map_etiquette_from_row,
-        )
+        let sql = format!(
+            "SELECT {} FROM etiquettes WHERE id = ?1",
+            Self::ETIQUETTE_SELECT_COLS
+        );
+        self.conn.query_row(&sql, params![id], Self::map_etiquette_from_row)
     }
 
-    fn validate_etiquette_for_save(etiquette: &NewEtiquette) -> Result<()> {
+    fn validate_etiquette_for_save(&self, etiquette: &NewEtiquette) -> Result<()> {
         if etiquette.nom.trim().is_empty() {
             return Err(rusqlite::Error::InvalidParameterName(
                 "Le nom de l'étiquette est obligatoire".to_string(),
             ));
         }
         let is_auto = etiquette.actif.unwrap_or(true)
-            && etiquette
-                .auto_condition_type
-                .as_ref()
-                .map(|t| !t.trim().is_empty())
-                .unwrap_or(false);
+            && (etiquette.segment_id.is_some()
+                || etiquette
+                    .auto_condition_type
+                    .as_ref()
+                    .map(|t| !t.trim().is_empty())
+                    .unwrap_or(false));
         if is_auto {
-            let categories: Vec<String> = etiquette
-                .auto_categories
-                .as_ref()
-                .and_then(|c| serde_json::from_str(c).ok())
-                .unwrap_or_default();
-            if categories.is_empty() {
-                return Err(rusqlite::Error::InvalidParameterName(
-                    "Au moins une catégorie de contact est requise pour une règle automatique"
-                        .to_string(),
-                ));
+            if let Some(seg_id) = etiquette.segment_id {
+                if self.get_segment_by_id(seg_id)?.is_none() {
+                    return Err(rusqlite::Error::InvalidParameterName(
+                        "Segment introuvable".to_string(),
+                    ));
+                }
+            } else if etiquette.auto_condition_type.as_deref() == Some("RULE_TREE") {
+                if let Some(cfg) = etiquette.auto_condition_config.as_ref() {
+                    super::etiquette_rule_ast::parse_rule_json(
+                        Some(cfg),
+                        None,
+                        None,
+                        None,
+                    )?;
+                } else {
+                    return Err(rusqlite::Error::InvalidParameterName(
+                        "Règle combinée invalide".to_string(),
+                    ));
+                }
+            } else {
+                let categories: Vec<String> = etiquette
+                    .auto_categories
+                    .as_ref()
+                    .and_then(|c| serde_json::from_str(c).ok())
+                    .unwrap_or_default();
+                if categories.is_empty() {
+                    return Err(rusqlite::Error::InvalidParameterName(
+                        "Au moins une catégorie de contact est requise pour une règle automatique"
+                            .to_string(),
+                    ));
+                }
             }
         }
         if etiquette.email_actif.unwrap_or(false) {
@@ -2813,7 +2814,7 @@ Bien cordialement,\n\
 
     /// Créer une nouvelle étiquette
     pub fn create_etiquette(&self, etiquette: NewEtiquette) -> Result<Etiquette> {
-        Self::validate_etiquette_for_save(&etiquette)?;
+        self.validate_etiquette_for_save(&etiquette)?;
         if self.etiquette_nom_exists(&etiquette.nom, None)? {
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "Une étiquette nommée « {} » existe déjà",
@@ -2843,8 +2844,8 @@ Bien cordialement,\n\
             "INSERT INTO etiquettes (nom, couleur, icone, description, priorite,
                                     auto_condition_type, auto_condition_config, auto_categories,
                                     email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
-                                    email_actif, is_default, actif) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                                    email_actif, is_default, actif, segment_id) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -2861,6 +2862,7 @@ Bien cordialement,\n\
                 email_actif,
                 is_default,
                 actif,
+                etiquette.segment_id,
             ],
         )?;
 
@@ -2874,7 +2876,7 @@ Bien cordialement,\n\
 
     /// Mettre à jour une étiquette
     pub fn update_etiquette(&self, id: i64, etiquette: &NewEtiquette) -> Result<Etiquette> {
-        Self::validate_etiquette_for_save(etiquette)?;
+        self.validate_etiquette_for_save(etiquette)?;
         if self.etiquette_nom_exists(&etiquette.nom, Some(id))? {
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "Une étiquette nommée « {} » existe déjà",
@@ -2918,8 +2920,9 @@ Bien cordialement,\n\
                 email_actif = ?13,
                 is_default = ?14,
                 actif = ?15,
+                segment_id = ?16,
                 updated_at = unixepoch()
-            WHERE id = ?16",
+            WHERE id = ?17",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -2936,6 +2939,7 @@ Bien cordialement,\n\
                 email_actif,
                 is_default,
                 actif,
+                etiquette.segment_id,
                 id
             ],
         )?;
@@ -2951,6 +2955,14 @@ Bien cordialement,\n\
         Ok(updated)
     }
 
+    pub fn protect_newsletter_etiquette(&self, etiquette_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE etiquettes SET is_default = 1 WHERE id = ?1 AND is_default = 0",
+            params![etiquette_id],
+        )?;
+        Ok(())
+    }
+
     /// Supprimer une étiquette (les étiquettes système `is_default` sont protégées).
     pub fn delete_etiquette(&self, id: i64) -> Result<()> {
         let is_default: i64 = self
@@ -2964,6 +2976,22 @@ Bien cordialement,\n\
         if is_default != 0 {
             return Err(rusqlite::Error::InvalidParameterName(
                 "Les étiquettes fournies par défaut ne peuvent pas être supprimées. Désactivez la règle auto ou modifiez le nom si besoin.".to_string(),
+            ));
+        }
+        let newsletter_linked: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM etiquettes e
+                 INNER JOIN templates_email t ON e.email_template_id = t.id
+                 WHERE e.id = ?1 AND t.categorie = 'NEWSLETTER'",
+                params![id],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if newsletter_linked > 0 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "L'étiquette Newsletter ne peut pas être supprimée (file d'envoi du module Newsletter)."
+                    .to_string(),
             ));
         }
         self.conn
@@ -3290,6 +3318,7 @@ Bien cordialement,\n\
         if count > 0 {
             total += self.ensure_default_etiquettes()?;
             total += self.merge_duplicate_reduction_impot_etiquettes()?;
+            let _ = self.ensure_default_segments_and_alerte_links();
             return Ok(total);
         }
 
@@ -3312,6 +3341,7 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
@@ -3334,6 +3364,7 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
@@ -3354,6 +3385,7 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
@@ -3374,6 +3406,7 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
@@ -3394,6 +3427,7 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
@@ -3414,6 +3448,7 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
@@ -3434,6 +3469,7 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
@@ -3457,12 +3493,14 @@ Bien cordialement,\n\
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
+            segment_id: None,
         })?;
         created += 1;
 
         total += created;
         total += self.ensure_default_etiquettes()?;
         total += self.merge_duplicate_reduction_impot_etiquettes()?;
+        let _ = self.ensure_default_segments_and_alerte_links();
         Ok(total)
     }
 
@@ -3721,8 +3759,9 @@ Bien cordialement,\n\
                             email_envoi_heure: None,
                             email_actif: Some(false),
                             is_default: Some(true),
-            actif: None,
-                        })
+                actif: None,
+                segment_id: None,
+            })
                         .is_ok()
                     {
                         changes += 1;
@@ -3934,6 +3973,7 @@ Bien cordialement,\n\
                    AND ce.email_date_envoi + ?2 > ?1
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                   AND COALESCE(t.categorie, '') != 'NEWSLETTER'
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_envoi DESC
@@ -3958,6 +3998,7 @@ Bien cordialement,\n\
                    AND ce.email_date_envoi + ?2 <= ?1
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                   AND COALESCE(t.categorie, '') != 'NEWSLETTER'
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom"
@@ -4262,6 +4303,7 @@ Bien cordialement,\n\
         response_type: &str,
         reponse_body: Option<&str>,
         reponse_gmail_message_id: Option<&str>,
+        reponse_subject: Option<&str>,
     ) -> Result<()> {
         let allowed = ["mail", "rdv", "autre"];
         if !allowed.contains(&response_type) {
@@ -4320,6 +4362,14 @@ Bien cordialement,\n\
             if response_type == "rdv" {
                 self.touch_contact_last_contact(contact_id, now)?;
                 self.auto_close_suivi_alertes_after_contact(contact_id)?;
+            }
+
+            if response_type == "mail" {
+                let _ = self.try_newsletter_unsubscribe_from_reply(
+                    contact_etiquette_id,
+                    reponse_subject,
+                    reponse_body,
+                )?;
             }
             Ok(())
         })();
@@ -5691,6 +5741,574 @@ Bien cordialement,\n\
         )?;
         Ok(())
     }
+
+    fn load_contacts_for_newsletter_audience(&self) -> Result<Vec<ContactAudienceRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nom, prenom, categorie, filleul_categorie, statut_suivi, newsletter_desinscrit_at, email
+             FROM contacts
+             ORDER BY nom, prenom",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(ContactAudienceRow {
+                id: row.get(0)?,
+                nom: row.get(1)?,
+                prenom: row.get(2)?,
+                categorie: row.get(3)?,
+                filleul_categorie: row.get(4)?,
+                statut_suivi: row.get(5)?,
+                newsletter_desinscrit_at: row.get(6)?,
+                email: row.get(7)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    fn is_permanently_excluded_from_newsletter(c: &ContactAudienceRow) -> bool {
+        c.newsletter_desinscrit_at.is_some()
+    }
+
+    fn is_excluded_by_newsletter_filters(
+        c: &ContactAudienceRow,
+        filters: &NewsletterAudienceFilters,
+    ) -> bool {
+        filters.exclude_contact_ids.contains(&c.id)
+    }
+
+    fn has_usable_newsletter_email(email: Option<&str>) -> bool {
+        email.map(|e| !e.trim().is_empty()).unwrap_or(false)
+    }
+
+    pub fn list_newsletter_audience_members(&self) -> Result<Vec<NewsletterAudienceMember>> {
+        let contacts = self.load_contacts_for_newsletter_audience()?;
+        Ok(contacts
+            .into_iter()
+            .map(|c| {
+                let has_email = Self::has_usable_newsletter_email(c.email.as_deref());
+                NewsletterAudienceMember {
+                    contact_id: c.id,
+                    nom: c.nom,
+                    prenom: c.prenom,
+                    email: c.email,
+                    categorie: c.categorie,
+                    filleul_categorie: c.filleul_categorie,
+                    has_email,
+                    unsubscribed: c.newsletter_desinscrit_at.is_some(),
+                }
+            })
+            .collect())
+    }
+
+    pub fn preview_newsletter_audience(
+        &self,
+        filters: &NewsletterAudienceFilters,
+    ) -> Result<NewsletterAudiencePreview> {
+        let contacts = self.load_contacts_for_newsletter_audience()?;
+        let total = contacts.len() as u32;
+        let mut with_email = 0u32;
+        let mut without_email = 0u32;
+        let mut permanent_excluded = 0u32;
+        let mut excluded_by_filters = 0u32;
+        let mut eligible = 0u32;
+        let mut recipients = Vec::new();
+
+        for c in &contacts {
+            if Self::has_usable_newsletter_email(c.email.as_deref()) {
+                with_email += 1;
+            } else {
+                without_email += 1;
+            }
+            if Self::is_permanently_excluded_from_newsletter(c) {
+                permanent_excluded += 1;
+                continue;
+            }
+            if Self::is_excluded_by_newsletter_filters(c, filters) {
+                excluded_by_filters += 1;
+                continue;
+            }
+            if Self::has_usable_newsletter_email(c.email.as_deref()) {
+                eligible += 1;
+                recipients.push(NewsletterEligibleContact {
+                    contact_id: c.id,
+                    nom: c.nom.clone(),
+                    prenom: c.prenom.clone(),
+                    email: c.email.clone().unwrap_or_default(),
+                    categorie: c.categorie.clone(),
+                    filleul_categorie: c.filleul_categorie.clone(),
+                });
+            }
+        }
+
+        Ok(NewsletterAudiencePreview {
+            total_contacts: total,
+            with_email,
+            without_email,
+            permanent_excluded,
+            excluded_by_filters,
+            eligible,
+            recipients,
+        })
+    }
+
+    pub fn list_newsletter_unsubscribed(&self) -> Result<Vec<NewsletterUnsubscribedContact>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nom, prenom, email, newsletter_desinscrit_at, newsletter_desinscrit_note
+             FROM contacts
+             WHERE newsletter_desinscrit_at IS NOT NULL
+             ORDER BY newsletter_desinscrit_at DESC, nom, prenom",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok(NewsletterUnsubscribedContact {
+                contact_id: row.get(0)?,
+                nom: row.get(1)?,
+                prenom: row.get(2)?,
+                email: row.get(3)?,
+                unsubscribed_at: row.get::<_, Option<i64>>(4)?.unwrap_or(0),
+                source: row.get(5)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn mark_newsletter_unsubscribed(
+        &self,
+        contact_id: i64,
+        source: Option<&str>,
+    ) -> Result<bool> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let updated = self.conn.execute(
+            "UPDATE contacts SET newsletter_desinscrit_at = ?1,
+             newsletter_desinscrit_note = COALESCE(?2, newsletter_desinscrit_note),
+             updated_at = ?1
+             WHERE id = ?3 AND newsletter_desinscrit_at IS NULL",
+            params![now, source, contact_id],
+        )?;
+
+        let _ = self.conn.execute(
+            "DELETE FROM contact_etiquettes
+             WHERE contact_id = ?1 AND email_envoye = 0
+               AND etiquette_id IN (
+                 SELECT id FROM etiquettes WHERE email_actif = 1
+                   AND email_template_id IN (
+                     SELECT id FROM templates_email WHERE categorie = 'NEWSLETTER'
+                   )
+               )",
+            params![contact_id],
+        );
+
+        Ok(updated > 0)
+    }
+
+    pub fn try_newsletter_unsubscribe_from_reply(
+        &self,
+        contact_etiquette_id: i64,
+        reply_subject: Option<&str>,
+        reply_text: Option<&str>,
+    ) -> Result<bool> {
+        if !is_newsletter_unsubscribe_request(reply_subject, reply_text) {
+            return Ok(false);
+        }
+
+        let (contact_id, template_categorie): (i64, Option<String>) = self.conn.query_row(
+            "SELECT ce.contact_id, t.categorie
+             FROM contact_etiquettes ce
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             LEFT JOIN templates_email t ON e.email_template_id = t.id
+             WHERE ce.id = ?1",
+            params![contact_etiquette_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+
+        if template_categorie.as_deref() != Some("NEWSLETTER") {
+            return Ok(false);
+        }
+
+        self.mark_newsletter_unsubscribed(contact_id, Some("Lien Se désinscrire (email)"))?;
+        Ok(true)
+    }
+
+    pub fn upsert_newsletter_template(
+        &self,
+        etiquette_id: i64,
+        subject: &str,
+        plain_body: &str,
+        html_meta: &str,
+    ) -> Result<i64> {
+        use super::models::NewTemplateEmail;
+
+        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
+        let template_payload = NewTemplateEmail {
+            nom: "Newsletter".into(),
+            sujet: subject.into(),
+            corps: plain_body.into(),
+            categorie: "NEWSLETTER".into(),
+            variables: Some(html_meta.into()),
+            agenda_link_id: None,
+            relance_template_id: None,
+        };
+
+        if let Some(template_id) = etiquette.email_template_id {
+            if let Ok(existing) = self.get_template_email_by_id(template_id) {
+                if existing.categorie == "NEWSLETTER" {
+                    let updated = self.update_template_email(template_id, &template_payload)?;
+                    return Ok(updated.id);
+                }
+            }
+        }
+
+        let created = self.create_template_email(template_payload)?;
+        Ok(created.id)
+    }
+
+    pub fn queue_newsletter_edition(
+        &self,
+        etiquette_id: i64,
+        send_at: i64,
+        filters: &NewsletterAudienceFilters,
+    ) -> Result<(u32, u32, Vec<QueuedNewsletterContact>)> {
+        let contacts = self.load_contacts_for_newsletter_audience()?;
+        let mut queued = 0u32;
+        let mut skipped_no_email = 0u32;
+        let mut queued_contacts = Vec::new();
+
+        self.conn.execute("BEGIN IMMEDIATE", [])?;
+
+        let result = (|| -> Result<(u32, u32, Vec<QueuedNewsletterContact>)> {
+            for c in contacts {
+                if Self::is_permanently_excluded_from_newsletter(&c)
+                    || Self::is_excluded_by_newsletter_filters(&c, filters)
+                {
+                    continue;
+                }
+                if !Self::has_usable_newsletter_email(c.email.as_deref()) {
+                    skipped_no_email += 1;
+                    continue;
+                }
+
+                self.conn.execute(
+                    "INSERT INTO contact_etiquettes (
+                        contact_id, etiquette_id, attribue_par, email_date_prevue,
+                        email_envoye, email_suivi_ignore, email_relance_active
+                     ) VALUES (?1, ?2, 'NEWSLETTER', ?3, 0, 1, 0)
+                     ON CONFLICT(contact_id, etiquette_id) DO UPDATE SET
+                        attribue_par = 'NEWSLETTER',
+                        date_attribution = unixepoch(),
+                        email_date_prevue = excluded.email_date_prevue,
+                        email_envoye = 0,
+                        email_date_envoi = NULL,
+                        email_reponse_at = NULL,
+                        email_reponse_type = NULL,
+                        email_reponse_body = NULL,
+                        email_reponse_gmail_message_id = NULL,
+                        email_suivi_ignore = 1,
+                        email_relance_active = 0,
+                        email_gmail_message_id = NULL,
+                        email_gmail_thread_id = NULL,
+                        email_sent_subject = NULL,
+                        email_sent_body = NULL,
+                        email_sent_template_nom = NULL",
+                    params![c.id, etiquette_id, send_at],
+                )?;
+
+                let contact_etiquette_id: i64 = self.conn.query_row(
+                    "SELECT id FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                    params![c.id, etiquette_id],
+                    |row| row.get(0),
+                )?;
+
+                queued_contacts.push(QueuedNewsletterContact {
+                    contact_id: c.id,
+                    contact_etiquette_id,
+                    nom: c.nom.clone(),
+                    prenom: c.prenom.clone(),
+                    email: c.email.clone().unwrap_or_default(),
+                });
+                queued += 1;
+            }
+            Ok((queued, skipped_no_email, queued_contacts))
+        })();
+
+        match result {
+            Ok(r) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(r)
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
+    }
+
+    pub fn create_newsletter_edition(
+        &self,
+        etiquette_id: i64,
+        template_id: i64,
+        edition_label: &str,
+        subject: &str,
+        plain_body: &str,
+        content_json: &str,
+        theme: Option<&str>,
+        edition_instructions: Option<&str>,
+        filters_json: &str,
+        prepared_at: i64,
+        queued: &[QueuedNewsletterContact],
+    ) -> Result<i64> {
+        self.conn.execute(
+            "INSERT INTO newsletter_editions (
+                etiquette_id, template_id, edition_label, subject, plain_body, content_json,
+                theme, edition_instructions, audience_filters_json, prepared_at, queued_count, status
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'prepared')",
+            params![
+                etiquette_id,
+                template_id,
+                edition_label,
+                subject,
+                plain_body,
+                content_json,
+                theme,
+                edition_instructions,
+                filters_json,
+                prepared_at,
+                queued.len() as i64,
+            ],
+        )?;
+        let edition_id = self.conn.last_insert_rowid();
+
+        for q in queued {
+            self.conn.execute(
+                "INSERT INTO newsletter_edition_recipients (
+                    edition_id, contact_id, contact_etiquette_id, nom, prenom, email
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    edition_id,
+                    q.contact_id,
+                    q.contact_etiquette_id,
+                    q.nom,
+                    q.prenom,
+                    q.email,
+                ],
+            )?;
+        }
+
+        Ok(edition_id)
+    }
+
+    pub fn list_newsletter_editions(&self, limit: u32) -> Result<Vec<NewsletterEditionSummary>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, edition_label, subject, prepared_at, send_completed_at,
+                    queued_count, sent_count, error_count, status
+             FROM newsletter_editions
+             ORDER BY prepared_at DESC
+             LIMIT ?1",
+        )?;
+        let rows = stmt.query_map(params![limit], |row| {
+            Ok(NewsletterEditionSummary {
+                id: row.get(0)?,
+                edition_label: row.get(1)?,
+                subject: row.get(2)?,
+                prepared_at: row.get(3)?,
+                send_completed_at: row.get(4)?,
+                queued_count: row.get::<_, i64>(5)? as u32,
+                sent_count: row.get::<_, i64>(6)? as u32,
+                error_count: row.get::<_, i64>(7)? as u32,
+                status: row.get(8)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    pub fn get_newsletter_edition_detail(&self, edition_id: i64) -> Result<NewsletterEditionDetail> {
+        let mut detail = self.conn.query_row(
+            "SELECT id, edition_label, subject, plain_body, theme, edition_instructions,
+                    prepared_at, send_started_at, send_completed_at,
+                    queued_count, sent_count, error_count, status
+             FROM newsletter_editions WHERE id = ?1",
+            params![edition_id],
+            |row| {
+                Ok(NewsletterEditionDetail {
+                    id: row.get(0)?,
+                    edition_label: row.get(1)?,
+                    subject: row.get(2)?,
+                    plain_body: row.get(3)?,
+                    theme: row.get(4)?,
+                    edition_instructions: row.get(5)?,
+                    prepared_at: row.get(6)?,
+                    send_started_at: row.get(7)?,
+                    send_completed_at: row.get(8)?,
+                    queued_count: row.get::<_, i64>(9)? as u32,
+                    sent_count: row.get::<_, i64>(10)? as u32,
+                    error_count: row.get::<_, i64>(11)? as u32,
+                    status: row.get(12)?,
+                    recipients: Vec::new(),
+                })
+            },
+        )?;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT contact_id, contact_etiquette_id, nom, prenom, email, sent_at, error_message
+             FROM newsletter_edition_recipients
+             WHERE edition_id = ?1
+             ORDER BY nom, prenom",
+        )?;
+        detail.recipients = stmt
+            .query_map(params![edition_id], |row| {
+                Ok(NewsletterEditionRecipient {
+                    contact_id: row.get(0)?,
+                    contact_etiquette_id: row.get(1)?,
+                    nom: row.get(2)?,
+                    prenom: row.get(3)?,
+                    email: row.get(4)?,
+                    sent_at: row.get(5)?,
+                    error_message: row.get(6)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(detail)
+    }
+
+    pub fn get_last_newsletter_edition_duplicate(
+        &self,
+    ) -> Result<Option<LastNewsletterEditionDuplicate>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT edition_label, subject, plain_body, content_json, theme, edition_instructions, prepared_at
+             FROM newsletter_editions
+             ORDER BY prepared_at DESC
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query([])?;
+        if let Some(row) = rows.next()? {
+            return Ok(Some(LastNewsletterEditionDuplicate {
+                edition_label: row.get(0)?,
+                subject: row.get(1)?,
+                plain_body: row.get(2)?,
+                content_json: row.get(3)?,
+                theme: row.get(4)?,
+                edition_instructions: row.get(5)?,
+                prepared_at: row.get(6)?,
+            }));
+        }
+        Ok(None)
+    }
+
+    pub fn start_newsletter_edition_send(&self, edition_id: i64, started_at: i64) -> Result<()> {
+        let updated = self.conn.execute(
+            "UPDATE newsletter_editions
+             SET status = 'sending', send_started_at = ?1
+             WHERE id = ?2 AND status IN ('prepared', 'partial')",
+            params![started_at, edition_id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Édition introuvable ou déjà envoyée: {}",
+                edition_id
+            )));
+        }
+        Ok(())
+    }
+
+    pub fn record_newsletter_edition_send(
+        &self,
+        edition_id: i64,
+        contact_etiquette_id: i64,
+        sent_at: i64,
+        gmail_message_id: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute("BEGIN IMMEDIATE", [])?;
+        let result = (|| -> Result<()> {
+            if let Some(err) = error_message {
+                self.conn.execute(
+                    "UPDATE newsletter_edition_recipients
+                     SET error_message = ?1
+                     WHERE edition_id = ?2 AND contact_etiquette_id = ?3",
+                    params![err, edition_id, contact_etiquette_id],
+                )?;
+                self.conn.execute(
+                    "UPDATE newsletter_editions SET error_count = error_count + 1 WHERE id = ?1",
+                    params![edition_id],
+                )?;
+            } else {
+                self.conn.execute(
+                    "UPDATE newsletter_edition_recipients
+                     SET sent_at = ?1, gmail_message_id = ?2, error_message = NULL
+                     WHERE edition_id = ?3 AND contact_etiquette_id = ?4",
+                    params![sent_at, gmail_message_id, edition_id, contact_etiquette_id],
+                )?;
+                self.conn.execute(
+                    "UPDATE newsletter_editions SET sent_count = sent_count + 1 WHERE id = ?1",
+                    params![edition_id],
+                )?;
+            }
+            Ok(())
+        })();
+        match result {
+            Ok(()) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(())
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
+    }
+
+    pub fn finish_newsletter_edition_send(
+        &self,
+        edition_id: i64,
+        completed_at: i64,
+        cancelled: bool,
+    ) -> Result<NewsletterEditionSummary> {
+        let (_queued, sent, errors): (i64, i64, i64) = self.conn.query_row(
+            "SELECT queued_count, sent_count, error_count FROM newsletter_editions WHERE id = ?1",
+            params![edition_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+
+        let status = if cancelled {
+            if sent > 0 || errors > 0 {
+                "partial"
+            } else {
+                "cancelled"
+            }
+        } else if errors > 0 {
+            "partial"
+        } else {
+            "completed"
+        };
+
+        self.conn.execute(
+            "UPDATE newsletter_editions
+             SET status = ?1, send_completed_at = ?2
+             WHERE id = ?3",
+            params![status, completed_at, edition_id],
+        )?;
+
+        self.conn.query_row(
+            "SELECT id, edition_label, subject, prepared_at, send_completed_at,
+                    queued_count, sent_count, error_count, status
+             FROM newsletter_editions WHERE id = ?1",
+            params![edition_id],
+            |row| {
+                Ok(NewsletterEditionSummary {
+                    id: row.get(0)?,
+                    edition_label: row.get(1)?,
+                    subject: row.get(2)?,
+                    prepared_at: row.get(3)?,
+                    send_completed_at: row.get(4)?,
+                    queued_count: row.get::<_, i64>(5)? as u32,
+                    sent_count: row.get::<_, i64>(6)? as u32,
+                    error_count: row.get::<_, i64>(7)? as u32,
+                    status: row.get(8)?,
+                })
+            },
+        )
+    }
 }
 
 #[cfg(test)]
@@ -5766,6 +6384,63 @@ mod database_integration_tests {
 
         let updated = db.get_contact_by_id(contact.id.unwrap()).unwrap();
         assert_eq!(updated.date_dernier_contact, Some(souscription_ts));
+    }
+
+    fn investissement_with_souscription(
+        db: &Database,
+        contact_id: i64,
+        year: i32,
+        month: u32,
+        montant_centimes: i64,
+    ) {
+        let ts = chrono::Utc
+            .with_ymd_and_hms(year, month, 15, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let iso = chrono::DateTime::from_timestamp(ts, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Contrat test".into(),
+            montant_initial: Some(montant_centimes),
+            date_souscription: Some(iso),
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn get_yearly_activity_stats_groups_by_souscription_year() {
+        let db = test_db();
+        let alice = db.create_contact(sample_contact("Dupont", "Alice")).unwrap();
+        let bob = db.create_contact(sample_contact("Martin", "Bob")).unwrap();
+
+        investissement_with_souscription(&db, alice.id.unwrap(), 2024, 3, 10_000_00);
+        investissement_with_souscription(&db, bob.id.unwrap(), 2024, 6, 5_000_00);
+        investissement_with_souscription(&db, alice.id.unwrap(), 2025, 1, 20_000_00);
+
+        let stats = db.get_yearly_activity_stats().unwrap();
+        assert_eq!(stats.len(), 2);
+
+        let y2024 = stats.iter().find(|s| s.year == 2024).unwrap();
+        assert_eq!(y2024.clients, 2);
+        assert!((y2024.panier_moyen - 7_500.0).abs() < 0.01);
+
+        let y2025 = stats.iter().find(|s| s.year == 2025).unwrap();
+        assert_eq!(y2025.clients, 1);
+        assert!((y2025.panier_moyen - 20_000.0).abs() < 0.01);
     }
 
     #[test]
@@ -6320,6 +6995,7 @@ mod database_integration_tests {
                 email_actif: Some(true),
                 is_default: Some(false),
                 actif: None,
+                segment_id: None,
             }
         }
 
@@ -6461,7 +7137,7 @@ mod database_integration_tests {
         assert_eq!(db.get_alertes_for_contact(cid).unwrap().len(), 1);
 
         let date_before_mail = db.get_contact_by_id(cid).unwrap().date_dernier_contact;
-        db.mark_email_campaign_response(ce_id, "mail", None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None)
             .unwrap();
         assert!(
             db.get_etiquette_email_queue("sent").unwrap().is_empty(),
@@ -6483,7 +7159,7 @@ mod database_integration_tests {
             "réponse mail ne clôture pas les alertes suivi client"
         );
 
-        db.mark_email_campaign_response(ce_id, "mail", None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None)
             .unwrap();
         assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
 
@@ -6518,7 +7194,7 @@ mod database_integration_tests {
         })
         .unwrap();
         assert!(db.get_contact_by_id(cid_rdv).unwrap().date_dernier_contact.is_none());
-        db.mark_email_campaign_response(ce_rdv, "rdv", None, None)
+        db.mark_email_campaign_response(ce_rdv, "rdv", None, None, None)
             .unwrap();
         assert!(
             db.get_contact_by_id(cid_rdv)
@@ -6591,6 +7267,7 @@ mod database_integration_tests {
                 email_actif: Some(true),
                 is_default: Some(false),
                 actif: None,
+            segment_id: None,
             })
             .unwrap();
 
@@ -6636,7 +7313,7 @@ mod database_integration_tests {
             "délai dépassé : bascule en relance"
         );
 
-        db.mark_email_campaign_response(ce_id, "mail", None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None)
             .unwrap();
         assert!(db.get_etiquette_email_queue("sent").unwrap().is_empty());
         assert!(db.get_etiquette_email_queue("followup").unwrap().is_empty());
@@ -6705,6 +7382,7 @@ mod database_integration_tests {
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
+            segment_id: None,
             })
             .unwrap();
 
@@ -6744,6 +7422,7 @@ mod database_integration_tests {
                 email_actif: Some(false),
                 is_default: Some(true),
                 actif: None,
+            segment_id: None,
             })
             .unwrap();
         db.create_etiquette(NewEtiquette {
@@ -6761,8 +7440,9 @@ mod database_integration_tests {
             email_envoi_heure: None,
             email_actif: Some(false),
             is_default: Some(true),
-            actif: None,
-        })
+                actif: None,
+                segment_id: None,
+            })
         .unwrap();
 
         let merged = db.merge_duplicate_reduction_impot_etiquettes().unwrap();
@@ -6838,6 +7518,7 @@ mod database_integration_tests {
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
+            segment_id: None,
             })
             .unwrap();
 
@@ -6893,6 +7574,7 @@ mod database_integration_tests {
             email_actif: Some(false),
             is_default: Some(false),
             actif: None,
+            segment_id: None,
         };
         db.create_etiquette(mk()).unwrap();
         let err = db.create_etiquette(mk()).unwrap_err();
@@ -6928,6 +7610,7 @@ mod database_integration_tests {
                 email_actif: Some(false),
                 is_default: Some(false),
                 actif: Some(true),
+                segment_id: None,
             })
             .unwrap();
 
@@ -6952,6 +7635,7 @@ mod database_integration_tests {
                 email_actif: Some(etiqu.email_actif),
                 is_default: Some(etiqu.is_default),
                 actif: Some(false),
+                segment_id: None,
             },
         )
         .unwrap();
@@ -7015,6 +7699,7 @@ mod database_integration_tests {
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
+            segment_id: None,
             })
             .unwrap_err();
         assert!(
@@ -7049,6 +7734,7 @@ mod database_integration_tests {
                 email_actif: Some(false),
                 is_default: Some(false),
                 actif: Some(true),
+                segment_id: None,
             })
             .unwrap();
 
@@ -7112,6 +7798,7 @@ mod database_integration_tests {
                 email_actif: Some(false),
                 is_default: Some(false),
                 actif: Some(true),
+                segment_id: None,
             })
             .unwrap();
 

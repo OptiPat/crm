@@ -2,7 +2,8 @@ use super::oauth_client::build_basic_client;
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore};
 use super::response_sync::parse_gmail_send_response;
 use super::signature_html::{
-    build_outgoing_email_bodies, html_to_plain_signature, normalize_signature_html,
+    build_outgoing_email_bodies, html_to_plain_signature, inline_remote_images_in_html,
+    normalize_signature_html,
 };
 use crate::commands::DbState;
 use crate::database::models::CgpConfig;
@@ -329,7 +330,7 @@ pub fn fetch_gmail_signature(app: &AppHandle) -> Result<ImportedGmailSignature, 
             "Aucune signature configurée dans Gmail (Paramètres Gmail → Signature).".into(),
         );
     }
-    let html = normalize_signature_html(sig_html);
+    let html = inline_remote_images_in_html(&normalize_signature_html(sig_html));
     let plain = html_to_plain_signature(&html);
     Ok(ImportedGmailSignature { html, plain })
 }

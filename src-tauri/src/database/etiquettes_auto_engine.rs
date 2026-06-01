@@ -8,6 +8,15 @@ type AssignmentKey = (i64, i64);
 type AssignmentInfo = (i64, String);
 
 impl Database {
+    pub(crate) fn etiquette_has_auto_rule(etiquette: &Etiquette) -> bool {
+        etiquette.segment_id.is_some()
+            || etiquette
+                .auto_condition_type
+                .as_ref()
+                .map(|t| !t.trim().is_empty())
+                .unwrap_or(false)
+    }
+
     fn auto_etiquettes_table_exists(&self) -> Result<bool> {
         let table_exists: i64 = self
             .conn
@@ -20,7 +29,7 @@ impl Database {
         Ok(table_exists > 0)
     }
 
-    fn auto_etiquette_now_and_month() -> (i64, i32) {
+    pub(crate) fn auto_etiquette_now_and_month() -> (i64, i32) {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -42,7 +51,7 @@ impl Database {
             .unwrap_or_default()
     }
 
-    fn contact_matches_auto_categories(contact: &Contact, categories: &[String]) -> bool {
+    pub(crate) fn contact_matches_auto_categories(contact: &Contact, categories: &[String]) -> bool {
         if categories.is_empty() {
             return false;
         }
@@ -81,7 +90,7 @@ impl Database {
         map.get(&(contact_id, etiquette_id)).cloned()
     }
 
-    fn evaluate_auto_etiquette_condition(
+    pub(crate) fn evaluate_auto_etiquette_condition(
         &self,
         contact: &Contact,
         contact_id: i64,
@@ -212,6 +221,36 @@ impl Database {
                     false
                 }
             }
+            "JAMAIS_CONTACT" => {
+                let filleul_only = categories.iter().any(|c| c.contains("FILLEUL"))
+                    && !categories.iter().any(|c| {
+                        c == "CLIENT" || c == "PROSPECT_CLIENT" || c == "SUSPECT_CLIENT"
+                    });
+                let last = if filleul_only {
+                    contact.date_dernier_contact_filleul
+                } else {
+                    contact.date_dernier_contact
+                };
+                last.is_none()
+            }
+            "A_ETIQUETTE" => {
+                if let Some(config_str) = config {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                        let etiquette_id = parsed["etiquette_id"].as_i64().unwrap_or(0);
+                        let present = parsed["present"].as_bool().unwrap_or(true);
+                        if etiquette_id <= 0 {
+                            return Ok(false);
+                        }
+                        let has: i64 = self.conn.query_row(
+                            "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                            params![contact_id, etiquette_id],
+                            |row| row.get(0),
+                        )?;
+                        return Ok(if present { has > 0 } else { has == 0 });
+                    }
+                }
+                false
+            }
             "AGE_APPROCHE" => {
                 if let Some(config_str) = config {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
@@ -324,31 +363,23 @@ impl Database {
         if self.is_auto_etiquette_excluded(contact_id, etiquette.id)? {
             return Ok(0);
         }
-        let condition_type = match etiquette.auto_condition_type.as_ref() {
-            Some(t) => t.as_str(),
-            None => return Ok(0),
+        let Some(rule) = self.resolve_etiquette_auto_rule(etiquette)? else {
+            return Ok(0);
         };
-        let categories = Self::parse_auto_categories(etiquette);
         let assignment_info =
             self.lookup_assignment(contact_id, etiquette.id, assignments.as_deref());
-        if !Self::contact_matches_auto_categories(contact, &categories) {
-            return self.apply_auto_etiquette_decision(
-                contact_id,
-                etiquette.id,
-                false,
-                assignment_info,
-                assignments,
-            );
-        }
-        let should_assign = self.evaluate_auto_etiquette_condition(
-            contact,
+        let should_assign =
+            self.contact_matches_rule_tree(contact, &rule.tree, now, current_month)?;
+        let _ = self.log_auto_etiquette_event(
             contact_id,
-            condition_type,
-            etiquette.auto_condition_config.as_ref(),
-            &categories,
-            now,
-            current_month,
-        )?;
+            etiquette.id,
+            should_assign,
+            if should_assign {
+                "rule_match"
+            } else {
+                "rule_no_match"
+            },
+        );
         self.apply_auto_etiquette_decision(
             contact_id,
             etiquette.id,
@@ -367,7 +398,7 @@ impl Database {
         let etiquettes = self.get_all_etiquettes()?;
         let auto_etiquettes: Vec<_> = etiquettes
             .into_iter()
-            .filter(|e| e.actif && e.auto_condition_type.is_some())
+            .filter(|e| e.actif && Self::etiquette_has_auto_rule(e))
             .collect();
         let contacts = self.get_all_contacts()?;
 
@@ -421,7 +452,7 @@ impl Database {
         let etiquettes = self.get_all_etiquettes()?;
         for etiquette in etiquettes
             .into_iter()
-            .filter(|e| e.actif && e.auto_condition_type.is_some())
+            .filter(|e| e.actif && Self::etiquette_has_auto_rule(e))
         {
             total += self.sync_auto_pair(
                 &contact,
@@ -440,7 +471,7 @@ impl Database {
             return Ok(0);
         }
         let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        if !etiquette.actif || etiquette.auto_condition_type.is_none() {
+        if !etiquette.actif || !Self::etiquette_has_auto_rule(&etiquette) {
             return Ok(0);
         }
         let (now, current_month) = Self::auto_etiquette_now_and_month();

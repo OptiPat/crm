@@ -2,9 +2,11 @@ use rusqlite::{Connection, Result};
 use tauri::{AppHandle, Manager};
 
 pub mod email_schedule;
+pub mod etiquette_rule_ast;
 pub mod etiquettes_auto_engine;
 pub mod models;
 pub mod operations;
+pub mod segments;
 
 pub struct Database {
     conn: Connection,
@@ -346,12 +348,16 @@ impl Database {
         self.migrate_backfill_filleul_categorie()?;
         self.migrate_add_email_envoi_prevu()?;
         self.migrate_add_email_envoi_heure()?;
+        self.migrate_add_newsletter_desinscrit()?;
+        self.migrate_newsletter_editions()?;
+        self.migrate_protect_newsletter_etiquette()?;
         self.migrate_contact_etiquettes_contact_index()?;
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
         self.migrate_templates_email_relance_template_id()?;
         self.migrate_contact_etiquettes_email_suivi()?;
         self.migrate_contact_etiquette_auto_exclusions()?;
+        self.migrate_segments_and_rule_engine()?;
         self.migrate_contact_gmail_messages()?;
         self.migrate_contact_mail_sync_state()?;
         self.migrate_drop_emails_message_id_smtp()?;
@@ -578,6 +584,52 @@ impl Database {
         Ok(())
     }
 
+    fn migrate_segments_and_rule_engine(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS segments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nom TEXT NOT NULL,
+                description TEXT,
+                rule_json TEXT NOT NULL,
+                actif INTEGER NOT NULL DEFAULT 1,
+                is_system INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS alerte_segment_links (
+                type_alerte TEXT PRIMARY KEY,
+                segment_id INTEGER NOT NULL,
+                FOREIGN KEY (segment_id) REFERENCES segments(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS contact_etiquette_auto_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                etiquette_id INTEGER NOT NULL,
+                matched INTEGER NOT NULL,
+                reason TEXT,
+                evaluated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+                FOREIGN KEY (etiquette_id) REFERENCES etiquettes(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        if !self.table_has_column("etiquettes", "segment_id")? {
+            self.conn.execute(
+                "ALTER TABLE etiquettes ADD COLUMN segment_id INTEGER REFERENCES segments(id) ON DELETE SET NULL",
+                [],
+            )?;
+            println!("✅ Migration: segment_id sur etiquettes");
+        }
+        let _ = self.ensure_default_segments_and_alerte_links();
+        Ok(())
+    }
+
     fn migrate_contact_etiquettes_contact_index(&self) -> Result<()> {
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS contact_etiquettes_contact_idx ON contact_etiquettes (contact_id)",
@@ -605,6 +657,96 @@ impl Database {
             )?;
             println!("✅ Migration: colonne email_envoi_heure sur etiquettes");
         }
+        Ok(())
+    }
+
+    fn migrate_add_newsletter_desinscrit(&self) -> Result<()> {
+        if !self.table_has_column("contacts", "newsletter_desinscrit_at")? {
+            self.conn
+                .execute(
+                    "ALTER TABLE contacts ADD COLUMN newsletter_desinscrit_at INTEGER",
+                    [],
+                )?;
+            println!("✅ Migration: colonne newsletter_desinscrit_at sur contacts");
+        }
+        if !self.table_has_column("contacts", "newsletter_desinscrit_note")? {
+            self.conn.execute(
+                "ALTER TABLE contacts ADD COLUMN newsletter_desinscrit_note TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne newsletter_desinscrit_note sur contacts");
+        }
+        Ok(())
+    }
+
+    fn migrate_newsletter_editions(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS newsletter_editions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                etiquette_id INTEGER NOT NULL,
+                template_id INTEGER,
+                edition_label TEXT NOT NULL,
+                subject TEXT NOT NULL,
+                plain_body TEXT NOT NULL,
+                content_json TEXT NOT NULL,
+                theme TEXT,
+                edition_instructions TEXT,
+                audience_filters_json TEXT NOT NULL,
+                prepared_at INTEGER NOT NULL,
+                send_started_at INTEGER,
+                send_completed_at INTEGER,
+                queued_count INTEGER NOT NULL DEFAULT 0,
+                sent_count INTEGER NOT NULL DEFAULT 0,
+                error_count INTEGER NOT NULL DEFAULT 0,
+                status TEXT NOT NULL DEFAULT 'prepared',
+                FOREIGN KEY (etiquette_id) REFERENCES etiquettes(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS newsletter_edition_recipients (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                edition_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                contact_etiquette_id INTEGER NOT NULL,
+                nom TEXT NOT NULL,
+                prenom TEXT NOT NULL,
+                email TEXT NOT NULL,
+                sent_at INTEGER,
+                error_message TEXT,
+                gmail_message_id TEXT,
+                FOREIGN KEY (edition_id) REFERENCES newsletter_editions(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_newsletter_editions_prepared_at
+             ON newsletter_editions(prepared_at DESC)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_newsletter_edition_recipients_edition
+             ON newsletter_edition_recipients(edition_id)",
+            [],
+        )?;
+        Ok(())
+    }
+
+    fn migrate_protect_newsletter_etiquette(&self) -> Result<()> {
+        self.conn.execute(
+            "UPDATE etiquettes SET is_default = 1
+             WHERE id IN (
+               SELECT e.id FROM etiquettes e
+               INNER JOIN templates_email t ON e.email_template_id = t.id
+               WHERE t.categorie = 'NEWSLETTER'
+             )",
+            [],
+        )?;
+        self.conn.execute(
+            "UPDATE etiquettes SET is_default = 1 WHERE lower(trim(nom)) = 'newsletter'",
+            [],
+        )?;
         Ok(())
     }
 

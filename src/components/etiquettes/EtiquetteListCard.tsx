@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { getContrastColor, type EtiquetteWithCount } from "@/lib/api/tauri-etiquettes";
 import { getConditionTypeLabel } from "@/lib/etiquettes/etiquette-condition-labels";
+import { etiquetteHasAutoRule } from "@/lib/etiquettes/etiquette-auto-rule";
 import { cn } from "@/lib/utils";
 import {
   ChevronRight,
@@ -26,7 +27,10 @@ export function EtiquetteListCard({
   onDelete: () => void;
 }) {
   const hasContacts = etiquette.contact_count > 0;
-  const isAuto = Boolean(etiquette.auto_condition_type);
+  const isAuto = etiquetteHasAutoRule(etiquette);
+  const autoLabel = etiquette.segment_id
+    ? "Segment"
+    : getConditionTypeLabel(etiquette.auto_condition_type);
 
   return (
     <div
@@ -110,7 +114,7 @@ export function EtiquetteListCard({
           {isAuto ? (
             <>
               <Zap className="h-3 w-3 text-amber-600" />
-              {getConditionTypeLabel(etiquette.auto_condition_type)}
+              {autoLabel}
             </>
           ) : (
             <>
@@ -129,7 +133,7 @@ export function EtiquetteListCard({
         {etiquette.is_default && (
           <span
             className="px-2 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200/80"
-            title="Fournie avec le CRM : modifiable et désactivable, mais pas supprimable"
+            title="Étiquette système : modifiable et désactivable, mais pas supprimable"
           >
             Préinstallée
           </span>

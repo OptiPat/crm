@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Check, Mail, Tag, Users } from "lucide-react";
+import { AlertCircle, Check, Filter, Mail, Tag, Users } from "lucide-react";
 import {
   marquerAlerteTraitee,
   deleteAlerte,
@@ -18,6 +18,7 @@ import { SuiviPageHeader } from "@/components/suivi/SuiviPageHeader";
 import { SuiviAlerteCard } from "@/components/suivi/SuiviAlerteCard";
 import { SuiviAlertesFilters } from "@/components/suivi/SuiviAlertesFilters";
 import { SuiviEtiquetteContactRow } from "@/components/suivi/SuiviEtiquetteContactRow";
+import { SuiviSegmentsTab } from "@/components/suivi/SuiviSegmentsTab";
 import {
   countAlertesByCategory,
   matchesAlerteCategoryFilter,
@@ -584,6 +585,10 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
               <Badge variant="secondary" className="ml-1">{totalContactsAvecEtiquettes}</Badge>
             )}
           </TabsTrigger>
+          <TabsTrigger value="segments" className="gap-2">
+            <Filter className="h-4 w-4" />
+            Par segment
+          </TabsTrigger>
           <TabsTrigger value="envois" className="gap-2">
             <Mail className="h-4 w-4" />
             Envois
@@ -793,6 +798,14 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="segments" className="mt-4">
+          <SuiviSegmentsTab
+            onOpenContact={
+              onOpenContact || onNavigate ? openContact : undefined
+            }
+          />
         </TabsContent>
 
         <TabsContent value="envois" className="mt-4">

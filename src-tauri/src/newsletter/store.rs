@@ -1,4 +1,5 @@
 use crate::email::oauth_secrets::{decrypt_secret, encrypt_secret, load_storage_key};
+use super::db::NewsletterAudienceFilters;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -48,6 +49,7 @@ pub struct NewsletterSettingsPublic {
     pub model: String,
     pub etiquette_nom: String,
     pub send_delay_ms: u64,
+    pub default_audience_filters: NewsletterAudienceFilters,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -59,6 +61,7 @@ pub struct NewsletterSettingsInput {
     pub model: Option<String>,
     pub etiquette_nom: Option<String>,
     pub send_delay_ms: Option<u64>,
+    pub default_audience_filters: Option<NewsletterAudienceFilters>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -75,6 +78,8 @@ struct PersistedNewsletterStore {
     etiquette_nom: Option<String>,
     #[serde(default)]
     send_delay_ms: Option<u64>,
+    #[serde(default)]
+    default_audience_filters: Option<NewsletterAudienceFilters>,
 }
 
 #[derive(Debug, Clone)]
@@ -86,6 +91,7 @@ pub struct NewsletterStore {
     pub model: String,
     pub etiquette_nom: String,
     pub send_delay_ms: u64,
+    pub default_audience_filters: NewsletterAudienceFilters,
 }
 
 impl NewsletterStore {
@@ -137,6 +143,7 @@ impl NewsletterStore {
             model: self.model.clone(),
             etiquette_nom: self.etiquette_nom.clone(),
             send_delay_ms: self.send_delay_ms,
+            default_audience_filters: self.default_audience_filters.clone(),
         }
     }
 
@@ -178,6 +185,9 @@ impl NewsletterStore {
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| "Newsletter".to_string()),
             send_delay_ms: persisted.send_delay_ms.unwrap_or(3000).max(500),
+            default_audience_filters: persisted
+                .default_audience_filters
+                .unwrap_or_default(),
         })
     }
 
@@ -206,6 +216,7 @@ impl NewsletterStore {
             model: Some(self.model.clone()),
             etiquette_nom: Some(self.etiquette_nom.clone()),
             send_delay_ms: Some(self.send_delay_ms),
+            default_audience_filters: Some(self.default_audience_filters.clone()),
         })
     }
 }
@@ -219,6 +230,7 @@ impl Default for NewsletterStore {
             model: DEFAULT_MISTRAL_MODEL.to_string(),
             etiquette_nom: "Newsletter".to_string(),
             send_delay_ms: 3000,
+            default_audience_filters: NewsletterAudienceFilters::default(),
         }
     }
 }

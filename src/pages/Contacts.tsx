@@ -22,6 +22,7 @@ import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { downloadCsvFile } from "@/lib/export/csv-export";
 import { buildContactsCsv } from "@/lib/export/contacts-csv";
 import { getAllEtiquettes, getAllContactEtiquettesDetails, type ContactEtiquetteDetails, type Etiquette } from "@/lib/api/tauri-etiquettes";
+import { getAllSegments, getContactsMatchingSegment, type Segment } from "@/lib/api/tauri-segments";
 import { groupEtiquettesByContactId } from "@/lib/etiquettes/etiquette-condition-labels";
 import { buildEtiquettesPourFiltre } from "@/lib/etiquettes/etiquettes-filter";
 import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
@@ -78,6 +79,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [filleulSubTab, setFilleulSubTab] = useState<FilleulSubTab>("FILLEUL");
   const [statutFilter, setStatutFilter] = useState<string>("ALL");
   const [etiquetteFilter, setEtiquetteFilter] = useState<string>("ALL");
+  const [segmentFilter, setSegmentFilter] = useState<string>("ALL");
+  const [segmentsDisponibles, setSegmentsDisponibles] = useState<Segment[]>([]);
+  const [segmentContactIds, setSegmentContactIds] = useState<Set<number>>(new Set());
   const [etiquettesDisponibles, setEtiquettesDisponibles] = useState<Etiquette[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
@@ -103,6 +107,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
       if (stored.filleulSubTab) setFilleulSubTab(stored.filleulSubTab);
       if (stored.statutFilter) setStatutFilter(stored.statutFilter);
       if (stored.etiquetteFilter) setEtiquetteFilter(stored.etiquetteFilter);
+      if (stored.segmentFilter) setSegmentFilter(stored.segmentFilter);
       if (stored.groupByFoyer != null) setGroupByFoyer(stored.groupByFoyer);
     }
     setSessionHydrated(true);
@@ -116,6 +121,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
       filleulSubTab,
       statutFilter,
       etiquetteFilter,
+      segmentFilter,
       groupByFoyer,
     });
   }, [
@@ -125,6 +131,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
     filleulSubTab,
     statutFilter,
     etiquetteFilter,
+    segmentFilter,
     groupByFoyer,
   ]);
 
@@ -251,6 +258,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
         etiquettesParContact[contact.id]?.some(e => e.etiquette_id.toString() === etiquetteFilter)
       );
 
+      const matchesSegment =
+        segmentFilter === "ALL" ||
+        (contact.id != null && segmentContactIds.has(contact.id));
+
       const matchesFollowup =
         !needsFollowupOnly ||
         (contact.id != null && alertContactIds.has(contact.id));
@@ -260,6 +271,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
         matchesCategorie &&
         matchesStatut &&
         matchesEtiquette &&
+        matchesSegment &&
         matchesFollowup
       );
     })
@@ -346,12 +358,14 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
   const reloadEtiquettesAttributions = useCallback(async () => {
     try {
-      const [all, rows] = await Promise.all([
+      const [all, segs, rows] = await Promise.all([
         getAllEtiquettes(),
+        getAllSegments(),
         contacts.length > 0
           ? getAllContactEtiquettesDetails()
           : Promise.resolve([]),
       ]);
+      setSegmentsDisponibles(segs);
       const grouped =
         rows.length > 0
           ? (groupEtiquettesByContactId(rows) as Record<
@@ -375,6 +389,24 @@ export function Contacts({ onNavigate }: ContactsProps) {
       void reloadEtiquettesAttributions();
     });
   }, [reloadEtiquettesAttributions]);
+
+  useEffect(() => {
+    if (segmentFilter === "ALL") {
+      setSegmentContactIds(new Set());
+      return;
+    }
+    const id = parseInt(segmentFilter, 10);
+    if (Number.isNaN(id)) return;
+    getContactsMatchingSegment(id)
+      .then((list) => {
+        const ids = new Set<number>();
+        for (const c of list) {
+          if (c.id != null) ids.add(c.id);
+        }
+        setSegmentContactIds(ids);
+      })
+      .catch(() => setSegmentContactIds(new Set()));
+  }, [segmentFilter]);
 
   const isWideLayout = useMediaQuery("(min-width: 1024px)");
   /** Grand écran : liste pleine largeur, split 50/50 seulement après sélection d’un contact */
@@ -572,9 +604,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const selectedEtiquette = etiquettesDisponibles.find(
     (e) => e.id.toString() === etiquetteFilter
   );
+  const selectedSegment = segmentsDisponibles.find(
+    (s) => s.id.toString() === segmentFilter
+  );
   const hasExtraFilters =
     statutFilter !== "ALL" ||
     etiquetteFilter !== "ALL" ||
+    segmentFilter !== "ALL" ||
     needsFollowupOnly ||
     !!searchQuery.trim();
 
@@ -757,6 +793,23 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   </SelectContent>
                 </Select>
 
+                {segmentsDisponibles.length > 0 && (
+                  <Select value={segmentFilter} onValueChange={setSegmentFilter}>
+                    <SelectTrigger className="w-[200px]">
+                      <Filter className="h-4 w-4 mr-2 shrink-0" />
+                      <SelectValue placeholder="Segment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">Tous segments</SelectItem>
+                      {segmentsDisponibles.map((s) => (
+                        <SelectItem key={s.id} value={s.id.toString()}>
+                          {s.nom}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+
                 <Button
                   variant={groupByFoyer ? "default" : "outline"}
                   onClick={() => setGroupByFoyer(!groupByFoyer)}
@@ -780,6 +833,11 @@ export function Contacts({ onNavigate }: ContactsProps) {
                     : undefined
                 }
                 onClearEtiquette={() => setEtiquetteFilter("ALL")}
+                segmentFilter={segmentFilter}
+                segmentLabel={
+                  selectedSegment ? `Segment : ${selectedSegment.nom}` : undefined
+                }
+                onClearSegment={() => setSegmentFilter("ALL")}
                 needsFollowupOnly={needsFollowupOnly}
                 onToggleNeedsFollowup={() => setNeedsFollowupOnly((v) => !v)}
                 followupCount={alertContactIds.size}

@@ -41,7 +41,7 @@ L'utilisateur te soumet une newsletter en JSON et te demande des modifications c
 
 RÈGLES :
 - Applique UNIQUEMENT ce qui est demandé ; conserve le reste tel quel sauf si la demande implique un ajustement global (ex. « raccourcir tout »).
-- Réponds en JSON strict (sans markdown) avec exactement : subject, intro, sections [{title, body}], cta
+- Réponds en JSON strict (sans markdown) avec exactement : subject, preheader, editionTitle, intro, sections [{title, body, highlight?}], cta
 - Garde le ton défini dans le style du conseiller (professionnel, accessible, légère ironie si déjà présente)
 - Conserve {{prenom}} dans l'intro si déjà utilisé
 - Pas de signature (ajoutée automatiquement)

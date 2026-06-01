@@ -11,8 +11,8 @@ export function SuiviEtiquetteContactRow({
 }: {
   contact: Contact;
   onOpenContact?: (contactId: number) => void;
-  onOpenEnvois: (contactId: number) => void;
-  onRetirerEtiquette: (contactId: number) => void;
+  onOpenEnvois?: (contactId: number) => void;
+  onRetirerEtiquette?: (contactId: number) => void;
 }) {
   const meta = [
     getFilleulLabel(contact.filleul_categorie),
@@ -46,7 +46,7 @@ export function SuiviEtiquetteContactRow({
             <span className="hidden sm:inline">Fiche</span>
           </Button>
         )}
-        {contact.id != null && (
+        {contact.id != null && onOpenEnvois && (
           <Button
             type="button"
             variant="outline"
@@ -59,7 +59,7 @@ export function SuiviEtiquetteContactRow({
             <span className="hidden sm:inline">Envois</span>
           </Button>
         )}
-        {contact.id != null && (
+        {contact.id != null && onRetirerEtiquette && (
           <Button
             type="button"
             variant="ghost"

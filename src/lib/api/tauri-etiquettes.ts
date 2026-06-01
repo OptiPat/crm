@@ -25,6 +25,8 @@ export interface Etiquette {
   is_default: boolean;
   /** false = désactivée (pas de règle auto ni campagne email) */
   actif: boolean;
+  /** Segment réutilisable (règle héritée) */
+  segment_id: number | null;
   created_at: number;
   updated_at: number;
 }
@@ -48,6 +50,7 @@ export interface NewEtiquette {
   // Système
   is_default?: boolean;       // Défaut: false
   actif?: boolean;            // Défaut: true
+  segment_id?: number | null;
 }
 
 export interface ContactEtiquette {

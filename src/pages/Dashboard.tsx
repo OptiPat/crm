@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
-import { MonthlyChart } from "@/components/dashboard/MonthlyChart";
+import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { QuickActions } from "@/components/dashboard/QuickActions";
@@ -175,11 +175,11 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
       </section>
 
       <section className="space-y-4">
-        <DashboardSectionTitle subtitle="Acquisition et funnel commercial">
+        <DashboardSectionTitle subtitle="Souscriptions et funnel commercial">
           Activité
         </DashboardSectionTitle>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          <MonthlyChart key={`month-${refreshKey}`} />
+          <YearlyActivityChart key={`year-${refreshKey}`} />
           <PipelineChart key={`pipe-${refreshKey}`} />
         </div>
       </section>

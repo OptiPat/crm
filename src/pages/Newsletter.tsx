@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,19 +15,31 @@ import {
   Eye,
   Save,
   Mail,
+  Copy,
 } from "lucide-react";
 import {
-  activateNewsletterCampaign,
+  DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
   ensureNewsletterEtiquette,
   generateNewsletterContent,
+  getLastNewsletterEditionDuplicate,
   getNewsletterSettings,
+  prepareNewsletterEdition,
   type GeneratedNewsletterContent,
+  type NewsletterAudienceFilters,
+  type NewsletterAudiencePreview,
+  type NewsletterChatTurn,
   type NewsletterSettings,
 } from "@/lib/api/tauri-newsletter";
 import {
-  createTemplateEmail,
-  setTemplateEtiquetteLinks,
-} from "@/lib/api/tauri-templates-email";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
@@ -40,40 +52,115 @@ import {
   buildNewsletterHtmlOptions,
   buildNewsletterPlainBody,
   contentFromPlainEdit,
+  formatNewsletterEditionLabel,
   injectNewsletterSignatureHtml,
   serializeNewsletterTemplateMeta,
 } from "@/lib/newsletter/newsletter-html";
+import { loadCgpLogoDataUrl } from "@/lib/settings/cgp-logo-preview";
 import { NewsletterChatPanel } from "@/components/newsletter/NewsletterChatPanel";
+import {
+  NewsletterAudiencePanel,
+  newsletterChecklistOk,
+} from "@/components/newsletter/NewsletterAudiencePanel";
+import { NewsletterHistoryPanel } from "@/components/newsletter/NewsletterHistoryPanel";
+import {
+  countNewsletterReady,
+  sendNewsletterBatch,
+} from "@/lib/newsletter/newsletter-batch-send";
+import {
+  loadNewsletterComposerDraft,
+  saveNewsletterComposerDraft,
+} from "@/lib/newsletter/newsletter-composer-draft";
 import { toast } from "sonner";
 
-function formatEditionLabel() {
-  return new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+function buildHtmlOptions(
+  cgp: CgpConfig | null,
+  logoDataUrl: string | null,
+  content: GeneratedNewsletterContent | null
+) {
+  return {
+    ...buildNewsletterHtmlOptions(cgp),
+    logoDataUrl: logoDataUrl ?? undefined,
+    editionLabel: formatNewsletterEditionLabel(),
+    preheader: content?.preheader?.trim() || undefined,
+  };
+}
+
+function resetComposerState(): {
+  theme: string;
+  editionInstructions: string;
+  content: GeneratedNewsletterContent | null;
+  subject: string;
+  plainBody: string;
+  previewHtml: string;
+  chatHistory: NewsletterChatTurn[];
+  chatSessionKey: number;
+} {
+  return {
+    theme: "",
+    editionInstructions: "",
+    content: null,
+    subject: "",
+    plainBody: "",
+    previewHtml: "",
+    chatHistory: [],
+    chatSessionKey: 0,
+  };
 }
 
 export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void }) {
-  const [tab, setTab] = useState<"composer" | "settings">("composer");
+  const restoredDraftRef = useRef(loadNewsletterComposerDraft());
+  const restoredDraft = restoredDraftRef.current;
+  const draftPersistReady = useRef(false);
+  const draftRestoreNotified = useRef(false);
+
+  const [tab, setTab] = useState<"composer" | "settings">(restoredDraft?.tab ?? "composer");
   const [settings, setSettings] = useState<NewsletterSettings | null>(null);
   const [cgp, setCgp] = useState<CgpConfig | null>(null);
   const [emailConnected, setEmailConnected] = useState(false);
 
-  const [theme, setTheme] = useState("");
-  const [editionInstructions, setEditionInstructions] = useState("");
+  const [theme, setTheme] = useState(restoredDraft?.theme ?? "");
+  const [editionInstructions, setEditionInstructions] = useState(
+    restoredDraft?.editionInstructions ?? ""
+  );
   const [generating, setGenerating] = useState(false);
-  const [content, setContent] = useState<GeneratedNewsletterContent | null>(null);
-  const [subject, setSubject] = useState("");
-  const [plainBody, setPlainBody] = useState("");
-  const [previewHtml, setPreviewHtml] = useState("");
+  const [content, setContent] = useState<GeneratedNewsletterContent | null>(
+    restoredDraft?.content ?? null
+  );
+  const [subject, setSubject] = useState(restoredDraft?.subject ?? "");
+  const [plainBody, setPlainBody] = useState(restoredDraft?.plainBody ?? "");
+  const [previewHtml, setPreviewHtml] = useState(restoredDraft?.previewHtml ?? "");
 
   const [preparing, setPreparing] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
 
   const [etiquetteInfo, setEtiquetteInfo] = useState<{
     id: number;
-    count: number;
   } | null>(null);
-  const [etiquetteNom, setEtiquetteNom] = useState("Newsletter");
   const [sendDelayMs, setSendDelayMs] = useState(3000);
-  const [chatSessionKey, setChatSessionKey] = useState(0);
+  const [chatHistory, setChatHistory] = useState<NewsletterChatTurn[]>(
+    restoredDraft?.chatHistory ?? []
+  );
+  const [chatSessionKey, setChatSessionKey] = useState(restoredDraft?.chatSessionKey ?? 0);
+  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
+  const [audienceFilters, setAudienceFilters] = useState<NewsletterAudienceFilters>(
+    restoredDraft?.audienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
+  );
+  const [preparedQueueCount, setPreparedQueueCount] = useState<number | null>(
+    restoredDraft?.preparedQueueCount ?? null
+  );
+  const [activeEditionId, setActiveEditionId] = useState<number | null>(
+    restoredDraft?.activeEditionId ?? null
+  );
+  const [batchSending, setBatchSending] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ sent: number; total: number } | null>(
+    null
+  );
+  const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const batchAbortRef = useRef<AbortController | null>(null);
+  const [audiencePreview, setAudiencePreview] = useState<NewsletterAudiencePreview | null>(null);
 
   const load = useCallback(async () => {
     const [s, cgpConfig, emailSt] = await Promise.all([
@@ -82,13 +169,18 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       getEmailConnectionStatus().catch(() => null),
     ]);
     setSettings(s);
-    setEtiquetteNom(s.etiquetteNom);
     setSendDelayMs(s.sendDelayMs);
     setCgp(cgpConfig);
     setEmailConnected(Boolean(emailSt?.connected && emailSt.method === "oauth"));
     const etiq = await ensureNewsletterEtiquette(s.etiquetteNom);
-    setEtiquetteInfo({ id: etiq.etiquetteId, count: etiq.contactCount });
-  }, []);
+    setEtiquetteInfo({ id: etiq.etiquetteId });
+    const ready = await countNewsletterReady(etiq.etiquetteId);
+    if (ready > 0) {
+      setPreparedQueueCount((prev) => prev ?? ready);
+    } else if (activeEditionId == null) {
+      setPreparedQueueCount(null);
+    }
+  }, [activeEditionId]);
 
   useEffect(() => {
     void load().catch((e) => {
@@ -98,13 +190,36 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   }, [load]);
 
   useEffect(() => {
+    draftPersistReady.current = true;
+    if (
+      !draftRestoreNotified.current &&
+      restoredDraft &&
+      (restoredDraft.plainBody.trim() ||
+        restoredDraft.theme.trim() ||
+        restoredDraft.chatHistory.length > 0 ||
+        restoredDraft.audienceFilters.excludeContactIds.length > 0 ||
+        restoredDraft.preparedQueueCount != null)
+    ) {
+      draftRestoreNotified.current = true;
+      toast.info("Brouillon newsletter restauré");
+    }
+  }, [restoredDraft]);
+
+  useEffect(() => {
     if (tab !== "composer") return;
     void getNewsletterSettings()
       .then(setSettings)
       .catch(() => {});
   }, [tab]);
 
-  const htmlOptions = useMemo(() => buildNewsletterHtmlOptions(cgp), [cgp]);
+  useEffect(() => {
+    void loadCgpLogoDataUrl(cgp?.logo_path).then(setLogoDataUrl);
+  }, [cgp?.logo_path]);
+
+  const htmlOptions = useMemo(
+    () => buildHtmlOptions(cgp, logoDataUrl, content),
+    [cgp, logoDataUrl, content]
+  );
 
   const refreshPreviewHtml = useCallback(
     (c: GeneratedNewsletterContent) => {
@@ -112,6 +227,45 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     },
     [htmlOptions]
   );
+
+  useEffect(() => {
+    if (!draftPersistReady.current) return;
+    saveNewsletterComposerDraft({
+      tab,
+      theme,
+      editionInstructions,
+      content,
+      subject,
+      plainBody,
+      previewHtml,
+      chatHistory,
+      chatSessionKey,
+      audienceFilters,
+      activeEditionId,
+      preparedQueueCount,
+    });
+  }, [
+    tab,
+    theme,
+    editionInstructions,
+    content,
+    subject,
+    plainBody,
+    previewHtml,
+    chatHistory,
+    chatSessionKey,
+    audienceFilters,
+    activeEditionId,
+    preparedQueueCount,
+  ]);
+
+  useEffect(() => {
+    if (!content) return;
+    refreshPreviewHtml({
+      ...content,
+      subject: subject.trim() || content.subject,
+    });
+  }, [htmlOptions, content, subject, refreshPreviewHtml]);
 
   const applyDraft = useCallback(
     (c: GeneratedNewsletterContent) => {
@@ -146,6 +300,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       const plain = buildNewsletterPlainBody(generated);
       setPlainBody(plain);
       refreshPreviewHtml(generated);
+      setChatHistory([]);
       setChatSessionKey((k) => k + 1);
       toast.success("Newsletter générée — discutez avec Mistral pour affiner");
     } catch (e) {
@@ -211,6 +366,36 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     }
   };
 
+  const handleDuplicateLastEdition = async () => {
+    setDuplicating(true);
+    try {
+      const last = await getLastNewsletterEditionDuplicate();
+      if (!last) {
+        toast.error("Aucune édition précédente à dupliquer");
+        return;
+      }
+      let parsedContent: GeneratedNewsletterContent | null = null;
+      try {
+        parsedContent = JSON.parse(last.contentJson) as GeneratedNewsletterContent;
+      } catch {
+        parsedContent = contentFromPlainEdit(last.subject, last.plainBody);
+      }
+      setTheme(last.theme?.trim() ?? "");
+      setEditionInstructions(last.editionInstructions?.trim() ?? "");
+      setContent(parsedContent);
+      setSubject(last.subject);
+      setPlainBody(last.plainBody);
+      refreshPreviewHtml(parsedContent);
+      setChatHistory([]);
+      setChatSessionKey((k) => k + 1);
+      toast.success(`Édition « ${last.editionLabel} » dupliquée — adaptez puis préparez`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Duplication impossible");
+    } finally {
+      setDuplicating(false);
+    }
+  };
+
   const handlePrepareCampaign = async () => {
     if (!subject.trim() || !plainBody.trim()) {
       toast.error("Contenu incomplet");
@@ -220,38 +405,97 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       toast.error("Étiquette Newsletter introuvable");
       return;
     }
-    if (etiquetteInfo.count === 0) {
-      toast.warning(
-        "Aucun contact tagué — taguez vos abonnés avec l'étiquette Newsletter avant l'envoi"
-      );
+    if (!emailConnected) {
+      toast.error("Connectez Gmail dans Paramètres → Email");
+      return;
     }
     setPreparing(true);
     try {
-      const html = previewHtml || buildNewsletterHtml(
-        content ?? {
-          subject,
-          intro: plainBody.split("\n\n")[0] ?? "",
-          sections: [],
-          cta: "",
-        },
-        htmlOptions
-      );
-      const templateNom = `Newsletter — ${formatEditionLabel()}`;
-      const template = await createTemplateEmail({
-        nom: templateNom,
-        sujet: subject.trim(),
-        corps: plainBody.trim(),
-        categorie: "NEWSLETTER",
-        variables: serializeNewsletterTemplateMeta(html),
+      const draftContent = currentDraft;
+      const html =
+        previewHtml || buildNewsletterHtml(draftContent, htmlOptions);
+      const result = await prepareNewsletterEdition({
+        etiquetteId: etiquetteInfo.id,
+        editionLabel: formatNewsletterEditionLabel(),
+        subject: subject.trim(),
+        plainBody: plainBody.trim(),
+        contentJson: JSON.stringify(draftContent),
+        htmlMeta: serializeNewsletterTemplateMeta(html),
+        theme: theme.trim() || null,
+        editionInstructions: editionInstructions.trim() || null,
+        filters: audienceFilters,
       });
-      await setTemplateEtiquetteLinks(template.id, [etiquetteInfo.id]);
-      await activateNewsletterCampaign(etiquetteInfo.id, template.id);
-      toast.success("Campagne préparée — ouvrez Suivi → Envois pour valider l'envoi");
+      setPreparedQueueCount(result.queued);
+      setActiveEditionId(result.editionId);
+      setHistoryRefreshKey((k) => k + 1);
+      const reset = resetComposerState();
+      setTheme(reset.theme);
+      setEditionInstructions(reset.editionInstructions);
+      setContent(reset.content);
+      setSubject(reset.subject);
+      setPlainBody(reset.plainBody);
+      setPreviewHtml(reset.previewHtml);
+      setChatHistory(reset.chatHistory);
+      setChatSessionKey((k) => k + 1);
+      toast.success(
+        `${result.queued} destinataire${result.queued !== 1 ? "s" : ""} en file` +
+          (result.skippedNoEmail > 0 ? ` (${result.skippedNoEmail} sans email ignorés)` : "")
+      );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Préparation campagne impossible");
     } finally {
       setPreparing(false);
     }
+  };
+
+  const runBatchSend = async () => {
+    if (!etiquetteInfo || !preparedQueueCount || !activeEditionId) {
+      toast.error("Préparez la campagne d'abord");
+      return;
+    }
+    if (!emailConnected) {
+      toast.error("Connectez Gmail dans Paramètres → Email");
+      return;
+    }
+    setSendConfirmOpen(false);
+    batchAbortRef.current = new AbortController();
+    setBatchSending(true);
+    setBatchProgress({ sent: 0, total: preparedQueueCount });
+    try {
+      const result = await sendNewsletterBatch({
+        etiquetteId: etiquetteInfo.id,
+        editionId: activeEditionId,
+        sendDelayMs,
+        cgp,
+        signal: batchAbortRef.current.signal,
+        onProgress: (p) => setBatchProgress({ sent: p.sent, total: p.total }),
+      });
+      const remaining = await countNewsletterReady(etiquetteInfo.id);
+      setPreparedQueueCount(remaining > 0 ? remaining : null);
+      if (remaining === 0) {
+        setActiveEditionId(null);
+      }
+      setHistoryRefreshKey((k) => k + 1);
+      if (batchAbortRef.current.signal.aborted) {
+        toast.info(`Envoi interrompu — ${result.sent}/${result.total} envoyé(s)`);
+      } else if (result.errors.length > 0) {
+        toast.warning(
+          `${result.sent}/${result.total} envoyés — ${result.errors.length} erreur(s)`
+        );
+      } else {
+        toast.success(`${result.sent} email${result.sent !== 1 ? "s" : ""} envoyé${result.sent !== 1 ? "s" : ""}`);
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Envoi groupé impossible");
+    } finally {
+      setBatchSending(false);
+      setBatchProgress(null);
+      batchAbortRef.current = null;
+    }
+  };
+
+  const handleCancelBatchSend = () => {
+    batchAbortRef.current?.abort();
   };
 
   return (
@@ -260,7 +504,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Newsletter</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Génération Mistral, mise en page HTML, envoi via votre file Suivi → Envois
+            Génération Mistral, envoi à toute la base (sauf désinscrits et exclusions)
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -272,9 +516,9 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
               Clé API à configurer
             </Badge>
           }
-          {etiquetteInfo != null && (
-            <Badge variant="outline" className="font-normal">
-              {etiquetteInfo.count} abonné{etiquetteInfo.count !== 1 ? "s" : ""}
+          {preparedQueueCount != null && preparedQueueCount > 0 && (
+            <Badge variant="default" className="font-normal">
+              {preparedQueueCount} en file d&apos;envoi
             </Badge>
           )}
         </div>
@@ -290,6 +534,54 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         </TabsList>
 
         <TabsContent value="composer" className="mt-4 space-y-4">
+          <NewsletterAudiencePanel
+            filters={audienceFilters}
+            onFiltersChange={setAudienceFilters}
+            onPreviewChange={setAudiencePreview}
+            onOpenContact={(id) => onNavigate?.(`contact-${id}`)}
+          />
+
+          {preparedQueueCount != null && preparedQueueCount > 0 && (
+            <Card className="border-primary/30 bg-primary/5">
+              <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex-1 text-sm">
+                  <p className="font-medium">
+                    Campagne prête — {preparedQueueCount} email
+                    {preparedQueueCount !== 1 ? "s" : ""} à envoyer
+                  </p>
+                  {batchProgress ?
+                    <p className="text-muted-foreground mt-1 flex items-center gap-2">
+                      {batchSending ?
+                        <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                      : null}
+                      Envoi en cours… {batchProgress.sent}/{batchProgress.total}
+                    </p>
+                  : <p className="text-muted-foreground mt-1">
+                      Délai {Math.round(sendDelayMs / 1000)} s entre chaque envoi
+                    </p>
+                  }
+                </div>
+                <div className="flex flex-wrap gap-2 shrink-0">
+                  {batchSending ?
+                    <Button type="button" variant="destructive" onClick={handleCancelBatchSend}>
+                      Annuler l&apos;envoi
+                    </Button>
+                  : <>
+                      <Button
+                        type="button"
+                        disabled={!emailConnected}
+                        onClick={() => setSendConfirmOpen(true)}
+                      >
+                        <Send className="h-4 w-4 mr-2" />
+                        Envoyer la campagne
+                      </Button>
+                    </>
+                  }
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Thème du numéro</CardTitle>
@@ -316,6 +608,17 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                   onChange={(e) => setEditionInstructions(e.target.value)}
                 />
               </div>
+              <Button
+                type="button"
+                variant="outline"
+                disabled={duplicating}
+                onClick={() => void handleDuplicateLastEdition()}
+              >
+                {duplicating ?
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                : <Copy className="h-4 w-4 mr-2" />}
+                Dupliquer la dernière édition
+              </Button>
               <Button
                 type="button"
                 onClick={() => void handleGenerate()}
@@ -397,10 +700,22 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                       Préparer la campagne
                     </Button>
                   </div>
+                  {!newsletterChecklistOk({
+                    preview: audiencePreview,
+                    emailConnected,
+                    hasContent: Boolean(subject.trim() && plainBody.trim()),
+                  }).ok && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      {newsletterChecklistOk({
+                        preview: audiencePreview,
+                        emailConnected,
+                        hasContent: Boolean(subject.trim() && plainBody.trim()),
+                      }).messages.join(" · ")}
+                    </p>
+                  )}
                   <p className="text-xs text-muted-foreground">
-                    Délai recommandé entre envois : {Math.round(sendDelayMs / 1000)} s (Paramètres).
-                    Validez chaque envoi dans{" "}
-                    <strong>Suivi → Envois → Prêts</strong>.
+                    Met à jour le modèle « Newsletter » (sans en créer un nouveau) et enregistre
+                    l&apos;édition dans l&apos;historique.
                   </p>
                 </CardContent>
               </Card>
@@ -431,12 +746,18 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
 
           {(content || plainBody) && (
             <NewsletterChatPanel
-              key={chatSessionKey}
               draft={currentDraft}
               onDraftUpdated={applyDraft}
+              history={chatHistory}
+              onHistoryChange={setChatHistory}
               disabled={!settings?.apiKeyConfigured}
             />
           )}
+
+          <NewsletterHistoryPanel
+            refreshKey={historyRefreshKey}
+            onOpenContact={(id) => onNavigate?.(`contact-${id}`)}
+          />
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4 space-y-4">
@@ -454,20 +775,45 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
           <ParametresNewsletterSection
             onSettingsSaved={(saved) => {
               setSettings(saved);
-              setEtiquetteNom(saved.etiquetteNom);
               setSendDelayMs(saved.sendDelayMs);
+              setAudienceFilters(saved.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS);
               setTab("composer");
             }}
           />
         </TabsContent>
       </Tabs>
 
+      <AlertDialog open={sendConfirmOpen} onOpenChange={setSendConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer l&apos;envoi de la campagne</AlertDialogTitle>
+            <AlertDialogDescription>
+              Vous allez envoyer cette newsletter à{" "}
+              <strong>
+                {preparedQueueCount ?? 0} destinataire
+                {(preparedQueueCount ?? 0) !== 1 ? "s" : ""}
+              </strong>
+              . Cette action enverra un email Gmail à chaque contact coché (délai{" "}
+              {Math.round(sendDelayMs / 1000)} s entre chaque envoi).
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void runBatchSend()}>
+              Envoyer maintenant
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Card className="border-dashed">
         <CardContent className="py-4 flex flex-col sm:flex-row sm:items-center gap-3 text-sm">
           <Send className="h-5 w-5 text-muted-foreground shrink-0" />
           <p className="flex-1 text-muted-foreground">
-            Après « Préparer la campagne », taguez vos contacts avec l&apos;étiquette{" "}
-            <strong>{etiquetteNom}</strong>, puis validez l&apos;envoi contact par contact dans Suivi.
+            Les désinscriptions sont enregistrées automatiquement lorsqu&apos;un contact clique sur
+            «&nbsp;Se désinscrire&nbsp;» dans le pied de page et envoie l&apos;email prérempli.
+            Suivi détaillé dans{" "}
+            <strong>Suivi → Envois</strong> si besoin.
           </p>
           <Button
             type="button"

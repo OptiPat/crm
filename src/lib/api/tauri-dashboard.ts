@@ -22,6 +22,12 @@ export interface MonthlyStats {
   nouveaux: number;   // Nombre de nouveaux contacts
 }
 
+export interface YearlyActivityStats {
+  year: number;
+  clients: number;
+  panier_moyen: number;
+}
+
 export interface ProductStats {
   type_produit: string;   // Type de produit
   montant: number;        // Montant en euros
@@ -55,6 +61,10 @@ export async function getCategoryStats(): Promise<CategoryStats> {
 
 export async function getMonthlyStats(): Promise<MonthlyStats[]> {
   return invoke<MonthlyStats[]>("get_monthly_stats");
+}
+
+export async function getYearlyActivityStats(): Promise<YearlyActivityStats[]> {
+  return invoke<YearlyActivityStats[]>("get_yearly_activity_stats");
 }
 
 export async function getProductStats(): Promise<ProductStats[]> {

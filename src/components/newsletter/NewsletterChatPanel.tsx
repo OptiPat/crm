@@ -23,6 +23,8 @@ const QUICK_PROMPTS = [
 type NewsletterChatPanelProps = {
   draft: GeneratedNewsletterContent;
   onDraftUpdated: (next: GeneratedNewsletterContent) => void;
+  history: NewsletterChatTurn[];
+  onHistoryChange: (history: NewsletterChatTurn[]) => void;
   disabled?: boolean;
   className?: string;
 };
@@ -30,10 +32,11 @@ type NewsletterChatPanelProps = {
 export function NewsletterChatPanel({
   draft,
   onDraftUpdated,
+  history,
+  onHistoryChange,
   disabled,
   className,
 }: NewsletterChatPanelProps) {
-  const [history, setHistory] = useState<NewsletterChatTurn[]>([]);
   const [message, setMessage] = useState("");
   const [refining, setRefining] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -45,7 +48,8 @@ export function NewsletterChatPanel({
     setRefining(true);
     setMessage("");
     const userTurn: NewsletterChatTurn = { role: "user", content: trimmed };
-    setHistory((h) => [...h, userTurn]);
+    const historyWithUser = [...history, userTurn];
+    onHistoryChange(historyWithUser);
 
     try {
       const updated = await refineNewsletterContent({
@@ -54,8 +58,8 @@ export function NewsletterChatPanel({
         history,
       });
       onDraftUpdated(updated);
-      setHistory((h) => [
-        ...h,
+      onHistoryChange([
+        ...historyWithUser,
         {
           role: "assistant",
           content: "Newsletter mise à jour — vérifiez l'aperçu et continuez si besoin.",
@@ -65,7 +69,7 @@ export function NewsletterChatPanel({
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
       });
     } catch (e) {
-      setHistory((h) => h.slice(0, -1));
+      onHistoryChange(history);
       setMessage(trimmed);
       toast.error(e instanceof Error ? e.message : "Reformulation impossible");
     } finally {
@@ -164,5 +168,3 @@ export function NewsletterChatPanel({
     </Card>
   );
 }
-
-/** Réinitialise l'historique via key={chatSessionKey} côté parent. */

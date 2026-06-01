@@ -18,4 +18,4 @@ export function getEtiquetteNomForAlerte(typeAlerte: string): string | null {
 }
 
 export const ALERTE_ETIQUETTE_EXPLICATION =
-  "Les alertes repèrent les dates de dernier contact ; les étiquettes regroupent les contacts pour le suivi et les campagnes email.";
+  "Les alertes et les étiquettes partagent la même logique via des segments (ex. suivi > 1 an). Les alertes = à traiter ; les étiquettes = badges et campagnes.";

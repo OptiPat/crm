@@ -177,6 +177,98 @@ pub fn normalize_signature_html(html: &str) -> String {
     decode_html_entities(html.trim())
 }
 
+const MAX_INLINE_SIGNATURE_IMAGE_BYTES: usize = 512_000;
+
+/// Télécharge les images http(s) de la signature et les intègre en data URL (aperçu CRM + envoi fiable).
+pub fn inline_remote_images_in_html(html: &str) -> String {
+    if !html.contains("<img") && !html.contains("<IMG") {
+        return html.to_string();
+    }
+    let Ok(client) = reqwest::blocking::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .build()
+    else {
+        return html.to_string();
+    };
+
+    let mut out = html.to_string();
+    let mut offset = 0usize;
+    loop {
+        let lower = out.to_lowercase();
+        let Some(rel) = lower[offset..].find("<img") else {
+            break;
+        };
+        let tag_start = offset + rel;
+        let Some(tag_end_rel) = lower[tag_start..].find('>') else {
+            break;
+        };
+        let tag_end = tag_start + tag_end_rel + 1;
+        let tag = &out[tag_start..tag_end];
+        if let Some((rel_start, rel_end)) = find_img_src_range(tag) {
+            let url_start = tag_start + rel_start;
+            let url_end = tag_start + rel_end;
+            let url = &out[url_start..url_end];
+            if url.starts_with("http://") || url.starts_with("https://") {
+                if let Some(data_url) = fetch_image_as_data_url(&client, url) {
+                    out.replace_range(url_start..url_end, &data_url);
+                    offset = url_start + data_url.len();
+                    continue;
+                }
+            }
+        }
+        offset = tag_end;
+    }
+    out
+}
+
+fn find_img_src_range(tag: &str) -> Option<(usize, usize)> {
+    let lower = tag.to_lowercase();
+    for needle in ["src=\"", "src='"] {
+        let Some(rel) = lower.find(needle) else {
+            continue;
+        };
+        let quote = needle.chars().last().unwrap();
+        let start = rel + needle.len();
+        let end = tag[start..].find(quote)? + start;
+        return Some((start, end));
+    }
+    None
+}
+
+fn fetch_image_as_data_url(client: &reqwest::blocking::Client, url: &str) -> Option<String> {
+    let res = client.get(url).send().ok()?;
+    if !res.status().is_success() {
+        return None;
+    }
+    let mime = res
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(';').next().unwrap_or(s).trim().to_string())
+        .filter(|s| s.starts_with("image/"))
+        .unwrap_or_else(|| guess_image_mime(url));
+    let bytes = res.bytes().ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_INLINE_SIGNATURE_IMAGE_BYTES {
+        return None;
+    }
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Some(format!("data:{mime};base64,{b64}"))
+}
+
+fn guess_image_mime(url: &str) -> String {
+    let lower = url.to_lowercase();
+    if lower.contains(".png") {
+        "image/png".into()
+    } else if lower.contains(".gif") {
+        "image/gif".into()
+    } else if lower.contains(".webp") {
+        "image/webp".into()
+    } else {
+        "image/jpeg".into()
+    }
+}
+
 fn escape_html_text(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('<', "&lt;")

@@ -3,6 +3,7 @@
 use super::oauth_send::refresh_connection_if_needed;
 use super::oauth_store::EmailOAuthStore;
 use crate::database::models::PendingCampaignResponseCheck;
+use crate::newsletter::db::is_newsletter_unsubscribe_request;
 use serde::Deserialize;
 use tauri::AppHandle;
 
@@ -10,6 +11,7 @@ use tauri::AppHandle;
 pub struct GmailReplyFound {
     pub message_id: String,
     pub body_text: String,
+    pub subject: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -157,6 +159,12 @@ struct GmailPart {
     body: Option<GmailBodyData>,
     #[serde(default)]
     parts: Option<Vec<GmailPart>>,
+    #[serde(default)]
+    headers: Option<Vec<GmailHeader>>,
+}
+
+fn header_from_part(part: &GmailPart, name: &str) -> Option<String> {
+    part.headers.as_ref()?.iter().find(|h| h.name.eq_ignore_ascii_case(name)).map(|h| h.value.clone())
 }
 
 #[derive(Debug, Deserialize)]
@@ -228,11 +236,11 @@ fn extract_text_from_part(part: &GmailPart, plain: &mut Option<String>, html: &m
     }
 }
 
-pub fn gmail_fetch_message_body(
+pub fn gmail_fetch_message_body_and_subject(
     client: &reqwest::blocking::Client,
     token: &str,
     message_id: &str,
-) -> Result<String, String> {
+) -> Result<(String, Option<String>), String> {
     let res = client
         .get(format!(
             "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
@@ -246,6 +254,10 @@ pub fn gmail_fetch_message_body(
         return Err(format!("Gmail message: {}", res.text().unwrap_or_default()));
     }
     let msg: GmailMessageFull = res.json().map_err(|e| e.to_string())?;
+    let subject = msg
+        .payload
+        .as_ref()
+        .and_then(|p| header_from_part(p, "Subject"));
     let mut plain = None;
     let mut html = None;
     if let Some(ref payload) = msg.payload {
@@ -257,9 +269,20 @@ pub fn gmail_fetch_message_body(
         .unwrap_or_default();
     let text = normalize_email_body_text(&raw);
     if text.is_empty() {
-        return Ok(msg.snippet.unwrap_or_default().trim().to_string());
+        return Ok((
+            msg.snippet.unwrap_or_default().trim().to_string(),
+            subject,
+        ));
     }
-    Ok(text)
+    Ok((text, subject))
+}
+
+pub fn gmail_fetch_message_body(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    message_id: &str,
+) -> Result<String, String> {
+    gmail_fetch_message_body_and_subject(client, token, message_id).map(|(body, _)| body)
 }
 
 fn message_from_contact(
@@ -387,13 +410,17 @@ pub fn gmail_find_contact_reply(
     let Some(message_id) = gmail_find_reply_message_id(client, token, item)? else {
         return Ok(None);
     };
-    let body_text = gmail_fetch_message_body(client, token, &message_id)?;
-    if body_text.trim().is_empty() {
+    let (body_text, subject) =
+        gmail_fetch_message_body_and_subject(client, token, &message_id)?;
+    if body_text.trim().is_empty()
+        && !is_newsletter_unsubscribe_request(subject.as_deref(), None)
+    {
         return Ok(None);
     }
     Ok(Some(GmailReplyFound {
         message_id,
         body_text,
+        subject,
     }))
 }
 
@@ -485,7 +512,7 @@ fn calendar_has_rdv(
 pub fn sync_email_campaign_responses(
     app: &AppHandle,
     pending: Vec<PendingCampaignResponseCheck>,
-    mark_response: impl Fn(i64, &str, Option<&str>, Option<&str>) -> Result<(), String>,
+    mark_response: impl Fn(i64, &str, Option<&str>, Option<&str>, Option<&str>) -> Result<(), String>,
 ) -> Result<EmailCampaignSyncResult, String> {
     let store = EmailOAuthStore::load(app)?;
     let mut conn = store
@@ -515,6 +542,7 @@ pub fn sync_email_campaign_responses(
                     "mail",
                     Some(reply.body_text.as_str()),
                     Some(reply.message_id.as_str()),
+                    reply.subject.as_deref(),
                 ) {
                     Ok(()) => result.mail_detected += 1,
                     Err(e) if result.errors.len() < 5 => result.errors.push(e),
@@ -523,7 +551,7 @@ pub fn sync_email_campaign_responses(
             }
             Ok(None) => {
                 match calendar_has_rdv(&client, &conn.access_token, &item) {
-                    Ok(true) => match mark_response(item.contact_etiquette_id, "rdv", None, None) {
+                    Ok(true) => match mark_response(item.contact_etiquette_id, "rdv", None, None, None) {
                         Ok(()) => result.rdv_detected += 1,
                         Err(e) if result.errors.len() < 5 => result.errors.push(e),
                         Err(_) => {}

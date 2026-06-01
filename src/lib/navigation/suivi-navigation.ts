@@ -1,7 +1,7 @@
 import type { EtiquetteEmailQueueStatus } from "@/lib/api/tauri-etiquettes";
 import { dispatchAppNavigation } from "@/lib/navigation/app-navigation";
 
-export type SuiviMainTab = "alertes" | "etiquettes" | "envois";
+export type SuiviMainTab = "alertes" | "etiquettes" | "segments" | "envois";
 
 const TAB_KEY = "crm_nav_suivi_tab";
 const ENVOIS_SUBTAB_KEY = "crm_nav_suivi_envois_subtab";
@@ -64,7 +64,12 @@ export function consumeSuiviNavigationIntent(): SuiviNavigationIntent {
   sessionStorage.removeItem(CONTACT_KEY);
 
   const tab =
-    rawTab === "alertes" || rawTab === "etiquettes" || rawTab === "envois" ? rawTab : null;
+    rawTab === "alertes" ||
+    rawTab === "etiquettes" ||
+    rawTab === "segments" ||
+    rawTab === "envois"
+      ? rawTab
+      : null;
 
   const envoisSubTab =
     rawSub === "ready" ||

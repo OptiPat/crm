@@ -6,7 +6,10 @@ export type ConditionType =
   | "PERIODE_ANNEE"
   | "TYPE_PRODUIT"
   | "DATE_APPROCHE_INVESTISSEMENT"
-  | "AGE_APPROCHE";
+  | "AGE_APPROCHE"
+  | "JAMAIS_CONTACT"
+  | "A_ETIQUETTE"
+  | "RULE_TREE";
 
 export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
   DELAI_SANS_CONTACT: "Délai sans contact",
@@ -15,6 +18,9 @@ export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
   TYPE_PRODUIT: "Détient un type de produit",
   DATE_APPROCHE_INVESTISSEMENT: "Date sur un investissement",
   AGE_APPROCHE: "Âge approchant",
+  JAMAIS_CONTACT: "Jamais contacté (catégories cochées)",
+  A_ETIQUETTE: "Possède une étiquette",
+  RULE_TREE: "Règle combinée",
 };
 
 export function getConditionTypeLabel(type: string | null | undefined): string {

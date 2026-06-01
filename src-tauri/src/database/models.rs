@@ -251,6 +251,13 @@ pub struct MonthlyStats {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct YearlyActivityStats {
+    pub year: i32,
+    pub clients: i64,
+    pub panier_moyen: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ProductStats {
     pub type_produit: String, // Type de produit
     pub montant: f64,         // Montant total en euros
@@ -373,6 +380,8 @@ pub struct Etiquette {
     pub is_default: bool,
     /// false = étiquette désactivée (pas de règle auto ni campagne, tags AUTO retirés)
     pub actif: bool,
+    /// Segment réutilisable (règle héritée si renseigné)
+    pub segment_id: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -397,6 +406,42 @@ pub struct NewEtiquette {
     // Système
     pub is_default: Option<bool>, // Défaut: false
     pub actif: Option<bool>,      // Défaut: true
+    pub segment_id: Option<i64>,
+}
+
+// ==================== SEGMENTS ====================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Segment {
+    pub id: i64,
+    pub nom: String,
+    pub description: Option<String>,
+    pub rule_json: String,
+    pub actif: bool,
+    pub is_system: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct SegmentWithCount {
+    pub id: i64,
+    pub nom: String,
+    pub description: Option<String>,
+    pub rule_json: String,
+    pub actif: bool,
+    pub is_system: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    pub contact_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewSegment {
+    pub nom: String,
+    pub description: Option<String>,
+    pub rule_json: String,
+    pub actif: Option<bool>,
 }
 
 /// Ligne de la file d'envoi manuel (étiquettes + email)
@@ -496,6 +541,7 @@ pub struct EtiquetteWithCount {
     pub email_actif: bool,
     pub is_default: bool,
     pub actif: bool,
+    pub segment_id: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
     pub contact_count: i64, // Nombre de contacts avec cette étiquette

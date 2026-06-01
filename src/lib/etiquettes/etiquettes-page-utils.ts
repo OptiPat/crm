@@ -28,7 +28,7 @@ export function computeEtiquettesPageStats(
 
   for (const e of etiquettes) {
     if (e.actif !== false) activeCount += 1;
-    if (e.auto_condition_type) autoCount += 1;
+    if (e.auto_condition_type || e.segment_id) autoCount += 1;
     else manualCount += 1;
     if (e.email_actif) emailCount += 1;
   }
@@ -51,9 +51,9 @@ export function filterEtiquettesByType(
 ): EtiquetteWithCount[] {
   switch (filter) {
     case "auto":
-      return etiquettes.filter((e) => Boolean(e.auto_condition_type));
+      return etiquettes.filter((e) => Boolean(e.auto_condition_type) || e.segment_id != null);
     case "manual":
-      return etiquettes.filter((e) => !e.auto_condition_type);
+      return etiquettes.filter((e) => !e.auto_condition_type && e.segment_id == null);
     case "email":
       return etiquettes.filter((e) => e.email_actif);
     case "inactive":
