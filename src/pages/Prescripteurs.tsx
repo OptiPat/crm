@@ -8,7 +8,6 @@ import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { getAllInvestissements, type Investissement } from "@/lib/api/tauri-investissements";
 import { indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
-import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import {
   buildFoyersInfo,
   buildPrescripteurTree,
@@ -177,13 +176,6 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
   };
 
   const openMember = (contact: Contact) => {
-    if (onNavigate && contact.id) {
-      requestOpenContact(contact.id, {
-        setCurrentPage: onNavigate,
-        currentPage: "prescripteurs",
-      });
-      return;
-    }
     setSelectedContact(contact);
     if (!isWideLayout) {
       setShowContactDetail(true);

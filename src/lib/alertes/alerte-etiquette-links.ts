@@ -2,7 +2,7 @@
 export const ALERTE_ETIQUETTE_NOM: Record<string, string> = {
   SUIVI_CLIENT_1AN: "Suivi > 1 an",
   SUIVI_CLIENT_ANNUEL: "Suivi > 1 an",
-  CLIENT_JAMAIS_SUIVI: "Suivi > 1 an",
+  CLIENT_JAMAIS_SUIVI: "Jamais suivi",
   LEAD_SUIVI_6MOIS: "Suivi > 6 mois",
   SUIVI_PROSPECT_6MOIS: "Suivi > 6 mois",
   LEAD_JAMAIS_CONTACTE: "Suivi > 6 mois",

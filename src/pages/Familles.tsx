@@ -11,7 +11,6 @@ import {
 } from "@/lib/api/tauri-investissements";
 import { textMatchesSearch } from "@/lib/search-utils";
 import { indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
-import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { buildFamilleGroups } from "@/lib/familles/build-famille-groups";
 import type { FamilleGroup } from "@/lib/familles/famille-types";
@@ -157,13 +156,6 @@ export function Familles({ onNavigate }: FamillesProps) {
   };
 
   const openMember = (contact: Contact) => {
-    if (onNavigate && contact.id) {
-      requestOpenContact(contact.id, {
-        setCurrentPage: onNavigate,
-        currentPage: "familles",
-      });
-      return;
-    }
     setSelectedContact(contact);
     if (!isWideLayout) {
       setShowContactDetail(true);

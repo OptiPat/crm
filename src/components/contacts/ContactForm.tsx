@@ -271,7 +271,7 @@ export function ContactForm({
     } else {
       setMesFilleulsCount(0);
     }
-  }, [contact, open, createContext]);
+  }, [open, contact?.id, createContext]);
 
   useEffect(() => {
     if (!open) return;

@@ -3351,10 +3351,10 @@ Bien cordialement,\n\
             nom: "Suivi > 1 an".to_string(),
             couleur: Some("#EF4444".to_string()),
             icone: Some("🔴".to_string()),
-            description: Some("Client non contacté depuis plus d'un an".to_string()),
+            description: Some("Client contacté, mais plus d'un an sans nouvel échange".to_string()),
             priorite: Some(100),
             auto_condition_type: Some("DELAI_SANS_CONTACT".to_string()),
-            auto_condition_config: Some(r#"{"jours": 365}"#.to_string()),
+            auto_condition_config: Some(r#"{"jours": 365, "inclure_sans_date": false}"#.to_string()),
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
@@ -3367,7 +3367,28 @@ Bien cordialement,\n\
         })?;
         created += 1;
 
-        // 2. Suivi à planifier (orange)
+        // 2. Jamais suivi (rouge)
+        self.create_etiquette(NewEtiquette {
+            nom: "Jamais suivi".to_string(),
+            couleur: Some("#EF4444".to_string()),
+            icone: Some("🔴".to_string()),
+            description: Some("Client sans date de dernier contact enregistrée".to_string()),
+            priorite: Some(99),
+            auto_condition_type: Some("JAMAIS_CONTACT".to_string()),
+            auto_condition_config: Some(r#"{}"#.to_string()),
+            auto_categories: Some(r#"["CLIENT"]"#.to_string()),
+            email_template_id: None,
+            email_delai_jours: Some(0),
+            email_envoi_prevu: None,
+            email_envoi_heure: None,
+            email_actif: Some(false),
+            is_default: Some(true),
+            actif: None,
+            segment_id: None,
+        })?;
+        created += 1;
+
+        // 3. Suivi à planifier (orange)
         self.create_etiquette(NewEtiquette {
             nom: "Suivi à planifier".to_string(),
             couleur: Some("#F97316".to_string()),
@@ -3650,10 +3671,20 @@ Bien cordialement,\n\
                 "Suivi > 1 an",
                 "#EF4444",
                 "🔴",
-                "Client non contacté depuis plus d'un an",
+                "Client contacté, mais plus d'un an sans nouvel échange",
                 100,
                 "DELAI_SANS_CONTACT",
-                r#"{"jours": 365}"#,
+                r#"{"jours": 365, "inclure_sans_date": false}"#,
+                r#"["CLIENT"]"#,
+            ),
+            (
+                "Jamais suivi",
+                "#EF4444",
+                "🔴",
+                "Client sans date de dernier contact enregistrée",
+                99,
+                "JAMAIS_CONTACT",
+                r#"{}"#,
                 r#"["CLIENT"]"#,
             ),
             (
@@ -3791,6 +3822,28 @@ Bien cordialement,\n\
                     }
                 }
             }
+        }
+
+        // Ancienne base : « Suivi > 1 an » ne doit plus couvrir les contacts sans date
+        if self
+            .conn
+            .execute(
+                "UPDATE etiquettes SET auto_condition_config = ?1,
+                        description = ?2
+                 WHERE LOWER(TRIM(nom)) = LOWER(TRIM('Suivi > 1 an'))
+                   AND is_default = 1
+                   AND (auto_condition_config = ?3 OR auto_condition_config = ?4 OR auto_condition_config = ?5)",
+                params![
+                    r#"{"jours": 365, "inclure_sans_date": false}"#,
+                    "Client contacté, mais plus d'un an sans nouvel échange",
+                    r#"{"jours": 365}"#,
+                    r#"{"jours":365}"#,
+                    r#"{"jours": 365, "inclure_sans_date": true}"#,
+                ],
+            )
+            .is_ok()
+        {
+            changes += self.conn.changes() as usize;
         }
 
         // Ancienne base : « Suivi > 6 mois » partageait l'orange avec « Suivi à planifier »

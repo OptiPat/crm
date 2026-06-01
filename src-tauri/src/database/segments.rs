@@ -263,6 +263,7 @@ impl super::Database {
         }
         let pairs: &[(&str, &str)] = &[
             ("Suivi > 1 an", "Suivi client > 1 an"),
+            ("Jamais suivi", "Client jamais suivi"),
             ("Suivi > 6 mois", "Prospect / suspect > 6 mois"),
             ("Fin démembrement", "Fin démembrement"),
             ("Fin de prêt", "Fin de prêt"),

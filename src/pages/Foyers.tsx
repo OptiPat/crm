@@ -25,7 +25,6 @@ import { cleanupOrphanedData, deleteContact, getAllContacts, type Contact } from
 import { getContactsForFoyer } from "@/lib/foyers/foyer-utils";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
 import { buildPatrimoineMaps } from "@/lib/investissements/bulk-patrimoine";
-import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { FoyerForm } from "@/components/foyers/FoyerForm";
@@ -151,13 +150,6 @@ export function Foyers({ onNavigate }: FoyersProps) {
   };
 
   const openMember = (contact: Contact) => {
-    if (onNavigate && contact.id) {
-      requestOpenContact(contact.id, {
-        setCurrentPage: onNavigate,
-        currentPage: "foyers",
-      });
-      return;
-    }
     setSelectedContact(contact);
     if (!isWideLayout) {
       setShowContactDetail(true);
