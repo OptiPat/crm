@@ -1,7 +1,14 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { AgendaLink } from "@/lib/emails/agenda-links";
 
-export type SettingsSectionId = "accueil" | "profil" | "email" | "suivi" | "donnees" | "application";
+export type SettingsSectionId =
+  | "accueil"
+  | "profil"
+  | "email"
+  | "newsletter"
+  | "suivi"
+  | "donnees"
+  | "application";
 
 export type SetupCheckItem = {
   id: string;

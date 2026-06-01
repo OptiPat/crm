@@ -18,6 +18,7 @@ import {
   Landmark,
   History,
   LucideIcon,
+  Newspaper,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -73,6 +74,7 @@ const relationGroup: NavGroup = {
   landingLabel: "Suivi & alertes",
   children: [
     { id: "suivi", label: "Suivi & alertes", icon: Bell },
+    { id: "newsletter", label: "Newsletter", icon: Newspaper },
     { id: "interactions", label: "Historique des échanges", icon: History },
   ],
 };

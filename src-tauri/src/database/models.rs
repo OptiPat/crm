@@ -416,6 +416,8 @@ pub struct EtiquetteEmailQueueItem {
     pub template_sujet: String,
     pub template_corps: String,
     pub template_agenda_link_id: Option<String>,
+    pub template_variables: Option<String>,
+    pub template_categorie: Option<String>,
     /// Raison si file « incomplete » : NO_EMAIL, NO_TEMPLATE, NO_DATE, SCHEDULED
     pub queue_issue: Option<String>,
     /// Réponse client enregistrée (suivi campagne)

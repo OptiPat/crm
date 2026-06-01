@@ -7,6 +7,7 @@ mod commands;
 mod contact_name;
 mod database;
 mod email;
+mod newsletter;
 mod system_commands;
 
 use auth::commands::*;
@@ -15,6 +16,7 @@ use commands::*;
 use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
+use newsletter::*;
 use std::sync::Mutex;
 use system_commands::*;
 use tauri::Manager;
@@ -201,7 +203,13 @@ fn main() {
             get_contact_gmail_messages,
             fetch_contact_gmail_message_body,
             open_contact_mail_attachment,
-            get_contact_mail_sync_state
+            get_contact_mail_sync_state,
+            get_newsletter_settings,
+            save_newsletter_settings,
+            generate_newsletter_content,
+            refine_newsletter_content,
+            ensure_newsletter_etiquette,
+            activate_newsletter_campaign
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

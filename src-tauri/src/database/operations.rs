@@ -3859,7 +3859,11 @@ Bien cordialement,\n\
                         CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
                              THEN COALESCE(t_rel.corps, '') ELSE COALESCE(t.corps, '') END,
                         CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN t_rel.agenda_link_id ELSE t.agenda_link_id END";
+                             THEN t_rel.agenda_link_id ELSE t.agenda_link_id END,
+                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
+                             THEN t_rel.variables ELSE t.variables END,
+                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
+                             THEN t_rel.categorie ELSE t.categorie END";
 
         let sql = match queue_status {
             "ready" => {
@@ -3916,7 +3920,8 @@ Bien cordialement,\n\
                 format!(
                     "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, NULL,
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
+                        t.variables, t.categorie, NULL,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         0
                  FROM contact_etiquettes ce
@@ -3939,7 +3944,8 @@ Bien cordialement,\n\
                 format!(
                     "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id, 'FOLLOWUP',
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
+                        t.variables, t.categorie, 'FOLLOWUP',
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         0
                  FROM contact_etiquettes ce
@@ -3981,11 +3987,13 @@ Bien cordialement,\n\
                 template_sujet: row.get(11)?,
                 template_corps: row.get(12)?,
                 template_agenda_link_id: row.get(13)?,
-                queue_issue: row.get(14)?,
-                email_reponse_at: row.get(15)?,
-                email_reponse_type: row.get(16)?,
-                contact_date_dernier_contact: row.get(17)?,
-                email_is_relance: row.get::<_, i64>(18)? != 0,
+                template_variables: row.get(14)?,
+                template_categorie: row.get(15)?,
+                queue_issue: row.get(16)?,
+                email_reponse_at: row.get(17)?,
+                email_reponse_type: row.get(18)?,
+                contact_date_dernier_contact: row.get(19)?,
+                email_is_relance: row.get::<_, i64>(20)? != 0,
             })
         };
 

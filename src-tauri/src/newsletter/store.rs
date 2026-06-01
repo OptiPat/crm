@@ -1,0 +1,240 @@
+use crate::email::oauth_secrets::{decrypt_secret, encrypt_secret, load_storage_key};
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::PathBuf;
+use tauri::{AppHandle, Manager};
+
+pub const DEFAULT_NEWSLETTER_STYLE_PROMPT: &str = r#"Tu es "Patrimoine Sarcasme", expert en communication financière et Conseiller en Gestion de Patrimoine (CGP).
+
+TON OBJECTIF : transformer l'actualité financière en newsletter mensuelle engageante pour des clients particuliers.
+
+TA MISSION :
+1. Synthétiser l'information ayant un IMPACT CONCRET pour un épargnant particulier
+2. Expliquer avec clarté (métaphores simples)
+3. Rédiger avec un style professionnel, bienveillant, avec une légère ironie fine
+
+FORMAT DE RÉPONSE (JSON strict, sans markdown autour) :
+{
+  "subject": "Ligne d'objet accrocheuse",
+  "intro": "Introduction relatable (2-3 phrases)",
+  "sections": [
+    { "title": "Titre section 1", "body": "Contenu..." },
+    { "title": "Titre section 2", "body": "Contenu..." }
+  ],
+  "cta": "Appel à l'action + invitation (1-2 phrases)"
+}
+
+CONTRAINTES :
+- TON : Professionnel, informel, bienveillant, légèrement ironique
+- 2 ou 3 sections maximum dans "sections"
+- LONGUEUR totale : 300-500 mots (intro + sections + cta)
+- JARGON : traduire en métaphores accessibles
+- Utilise {{prenom}} uniquement dans l'intro si tu salues le lecteur (ex. "Bonjour {{prenom}},")
+
+INTERDITS :
+- Jargon non expliqué
+- Promesses de rendement
+- Ton ennuyeux ou trop corporate
+- Texte hors JSON
+- Signature (ajoutée automatiquement)"#;
+
+pub const DEFAULT_MISTRAL_MODEL: &str = "mistral-small-latest";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewsletterSettingsPublic {
+    pub api_key_configured: bool,
+    pub style_prompt: String,
+    pub model: String,
+    pub etiquette_nom: String,
+    pub send_delay_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NewsletterSettingsInput {
+    #[serde(default)]
+    pub api_key: Option<String>,
+    pub style_prompt: Option<String>,
+    pub model: Option<String>,
+    pub etiquette_nom: Option<String>,
+    pub send_delay_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct PersistedNewsletterStore {
+    #[serde(default)]
+    version: u32,
+    #[serde(default)]
+    api_key_enc: Option<String>,
+    #[serde(default)]
+    style_prompt: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    etiquette_nom: Option<String>,
+    #[serde(default)]
+    send_delay_ms: Option<u64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NewsletterStore {
+    pub api_key: Option<String>,
+    /// Clé chiffrée présente sur disque (même si déchiffrement indisponible).
+    pub encrypted_api_key_present: bool,
+    pub style_prompt: String,
+    pub model: String,
+    pub etiquette_nom: String,
+    pub send_delay_ms: u64,
+}
+
+impl NewsletterStore {
+    pub fn load(app: &AppHandle) -> Result<Self, String> {
+        let path = Self::path(app)?;
+        if !path.exists() {
+            return Ok(Self::default());
+        }
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let storage_key = load_storage_key(app)?;
+        let persisted: PersistedNewsletterStore =
+            serde_json::from_str(&raw).map_err(|e| format!("Parse newsletter config: {}", e))?;
+        Self::from_persisted(persisted, storage_key.as_ref())
+    }
+
+    fn read_persisted(app: &AppHandle) -> Result<Option<PersistedNewsletterStore>, String> {
+        let path = Self::path(app)?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        serde_json::from_str(&raw)
+            .map_err(|e| format!("Parse newsletter config: {}", e))
+            .map(Some)
+    }
+
+    pub fn save(&self, app: &AppHandle) -> Result<(), String> {
+        let path = Self::path(app)?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+        }
+        let storage_key = load_storage_key(app)?;
+        let existing_enc = Self::read_persisted(app)?
+            .and_then(|p| p.api_key_enc);
+        let persisted = self.to_persisted(storage_key.as_ref(), existing_enc)?;
+        let json = serde_json::to_string_pretty(&persisted).map_err(|e| e.to_string())?;
+        fs::write(path, json).map_err(|e| e.to_string())
+    }
+
+    pub fn to_public(&self) -> NewsletterSettingsPublic {
+        NewsletterSettingsPublic {
+            api_key_configured: self.encrypted_api_key_present
+                || self
+                    .api_key
+                    .as_ref()
+                    .map(|k| !k.trim().is_empty())
+                    .unwrap_or(false),
+            style_prompt: self.style_prompt.clone(),
+            model: self.model.clone(),
+            etiquette_nom: self.etiquette_nom.clone(),
+            send_delay_ms: self.send_delay_ms,
+        }
+    }
+
+    fn path(app: &AppHandle) -> Result<PathBuf, String> {
+        Ok(app
+            .path()
+            .app_data_dir()
+            .map_err(|e| e.to_string())?
+            .join("newsletter_config.json"))
+    }
+
+    fn from_persisted(
+        persisted: PersistedNewsletterStore,
+        storage_key: Option<&[u8; 32]>,
+    ) -> Result<Self, String> {
+        let encrypted_api_key_present = persisted
+            .api_key_enc
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false);
+        let api_key = match (&persisted.api_key_enc, storage_key) {
+            (Some(enc), Some(key)) => Some(decrypt_secret(enc, key)?),
+            (Some(_), None) => None,
+            (None, _) => None,
+        };
+        Ok(Self {
+            api_key,
+            encrypted_api_key_present,
+            style_prompt: persisted
+                .style_prompt
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_NEWSLETTER_STYLE_PROMPT.to_string()),
+            model: persisted
+                .model
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| DEFAULT_MISTRAL_MODEL.to_string()),
+            etiquette_nom: persisted
+                .etiquette_nom
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "Newsletter".to_string()),
+            send_delay_ms: persisted.send_delay_ms.unwrap_or(3000).max(500),
+        })
+    }
+
+    fn to_persisted(
+        &self,
+        storage_key: Option<&[u8; 32]>,
+        existing_enc: Option<String>,
+    ) -> Result<PersistedNewsletterStore, String> {
+        let api_key_enc = match (&self.api_key, storage_key) {
+            (Some(key), Some(storage)) if !key.trim().is_empty() => {
+                Some(encrypt_secret(key.trim(), storage)?)
+            }
+            (Some(_), None) => {
+                return Err(
+                    "Clé API Mistral : ouvrez le CRM avec votre mot de passe maître.".into(),
+                );
+            }
+            (Some(_), Some(_)) | (None, _) => {
+                existing_enc.filter(|s| !s.trim().is_empty())
+            }
+        };
+        Ok(PersistedNewsletterStore {
+            version: 1,
+            api_key_enc,
+            style_prompt: Some(self.style_prompt.clone()),
+            model: Some(self.model.clone()),
+            etiquette_nom: Some(self.etiquette_nom.clone()),
+            send_delay_ms: Some(self.send_delay_ms),
+        })
+    }
+}
+
+impl Default for NewsletterStore {
+    fn default() -> Self {
+        Self {
+            api_key: None,
+            encrypted_api_key_present: false,
+            style_prompt: DEFAULT_NEWSLETTER_STYLE_PROMPT.to_string(),
+            model: DEFAULT_MISTRAL_MODEL.to_string(),
+            etiquette_nom: "Newsletter".to_string(),
+            send_delay_ms: 3000,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::NewsletterSettingsInput;
+
+    #[test]
+    fn newsletter_settings_input_accepts_camel_case_from_frontend() {
+        let raw = r#"{"apiKey":"sk-test","stylePrompt":"Ton","model":"mistral-small-latest","etiquetteNom":"Newsletter","sendDelayMs":3000}"#;
+        let input: NewsletterSettingsInput = serde_json::from_str(raw).expect("parse");
+        assert_eq!(input.api_key.as_deref(), Some("sk-test"));
+        assert_eq!(input.style_prompt.as_deref(), Some("Ton"));
+        assert_eq!(input.model.as_deref(), Some("mistral-small-latest"));
+        assert_eq!(input.etiquette_nom.as_deref(), Some("Newsletter"));
+        assert_eq!(input.send_delay_ms, Some(3000));
+    }
+}

@@ -17,6 +17,7 @@ export type EmailTemplateCategory =
   | "FISCALITE"
   | "BIENVENUE"
   | "ARBITRAGE"
+  | "NEWSLETTER"
   | "AUTRE";
 
 export const EMAIL_TEMPLATE_CATEGORIES: {
@@ -29,6 +30,7 @@ export const EMAIL_TEMPLATE_CATEGORIES: {
   { id: "FISCALITE", label: "Fiscalité", badgeClass: "bg-green-100 text-green-800" },
   { id: "BIENVENUE", label: "Bienvenue", badgeClass: "bg-yellow-100 text-yellow-800" },
   { id: "ARBITRAGE", label: "Arbitrage", badgeClass: "bg-purple-100 text-purple-800" },
+  { id: "NEWSLETTER", label: "Newsletter", badgeClass: "bg-indigo-100 text-indigo-800" },
   { id: "AUTRE", label: "Autre", badgeClass: "bg-gray-100 text-gray-800" },
 ];
 

@@ -1,6 +1,12 @@
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
-import { appendEmailSignature } from "@/lib/emails/email-signature";
+import { appendEmailSignature, buildSendEmailBodies } from "@/lib/emails/email-signature";
 import { buildVariablesFromContact } from "@/lib/emails/template-email-meta";
+import {
+  applyVariablesToNewsletterHtml,
+  injectNewsletterSignatureHtml,
+  isNewsletterTemplate,
+  parseNewsletterTemplateMeta,
+} from "@/lib/newsletter/newsletter-html";
 import { parseMillesimeLabelFromEtiquetteNom } from "@/lib/etiquettes/exceltis";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
@@ -29,13 +35,23 @@ export function buildTemplateVariables(
 export function renderEtiquetteEmailPreview(
   item: EtiquetteEmailQueueItem,
   cgp: CgpConfig | null
-): { subject: string; body: string } {
+): { subject: string; body: string; body_html: string | null } {
   const vars = buildTemplateVariables(item, cgp);
-  const body = replaceTemplateVariables(item.template_corps, vars);
-  return {
-    subject: replaceTemplateVariables(item.template_sujet, vars),
-    body: appendEmailSignature(body, cgp?.email_signature),
-  };
+  const bodyCore = replaceTemplateVariables(item.template_corps, vars);
+  const body = appendEmailSignature(bodyCore, cgp?.email_signature);
+  const subject = replaceTemplateVariables(item.template_sujet, vars);
+
+  if (isNewsletterTemplate(item.template_categorie)) {
+    const meta = parseNewsletterTemplateMeta(item.template_variables);
+    if (meta?.newsletter_html) {
+      let html = applyVariablesToNewsletterHtml(meta.newsletter_html, vars);
+      html = injectNewsletterSignatureHtml(html, cgp?.email_signature_html);
+      return { subject, body, body_html: html };
+    }
+  }
+
+  const { body_html } = buildSendEmailBodies(body, cgp);
+  return { subject, body, body_html };
 }
 
 /** Indice : dernier contact fiche mis à jour après l'envoi campagne. */

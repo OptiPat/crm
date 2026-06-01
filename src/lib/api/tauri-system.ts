@@ -37,3 +37,7 @@ export async function restoreDbBackup(
 ): Promise<RestoreDbBackupResult> {
   return invoke<RestoreDbBackupResult>("restore_db_backup", { backupFilename });
 }
+
+export async function openExternalUrl(url: string): Promise<void> {
+  return invoke<void>("open_external_url", { url });
+}

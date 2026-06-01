@@ -13,6 +13,7 @@ import { ParametresEmailSection } from "@/components/settings/ParametresEmailSec
 import { ParametresSuiviSection } from "@/components/settings/ParametresSuiviSection";
 import { ParametresDatabaseSection } from "@/components/settings/ParametresDatabaseSection";
 import { ParametresApplicationSection } from "@/components/settings/ParametresApplicationSection";
+import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
@@ -24,6 +25,7 @@ import {
   LayoutDashboard,
   User,
   Mail,
+  Newspaper,
   CalendarClock,
   Database,
   Sparkles,
@@ -62,6 +64,12 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     label: "Email",
     description: "Connexion et signature",
     icon: Mail,
+  },
+  {
+    id: "newsletter",
+    label: "Newsletter",
+    description: "Mistral et style de rédaction",
+    icon: Newspaper,
   },
   {
     id: "suivi",
@@ -231,6 +239,8 @@ export function Parametres() {
         return (
           <ParametresEmailSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
         );
+      case "newsletter":
+        return <ParametresNewsletterSection />;
       case "suivi":
         return (
           <ParametresSuiviSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />

@@ -18,7 +18,6 @@ import {
 } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { sendEmail } from "@/lib/api/tauri-email";
-import { buildSendEmailBodies } from "@/lib/emails/email-signature";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
@@ -70,13 +69,16 @@ export function EtiquetteEmailSendDialog({
     setSending(true);
     try {
       const cgp = cgpConfig ?? (await getCgpConfig());
-      const { body: plainBody, body_html } = buildSendEmailBodies(body, cgp);
+      const preview = renderEtiquetteEmailPreview(
+        { ...item, template_sujet: subject.trim(), template_corps: body },
+        cgp
+      );
       const sent = await sendEmail({
         to_email: item.contact_email,
         to_name: `${item.contact_prenom} ${item.contact_nom}`,
         subject: subject.trim(),
-        body: plainBody,
-        body_html,
+        body: preview.body,
+        body_html: preview.body_html,
       });
       try {
         await markEtiquetteEmailSent(
@@ -84,7 +86,7 @@ export function EtiquetteEmailSendDialog({
           sent.gmail_message_id,
           sent.gmail_thread_id,
           subject.trim(),
-          plainBody
+          preview.body
         );
       } catch (markError) {
         console.error(markError);

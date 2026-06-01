@@ -18,6 +18,7 @@ import { Parametres } from "@/pages/Parametres";
 import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
+import { Newsletter } from "@/pages/Newsletter";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
@@ -159,6 +160,8 @@ function App() {
         );
       case "templates-email":
         return <TemplatesEmail />;
+      case "newsletter":
+        return <Newsletter onNavigate={setCurrentPage} />;
       case "suivi":
         return (
           <Suivi
