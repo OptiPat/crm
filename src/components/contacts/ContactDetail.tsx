@@ -1346,9 +1346,9 @@ export function ContactDetail({
   if (embedded) {
     return (
       <>
-        <div className="flex flex-col h-full min-h-[420px] max-h-[calc(100vh-10rem)] rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           <div className="shrink-0 border-b border-border/60 px-4 py-3">{headerBlock}</div>
-          <div className="flex-1 overflow-y-auto px-4 py-3 min-h-0">{tabsBlock}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{tabsBlock}</div>
         </div>
         {modals}
       </>
@@ -1358,8 +1358,8 @@ export function ContactDetail({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto shadow-md flex flex-col">
-          <DialogHeader className="pr-12 shrink-0">{headerBlock}</DialogHeader>
+        <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-y-auto shadow-md">
+          <DialogHeader className="shrink-0 pr-12">{headerBlock}</DialogHeader>
           <div className="min-h-0">{tabsBlock}</div>
         </DialogContent>
       </Dialog>

@@ -24,6 +24,16 @@ import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import {
+  SplitDetailLayout,
+  SplitDetailPane,
+  SplitDetailStack,
+  SplitListColumn,
+  embeddedDetailShellClassName,
+  splitCardClassName,
+  splitCardContentClassName,
+  splitCardHeaderClassName,
+} from "@/components/layout";
 
 type PrescripteursProps = {
   onNavigate?: (page: string) => void;
@@ -297,8 +307,8 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         />
       </div>
 
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader className="pb-3">
+      <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
+        <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
             <div>
               <CardTitle className="font-serif text-lg">Liste des prescripteurs</CardTitle>
@@ -332,20 +342,16 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
           </div>
         </CardHeader>
 
-        <CardContent className="pt-0">
-          <div className={cn("grid gap-4 items-start", showSplit && "lg:grid-cols-2")}>
-            <div
-              className={cn(
-                "space-y-2 min-w-0",
-                showSplit && "lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1"
-              )}
-            >
-              {showSplit && (
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide sticky top-0 bg-card z-10 py-2 px-1">
-                  Prescripteurs ({filteredPrescripteurs.length})
-                </p>
-              )}
-
+        <CardContent className={splitCardContentClassName(showSplit, "pt-0", true)}>
+          <SplitDetailLayout
+            showSplit={showSplit}
+            nested
+            list={
+              <SplitListColumn
+                showSplit={showSplit}
+                nested
+                listLabel={`Prescripteurs (${filteredPrescripteurs.length})`}
+              >
               {filteredPrescripteurs.length === 0 ? (
                 <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
                   <Share2 className="h-12 w-12 mx-auto text-muted-foreground/35 mb-3" />
@@ -421,22 +427,26 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                   );
                 })
               )}
-            </div>
-
-            {showSplit && selectedTree && selectedStats && (
-              <div className="hidden lg:block min-w-0 lg:sticky lg:top-4 self-start w-full">
+              </SplitListColumn>
+            }
+            detail={
+              showSplit && selectedTree && selectedStats ? (
+                <SplitDetailPane nested>
                 {selectedContact ? (
-                  <div className="space-y-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 shadow-sm"
-                      onClick={() => setSelectedContact(null)}
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      {getContactDisplayName(selectedStats.contact, foyersInfo)}
-                    </Button>
+                  <SplitDetailStack
+                    back={
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 shadow-sm"
+                        onClick={() => setSelectedContact(null)}
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        {getContactDisplayName(selectedStats.contact, foyersInfo)}
+                      </Button>
+                    }
+                  >
                     <ContactDetail
                       key={selectedContact.id}
                       embedded
@@ -451,18 +461,18 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                       onNavigate={onNavigate}
                       onOpenContact={openMember}
                     />
-                  </div>
+                  </SplitDetailStack>
                 ) : (
-                  <div className="rounded-xl border border-border/70 bg-card shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-10rem)]">
-                    <div className="shrink-0 border-b border-border/60 bg-muted/30 px-4 py-3 flex items-start justify-between gap-2">
+                  <div className={embeddedDetailShellClassName("shadow-md")}>
+                    <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border/60 bg-muted/30 px-4 py-3">
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Arbre
                         </p>
-                        <h3 className="text-lg font-serif font-bold text-primary truncate">
+                        <h3 className="truncate font-serif text-lg font-bold text-primary">
                           {getContactDisplayName(selectedStats.contact, foyersInfo)}
                         </h3>
-                        <p className="text-xs text-muted-foreground mt-1">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           {selectedStats.nombreClientsTotal} client
                           {selectedStats.nombreClientsTotal !== 1 ? "s" : ""} ·{" "}
                           {formatEuroCentimes(selectedStats.patrimoineApporteTotal)} apporté
@@ -479,7 +489,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
-                    <div className="flex-1 overflow-y-auto min-h-0 p-4">
+                    <div className="min-h-0 flex-1 overflow-y-auto p-4">
                       <PrescripteurTreeView
                         root={selectedTree}
                         foyersInfo={foyersInfo}
@@ -494,9 +504,10 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-          </div>
+                </SplitDetailPane>
+              ) : null
+            }
+          />
         </CardContent>
       </Card>
 

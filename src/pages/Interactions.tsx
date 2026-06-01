@@ -37,6 +37,14 @@ import {
 } from "@/lib/interactions/exchange-history-display";
 import { getInteractionTypeLabel } from "@/lib/interactions/interaction-display";
 import { cn } from "@/lib/utils";
+import {
+  SplitDetailLayout,
+  SplitDetailPane,
+  SplitListColumn,
+  splitCardClassName,
+  splitCardContentClassName,
+  splitCardHeaderClassName,
+} from "@/components/layout";
 import { textMatchesSearch } from "@/lib/search-utils";
 
 interface InteractionsProps {
@@ -220,17 +228,16 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
         onNewInteraction={startCreate}
       />
 
-      <Card className="border-border/70 shadow-sm min-w-0">
-        <CardHeader className="pb-3">
+      <Card className={splitCardClassName(showSplit, "min-w-0 border-border/70 shadow-sm")}>
+        <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
           <CardTitle className="text-lg">Journal</CardTitle>
           <CardDescription>
             {items.length} échange{items.length !== 1 ? "s" : ""} enregistré
             {items.length !== 1 ? "s" : ""}
-            {showSplit ? " — détail à droite (clic sur une ligne)" : ""}
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="pt-0 space-y-4">
+        <CardContent className={splitCardContentClassName(showSplit, "space-y-4 pt-0", true)}>
           {contactFilterId != null && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm">
               <span>
@@ -326,28 +333,27 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
               </Button>
             </div>
           ) : (
-            <div
-              className={cn(
-                "grid gap-4 items-start",
-                showSplit && "lg:grid-cols-2"
-              )}
-            >
-              <div
-                className={cn(
-                  "space-y-2 min-w-0",
-                  showSplit &&
-                    "lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1"
-                )}
-              >
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide px-1 sticky top-0 bg-card z-10 py-2">
-                  Échanges ({filtered.length})
-                  {!showSplit && isWideLayout && (
-                    <span className="normal-case font-normal text-muted-foreground/80">
-                      {" "}
-                      — cliquez une ligne pour le détail
-                    </span>
-                  )}
-                </p>
+            <div className={cn(showSplit && "min-h-0 flex-1 overflow-hidden")}>
+            <SplitDetailLayout
+              showSplit={showSplit}
+              nested
+              list={
+                <SplitListColumn
+                  showSplit={showSplit}
+                  nested
+                  showListLabel
+                  listLabel={
+                    <>
+                      Échanges ({filtered.length})
+                      {!showSplit && isWideLayout && (
+                        <span className="font-normal normal-case text-muted-foreground/80">
+                          {" "}
+                          — cliquez une ligne pour le détail
+                        </span>
+                      )}
+                    </>
+                  }
+                >
                 {filtered.map((entry) => (
                   <ExchangeHistoryListRow
                     key={exchangeEntryKey(entry)}
@@ -360,33 +366,36 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
                     onClick={() => openEntry(entry)}
                   />
                 ))}
-              </div>
-
-              {showSplit && selectedEntry && (
-                <div className="hidden lg:block min-w-0 lg:sticky lg:top-4 self-start w-full">
-                  <ExchangeHistoryDetailPanel
-                    embedded
-                    entry={selectedEntry}
-                    onClose={() => setSelectedEntry(null)}
-                    onEdit={
-                      !isEmailCampaignEntry(selectedEntry)
-                        ? () => startEdit(selectedEntry)
-                        : undefined
-                    }
-                    onDelete={
-                      !isEmailCampaignEntry(selectedEntry)
-                        ? () => void handleDelete(selectedEntry)
-                        : undefined
-                    }
-                    onOpenContact={
-                      onOpenContact || onNavigate
-                        ? () => openContact(selectedEntry.contact_id)
-                        : undefined
-                    }
-                    onRefresh={() => void load()}
-                  />
-                </div>
-              )}
+                </SplitListColumn>
+              }
+              detail={
+                showSplit && selectedEntry ? (
+                  <SplitDetailPane nested>
+                    <ExchangeHistoryDetailPanel
+                      embedded
+                      entry={selectedEntry}
+                      onClose={() => setSelectedEntry(null)}
+                      onEdit={
+                        !isEmailCampaignEntry(selectedEntry)
+                          ? () => startEdit(selectedEntry)
+                          : undefined
+                      }
+                      onDelete={
+                        !isEmailCampaignEntry(selectedEntry)
+                          ? () => void handleDelete(selectedEntry)
+                          : undefined
+                      }
+                      onOpenContact={
+                        onOpenContact || onNavigate
+                          ? () => openContact(selectedEntry.contact_id)
+                          : undefined
+                      }
+                      onRefresh={() => void load()}
+                    />
+                  </SplitDetailPane>
+                ) : null
+              }
+            />
             </div>
           )}
         </CardContent>

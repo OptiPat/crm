@@ -45,7 +45,7 @@ export function ExchangeHistoryDetailPanel({
     <Card
       className={
         embedded
-          ? "border-border/70 shadow-md overflow-hidden flex flex-col max-h-[calc(100vh-10rem)]"
+          ? "flex h-full min-h-0 flex-col overflow-hidden border-border/70 shadow-md"
           : "border-border/70 shadow-lg"
       }
     >

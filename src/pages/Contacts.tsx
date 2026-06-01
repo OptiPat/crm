@@ -62,6 +62,13 @@ import { useContactsAutoRefresh } from "@/hooks/useContactsAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { consumePendingOpenContactId, prepareOpenContactWithInvestissement } from "@/lib/investissements/investissement-navigation";
+import {
+  SplitDetailLayout,
+  SplitDetailPane,
+  splitCardClassName,
+  splitCardContentClassName,
+  splitCardHeaderClassName,
+} from "@/components/layout";
 import { toast } from "sonner";
 
 type MainTab = "clients" | "filleuls";
@@ -417,7 +424,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   }, [segmentFilter]);
 
   const isWideLayout = useMediaQuery("(min-width: 1024px)");
-  /** Grand écran : liste pleine largeur, split 50/50 seulement après sélection d’un contact */
+  /** Grand écran : split liste / fiche latérale pleine hauteur */
   const showSplit = isWideLayout && selectedContact != null;
 
   const openContactDetail = useCallback(
@@ -628,7 +635,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   return (
     <div
       className={cn(
-        "space-y-6 mx-auto pb-8",
+        "mx-auto space-y-6 pb-8",
         showSplit ? "max-w-[1800px]" : "max-w-[1600px]"
       )}
     >
@@ -655,9 +662,11 @@ export function Contacts({ onNavigate }: ContactsProps) {
         )}
       </div>
 
-      <div className={cn("grid gap-4 items-start", showSplit && "lg:grid-cols-2")}>
-      <Card className={cn("border-border/70 shadow-sm min-w-0", showSplit && "min-h-0")}>
-        <CardHeader>
+      <SplitDetailLayout
+        showSplit={showSplit}
+        list={
+      <Card className={splitCardClassName(showSplit, "min-w-0 border-border/70 shadow-sm")}>
+        <CardHeader className={splitCardHeaderClassName(showSplit)}>
           <div className="space-y-4">
             <div>
               <CardTitle className="font-serif">Liste des contacts</CardTitle>
@@ -848,7 +857,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className={splitCardContentClassName(showSplit)}>
           {loading ? (
             <div className="space-y-2 py-4">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -935,25 +944,27 @@ export function Contacts({ onNavigate }: ContactsProps) {
           )}
         </CardContent>
       </Card>
-
-      {showSplit && selectedContact && (
-        <div className="hidden lg:block min-w-0 lg:sticky lg:top-4 self-start">
-          <ContactDetail
-            key={selectedContact.id}
-            embedded
-            open
-            contact={selectedContact}
-            onOpenChange={(open) => {
-              if (!open) closeContactDetail();
-            }}
-            onDelete={handleDeleteContact}
-            onContactRefreshed={setSelectedContact}
-            onNavigate={onNavigate}
-            onOpenContact={openLinkedContact}
-          />
-        </div>
-      )}
-      </div>
+        }
+        detail={
+          selectedContact ? (
+            <SplitDetailPane>
+              <ContactDetail
+                key={selectedContact.id}
+                embedded
+                open
+                contact={selectedContact}
+                onOpenChange={(open) => {
+                  if (!open) closeContactDetail();
+                }}
+                onDelete={handleDeleteContact}
+                onContactRefreshed={setSelectedContact}
+                onNavigate={onNavigate}
+                onOpenContact={openLinkedContact}
+              />
+            </SplitDetailPane>
+          ) : null
+        }
+      />
 
       {/* Formulaire de création */}
       <ContactForm

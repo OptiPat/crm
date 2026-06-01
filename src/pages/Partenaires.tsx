@@ -35,6 +35,14 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribePartenairesChanged } from "@/lib/partenaires/partenaire-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import {
+  SplitDetailLayout,
+  SplitDetailPane,
+  SplitListColumn,
+  splitCardClassName,
+  splitCardContentClassName,
+  splitCardHeaderClassName,
+} from "@/components/layout";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
 
 type PartenairesProps = {
@@ -244,8 +252,8 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
         />
       </div>
 
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader className="pb-3">
+      <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
+        <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
           <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
             <div>
               <CardTitle className="font-serif text-lg">Répertoire</CardTitle>
@@ -307,20 +315,16 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
           )}
         </CardHeader>
 
-        <CardContent className="pt-0">
-          <div className={cn("grid gap-4 items-start", showSplit && "lg:grid-cols-2")}>
-            <div
-              className={cn(
-                "space-y-2 min-w-0",
-                showSplit && "lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1"
-              )}
-            >
-              {showSplit && (
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide sticky top-0 bg-card z-10 py-2 px-1">
-                  Partenaires ({filteredPartenaires.length})
-                </p>
-              )}
-
+        <CardContent className={splitCardContentClassName(showSplit, "pt-0", true)}>
+          <SplitDetailLayout
+            showSplit={showSplit}
+            nested
+            list={
+              <SplitListColumn
+                showSplit={showSplit}
+                nested
+                listLabel={`Partenaires (${filteredPartenaires.length})`}
+              >
               {filteredPartenaires.length === 0 ? (
                 <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
                   <Building2 className="h-12 w-12 mx-auto text-muted-foreground/35 mb-3" />
@@ -351,25 +355,27 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
                   />
                 ))
               )}
-            </div>
-
-            {showSplit && selectedPartenaire && (
-              <div className="hidden lg:block min-w-0 lg:sticky lg:top-4 self-start w-full">
-                <PartenaireDetail
-                  key={selectedPartenaire.id}
-                  embedded
-                  open
-                  partenaire={selectedPartenaire}
-                  onOpenChange={(open) => {
-                    if (!open) closeDetail();
-                  }}
-                  onDelete={handleDeletePartenaire}
-                  onUpdate={() => void loadPartenaires()}
-                  onOpenContact={handleOpenContact}
-                />
-              </div>
-            )}
-          </div>
+              </SplitListColumn>
+            }
+            detail={
+              showSplit && selectedPartenaire ? (
+                <SplitDetailPane nested>
+                  <PartenaireDetail
+                    key={selectedPartenaire.id}
+                    embedded
+                    open
+                    partenaire={selectedPartenaire}
+                    onOpenChange={(open) => {
+                      if (!open) closeDetail();
+                    }}
+                    onDelete={handleDeletePartenaire}
+                    onUpdate={() => void loadPartenaires()}
+                    onOpenContact={handleOpenContact}
+                  />
+                </SplitDetailPane>
+              ) : null
+            }
+          />
         </CardContent>
       </Card>
 

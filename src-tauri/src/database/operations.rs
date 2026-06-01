@@ -2158,6 +2158,27 @@ Bien cordialement,\n\
         Ok(())
     }
 
+    /// Suspect ou prospect client + investissement « avec moi » → promotion CLIENT.
+    fn maybe_promote_contact_to_client_from_mon_conseil_investissement(
+        &self,
+        contact_id: i64,
+        origine: &str,
+    ) -> Result<()> {
+        if origine != "MON_CONSEIL" {
+            return Ok(());
+        }
+        let contact = self.get_contact_by_id(contact_id)?;
+        if contact.categorie != "SUSPECT_CLIENT" && contact.categorie != "PROSPECT_CLIENT" {
+            return Ok(());
+        }
+        self.conn.execute(
+            "UPDATE contacts SET categorie = 'CLIENT', updated_at = unixepoch() WHERE id = ?1",
+            params![contact_id],
+        )?;
+        self.auto_close_obsolete_suivi_alertes_for_contact(contact_id)?;
+        Ok(())
+    }
+
     pub fn create_investissement(
         &self,
         investissement: super::models::NewInvestissement,
@@ -2228,6 +2249,10 @@ Bien cordialement,\n\
 
         if let Some(contact_id) = investissement.contact_id {
             self.sync_dernier_contact_from_investissements(contact_id)?;
+            self.maybe_promote_contact_to_client_from_mon_conseil_investissement(
+                contact_id,
+                &origine,
+            )?;
         }
 
         let id = self.conn.last_insert_rowid();
@@ -2315,6 +2340,12 @@ Bien cordialement,\n\
                 .map(|dt| dt.timestamp())
         });
 
+        let origine = investissement
+            .origine
+            .clone()
+            .or_else(|| self.get_investissement_by_id(id).ok().map(|i| i.origine))
+            .unwrap_or_else(|| "MON_CONSEIL".to_string());
+
         self.conn.execute(
             "UPDATE investissements SET 
                 contact_id = ?1,
@@ -2354,6 +2385,10 @@ Bien cordialement,\n\
 
         if let Some(contact_id) = investissement.contact_id {
             self.sync_dernier_contact_from_investissements(contact_id)?;
+            self.maybe_promote_contact_to_client_from_mon_conseil_investissement(
+                contact_id,
+                &origine,
+            )?;
         }
 
         self.get_investissement_by_id(id)
@@ -6459,6 +6494,99 @@ mod database_integration_tests {
 
         let updated = db.get_contact_by_id(contact.id.unwrap()).unwrap();
         assert_eq!(updated.date_dernier_contact, Some(souscription_ts));
+    }
+
+    #[test]
+    fn create_investissement_mon_conseil_promotes_prospect_client_to_client() {
+        let db = test_db();
+        let mut prospect = sample_contact("Dupont", "Marie");
+        prospect.categorie = "PROSPECT_CLIENT".into();
+        let contact = db.create_contact(prospect).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Contrat test".into(),
+            montant_initial: Some(50_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let updated = db.get_contact_by_id(contact_id).unwrap();
+        assert_eq!(updated.categorie, "CLIENT");
+    }
+
+    #[test]
+    fn create_investissement_mon_conseil_promotes_suspect_client_to_client() {
+        let db = test_db();
+        let mut suspect = sample_contact("Martin", "Paul");
+        suspect.categorie = "SUSPECT_CLIENT".into();
+        let contact = db.create_contact(suspect).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "SCPI test".into(),
+            montant_initial: Some(10_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let updated = db.get_contact_by_id(contact_id).unwrap();
+        assert_eq!(updated.categorie, "CLIENT");
+    }
+
+    #[test]
+    fn create_investissement_existant_client_does_not_promote_prospect() {
+        let db = test_db();
+        let mut prospect = sample_contact("Bernard", "Luc");
+        prospect.categorie = "PROSPECT_CLIENT".into();
+        let contact = db.create_contact(prospect).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Patrimoine existant".into(),
+            montant_initial: Some(200_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("EXISTANT_CLIENT".into()),
+        })
+        .unwrap();
+
+        let updated = db.get_contact_by_id(contact_id).unwrap();
+        assert_eq!(updated.categorie, "PROSPECT_CLIENT");
     }
 
     fn investissement_with_souscription(

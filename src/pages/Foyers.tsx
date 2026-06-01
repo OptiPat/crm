@@ -38,6 +38,15 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import {
+  SplitDetailLayout,
+  SplitDetailPane,
+  SplitDetailStack,
+  SplitListColumn,
+  splitCardClassName,
+  splitCardContentClassName,
+  splitCardHeaderClassName,
+} from "@/components/layout";
 
 type FoyersProps = {
   onNavigate?: (page: string) => void;
@@ -266,8 +275,8 @@ export function Foyers({ onNavigate }: FoyersProps) {
         />
       </div>
 
-      <Card className="border-border/70 shadow-sm">
-        <CardHeader className="pb-3">
+      <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
+        <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
           <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
             <div>
               <CardTitle className="font-serif text-lg">Liste des foyers</CardTitle>
@@ -334,20 +343,16 @@ export function Foyers({ onNavigate }: FoyersProps) {
           )}
         </CardHeader>
 
-        <CardContent className="pt-0">
-          <div className={cn("grid gap-4 items-start", showSplit && "lg:grid-cols-2")}>
-            <div
-              className={cn(
-                "space-y-2 min-w-0",
-                showSplit && "lg:max-h-[calc(100vh-14rem)] lg:overflow-y-auto lg:pr-1"
-              )}
-            >
-              {showSplit && (
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide sticky top-0 bg-card z-10 py-2 px-1">
-                  Foyers ({filteredFoyers.length})
-                </p>
-              )}
-
+        <CardContent className={splitCardContentClassName(showSplit, "pt-0", true)}>
+          <SplitDetailLayout
+            showSplit={showSplit}
+            nested
+            list={
+              <SplitListColumn
+                showSplit={showSplit}
+                nested
+                listLabel={`Foyers (${filteredFoyers.length})`}
+              >
               {filteredFoyers.length === 0 ? (
                 <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
                   <Home className="h-12 w-12 mx-auto text-muted-foreground/35 mb-3" />
@@ -384,24 +389,28 @@ export function Foyers({ onNavigate }: FoyersProps) {
                   );
                 })
               )}
-            </div>
-
-            {showSplit && (
-              <div className="hidden lg:block min-w-0 lg:sticky lg:top-4 self-start w-full">
+              </SplitListColumn>
+            }
+            detail={
+              showSplit ? (
+                <SplitDetailPane nested>
                 {selectedContact ? (
-                  <div className="space-y-2">
-                    {selectedFoyer && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 shadow-sm"
-                        onClick={() => setSelectedContact(null)}
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                        {selectedFoyer.nom}
-                      </Button>
-                    )}
+                  <SplitDetailStack
+                    back={
+                      selectedFoyer ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 shadow-sm"
+                          onClick={() => setSelectedContact(null)}
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          {selectedFoyer.nom}
+                        </Button>
+                      ) : undefined
+                    }
+                  >
                     <ContactDetail
                       key={selectedContact.id}
                       embedded
@@ -416,7 +425,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
                       onNavigate={onNavigate}
                       onOpenContact={openMember}
                     />
-                  </div>
+                  </SplitDetailStack>
                 ) : selectedFoyer ? (
                   <FoyerDetail
                     key={selectedFoyer.id}
@@ -431,9 +440,10 @@ export function Foyers({ onNavigate }: FoyersProps) {
                     onMemberClick={openMember}
                   />
                 ) : null}
-              </div>
-            )}
-          </div>
+                </SplitDetailPane>
+              ) : null
+            }
+          />
         </CardContent>
       </Card>
 
