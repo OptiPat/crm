@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Search, X } from "lucide-react";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useInteractionsAutoRefresh } from "@/hooks/useInteractionsAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { toast } from "sonner";
 import {
@@ -55,7 +55,9 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
   const [editing, setEditing] = useState<InteractionWithContact | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<ExchangeHistoryEntry | null>(null);
   const [contactFilterId, setContactFilterId] = useState<number | null>(null);
-  const consumedFocusRef = useRef(false);
+  const focusConsumedRef = useRef(false);
+  const contactFilterIdRef = useRef(contactFilterId);
+  contactFilterIdRef.current = contactFilterId;
 
   const isWideLayout = useMediaQuery("(min-width: 1024px)");
   const showSplit = isWideLayout && selectedEntry != null;
@@ -63,7 +65,10 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
   const load = useCallback(async () => {
     setLoadError(null);
     try {
-      const data = await loadExchangeHistory();
+      const contactId = contactFilterIdRef.current;
+      const data = await loadExchangeHistory(
+        contactId != null ? { contactId } : undefined
+      );
       setItems(data);
       setSelectedEntry((prev) => {
         if (!prev) return prev;
@@ -80,15 +85,17 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
   }, []);
 
   useEffect(() => {
-    void load();
-    if (!consumedFocusRef.current) {
-      const focusId = consumeInteractionsContactFocus();
-      consumedFocusRef.current = true;
-      if (focusId != null) {
-        setContactFilterId(focusId);
-      }
+    if (focusConsumedRef.current) return;
+    focusConsumedRef.current = true;
+    const focusId = consumeInteractionsContactFocus();
+    if (focusId != null) {
+      setContactFilterId(focusId);
     }
-  }, [load]);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load, contactFilterId]);
 
   useAppNavigationListener((detail) => {
     if (detail.type !== "interactions") return;
@@ -98,7 +105,7 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
     }
   }, []);
 
-  useAppAutoRefresh(() => load());
+  useInteractionsAutoRefresh(load);
 
   const openContact = (contactId: number) => {
     if (onOpenContact) {
@@ -183,7 +190,6 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
       ) {
         setSelectedEntry(null);
       }
-      await load();
       toast.success("Interaction supprimée");
     } catch (error) {
       toast.error(`Erreur : ${String(error)}`);
@@ -418,7 +424,6 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
         defaultContactId={
           contactFilterId ?? selectedEntry?.contact_id ?? undefined
         }
-        onSuccess={() => load()}
       />
     </div>
   );

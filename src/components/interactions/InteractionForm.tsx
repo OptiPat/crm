@@ -35,7 +35,7 @@ interface InteractionFormProps {
   onOpenChange: (open: boolean) => void;
   interaction?: InteractionWithContact | null;
   defaultContactId?: number;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
 function toLocalDatetimeInput(ts?: number): string {
@@ -130,7 +130,7 @@ export function InteractionForm({
         await touchContactAfterInteraction(formData.contact_id, dateIso);
       }
       notifyRelationChanged(formData.contact_id);
-      onSuccess();
+      onSuccess?.();
       onOpenChange(false);
     } catch (error) {
       console.error(error);

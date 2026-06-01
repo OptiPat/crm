@@ -20,6 +20,10 @@ import {
 import type { AlerteWithContact } from "@/lib/api/tauri-dashboard";
 import type { EtiquetteWithCount } from "@/lib/api/tauri-etiquettes";
 import { formatAlerteContactLabel } from "@/lib/api/tauri-alertes";
+import {
+  ALERTE_ETIQUETTE_NOM,
+  getEtiquetteNomForAlerte,
+} from "@/lib/alertes/alerte-etiquette-links";
 import { getAlerteTraceInfo } from "@/lib/alertes/alerte-trace";
 import { Check, Clock, ExternalLink, History, Info, Mail, X } from "lucide-react";
 
@@ -78,6 +82,13 @@ export function SuiviAlerteCard({
   const showMessageDetail =
     detailLabel !== name && alerte.message.trim().length > 0;
   const trace = getAlerteTraceInfo(alerte);
+  const linkedEtiquetteNom = getEtiquetteNomForAlerte(alerte.type_alerte);
+  const linkedEtiquette = linkedEtiquetteNom
+    ? etiquettes.find((e) => e.nom === linkedEtiquetteNom)
+    : undefined;
+  const showEtiquetteHint = linkedEtiquetteNom != null && !linkedEtiquette;
+  const showLastContactLine =
+    lastContact != null && !(alerte.type_alerte in ALERTE_ETIQUETTE_NOM);
 
   return (
     <article className="rounded-xl border border-border/70 bg-card overflow-hidden">
@@ -124,7 +135,7 @@ export function SuiviAlerteCard({
             <p>{trace.detail}</p>
             <p className="text-[10px] opacity-80">Source : {trace.source}</p>
           </div>
-          {lastContact && (
+          {showLastContactLine && (
             <p className="text-xs text-muted-foreground mt-1">
               Dernier contact : {lastContact}
             </p>
@@ -134,11 +145,13 @@ export function SuiviAlerteCard({
               {alerte.message}
             </p>
           )}
-          <AlerteEtiquetteHint
-            typeAlerte={alerte.type_alerte}
-            etiquettes={etiquettes}
-            onOpenEtiquettesTab={onOpenEtiquettesTab}
-          />
+          {showEtiquetteHint && (
+            <AlerteEtiquetteHint
+              typeAlerte={alerte.type_alerte}
+              etiquettes={etiquettes}
+              onOpenEtiquettesTab={onOpenEtiquettesTab}
+            />
+          )}
         </div>
         <div className="flex flex-col gap-1 shrink-0">
           {onOpenContact && (

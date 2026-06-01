@@ -40,8 +40,13 @@ import {
   EnvoisQueueHelp,
   EnvoisQueueStats,
 } from "@/components/etiquettes/etiquette-envois-ui";
-import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import {
+  notifyRelationChanged,
+  subscribeEtiquettesChanged,
+  subscribeRelationChanged,
+} from "@/lib/etiquettes/etiquette-events";
+import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { consumeEnvoisContactFocus } from "@/lib/navigation/suivi-navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -107,9 +112,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     if (focusId != null) setHighlightContactId(focusId);
   }, []);
 
-  const loadQueue = useCallback(async () => {
+  const loadQueue = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [cgp, r, i, s, f, emailConn] = await Promise.all([
         getCgpConfig(),
         getEtiquetteEmailQueue("ready"),
@@ -129,7 +135,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       console.error("Error loading email queue:", error);
       toast.error("Erreur lors du chargement de la file d'envoi");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [onQueueChanged]);
 
@@ -137,7 +143,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     void loadQueue();
   }, [loadQueue]);
 
-  useAppAutoRefresh(() => loadQueue());
+  useEventAutoRefresh(
+    () => loadQueue({ silent: true }),
+    subscribeRelationChanged,
+    subscribeEtiquettesChanged,
+    subscribeContactsChanged
+  );
 
   useEffect(() => {
     if (highlightContactId == null || loading) return;

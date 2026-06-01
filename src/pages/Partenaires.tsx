@@ -30,7 +30,9 @@ import {
 import { StatCard } from "@/components/dashboard/StatCard";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { textMatchesSearch } from "@/lib/search-utils";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribePartenairesChanged } from "@/lib/partenaires/partenaire-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
@@ -102,9 +104,7 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
     void loadPartenaires();
   }, [loadPartenaires]);
 
-  useAppAutoRefresh(() => {
-    void loadPartenaires();
-  });
+  useEventAutoRefresh(loadPartenaires, subscribeContactsChanged, subscribePartenairesChanged);
 
   const filteredPartenaires = useMemo(() => {
     return partenaires.filter((partenaire) => {

@@ -4,7 +4,7 @@ import {
   notifyStelliumExceltisChanged,
   scanStelliumExceltisEmails,
 } from "@/lib/api/tauri-stellium-exceltis";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useWakeIntervalRefresh } from "@/hooks/useWakeIntervalRefresh";
 import { toast } from "sonner";
 
 const SCAN_INTERVAL_MS = 300_000;
@@ -50,7 +50,7 @@ export function useStelliumExceltisScan(enabled = true): void {
     void runScan();
   }, [enabled, runScan]);
 
-  useAppAutoRefresh(() => runScan(), {
+  useWakeIntervalRefresh(() => runScan(), {
     enabled,
     intervalMs: SCAN_INTERVAL_MS,
   });

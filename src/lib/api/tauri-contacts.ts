@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 
 export interface Contact {
   id: number;
@@ -76,15 +77,20 @@ export async function getContactById(id: number): Promise<Contact> {
 }
 
 export async function createContact(newContact: NewContact): Promise<Contact> {
-  return await invoke<Contact>("create_contact", { newContact });
+  const created = await invoke<Contact>("create_contact", { newContact });
+  notifyContactsChanged();
+  return created;
 }
 
 export async function updateContact(id: number, contact: NewContact): Promise<Contact> {
-  return await invoke<Contact>("update_contact", { id, contact });
+  const updated = await invoke<Contact>("update_contact", { id, contact });
+  notifyContactsChanged();
+  return updated;
 }
 
 export async function deleteContact(id: number): Promise<void> {
-  return await invoke<void>("delete_contact", { id });
+  await invoke<void>("delete_contact", { id });
+  notifyContactsChanged();
 }
 
 export async function findContactByEmail(email: string): Promise<Contact | null> {

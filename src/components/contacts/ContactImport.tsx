@@ -19,6 +19,7 @@ import {
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, Target, Phone, Sparkles, Users2, Gift, Lightbulb, Check, CheckCircle2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
+import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
 import { createInvestissement, updateInvestissement, getAllInvestissements, type NewInvestissement, type Investissement } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenaire } from "@/lib/api/tauri-partenaires";
 import { createFoyer, getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
@@ -223,7 +224,7 @@ const deduireTypePartenaire = (typeProduit: string): string => {
 interface ContactImportProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
 interface ImportRow {
@@ -634,8 +635,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
 
     const updatedRows = [...importRows];
     let importTxActive = false;
+    let releaseSuppress: (() => void) | null = null;
 
     try {
+      releaseSuppress = suppressContactsChangedNotify();
       await beginImportTransaction();
       importTxActive = true;
 
@@ -2348,6 +2351,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       console.error("Import clients:", error);
       setImporting(false);
       setImportCompleted(true);
+    } finally {
+      releaseSuppress?.();
     }
   };
 
@@ -2369,7 +2374,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     const refresh = importCompleted;
     handleClose();
     if (refresh) {
-      onSuccess();
+      notifyContactsChanged();
+      onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)
       );
@@ -2380,7 +2386,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     const refresh = importCompleted;
     handleClose();
     if (refresh) {
-      onSuccess();
+      notifyContactsChanged();
+      onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)
       );
@@ -2828,7 +2835,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         setShowFoyerGrouping(false);
         handleClose();
         try {
-          await onSuccess();
+          await onSuccess?.();
         } catch (error) {
           console.error("Error reloading contacts:", error);
         }

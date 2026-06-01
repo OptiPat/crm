@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyFoyersChanged } from "@/lib/foyers/foyer-events";
 
 export interface Foyer {
   id: number;
@@ -34,13 +35,18 @@ export async function getFoyerById(id: number): Promise<Foyer> {
 }
 
 export async function createFoyer(newFoyer: NewFoyer): Promise<Foyer> {
-  return await invoke<Foyer>("create_foyer", { newFoyer });
+  const result = await invoke<Foyer>("create_foyer", { newFoyer });
+  notifyFoyersChanged();
+  return result;
 }
 
 export async function updateFoyer(id: number, foyer: NewFoyer): Promise<Foyer> {
-  return await invoke<Foyer>("update_foyer", { id, foyer });
+  const result = await invoke<Foyer>("update_foyer", { id, foyer });
+  notifyFoyersChanged();
+  return result;
 }
 
 export async function deleteFoyer(id: number): Promise<void> {
-  return await invoke<void>("delete_foyer", { id });
+  await invoke<void>("delete_foyer", { id });
+  notifyFoyersChanged();
 }

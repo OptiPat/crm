@@ -84,7 +84,7 @@ interface ContactFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   contact?: Contact | null;
-  onSuccess: () => void;
+  onSuccess?: () => void;
   /** Après création uniquement (pas édition). */
   onCreated?: (
     contact: Contact,
@@ -356,7 +356,7 @@ export function ContactForm({
       }
       setDirty(false);
       notifyEtiquettesChanged();
-      onSuccess();
+      onSuccess?.();
       onOpenChange(false);
       setFormData(getEmptyForm(createContext));
       setInvestissementChoice({ addAfterCreate: false });

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,7 @@ import {
 } from "@/lib/emails/template-email-meta";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
+import { useTemplatesEmailAutoRefresh } from "@/hooks/useTemplatesEmailAutoRefresh";
 import { toast } from "sonner";
 
 export function TemplatesEmail() {
@@ -38,26 +39,43 @@ export function TemplatesEmail() {
   const [cgp, setCgp] = useState<Awaited<ReturnType<typeof getCgpConfig>> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const previewIdRef = useRef(previewId);
+  previewIdRef.current = previewId;
 
-  const loadTemplates = async () => {
+  const loadTemplates = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) setLoading(true);
     try {
-      setLoading(true);
-      const [data, etiq] = await Promise.all([getAllTemplatesEmail(), getAllEtiquettes()]);
+      const data = await getAllTemplatesEmail();
       setTemplates(data);
-      setEtiquettes(etiq);
-      if (data.length > 0 && previewId == null) {
+      const currentPreviewId = previewIdRef.current;
+      if (data.length > 0 && currentPreviewId == null) {
         setPreviewId(data[0].id);
       }
-      if (previewId != null && !data.some((t) => t.id === previewId)) {
+      if (currentPreviewId != null && !data.some((t) => t.id === currentPreviewId)) {
         setPreviewId(data[0]?.id ?? null);
       }
     } catch (error) {
       console.error("Error loading templates:", error);
       toast.error("Erreur lors du chargement");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
+
+  const loadEtiquetteLinks = useCallback(async () => {
+    try {
+      const etiq = await getAllEtiquettes();
+      setEtiquettes(etiq);
+    } catch (error) {
+      console.error("Error loading etiquettes:", error);
+    }
+  }, []);
+
+  useTemplatesEmailAutoRefresh({
+    onTemplatesRefresh: () => loadTemplates({ silent: true }),
+    onEtiquetteLinksRefresh: loadEtiquetteLinks,
+  });
 
   useEffect(() => {
     void (async () => {
@@ -66,10 +84,10 @@ export function TemplatesEmail() {
       } catch {
         /* ignore */
       }
-      await loadTemplates();
+      await Promise.all([loadTemplates(), loadEtiquetteLinks()]);
       void getCgpConfig().then(setCgp).catch(() => setCgp(null));
     })();
-  }, []);
+  }, [loadTemplates, loadEtiquetteLinks]);
 
   const linkCountByTemplate = useMemo(() => {
     const m = new Map<number, number>();
@@ -105,7 +123,9 @@ export function TemplatesEmail() {
     setSeeding(true);
     try {
       const n = await seedDefaultEmailTemplates();
-      await loadTemplates();
+      if (n > 0) {
+        await loadTemplates();
+      }
       toast.success(
         n > 0 ? `${n} modèle${n > 1 ? "s" : ""} ajouté${n > 1 ? "s" : ""}` : "Bibliothèque déjà complète"
       );
@@ -124,7 +144,6 @@ export function TemplatesEmail() {
   const handleDuplicate = async (template: TemplateEmail) => {
     try {
       await createTemplateEmail(duplicateTemplatePayload(template));
-      await loadTemplates();
       toast.success("Modèle dupliqué");
     } catch {
       toast.error("Erreur lors de la duplication");
@@ -136,7 +155,6 @@ export function TemplatesEmail() {
     try {
       await deleteTemplateEmail(id);
       if (previewId === id) setPreviewId(null);
-      await loadTemplates();
       toast.success("Modèle supprimé");
     } catch {
       toast.error("Erreur lors de la suppression");
@@ -300,7 +318,6 @@ export function TemplatesEmail() {
         onOpenChange={handleFormClose}
         template={selectedTemplate}
         onSuccess={() => {
-          void loadTemplates();
           handleFormClose();
         }}
       />

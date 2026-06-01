@@ -41,6 +41,7 @@ const etiquettes: EtiquetteWithCount[] = [
     email_actif: true,
     is_default: true,
     actif: true,
+    segment_id: null,
     created_at: 1,
     updated_at: 1,
     contact_count: 1,

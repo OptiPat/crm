@@ -61,13 +61,11 @@ import {
   type RemoveAutoEtiquetteTarget,
 } from "@/components/etiquettes/RemoveAutoEtiquetteDialog";
 import { buildEtiquetteAttributionMap } from "@/lib/etiquettes/etiquette-attribution-map";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useSuiviAutoRefresh } from "@/hooks/useSuiviAutoRefresh";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
   notifyRelationChanged,
   notifyEtiquettesChanged,
-  subscribeEtiquettesChanged,
-  subscribeRelationChanged,
 } from "@/lib/etiquettes/etiquette-events";
 import { ALERTE_ETIQUETTE_EXPLICATION } from "@/lib/alertes/alerte-etiquette-links";
 import {
@@ -159,30 +157,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   );
 
   useEffect(() => {
-    const { tab, envoisSubTab, contactId, etiquetteId } = consumeSuiviNavigationIntent();
-    applySuiviNavigation(tab, envoisSubTab, contactId, etiquetteId);
-    void loadAlertes();
-    loadEtiquettes();
-    void loadEmailQueueCount();
-  }, []);
-
-  useAppNavigationListener((detail) => {
-    if (detail.type !== "suivi") return;
-    setSuiviNavigationIntent(
-      detail.tab,
-      detail.envoisSubTab,
-      detail.contactId,
-      detail.etiquetteId
-    );
-    applySuiviNavigation(
-      detail.tab,
-      detail.envoisSubTab ?? null,
-      detail.contactId ?? null,
-      detail.etiquetteId ?? null
-    );
-  }, [applySuiviNavigation]);
-
-  useEffect(() => {
     if (pendingSuiviContactId == null || loading || activeTab !== "alertes") return;
     const contactId = pendingSuiviContactId;
     const alerte = alertes.find((a) => a.contact_id === contactId);
@@ -198,36 +172,30 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     setPendingSuiviContactId(null);
   }, [pendingSuiviContactId, loading, alertes, activeTab, onOpenContact, onNavigate]);
 
-  const loadEmailQueueCount = async () => {
+  const loadEmailQueueCount = useCallback(async () => {
     try {
       const ready = await getEtiquetteEmailQueue("ready");
       setReadyEmailCount(ready.length);
     } catch {
       setReadyEmailCount(0);
     }
-  };
-
-  useEffect(() => {
-    if (activeTab === "envois") {
-      void loadEmailQueueCount();
-    }
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab !== "alertes") return;
-    const interval = window.setInterval(() => {
-      void loadAlertes({ silent: true });
-    }, 60_000);
-    return () => window.clearInterval(interval);
-  }, [activeTab]);
-
-  useEffect(() => {
-    const onFocus = () => void loadAlertes({ silent: true });
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
   }, []);
 
-  const loadAlertes = useCallback(async (options?: { silent?: boolean }) => {
+  const fetchAlertesList = useCallback(async (options?: { silent?: boolean }) => {
+    const showLoading = !options?.silent;
+    try {
+      if (showLoading) setLoading(true);
+      const data = await getAlertesWithContacts();
+      setAlertes(data);
+    } catch (error) {
+      console.error("Error loading alertes:", error);
+      if (showLoading) toast.error("Erreur lors du chargement des alertes");
+    } finally {
+      if (showLoading) setLoading(false);
+    }
+  }, []);
+
+  const regenerateAndLoadAlertes = useCallback(async (options?: { silent?: boolean }) => {
     const showLoading = !options?.silent;
     try {
       if (showLoading) setLoading(true);
@@ -245,7 +213,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
         if (showLoading) toast.error("Erreur lors de la génération des alertes");
       }
 
-      const data = await getAlertesWithContacts(5000);
+      const data = await getAlertesWithContacts();
       setAlertes(data);
     } catch (error) {
       console.error("Error loading alertes:", error);
@@ -281,44 +249,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     }
   }, [sortEtiquettes]);
 
-  const loadEtiquettes = async () => {
-    try {
-      setLoadingEtiquettes(true);
-      const sorted = sortEtiquettes(await getAllEtiquettesWithCount());
-      setEtiquettes(sorted);
-
-      const firstWithContacts = sorted.find((e) => e.contact_count > 0);
-      if (firstWithContacts) {
-        await handleSelectEtiquette(firstWithContacts);
-      }
-    } catch (error) {
-      console.error("Error loading etiquettes:", error);
-    } finally {
-      setLoadingEtiquettes(false);
-    }
-  };
-
-  useEffect(() => {
-    return subscribeEtiquettesChanged(() => {
-      void refreshEtiquetteCounts();
-    });
-  }, [refreshEtiquetteCounts]);
-
-  useEffect(() => {
-    return subscribeRelationChanged(() => {
-      void loadAlertes({ silent: true });
-      void loadEmailQueueCount();
-    });
-  }, [loadAlertes]);
-
-  const refreshSuiviPage = useCallback(() => {
-    void loadAlertes({ silent: true });
-    void refreshEtiquetteCounts();
-    void loadEmailQueueCount();
-  }, [loadAlertes, refreshEtiquetteCounts]);
-
-  useAppAutoRefresh(refreshSuiviPage);
-
   const handleSelectEtiquette = async (etiquette: EtiquetteWithCount) => {
     setSelectedEtiquette(etiquette);
     setLoadingContacts(true);
@@ -337,6 +267,62 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       setLoadingContacts(false);
     }
   };
+
+  const loadEtiquettes = async () => {
+    try {
+      setLoadingEtiquettes(true);
+      const sorted = sortEtiquettes(await getAllEtiquettesWithCount());
+      setEtiquettes(sorted);
+
+      const firstWithContacts = sorted.find((e) => e.contact_count > 0);
+      if (firstWithContacts) {
+        await handleSelectEtiquette(firstWithContacts);
+      }
+    } catch (error) {
+      console.error("Error loading etiquettes:", error);
+    } finally {
+      setLoadingEtiquettes(false);
+    }
+  };
+
+  useSuiviAutoRefresh({
+    onRegenerateAlertes: () => regenerateAndLoadAlertes({ silent: true }),
+    onFetchAlertes: () => fetchAlertesList({ silent: true }),
+    onRefreshEtiquettes: refreshEtiquetteCounts,
+    onRefreshEmailQueue: loadEmailQueueCount,
+  });
+
+  useEffect(() => {
+    if (activeTab === "envois") {
+      void loadEmailQueueCount();
+    }
+  }, [activeTab, loadEmailQueueCount]);
+
+  useEffect(() => {
+    const { tab, envoisSubTab, contactId, etiquetteId } = consumeSuiviNavigationIntent();
+    applySuiviNavigation(tab, envoisSubTab, contactId, etiquetteId);
+    void regenerateAndLoadAlertes();
+    void loadEtiquettes();
+    void loadEmailQueueCount();
+    // Chargement initial à l'ouverture de la page Suivi
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type !== "suivi") return;
+    setSuiviNavigationIntent(
+      detail.tab,
+      detail.envoisSubTab,
+      detail.contactId,
+      detail.etiquetteId
+    );
+    applySuiviNavigation(
+      detail.tab,
+      detail.envoisSubTab ?? null,
+      detail.contactId ?? null,
+      detail.etiquetteId ?? null
+    );
+  }, [applySuiviNavigation]);
 
   useEffect(() => {
     if (pendingEtiquetteId == null || loadingEtiquettes) return;
@@ -462,7 +448,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       setAlerteATraiter(null);
       toast.success("Suivi enregistré sur le contact");
       notifyRelationChanged(treatedContactId);
-      void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error marking alerte as treated:", error);
       toast.error("Erreur lors du traitement");
@@ -494,7 +479,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       }));
       toast.success(`Suivi reporté de ${mois} mois`);
       notifyRelationChanged(alerte.contact_id);
-      void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error reporting suivi:", error);
       toast.error("Erreur lors du report du suivi");
@@ -506,7 +490,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       await deleteAlerte(id);
       setAlertes((prev) => prev.filter((a) => a.alerte_id !== id));
       toast.success("Alerte supprimée");
-      void loadAlertes({ silent: true });
     } catch (error) {
       console.error("Error deleting alerte:", error);
       toast.error("Erreur lors de la suppression");
@@ -519,6 +502,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       toast.info("Recalcul des règles automatiques en cours…");
       const n = await runFullEtiquettesRecalc();
       await refreshEtiquetteCounts();
+      await regenerateAndLoadAlertes({ silent: true });
       toast.success(
         n > 0
           ? `Recalcul terminé — ${n} attribution${n > 1 ? "s" : ""} automatique${n > 1 ? "s" : ""}`
@@ -880,7 +864,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           const contactId = alertEmailItem?.contact_id;
           notifyRelationChanged(contactId);
           void loadEmailQueueCount();
-          void loadAlertes({ silent: true });
+          void fetchAlertesList({ silent: true });
         }}
       />
 

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyPartenairesChanged } from "@/lib/partenaires/partenaire-events";
 
 export interface Partenaire {
   id: number;
@@ -44,13 +45,18 @@ export async function getPartenaireById(id: number): Promise<Partenaire> {
 }
 
 export async function createPartenaire(newPartenaire: NewPartenaire): Promise<Partenaire> {
-  return await invoke<Partenaire>("create_partenaire", { newPartenaire });
+  const result = await invoke<Partenaire>("create_partenaire", { newPartenaire });
+  notifyPartenairesChanged();
+  return result;
 }
 
 export async function updatePartenaire(id: number, partenaire: NewPartenaire): Promise<Partenaire> {
-  return await invoke<Partenaire>("update_partenaire", { id, partenaire });
+  const result = await invoke<Partenaire>("update_partenaire", { id, partenaire });
+  notifyPartenairesChanged();
+  return result;
 }
 
 export async function deletePartenaire(id: number): Promise<void> {
-  return await invoke<void>("delete_partenaire", { id });
+  await invoke<void>("delete_partenaire", { id });
+  notifyPartenairesChanged();
 }

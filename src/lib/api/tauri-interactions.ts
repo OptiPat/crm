@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyInteractionsChanged } from "@/lib/interactions/interaction-events";
 
 export interface Interaction {
   id: number;
@@ -90,16 +91,21 @@ export async function getInteractionsByContact(contactId: number): Promise<Inter
 }
 
 export async function createInteraction(data: NewInteraction): Promise<Interaction> {
-  return invoke<Interaction>("create_interaction", { newInteraction: data });
+  const result = await invoke<Interaction>("create_interaction", { newInteraction: data });
+  notifyInteractionsChanged();
+  return result;
 }
 
 export async function updateInteraction(
   id: number,
   data: NewInteraction
 ): Promise<Interaction> {
-  return invoke<Interaction>("update_interaction", { id, interaction: data });
+  const result = await invoke<Interaction>("update_interaction", { id, interaction: data });
+  notifyInteractionsChanged();
+  return result;
 }
 
 export async function deleteInteraction(id: number): Promise<void> {
-  return invoke<void>("delete_interaction", { id });
+  await invoke<void>("delete_interaction", { id });
+  notifyInteractionsChanged();
 }

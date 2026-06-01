@@ -17,15 +17,19 @@ import {
   commitImportTransaction,
   rollbackImportTransaction,
 } from "@/lib/api/tauri-import-transaction";
+import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
 
 /** Fusionne un groupe de doublons (garde le plus petit id). Retourne le nombre de fiches supprimées. */
 export async function mergeDuplicateGroup(duplicates: Contact[]): Promise<number> {
   if (duplicates.length <= 1) return 0;
 
-  await beginImportTransaction();
+  const releaseSuppress = suppressContactsChangedNotify();
+  let committed = false;
   try {
+    await beginImportTransaction();
     const removed = await mergeDuplicateGroupInner(duplicates);
     await commitImportTransaction();
+    committed = true;
     return removed;
   } catch (error) {
     try {
@@ -34,6 +38,9 @@ export async function mergeDuplicateGroup(duplicates: Contact[]): Promise<number
       console.error("Rollback fusion doublons:", rollbackErr);
     }
     throw error;
+  } finally {
+    releaseSuppress();
+    if (committed) notifyContactsChanged();
   }
 }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, CheckCircle2 } from "lucide-react";
@@ -13,6 +13,8 @@ import {
 } from "@/lib/alertes/alerte-labels";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { getAlerteTraceInfo } from "@/lib/alertes/alerte-trace";
+import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
 
 interface AlertsPreviewProps {
@@ -34,18 +36,38 @@ export function AlertsPreview({ currentPage, onNavigate, onOpenContact }: Alerts
   const [alertes, setAlertes] = useState<AlerteWithContact[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        setAlertes(await getAlertesWithContacts(5));
-      } catch (error) {
-        console.error("Erreur alertes:", error);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const loadPreview = useCallback(async () => {
+    try {
+      setLoading(true);
+      setAlertes(await getAlertesWithContacts(5));
+    } catch (error) {
+      console.error("Erreur alertes:", error);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadPreview();
+  }, [loadPreview]);
+
+  useEffect(() => {
+    const debounceRef = { id: null as number | null };
+    const schedule = () => {
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+      debounceRef.id = window.setTimeout(() => {
+        debounceRef.id = null;
+        void loadPreview();
+      }, 120);
+    };
+    const unsubAlertes = subscribeAlertesChanged(schedule);
+    const unsubContacts = subscribeContactsChanged(schedule);
+    return () => {
+      unsubAlertes();
+      unsubContacts();
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+    };
+  }, [loadPreview]);
 
   const openAlert = (alerte: AlerteWithContact) => {
     if (onNavigate) {

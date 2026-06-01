@@ -94,7 +94,7 @@ interface ContactDetailProps {
   onOpenChange: (open: boolean) => void;
   contact: Contact | null;
   onDelete: (id: number) => void;
-  onUpdate: () => void;
+  onUpdate?: () => void;
   onContactRefreshed?: (contact: Contact) => void;
   onOpenContact?: (contact: Contact) => void;
   /** Navigation app (Suivi, etc.) — ferme la fiche avant de changer de page */
@@ -158,7 +158,7 @@ export function ContactDetail({
         })
       );
       onContactRefreshed?.(updated);
-      onUpdate();
+      onUpdate?.();
     } catch (error) {
       console.error("🏠 [ContactDetail] ❌ Erreur dissociation:", error);
       alert("Erreur lors de la dissociation: " + String(error));
@@ -899,7 +899,7 @@ export function ContactDetail({
                     const refreshed = await getContactById(contact.id);
                     onContactRefreshed?.(refreshed);
                   }
-                  onUpdate();
+                  onUpdate?.();
                 }}
                 onNavigate={
                   onNavigate
@@ -1252,7 +1252,7 @@ export function ContactDetail({
               console.error("Error refreshing contact after edit:", error);
             }
           }
-          onUpdate();
+          onUpdate?.();
         }}
       />
 
@@ -1275,7 +1275,7 @@ export function ContactDetail({
             onSuccess={async () => {
               try {
                 await getContactById(contact.id!);
-                onUpdate();
+                onUpdate?.();
               } catch (error) {
                 console.error("Erreur rechargement contact:", error);
               }
@@ -1288,7 +1288,7 @@ export function ContactDetail({
             onSuccess={async () => {
               try {
                 await getContactById(contact.id!);
-                onUpdate();
+                onUpdate?.();
               } catch (error) {
                 console.error("Erreur rechargement contact:", error);
               }
@@ -1323,7 +1323,8 @@ export function ContactDetail({
                   <strong>
                     {contact.prenom} {contact.nom}
                   </strong>
-                  . Cette action est irréversible.
+                  . Cette action est irréversible (investissements, documents et
+                  historique liés).
                 </>
               )}
             </AlertDialogDescription>

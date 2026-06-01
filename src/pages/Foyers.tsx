@@ -21,7 +21,7 @@ import {
   Building2,
 } from "lucide-react";
 import { getAllFoyers, deleteFoyer, type Foyer } from "@/lib/api/tauri-foyers";
-import { cleanupOrphanedData, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { cleanupOrphanedData, deleteContact, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getContactsForFoyer } from "@/lib/foyers/foyer-utils";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
 import { buildPatrimoineMaps } from "@/lib/investissements/bulk-patrimoine";
@@ -34,7 +34,9 @@ import { FoyerSummaryCard } from "@/components/foyers/FoyerSummaryCard";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { textMatchesSearch } from "@/lib/search-utils";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 
@@ -99,9 +101,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
     void loadFoyers();
   }, [loadFoyers]);
 
-  useAppAutoRefresh(() => {
-    void loadFoyers();
-  });
+  useEventAutoRefresh(loadFoyers, subscribeContactsChanged, subscribeFoyersChanged);
 
   const membresParFoyerId = useMemo(() => {
     const map = new Map<number, Contact[]>();
@@ -178,10 +178,16 @@ export function Foyers({ onNavigate }: FoyersProps) {
   };
 
   const handleDeleteContact = async (id: number) => {
-    await loadFoyers();
-    if (selectedContact?.id === id) {
-      setSelectedContact(null);
-      setShowContactDetail(false);
+    try {
+      await deleteContact(id);
+      await loadFoyers();
+      if (selectedContact?.id === id) {
+        setSelectedContact(null);
+        setShowContactDetail(false);
+      }
+    } catch (error) {
+      console.error("Erreur suppression contact:", error);
+      alert("Erreur lors de la suppression: " + String(error));
     }
   };
 

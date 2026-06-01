@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Search, Users, ChevronDown, ChevronUp, Home, ArrowLeft, X, TreePine } from "lucide-react";
-import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
   getAllInvestissements,
@@ -21,7 +21,9 @@ import { FamilleSummaryCard } from "@/components/familles/FamilleSummaryCard";
 import { FamilleDetailHeader } from "@/components/familles/FamilleDetailHeader";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 
@@ -86,9 +88,7 @@ export function Familles({ onNavigate }: FamillesProps) {
     void loadData();
   }, [loadData]);
 
-  useAppAutoRefresh(() => {
-    void loadData();
-  });
+  useEventAutoRefresh(loadData, subscribeContactsChanged, subscribeFoyersChanged);
 
   const familleGroups = useMemo(
     () =>
@@ -190,10 +190,16 @@ export function Familles({ onNavigate }: FamillesProps) {
   };
 
   const handleDeleteContact = async (id: number) => {
-    await loadData();
-    if (selectedContact?.id === id) {
-      setSelectedContact(null);
-      setShowContactDetail(false);
+    try {
+      await deleteContact(id);
+      await loadData();
+      if (selectedContact?.id === id) {
+        setSelectedContact(null);
+        setShowContactDetail(false);
+      }
+    } catch (error) {
+      console.error("Erreur suppression contact:", error);
+      alert("Erreur lors de la suppression: " + String(error));
     }
   };
 

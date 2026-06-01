@@ -43,7 +43,7 @@ export function getPrioriteContact(contact: Contact): ContactPriorite {
     return {
       rowClass: "border-l-4 border-l-red-500 bg-red-50/40",
       priorite: 1,
-      label: "Suivi +1 an",
+      label: "Suivi > 1 an",
       dotClass: "bg-red-500",
     };
   }
@@ -55,7 +55,7 @@ export function getPrioriteContact(contact: Contact): ContactPriorite {
     return {
       rowClass: "border-l-4 border-l-orange-500 bg-orange-50/35",
       priorite: 2,
-      label: "Suivi +6 mois",
+      label: "Suivi > 6 mois",
       dotClass: "bg-orange-500",
     };
   }
@@ -92,7 +92,7 @@ export function getPrioriteFilleul(contact: Contact): ContactPriorite {
     return {
       rowClass: "border-l-4 border-l-red-500 bg-red-50/40",
       priorite: 1,
-      label: "Suivi +1 an",
+      label: "Suivi > 1 an",
       dotClass: "bg-red-500",
     };
   }
@@ -101,7 +101,7 @@ export function getPrioriteFilleul(contact: Contact): ContactPriorite {
     return {
       rowClass: "border-l-4 border-l-orange-500 bg-orange-50/35",
       priorite: 2,
-      label: "Suivi +6 mois",
+      label: "Suivi > 6 mois",
       dotClass: "bg-orange-500",
     };
   }

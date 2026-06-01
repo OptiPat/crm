@@ -75,6 +75,10 @@ export async function getPipelineStats(): Promise<PipelineStats> {
   return invoke<PipelineStats>("get_pipeline_stats");
 }
 
-export async function getAlertesWithContacts(limit: number): Promise<AlerteWithContact[]> {
-  return invoke<AlerteWithContact[]>("get_alertes_with_contacts", { limit });
+export async function getAlertesWithContacts(
+  limit?: number | null
+): Promise<AlerteWithContact[]> {
+  return invoke<AlerteWithContact[]>("get_alertes_with_contacts", {
+    limit: limit ?? null,
+  });
 }

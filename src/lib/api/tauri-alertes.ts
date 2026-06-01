@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyAlertesChanged } from "@/lib/alertes/alert-events";
 
 export interface Alerte {
   id: number;
@@ -43,7 +44,9 @@ export async function getAlertesNonTraitees(): Promise<Alerte[]> {
 }
 
 export async function createAlerte(alerte: NewAlerte): Promise<Alerte> {
-  return invoke<Alerte>("create_alerte", { newAlerte: alerte });
+  const created = await invoke<Alerte>("create_alerte", { newAlerte: alerte });
+  notifyAlertesChanged();
+  return created;
 }
 
 export async function marquerAlerteLue(id: number): Promise<void> {
@@ -51,11 +54,13 @@ export async function marquerAlerteLue(id: number): Promise<void> {
 }
 
 export async function marquerAlerteTraitee(id: number): Promise<void> {
-  return invoke<void>("marquer_alerte_traitee", { id });
+  await invoke<void>("marquer_alerte_traitee", { id });
+  notifyAlertesChanged();
 }
 
 export async function deleteAlerte(id: number): Promise<void> {
-  return invoke<void>("delete_alerte", { id });
+  await invoke<void>("delete_alerte", { id });
+  notifyAlertesChanged();
 }
 
 export async function genererAlertesAutomatiques(): Promise<number> {

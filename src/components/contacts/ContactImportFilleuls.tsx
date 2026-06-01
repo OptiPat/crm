@@ -19,6 +19,7 @@ import {
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, ClipboardList, Check, AlertTriangle, Circle } from "lucide-react";
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
+import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
   buildContactIdMap,
@@ -41,7 +42,7 @@ import { toast } from "sonner";
 interface ContactImportFilleulsProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
 interface ImportRow {
@@ -275,8 +276,10 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
 
     const updatedRows = [...importRows];
     let importTxActive = false;
+    let releaseSuppress: (() => void) | null = null;
 
     try {
+      releaseSuppress = suppressContactsChangedNotify();
       await beginImportTransaction();
       importTxActive = true;
     
@@ -586,6 +589,8 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       console.error("Import filleuls:", error);
       setImporting(false);
       setImportCompleted(true);
+    } finally {
+      releaseSuppress?.();
     }
   };
 
@@ -607,7 +612,8 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     const refresh = importCompleted;
     handleClose();
     if (refresh) {
-      onSuccess();
+      notifyContactsChanged();
+      onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)
       );
@@ -618,7 +624,8 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
     const refresh = importCompleted;
     handleClose();
     if (refresh) {
-      onSuccess();
+      notifyContactsChanged();
+      onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)
       );

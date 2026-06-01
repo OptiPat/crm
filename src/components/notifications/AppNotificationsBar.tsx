@@ -12,7 +12,12 @@ import {
 } from "@/lib/notifications/app-notifications";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { STELLIUM_EXCELTIS_CHANGED_EVENT } from "@/lib/api/tauri-stellium-exceltis";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import {
+  subscribeEtiquettesChanged,
+  subscribeRelationChanged,
+} from "@/lib/etiquettes/etiquette-events";
 
 type AppNotificationsBarProps = {
   onPageChange: (page: string) => void;
@@ -71,7 +76,37 @@ export function AppNotificationsBar({
       window.removeEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onStellium);
   }, [load]);
 
-  useAppAutoRefresh(() => load(true));
+  useEffect(() => {
+    const debounceRef = { id: null as number | null };
+    const schedule = () => {
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+      debounceRef.id = window.setTimeout(() => {
+        debounceRef.id = null;
+        void load(true);
+      }, 120);
+    };
+
+    const unsubAlertes = subscribeAlertesChanged(schedule);
+    const unsubContacts = subscribeContactsChanged(schedule);
+    const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
+    const unsubRelation = subscribeRelationChanged(schedule);
+
+    const onWake = () => {
+      if (!document.hidden) void load(true);
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+
+    return () => {
+      unsubAlertes();
+      unsubContacts();
+      unsubEtiquettes();
+      unsubRelation();
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+    };
+  }, [load]);
 
   const hasUrgent = items.some((i) => i.severity === "urgent");
 

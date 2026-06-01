@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { syncEmailCampaignResponses } from "@/lib/api/tauri-email";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useWakeIntervalRefresh } from "@/hooks/useWakeIntervalRefresh";
 
 const SYNC_INTERVAL_MS = 120_000;
 
@@ -48,7 +48,7 @@ export function useEmailCampaignAutoSync(enabled = true): void {
     void runSync();
   }, [enabled, runSync]);
 
-  useAppAutoRefresh(() => runSync(), {
+  useWakeIntervalRefresh(() => runSync(), {
     enabled,
     intervalMs: SYNC_INTERVAL_MS,
   });

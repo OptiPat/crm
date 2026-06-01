@@ -10,6 +10,7 @@ import {
   getFoyerRoleLabel,
 } from "@/lib/contacts/contact-list-labels";
 import { getContactPriorite } from "@/lib/contacts/contact-priority";
+import { resolveSuiviRowDisplay } from "@/lib/contacts/contact-row-suivi-display";
 import { cn } from "@/lib/utils";
 import { ContactInitialsAvatar } from "./contacts-ui";
 import { ContactRowEtiquettes } from "./ContactRowEtiquettes";
@@ -43,15 +44,19 @@ export function ContactListRow({
   nameSize = "lg",
 }: ContactListRowProps) {
   const priorite = getContactPriorite(contact, isFilleulTab);
+  const contactEtiquettes =
+    contact.id != null ? etiquettesParContact[contact.id] : undefined;
+  const { showPrioriteLabel, etiquettesForRow } = resolveSuiviRowDisplay(
+    priorite,
+    contactEtiquettes
+  );
+  const hasEtiquettes = etiquettesForRow.length > 0;
   const contactPatrimoine = patrimoines[`contact_${contact.id}`] || 0;
   const contactPatrimoineAvecMoi = patrimoinesAvecMoi[`contact_${contact.id}`] || 0;
   const foyerAvecMoi =
     contact.foyer_id != null
       ? patrimoinesAvecMoi[`foyer_${contact.foyer_id}`] || 0
       : 0;
-  const hasEtiquettes = !!(
-    contact.id && (etiquettesParContact[contact.id]?.length ?? 0) > 0
-  );
 
   const patrimoineBlock = !isFilleulTab && (
     <>
@@ -120,7 +125,7 @@ export function ContactListRow({
           >
             {contact.prenom} {contact.nom}
           </p>
-          {priorite.label && priorite.priorite < 3 && (
+          {showPrioriteLabel && (
             <span
               className="inline-flex items-center gap-1 text-[10px] font-medium text-muted-foreground"
               title={priorite.label}
@@ -160,6 +165,7 @@ export function ContactListRow({
           <ContactRowEtiquettes
             contactId={contact.id}
             etiquettesParContact={etiquettesParContact}
+            etiquettes={etiquettesForRow}
           />
         )}
         <ContactRowMeta

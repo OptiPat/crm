@@ -1837,9 +1837,32 @@ Bien cordialement,\n\
         })
     }
 
+    fn map_alerte_with_contact_row(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<super::models::AlerteWithContact> {
+        let traitee: i64 = row.get(9)?;
+        Ok(super::models::AlerteWithContact {
+            alerte_id: row.get(0)?,
+            contact_id: row.get(1)?,
+            contact_nom: row.get(2)?,
+            contact_prenom: row.get(3)?,
+            contact_categorie: row.get(4)?,
+            date_dernier_contact: row.get(5)?,
+            type_alerte: row.get(6)?,
+            message: row.get(7)?,
+            date_alerte: row.get::<_, i64>(8)?.to_string(),
+            statut: if traitee != 0 {
+                "TRAITE"
+            } else {
+                "EN_ATTENTE"
+            }
+            .to_string(),
+        })
+    }
+
     pub fn get_alertes_with_contacts(
         &self,
-        limit: i64,
+        limit: Option<i64>,
     ) -> Result<Vec<super::models::AlerteWithContact>> {
         // Vérifier si la table alertes existe
         let table_exists: Result<i64> = self.conn.query_row(
@@ -1852,38 +1875,37 @@ Bien cordialement,\n\
             return Ok(Vec::new());
         }
 
-        let mut stmt = self.conn.prepare(
-            "SELECT a.id, a.contact_id, c.nom, c.prenom,
+        let base_sql = "SELECT a.id, a.contact_id, c.nom, c.prenom,
                     COALESCE(NULLIF(c.filleul_categorie, ''), c.categorie) as display_categorie,
                     c.date_dernier_contact,
                     a.type_alerte, a.message, a.date_alerte, a.traitee
              FROM alertes a
              INNER JOIN contacts c ON a.contact_id = c.id
              WHERE a.traitee = 0
-             ORDER BY a.date_alerte ASC
-             LIMIT ?1",
-        )?;
-
-        let alertes = stmt.query_map(params![limit], |row| {
-            let traitee: i64 = row.get(9)?;
-            Ok(super::models::AlerteWithContact {
-                alerte_id: row.get(0)?,
-                contact_id: row.get(1)?,
-                contact_nom: row.get(2)?,
-                contact_prenom: row.get(3)?,
-                contact_categorie: row.get(4)?,
-                date_dernier_contact: row.get(5)?,
-                type_alerte: row.get(6)?,
-                message: row.get(7)?,
-                date_alerte: row.get::<_, i64>(8)?.to_string(),
-                statut: if traitee != 0 { "TRAITE" } else { "EN_ATTENTE" }.to_string(),
-            })
-        })?;
+             ORDER BY a.date_alerte ASC";
 
         let mut result = Vec::new();
-        for alerte in alertes {
-            result.push(alerte?);
+
+        match limit {
+            Some(max) if max > 0 => {
+                let sql = format!("{base_sql} LIMIT ?1");
+                let mut stmt = self.conn.prepare(&sql)?;
+                let alertes = stmt.query_map(params![max], |row| {
+                    Self::map_alerte_with_contact_row(row)
+                })?;
+                for alerte in alertes {
+                    result.push(alerte?);
+                }
+            }
+            _ => {
+                let mut stmt = self.conn.prepare(base_sql)?;
+                let alertes = stmt.query_map([], Self::map_alerte_with_contact_row)?;
+                for alerte in alertes {
+                    result.push(alerte?);
+                }
+            }
         }
+
         Ok(result)
     }
 
@@ -6719,7 +6741,7 @@ mod database_integration_tests {
             )
             .unwrap();
 
-        let alertes = db.get_alertes_with_contacts(10).unwrap();
+        let alertes = db.get_alertes_with_contacts(Some(10)).unwrap();
         assert_eq!(alertes.len(), 1);
         assert_eq!(alertes[0].contact_id, contact_id);
         assert_eq!(alertes[0].date_dernier_contact, Some(stored_ts));

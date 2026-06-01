@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 
 export type OrigineInvestissement = "MON_CONSEIL" | "EXISTANT_CLIENT";
 
@@ -83,7 +84,9 @@ export async function getInvestissementsWithDetails(): Promise<InvestissementWit
 }
 
 export async function createInvestissement(newInvestissement: NewInvestissement): Promise<Investissement> {
-  return await invoke<Investissement>("create_investissement", { newInvestissement });
+  const created = await invoke<Investissement>("create_investissement", { newInvestissement });
+  notifyContactsChanged();
+  return created;
 }
 
 export async function getInvestissementById(id: number): Promise<Investissement> {
@@ -91,9 +94,12 @@ export async function getInvestissementById(id: number): Promise<Investissement>
 }
 
 export async function updateInvestissement(id: number, investissement: NewInvestissement): Promise<Investissement> {
-  return await invoke<Investissement>("update_investissement", { id, investissement });
+  const updated = await invoke<Investissement>("update_investissement", { id, investissement });
+  notifyContactsChanged();
+  return updated;
 }
 
 export async function deleteInvestissement(id: number): Promise<void> {
-  return await invoke<void>("delete_investissement", { id });
+  await invoke<void>("delete_investissement", { id });
+  notifyContactsChanged();
 }

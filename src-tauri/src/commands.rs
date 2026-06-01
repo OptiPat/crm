@@ -627,7 +627,7 @@ pub fn get_pipeline_stats(db: State<'_, DbState>) -> Result<PipelineStats, Strin
 #[tauri::command]
 pub fn get_alertes_with_contacts(
     db: State<'_, DbState>,
-    limit: i64,
+    limit: Option<i64>,
 ) -> Result<Vec<AlerteWithContact>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;

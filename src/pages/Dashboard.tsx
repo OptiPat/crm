@@ -12,7 +12,6 @@ import {
   StatCardSkeleton,
 } from "@/components/dashboard/dashboard-ui";
 import { formatDashboardCurrency } from "@/components/dashboard/dashboard-format";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
 import {
   Users,
   Home,
@@ -23,6 +22,9 @@ import {
 import { getDashboardStats, type DashboardStats } from "@/lib/api/tauri-dashboard";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
+import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 
 interface DashboardProps {
   currentPage?: string;
@@ -66,7 +68,32 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
     void loadStats();
   }, [loadStats]);
 
-  useAppAutoRefresh(refreshAll);
+  useEffect(() => {
+    const debounceRef = { id: null as number | null };
+    const schedule = () => {
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+      debounceRef.id = window.setTimeout(() => {
+        debounceRef.id = null;
+        refreshAll();
+      }, 120);
+    };
+    const unsubContacts = subscribeContactsChanged(schedule);
+    const unsubAlertes = subscribeAlertesChanged(schedule);
+    const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
+    const onWake = () => {
+      if (!document.hidden) refreshAll();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    return () => {
+      unsubContacts();
+      unsubAlertes();
+      unsubEtiquettes();
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+      if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+    };
+  }, [refreshAll]);
 
   const retryLoad = () => {
     setRefreshKey((k) => k + 1);

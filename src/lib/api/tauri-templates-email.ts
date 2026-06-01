@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyTemplatesEmailChanged } from "@/lib/emails/template-events";
 
 export interface TemplateEmail {
   id: number;
@@ -28,7 +29,9 @@ export async function getAllTemplatesEmail(): Promise<TemplateEmail[]> {
 }
 
 export async function createTemplateEmail(template: NewTemplateEmail): Promise<TemplateEmail> {
-  return invoke<TemplateEmail>("create_template_email", { newTemplate: template });
+  const result = await invoke<TemplateEmail>("create_template_email", { newTemplate: template });
+  notifyTemplatesEmailChanged();
+  return result;
 }
 
 export async function getTemplateEmailById(id: number): Promise<TemplateEmail> {
@@ -36,20 +39,24 @@ export async function getTemplateEmailById(id: number): Promise<TemplateEmail> {
 }
 
 export async function updateTemplateEmail(id: number, template: NewTemplateEmail): Promise<TemplateEmail> {
-  return invoke<TemplateEmail>("update_template_email", { id, template });
+  const result = await invoke<TemplateEmail>("update_template_email", { id, template });
+  notifyTemplatesEmailChanged();
+  return result;
 }
 
 export async function deleteTemplateEmail(id: number): Promise<void> {
-  return invoke<void>("delete_template_email", { id });
+  await invoke<void>("delete_template_email", { id });
+  notifyTemplatesEmailChanged();
 }
 
 export async function setTemplateEtiquetteLinks(
   templateId: number,
   etiquetteIds: number[]
 ): Promise<void> {
-  return invoke<void>("set_template_etiquette_links", {
+  await invoke<void>("set_template_etiquette_links", {
     input: { template_id: templateId, etiquette_ids: etiquetteIds },
   });
+  notifyTemplatesEmailChanged();
 }
 
 export async function getEtiquetteIdsForTemplate(templateId: number): Promise<number[]> {

@@ -21,7 +21,8 @@ import { PrescripteurSummaryCard } from "@/components/prescripteurs/Prescripteur
 import { PrescripteurTreeView } from "@/components/prescripteurs/PrescripteurTreeView";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 
@@ -91,9 +92,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
     void loadData();
   }, [loadData]);
 
-  useAppAutoRefresh(() => {
-    void loadData();
-  });
+  useEventAutoRefresh(loadData, subscribeContactsChanged);
 
   const foyersInfo = useMemo(() => buildFoyersInfo(contacts), [contacts]);
 
@@ -212,10 +211,16 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
   };
 
   const handleDeleteContact = async (id: number) => {
-    await loadData();
-    if (selectedContact?.id === id) {
-      setSelectedContact(null);
-      setShowContactDetail(false);
+    try {
+      await deleteContact(id);
+      await loadData();
+      if (selectedContact?.id === id) {
+        setSelectedContact(null);
+        setShowContactDetail(false);
+      }
+    } catch (error) {
+      console.error("Erreur suppression contact:", error);
+      alert("Erreur lors de la suppression: " + String(error));
     }
   };
 

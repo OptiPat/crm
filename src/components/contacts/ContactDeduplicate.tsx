@@ -21,7 +21,7 @@ import { toast } from "sonner";
 interface ContactDeduplicateProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess?: () => void;
 }
 
 interface ReviewGroup {
@@ -55,7 +55,7 @@ export function ContactDeduplicate({ open, onOpenChange, onSuccess }: ContactDed
   };
 
   const handleClose = () => {
-    if (result) onSuccess();
+    if (result) onSuccess?.();
     resetState();
     onOpenChange(false);
   };

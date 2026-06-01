@@ -12,6 +12,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, Filter, Users2, Tag, Download } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAlertesNonTraitees } from "@/lib/api/tauri-alertes";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
@@ -48,7 +58,7 @@ import {
   getPrioriteFilleul,
 } from "@/lib/contacts/contact-priority";
 import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contacts-session";
-import { useAppAutoRefresh } from "@/hooks/useAppAutoRefresh";
+import { useContactsAutoRefresh } from "@/hooks/useContactsAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { consumePendingOpenContactId, prepareOpenContactWithInvestissement } from "@/lib/investissements/investissement-navigation";
@@ -89,6 +99,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [showImport, setShowImport] = useState(false);
   const [showImportFilleuls, setShowImportFilleuls] = useState(false);
   const [showDeduplicate, setShowDeduplicate] = useState(false);
+  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
+  const [deleteAllBusy, setDeleteAllBusy] = useState(false);
   const [groupByFoyer, setGroupByFoyer] = useState(false);
   const [etiquettesParContact, setEtiquettesParContact] = useState<Record<number, ContactEtiquetteDetails[]>>({});
   const [needsFollowupOnly, setNeedsFollowupOnly] = useState(false);
@@ -155,15 +167,37 @@ export function Contacts({ onNavigate }: ContactsProps) {
     }
   }, []);
 
+  const loadContacts = useCallback(async () => {
+    try {
+      const [dataContacts, dataFoyers] = await Promise.all([
+        getAllContacts(),
+        getAllFoyers(),
+      ]);
+      setContacts(dataContacts);
+      setFoyers(dataFoyers);
+      setSelectedContact((prev) => {
+        if (!prev?.id) return prev;
+        return dataContacts.find((c) => c.id === prev.id) ?? prev;
+      });
+      setLoading(false);
+      setIsInitialLoad(false);
+    } catch (error) {
+      if (isInitialLoad && error instanceof Error && error.message.includes("Invalid column type")) {
+        setTimeout(() => void loadContacts(), 500);
+      } else {
+        console.error("Error loading contacts:", error);
+        setLoading(false);
+        setIsInitialLoad(false);
+      }
+    }
+  }, [isInitialLoad]);
+
   useEffect(() => {
     void loadContacts();
     void loadAlertContactIds();
-  }, []);
+  }, [loadContacts, loadAlertContactIds]);
 
-  useAppAutoRefresh(() => {
-    void loadContacts();
-    void loadAlertContactIds();
-  });
+  useContactsAutoRefresh(loadContacts, loadAlertContactIds);
 
   useEffect(() => {
     const id = consumePendingOpenContactId();
@@ -185,32 +219,6 @@ export function Contacts({ onNavigate }: ContactsProps) {
       toast.error("Contact introuvable — il a peut-être été supprimé.");
     }
   }, [loading, contacts]);
-
-  const loadContacts = async () => {
-    try {
-      const [dataContacts, dataFoyers] = await Promise.all([
-        getAllContacts(),
-        getAllFoyers(),
-      ]);
-      setContacts(dataContacts);
-      setFoyers(dataFoyers);
-      setSelectedContact((prev) => {
-        if (!prev?.id) return prev;
-        return dataContacts.find((c) => c.id === prev.id) ?? prev;
-      });
-      setLoading(false);
-      setIsInitialLoad(false);
-    } catch (error) {
-      // Si c'est le premier chargement et erreur de type de colonne, réessayer après un court délai
-      if (isInitialLoad && error instanceof Error && error.message.includes("Invalid column type")) {
-        setTimeout(loadContacts, 500);
-      } else {
-        console.error("Error loading contacts:", error);
-        setLoading(false);
-        setIsInitialLoad(false);
-      }
-    }
-  };
 
   // Calcul des compteurs par catégorie
   // categorie = statut commercial (CLIENT, PROSPECT_CLIENT, SUSPECT_CLIENT)
@@ -470,29 +478,24 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const handleDeleteContact = async (id: number) => {
     try {
       await deleteContact(id);
-      await loadContacts();
+      if (selectedContact?.id === id) {
+        closeContactDetail();
+      }
     } catch (error) {
       console.error("Error deleting contact:", error);
-      alert("Erreur lors de la suppression: " + String(error));
+      toast.error("Erreur lors de la suppression: " + String(error));
     }
   };
 
   const handleDeleteAllContacts = async () => {
-    // Déterminer quel type de contacts supprimer selon l'onglet actif
     const isClients = mainTab === "clients";
     const contactsToDelete = filteredContacts;
     const typeLabel = isClients ? "clients" : "filleuls";
-    
+
     if (contactsToDelete.length === 0) {
-      alert(`Aucun ${typeLabel} à supprimer`);
+      toast.error(`Aucun ${typeLabel} à supprimer`);
       return;
     }
-
-    const confirmed = window.confirm(
-      `⚠️ ATTENTION - Action irréversible !\n\nVoulez-vous vraiment supprimer TOUS les ${contactsToDelete.length} ${typeLabel} ?\n\nCette action ne peut pas être annulée.`
-    );
-    
-    if (!confirmed) return;
 
     try {
       let deleted = 0;
@@ -538,9 +541,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
           }
         }
         const message = cleared > 0 
-          ? `✅ ${deleted} ${typeLabel} supprimé(s), ${cleared} conservé(s) (aussi filleuls)`
-          : `✅ ${deleted} ${typeLabel} supprimé(s) avec succès`;
-        alert(message);
+          ? `${deleted} ${typeLabel} supprimé(s), ${cleared} conservé(s) (aussi filleuls)`
+          : `${deleted} ${typeLabel} supprimé(s)`;
+        toast.success(message);
       } else {
         // 🔥 Suppression des FILLEULS : logique spéciale pour protéger les clients
         for (const contact of contactsToDelete) {
@@ -584,18 +587,18 @@ export function Contacts({ onNavigate }: ContactsProps) {
         }
         
         if (cleared > 0 && deleted > 0) {
-          alert(`✅ ${deleted} filleul(s) supprimé(s), ${cleared} client(s) conservé(s) (statut filleul effacé)`);
+          toast.success(
+            `${deleted} filleul(s) supprimé(s), ${cleared} client(s) conservé(s) (statut filleul effacé)`
+          );
         } else if (cleared > 0) {
-          alert(`✅ ${cleared} client(s) conservé(s) (statut filleul effacé)`);
+          toast.success(`${cleared} client(s) conservé(s) (statut filleul effacé)`);
         } else {
-          alert(`✅ ${deleted} filleul(s) supprimé(s)`);
+          toast.success(`${deleted} filleul(s) supprimé(s)`);
         }
       }
-      
-      await loadContacts();
     } catch (error) {
       console.error("Error deleting contacts:", error);
-      alert("❌ Erreur lors de la suppression: " + String(error));
+      toast.error("Erreur lors de la suppression: " + String(error));
     }
   };
 
@@ -638,7 +641,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
             mainTab === "filleuls" ? setShowImportFilleuls(true) : setShowImport(true)
           }
           onDeduplicate={() => setShowDeduplicate(true)}
-          onDeleteAll={() => void handleDeleteAllContacts()}
+          onDeleteAll={() => setShowDeleteAllDialog(true)}
         />
         {filteredContacts.length > 0 && (
           <Button
@@ -944,7 +947,6 @@ export function Contacts({ onNavigate }: ContactsProps) {
               if (!open) closeContactDetail();
             }}
             onDelete={handleDeleteContact}
-            onUpdate={loadContacts}
             onContactRefreshed={setSelectedContact}
             onNavigate={onNavigate}
             onOpenContact={openLinkedContact}
@@ -957,7 +959,6 @@ export function Contacts({ onNavigate }: ContactsProps) {
       <ContactForm
         open={showForm}
         onOpenChange={setShowForm}
-        onSuccess={loadContacts}
         onCreated={(contact, { addInvestissement }) => {
           if (addInvestissement && contact.id) {
             prepareOpenContactWithInvestissement(contact.id);
@@ -973,7 +974,6 @@ export function Contacts({ onNavigate }: ContactsProps) {
         <ContactImport
           open={showImport}
           onOpenChange={setShowImport}
-          onSuccess={loadContacts}
         />
       </ErrorBoundary>
 
@@ -982,7 +982,6 @@ export function Contacts({ onNavigate }: ContactsProps) {
         <ContactImportFilleuls
           open={showImportFilleuls}
           onOpenChange={setShowImportFilleuls}
-          onSuccess={loadContacts}
         />
       </ErrorBoundary>
 
@@ -990,7 +989,6 @@ export function Contacts({ onNavigate }: ContactsProps) {
       <ContactDeduplicate
         open={showDeduplicate}
         onOpenChange={setShowDeduplicate}
-        onSuccess={loadContacts}
       />
 
       {/* Fiche détaillée (mobile / fenêtre étroite) */}
@@ -1004,12 +1002,55 @@ export function Contacts({ onNavigate }: ContactsProps) {
           }}
           contact={selectedContact}
           onDelete={handleDeleteContact}
-          onUpdate={loadContacts}
           onContactRefreshed={setSelectedContact}
           onNavigate={onNavigate}
           onOpenContact={openLinkedContact}
         />
       )}
+
+      <AlertDialog
+        open={showDeleteAllDialog}
+        onOpenChange={(open) => !deleteAllBusy && setShowDeleteAllDialog(open)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Supprimer tous les {mainTab === "clients" ? "clients" : "filleuls"} ?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-left space-y-2">
+              <span className="block">
+                Vous allez supprimer{" "}
+                <strong>{filteredContacts.length}</strong>{" "}
+                {mainTab === "clients" ? "client" : "filleul"}
+                {filteredContacts.length > 1 ? "s" : ""} de la vue actuelle
+                {hasExtraFilters ? " (filtres appliqués)" : ""}.
+              </span>
+              <span className="block text-destructive">
+                Cette action est irréversible. Les contacts aussi filleuls ou clients
+                seront conservés avec leur autre statut effacé.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteAllBusy}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAllBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                setDeleteAllBusy(true);
+                void handleDeleteAllContacts()
+                  .finally(() => {
+                    setDeleteAllBusy(false);
+                    setShowDeleteAllDialog(false);
+                  });
+              }}
+            >
+              {deleteAllBusy ? "Suppression…" : "Supprimer tout"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

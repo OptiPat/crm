@@ -5,11 +5,13 @@ const MAX_ETIQUETTES_ON_ROW = 4;
 export function ContactRowEtiquettes({
   contactId,
   etiquettesParContact,
+  etiquettes: etiquettesOverride,
 }: {
   contactId: number;
   etiquettesParContact: Record<number, ContactEtiquetteDetails[]>;
+  etiquettes?: ContactEtiquetteDetails[];
 }) {
-  const etiqs = etiquettesParContact[contactId];
+  const etiqs = etiquettesOverride ?? etiquettesParContact[contactId];
   if (!etiqs?.length) return null;
 
   const shown = etiqs.slice(0, MAX_ETIQUETTES_ON_ROW);

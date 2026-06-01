@@ -350,15 +350,29 @@ export function interactionToExchangeEntry(
   };
 }
 
+export type LoadExchangeHistoryOptions = {
+  /** Charge uniquement ce contact (timeline + traces legacy filtrées). */
+  contactId?: number | null;
+};
+
 /** Charge le journal : timeline `contact_etiquettes` d'abord, puis traces `interactions`. */
-export async function loadExchangeHistory(): Promise<ExchangeHistoryEntry[]> {
-  const { getAllInteractionsWithContacts, getExchangeHistoryTimeline } =
-    await import("@/lib/api/tauri-interactions");
+export async function loadExchangeHistory(
+  options?: LoadExchangeHistoryOptions
+): Promise<ExchangeHistoryEntry[]> {
+  const contactId = options?.contactId ?? undefined;
+  const {
+    getAllInteractionsWithContacts,
+    getExchangeHistoryTimeline,
+    getExchangeHistoryTimelineForContact,
+    getInteractionsByContact,
+  } = await import("@/lib/api/tauri-interactions");
 
   const byKey = new Map<string, ExchangeHistoryEntry>();
 
   try {
-    const timeline = await getExchangeHistoryTimeline();
+    const timeline = contactId
+      ? await getExchangeHistoryTimelineForContact(contactId)
+      : await getExchangeHistoryTimeline();
     for (const t of timeline) {
       const key = exchangeEntryKey(t);
       byKey.set(key, mergeExchangeEntries(byKey.get(key), t));
@@ -367,11 +381,39 @@ export async function loadExchangeHistory(): Promise<ExchangeHistoryEntry[]> {
     console.warn("Historique timeline indisponible:", error);
   }
 
-  const legacy = await getAllInteractionsWithContacts();
-  for (const row of legacy) {
-    const entry = interactionToExchangeEntry(row);
-    const key = exchangeEntryKey(entry);
-    byKey.set(key, mergeExchangeEntries(byKey.get(key), entry));
+  const contactNamesFromTimeline = (): { nom: string; prenom: string } => {
+    const sample = Array.from(byKey.values()).find((e) => e.contact_id === contactId);
+    return {
+      nom: sample?.contact_nom ?? "",
+      prenom: sample?.contact_prenom ?? "",
+    };
+  };
+
+  if (contactId) {
+    const { nom, prenom } = contactNamesFromTimeline();
+    const legacyRows = await getInteractionsByContact(contactId);
+    for (const row of legacyRows) {
+      const entry = interactionToExchangeEntry({
+        id: row.id,
+        contact_id: row.contact_id,
+        contact_nom: nom,
+        contact_prenom: prenom,
+        type_interaction: row.type_interaction,
+        sujet: row.sujet,
+        contenu: row.contenu,
+        date_interaction: row.date_interaction,
+        created_at: row.created_at,
+      });
+      const key = exchangeEntryKey(entry);
+      byKey.set(key, mergeExchangeEntries(byKey.get(key), entry));
+    }
+  } else {
+    const legacy = await getAllInteractionsWithContacts();
+    for (const row of legacy) {
+      const entry = interactionToExchangeEntry(row);
+      const key = exchangeEntryKey(entry);
+      byKey.set(key, mergeExchangeEntries(byKey.get(key), entry));
+    }
   }
 
   return mergeEmailEntriesByContact(Array.from(byKey.values()));
