@@ -610,12 +610,16 @@ export function InvestissementForm({
               encoursActuel={liveEncours.actuel ?? investissement.encours_actuel}
               encoursDate={liveEncours.date ?? investissement.encours_date}
               onUpdated={async () => {
-                const refreshed = await getInvestissementById(investissement.id);
-                setLiveEncours({
-                  actuel: refreshed.encours_actuel,
-                  date: refreshed.encours_date,
-                });
-                onEncoursUpdated?.();
+                try {
+                  const refreshed = await getInvestissementById(investissement.id);
+                  setLiveEncours({
+                    actuel: refreshed.encours_actuel,
+                    date: refreshed.encours_date,
+                  });
+                  onEncoursUpdated?.();
+                } catch (error) {
+                  console.error("Refresh encours:", error);
+                }
               }}
             />
           )}

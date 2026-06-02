@@ -90,6 +90,7 @@ import {
   buildFoyerNomFromMembers,
 } from "@/lib/foyers/foyer-utils";
 import { consumeOpenContactInvestissementFlag } from "@/lib/investissements/investissement-navigation";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
@@ -155,6 +156,8 @@ export function ContactDetail({
   );
   const contactRef = useRef(contact);
   contactRef.current = contact;
+  const investissementFormOpenRef = useRef(false);
+  investissementFormOpenRef.current = showInvestissementForm;
 
   const openEditForm = () => {
     if (contact) {
@@ -578,6 +581,10 @@ export function ContactDetail({
       void (async () => {
         if (!contact?.id) return;
         try {
+          if (investissementFormOpenRef.current) {
+            await loadInvestissements();
+            return;
+          }
           const fresh = await getContactById(contact.id);
           onContactRefreshed?.(fresh);
           await reloadAllSections(fresh);
@@ -587,9 +594,15 @@ export function ContactDetail({
       })();
     };
 
+    const syncInvestissementsOnly = () => {
+      if (!contact?.id || !detailActive) return;
+      void loadInvestissements();
+    };
+
     const unsubs = [
       subscribeContactsChanged(syncOpenContactFromServer),
       subscribeFoyersChanged(syncOpenContactFromServer),
+      subscribeInvestissementsChanged(syncInvestissementsOnly),
       subscribeEtiquettesChanged(() => {
         void loadEtiquettes();
       }),

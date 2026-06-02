@@ -425,6 +425,7 @@ impl Database {
                        AND cte.email_reponse_at IS NULL
                        AND COALESCE(cte.email_suivi_ignore, 0) = 0
                        AND COALESCE(t.categorie, '') != 'NEWSLETTER'
+                       AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                        {relance_filter}
                        AND c.email IS NOT NULL AND TRIM(c.email) != ''"
                 )

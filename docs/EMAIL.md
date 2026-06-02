@@ -153,6 +153,8 @@ Les séquences post-souscription (J+1, J+45, etc.) peuvent donc rester sur le **
 
 **Modifier le déclencheur** (délai, heure, jours) : à l’enregistrement du modèle, les lignes déjà planifiées et **non envoyées** recalculent leur date (`contact_template_envois`). Sinon, rouvrir l’investissement et enregistrer (même date de souscription) fait le même recalcul.
 
+**Attendre une réponse client** (modèle → onglet Relance) : si décoché, l’envoi reste tracé (fiche contact / interactions) mais n’alimente pas le bandeau « En attente de réponse » ni la relance automatique.
+
 ## Templates ↔ étiquettes
 
 - Dans **Templates email** → modifier un modèle : section **Étiquettes qui utilisent ce template** (cases à cocher). Enregistrement = `email_template_id` mis à jour sur chaque étiquette cochée.

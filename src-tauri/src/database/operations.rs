@@ -4178,6 +4178,7 @@ Bien cordialement,\n\
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
                    AND COALESCE(t.categorie, '') != 'NEWSLETTER'
+                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_envoi DESC
@@ -4203,6 +4204,7 @@ Bien cordialement,\n\
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
                    AND COALESCE(t.categorie, '') != 'NEWSLETTER'
+                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                    AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
@@ -4708,11 +4710,13 @@ Bien cordialement,\n\
                 FROM contact_etiquettes ce
                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                 INNER JOIN contacts c ON ce.contact_id = c.id
+                INNER JOIN templates_email t ON e.email_template_id = t.id
                 WHERE e.actif = 1 AND e.email_actif = 1
                   AND ce.email_envoye = 1
                   AND ce.email_date_envoi IS NOT NULL
                   AND ce.email_reponse_at IS NULL
                   AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                  AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
                 UNION ALL
                 SELECT cte.id, c.email, cte.email_date_envoi, cte.email_gmail_thread_id
@@ -4728,6 +4732,7 @@ Bien cordialement,\n\
                   AND cte.email_date_envoi IS NOT NULL
                   AND cte.email_reponse_at IS NULL
                   AND COALESCE(cte.email_suivi_ignore, 0) = 0
+                  AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
              )
              ORDER BY email_date_envoi ASC

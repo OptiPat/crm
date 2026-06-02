@@ -125,8 +125,7 @@ export function InvestissementEncoursPanel({
     [montantInitial, dateSouscription, valorisations]
   );
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveEncours = async () => {
     const parsed = parseFloat(montant.replace(",", "."));
     if (!Number.isFinite(parsed) || parsed <= 0) {
       toast.error("Saisissez un montant d'encours valide");
@@ -175,7 +174,7 @@ export function InvestissementEncoursPanel({
         </div>
       </div>
 
-      {loading ? (
+      {loading || saving ? (
         <ChartLoading height={180} />
       ) : chartData.length === 0 ? (
         <ChartEmpty
@@ -232,7 +231,7 @@ export function InvestissementEncoursPanel({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+      <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
         <div className="space-y-1.5">
           <Label htmlFor={`encours-montant-${investissementId}`}>Encours (€)</Label>
           <Input
@@ -243,6 +242,12 @@ export function InvestissementEncoursPanel({
             value={montant}
             onChange={(e) => setMontant(e.target.value)}
             placeholder="Ex: 25000"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleSaveEncours();
+              }
+            }}
           />
         </div>
         <div className="space-y-1.5">
@@ -252,12 +257,23 @@ export function InvestissementEncoursPanel({
             type="date"
             value={dateValorisation}
             onChange={(e) => setDateValorisation(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void handleSaveEncours();
+              }
+            }}
           />
         </div>
-        <Button type="submit" disabled={saving} className="sm:mb-0">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer"}
+        <Button
+          type="button"
+          disabled={saving}
+          className="sm:mb-0"
+          onClick={() => void handleSaveEncours()}
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Enregistrer l'encours"}
         </Button>
-      </form>
+      </div>
 
       {montantInitial != null && montantInitial > 0 && (
         <p className="text-xs text-muted-foreground">

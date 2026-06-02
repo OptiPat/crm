@@ -61,7 +61,12 @@ export function toDateInput(dateValue: string | number | undefined | null): stri
 export function dateFieldToIso(field?: string): string | undefined {
   if (!field?.trim()) return undefined;
   const [year, month, day] = field.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day)).toISOString();
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return undefined;
+  }
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
 }
 
 export function todayLocal(): string {

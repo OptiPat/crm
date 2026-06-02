@@ -24,6 +24,7 @@ import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { genererAlertesAutomatiques } from "@/lib/api/tauri-alertes";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 
 interface DashboardProps {
@@ -78,6 +79,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
       }, 120);
     };
     const unsubContacts = subscribeContactsChanged(schedule);
+    const unsubInvestissements = subscribeInvestissementsChanged(schedule);
     const unsubAlertes = subscribeAlertesChanged(schedule);
     const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
     const onWake = () => {
@@ -87,6 +89,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
     window.addEventListener("focus", onWake);
     return () => {
       unsubContacts();
+      unsubInvestissements();
       unsubAlertes();
       unsubEtiquettes();
       document.removeEventListener("visibilitychange", onWake);

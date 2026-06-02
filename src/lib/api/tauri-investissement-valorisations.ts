@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { notifyContactsChanged } from "@/lib/contacts/contact-events";
+import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 export interface InvestissementValorisation {
   id: number;
@@ -33,11 +33,11 @@ export async function createInvestissementValorisation(
     "create_investissement_valorisation",
     { valorisation }
   );
-  notifyContactsChanged();
+  notifyInvestissementsChanged();
   return created;
 }
 
 export async function deleteInvestissementValorisation(id: number): Promise<void> {
   await invoke<void>("delete_investissement_valorisation", { id });
-  notifyContactsChanged();
+  notifyInvestissementsChanged();
 }

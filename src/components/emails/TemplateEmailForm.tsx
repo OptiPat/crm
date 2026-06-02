@@ -52,6 +52,10 @@ import {
   setTemplateEmailRelanceInMeta,
   TEMPLATE_EMAIL_RELANCE_KEY,
 } from "@/lib/emails/template-email-relance";
+import {
+  parseTemplateEmailSuiviReponse,
+  setTemplateEmailSuiviReponseInMeta,
+} from "@/lib/emails/template-email-suivi-reponse";
 import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
@@ -98,6 +102,7 @@ export function TemplateEmailForm({
     useSameMessage: true,
     sujet: "",
     corpsHtml: "",
+    attendreReponse: true,
   });
   const [relanceTemplateId, setRelanceTemplateId] = useState<number | null>(null);
   const [emailTrigger, setEmailTrigger] = useState<TemplateEmailTriggerConfig>(
@@ -155,6 +160,7 @@ export function TemplateEmailForm({
         useSameMessage: !hasDedicated,
         sujet: "",
         corpsHtml: "",
+        attendreReponse: parseTemplateEmailSuiviReponse(template.variables).attendre_reponse,
       });
       if (hasDedicated && template.relance_template_id) {
         void getTemplateEmailById(template.relance_template_id)
@@ -185,6 +191,7 @@ export function TemplateEmailForm({
         useSameMessage: true,
         sujet: "",
         corpsHtml: "",
+        attendreReponse: true,
       });
       setRelanceTemplateId(null);
       setPreviewContactId("sample");
@@ -283,6 +290,9 @@ export function TemplateEmailForm({
       variables = setTemplateEmailTriggerInMeta(variables, emailTrigger);
       variables = setTemplateEmailRelanceInMeta(variables, {
         enabled: relanceDraft.enabled,
+      });
+      variables = setTemplateEmailSuiviReponseInMeta(variables, {
+        attendre_reponse: relanceDraft.attendreReponse,
       });
 
       const payload: NewTemplateEmail = {

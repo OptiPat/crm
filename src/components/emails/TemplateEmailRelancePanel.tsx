@@ -3,13 +3,15 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
-import { RotateCcw } from "lucide-react";
+import { MessageCircle, RotateCcw } from "lucide-react";
 
 export type TemplateRelanceDraft = {
   enabled: boolean;
   useSameMessage: boolean;
   sujet: string;
   corpsHtml: string;
+  /** Attendre une réponse client (bandeau + relance auto). */
+  attendreReponse: boolean;
 };
 
 type Props = {
@@ -24,6 +26,28 @@ export function TemplateEmailRelancePanel({ draft, onChange, parentNom }: Props)
 
   return (
     <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 rounded-lg border bg-sky-50/80 px-4 py-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-900">
+            <MessageCircle className="h-4 w-4" />
+          </span>
+          <div className="min-w-0">
+            <Label htmlFor="suivi-attendre-reponse" className="text-sm font-medium">
+              Attendre une réponse client
+            </Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Décoché pour bienvenue, newsletter métier, etc. : l&apos;envoi reste visible (fiche
+              contact), mais plus dans «&nbsp;En attente de réponse&nbsp;» ni relance auto.
+            </p>
+          </div>
+        </div>
+        <Switch
+          id="suivi-attendre-reponse"
+          checked={draft.attendreReponse}
+          onCheckedChange={(checked) => patch({ attendreReponse: checked })}
+        />
+      </div>
+
       <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-4 py-3">
         <div className="flex items-start gap-3 min-w-0">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-800">
