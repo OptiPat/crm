@@ -39,6 +39,7 @@ import {
   type ConditionPeriodeAnnee,
   type ConditionTypeProduit,
   type ConditionAgeApproche,
+  type ConditionEvenementSouscription,
 } from "@/lib/api/tauri-etiquettes";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
 import {
@@ -54,6 +55,12 @@ import {
   type ConditionType,
 } from "@/lib/etiquettes/etiquette-condition-labels";
 import { formatEtiquetteRuleSummary } from "@/lib/etiquettes/etiquette-form-summary";
+import {
+  formatSouscriptionDuplicateWarning,
+  templateHasSouscriptionTrigger,
+} from "@/lib/emails/template-etiquette-duplicate";
+import { EtiquetteSouscriptionGuide } from "@/components/etiquettes/EtiquetteSouscriptionGuide";
+import { SouscriptionRepeatModeRadios } from "@/components/etiquettes/SouscriptionRepeatModeRadios";
 import { getAllSegments, type Segment } from "@/lib/api/tauri-segments";
 import { ConditionBuilder } from "@/components/etiquettes/ConditionBuilder";
 import {
@@ -139,6 +146,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [emailEnvoiMode, setEmailEnvoiMode] = useState<"eligibility" | "fixed">("eligibility");
   const [emailEnvoiHeure, setEmailEnvoiHeure] = useState("09:00");
   const [emailEnvoiLocal, setEmailEnvoiLocal] = useState("");
+  const [emailDelaiJours, setEmailDelaiJours] = useState(0);
+  const [eventTypesProduit, setEventTypesProduit] = useState<string[]>([]);
+  const [eventAChaqueSouscription, setEventAChaqueSouscription] = useState(true);
 
   const ruleSummary = useMemo(
     () =>
@@ -154,6 +164,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         moisDebut,
         moisFin,
         typesProduitCount: typesProduitSelectionnes.length,
+        eventTypesProduitCount:
+          conditionType === "EVENEMENT_SOUSCRIPTION"
+            ? eventTypesProduit.length
+            : undefined,
+        aChaqueSouscription:
+          conditionType === "EVENEMENT_SOUSCRIPTION" ? eventAChaqueSouscription : undefined,
         invChampDate,
         invJoursAvant,
         invTypesProduitCount: invTypesProduit.length,
@@ -171,12 +187,23 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       moisDebut,
       moisFin,
       typesProduitSelectionnes.length,
+      eventTypesProduit.length,
+      eventAChaqueSouscription,
       invChampDate,
       invJoursAvant,
       invTypesProduit.length,
       categoriesSelectionnees,
     ]
   );
+
+  const templateSouscriptionDuplicateWarning = useMemo(() => {
+    if (conditionType !== "EVENEMENT_SOUSCRIPTION" || emailTemplateId == null) {
+      return "";
+    }
+    const tpl = templates.find((t) => t.id === emailTemplateId);
+    if (!templateHasSouscriptionTrigger(tpl)) return "";
+    return formatSouscriptionDuplicateWarning(tpl?.nom ?? "ce modèle", [nom.trim() || "cette étiquette"]);
+  }, [conditionType, emailTemplateId, templates, nom]);
 
   // Charger les templates email
   useEffect(() => {
@@ -259,6 +286,14 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
               setInvJoursAvant(config.jours_avant);
               setInvTypesProduit(config.types_produit ?? []);
             }
+          } else if (etiquette.auto_condition_type === "EVENEMENT_SOUSCRIPTION") {
+            const config = parseConditionConfig<ConditionEvenementSouscription>(
+              etiquette.auto_condition_config
+            );
+            if (config) {
+              setEventTypesProduit(config.types ?? []);
+              setEventAChaqueSouscription(config.a_chaque_souscription ?? true);
+            }
           }
           
           setCategoriesSelectionnees(parseCategories(etiquette.auto_categories));
@@ -267,6 +302,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         
         // Email
         setEmailActif(etiquette.email_actif);
+        setEmailDelaiJours(etiquette.email_delai_jours ?? 0);
         setEmailTemplateId(etiquette.email_template_id);
         if (etiquette.email_envoi_heure) {
           setEmailEnvoiMode("eligibility");
@@ -310,6 +346,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setEmailEnvoiMode("eligibility");
         setEmailEnvoiHeure("09:00");
         setEmailEnvoiLocal("");
+        setEmailDelaiJours(0);
+        setEventTypesProduit([]);
+        setEventAChaqueSouscription(true);
       }
     }
   }, [open, etiquette]);
@@ -391,6 +430,11 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             jours_avant: invJoursAvant,
             types_produit: invTypesProduit.length > 0 ? invTypesProduit : undefined,
           });
+        } else if (conditionType === "EVENEMENT_SOUSCRIPTION") {
+          autoConditionConfig = stringifyConditionConfig({
+            types: eventTypesProduit.length > 0 ? eventTypesProduit : undefined,
+            a_chaque_souscription: eventAChaqueSouscription,
+          });
         }
         autoCategories = stringifyCategories(categoriesSelectionnees);
       }
@@ -406,7 +450,8 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         auto_categories: isAuto && !linkedSegmentId ? autoCategories : null,
         segment_id: linkedSegmentId,
         email_template_id: emailActif ? emailTemplateId : null,
-        email_delai_jours: 0,
+        email_delai_jours:
+          emailActif && emailEnvoiMode === "eligibility" ? emailDelaiJours : 0,
         email_envoi_prevu:
           emailActif && emailEnvoiMode === "fixed"
             ? localDatetimeToUnix(emailEnvoiLocal)
@@ -683,10 +728,24 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                       ) : !segmentId ? (
                     <>
                       <EtiquetteRuleSummaryCard summary={ruleSummary} />
+                      {templateSouscriptionDuplicateWarning && (
+                        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                          {templateSouscriptionDuplicateWarning}
+                        </p>
+                      )}
 
                       <div className="space-y-2">
                         <Label>Type de condition</Label>
-                        <Select value={conditionType} onValueChange={setConditionType}>
+                        <Select
+                          value={conditionType}
+                          onValueChange={(v) => {
+                            setConditionType(v);
+                            if (v === "EVENEMENT_SOUSCRIPTION") {
+                              setIsAuto(true);
+                              if (emailActif) setEmailEnvoiMode("eligibility");
+                            }
+                          }}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Choisir une condition" />
                           </SelectTrigger>
@@ -706,6 +765,42 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                       </div>
 
                 {/* Paramètres selon le type */}
+                {conditionType === "EVENEMENT_SOUSCRIPTION" && (
+                  <div className="space-y-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                    <EtiquetteSouscriptionGuide />
+                    <p className="text-xs text-muted-foreground">
+                      Déclencheur : enregistrement d&apos;un investissement avec date de souscription
+                      sur la fiche contact. Pour envoyer un mail, onglet{" "}
+                      <strong>Campagne email</strong> (via cette étiquette).
+                    </p>
+                    <div className="space-y-2">
+                      <Label>Types de produit (vide = tous)</Label>
+                      <div className="max-h-36 overflow-y-auto border rounded-md p-2 flex flex-wrap gap-2 bg-background">
+                        {INVESTISSEMENT_TYPE_GROUPS.flatMap((g) => g.types).map((t) => (
+                          <div key={t.value} className="flex items-center gap-1.5">
+                            <Checkbox
+                              id={`evt-${t.value}`}
+                              checked={eventTypesProduit.includes(t.value)}
+                              onCheckedChange={() =>
+                                toggleTypeInList(t.value, setEventTypesProduit)
+                              }
+                            />
+                            <Label htmlFor={`evt-${t.value}`} className="text-xs font-normal cursor-pointer">
+                              {t.label}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <SouscriptionRepeatModeRadios
+                      variant="etiquette"
+                      name="repeat-souscription-etiquette"
+                      eachInvestissement={eventAChaqueSouscription}
+                      onChange={setEventAChaqueSouscription}
+                    />
+                  </div>
+                )}
+
                 {conditionType === "DELAI_SANS_CONTACT" && (
                   <div className="space-y-3">
                     <div className="space-y-2">
@@ -950,9 +1045,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   onEnvoiHeureChange={setEmailEnvoiHeure}
                   emailEnvoiLocal={emailEnvoiLocal}
                   onEnvoiLocalChange={setEmailEnvoiLocal}
+                  emailDelaiJours={emailDelaiJours}
+                  onDelaiJoursChange={setEmailDelaiJours}
                   templates={templates}
                   nom={nom}
                   isAuto={isAuto}
+                  isEventSouscription={conditionType === "EVENEMENT_SOUSCRIPTION"}
                 />
               </TabsContent>
             </div>

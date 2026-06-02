@@ -3226,14 +3226,17 @@ Bien cordialement,\n\
         contact_id: i64,
         etiquette_id: i64,
         attribue_par: Option<String>,
+        eligible_at_unix: Option<i64>,
     ) -> Result<ContactEtiquette> {
         let attribue_par = attribue_par.unwrap_or_else(|| "MANUEL".to_string());
 
         let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        let eligible_at = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let eligible_at = eligible_at_unix.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64
+        });
         let email_date_prevue = resolve_email_date_prevue_for_contact(&etiquette, eligible_at);
 
         self.conn.execute(
@@ -4167,6 +4170,7 @@ Bien cordialement,\n\
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
                    AND COALESCE(t.categorie, '') != 'NEWSLETTER'
+                   AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom"
@@ -4182,6 +4186,7 @@ Bien cordialement,\n\
 
         let map_row = |row: &rusqlite::Row<'_>| -> rusqlite::Result<EtiquetteEmailQueueItem> {
             Ok(EtiquetteEmailQueueItem {
+                queue_row_kind: "etiquette".to_string(),
                 contact_etiquette_id: row.get(0)?,
                 contact_id: row.get(1)?,
                 contact_nom: row.get(2)?,
@@ -4206,15 +4211,32 @@ Bien cordialement,\n\
             })
         };
 
-        if queue_status == "sent" || queue_status == "followup" {
+        let mut items = if queue_status == "sent" || queue_status == "followup" {
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(params![now, delai_secs], map_row)?;
-            return rows.collect();
+            rows.collect::<Result<Vec<_>, _>>()?
+        } else {
+            let mut stmt = self.conn.prepare(&sql)?;
+            let rows = stmt.query_map(params![now], map_row)?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+
+        let mut template_items = self.get_template_email_queue(queue_status, now, delai_secs)?;
+        items.append(&mut template_items);
+
+        items.sort_by(|a, b| {
+            let da = a.email_date_prevue.unwrap_or(i64::MAX);
+            let db = b.email_date_prevue.unwrap_or(i64::MAX);
+            da.cmp(&db)
+                .then_with(|| a.contact_nom.cmp(&b.contact_nom))
+                .then_with(|| a.contact_prenom.cmp(&b.contact_prenom))
+        });
+
+        if queue_status == "sent" {
+            items.truncate(100);
         }
 
-        let mut stmt = self.conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![now], map_row)?;
-        rows.collect()
+        Ok(items)
     }
 
     /// Compatibilité : file « prêts à envoyer »
@@ -4249,7 +4271,7 @@ Bien cordialement,\n\
         )
     }
 
-    fn touch_contact_last_contact(&self, contact_id: i64, ts: i64) -> Result<()> {
+    pub(crate) fn touch_contact_last_contact(&self, contact_id: i64, ts: i64) -> Result<()> {
         let contact = self.get_contact_by_id(contact_id)?;
         let client = Self::is_client_actif(&contact.categorie);
         let filleul = Self::is_filleul_statut(contact.filleul_categorie.as_deref());
@@ -4332,7 +4354,7 @@ Bien cordialement,\n\
         )
     }
 
-    fn insert_campaign_interaction(
+    pub(crate) fn insert_campaign_interaction(
         &self,
         contact_id: i64,
         type_interaction: &str,
@@ -4348,7 +4370,7 @@ Bien cordialement,\n\
         Ok(())
     }
 
-    fn auto_close_suivi_alertes_after_contact(&self, contact_id: i64) -> Result<()> {
+    pub(crate) fn auto_close_suivi_alertes_after_contact(&self, contact_id: i64) -> Result<()> {
         self.conn.execute(
             "UPDATE alertes SET traitee = 1, lue = 1
              WHERE contact_id = ?1 AND traitee = 0
@@ -4358,14 +4380,36 @@ Bien cordialement,\n\
         Ok(())
     }
 
-    fn campaign_response_already_recorded(&self, contact_etiquette_id: i64) -> Result<bool> {
+    fn campaign_response_already_recorded(&self, row_id: i64) -> Result<bool> {
         let n: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM contact_etiquettes
              WHERE id = ?1 AND email_envoye = 1 AND email_reponse_at IS NOT NULL",
-            params![contact_etiquette_id],
+            params![row_id],
             |row| row.get(0),
         )?;
-        Ok(n > 0)
+        if n > 0 {
+            return Ok(true);
+        }
+        self.template_envoi_response_already_recorded(row_id)
+    }
+
+    fn patch_campaign_response_details(
+        &self,
+        row_id: i64,
+        reponse_body: Option<&str>,
+        reponse_gmail_message_id: Option<&str>,
+    ) -> Result<()> {
+        let updated = self.conn.execute(
+            "UPDATE contact_etiquettes SET
+                email_reponse_body = COALESCE(?1, email_reponse_body),
+                email_reponse_gmail_message_id = COALESCE(?2, email_reponse_gmail_message_id)
+             WHERE id = ?3",
+            params![reponse_body, reponse_gmail_message_id, row_id],
+        )?;
+        if updated > 0 {
+            return Ok(());
+        }
+        self.patch_template_envoi_response_details(row_id, reponse_body, reponse_gmail_message_id)
     }
 
     fn campaign_email_already_sent(&self, contact_etiquette_id: i64) -> Result<bool> {
@@ -4467,7 +4511,7 @@ Bien cordialement,\n\
     /// `rdv` : MAJ dernier contact + clôture alertes suivi.
     pub fn mark_email_campaign_response(
         &self,
-        contact_etiquette_id: i64,
+        row_id: i64,
         response_type: &str,
         reponse_body: Option<&str>,
         reponse_gmail_message_id: Option<&str>,
@@ -4481,23 +4525,43 @@ Bien cordialement,\n\
             )));
         }
 
-        if self.campaign_response_already_recorded(contact_etiquette_id)? {
+        if self.campaign_response_already_recorded(row_id)? {
             if reponse_body.is_some() || reponse_gmail_message_id.is_some() {
-                self.conn.execute(
-                    "UPDATE contact_etiquettes SET
-                     email_reponse_body = COALESCE(?1, email_reponse_body),
-                     email_reponse_gmail_message_id = COALESCE(?2, email_reponse_gmail_message_id)
-                     WHERE id = ?3",
-                    params![
-                        reponse_body,
-                        reponse_gmail_message_id,
-                        contact_etiquette_id
-                    ],
-                )?;
+                self.patch_campaign_response_details(row_id, reponse_body, reponse_gmail_message_id)?;
             }
             return Ok(());
         }
 
+        if self
+            .mark_contact_etiquette_campaign_response(
+                row_id,
+                response_type,
+                reponse_body,
+                reponse_gmail_message_id,
+                reponse_subject,
+            )
+            .is_ok()
+        {
+            return Ok(());
+        }
+
+        self.mark_template_envoi_response(
+            row_id,
+            response_type,
+            reponse_body,
+            reponse_gmail_message_id,
+            reponse_subject,
+        )
+    }
+
+    fn mark_contact_etiquette_campaign_response(
+        &self,
+        contact_etiquette_id: i64,
+        response_type: &str,
+        reponse_body: Option<&str>,
+        reponse_gmail_message_id: Option<&str>,
+        reponse_subject: Option<&str>,
+    ) -> Result<()> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -4555,15 +4619,22 @@ Bien cordialement,\n\
     }
 
     /// Ne plus proposer de relance pour cet envoi.
-    pub fn dismiss_email_campaign_followup(&self, contact_etiquette_id: i64) -> Result<()> {
+    pub fn dismiss_email_campaign_followup(&self, row_id: i64) -> Result<()> {
         let updated = self.conn.execute(
             "UPDATE contact_etiquettes SET email_suivi_ignore = 1 WHERE id = ?1",
-            params![contact_etiquette_id],
+            params![row_id],
+        )?;
+        if updated > 0 {
+            return Ok(());
+        }
+        let updated = self.conn.execute(
+            "UPDATE contact_template_envois SET email_suivi_ignore = 1 WHERE id = ?1",
+            params![row_id],
         )?;
         if updated == 0 {
             return Err(rusqlite::Error::InvalidParameterName(format!(
-                "contact_etiquette introuvable: {}",
-                contact_etiquette_id
+                "Envoi introuvable: {}",
+                row_id
             )));
         }
         Ok(())
@@ -4572,25 +4643,26 @@ Bien cordialement,\n\
     /// Contexte Gmail pour importer ou détecter la réponse d'un envoi.
     pub fn campaign_response_check_item(
         &self,
-        contact_etiquette_id: i64,
+        row_id: i64,
     ) -> Result<super::models::PendingCampaignResponseCheck, String> {
-        self.conn
-            .query_row(
-                "SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
-                 FROM contact_etiquettes ce
-                 INNER JOIN contacts c ON ce.contact_id = c.id
-                 WHERE ce.id = ?1 AND ce.email_date_envoi IS NOT NULL",
-                params![contact_etiquette_id],
-                |row| {
-                    Ok(super::models::PendingCampaignResponseCheck {
-                        contact_etiquette_id: row.get(0)?,
-                        contact_email: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                        email_date_envoi: row.get(2)?,
-                        email_gmail_thread_id: row.get(3)?,
-                    })
-                },
-            )
-            .map_err(|e| format!("Envoi introuvable: {}", e))
+        if let Ok(item) = self.conn.query_row(
+            "SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
+             FROM contact_etiquettes ce
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             WHERE ce.id = ?1 AND ce.email_date_envoi IS NOT NULL",
+            params![row_id],
+            |row| {
+                Ok(super::models::PendingCampaignResponseCheck {
+                    contact_etiquette_id: row.get(0)?,
+                    contact_email: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    email_date_envoi: row.get(2)?,
+                    email_gmail_thread_id: row.get(3)?,
+                })
+            },
+        ) {
+            return Ok(item);
+        }
+        self.template_envoi_response_check_item(row_id)
     }
 
     /// Campagnes envoyées sans réponse enregistrée (pour sync Gmail / Agenda).
@@ -4598,17 +4670,34 @@ Bien cordialement,\n\
         &self,
     ) -> Result<Vec<super::models::PendingCampaignResponseCheck>> {
         let mut stmt = self.conn.prepare(
-            "SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
-             FROM contact_etiquettes ce
-             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
-             INNER JOIN contacts c ON ce.contact_id = c.id
-             WHERE e.actif = 1 AND e.email_actif = 1
-               AND ce.email_envoye = 1
-               AND ce.email_date_envoi IS NOT NULL
-               AND ce.email_reponse_at IS NULL
-               AND COALESCE(ce.email_suivi_ignore, 0) = 0
-               AND c.email IS NOT NULL AND TRIM(c.email) != ''
-             ORDER BY ce.email_date_envoi ASC
+            "SELECT id, email, email_date_envoi, email_gmail_thread_id FROM (
+                SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
+                FROM contact_etiquettes ce
+                INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+                INNER JOIN contacts c ON ce.contact_id = c.id
+                WHERE e.actif = 1 AND e.email_actif = 1
+                  AND ce.email_envoye = 1
+                  AND ce.email_date_envoi IS NOT NULL
+                  AND ce.email_reponse_at IS NULL
+                  AND COALESCE(ce.email_suivi_ignore, 0) = 0
+                  AND c.email IS NOT NULL AND TRIM(c.email) != ''
+                UNION ALL
+                SELECT cte.id, c.email, cte.email_date_envoi, cte.email_gmail_thread_id
+                FROM contact_template_envois cte
+                INNER JOIN templates_email t ON cte.template_id = t.id
+                INNER JOIN contacts c ON cte.contact_id = c.id
+                WHERE json_extract(t.variables, '$.email_trigger.enabled') = 1
+                  AND (
+                    json_extract(t.variables, '$.email_trigger.condition_type') IS NOT NULL
+                    OR json_extract(t.variables, '$.email_trigger.trigger_type') = 'EVENEMENT_SOUSCRIPTION'
+                  )
+                  AND cte.email_envoye = 1
+                  AND cte.email_date_envoi IS NOT NULL
+                  AND cte.email_reponse_at IS NULL
+                  AND COALESCE(cte.email_suivi_ignore, 0) = 0
+                  AND c.email IS NOT NULL AND TRIM(c.email) != ''
+             )
+             ORDER BY email_date_envoi ASC
              LIMIT 80",
         )?;
         let rows = stmt.query_map([], |row| {
@@ -4623,12 +4712,18 @@ Bien cordialement,\n\
     }
 
     /// Remet l'envoi en file « Prêts » pour une relance manuelle.
-    pub fn prepare_email_campaign_relance(&self, contact_etiquette_id: i64) -> Result<()> {
+    pub fn prepare_email_campaign_relance(&self, row_id: i64) -> Result<()> {
+        if self.prepare_contact_etiquette_relance(row_id).is_ok() {
+            return Ok(());
+        }
+        self.prepare_template_envoi_relance(row_id)
+    }
+
+    fn prepare_contact_etiquette_relance(&self, contact_etiquette_id: i64) -> Result<()> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        // Garde date/sujet/corps du 1er envoi pour l'historique (relance = nouvel envoi en file).
         let updated = self.conn.execute(
             "UPDATE contact_etiquettes SET
                 email_envoye = 0,
@@ -4639,12 +4734,18 @@ Bien cordialement,\n\
                 email_relance_active = 1,
                 email_gmail_message_id = NULL,
                 email_gmail_thread_id = NULL
-             WHERE id = ?2 AND email_envoye = 1",
+             WHERE id = ?2 AND email_envoye = 1
+               AND EXISTS (
+                 SELECT 1 FROM etiquettes e
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 WHERE e.id = contact_etiquettes.etiquette_id
+                   AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
+               )",
             params![now, contact_etiquette_id],
         )?;
         if updated == 0 {
             return Err(rusqlite::Error::InvalidParameterName(format!(
-                "Envoi introuvable: {}",
+                "Envoi introuvable ou relance désactivée: {}",
                 contact_etiquette_id
             )));
         }
@@ -6098,6 +6199,33 @@ Bien cordialement,\n\
         Ok(true)
     }
 
+    pub fn try_newsletter_unsubscribe_from_template_reply(
+        &self,
+        row_id: i64,
+        reply_subject: Option<&str>,
+        reply_text: Option<&str>,
+    ) -> Result<bool> {
+        if !is_newsletter_unsubscribe_request(reply_subject, reply_text) {
+            return Ok(false);
+        }
+
+        let (contact_id, template_categorie): (i64, String) = self.conn.query_row(
+            "SELECT cte.contact_id, t.categorie
+             FROM contact_template_envois cte
+             INNER JOIN templates_email t ON cte.template_id = t.id
+             WHERE cte.id = ?1",
+            params![row_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+
+        if template_categorie != "NEWSLETTER" {
+            return Ok(false);
+        }
+
+        self.mark_newsletter_unsubscribed(contact_id, Some("Lien Se désinscrire (email)"))?;
+        Ok(true)
+    }
+
     pub fn upsert_newsletter_template(
         &self,
         etiquette_id: i64,
@@ -7500,7 +7628,7 @@ mod database_integration_tests {
             .unwrap();
         let cid = contact.id.unwrap();
 
-        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()))
+        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()), None)
             .unwrap();
 
         assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
@@ -7611,7 +7739,7 @@ mod database_integration_tests {
             })
             .unwrap();
         let cid_rdv = contact_rdv.id.unwrap();
-        db.attribuer_etiquette(cid_rdv, etiqu.id, Some("MANUEL".into()))
+        db.attribuer_etiquette(cid_rdv, etiqu.id, Some("MANUEL".into()), None)
             .unwrap();
         db.update_etiquette(
             etiqu.id,
@@ -7659,7 +7787,7 @@ mod database_integration_tests {
                 ..sample_contact("Sans", "Mail")
             })
             .unwrap();
-        db.attribuer_etiquette(no_email.id.unwrap(), etiqu.id, Some("MANUEL".into()))
+        db.attribuer_etiquette(no_email.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
             .unwrap();
         let incomplete = db.get_etiquette_email_queue("incomplete").unwrap();
         assert!(
@@ -7719,7 +7847,7 @@ mod database_integration_tests {
             })
             .unwrap();
         let cid = contact.id.unwrap();
-        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()))
+        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()), None)
             .unwrap();
 
         let ce_id = db
@@ -8055,7 +8183,7 @@ mod database_integration_tests {
             })
             .unwrap();
 
-        db.attribuer_etiquette(cid, etiqu.id, Some("AUTO".into()))
+        db.attribuer_etiquette(cid, etiqu.id, Some("AUTO".into()), None)
             .unwrap();
 
         db.update_etiquette(
@@ -8243,7 +8371,7 @@ mod database_integration_tests {
             })
             .unwrap();
 
-        db.attribuer_etiquette(cid, etiqu.id, Some("AUTO".into()))
+        db.attribuer_etiquette(cid, etiqu.id, Some("AUTO".into()), None)
             .unwrap();
 
         db.update_contact(

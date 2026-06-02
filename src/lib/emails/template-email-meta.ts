@@ -2,6 +2,11 @@ import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import {
+  buildTemplateSendBodies,
+  getTemplateCorpsHtml,
+} from "@/lib/emails/template-email-html";
+import { appendEmailSignature } from "@/lib/emails/email-signature";
+import {
   buildAgendaTemplateVariables,
   normalizeAgendaLinks,
   type AgendaLink,
@@ -142,16 +147,25 @@ export function renderTemplatePreview(
   corps: string,
   contact: typeof SAMPLE_PREVIEW_CONTACT,
   cgp: CgpConfig | null,
-  templateAgendaLinkId?: string | null
-): { subject: string; body: string } {
+  templateAgendaLinkId?: string | null,
+  templateVariables?: string | null,
+  /** HTML en cours d’édition (prioritaire sur `variables.corps_html`). */
+  corpsHtmlOverride?: string | null
+): { subject: string; body: string; body_html: string | null } {
   const vars = {
     ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
     ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
   };
-  return {
-    subject: replaceTemplateVariables(sujet, vars),
-    body: replaceTemplateVariables(corps, vars),
-  };
+  const subject = replaceTemplateVariables(sujet, vars);
+  const plainCore = replaceTemplateVariables(corps, vars);
+  const body = appendEmailSignature(plainCore, cgp?.email_signature);
+  const corpsHtmlStored =
+    corpsHtmlOverride?.trim() || getTemplateCorpsHtml(templateVariables);
+  const bodyHtmlCore = corpsHtmlStored
+    ? replaceTemplateVariables(corpsHtmlStored, vars)
+    : null;
+  const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp);
+  return { subject, body, body_html };
 }
 
 export function suggestTemplateIdForEtiquette(

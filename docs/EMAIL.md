@@ -46,6 +46,7 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 - Variables documentées : `src/lib/emails/template-email-meta.ts`.
 - Suggestion **étiquette → template** (`suggestTemplateIdForEtiquette`, bouton Suggérer dans EtiquetteForm).
 - Aperçu live (contact fictif ou réel), **duplication**, regroupement par catégorie.
+- **Mise en forme** (gras, souligné, listes, liens) dans l’éditeur des modèles ; HTML stocké dans `variables.corps_html`, envoyé tel quel via Gmail OAuth.
 
 ### Étape 3 — Connexion moderne (OAuth) ✅
 
@@ -128,7 +129,7 @@ Limite : envois **avant** cette version sans thread Gmail enregistré — la rec
 
 | Mode (formulaire étiquette) | Champ SQLite | Comportement |
 |-----------------------------|--------------|--------------|
-| **Dès éligibilité** | `email_envoi_heure` (ex. `09:00`) | Chaque contact reçoit une date d’envoi calculée à partir de **sa** date d’attribution (ou du recalcul auto). Ex. règle « Suivi > 1 an » : le mail devient **Prêt** dès que le délai est dépassé, au créneau horaire du jour (ou immédiatement si l’heure est déjà passée). |
+| **Dès éligibilité** | `email_envoi_heure` + `email_delai_jours` | Référence = attribution ou **date de souscription** (événement). Ex. délai **1** + heure **09:00** → mail proposé le lendemain matin après signature. |
 | **Date fixe** | `email_envoi_prevu` (timestamp) | Même date/heure pour tous les contacts déjà tagués (campagnes ponctuelles type « envoi le 15/06 à 10h »). |
 
 Prérequis pour voir des lignes dans **Suivi → Envois** :

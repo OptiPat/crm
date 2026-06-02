@@ -698,7 +698,11 @@ pub fn create_investissement(
     let inv = database
         .create_investissement(new_investissement)
         .map_err(|e| format!("Failed to create investissement: {}", e))?;
-    let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id);
+    let _ = database.sync_auto_etiquettes_after_investissement(
+        inv.contact_id,
+        inv.foyer_id,
+        Some(inv.id),
+    );
     Ok(inv)
 }
 
@@ -724,7 +728,11 @@ pub fn update_investissement(
     let inv = database
         .update_investissement(id, &investissement)
         .map_err(|e| format!("Failed to update investissement: {}", e))?;
-    let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id);
+    let _ = database.sync_auto_etiquettes_after_investissement(
+        inv.contact_id,
+        inv.foyer_id,
+        Some(inv.id),
+    );
     Ok(inv)
 }
 
@@ -738,7 +746,7 @@ pub fn delete_investissement(db: State<'_, DbState>, id: i64) -> Result<(), Stri
         .delete_investissement(id)
         .map_err(|e| format!("Failed to delete investissement: {}", e))?;
     if let Some(inv) = inv {
-        let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id);
+        let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id, None);
     }
     Ok(())
 }
@@ -916,7 +924,7 @@ pub fn attribuer_etiquette(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .attribuer_etiquette(contact_id, etiquette_id, attribue_par)
+        .attribuer_etiquette(contact_id, etiquette_id, attribue_par, None)
         .map_err(|e| format!("Failed to assign etiquette: {}", e))
 }
 
@@ -1153,9 +1161,22 @@ pub fn mark_etiquette_email_sent(
     gmail_thread_id: Option<String>,
     email_subject: Option<String>,
     email_body: Option<String>,
+    queue_row_kind: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    if queue_row_kind.as_deref() == Some("template") {
+        return database
+            .mark_template_email_sent(
+                contact_etiquette_id,
+                gmail_message_id.as_deref(),
+                gmail_thread_id.as_deref(),
+                email_subject.as_deref(),
+                email_body.as_deref(),
+            )
+            .map_err(|e| format!("Failed to mark email sent: {}", e));
+    }
 
     database
         .mark_etiquette_email_sent(

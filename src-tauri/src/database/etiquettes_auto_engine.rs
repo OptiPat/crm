@@ -251,6 +251,8 @@ impl Database {
                 }
                 false
             }
+            // Déclenché uniquement à l'enregistrement d'une souscription (voir apply_souscription_event_etiquettes).
+            "EVENEMENT_SOUSCRIPTION" => false,
             "AGE_APPROCHE" => {
                 if let Some(config_str) = config {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
@@ -300,7 +302,7 @@ impl Database {
         match (should_assign, assignment_info) {
             (true, None) => {
                 if self
-                    .attribuer_etiquette(contact_id, etiquette_id, Some("AUTO".to_string()))
+                    .attribuer_etiquette(contact_id, etiquette_id, Some("AUTO".to_string()), None)
                     .is_ok()
                 {
                     newly_assigned = 1;
@@ -462,6 +464,7 @@ impl Database {
                 None,
             )?;
         }
+        total += self.sync_template_email_triggers_for_contact(contact_id)?;
         Ok(total)
     }
 
@@ -501,12 +504,113 @@ impl Database {
     }
 
     /// Après création/mise à jour d'un investissement (contact + membres du foyer).
+    /// Pose les étiquettes « événement : nouvelle souscription » et calcule la date d'envoi.
+    pub fn apply_souscription_event_etiquettes(
+        &self,
+        contact_id: i64,
+        investissement_id: i64,
+    ) -> Result<usize> {
+        let inv = self.get_investissement_by_id(investissement_id)?;
+        let Some(inv_contact_id) = inv.contact_id else {
+            return Ok(0);
+        };
+        if inv_contact_id != contact_id {
+            return Ok(0);
+        }
+        let contact = self.get_contact_by_id(contact_id)?;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let eligible_at = inv.date_souscription.unwrap_or(now);
+
+        let etiquettes: Vec<Etiquette> = self
+            .get_all_etiquettes()?
+            .into_iter()
+            .filter(|e| {
+                e.actif
+                    && e.auto_condition_type.as_deref() == Some("EVENEMENT_SOUSCRIPTION")
+            })
+            .collect();
+
+        let mut assigned = 0usize;
+        for etiqu in etiquettes {
+            let categories = Self::parse_auto_categories(&etiqu);
+            if !Self::contact_matches_auto_categories(&contact, &categories) {
+                continue;
+            }
+
+            let (types_filter, a_chaque): (Vec<String>, bool) =
+                if let Some(ref cfg) = etiqu.auto_condition_config {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(cfg) {
+                        let types: Vec<String> = parsed["types"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        let a_chaque = parsed["a_chaque_souscription"].as_bool().unwrap_or(true);
+                        (types, a_chaque)
+                    } else {
+                        (vec![], true)
+                    }
+                } else {
+                    (vec![], true)
+                };
+
+            if !types_filter.is_empty() && !types_filter.iter().any(|t| t == &inv.type_produit) {
+                continue;
+            }
+
+            if !a_chaque {
+                let exists: i64 = self.conn.query_row(
+                    "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                    params![contact_id, etiqu.id],
+                    |row| row.get(0),
+                )?;
+                if exists > 0 {
+                    continue;
+                }
+            }
+
+            if self
+                .attribuer_etiquette(
+                    contact_id,
+                    etiqu.id,
+                    Some("AUTO".to_string()),
+                    Some(eligible_at),
+                )
+                .is_ok()
+            {
+                assigned += 1;
+            }
+        }
+        Ok(assigned)
+    }
+
     pub fn sync_auto_etiquettes_after_investissement(
         &self,
         contact_id: Option<i64>,
         foyer_id: Option<i64>,
+        trigger_investissement_id: Option<i64>,
     ) -> Result<usize> {
         let mut total = 0;
+        if let Some(iid) = trigger_investissement_id {
+            if let Ok(inv) = self.get_investissement_by_id(iid) {
+                if let Some(cid) = inv.contact_id {
+                    total += self.apply_souscription_event_etiquettes(cid, iid)?;
+                    total += self.schedule_template_souscription_events(
+                        cid,
+                        iid,
+                        &inv.type_produit,
+                        inv.date_souscription,
+                    )?;
+                }
+            }
+        }
         let mut seen = Vec::new();
         if let Some(cid) = contact_id {
             total += self.check_auto_etiquettes_for_contact(cid)?;

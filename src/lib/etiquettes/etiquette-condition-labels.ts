@@ -1,6 +1,7 @@
 /** Libellés et types de conditions — alignés sur le moteur Rust. */
 
 export type ConditionType =
+  | "EVENEMENT_SOUSCRIPTION"
   | "DELAI_SANS_CONTACT"
   | "DATE_APPROCHE"
   | "PERIODE_ANNEE"
@@ -12,6 +13,7 @@ export type ConditionType =
   | "RULE_TREE";
 
 export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
+  EVENEMENT_SOUSCRIPTION: "Événement : nouvelle souscription",
   DELAI_SANS_CONTACT: "Délai sans contact",
   DATE_APPROCHE: "Date sur la fiche contact",
   PERIODE_ANNEE: "Période de l'année",

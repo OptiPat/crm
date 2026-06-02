@@ -14,6 +14,7 @@ import {
   X,
   RotateCcw,
 } from "lucide-react";
+import { isTemplateEmailRelanceEnabledForQueue } from "@/lib/emails/template-email-relance";
 import {
   getEtiquetteEmailQueue,
   markEmailCampaignResponse,
@@ -328,6 +329,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 )}
                 {options.mode === "followup" && (
                   <>
+                    {isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
                     <Button
                       size="sm"
                       onClick={() => void handlePrepareRelance(item)}
@@ -335,6 +337,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                       <RotateCcw className="h-4 w-4 mr-1" />
                       Relancer
                     </Button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground self-center">
+                        Relance désactivée sur ce modèle
+                      </span>
+                    )}
                     <Button
                       size="sm"
                       variant="outline"

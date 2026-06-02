@@ -21,6 +21,10 @@ export interface EtiquetteRuleSummaryInput {
   moisDebut: number;
   moisFin: number;
   typesProduitCount: number;
+  /** Types produit pour EVENEMENT_SOUSCRIPTION (sinon `typesProduitCount`). */
+  eventTypesProduitCount?: number;
+  /** Pose de l'étiquette à chaque investissement (événement souscription). */
+  aChaqueSouscription?: boolean;
   invChampDate: string;
   invJoursAvant: number;
   invTypesProduitCount: number;
@@ -60,6 +64,19 @@ export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): st
 
   let detail = "";
   switch (input.conditionType) {
+    case "EVENEMENT_SOUSCRIPTION": {
+      const count = input.eventTypesProduitCount ?? input.typesProduitCount;
+      const types =
+        count > 0
+          ? ` (${count} type${count > 1 ? "s" : ""} de produit)`
+          : " (tous produits)";
+      const repeat =
+        input.aChaqueSouscription === false
+          ? " — étiquette une seule fois par contact"
+          : " — étiquette à chaque investissement";
+      detail = `souscription enregistrée sur la fiche${types}${repeat}`;
+      break;
+    }
     case "DELAI_SANS_CONTACT":
       detail = `sans contact depuis ${input.delaiJours} jour${input.delaiJours > 1 ? "s" : ""}${
         input.inclureSansDate ? " (y compris sans date renseignée)" : ""

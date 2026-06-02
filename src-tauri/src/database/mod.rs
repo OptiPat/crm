@@ -7,6 +7,8 @@ pub mod etiquettes_auto_engine;
 pub mod models;
 pub mod operations;
 pub mod segments;
+pub mod template_email_trigger;
+pub mod template_email_queue;
 
 pub struct Database {
     conn: Connection,
@@ -363,6 +365,7 @@ impl Database {
         self.migrate_contact_gmail_messages()?;
         self.migrate_contact_mail_sync_state()?;
         self.migrate_drop_emails_message_id_smtp()?;
+        self.migrate_contact_template_envois()?;
 
         Ok(())
     }

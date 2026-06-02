@@ -71,6 +71,8 @@ export interface EtiquetteWithCount extends Etiquette {
 }
 
 export interface EtiquetteEmailQueueItem {
+  /** `etiquette` (défaut) ou `template` (modèle sans étiquette) */
+  queue_row_kind?: string;
   contact_etiquette_id: number;
   contact_id: number;
   contact_nom: string;
@@ -151,6 +153,13 @@ export interface ConditionPeriodeAnnee {
 
 export interface ConditionTypeProduit {
   types: string[];  // Liste des types de produits
+}
+
+/** Déclenché à l'enregistrement d'un investissement (date de souscription). */
+export interface ConditionEvenementSouscription {
+  types?: string[];
+  /** Si false : une seule fois par contact (première souscription). */
+  a_chaque_souscription?: boolean;
 }
 
 export interface ConditionDateApprocheInvestissement {
@@ -325,7 +334,8 @@ export async function markEtiquetteEmailSent(
   gmailMessageId?: string | null,
   gmailThreadId?: string | null,
   emailSubject?: string | null,
-  emailBody?: string | null
+  emailBody?: string | null,
+  queueRowKind?: string | null
 ): Promise<void> {
   return invoke<void>("mark_etiquette_email_sent", {
     contactEtiquetteId,
@@ -333,6 +343,7 @@ export async function markEtiquetteEmailSent(
     gmailThreadId: gmailThreadId ?? null,
     emailSubject: emailSubject ?? null,
     emailBody: emailBody ?? null,
+    queueRowKind: queueRowKind ?? null,
   });
 }
 

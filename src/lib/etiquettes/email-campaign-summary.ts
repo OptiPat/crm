@@ -9,8 +9,10 @@ export interface EmailCampaignSummaryInput {
   mode: EmailEnvoiMode;
   envoiHeure: string;
   envoiLocal: string;
+  emailDelaiJours: number;
   hasAutoRule: boolean;
   etiquetteNom: string;
+  isEventSouscription?: boolean;
 }
 
 export function formatEmailCampaignSummary(input: EmailCampaignSummaryInput): string {
@@ -29,7 +31,14 @@ export function formatEmailCampaignSummary(input: EmailCampaignSummaryInput): st
     if (!input.hasAutoRule) {
       return `Modèle : ${tpl}. Mode « à l'éligibilité » nécessite une règle auto sur l'onglet Règle.`;
     }
-    return `Modèle : ${tpl}. Dès qu'un contact reçoit l'étiquette « ${input.etiquetteNom || "…"} », un email sera proposé à ${heure} ce jour-là (Suivi → Envois).`;
+    const delai = input.emailDelaiJours;
+    const delaiLabel =
+      delai > 0
+        ? `${delai} jour${delai > 1 ? "s" : ""} après ${
+            input.isEventSouscription ? "la souscription" : "l'attribution de l'étiquette"
+          }, puis `
+        : "";
+    return `Modèle : ${tpl}. Dès qu'un contact reçoit l'étiquette « ${input.etiquetteNom || "…"} », email proposé ${delaiLabel}à ${heure} (Suivi → Envois).`;
   }
 
   const dateLabel = input.envoiLocal.trim()

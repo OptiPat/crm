@@ -20,12 +20,16 @@ export function TemplatesEmailHelp() {
           {"{{prenom}}"}, etc.).
         </p>
         <p>
-          <strong className="text-foreground">2. Lier</strong> à une ou plusieurs étiquettes (case à
-          cocher dans le modèle, ou choix du modèle sur l&apos;étiquette → onglet Email).
+          <strong className="text-foreground">2. Déclencheur</strong> (onglet du modèle) : événement
+          ex. nouvelle souscription + délai/heure — <em>sans créer d&apos;étiquette</em>.
         </p>
         <p>
-          <strong className="text-foreground">3. Envoyer</strong> depuis Suivi → Envois une fois la
-          campagne active sur l&apos;étiquette.
+          <strong className="text-foreground">3. Étiquettes</strong> (optionnel) : liez le modèle
+          pour les campagnes classiques par étiquette.
+        </p>
+        <p>
+          <strong className="text-foreground">4. Envoyer</strong> depuis Suivi → Envois (CRM ouvert,
+          compte email connecté).
         </p>
       </div>
     </details>

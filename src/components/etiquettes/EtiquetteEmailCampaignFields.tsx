@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { EtiquetteFormPanel } from "@/components/etiquettes/etiquette-form-ui";
+import { EtiquetteSouscriptionGuide } from "@/components/etiquettes/EtiquetteSouscriptionGuide";
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
@@ -39,9 +40,12 @@ type Props = {
   onEnvoiHeureChange: (v: string) => void;
   emailEnvoiLocal: string;
   onEnvoiLocalChange: (v: string) => void;
+  emailDelaiJours: number;
+  onDelaiJoursChange: (v: number) => void;
   templates: TemplateEmail[];
   nom: string;
   isAuto: boolean;
+  isEventSouscription?: boolean;
 };
 
 export function EtiquetteEmailCampaignFields({
@@ -56,9 +60,12 @@ export function EtiquetteEmailCampaignFields({
   onEnvoiHeureChange,
   emailEnvoiLocal,
   onEnvoiLocalChange,
+  emailDelaiJours,
+  onDelaiJoursChange,
   templates,
   nom,
   isAuto,
+  isEventSouscription = false,
 }: Props) {
   const selectedTemplate = templates.find((t) => t.id === emailTemplateId) ?? null;
 
@@ -81,8 +88,10 @@ export function EtiquetteEmailCampaignFields({
     mode: emailEnvoiMode,
     envoiHeure: emailEnvoiHeure,
     envoiLocal: emailEnvoiLocal,
+    emailDelaiJours,
     hasAutoRule: isAuto,
     etiquetteNom: nom.trim(),
+    isEventSouscription,
   });
 
   const handleSuggest = () => {
@@ -137,6 +146,7 @@ export function EtiquetteEmailCampaignFields({
 
       {emailActif && (
         <div className="space-y-5">
+          {isEventSouscription && <EtiquetteSouscriptionGuide />}
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label className="text-sm font-medium">
@@ -212,7 +222,9 @@ export function EtiquetteEmailCampaignFields({
                   <span className="text-sm font-medium">À l&apos;éligibilité</span>
                 </div>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Le jour où la règle auto pose l&apos;étiquette, à l&apos;heure choisie.
+                  {isEventSouscription
+                    ? "À partir de la date de souscription (+ délai ci-dessous), à l'heure choisie."
+                    : "Le jour où la règle auto pose l'étiquette, à l'heure choisie."}
                 </p>
               </button>
               <button
@@ -249,17 +261,40 @@ export function EtiquetteEmailCampaignFields({
             </Label>
             {emailEnvoiMode === "eligibility" ? (
               <>
-                <Input
-                  id="email-envoi-heure"
-                  type="time"
-                  value={emailEnvoiHeure}
-                  onChange={(e) => onEnvoiHeureChange(e.target.value)}
-                  className="max-w-[160px]"
-                  required
-                />
+                <div className="flex flex-wrap gap-4 items-end">
+                  <div className="space-y-1">
+                    <Label htmlFor="email-delai-jours" className="text-xs text-muted-foreground">
+                      Délai (jours)
+                    </Label>
+                    <Input
+                      id="email-delai-jours"
+                      type="number"
+                      min={0}
+                      max={365}
+                      value={emailDelaiJours}
+                      onChange={(e) =>
+                        onDelaiJoursChange(Math.max(0, parseInt(e.target.value, 10) || 0))
+                      }
+                      className="w-24"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="email-envoi-heure" className="text-xs text-muted-foreground">
+                      Heure
+                    </Label>
+                    <Input
+                      id="email-envoi-heure"
+                      type="time"
+                      value={emailEnvoiHeure}
+                      onChange={(e) => onEnvoiHeureChange(e.target.value)}
+                      className="w-[160px]"
+                      required
+                    />
+                  </div>
+                </div>
                 <p className="text-xs text-muted-foreground">
-                  Si l&apos;heure est déjà passée le jour de l&apos;éligibilité, l&apos;email est
-                  proposé tout de suite dans la file.
+                  Ex. délai 1 + heure 09:00 = lendemain de la souscription à 9 h. Si l&apos;heure est
+                  passée ce jour-là, l&apos;email est proposé tout de suite.
                 </p>
               </>
             ) : (

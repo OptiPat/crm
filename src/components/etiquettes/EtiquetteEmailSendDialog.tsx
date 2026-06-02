@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,8 +18,11 @@ import {
 } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { sendEmail } from "@/lib/api/tauri-email";
+import { EMAIL_PREVIEW_HTML_CLASS } from "@/lib/emails/email-preview-html-styles";
+import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface EtiquetteEmailSendDialogProps {
@@ -39,6 +42,8 @@ export function EtiquetteEmailSendDialog({
 }: EtiquetteEmailSendDialogProps) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const [initialBody, setInitialBody] = useState("");
+  const [editPlain, setEditPlain] = useState(false);
   const [sending, setSending] = useState(false);
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(cgpConfigProp ?? null);
 
@@ -53,6 +58,8 @@ export function EtiquetteEmailSendDialog({
         const preview = renderEtiquetteEmailPreview(item, cgp);
         setSubject(preview.subject);
         setBody(preview.body);
+        setInitialBody(preview.body);
+        setEditPlain(false);
       } catch (error) {
         console.error(error);
         toast.error("Impossible de préparer l'aperçu");
@@ -64,21 +71,33 @@ export function EtiquetteEmailSendDialog({
     };
   }, [open, item, cgpConfigProp, onOpenChange]);
 
+  const bodyEdited = body.trim() !== initialBody.trim();
+
+  const sendPreview = useMemo(() => {
+    if (!item || !cgpConfig) return null;
+    return renderEtiquetteEmailPreview(
+      {
+        ...item,
+        template_sujet: subject.trim(),
+        template_corps: body,
+        template_variables: bodyEdited
+          ? setTemplateCorpsHtmlInMeta(item.template_variables, null)
+          : item.template_variables,
+      },
+      cgpConfig
+    );
+  }, [item, cgpConfig, subject, body, bodyEdited]);
+
   const handleSend = async () => {
-    if (!item?.contact_email) return;
+    if (!item?.contact_email || !sendPreview) return;
     setSending(true);
     try {
-      const cgp = cgpConfig ?? (await getCgpConfig());
-      const preview = renderEtiquetteEmailPreview(
-        { ...item, template_sujet: subject.trim(), template_corps: body },
-        cgp
-      );
       const sent = await sendEmail({
         to_email: item.contact_email,
         to_name: `${item.contact_prenom} ${item.contact_nom}`,
         subject: subject.trim(),
-        body: preview.body,
-        body_html: preview.body_html,
+        body: sendPreview.body,
+        body_html: sendPreview.body_html,
       });
       try {
         await markEtiquetteEmailSent(
@@ -86,7 +105,8 @@ export function EtiquetteEmailSendDialog({
           sent.gmail_message_id,
           sent.gmail_thread_id,
           subject.trim(),
-          preview.body
+          sendPreview.body,
+          item.queue_row_kind ?? "etiquette"
         );
       } catch (markError) {
         console.error(markError);
@@ -118,7 +138,7 @@ export function EtiquetteEmailSendDialog({
           <DialogDescription>
             {item && (
               <>
-                À <strong>{item.contact_email}</strong> — étiquette{" "}
+                À <strong>{item.contact_email}</strong> —{" "}
                 <strong>{item.etiquette_nom}</strong>
               </>
             )}
@@ -133,19 +153,62 @@ export function EtiquetteEmailSendDialog({
               onChange={(e) => setSubject(e.target.value)}
             />
           </div>
+
+          {sendPreview?.body_html && !bodyEdited && (
+            <div className="space-y-2">
+              <Label>Message (aperçu HTML)</Label>
+              <p className="text-xs text-primary font-medium">
+                La version HTML sera envoyée (gras, listes, liens) — comme dans Gmail.
+              </p>
+              <div
+                className={cn(
+                  "rounded-lg border bg-white dark:bg-card p-3 max-h-64 overflow-y-auto",
+                  EMAIL_PREVIEW_HTML_CLASS
+                )}
+                dangerouslySetInnerHTML={{ __html: sendPreview.body_html }}
+              />
+            </div>
+          )}
+
+          {sendPreview?.body_html && bodyEdited && (
+            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              Vous avez modifié le texte brut : l&apos;envoi sera en <strong>texte seul</strong>{" "}
+              (sans mise en forme HTML).
+            </p>
+          )}
+
           <div className="space-y-2">
-            <Label htmlFor="confirm-body">Message</Label>
-            <Textarea
-              id="confirm-body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={10}
-              className="font-mono text-sm"
-            />
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="confirm-body">
+                {sendPreview?.body_html && !editPlain
+                  ? "Modifier le texte (optionnel)"
+                  : "Message"}
+              </Label>
+              {sendPreview?.body_html && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setEditPlain((v) => !v)}
+                >
+                  {editPlain ? "Masquer l'éditeur" : "Modifier le texte brut"}
+                </Button>
+              )}
+            </div>
+            {(editPlain || !sendPreview?.body_html) && (
+              <Textarea
+                id="confirm-body"
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={8}
+                className="font-mono text-sm"
+              />
+            )}
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>
             Annuler
           </Button>
           <Button

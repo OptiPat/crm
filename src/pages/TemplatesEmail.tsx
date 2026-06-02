@@ -25,6 +25,7 @@ import {
 } from "@/lib/emails/template-email-meta";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
+import { getTemplateCorpsHtml } from "@/lib/emails/template-email-html";
 import { useTemplatesEmailAutoRefresh } from "@/hooks/useTemplatesEmailAutoRefresh";
 import { toast } from "sonner";
 
@@ -300,8 +301,11 @@ export function TemplatesEmail() {
                 <TemplateEmailPreviewPanel
                   sujet={previewTemplate.sujet}
                   corps={previewTemplate.corps}
+                  corpsHtml={getTemplateCorpsHtml(previewTemplate.variables)}
+                  templateVariables={previewTemplate.variables}
                   cgp={cgp}
                   agendaLinkId={previewTemplate.agenda_link_id}
+                  allowSendTest
                 />
               </TemplatePreviewActions>
             ) : (

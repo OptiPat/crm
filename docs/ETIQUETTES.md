@@ -28,6 +28,15 @@ Les **alertes** (Suivi → Alertes) restent un filet basé sur les **dates de de
 | **Suivi → Étiquettes** | Parcourir les contacts par étiquette active |
 | **Suivi → Envois** | Valider et envoyer les emails planifiés |
 
+### Événement « nouvelle souscription » + email
+
+Pour un mail de bienvenue **J+1 après signature** :
+
+1. **Étiquettes** → créer ou modifier une étiquette → règle **Événement : nouvelle souscription** (catégories Client, etc.).
+2. Onglet **Campagne email** : activer, choisir le modèle, mode **À l'éligibilité**, **délai 1 jour**, heure **09:00**.
+3. À chaque **création / mise à jour** d'investissement avec date de souscription sur la fiche contact, l'étiquette est posée et la date d'envoi est calculée.
+4. **Suivi → Envois → Prêts** : valider l'envoi (CRM ouvert, OAuth connecté).
+
 ### Étiquette active / inactive
 
 - **Active** : règle auto appliquée, visible dans les sélecteurs et (si configuré) campagne email.
@@ -71,6 +80,7 @@ Champ **0–100** sur l’étiquette : plus la valeur est haute, plus le badge a
 | `PERIODE_ANNEE` | Mois calendaires (ex. déclaration IR avril–mai) |
 | `TYPE_PRODUIT` | Le contact (ou son foyer) détient un type de produit donné |
 | `AGE_APPROCHE` | Âge proche d’un seuil (ex. 69 ans) |
+| `EVENEMENT_SOUSCRIPTION` | **Événement** : à l’enregistrement d’un investissement (date de souscription) |
 
 Validation à l’enregistrement : nom obligatoire, nom unique ; si étiquette **active** et règle auto → au moins une **catégorie** de contact.
 

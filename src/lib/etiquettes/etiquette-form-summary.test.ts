@@ -30,4 +30,31 @@ describe("formatEtiquetteRuleSummary", () => {
   it("manuel si pas de règle auto", () => {
     expect(formatEtiquetteRuleSummary({ ...base, isAuto: false })).toContain("manuelle");
   });
+
+  it("souscription utilise eventTypesProduitCount", () => {
+    const s = formatEtiquetteRuleSummary({
+      ...base,
+      conditionType: "EVENEMENT_SOUSCRIPTION",
+      typesProduitCount: 5,
+      eventTypesProduitCount: 2,
+    });
+    expect(s).toContain("2 type");
+    expect(s).not.toContain("5 type");
+  });
+
+  it("souscription précise une fois vs chaque investissement", () => {
+    const each = formatEtiquetteRuleSummary({
+      ...base,
+      conditionType: "EVENEMENT_SOUSCRIPTION",
+      aChaqueSouscription: true,
+    });
+    expect(each).toContain("à chaque investissement");
+
+    const once = formatEtiquetteRuleSummary({
+      ...base,
+      conditionType: "EVENEMENT_SOUSCRIPTION",
+      aChaqueSouscription: false,
+    });
+    expect(once).toContain("une seule fois");
+  });
 });

@@ -5,6 +5,7 @@ import {
   renderEtiquetteEmailPreview,
   unixToLocalDatetime,
 } from "./etiquette-email-preview";
+import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 
 describe("etiquette-email-preview", () => {
@@ -119,5 +120,37 @@ describe("etiquette-email-preview", () => {
     });
     expect(rendered.body).toContain("Message.");
     expect(rendered.body).toContain("Paul Martin");
+  });
+
+  it("envoie le HTML du modèle quand corps_html est défini", () => {
+    const vars = setTemplateCorpsHtmlInMeta(
+      null,
+      "<p>Bonjour <strong>{{prenom}}</strong></p>"
+    );
+    const item: EtiquetteEmailQueueItem = {
+      contact_etiquette_id: 1,
+      contact_id: 2,
+      contact_nom: "Dupont",
+      contact_prenom: "Jean",
+      contact_email: "jean@example.com",
+      contact_telephone: null,
+      etiquette_id: 3,
+      etiquette_nom: "Campagne",
+      etiquette_couleur: "#3B82F6",
+      email_date_prevue: null,
+      email_date_envoi: null,
+      template_sujet: "Sujet",
+      template_corps: "Bonjour {{prenom}}",
+      template_variables: vars,
+      template_agenda_link_id: null,
+      queue_issue: null,
+    };
+    const rendered = renderEtiquetteEmailPreview(item, {
+      wizard_completed: true,
+      wizard_step: 4,
+      email_signature_html: "<p>Signature</p>",
+    });
+    expect(rendered.body_html).toContain("<strong>Jean</strong>");
+    expect(rendered.body_html).toContain("Signature");
   });
 });

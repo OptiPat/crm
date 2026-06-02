@@ -16,7 +16,18 @@ const template = {
 
 describe("formatEmailCampaignSummary", () => {
   it("campagnes désactivée", () => {
-    expect(formatEmailCampaignSummary({ active: false, template: null, mode: "eligibility", envoiHeure: "09:00", envoiLocal: "", hasAutoRule: true, etiquetteNom: "IR" })).toContain("désactivée");
+    expect(
+      formatEmailCampaignSummary({
+        active: false,
+        template: null,
+        mode: "eligibility",
+        envoiHeure: "09:00",
+        envoiLocal: "",
+        emailDelaiJours: 0,
+        hasAutoRule: true,
+        etiquetteNom: "IR",
+      })
+    ).toContain("désactivée");
   });
 
   it("éligibilité avec règle auto", () => {
@@ -26,9 +37,12 @@ describe("formatEmailCampaignSummary", () => {
       mode: "eligibility",
       envoiHeure: "10:30",
       envoiLocal: "",
+      emailDelaiJours: 1,
       hasAutoRule: true,
       etiquetteNom: "Déclaration IR",
+      isEventSouscription: true,
     });
+    expect(s).toContain("1 jour");
     expect(s).toContain("10:30");
     expect(s).toContain("Déclaration IR");
   });

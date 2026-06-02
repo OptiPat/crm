@@ -468,9 +468,16 @@ pub struct NewSegment {
     pub actif: Option<bool>,
 }
 
-/// Ligne de la file d'envoi manuel (étiquettes + email)
+fn default_queue_row_kind() -> String {
+    "etiquette".to_string()
+}
+
+/// Ligne de la file d'envoi manuel (étiquettes ou modèle direct)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct EtiquetteEmailQueueItem {
+    /// `etiquette` → contact_etiquettes.id ; `template` → contact_template_envois.id
+    #[serde(default = "default_queue_row_kind")]
+    pub queue_row_kind: String,
     pub contact_etiquette_id: i64,
     pub contact_id: i64,
     pub contact_nom: String,

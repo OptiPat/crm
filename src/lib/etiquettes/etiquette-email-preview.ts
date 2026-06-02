@@ -1,5 +1,9 @@
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
-import { appendEmailSignature, buildSendEmailBodies } from "@/lib/emails/email-signature";
+import { appendEmailSignature } from "@/lib/emails/email-signature";
+import {
+  buildTemplateSendBodies,
+  getTemplateCorpsHtml,
+} from "@/lib/emails/template-email-html";
 import { buildVariablesFromContact } from "@/lib/emails/template-email-meta";
 import {
   applyVariablesToNewsletterHtml,
@@ -37,9 +41,9 @@ export function renderEtiquetteEmailPreview(
   cgp: CgpConfig | null
 ): { subject: string; body: string; body_html: string | null } {
   const vars = buildTemplateVariables(item, cgp);
+  const subject = replaceTemplateVariables(item.template_sujet, vars);
   const bodyCore = replaceTemplateVariables(item.template_corps, vars);
   const body = appendEmailSignature(bodyCore, cgp?.email_signature);
-  const subject = replaceTemplateVariables(item.template_sujet, vars);
 
   if (isNewsletterTemplate(item.template_categorie)) {
     const meta = parseNewsletterTemplateMeta(item.template_variables);
@@ -50,7 +54,11 @@ export function renderEtiquetteEmailPreview(
     }
   }
 
-  const { body_html } = buildSendEmailBodies(body, cgp);
+  const corpsHtmlStored = getTemplateCorpsHtml(item.template_variables);
+  const bodyHtmlCore = corpsHtmlStored
+    ? replaceTemplateVariables(corpsHtmlStored, vars)
+    : null;
+  const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp);
   return { subject, body, body_html };
 }
 

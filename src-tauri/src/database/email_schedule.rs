@@ -20,6 +20,17 @@ pub fn normalize_email_heure(s: &str) -> Option<String> {
     Some(format!("{:02}:{:02}", h, m))
 }
 
+/// Créneau horaire le jour calendaire de `anchor_unix` (sans report « immédiat » si l'heure est passée).
+fn calendar_slot_on_anchor_day(anchor_unix: i64, heure: &str) -> Option<i64> {
+    let (h, m) = parse_email_heure(heure)?;
+    let anchor = Local.timestamp_opt(anchor_unix, 0).single()?;
+    let time = NaiveTime::from_hms_opt(h, m, 0)?;
+    let slot_naive = anchor.date_naive().and_time(time);
+    Local.from_local_datetime(&slot_naive)
+        .single()
+        .map(|dt| dt.timestamp())
+}
+
 /// Heure d'envoi le jour de l'éligibilité : créneau à `heure` si pas encore passé, sinon immédiat.
 pub fn send_at_eligibility_slot(eligible_at_unix: i64, heure: &str) -> Option<i64> {
     let (h, m) = parse_email_heure(heure)?;
@@ -46,11 +57,18 @@ pub fn resolve_email_date_prevue_for_contact(
     if let Some(ts) = etiquette.email_envoi_prevu {
         return Some(ts);
     }
+    let mut anchor = eligible_at_unix;
+    if etiquette.email_delai_jours > 0 {
+        anchor += etiquette.email_delai_jours * 24 * 60 * 60;
+    }
     if let Some(ref heure) = etiquette.email_envoi_heure {
-        return send_at_eligibility_slot(eligible_at_unix, heure);
+        if etiquette.email_delai_jours > 0 {
+            return calendar_slot_on_anchor_day(anchor, heure);
+        }
+        return send_at_eligibility_slot(anchor, heure);
     }
     if etiquette.email_delai_jours > 0 {
-        return Some(eligible_at_unix + etiquette.email_delai_jours * 24 * 60 * 60);
+        return Some(anchor);
     }
     None
 }
@@ -78,6 +96,43 @@ mod tests {
             .unwrap()
             .timestamp();
         assert_eq!(slot, expected);
+    }
+
+    #[test]
+    fn delai_then_heure_on_anchor_day() {
+        use super::super::models::Etiquette;
+        use chrono::{Local, TimeZone};
+        let souscription = Local
+            .with_ymd_and_hms(2026, 5, 28, 14, 0, 0)
+            .unwrap()
+            .timestamp();
+        let etiqu = Etiquette {
+            id: 1,
+            nom: "Test".into(),
+            couleur: "#000".into(),
+            icone: None,
+            description: None,
+            priorite: 0,
+            auto_condition_type: None,
+            auto_condition_config: None,
+            auto_categories: None,
+            email_template_id: Some(1),
+            email_delai_jours: 1,
+            email_envoi_prevu: None,
+            email_envoi_heure: Some("09:00".into()),
+            email_actif: true,
+            is_default: false,
+            actif: true,
+            segment_id: None,
+            created_at: 0,
+            updated_at: 0,
+        };
+        let prevue = resolve_email_date_prevue_for_contact(&etiqu, souscription).unwrap();
+        let expected = Local
+            .with_ymd_and_hms(2026, 5, 29, 9, 0, 0)
+            .unwrap()
+            .timestamp();
+        assert_eq!(prevue, expected);
     }
 
     #[test]
