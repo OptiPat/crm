@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,6 +30,9 @@ import {
 import { textMatchesSearch } from "@/lib/search-utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 
 type InvestissementsProps = {
   onOpenContact?: (contactId: number) => void;
@@ -84,11 +87,7 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
   const [encoursInvestissement, setEncoursInvestissement] =
     useState<InvestissementWithDetails | null>(null);
 
-  useEffect(() => {
-    loadInvestissements();
-  }, []);
-
-  const loadInvestissements = async () => {
+  const loadInvestissements = useCallback(async () => {
     try {
       const data = await getInvestissementsWithDetails();
       setInvestissements(data);
@@ -97,7 +96,17 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadInvestissements();
+  }, [loadInvestissements]);
+
+  useEventAutoRefresh(
+    loadInvestissements,
+    subscribeContactsChanged,
+    subscribeFoyersChanged
+  );
 
   const handleDelete = async (id: number) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer cet investissement ?")) {

@@ -20,7 +20,7 @@ import {
 import { Search, Home, UserPlus } from "lucide-react";
 import { type Contact, getAllContacts } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, createFoyer, type Foyer } from "@/lib/api/tauri-foyers";
-import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
+import { linkContactToFoyer, buildFoyerNomFromMembers } from "@/lib/foyers/foyer-utils";
 import { Badge } from "@/components/ui/badge";
 import { contactMatchesSearch } from "@/lib/search-utils";
 
@@ -92,10 +92,8 @@ export function FoyerLinkModal({
     }
   };
 
-  const buildFoyerName = (a: Contact, b: Contact) => {
-    const noms = [...new Set([a.nom, b.nom].map((n) => n.toUpperCase()))].sort();
-    return noms.length === 1 ? `Foyer ${noms[0]}` : `Foyer ${noms.join(" - ")}`;
-  };
+  const buildFoyerName = (a: Contact, b: Contact) =>
+    buildFoyerNomFromMembers([a, b]);
 
   const handleCreateFoyerTogether = async (contact: Contact) => {
     setLoading(true);

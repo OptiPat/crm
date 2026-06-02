@@ -6,6 +6,7 @@ import {
   formatFoyerMemberLabel,
   getContactsForFoyer,
   sumPatrimoineCentimes,
+  buildFoyerNomFromMembers,
 } from "./foyer-utils";
 
 function contact(partial: Partial<Contact> & Pick<Contact, "id">): Contact {
@@ -28,6 +29,20 @@ describe("getContactsForFoyer", () => {
       contact({ id: 3, foyer_id: "10" as unknown as number }),
     ];
     expect(getContactsForFoyer(contacts, 10).map((c) => c.id)).toEqual([1, 3]);
+  });
+});
+
+describe("buildFoyerNomFromMembers", () => {
+  it("compose un nom unique ou hyphené", () => {
+    expect(
+      buildFoyerNomFromMembers([
+        contact({ id: 1, nom: "Dupont" }),
+        contact({ id: 2, nom: "Martin" }),
+      ])
+    ).toBe("Foyer DUPONT - MARTIN");
+    expect(
+      buildFoyerNomFromMembers([contact({ id: 1, nom: "Dupont" })])
+    ).toBe("Foyer DUPONT");
   });
 });
 

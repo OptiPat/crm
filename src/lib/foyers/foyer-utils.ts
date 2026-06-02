@@ -50,6 +50,18 @@ export function formatFoyerMemberLabel(
   return `${name} · ${ROLE_FOYER_LABELS[role] || role}`;
 }
 
+/** Nom de foyer suggéré à partir des noms de famille des membres. */
+export function buildFoyerNomFromMembers(contacts: Contact[]): string {
+  const uniqueNoms = [
+    ...new Set(
+      contacts.map((c) => c.nom.trim().toUpperCase()).filter(Boolean)
+    ),
+  ].sort();
+  if (uniqueNoms.length === 0) return "Foyer";
+  if (uniqueNoms.length === 1) return `Foyer ${uniqueNoms[0]}`;
+  return `Foyer ${uniqueNoms.join(" - ")}`;
+}
+
 /** Foyer existant pour un nom de famille (évite les doublons à l'import). */
 export function findExistingFoyerByFamilleName(
   foyers: Foyer[],

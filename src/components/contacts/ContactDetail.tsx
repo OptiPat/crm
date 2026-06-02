@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -53,7 +53,7 @@ import { ContactForm } from "./ContactForm";
 import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
-import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
+import { getAllFoyers, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { FoyerCreateModal } from "@/components/foyers/FoyerCreateModal";
 import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
 import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
@@ -87,8 +87,12 @@ import {
 import {
   getContactsForFoyer,
   loadFoyerPatrimoineCentimes,
+  buildFoyerNomFromMembers,
 } from "@/lib/foyers/foyer-utils";
 import { consumeOpenContactInvestissementFlag } from "@/lib/investissements/investissement-navigation";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
+import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 
 interface ContactDetailProps {
   open: boolean;
@@ -142,6 +146,25 @@ export function ContactDetail({
   const [showFoyerLinkModal, setShowFoyerLinkModal] = useState(false);
   const [etiquettes, setEtiquettes] = useState<ContactEtiquetteDetails[]>([]);
   const [showDeleteContactDialog, setShowDeleteContactDialog] = useState(false);
+  const [foyerRenamePrompt, setFoyerRenamePrompt] = useState<{
+    foyer: Foyer;
+    suggestedNom: string;
+  } | null>(null);
+  const identityBeforeEditRef = useRef<{ nom: string; prenom: string } | null>(
+    null
+  );
+  const contactRef = useRef(contact);
+  contactRef.current = contact;
+
+  const openEditForm = () => {
+    if (contact) {
+      identityBeforeEditRef.current = {
+        nom: contact.nom,
+        prenom: contact.prenom,
+      };
+    }
+    setShowEditForm(true);
+  };
 
   const handleDissocierFoyer = async () => {
     if (!contact?.id) return;
@@ -205,23 +228,16 @@ export function ContactDetail({
     }
   }, [contact?.id]);
 
-  // Charger les investissements du contact
-  useEffect(() => {
-    if (contact?.id && detailActive) {
-      loadInvestissements();
-      loadParrain();
-      loadPrescripteur();
-      loadFilleuls();
-      loadFoyer();
-      loadEtiquettes();
+  const refreshContactAfterMutation = useCallback(async () => {
+    if (!contact?.id) return;
+    try {
+      const fresh = await getContactById(contact.id);
+      onContactRefreshed?.(fresh);
+      onUpdate?.();
+    } catch (error) {
+      console.error("Erreur rechargement contact:", error);
     }
-  }, [contact?.id, detailActive]);
-
-  useEffect(() => {
-    if (detailTab === "patrimoine" && contact?.id && detailActive) {
-      loadInvestissements();
-    }
-  }, [detailTab, contact?.id, detailActive]);
+  }, [contact?.id, onContactRefreshed, onUpdate]);
 
   const loadEtiquettes = async () => {
     if (!contact?.id) return;
@@ -308,32 +324,34 @@ export function ContactDetail({
       !etiquettes.some((ce) => ce.etiquette_id === e.id)
   );
 
-  const loadInvestissements = async () => {
-    if (!contact?.id) return;
+  const loadInvestissements = async (forContact?: Contact) => {
+    const c = forContact ?? contact;
+    if (!c?.id) return;
 
     setLoadingInvestissements(true);
     try {
-      const own = await getInvestissementsByContact(contact.id);
-      const contactLabel = `${contact.prenom} ${contact.nom}`.trim();
+      const own = await getInvestissementsByContact(c.id);
+      const contactLabel = `${c.prenom} ${c.nom}`.trim();
 
-      if (!contact.foyer_id) {
+      if (!c.foyer_id) {
         setInvestissements(
           own.map((inv) => ({
             ...inv,
             _proprietaire: contactLabel,
-            _proprietaireId: contact.id,
+            _proprietaireId: c.id,
           }))
         );
         return;
       }
 
       const [foyerInvs, allContacts] = await Promise.all([
-        getInvestissementsByFoyer(contact.foyer_id),
+        getInvestissementsByFoyer(c.foyer_id),
         getAllContacts(),
       ]);
 
       const otherMembers = allContacts.filter(
-        (c) => c.foyer_id === contact.foyer_id && c.id && c.id !== contact.id
+        (member) =>
+          member.foyer_id === c.foyer_id && member.id && member.id !== c.id
       );
       const memberRows = (
         await Promise.all(
@@ -350,7 +368,7 @@ export function ContactDetail({
 
       setInvestissements(
         mergeContactPatrimoineRows(
-          contact.id,
+          c.id,
           contactLabel,
           own,
           foyerInvs,
@@ -366,14 +384,15 @@ export function ContactDetail({
     }
   };
 
-  const loadPrescripteur = async () => {
-    if (!contact?.prescripteur_id) {
+  const loadPrescripteur = async (forContact?: Contact) => {
+    const c = forContact ?? contact;
+    if (!c?.prescripteur_id) {
       setPrescripteur(null);
       return;
     }
     setLoadingPrescripteur(true);
     try {
-      const data = await getContactById(contact.prescripteur_id);
+      const data = await getContactById(c.prescripteur_id);
       setPrescripteur(data);
     } catch (error) {
       console.error("Error loading prescripteur:", error);
@@ -383,15 +402,16 @@ export function ContactDetail({
     }
   };
 
-  const loadParrain = async () => {
-    if (!contact?.parrain_id) {
+  const loadParrain = async (forContact?: Contact) => {
+    const c = forContact ?? contact;
+    if (!c?.parrain_id) {
       setParrain(null);
       return;
     }
-    
+
     setLoadingParrain(true);
     try {
-      const data = await getContactById(contact.parrain_id);
+      const data = await getContactById(c.parrain_id);
       setParrain(data);
     } catch (error) {
       console.error("Error loading parrain:", error);
@@ -401,12 +421,13 @@ export function ContactDetail({
     }
   };
 
-  const loadFilleuls = async () => {
-    if (!contact?.id) return;
-    
+  const loadFilleuls = async (forContact?: Contact) => {
+    const c = forContact ?? contact;
+    if (!c?.id) return;
+
     setLoadingFilleuls(true);
     try {
-      const data = await getFilleulsByParrain(contact.id);
+      const data = await getFilleulsByParrain(c.id);
       setFilleuls(data);
     } catch (error) {
       console.error("Error loading filleuls:", error);
@@ -416,32 +437,32 @@ export function ContactDetail({
     }
   };
 
-  const loadFoyer = async () => {
-    if (!contact?.foyer_id) {
+  const loadFoyer = async (forContact?: Contact) => {
+    const c = forContact ?? contact;
+    if (!c?.foyer_id) {
       setFoyer(null);
       setFoyerMembers([]);
       setFoyerPatrimoine(0);
       return;
     }
-    
+
     setLoadingFoyer(true);
     try {
       const [foyers, allContacts] = await Promise.all([
         getAllFoyers(),
-        getAllContacts()
+        getAllContacts(),
       ]);
-      
-      const currentFoyer = foyers.find(f => f.id === contact.foyer_id);
+
+      const currentFoyer = foyers.find((f) => f.id === c.foyer_id);
       setFoyer(currentFoyer || null);
-      
-      // Récupérer les autres membres du foyer (sauf le contact actuel)
+
       const members = allContacts.filter(
-        c => c.foyer_id === contact.foyer_id && c.id !== contact.id
+        (member) => member.foyer_id === c.foyer_id && member.id !== c.id
       );
       setFoyerMembers(members);
-      
-      if (currentFoyer && contact.foyer_id) {
-        const membres = getContactsForFoyer(allContacts, contact.foyer_id);
+
+      if (currentFoyer && c.foyer_id) {
+        const membres = getContactsForFoyer(allContacts, c.foyer_id);
         const totalFoyer = await loadFoyerPatrimoineCentimes(
           currentFoyer.id,
           membres
@@ -457,6 +478,127 @@ export function ContactDetail({
       setLoadingFoyer(false);
     }
   };
+
+  const reloadAllSections = useCallback(async (forContact?: Contact) => {
+    const c = forContact ?? contactRef.current;
+    if (!c?.id) return;
+    await Promise.all([
+      loadInvestissements(c),
+      loadParrain(c),
+      loadPrescripteur(c),
+      loadFilleuls(c),
+      loadFoyer(c),
+      loadEtiquettes(),
+    ]);
+  }, []);
+
+  const maybeOfferFoyerRename = async (
+    before: { nom: string; prenom: string } | null,
+    fresh: Contact
+  ) => {
+    if (!before || !fresh.foyer_id) return;
+
+    const identityChanged =
+      before.nom.trim().toUpperCase() !== fresh.nom.trim().toUpperCase() ||
+      before.prenom.trim().toUpperCase() !== fresh.prenom.trim().toUpperCase();
+    if (!identityChanged) return;
+
+    const [foyers, allContacts] = await Promise.all([
+      getAllFoyers(),
+      getAllContacts(),
+    ]);
+    const currentFoyer = foyers.find((f) => f.id === fresh.foyer_id);
+    if (!currentFoyer) return;
+
+    const membres = getContactsForFoyer(allContacts, fresh.foyer_id).map((m) =>
+      m.id === fresh.id ? fresh : m
+    );
+    const suggestedNom = buildFoyerNomFromMembers(membres);
+    if (
+      suggestedNom.trim().toUpperCase() === currentFoyer.nom.trim().toUpperCase()
+    ) {
+      return;
+    }
+
+    setFoyerRenamePrompt({ foyer: currentFoyer, suggestedNom });
+  };
+
+  const handleConfirmFoyerRename = async () => {
+    if (!foyerRenamePrompt) return;
+    const { foyer, suggestedNom } = foyerRenamePrompt;
+    try {
+      await updateFoyer(foyer.id, {
+        nom: suggestedNom,
+        type_foyer: foyer.type_foyer,
+        nombre_parts_fiscales: foyer.nombre_parts_fiscales,
+        tranche_imposition: foyer.tranche_imposition,
+        revenu_fiscal_reference: foyer.revenu_fiscal_reference,
+        situation_patrimoniale: foyer.situation_patrimoniale ?? "",
+        objectifs_patrimoniaux: foyer.objectifs_patrimoniaux ?? "",
+        notes: foyer.notes ?? "",
+      });
+      toast.success("Nom du foyer mis à jour");
+      setFoyerRenamePrompt(null);
+      await loadFoyer(contact ?? undefined);
+      onUpdate?.();
+    } catch (error) {
+      console.error("Erreur mise à jour nom foyer:", error);
+      toast.error("Impossible de mettre à jour le nom du foyer");
+    }
+  };
+
+  useEffect(() => {
+    if (!contact?.id || !detailActive) return;
+    void loadInvestissements();
+    void loadParrain();
+    void loadPrescripteur();
+    void loadFilleuls();
+    void loadFoyer();
+    void loadEtiquettes();
+  }, [
+    contact?.id,
+    contact?.updated_at,
+    contact?.foyer_id,
+    contact?.role_foyer,
+    contact?.parrain_id,
+    contact?.prescripteur_id,
+    detailActive,
+  ]);
+
+  useEffect(() => {
+    if (detailTab === "patrimoine" && contact?.id && detailActive) {
+      void loadInvestissements();
+    }
+  }, [detailTab, contact?.id, detailActive]);
+
+  useEffect(() => {
+    if (!contact?.id || !detailActive) return;
+
+    const syncOpenContactFromServer = () => {
+      void (async () => {
+        if (!contact?.id) return;
+        try {
+          const fresh = await getContactById(contact.id);
+          onContactRefreshed?.(fresh);
+          await reloadAllSections(fresh);
+        } catch (error) {
+          console.error("Sync fiche contact:", error);
+        }
+      })();
+    };
+
+    const unsubs = [
+      subscribeContactsChanged(syncOpenContactFromServer),
+      subscribeFoyersChanged(syncOpenContactFromServer),
+      subscribeEtiquettesChanged(() => {
+        void loadEtiquettes();
+      }),
+    ];
+
+    return () => {
+      for (const unsub of unsubs) unsub();
+    };
+  }, [contact?.id, detailActive, onContactRefreshed, reloadAllSections]);
 
   const getPartenaireNom = (partenaireId?: number): string | null => {
     if (!partenaireId) return null;
@@ -522,14 +664,7 @@ export function ContactDetail({
   const handleInvestissementSuccess = async () => {
     loadInvestissements();
     notifyEtiquettesChanged();
-    if (contact?.id) {
-      try {
-        const fresh = await getContactById(contact.id);
-        onContactRefreshed?.(fresh);
-      } catch (error) {
-        console.error("Erreur rechargement contact:", error);
-      }
-    }
+    await refreshContactAfterMutation();
     handleInvestissementFormClose();
   };
 
@@ -609,7 +744,7 @@ export function ContactDetail({
           type="button"
           variant="outline"
           size="icon"
-          onClick={() => setShowEditForm(true)}
+          onClick={openEditForm}
           title="Modifier"
         >
           <Edit className="h-4 w-4" />
@@ -895,13 +1030,7 @@ export function ContactDetail({
                 relationTabActive={detailTab === "relation"}
                 dateDernierContact={contact.date_dernier_contact}
                 dateDernierContactFilleul={contact.date_dernier_contact_filleul}
-                onContactUpdated={async () => {
-                  if (contact.id) {
-                    const refreshed = await getContactById(contact.id);
-                    onContactRefreshed?.(refreshed);
-                  }
-                  onUpdate?.();
-                }}
+                onContactUpdated={() => void refreshContactAfterMutation()}
                 onNavigate={
                   onNavigate
                     ? (page) => {
@@ -1264,15 +1393,18 @@ export function ContactDetail({
         onOpenContact={onOpenContact}
         onSuccess={async () => {
           setShowEditForm(false);
-          if (contact?.id) {
-            try {
-              const fresh = await getContactById(contact.id);
-              onContactRefreshed?.(fresh);
-            } catch (error) {
-              console.error("Error refreshing contact after edit:", error);
-            }
+          const before = identityBeforeEditRef.current;
+          identityBeforeEditRef.current = null;
+          if (!contact?.id) return;
+          try {
+            const fresh = await getContactById(contact.id);
+            onContactRefreshed?.(fresh);
+            onUpdate?.();
+            await reloadAllSections(fresh);
+            await maybeOfferFoyerRename(before, fresh);
+          } catch (error) {
+            console.error("Erreur rechargement contact:", error);
           }
-          onUpdate?.();
         }}
       />
 
@@ -1293,27 +1425,13 @@ export function ContactDetail({
             open={showFoyerCreateModal}
             onOpenChange={setShowFoyerCreateModal}
             currentContact={contact}
-            onSuccess={async () => {
-              try {
-                await getContactById(contact.id!);
-                onUpdate?.();
-              } catch (error) {
-                console.error("Erreur rechargement contact:", error);
-              }
-            }}
+            onSuccess={() => void refreshContactAfterMutation()}
           />
           <FoyerLinkModal
             open={showFoyerLinkModal}
             onOpenChange={setShowFoyerLinkModal}
             currentContact={contact}
-            onSuccess={async () => {
-              try {
-                await getContactById(contact.id!);
-                onUpdate?.();
-              } catch (error) {
-                console.error("Erreur rechargement contact:", error);
-              }
-            }}
+            onSuccess={() => void refreshContactAfterMutation()}
           />
         </>
       )}
@@ -1329,6 +1447,43 @@ export function ContactDetail({
           );
         }}
       />
+
+      <AlertDialog
+        open={foyerRenamePrompt != null}
+        onOpenChange={(open) => {
+          if (!open) setFoyerRenamePrompt(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mettre à jour le nom du foyer ?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  Vous avez modifié l’identité de ce contact. Le foyer associé
+                  s’appelle encore{" "}
+                  <strong className="text-foreground">
+                    {foyerRenamePrompt?.foyer.nom}
+                  </strong>
+                  .
+                </p>
+                <p>
+                  Suggestion :{" "}
+                  <strong className="text-foreground">
+                    {foyerRenamePrompt?.suggestedNom}
+                  </strong>
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Conserver l’ancien nom</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleConfirmFoyerRename()}>
+              Mettre à jour
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={showDeleteContactDialog}

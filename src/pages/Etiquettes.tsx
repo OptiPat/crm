@@ -49,6 +49,7 @@ import {
   notifyEtiquettesChanged,
   subscribeEtiquettesChanged,
 } from "@/lib/etiquettes/etiquette-events";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 
@@ -182,6 +183,12 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
 
   useEffect(() => {
     return subscribeEtiquettesChanged(() => {
+      void refreshEtiquetteCounts();
+    });
+  }, [refreshEtiquetteCounts]);
+
+  useEffect(() => {
+    return subscribeContactsChanged(() => {
       void refreshEtiquetteCounts();
     });
   }, [refreshEtiquetteCounts]);
