@@ -12,7 +12,9 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { EtiquetteFormPanel } from "@/components/etiquettes/etiquette-form-ui";
+import { EmailEnvoiWeekdayPicker } from "@/components/emails/EmailEnvoiWeekdayPicker";
 import { EtiquetteSouscriptionGuide } from "@/components/etiquettes/EtiquetteSouscriptionGuide";
+import type { EmailEnvoiJourCode } from "@/lib/emails/email-envoi-schedule";
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
@@ -42,6 +44,8 @@ type Props = {
   onEnvoiLocalChange: (v: string) => void;
   emailDelaiJours: number;
   onDelaiJoursChange: (v: number) => void;
+  emailEnvoiJours: EmailEnvoiJourCode[] | null;
+  onEnvoiJoursChange: (v: EmailEnvoiJourCode[] | null) => void;
   templates: TemplateEmail[];
   nom: string;
   isAuto: boolean;
@@ -62,6 +66,8 @@ export function EtiquetteEmailCampaignFields({
   onEnvoiLocalChange,
   emailDelaiJours,
   onDelaiJoursChange,
+  emailEnvoiJours,
+  onEnvoiJoursChange,
   templates,
   nom,
   isAuto,
@@ -89,6 +95,9 @@ export function EtiquetteEmailCampaignFields({
     envoiHeure: emailEnvoiHeure,
     envoiLocal: emailEnvoiLocal,
     emailDelaiJours,
+    emailEnvoiJoursSemaine: emailEnvoiJours
+      ? JSON.stringify(emailEnvoiJours)
+      : null,
     hasAutoRule: isAuto,
     etiquetteNom: nom.trim(),
     isEventSouscription,
@@ -292,9 +301,14 @@ export function EtiquetteEmailCampaignFields({
                     />
                   </div>
                 </div>
+                <EmailEnvoiWeekdayPicker
+                  id="email-envoi-jours"
+                  value={emailEnvoiJours}
+                  onChange={onEnvoiJoursChange}
+                />
                 <p className="text-xs text-muted-foreground">
-                  Ex. délai 1 + heure 09:00 = lendemain de la souscription à 9 h. Si l&apos;heure est
-                  passée ce jour-là, l&apos;email est proposé tout de suite.
+                  Si l&apos;heure est passée le jour prévu, l&apos;email est proposé tout de suite dans
+                  Suivi → Envois.
                 </p>
               </>
             ) : (

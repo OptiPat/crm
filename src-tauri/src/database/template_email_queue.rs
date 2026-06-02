@@ -248,6 +248,37 @@ impl Database {
         Ok(scheduled)
     }
 
+    /// Recalcule `email_date_prevue` des envois non envoyés après modification du déclencheur modèle.
+    pub fn resync_pending_template_envois_for_template(&self, template_id: i64) -> Result<usize> {
+        let tpl = self.get_template_email_by_id(template_id)?;
+        let trigger = parse_template_email_trigger(tpl.variables.as_deref());
+        if !trigger.is_active() {
+            return Ok(0);
+        }
+        let sched = etiquette_schedule_from_trigger(&trigger);
+
+        let mut stmt = self.conn.prepare(
+            "SELECT id, COALESCE(trigger_event_at, 0)
+             FROM contact_template_envois
+             WHERE template_id = ?1 AND email_envoye = 0",
+        )?;
+        let rows: Vec<(i64, i64)> = stmt
+            .query_map(params![template_id], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let mut updated = 0usize;
+        for (row_id, eligible_at) in rows {
+            let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, eligible_at);
+            let n = self.conn.execute(
+                "UPDATE contact_template_envois SET email_date_prevue = ?1
+                 WHERE id = ?2 AND email_envoye = 0",
+                params![email_date_prevue, row_id],
+            )?;
+            updated += n;
+        }
+        Ok(updated)
+    }
+
     pub fn mark_template_email_sent(
         &self,
         row_id: i64,

@@ -47,6 +47,11 @@ import {
   unixToLocalDatetime,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { getAllTemplatesEmail, type TemplateEmail } from "@/lib/api/tauri-templates-email";
+import {
+  parseEmailEnvoiJoursSemaine,
+  serializeEmailEnvoiJoursSemaine,
+  type EmailEnvoiJourCode,
+} from "@/lib/emails/email-envoi-schedule";
 import { suggestTemplateIdForEtiquette } from "@/lib/emails/template-email-meta";
 import { EtiquetteEmailCampaignFields } from "@/components/etiquettes/EtiquetteEmailCampaignFields";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
@@ -147,6 +152,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [emailEnvoiHeure, setEmailEnvoiHeure] = useState("09:00");
   const [emailEnvoiLocal, setEmailEnvoiLocal] = useState("");
   const [emailDelaiJours, setEmailDelaiJours] = useState(0);
+  const [emailEnvoiJours, setEmailEnvoiJours] = useState<EmailEnvoiJourCode[] | null>(
+    null
+  );
   const [eventTypesProduit, setEventTypesProduit] = useState<string[]>([]);
   const [eventAChaqueSouscription, setEventAChaqueSouscription] = useState(true);
 
@@ -307,6 +315,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         if (etiquette.email_envoi_heure) {
           setEmailEnvoiMode("eligibility");
           setEmailEnvoiHeure(etiquette.email_envoi_heure);
+          setEmailEnvoiJours(parseEmailEnvoiJoursSemaine(etiquette.email_envoi_jours_semaine));
           setEmailEnvoiLocal("");
         } else if (etiquette.email_envoi_prevu) {
           setEmailEnvoiMode("fixed");
@@ -314,6 +323,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         } else {
           setEmailEnvoiMode(etiquette.auto_condition_type ? "eligibility" : "fixed");
           setEmailEnvoiHeure("09:00");
+          setEmailEnvoiJours(null);
           setEmailEnvoiLocal("");
         }
       } else {
@@ -345,6 +355,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setEmailTemplateId(null);
         setEmailEnvoiMode("eligibility");
         setEmailEnvoiHeure("09:00");
+        setEmailEnvoiJours(null);
         setEmailEnvoiLocal("");
         setEmailDelaiJours(0);
         setEventTypesProduit([]);
@@ -458,6 +469,10 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             : null,
         email_envoi_heure:
           emailActif && emailEnvoiMode === "eligibility" ? emailEnvoiHeure.trim() : null,
+        email_envoi_jours_semaine:
+          emailActif && emailEnvoiMode === "eligibility"
+            ? serializeEmailEnvoiJoursSemaine(emailEnvoiJours)
+            : null,
         email_actif: emailActif,
         is_default: etiquette?.is_default || false,
         actif,
@@ -1047,6 +1062,8 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   onEnvoiLocalChange={setEmailEnvoiLocal}
                   emailDelaiJours={emailDelaiJours}
                   onDelaiJoursChange={setEmailDelaiJours}
+                  emailEnvoiJours={emailEnvoiJours}
+                  onEnvoiJoursChange={setEmailEnvoiJours}
                   templates={templates}
                   nom={nom}
                   isAuto={isAuto}

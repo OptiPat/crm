@@ -1,3 +1,5 @@
+import { EmailEnvoiWeekdayPicker } from "@/components/emails/EmailEnvoiWeekdayPicker";
+import { parseEmailEnvoiJoursSemaine } from "@/lib/emails/email-envoi-schedule";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -138,9 +140,19 @@ export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
                 />
               </div>
             </div>
+            <EmailEnvoiWeekdayPicker
+              id="trg-jours-semaine"
+              value={parseEmailEnvoiJoursSemaine(trigger.envoi_jours_semaine)}
+              onChange={(days) =>
+                patch({
+                  envoi_jours_semaine:
+                    days && days.length > 0 ? JSON.stringify(days) : null,
+                })
+              }
+            />
             <p className="text-xs text-muted-foreground">
-              Ex. délai <strong>1</strong> + heure <strong>09:00</strong> = lendemain à 9 h dans
-              Suivi → Envois (envoi validé par vous).
+              Ex. délai <strong>45</strong> + <strong>19:00</strong> + <strong>Mer</strong> = 45
+              jours après la souscription, puis le prochain mercredi à 19 h (Suivi → Envois).
             </p>
           </div>
         </div>

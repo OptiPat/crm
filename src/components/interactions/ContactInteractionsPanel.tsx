@@ -113,7 +113,9 @@ function pendingEmailSummary(pending: ContactPendingEmail): string {
         : pending.queue_status === "sent"
           ? "en attente de réponse client"
           : "configuration ou date à compléter";
-  return `Campagne « ${pending.etiquette_nom} » — ${status}`;
+  const kind =
+    pending.queue_row_kind === "template" ? "Modèle" : "Étiquette";
+  return `${kind} « ${pending.etiquette_nom} » — ${status}`;
 }
 
 function RelationActionLink({

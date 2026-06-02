@@ -399,6 +399,8 @@ pub struct Etiquette {
     pub email_envoi_prevu: Option<i64>,
     /// Heure locale « HH:MM » : envoi le jour de l'éligibilité (règle auto)
     pub email_envoi_heure: Option<String>,
+    /// Report au prochain mardi ou jeudi après J+N (`MARDI_JEUDI`), sinon jour calendaire.
+    pub email_envoi_jours_semaine: Option<String>,
     pub email_actif: bool,
     // Système
     pub is_default: bool,
@@ -426,6 +428,7 @@ pub struct NewEtiquette {
     pub email_delai_jours: Option<i64>, // Défaut: 0 (legacy)
     pub email_envoi_prevu: Option<i64>,
     pub email_envoi_heure: Option<String>,
+    pub email_envoi_jours_semaine: Option<String>,
     pub email_actif: Option<bool>,      // Défaut: false
     // Système
     pub is_default: Option<bool>, // Défaut: false
@@ -508,10 +511,27 @@ pub struct EtiquetteEmailQueueItem {
 /// Email campagne en attente pour un contact (fiche relation).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ContactPendingEmail {
+    /// `contact_etiquettes.id` ou `contact_template_envois.id`
     pub contact_etiquette_id: i64,
+    /// `etiquette` | `template` — aligné sur `EtiquetteEmailQueueItem`
+    #[serde(default = "default_queue_row_kind")]
+    pub queue_row_kind: String,
+    /// Libellé affiché (nom étiquette ou `Modèle · …`)
     pub etiquette_nom: String,
     pub queue_status: String,
     pub email_date_prevue: Option<i64>,
+}
+
+impl ContactPendingEmail {
+    pub fn from_queue_item(item: &EtiquetteEmailQueueItem, queue_status: &str) -> Self {
+        Self {
+            contact_etiquette_id: item.contact_etiquette_id,
+            queue_row_kind: item.queue_row_kind.clone(),
+            etiquette_nom: item.etiquette_nom.clone(),
+            queue_status: queue_status.to_string(),
+            email_date_prevue: item.email_date_prevue,
+        }
+    }
 }
 
 /// Synthèse relation client (alertes + file email).
@@ -569,6 +589,7 @@ pub struct EtiquetteWithCount {
     pub email_delai_jours: i64,
     pub email_envoi_prevu: Option<i64>,
     pub email_envoi_heure: Option<String>,
+    pub email_envoi_jours_semaine: Option<String>,
     pub email_actif: bool,
     pub is_default: bool,
     pub actif: bool,

@@ -1,5 +1,8 @@
 use super::{
-    email_schedule::{normalize_email_heure, resolve_email_date_prevue_for_contact},
+    email_schedule::{
+        normalize_email_envoi_jours_semaine, normalize_email_heure,
+        resolve_email_date_prevue_for_contact,
+    },
     models::{
         Contact, ContactEtiquette, ContactEtiquetteDetails, Etiquette, EtiquetteEmailQueueItem,
         EtiquetteWithCount, Famille, NewContact, NewContactEtiquette, NewEtiquette, NewFamille,
@@ -1131,6 +1134,8 @@ impl Database {
                 id
             ],
         )?;
+
+        let _ = self.resync_pending_template_envois_for_template(id)?;
 
         self.get_template_email_by_id(id)
     }
@@ -2691,7 +2696,8 @@ Bien cordialement,\n\
     const ETIQUETTE_SELECT_COLS: &'static str = "id, nom, couleur, icone, description, priorite,
                     auto_condition_type, auto_condition_config, auto_categories,
                     email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
-                    email_actif, is_default, actif, segment_id, created_at, updated_at";
+                    email_envoi_jours_semaine, email_actif, is_default, actif, segment_id,
+                    created_at, updated_at";
 
     fn map_etiquette_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Etiquette> {
         Ok(Etiquette {
@@ -2708,13 +2714,23 @@ Bien cordialement,\n\
             email_delai_jours: row.get(10)?,
             email_envoi_prevu: row.get(11)?,
             email_envoi_heure: row.get(12)?,
-            email_actif: row.get::<_, i64>(13)? != 0,
-            is_default: row.get::<_, i64>(14)? != 0,
-            actif: row.get::<_, i64>(15)? != 0,
-            segment_id: row.get(16)?,
-            created_at: row.get(17)?,
-            updated_at: row.get(18)?,
+            email_envoi_jours_semaine: row.get(13)?,
+            email_actif: row.get::<_, i64>(14)? != 0,
+            is_default: row.get::<_, i64>(15)? != 0,
+            actif: row.get::<_, i64>(16)? != 0,
+            segment_id: row.get(17)?,
+            created_at: row.get(18)?,
+            updated_at: row.get(19)?,
         })
+    }
+
+    fn normalized_email_envoi_jours_semaine_field(
+        etiquette: &NewEtiquette,
+    ) -> Option<String> {
+        etiquette
+            .email_envoi_jours_semaine
+            .as_ref()
+            .and_then(|s| normalize_email_envoi_jours_semaine(s))
     }
 
     fn normalized_email_campaign_fields(
@@ -2821,7 +2837,8 @@ Bien cordialement,\n\
             "SELECT e.id, e.nom, e.couleur, e.icone, e.description, e.priorite,
                     e.auto_condition_type, e.auto_condition_config, e.auto_categories,
                     e.email_template_id, e.email_delai_jours, e.email_envoi_prevu, e.email_envoi_heure,
-                    e.email_actif, e.is_default, e.actif, e.segment_id, e.created_at, e.updated_at,
+                    e.email_envoi_jours_semaine, e.email_actif, e.is_default, e.actif, e.segment_id,
+                    e.created_at, e.updated_at,
                     COALESCE((SELECT COUNT(*) FROM contact_etiquettes ce WHERE ce.etiquette_id = e.id), 0) as contact_count
              FROM etiquettes e
              ORDER BY e.priorite DESC, e.nom ASC"
@@ -2842,13 +2859,14 @@ Bien cordialement,\n\
                 email_delai_jours: row.get(10)?,
                 email_envoi_prevu: row.get(11)?,
                 email_envoi_heure: row.get(12)?,
-                email_actif: row.get::<_, i64>(13)? != 0,
-                is_default: row.get::<_, i64>(14)? != 0,
-                actif: row.get::<_, i64>(15)? != 0,
-                segment_id: row.get(16)?,
-                created_at: row.get(17)?,
-                updated_at: row.get(18)?,
-                contact_count: row.get(19)?,
+                email_envoi_jours_semaine: row.get(13)?,
+                email_actif: row.get::<_, i64>(14)? != 0,
+                is_default: row.get::<_, i64>(15)? != 0,
+                actif: row.get::<_, i64>(16)? != 0,
+                segment_id: row.get(17)?,
+                created_at: row.get(18)?,
+                updated_at: row.get(19)?,
+                contact_count: row.get(20)?,
             })
         })?;
 
@@ -2938,6 +2956,7 @@ Bien cordialement,\n\
         }
 
         let (email_envoi_prevu, email_envoi_heure) = Self::normalized_email_campaign_fields(&etiquette);
+        let email_envoi_jours_semaine = Self::normalized_email_envoi_jours_semaine_field(&etiquette);
         let couleur = etiquette
             .couleur
             .unwrap_or_else(|| "#3B82F6".to_string());
@@ -2959,8 +2978,8 @@ Bien cordialement,\n\
             "INSERT INTO etiquettes (nom, couleur, icone, description, priorite,
                                     auto_condition_type, auto_condition_config, auto_categories,
                                     email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
-                                    email_actif, is_default, actif, segment_id) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                                    email_envoi_jours_semaine, email_actif, is_default, actif, segment_id) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -2974,6 +2993,7 @@ Bien cordialement,\n\
                 email_delai_jours,
                 &email_envoi_prevu,
                 &email_envoi_heure,
+                &email_envoi_jours_semaine,
                 email_actif,
                 is_default,
                 actif,
@@ -3017,6 +3037,7 @@ Bien cordialement,\n\
         };
         let actif = if etiquette.actif.unwrap_or(true) { 1 } else { 0 };
         let (email_envoi_prevu, email_envoi_heure) = Self::normalized_email_campaign_fields(&etiquette);
+        let email_envoi_jours_semaine = Self::normalized_email_envoi_jours_semaine_field(etiquette);
 
         self.conn.execute(
             "UPDATE etiquettes SET 
@@ -3032,12 +3053,13 @@ Bien cordialement,\n\
                 email_delai_jours = ?10,
                 email_envoi_prevu = ?11,
                 email_envoi_heure = ?12,
-                email_actif = ?13,
-                is_default = ?14,
-                actif = ?15,
-                segment_id = ?16,
+                email_envoi_jours_semaine = ?13,
+                email_actif = ?14,
+                is_default = ?15,
+                actif = ?16,
+                segment_id = ?17,
                 updated_at = unixepoch()
-            WHERE id = ?17",
+            WHERE id = ?18",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -3051,6 +3073,7 @@ Bien cordialement,\n\
                 email_delai_jours,
                 &email_envoi_prevu,
                 &email_envoi_heure,
+                &email_envoi_jours_semaine,
                 email_actif,
                 is_default,
                 actif,
@@ -3456,6 +3479,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3477,6 +3501,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3500,6 +3525,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3521,6 +3547,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3542,6 +3569,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3563,6 +3591,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3584,6 +3613,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3605,6 +3635,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3629,6 +3660,7 @@ Bien cordialement,\n\
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
             actif: None,
@@ -3906,6 +3938,7 @@ Bien cordialement,\n\
                             email_delai_jours: Some(0),
                             email_envoi_prevu: None,
                             email_envoi_heure: None,
+                            email_envoi_jours_semaine: None,
                             email_actif: Some(false),
                             is_default: Some(true),
                 actif: None,
@@ -5584,111 +5617,29 @@ Bien cordialement,\n\
         Ok(result)
     }
 
+    /// Prochaine ligne email pour un contact (même file que Suivi → Envois : étiquettes + modèles).
+    pub fn get_next_pending_email_for_contact(
+        &self,
+        contact_id: i64,
+    ) -> Result<Option<super::models::ContactPendingEmail>> {
+        for status in ["ready", "followup", "sent", "incomplete"] {
+            let queue = self.get_etiquette_email_queue(status)?;
+            if let Some(item) = queue.into_iter().find(|q| q.contact_id == contact_id) {
+                return Ok(Some(super::models::ContactPendingEmail::from_queue_item(
+                    &item, status,
+                )));
+            }
+        }
+        Ok(None)
+    }
+
     /// Synthèse relation : alertes ouvertes + prochain email campagne en attente.
     pub fn get_contact_relation_status(
         &self,
         contact_id: i64,
     ) -> Result<super::models::ContactRelationStatus> {
         let open_alertes = self.get_alertes_for_contact(contact_id)?;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
-        let delai_jours = self
-            .get_cgp_config()
-            .ok()
-            .and_then(|c| c.email_suivi_delai_jours)
-            .filter(|d| *d > 0)
-            .unwrap_or(5);
-        let delai_secs = delai_jours * 86_400;
-
-        let mut stmt = self.conn.prepare(
-            "SELECT ce.id, e.nom, ce.email_date_prevue, ce.email_envoye, ce.email_reponse_at,
-                    COALESCE(ce.email_suivi_ignore, 0), ce.email_date_envoi
-             FROM contact_etiquettes ce
-             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
-             INNER JOIN contacts c ON ce.contact_id = c.id
-             WHERE ce.contact_id = ?1
-               AND e.actif = 1 AND e.email_actif = 1
-               AND e.email_template_id IS NOT NULL
-               AND (
-                 (ce.email_envoye = 0 AND ce.email_date_prevue IS NOT NULL AND ce.email_date_prevue <= ?2
-                  AND c.email IS NOT NULL AND TRIM(c.email) != '')
-                 OR (ce.email_envoye = 0 AND (
-                      c.email IS NULL OR TRIM(c.email) = ''
-                      OR ce.email_date_prevue IS NULL OR ce.email_date_prevue > ?2))
-                 OR (ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
-                     AND COALESCE(ce.email_suivi_ignore, 0) = 0
-                     AND ce.email_date_envoi IS NOT NULL
-                     AND ce.email_date_envoi + ?3 <= ?2
-                     AND c.email IS NOT NULL AND TRIM(c.email) != '')
-                 OR (ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
-                     AND COALESCE(ce.email_suivi_ignore, 0) = 0
-                     AND ce.email_date_envoi IS NOT NULL
-                     AND ce.email_date_envoi + ?3 > ?2
-                     AND c.email IS NOT NULL AND TRIM(c.email) != '')
-               )
-             ORDER BY
-               CASE
-                 WHEN ce.email_envoye = 0 AND ce.email_date_prevue IS NOT NULL AND ce.email_date_prevue <= ?2
-                      AND c.email IS NOT NULL AND TRIM(c.email) != '' THEN 0
-                 WHEN ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
-                      AND COALESCE(ce.email_suivi_ignore, 0) = 0
-                      AND ce.email_date_envoi IS NOT NULL AND ce.email_date_envoi + ?3 <= ?2 THEN 1
-                 WHEN ce.email_envoye = 1 AND ce.email_reponse_at IS NULL
-                      AND COALESCE(ce.email_suivi_ignore, 0) = 0
-                      AND ce.email_date_envoi IS NOT NULL AND ce.email_date_envoi + ?3 > ?2 THEN 2
-                 ELSE 3
-               END,
-               ce.email_date_prevue ASC
-             LIMIT 1",
-        )?;
-
-        let pending_email = match stmt.query_row(params![contact_id, now, delai_secs], |row| {
-            let ce_id: i64 = row.get(0)?;
-            let etiquette_nom: String = row.get(1)?;
-            let email_date_prevue: Option<i64> = row.get(2)?;
-            let email_envoye: i64 = row.get(3)?;
-            let email_reponse_at: Option<i64> = row.get(4)?;
-            let email_suivi_ignore: i64 = row.get(5)?;
-            let email_date_envoi: Option<i64> = row.get(6)?;
-
-            let queue_status = if email_envoye == 0 {
-                if email_date_prevue.map(|d| d <= now).unwrap_or(false) {
-                    "ready".to_string()
-                } else {
-                    "incomplete".to_string()
-                }
-            } else if email_reponse_at.is_none()
-                && email_suivi_ignore == 0
-                && email_date_envoi
-                    .map(|d| d + delai_secs <= now)
-                    .unwrap_or(false)
-            {
-                "followup".to_string()
-            } else if email_reponse_at.is_none()
-                && email_suivi_ignore == 0
-                && email_date_envoi
-                    .map(|d| d + delai_secs > now)
-                    .unwrap_or(false)
-            {
-                "sent".to_string()
-            } else {
-                "incomplete".to_string()
-            };
-
-            Ok(super::models::ContactPendingEmail {
-                contact_etiquette_id: ce_id,
-                etiquette_nom,
-                queue_status,
-                email_date_prevue,
-            })
-        }) {
-            Ok(v) => Some(v),
-            Err(rusqlite::Error::QueryReturnedNoRows) => None,
-            Err(e) => return Err(e),
-        };
+        let pending_email = self.get_next_pending_email_for_contact(contact_id)?;
 
         Ok(super::models::ContactRelationStatus {
             open_alertes,
@@ -7561,6 +7512,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: envoi_prevu,
                 email_envoi_heure: envoi_heure.map(|s| s.to_string()),
+                email_envoi_jours_semaine: None,
                 email_actif: Some(true),
                 is_default: Some(false),
                 actif: None,
@@ -7833,6 +7785,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: Some(now - 60),
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(true),
                 is_default: Some(false),
                 actif: None,
@@ -7948,6 +7901,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
@@ -7988,6 +7942,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(false),
                 is_default: Some(true),
                 actif: None,
@@ -8007,6 +7962,7 @@ mod database_integration_tests {
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(true),
                 actif: None,
@@ -8084,6 +8040,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
@@ -8140,6 +8097,7 @@ mod database_integration_tests {
             email_delai_jours: Some(0),
             email_envoi_prevu: None,
             email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
             email_actif: Some(false),
             is_default: Some(false),
             actif: None,
@@ -8176,6 +8134,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(false),
                 is_default: Some(false),
                 actif: Some(true),
@@ -8201,6 +8160,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(etiqu.email_delai_jours),
                 email_envoi_prevu: etiqu.email_envoi_prevu,
                 email_envoi_heure: etiqu.email_envoi_heure.clone(),
+                email_envoi_jours_semaine: etiqu.email_envoi_jours_semaine.clone(),
                 email_actif: Some(etiqu.email_actif),
                 is_default: Some(etiqu.is_default),
                 actif: Some(false),
@@ -8265,6 +8225,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(false),
                 is_default: Some(false),
             actif: None,
@@ -8300,6 +8261,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(false),
                 is_default: Some(false),
                 actif: Some(true),
@@ -8364,6 +8326,7 @@ mod database_integration_tests {
                 email_delai_jours: Some(0),
                 email_envoi_prevu: None,
                 email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
                 email_actif: Some(false),
                 is_default: Some(false),
                 actif: Some(true),

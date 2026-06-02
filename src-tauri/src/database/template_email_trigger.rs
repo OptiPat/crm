@@ -13,6 +13,8 @@ pub struct TemplateEmailTriggerConfig {
     pub categories: Vec<String>,
     pub delai_jours: i64,
     pub envoi_heure: Option<String>,
+    #[serde(default)]
+    pub envoi_jours_semaine: Option<String>,
     pub a_chaque_souscription: bool,
     /// Ancien format
     pub trigger_type: String,
@@ -121,6 +123,10 @@ pub fn etiquette_schedule_from_trigger(trigger: &TemplateEmailTriggerConfig) -> 
         email_delai_jours: trigger.delai_jours.max(0),
         email_envoi_prevu: None,
         email_envoi_heure: trigger.envoi_heure.clone().filter(|s| !s.trim().is_empty()),
+        email_envoi_jours_semaine: trigger
+            .envoi_jours_semaine
+            .as_ref()
+            .and_then(|s| super::email_schedule::normalize_email_envoi_jours_semaine(s)),
         email_actif: trigger.enabled,
         is_default: false,
         actif: true,

@@ -20,6 +20,8 @@ export interface Etiquette {
   email_envoi_prevu: number | null;
   /** Heure locale HH:MM — envoi le jour de l'éligibilité */
   email_envoi_heure: string | null;
+  /** `MARDI_JEUDI` = prochain mardi ou jeudi après J+N */
+  email_envoi_jours_semaine: string | null;
   email_actif: boolean;
   // Système
   is_default: boolean;
@@ -46,6 +48,7 @@ export interface NewEtiquette {
   email_delai_jours?: number; // Défaut: 0 (legacy)
   email_envoi_prevu?: number | null;
   email_envoi_heure?: string | null;
+  email_envoi_jours_semaine?: string | null;
   email_actif?: boolean;      // Défaut: false
   // Système
   is_default?: boolean;       // Défaut: false

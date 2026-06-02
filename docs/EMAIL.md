@@ -129,7 +129,7 @@ Limite : envois **avant** cette version sans thread Gmail enregistré — la rec
 
 | Mode (formulaire étiquette) | Champ SQLite | Comportement |
 |-----------------------------|--------------|--------------|
-| **Dès éligibilité** | `email_envoi_heure` + `email_delai_jours` | Référence = attribution ou **date de souscription** (événement). Ex. délai **1** + heure **09:00** → mail proposé le lendemain matin après signature. |
+| **Dès éligibilité** | `email_envoi_heure` + `email_delai_jours` + option `email_envoi_jours_semaine` | Référence = attribution ou **date de souscription**. Après J+N : jour calendaire **ou** report au **prochain jour coché** (lun–dim, ex. `["MER"]` ou `["MAR","JEU"]`). Legacy `MARDI_JEUDI` = mar+jeu. |
 | **Date fixe** | `email_envoi_prevu` (timestamp) | Même date/heure pour tous les contacts déjà tagués (campagnes ponctuelles type « envoi le 15/06 à 10h »). |
 
 Prérequis pour voir des lignes dans **Suivi → Envois** :
@@ -139,6 +139,19 @@ Prérequis pour voir des lignes dans **Suivi → Envois** :
 3. OAuth connecté ; envoi manuel depuis l’onglet **Prêts**.
 
 Les deux modes sont exclusifs : enregistrer l’un efface l’autre côté base.
+
+## Où voir les envois (étiquette vs modèle seul)
+
+| Écran | Étiquette + campagne | Modèle avec déclencheur (sans étiquette) |
+|-------|----------------------|------------------------------------------|
+| Bandeau notifications — pastille email | Oui | Oui (même compteur/file) |
+| **Suivi → Envois** | Oui (pastille = nom étiquette) | Oui (pastille **`Modèle · …`**) |
+| **Suivi → Alertes** | Parfois (action si étiquette liée au type d’alerte) | Non |
+| **Fiche contact → Relation** | Oui | Oui (même priorité que la file Envois) |
+
+Les séquences post-souscription (J+1, J+45, etc.) peuvent donc rester sur le **déclencheur du modèle** sans créer d’étiquette par mail.
+
+**Modifier le déclencheur** (délai, heure, jours) : à l’enregistrement du modèle, les lignes déjà planifiées et **non envoyées** recalculent leur date (`contact_template_envois`). Sinon, rouvrir l’investissement et enregistrer (même date de souscription) fait le même recalcul.
 
 ## Templates ↔ étiquettes
 

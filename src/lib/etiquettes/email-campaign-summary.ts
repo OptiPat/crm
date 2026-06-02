@@ -1,4 +1,5 @@
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
+import { emailEnvoiJoursSemaineLabel } from "@/lib/emails/email-envoi-schedule";
 import { getTemplateCategoryMeta } from "@/lib/emails/template-email-meta";
 
 export type EmailEnvoiMode = "eligibility" | "fixed";
@@ -10,6 +11,7 @@ export interface EmailCampaignSummaryInput {
   envoiHeure: string;
   envoiLocal: string;
   emailDelaiJours: number;
+  emailEnvoiJoursSemaine?: string | null;
   hasAutoRule: boolean;
   etiquetteNom: string;
   isEventSouscription?: boolean;
@@ -38,7 +40,9 @@ export function formatEmailCampaignSummary(input: EmailCampaignSummaryInput): st
             input.isEventSouscription ? "la souscription" : "l'attribution de l'étiquette"
           }, puis `
         : "";
-    return `Modèle : ${tpl}. Dès qu'un contact reçoit l'étiquette « ${input.etiquetteNom || "…"} », email proposé ${delaiLabel}à ${heure} (Suivi → Envois).`;
+    const jourLabel = emailEnvoiJoursSemaineLabel(input.emailEnvoiJoursSemaine);
+    const jourPart = jourLabel ? `, ${jourLabel.toLowerCase()}` : "";
+    return `Modèle : ${tpl}. Dès qu'un contact reçoit l'étiquette « ${input.etiquetteNom || "…"} », email proposé ${delaiLabel}à ${heure}${jourPart} (Suivi → Envois).`;
   }
 
   const dateLabel = input.envoiLocal.trim()

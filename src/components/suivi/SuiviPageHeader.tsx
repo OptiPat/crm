@@ -58,9 +58,9 @@ export function SuiviPageHeader({
     },
     {
       id: "envois",
-      label: "Emails prêts",
+      label: "Envois prêts",
       value: readyEmailCount,
-      hint: "Campagnes à envoyer",
+      hint: "Étiquettes et modèles (déclencheur)",
       icon: Mail,
       accent: "border-emerald-200/80 bg-emerald-50/60 hover:bg-emerald-50",
     },

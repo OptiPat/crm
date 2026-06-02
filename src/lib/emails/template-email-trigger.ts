@@ -2,6 +2,10 @@ import {
   parseTemplateEmailMeta,
   TEMPLATE_CORPS_HTML_KEY,
 } from "@/lib/emails/template-email-html";
+import {
+  parseEmailEnvoiJoursSemaine,
+  serializeEmailEnvoiJoursSemaine,
+} from "@/lib/emails/email-envoi-schedule";
 
 export const TEMPLATE_EMAIL_TRIGGER_KEY = "email_trigger";
 
@@ -13,6 +17,8 @@ export interface TemplateEmailTriggerConfig {
   categories: string[];
   delai_jours: number;
   envoi_heure: string;
+  /** JSON `["MAR","MER"]` ou legacy ; `null` = jour calendaire. */
+  envoi_jours_semaine?: string | null;
   /** Nouvelle souscription : un envoi par investissement si true. */
   a_chaque_souscription: boolean;
   /** @deprecated lecture seule — migré vers condition_* */
@@ -28,6 +34,7 @@ export const DEFAULT_TEMPLATE_EMAIL_TRIGGER: TemplateEmailTriggerConfig = {
   categories: ["CLIENT"],
   delai_jours: 0,
   envoi_heure: "09:00",
+  envoi_jours_semaine: null,
   a_chaque_souscription: true,
 };
 
@@ -82,6 +89,18 @@ function migrateLegacyTrigger(
       typeof o.envoi_heure === "string" && o.envoi_heure.trim()
         ? o.envoi_heure.trim()
         : "09:00",
+    envoi_jours_semaine: (() => {
+      const raw = o.envoi_jours_semaine;
+      if (Array.isArray(raw)) {
+        return serializeEmailEnvoiJoursSemaine(
+          parseEmailEnvoiJoursSemaine(JSON.stringify(raw))
+        );
+      }
+      if (typeof raw === "string") {
+        return serializeEmailEnvoiJoursSemaine(parseEmailEnvoiJoursSemaine(raw));
+      }
+      return null;
+    })(),
     a_chaque_souscription: aChaque,
   };
 }

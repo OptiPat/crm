@@ -38,6 +38,7 @@ const etiquettes: EtiquetteWithCount[] = [
     email_delai_jours: 0,
     email_envoi_prevu: null,
     email_envoi_heure: null,
+    email_envoi_jours_semaine: null,
     email_actif: true,
     is_default: true,
     actif: true,

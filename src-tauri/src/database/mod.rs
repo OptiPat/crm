@@ -352,6 +352,7 @@ impl Database {
         self.migrate_backfill_filleul_categorie()?;
         self.migrate_add_email_envoi_prevu()?;
         self.migrate_add_email_envoi_heure()?;
+        self.migrate_add_email_envoi_jours_semaine()?;
         self.migrate_add_newsletter_desinscrit()?;
         self.migrate_newsletter_editions()?;
         self.migrate_protect_newsletter_etiquette()?;
@@ -661,6 +662,17 @@ impl Database {
                 [],
             )?;
             println!("✅ Migration: colonne email_envoi_heure sur etiquettes");
+        }
+        Ok(())
+    }
+
+    fn migrate_add_email_envoi_jours_semaine(&self) -> Result<()> {
+        if !self.table_has_column("etiquettes", "email_envoi_jours_semaine")? {
+            self.conn.execute(
+                "ALTER TABLE etiquettes ADD COLUMN email_envoi_jours_semaine TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne email_envoi_jours_semaine sur etiquettes");
         }
         Ok(())
     }
