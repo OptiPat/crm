@@ -302,6 +302,10 @@ pub struct Investissement {
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
     pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+    /// Dernière valorisation saisie (centimes), si renseignée.
+    pub encours_actuel: Option<i64>,
+    /// Date de la dernière valorisation (timestamp Unix).
+    pub encours_date: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -347,8 +351,28 @@ pub struct InvestissementWithDetails {
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
     pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+    pub encours_actuel: Option<i64>,
+    pub encours_date: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct InvestissementValorisation {
+    pub id: i64,
+    pub investissement_id: i64,
+    pub montant: i64,
+    pub date_valorisation: i64,
+    pub notes: Option<String>,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewInvestissementValorisation {
+    pub investissement_id: i64,
+    pub montant: i64,
+    pub date_valorisation: Option<String>,
+    pub notes: Option<String>,
 }
 
 // ==================== ETIQUETTES ====================

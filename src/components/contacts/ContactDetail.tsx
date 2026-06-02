@@ -1263,6 +1263,7 @@ export function ContactDetail({
         investissement={selectedInvestissement}
         defaultContactId={contact?.id}
         onSuccess={handleInvestissementSuccess}
+        onEncoursUpdated={loadInvestissements}
       />
 
       {/* Modales de gestion des foyers */}

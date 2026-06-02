@@ -154,7 +154,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
               <StatCard
                 title="Panier moyen"
                 value={formatDashboardCurrency(stats.panier_moyen)}
-                description="Investissement / client"
+                description="Montant souscrit / client (avec moi)"
                 icon={ShoppingCart}
                 accentColor="#8B5CF6"
                 iconColor="text-purple-600"

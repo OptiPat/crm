@@ -8,6 +8,10 @@ import {
   getTypeProduitTextClass,
   INVESTISSEMENT_META_TONE_CLASS,
 } from "@/lib/investissements/investissement-display";
+import {
+  getEffectiveEncoursCentimes,
+  isPlacementEncoursEligible,
+} from "@/lib/investissements/investissement-encours";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { cn } from "@/lib/utils";
 import {
@@ -64,6 +68,10 @@ export function InvestissementCard({
   actions,
 }: InvestissementCardProps) {
   const interactive = Boolean(onOpenContactClick);
+  const encoursEligible = isPlacementEncoursEligible(inv.type_produit);
+  const hasEncoursReleve =
+    inv.encours_actuel != null && inv.encours_actuel > 0;
+  const effectiveEncours = getEffectiveEncoursCentimes(inv);
 
   return (
     <div
@@ -127,9 +135,25 @@ export function InvestissementCard({
             </InvestissementMetaRow>
           )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
-            <InvestissementMetaRow tone="amount">
-              {formatEuroCentimes(inv.montant_initial)}
-            </InvestissementMetaRow>
+            {encoursEligible && hasEncoursReleve ? (
+              <>
+                <InvestissementMetaRow icon={TrendingUp} tone="growth">
+                  Encours : {formatEuroCentimes(effectiveEncours)}
+                  {inv.encours_date && (
+                    <> · {formatCalendarDateFr(inv.encours_date)}</>
+                  )}
+                </InvestissementMetaRow>
+                {(inv.montant_initial ?? 0) > 0 && (
+                  <InvestissementMetaRow tone="amount">
+                    Investi : {formatEuroCentimes(inv.montant_initial)}
+                  </InvestissementMetaRow>
+                )}
+              </>
+            ) : (
+              <InvestissementMetaRow tone="amount">
+                {formatEuroCentimes(inv.montant_initial)}
+              </InvestissementMetaRow>
+            )}
             {inv.date_souscription && (
               <InvestissementMetaRow icon={Calendar}>
                 {formatCalendarDateFr(inv.date_souscription)}

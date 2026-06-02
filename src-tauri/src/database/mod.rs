@@ -344,6 +344,8 @@ impl Database {
         // Migration automatique : Ajouter date_fin_pret aux investissements
         self.migrate_add_date_fin_pret()?;
 
+        self.migrate_investissement_valorisations()?;
+
         self.migrate_alertes_crud_schema()?;
         self.migrate_backfill_filleul_categorie()?;
         self.migrate_add_email_envoi_prevu()?;
@@ -821,6 +823,28 @@ impl Database {
                 updated
             );
         }
+        Ok(())
+    }
+
+    /// Migration : historique des valorisations (encours à date) par investissement
+    fn migrate_investissement_valorisations(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS investissement_valorisations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                investissement_id INTEGER NOT NULL,
+                montant INTEGER NOT NULL,
+                date_valorisation INTEGER NOT NULL,
+                notes TEXT,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (investissement_id) REFERENCES investissements(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS investissement_valorisations_inv_idx
+             ON investissement_valorisations (investissement_id, date_valorisation DESC)",
+            [],
+        )?;
         Ok(())
     }
 

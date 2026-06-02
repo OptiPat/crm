@@ -133,6 +133,9 @@ fn main() {
             get_investissement_by_id,
             update_investissement,
             delete_investissement,
+            get_valorisations_by_investissement,
+            create_investissement_valorisation,
+            delete_investissement_valorisation,
             check_and_create_demembrement_alerts,
             read_pdf_file,
             // Etiquettes

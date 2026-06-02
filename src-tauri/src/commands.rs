@@ -3,8 +3,8 @@ use crate::database::{
         Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
         ContactEtiquetteDetails, DashboardStats, Document, Etiquette, EtiquetteWithCount, Famille,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
-        NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewPartenaire,
-        ExchangeHistoryEntry, Interaction, InteractionWithContact, NewInteraction,
+        NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation, NewPartenaire,
+        ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation, NewInteraction,
         NewTemplateEmail, NewSegment, Partenaire,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, TemplateEmail,
         YearlyActivityStats,
@@ -741,6 +741,45 @@ pub fn delete_investissement(db: State<'_, DbState>, id: i64) -> Result<(), Stri
         let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn get_valorisations_by_investissement(
+    db: State<'_, DbState>,
+    investissement_id: i64,
+) -> Result<Vec<InvestissementValorisation>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_valorisations_by_investissement(investissement_id)
+        .map_err(|e| format!("Failed to get valorisations: {}", e))
+}
+
+#[tauri::command]
+pub fn create_investissement_valorisation(
+    db: State<'_, DbState>,
+    valorisation: NewInvestissementValorisation,
+) -> Result<InvestissementValorisation, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .create_investissement_valorisation(valorisation)
+        .map_err(|e| format!("Failed to create valorisation: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_investissement_valorisation(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .delete_investissement_valorisation(id)
+        .map_err(|e| format!("Failed to delete valorisation: {}", e))
 }
 
 #[tauri::command]

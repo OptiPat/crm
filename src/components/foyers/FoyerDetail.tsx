@@ -47,9 +47,12 @@ import {
   type FoyerInvestissement,
 } from "@/lib/foyers/foyer-utils";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
+import { InvestissementEncoursDialog } from "@/components/investissements/InvestissementEncoursDialog";
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import type { Investissement } from "@/lib/api/tauri-investissements";
 
 interface FoyerDetailProps {
   open: boolean;
@@ -77,6 +80,8 @@ export function FoyerDetail({
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [loadingData, setLoadingData] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [encoursInvestissement, setEncoursInvestissement] =
+    useState<Investissement | null>(null);
 
   const detailActive = embedded || open;
 
@@ -383,6 +388,20 @@ export function FoyerDetail({
                             ? "foyer"
                             : "member"
                         }
+                        actions={
+                          isPlacementEncoursEligible(inv.type_produit) ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-amber-700 hover:text-amber-800"
+                              onClick={() => setEncoursInvestissement(inv)}
+                              title="Mettre à jour l'encours"
+                              aria-label="Encours"
+                            >
+                              <TrendingUp className="h-4 w-4" />
+                            </Button>
+                          ) : undefined
+                        }
                       />
                     ))}
                   </div>
@@ -449,8 +468,18 @@ export function FoyerDetail({
             loadFoyerData();
             setShowInvestissementForm(false);
           }}
+          onEncoursUpdated={loadFoyerData}
         />
       )}
+
+      <InvestissementEncoursDialog
+        open={encoursInvestissement != null}
+        onOpenChange={(open) => {
+          if (!open) setEncoursInvestissement(null);
+        }}
+        investissement={encoursInvestissement}
+        onUpdated={loadFoyerData}
+      />
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>

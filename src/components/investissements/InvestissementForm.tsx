@@ -25,9 +25,12 @@ import { getAllPartenaires } from "@/lib/api/tauri-partenaires";
 import {
   createInvestissement,
   updateInvestissement,
+  getInvestissementById,
   type Investissement,
   type NewInvestissement,
 } from "@/lib/api/tauri-investissements";
+import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
+import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
 import {
   ContactFormExceltisSection,
   type ExceltisFormChoice,
@@ -49,6 +52,7 @@ interface InvestissementFormProps {
   investissement?: Investissement | null;
   defaultContactId?: number;
   defaultFoyerId?: number;
+  onEncoursUpdated?: () => void;
 }
 
 export function InvestissementForm({
@@ -58,6 +62,7 @@ export function InvestissementForm({
   investissement,
   defaultContactId,
   defaultFoyerId,
+  onEncoursUpdated,
 }: InvestissementFormProps) {
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -84,6 +89,13 @@ export function InvestissementForm({
   const [exceltisChoice, setExceltisChoice] = useState<ExceltisFormChoice>({
     hasExceltis: false,
   });
+  const [liveEncours, setLiveEncours] = useState<{
+    actuel?: number;
+    date?: number;
+  }>({});
+
+  const showEncoursSection =
+    !!investissement && isPlacementEncoursEligible(typeProduit);
 
   const showExceltisSection =
     !investissement &&
@@ -161,6 +173,10 @@ export function InvestissementForm({
         setReinvestissementDividendes(investissement.reinvestissement_dividendes);
         setPourcentageReinvestissement(investissement.notes?.match(/Réinv\. (\d+)%/)?.[1] || "100");
         setNotes(investissement.notes || "");
+        setLiveEncours({
+          actuel: investissement.encours_actuel,
+          date: investissement.encours_date,
+        });
       } else {
         resetForm();
         // Si un contact par défaut est fourni, le pré-sélectionner
@@ -210,6 +226,7 @@ export function InvestissementForm({
     setPourcentageReinvestissement("100");
     setNotes("");
     setExceltisChoice({ hasExceltis: false });
+    setLiveEncours({});
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -583,6 +600,24 @@ export function InvestissementForm({
                 </div>
               )}
             </div>
+          )}
+
+          {showEncoursSection && investissement && (
+            <InvestissementEncoursPanel
+              investissementId={investissement.id}
+              montantInitial={investissement.montant_initial}
+              dateSouscription={investissement.date_souscription}
+              encoursActuel={liveEncours.actuel ?? investissement.encours_actuel}
+              encoursDate={liveEncours.date ?? investissement.encours_date}
+              onUpdated={async () => {
+                const refreshed = await getInvestissementById(investissement.id);
+                setLiveEncours({
+                  actuel: refreshed.encours_actuel,
+                  date: refreshed.encours_date,
+                });
+                onEncoursUpdated?.();
+              }}
+            />
           )}
 
           {/* Notes */}

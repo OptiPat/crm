@@ -18,9 +18,11 @@ import {
   type InvestissementWithDetails,
 } from "@/lib/api/tauri-investissements";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
+import { InvestissementEncoursDialog } from "@/components/investissements/InvestissementEncoursDialog";
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
 import {
   computePatrimoineStats,
   type PatrimoineOrigineFilter,
@@ -79,6 +81,8 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
   const [partenaireFilter, setPartenaireFilter] = useState<string>("ALL");
   const [showForm, setShowForm] = useState(false);
   const [selectedInvestissement, setSelectedInvestissement] = useState<InvestissementWithDetails | null>(null);
+  const [encoursInvestissement, setEncoursInvestissement] =
+    useState<InvestissementWithDetails | null>(null);
 
   useEffect(() => {
     loadInvestissements();
@@ -437,6 +441,18 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
                     }
                     actions={
                       <>
+                        {isPlacementEncoursEligible(inv.type_produit) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-amber-700 hover:text-amber-800"
+                            onClick={() => setEncoursInvestissement(inv)}
+                            title="Mettre à jour l'encours"
+                            aria-label="Encours"
+                          >
+                            <TrendingUp className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -464,6 +480,15 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
         </CardContent>
       </Card>
 
+      <InvestissementEncoursDialog
+        open={encoursInvestissement != null}
+        onOpenChange={(open) => {
+          if (!open) setEncoursInvestissement(null);
+        }}
+        investissement={encoursInvestissement}
+        onUpdated={loadInvestissements}
+      />
+
       <InvestissementForm
         open={showForm}
         onOpenChange={(open) => {
@@ -473,6 +498,7 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
           }
         }}
         onSuccess={loadInvestissements}
+        onEncoursUpdated={loadInvestissements}
         investissement={selectedInvestissement}
       />
     </div>

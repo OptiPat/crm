@@ -13,11 +13,59 @@ use crate::newsletter::db::{
     NewsletterEditionDetail, NewsletterEditionRecipient, NewsletterEditionSummary,
     NewsletterEligibleContact, NewsletterUnsubscribedContact, QueuedNewsletterContact,
 };
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 
 const REDUCTION_IMPOT_ETIQUETTE_CANONICAL: &str = "Réduction d'impôt fin d'année";
 
+const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
+    versement_programme, montant_versement_programme, frequence_versement,
+    reinvestissement_dividendes, notes, origine, created_at, updated_at";
+
+const INVESTISSEMENT_ENCOURS_COLS: &str = "
+    (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+    (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
+
+const INVESTISSEMENT_ENCOURS_COLS_I: &str = "
+    (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+    (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
+
+const EFFECTIVE_ENCOURS_SQL_I: &str = "COALESCE(
+    (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+    i.montant_initial,
+    0
+)";
+
 impl Database {
+    fn map_investissement_row(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<super::models::Investissement> {
+        Ok(super::models::Investissement {
+            id: row.get(0)?,
+            contact_id: row.get(1)?,
+            foyer_id: row.get(2)?,
+            type_produit: row.get(3)?,
+            partenaire_id: row.get(4)?,
+            nom_produit: row.get(5)?,
+            montant_initial: row.get(6)?,
+            date_souscription: row.get(7)?,
+            date_fin_demembrement: row.get(8)?,
+            date_fin_pret: row.get(9)?,
+            versement_programme: row.get::<_, i64>(10)? != 0,
+            montant_versement_programme: row.get(11)?,
+            frequence_versement: row.get(12)?,
+            reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
+            notes: row.get(14)?,
+            origine: row
+                .get::<_, String>(15)
+                .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
+            created_at: row.get(16)?,
+            updated_at: row.get(17)?,
+            encours_actuel: row.get(18)?,
+            encours_date: row.get(19)?,
+        })
+    }
+
     fn validate_contact_identity(nom: &str, prenom: &str) -> Result<()> {
         if nom.trim().is_empty() || prenom.trim().is_empty() {
             return Err(rusqlite::Error::InvalidParameterName(
@@ -1547,10 +1595,13 @@ Bien cordialement,\n\
 
         // Encours placements (AV, PER, Contrat capi, Épargne salariale - SANS SCPI)
         let encours_placements: f64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(i.montant_initial), 0) FROM investissements i
+            &format!(
+                "SELECT COALESCE(SUM({EFFECTIVE_ENCOURS_SQL_I}), 0) FROM investissements i
              WHERE i.type_produit IN ('ASSURANCE_VIE', 'PER', 'CONTRAT_CAPITALISATION', 'EPARGNE_SALARIALE', 'FIP_FCPI', 'FCPR')
+               AND i.origine = 'MON_CONSEIL'
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
-                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
+                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))"
+            ),
             [],
             |row| {
                 let centimes: i64 = row.get(0)?;
@@ -1593,8 +1644,7 @@ Bien cordialement,\n\
             |row| row.get(0),
         ).unwrap_or(0);
 
-        // Panier moyen = Total investissements "avec moi" / Nombre de clients
-        // Uniquement les investissements avec origine = MON_CONSEIL
+        // Panier moyen = montants souscrits (montant_initial) « avec moi » / clients — pas l'encours
         let total_invests_avec_moi: f64 = self.conn.query_row(
             "SELECT COALESCE(SUM(i.montant_initial), 0) FROM investissements i
              WHERE i.origine = 'MON_CONSEIL'
@@ -1716,7 +1766,7 @@ Bien cordialement,\n\
         Ok(stats)
     }
 
-    /// Clients et panier moyen par année calendaire de souscription (origine MON_CONSEIL).
+    /// Clients et panier moyen par année de souscription — montant_initial uniquement (pas encours).
     pub fn get_yearly_activity_stats(&self) -> Result<Vec<super::models::YearlyActivityStats>> {
         let mut stmt = self.conn.prepare(
             "SELECT
@@ -1912,39 +1962,14 @@ Bien cordialement,\n\
     // ========== INVESTISSEMENTS ==========
 
     pub fn get_all_investissements(&self) -> Result<Vec<super::models::Investissement>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
-                    versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, origine, created_at, updated_at
+        let sql = format!(
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
              FROM investissements 
-             ORDER BY date_souscription DESC",
-        )?;
+             ORDER BY date_souscription DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
-        let investissements = stmt.query_map([], |row| {
-            Ok(super::models::Investissement {
-                id: row.get(0)?,
-                contact_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                type_produit: row.get(3)?,
-                partenaire_id: row.get(4)?,
-                nom_produit: row.get(5)?,
-                montant_initial: row.get(6)?,
-                date_souscription: row.get(7)?,
-                date_fin_demembrement: row.get(8)?,
-                date_fin_pret: row.get(9)?,
-                versement_programme: row.get::<_, i64>(10)? != 0,
-                montant_versement_programme: row.get(11)?,
-                frequence_versement: row.get(12)?,
-                reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
-                notes: row.get(14)?,
-                origine: row
-                    .get::<_, String>(15)
-                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(16)?,
-                updated_at: row.get(17)?,
-            })
-        })?;
+        let investissements = stmt.query_map([], Self::map_investissement_row)?;
 
         let mut result = Vec::new();
         for investissement in investissements {
@@ -1957,40 +1982,15 @@ Bien cordialement,\n\
         &self,
         contact_id: i64,
     ) -> Result<Vec<super::models::Investissement>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
-                    versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, origine, created_at, updated_at
+        let sql = format!(
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
              FROM investissements 
              WHERE contact_id = ?1
-             ORDER BY date_souscription DESC",
-        )?;
+             ORDER BY date_souscription DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
-        let investissements = stmt.query_map(params![contact_id], |row| {
-            Ok(super::models::Investissement {
-                id: row.get(0)?,
-                contact_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                type_produit: row.get(3)?,
-                partenaire_id: row.get(4)?,
-                nom_produit: row.get(5)?,
-                montant_initial: row.get(6)?,
-                date_souscription: row.get(7)?,
-                date_fin_demembrement: row.get(8)?,
-                date_fin_pret: row.get(9)?,
-                versement_programme: row.get::<_, i64>(10)? != 0,
-                montant_versement_programme: row.get(11)?,
-                frequence_versement: row.get(12)?,
-                reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
-                notes: row.get(14)?,
-                origine: row
-                    .get::<_, String>(15)
-                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(16)?,
-                updated_at: row.get(17)?,
-            })
-        })?;
+        let investissements = stmt.query_map(params![contact_id], Self::map_investissement_row)?;
 
         let mut result = Vec::new();
         for investissement in investissements {
@@ -2003,40 +2003,15 @@ Bien cordialement,\n\
         &self,
         foyer_id: i64,
     ) -> Result<Vec<super::models::Investissement>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
-                    versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, origine, created_at, updated_at
+        let sql = format!(
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
              FROM investissements 
              WHERE foyer_id = ?1
-             ORDER BY date_souscription DESC",
-        )?;
+             ORDER BY date_souscription DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
-        let investissements = stmt.query_map(params![foyer_id], |row| {
-            Ok(super::models::Investissement {
-                id: row.get(0)?,
-                contact_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                type_produit: row.get(3)?,
-                partenaire_id: row.get(4)?,
-                nom_produit: row.get(5)?,
-                montant_initial: row.get(6)?,
-                date_souscription: row.get(7)?,
-                date_fin_demembrement: row.get(8)?,
-                date_fin_pret: row.get(9)?,
-                versement_programme: row.get::<_, i64>(10)? != 0,
-                montant_versement_programme: row.get(11)?,
-                frequence_versement: row.get(12)?,
-                reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
-                notes: row.get(14)?,
-                origine: row
-                    .get::<_, String>(15)
-                    .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(16)?,
-                updated_at: row.get(17)?,
-            })
-        })?;
+        let investissements = stmt.query_map(params![foyer_id], Self::map_investissement_row)?;
 
         let mut result = Vec::new();
         for investissement in investissements {
@@ -2049,20 +2024,23 @@ Bien cordialement,\n\
         &self,
     ) -> Result<Vec<super::models::InvestissementWithDetails>> {
         let mut stmt = self.conn.prepare(
-            "SELECT i.id, i.contact_id,
+            &format!(
+                "SELECT i.id, i.contact_id,
                     COALESCE(c.nom, '') as contact_nom,
                     COALESCE(c.prenom, CASE WHEN i.contact_id IS NULL AND f.nom IS NOT NULL THEN 'Commun' ELSE '' END) as contact_prenom,
                     i.foyer_id, f.nom as foyer_nom,
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
                     i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
-                    i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at
+                    i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at,
+                    {INVESTISSEMENT_ENCOURS_COLS_I}
              FROM investissements i
              LEFT JOIN contacts c ON i.contact_id = c.id
              LEFT JOIN foyers f ON i.foyer_id = f.id
              LEFT JOIN partenaires p ON i.partenaire_id = p.id
              WHERE i.contact_id IS NOT NULL OR i.foyer_id IS NOT NULL
              ORDER BY i.date_souscription DESC"
+            ),
         )?;
 
         let investissements = stmt.query_map([], |row| {
@@ -2104,6 +2082,8 @@ Bien cordialement,\n\
                     .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
                 created_at: row.get(20)?,
                 updated_at: row.get(21)?,
+                encours_actuel: row.get(22)?,
+                encours_date: row.get(23)?,
             })
         })?;
 
@@ -2260,39 +2240,13 @@ Bien cordialement,\n\
     }
 
     pub fn get_investissement_by_id(&self, id: i64) -> Result<super::models::Investissement> {
-        self.conn.query_row(
-            "SELECT id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
-                    montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
-                    versement_programme, montant_versement_programme, frequence_versement,
-                    reinvestissement_dividendes, notes, origine, created_at, updated_at
+        let sql = format!(
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
              FROM investissements 
-             WHERE id = ?1",
-            params![id],
-            |row| {
-                Ok(super::models::Investissement {
-                    id: row.get(0)?,
-                    contact_id: row.get(1)?,
-                    foyer_id: row.get(2)?,
-                    type_produit: row.get(3)?,
-                    partenaire_id: row.get(4)?,
-                    nom_produit: row.get(5)?,
-                    montant_initial: row.get(6)?,
-                    date_souscription: row.get(7)?,
-                    date_fin_demembrement: row.get(8)?,
-                    date_fin_pret: row.get(9)?,
-                    versement_programme: row.get::<_, i64>(10)? != 0,
-                    montant_versement_programme: row.get(11)?,
-                    frequence_versement: row.get(12)?,
-                    reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
-                    notes: row.get(14)?,
-                    origine: row
-                        .get::<_, String>(15)
-                        .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                    created_at: row.get(16)?,
-                    updated_at: row.get(17)?,
-                })
-            },
-        )
+             WHERE id = ?1"
+        );
+        self.conn
+            .query_row(&sql, params![id], Self::map_investissement_row)
     }
 
     pub fn update_investissement(
@@ -2397,6 +2351,110 @@ Bien cordialement,\n\
     pub fn delete_investissement(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM investissements WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    pub fn get_valorisations_by_investissement(
+        &self,
+        investissement_id: i64,
+    ) -> Result<Vec<super::models::InvestissementValorisation>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, investissement_id, montant, date_valorisation, notes, created_at
+             FROM investissement_valorisations
+             WHERE investissement_id = ?1
+             ORDER BY date_valorisation ASC, id ASC",
+        )?;
+        let rows = stmt.query_map(params![investissement_id], |row| {
+            Ok(super::models::InvestissementValorisation {
+                id: row.get(0)?,
+                investissement_id: row.get(1)?,
+                montant: row.get(2)?,
+                date_valorisation: row.get(3)?,
+                notes: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    fn get_valorisation_by_id(&self, id: i64) -> Result<super::models::InvestissementValorisation> {
+        self.conn.query_row(
+            "SELECT id, investissement_id, montant, date_valorisation, notes, created_at
+             FROM investissement_valorisations WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(super::models::InvestissementValorisation {
+                    id: row.get(0)?,
+                    investissement_id: row.get(1)?,
+                    montant: row.get(2)?,
+                    date_valorisation: row.get(3)?,
+                    notes: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn create_investissement_valorisation(
+        &self,
+        valorisation: super::models::NewInvestissementValorisation,
+    ) -> Result<super::models::InvestissementValorisation> {
+        use chrono::{DateTime, Utc};
+
+        let date_ts = valorisation
+            .date_valorisation
+            .and_then(|date_str| {
+                DateTime::parse_from_rfc3339(&date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            })
+            .unwrap_or_else(|| Utc::now().timestamp());
+
+        let existing_id: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT id FROM investissement_valorisations
+                 WHERE investissement_id = ?1
+                   AND date(date_valorisation, 'unixepoch') = date(?2, 'unixepoch')
+                 LIMIT 1",
+                params![valorisation.investissement_id, date_ts],
+                |row| row.get(0),
+            )
+            .optional()?;
+
+        if let Some(id) = existing_id {
+            self.conn.execute(
+                "UPDATE investissement_valorisations
+                 SET montant = ?1, notes = ?2
+                 WHERE id = ?3",
+                params![valorisation.montant, valorisation.notes, id],
+            )?;
+            return self.get_valorisation_by_id(id);
+        }
+
+        self.conn.execute(
+            "INSERT INTO investissement_valorisations (investissement_id, montant, date_valorisation, notes)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                valorisation.investissement_id,
+                valorisation.montant,
+                date_ts,
+                valorisation.notes,
+            ],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        self.get_valorisation_by_id(id)
+    }
+
+    pub fn delete_investissement_valorisation(&self, id: i64) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM investissement_valorisations WHERE id = ?1",
+            params![id],
+        )?;
         Ok(())
     }
 
@@ -6425,7 +6483,7 @@ Bien cordialement,\n\
 mod database_integration_tests {
     use super::*;
     use chrono::TimeZone;
-    use crate::database::models::{NewContact, NewFoyer, NewInvestissement};
+    use crate::database::models::{NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation};
     use crate::database::Database;
 
     fn test_db() -> Database {
@@ -6494,6 +6552,186 @@ mod database_integration_tests {
 
         let updated = db.get_contact_by_id(contact.id.unwrap()).unwrap();
         assert_eq!(updated.date_dernier_contact, Some(souscription_ts));
+    }
+
+    #[test]
+    fn dashboard_encours_uses_valorisation_with_fallback_to_montant_initial() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Martin", "Paul")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV test".into(),
+                montant_initial: Some(2_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        let stats_before = db.get_dashboard_stats().unwrap();
+        assert!((stats_before.encours_placements - 20_000.0).abs() < 0.01);
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv.id,
+            montant: 2_500_000,
+            date_valorisation: None,
+            notes: None,
+        })
+        .unwrap();
+
+        let stats_after = db.get_dashboard_stats().unwrap();
+        assert!((stats_after.encours_placements - 25_000.0).abs() < 0.01);
+
+        let refreshed = db.get_investissement_by_id(inv.id).unwrap();
+        assert_eq!(refreshed.encours_actuel, Some(2_500_000));
+        assert_eq!(refreshed.montant_initial, Some(2_000_000));
+    }
+
+    #[test]
+    fn dashboard_encours_excludes_existant_client() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Durand", "Luc")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "AV avec moi".into(),
+            montant_initial: Some(1_000_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "PER".into(),
+            partenaire_id: None,
+            nom_produit: "PER à côté".into(),
+            montant_initial: Some(5_000_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("EXISTANT_CLIENT".into()),
+        })
+        .unwrap();
+
+        let stats = db.get_dashboard_stats().unwrap();
+        assert!((stats.encours_placements - 10_000.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn panier_moyen_uses_montant_initial_not_encours() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Petit", "Jean")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV".into(),
+                montant_initial: Some(2_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv.id,
+            montant: 3_000_000,
+            date_valorisation: None,
+            notes: None,
+        })
+        .unwrap();
+
+        let stats = db.get_dashboard_stats().unwrap();
+        assert!((stats.encours_placements - 30_000.0).abs() < 0.01);
+        assert!((stats.panier_moyen - 20_000.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn valorisation_same_day_replaces_existing_releve() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Blanc", "Anne")).unwrap();
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: contact.id,
+                foyer_id: None,
+                type_produit: "PER".into(),
+                partenaire_id: None,
+                nom_produit: "PER".into(),
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        let day = chrono::Utc.with_ymd_and_hms(2026, 3, 15, 0, 0, 0).unwrap();
+        let iso = day.to_rfc3339();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv.id,
+            montant: 1_100_000,
+            date_valorisation: Some(iso.clone()),
+            notes: None,
+        })
+        .unwrap();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv.id,
+            montant: 1_250_000,
+            date_valorisation: Some(iso),
+            notes: None,
+        })
+        .unwrap();
+
+        let rows = db.get_valorisations_by_investissement(inv.id).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].montant, 1_250_000);
     }
 
     #[test]

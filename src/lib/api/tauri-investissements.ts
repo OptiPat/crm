@@ -20,6 +20,8 @@ export interface Investissement {
   reinvestissement_dividendes: boolean;
   notes?: string;
   origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+  encours_actuel?: number;
+  encours_date?: number;
   created_at: number;
   updated_at: number;
 }
@@ -63,6 +65,8 @@ export interface InvestissementWithDetails {
   reinvestissement_dividendes: boolean;
   notes?: string;
   origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+  encours_actuel?: number;
+  encours_date?: number;
   created_at: number;
   updated_at: number;
 }

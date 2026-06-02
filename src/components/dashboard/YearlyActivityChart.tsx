@@ -64,10 +64,10 @@ export function YearlyActivityChart() {
         !loading && data.length > 0
           ? `Date de souscription · ${summary.totalClients} client${summary.totalClients > 1 ? "s" : ""} au total${
               summary.latest
-                ? ` · ${formatDashboardCurrency(summary.latest.panier_moyen)} panier moyen en ${summary.latest.year}`
+                ? ` · ${formatDashboardCurrency(summary.latest.panier_moyen)} panier moyen souscrit en ${summary.latest.year}`
                 : ""
             }`
-          : "Clients et panier moyen par année de souscription"
+          : "Clients et panier moyen (montant souscrit) par année"
       }
       className="h-full"
     >

@@ -8,6 +8,8 @@ import { InvestissementCard } from "@/components/investissements/InvestissementC
 import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { computeEncoursPlacementsStats, isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { InvestissementEncoursDialog } from "@/components/investissements/InvestissementEncoursDialog";
 import {
   type InvestissementWithOwner,
   type PatrimoineOrigineFilter,
@@ -86,6 +88,7 @@ function PatrimoineSection({
   getPartenaireNom,
   onEdit,
   onDelete,
+  onEncours,
 }: {
   title: string;
   icon: typeof Home;
@@ -96,6 +99,7 @@ function PatrimoineSection({
   getPartenaireNom: (id?: number) => string | null;
   onEdit: (inv: Investissement) => void;
   onDelete: (inv: Investissement) => void;
+  onEncours?: (inv: Investissement) => void;
 }) {
   if (items.length === 0) return null;
 
@@ -131,6 +135,18 @@ function PatrimoineSection({
             }
             actions={
               <>
+                {onEncours && isPlacementEncoursEligible(inv.type_produit) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-amber-700 hover:text-amber-800"
+                    onClick={() => onEncours(inv)}
+                    aria-label="Encours"
+                    title="Mettre à jour l'encours"
+                  >
+                    <TrendingUp className="h-4 w-4" />
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -187,6 +203,8 @@ export function ContactPatrimoinePanel({
   const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
   const [ownerFilter, setOwnerFilter] = useState<PatrimoineOwnerFilter>("all");
   const [showRioUpload, setShowRioUpload] = useState(false);
+  const [encoursInvestissement, setEncoursInvestissement] =
+    useState<Investissement | null>(null);
 
   const resetFilters = () => {
     setSearchQuery("");
@@ -207,6 +225,11 @@ export function ContactPatrimoinePanel({
 
   const stats = useMemo(
     () => computePatrimoineStats(investissements),
+    [investissements]
+  );
+
+  const encoursStats = useMemo(
+    () => computeEncoursPlacementsStats(investissements),
     [investissements]
   );
 
@@ -260,7 +283,12 @@ export function ContactPatrimoinePanel({
 
   return (
     <div className="space-y-4">
-      <div className={cn("grid gap-2", hasACote ? "grid-cols-3" : "grid-cols-2")}>
+      <div
+        className={cn(
+          "grid gap-2",
+          hasACote ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"
+        )}
+      >
         <StatCard
           title="Avec moi"
           value={formatEuroCentimes(stats.avecMoiCentimes)}
@@ -273,6 +301,19 @@ export function ContactPatrimoinePanel({
           onClick={() =>
             setOrigineFilter((f) => (f === "avec_moi" ? "all" : "avec_moi"))
           }
+        />
+        <StatCard
+          title="Encours placements"
+          value={formatEuroCentimes(encoursStats.encoursCentimes)}
+          description={
+            encoursStats.count > 0
+              ? `${encoursStats.count} contrat${encoursStats.count > 1 ? "s" : ""} — avec moi, AV/PER/capi…`
+              : "Avec moi — AV, PER, contrat capi…"
+          }
+          icon={Wallet}
+          accentColor="#C9A227"
+          iconColor="text-amber-700"
+          iconBgColor="bg-amber-50"
         />
         {hasACote && (
           <StatCard
@@ -507,6 +548,7 @@ export function ContactPatrimoinePanel({
                     getPartenaireNom={getPartenaireNom}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onEncours={(inv) => setEncoursInvestissement(inv)}
                   />
                   <PatrimoineSection
                     title="Placements financiers"
@@ -518,6 +560,7 @@ export function ContactPatrimoinePanel({
                     getPartenaireNom={getPartenaireNom}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onEncours={(inv) => setEncoursInvestissement(inv)}
                   />
                   {showFlatList && (
                     <div className="space-y-2">
@@ -536,6 +579,18 @@ export function ContactPatrimoinePanel({
                           }
                           actions={
                             <>
+                              {isPlacementEncoursEligible(inv.type_produit) && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-amber-700 hover:text-amber-800"
+                                  onClick={() => setEncoursInvestissement(inv)}
+                                  aria-label="Encours"
+                                  title="Mettre à jour l'encours"
+                                >
+                                  <TrendingUp className="h-4 w-4" />
+                                </Button>
+                              )}
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -566,6 +621,15 @@ export function ContactPatrimoinePanel({
           )}
         </CardContent>
       </Card>
+
+      <InvestissementEncoursDialog
+        open={encoursInvestissement != null}
+        onOpenChange={(open) => {
+          if (!open) setEncoursInvestissement(null);
+        }}
+        investissement={encoursInvestissement}
+        onUpdated={onRefresh}
+      />
 
       <DocumentUpload
         open={showRioUpload}
