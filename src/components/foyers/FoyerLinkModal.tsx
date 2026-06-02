@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Home } from "lucide-react";
+import { Search, Home, UserPlus } from "lucide-react";
 import { type Contact, getAllContacts } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, createFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
@@ -92,13 +92,18 @@ export function FoyerLinkModal({
     }
   };
 
+  const buildFoyerName = (a: Contact, b: Contact) => {
+    const noms = [...new Set([a.nom, b.nom].map((n) => n.toUpperCase()))].sort();
+    return noms.length === 1 ? `Foyer ${noms[0]}` : `Foyer ${noms.join(" - ")}`;
+  };
+
   const handleCreateFoyerTogether = async (contact: Contact) => {
     setLoading(true);
     try {
       const newFoyer = await createFoyer({
-        nom: `Famille ${currentContact.nom}`,
+        nom: buildFoyerName(currentContact, contact),
         type_foyer: "COUPLE",
-        notes: `Créé depuis ${currentContact.prenom} ${currentContact.nom}`,
+        notes: `Créé depuis ${currentContact.prenom} ${currentContact.nom} et ${contact.prenom} ${contact.nom}`,
       });
 
       await Promise.all([
@@ -125,18 +130,20 @@ export function FoyerLinkModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            🔗 Lier {currentContact.prenom} {currentContact.nom} à un contact
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlus className="h-5 w-5" />
+            Regrouper avec un autre contact
           </DialogTitle>
           <DialogDescription>
-            Recherchez un contact pour rejoindre son foyer ou créer un foyer ensemble
+            Couple, conjoint ou co-titulaire — les noms de famille peuvent être différents.
+            Rejoignez le foyer d’un contact existant ou créez un foyer commun à deux.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           {/* Recherche */}
           <div className="space-y-2">
-            <Label htmlFor="search">Rechercher un contact</Label>
+            <Label htmlFor="search">Rechercher le conjoint ou co-titulaire</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
@@ -151,7 +158,7 @@ export function FoyerLinkModal({
 
           {/* Rôle du contact actuel */}
           <div className="space-y-2">
-            <Label>Rôle de {currentContact.prenom}</Label>
+            <Label>Rôle de {currentContact.prenom} dans le foyer</Label>
             <Select value={selectedRole} onValueChange={setSelectedRole}>
               <SelectTrigger>
                 <SelectValue />
@@ -209,20 +216,22 @@ export function FoyerLinkModal({
 
                     {contact.foyer_id ? (
                       <Button
-                        className="w-full"
+                        className="w-full gap-2"
                         onClick={() => handleJoinFoyer(contact)}
                         disabled={loading}
                       >
-                        → Rejoindre {getFoyerName(contact.foyer_id)}
+                        <Home className="h-4 w-4" />
+                        Rejoindre le foyer de {contact.prenom} {contact.nom}
                       </Button>
                     ) : (
                       <Button
-                        className="w-full"
+                        className="w-full gap-2"
                         variant="outline"
                         onClick={() => handleCreateFoyerTogether(contact)}
                         disabled={loading}
                       >
-                        → Créer "Famille {currentContact.nom}" ensemble
+                        <UserPlus className="h-4 w-4" />
+                        Créer un foyer commun ({currentContact.prenom} + {contact.prenom})
                       </Button>
                     )}
                   </div>

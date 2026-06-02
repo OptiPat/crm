@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Home } from "lucide-react";
 import { type Contact, getAllContacts } from "@/lib/api/tauri-contacts";
 import { createFoyer } from "@/lib/api/tauri-foyers";
 import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
@@ -155,9 +155,13 @@ export function FoyerCreateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>➕ Créer un foyer</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Home className="h-5 w-5" />
+            Créer un foyer
+          </DialogTitle>
           <DialogDescription>
-            Créez un nouveau foyer fiscal et ajoutez-y des membres
+            Partez de ce contact et ajoutez conjoint, enfants ou autres membres.
+            Utile pour regrouper plus de deux personnes d’un coup.
           </DialogDescription>
         </DialogHeader>
 

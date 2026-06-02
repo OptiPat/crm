@@ -19,6 +19,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createFoyer, updateFoyer, type NewFoyer, type Foyer } from "@/lib/api/tauri-foyers";
+import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
+
+const FOYER_TYPE_OPTIONS = [
+  "CELIBATAIRE",
+  "COUPLE",
+  "FAMILLE",
+  "DIVORCE",
+  "VEUF",
+] as const;
 
 interface FoyerFormProps {
   open: boolean;
@@ -94,7 +103,7 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
                 onChange={(e) =>
                   setFormData({ ...formData, nom: e.target.value })
                 }
-                placeholder="Ex. Famille A"
+                placeholder="Ex. Foyer Martin - Dupont"
                 required
               />
             </div>
@@ -111,11 +120,11 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CELIBATAIRE">Célibataire</SelectItem>
-                  <SelectItem value="COUPLE">Couple</SelectItem>
-                  <SelectItem value="FAMILLE">Famille</SelectItem>
-                  <SelectItem value="DIVORCE">Divorcé(e)</SelectItem>
-                  <SelectItem value="VEUF">Veuf(ve)</SelectItem>
+                  {FOYER_TYPE_OPTIONS.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {getFoyerTypeLabel(type)}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

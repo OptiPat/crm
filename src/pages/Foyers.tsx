@@ -232,6 +232,10 @@ export function Foyers({ onNavigate }: FoyersProps) {
           <h2 className="text-3xl font-serif font-bold text-primary tracking-tight mt-1">
             Foyers
           </h2>
+          <p className="text-muted-foreground mt-1 text-sm max-w-2xl">
+            Regrouper des personnes qui déclarent ensemble — noms de famille
+            différents possibles.
+          </p>
           <p className="text-muted-foreground mt-1 text-sm">
             Foyers fiscaux et patrimoine commun —{" "}
             <span className="tabular-nums text-foreground/80">
@@ -316,7 +320,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
                 <SelectContent>
                   <SelectItem value="ALL">Tous les types</SelectItem>
                   <SelectItem value="COUPLE">Couples</SelectItem>
-                  <SelectItem value="FAMILLE">Familles</SelectItem>
+                  <SelectItem value="FAMILLE">Avec enfant(s)</SelectItem>
                   <SelectItem value="CELIBATAIRE">Célibataires</SelectItem>
                   <SelectItem value="DIVORCE">Divorcé(e)s</SelectItem>
                   <SelectItem value="VEUF">Veuf(ve)s</SelectItem>

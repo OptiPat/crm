@@ -34,11 +34,12 @@ import {
   X,
   LayoutGrid,
   History,
-  Network,
   Briefcase,
   UserCheck,
   UserX,
   AlertTriangle,
+  UserPlus,
+  Plus,
 } from "lucide-react";
 import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
 import {
@@ -666,8 +667,8 @@ export function ContactDetail({
                 )}
               </TabsTrigger>
               <TabsTrigger value="foyer" className="gap-1.5 text-xs sm:text-sm py-2">
-                <Network className="h-3.5 w-3.5 shrink-0" />
-                Foyer & réseau
+                <Home className="h-3.5 w-3.5 shrink-0" />
+                Couple / foyer
               </TabsTrigger>
             </TabsList>
 
@@ -934,54 +935,59 @@ export function ContactDetail({
             </TabsContent>
 
             <TabsContent value="foyer" className="space-y-4 mt-3 focus-visible:outline-none">
-            {/* Section Foyer */}
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Home className="h-5 w-5" />
-                  Foyer
+                  Couple / foyer
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {loadingFoyer ? (
                   <div className="text-sm text-muted-foreground">Chargement...</div>
                 ) : foyer ? (
-                  <div>
-                    <div className="flex items-center justify-between mb-4">
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                       <div>
                         <h3 className="font-semibold text-lg">{foyer.nom}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {contact.prenom} {contact.nom}
+                          {contact.role_foyer && (
+                            <> · {contact.role_foyer === "DECLARANT_1" ? "Déclarant 1" :
+                                 contact.role_foyer === "DECLARANT_2" ? "Déclarant 2" :
+                                 contact.role_foyer === "ENFANT" ? "Enfant" : "Autre membre"}</>
+                          )}
+                        </p>
                         {foyerPatrimoine > 0 && (
-                          <p className="text-sm text-primary font-medium">
-                            Patrimoine commun (foyer) : {foyerPatrimoine.toLocaleString("fr-FR")} €
+                          <p className="text-sm text-primary font-medium mt-2">
+                            Patrimoine commun : {foyerPatrimoine.toLocaleString("fr-FR")} €
                           </p>
                         )}
-                        <p className="text-xs text-muted-foreground">
-                          Encours personnels : voir section Patrimoine ci-dessous
-                        </p>
                       </div>
-                      <div className="flex gap-2">
-                        <Button 
-                          size="sm" 
-                          variant="outline"
+                      <div className="flex flex-wrap gap-2 shrink-0">
+                        <Button
+                          size="sm"
+                          className="gap-1.5"
                           onClick={() => setShowFoyerLinkModal(true)}
                         >
-                          Modifier
+                          <UserPlus className="h-4 w-4" />
+                          Ajouter un membre
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="ghost"
                           onClick={handleDissocierFoyer}
                         >
-                          Dissocier
+                          Retirer du foyer
                         </Button>
                       </div>
                     </div>
-                    {foyerMembers.length > 0 && (
+                    {foyerMembers.length > 0 ? (
                       <div>
-                        <h4 className="text-sm font-medium mb-2">Autres membres :</h4>
+                        <h4 className="text-sm font-medium mb-2">Autres membres du foyer</h4>
                         <div className="space-y-2">
                           {foyerMembers.map((member) => (
-                            <div 
+                            <div
                               key={member.id}
                               className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
                               onClick={() => handleOpenMemberDetail(member)}
@@ -1007,30 +1013,44 @@ export function ContactDetail({
                           ))}
                         </div>
                       </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        Seul(e) dans ce foyer pour l’instant — ajoutez conjoint, enfant ou co-titulaire.
+                      </p>
                     )}
                   </div>
                 ) : (
-                  <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                      Aucun foyer associé
-                    </p>
-                    <div className="flex gap-2">
-                      <Button 
-                        size="sm" 
-                        variant="outline" 
-                        className="gap-2"
+                  <div className="rounded-lg border border-dashed border-primary/25 bg-primary/5 p-4 space-y-4">
+                    <div className="space-y-2">
+                      <p className="text-sm text-foreground">
+                        Regroupez ce contact avec son conjoint, un co-titulaire ou d’autres membres
+                        du même foyer fiscal — <strong>même si les noms de famille diffèrent</strong>.
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Ce n’est pas la page « Familles » du menu, qui classe automatiquement par nom de famille.
+                      </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+                      <Button
+                        className="gap-2 shrink-0"
                         onClick={() => setShowFoyerLinkModal(true)}
                       >
-                        🔗 Lier à un foyer existant
+                        <UserPlus className="h-4 w-4" />
+                        Regrouper avec un autre contact
                       </Button>
-                      <Button 
-                        size="sm" 
-                        variant="default" 
-                        className="gap-2"
-                        onClick={() => setShowFoyerCreateModal(true)}
-                      >
-                        ➕ Créer un foyer
-                      </Button>
+                      <div className="flex flex-col gap-1">
+                        <Button
+                          variant="outline"
+                          className="gap-2"
+                          onClick={() => setShowFoyerCreateModal(true)}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Créer un foyer vide, puis ajouter des membres
+                        </Button>
+                        <p className="text-xs text-muted-foreground px-0.5">
+                          Conjoint + enfants en une fois
+                        </p>
+                      </div>
                     </div>
                   </div>
                 )}

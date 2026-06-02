@@ -1,6 +1,6 @@
 export const FOYER_TYPE_LABELS: Record<string, string> = {
   COUPLE: "Couple",
-  FAMILLE: "Famille",
+  FAMILLE: "Couple avec enfant(s)",
   CELIBATAIRE: "Célibataire",
   DIVORCE: "Divorcé(e)",
   VEUF: "Veuf(ve)",
