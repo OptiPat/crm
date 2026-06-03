@@ -170,6 +170,7 @@ fn main() {
             sync_email_campaign_responses,
             mark_email_campaign_response,
             dismiss_email_campaign_followup,
+            cancel_pending_email_campaign,
             prepare_email_campaign_relance,
             scan_stellium_exceltis_emails,
             get_stellium_exceltis_signals,

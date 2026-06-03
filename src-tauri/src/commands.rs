@@ -479,12 +479,15 @@ pub fn delete_template_email(db: State<'_, DbState>, id: i64) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn seed_default_email_templates(db: State<'_, DbState>) -> Result<usize, String> {
+pub fn seed_default_email_templates(
+    db: State<'_, DbState>,
+    only_if_empty: Option<bool>,
+) -> Result<usize, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .ensure_default_email_templates()
+        .ensure_default_email_templates(only_if_empty.unwrap_or(false))
         .map_err(|e| format!("Failed to seed email templates: {}", e))
 }
 
@@ -1296,6 +1299,18 @@ pub fn dismiss_email_campaign_followup(
     database
         .dismiss_email_campaign_followup(contact_etiquette_id)
         .map_err(|e| format!("Failed to dismiss followup: {}", e))
+}
+
+#[tauri::command]
+pub fn cancel_pending_email_campaign(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .cancel_pending_email_campaign(contact_etiquette_id)
+        .map_err(|e| format!("Failed to cancel pending email: {}", e))
 }
 
 #[tauri::command]

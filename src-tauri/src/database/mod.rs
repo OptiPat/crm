@@ -8,6 +8,7 @@ pub mod models;
 pub mod operations;
 pub mod segments;
 pub mod template_email_trigger;
+pub mod template_email_relance;
 pub mod template_email_queue;
 
 pub struct Database {
@@ -367,7 +368,55 @@ impl Database {
         self.migrate_contact_mail_sync_state()?;
         self.migrate_drop_emails_message_id_smtp()?;
         self.migrate_contact_template_envois()?;
+        self.migrate_email_campaign_cancelled()?;
+        self.migrate_fix_agenda_template_token_typos()?;
 
+        Ok(())
+    }
+
+    /// Corrige les variables agenda dupliquées dans les modèles (ex. lien_agenda_lien_agenda_suivi).
+    fn migrate_fix_agenda_template_token_typos(&self) -> Result<()> {
+        let updated = self.conn.execute(
+            "UPDATE templates_email SET
+                sujet = REPLACE(REPLACE(sujet,
+                    '{{lien_agenda_lien_agenda_suivi}}', '{{lien_agenda_suivi}}'),
+                    '{{lien_agenda_lien_agenda}}', '{{lien_agenda}}'),
+                corps = REPLACE(REPLACE(corps,
+                    '{{lien_agenda_lien_agenda_suivi}}', '{{lien_agenda_suivi}}'),
+                    '{{lien_agenda_lien_agenda}}', '{{lien_agenda}}'),
+                variables = REPLACE(REPLACE(COALESCE(variables, ''),
+                    '{{lien_agenda_lien_agenda_suivi}}', '{{lien_agenda_suivi}}'),
+                    '{{lien_agenda_lien_agenda}}', '{{lien_agenda}}')
+             WHERE sujet LIKE '%lien_agenda_lien_agenda%'
+                OR corps LIKE '%lien_agenda_lien_agenda%'
+                OR COALESCE(variables, '') LIKE '%lien_agenda_lien_agenda%'",
+            [],
+        )?;
+        if updated > 0 {
+            println!(
+                "✅ Migration: tokens agenda corrigés dans {} modèle(s) email",
+                updated
+            );
+        }
+        Ok(())
+    }
+
+    /// Envoi planifié annulé manuellement (Suivi → Envois → Ignorer).
+    fn migrate_email_campaign_cancelled(&self) -> Result<()> {
+        if !self.table_has_column("contact_etiquettes", "email_annule")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN email_annule INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            println!("✅ Migration: email_annule sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_template_envois", "email_annule")? {
+            self.conn.execute(
+                "ALTER TABLE contact_template_envois ADD COLUMN email_annule INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            println!("✅ Migration: email_annule sur contact_template_envois");
+        }
         Ok(())
     }
 

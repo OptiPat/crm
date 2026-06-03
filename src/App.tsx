@@ -95,7 +95,7 @@ function App() {
         /* déjà initialisé */
       }
       try {
-        await seedDefaultEmailTemplates();
+        await seedDefaultEmailTemplates({ onlyIfEmpty: true });
       } catch {
         /* déjà initialisé */
       }

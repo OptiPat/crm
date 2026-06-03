@@ -17,6 +17,7 @@ type RichTextEmailEditorProps = {
   className?: string;
   minHeight?: string;
   placeholder?: string;
+  onSelectionSave?: (range: Range | null) => void;
 };
 
 function normalizeEditorHtml(html: string): string {
@@ -35,6 +36,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
       className,
       minHeight = "220px",
       placeholder = "Rédigez votre message…",
+      onSelectionSave,
     },
     forwardedRef
   ) {
@@ -158,7 +160,10 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         )}
         style={{ "--editor-min-h": minHeight } as React.CSSProperties}
         onInput={emitChange}
-        onBlur={emitChange}
+        onBlur={() => {
+          onSelectionSave?.(saveRichEditorSelection(editorRef.current));
+          emitChange();
+        }}
       />
       <p className="px-3 pb-2 text-[11px] text-muted-foreground border-t bg-muted/10">
         Mise en forme conservée à l&apos;envoi Gmail (gras, listes, liens). Variables{" "}
@@ -169,13 +174,35 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
   }
 );
 
+/** Sauvegarde la sélection courante dans l'éditeur riche. */
+export function saveRichEditorSelection(editorEl: HTMLDivElement | null): Range | null {
+  if (!editorEl) return null;
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) return null;
+  const range = sel.getRangeAt(0);
+  if (!editorEl.contains(range.commonAncestorContainer)) return null;
+  return range.cloneRange();
+}
+
 /** Insère du texte à la position du curseur dans l'éditeur. */
 export function insertTextInRichEditor(
   editorEl: HTMLDivElement | null,
-  text: string
+  text: string,
+  savedRange?: Range | null
 ): string {
   if (!editorEl) return "";
   editorEl.focus();
+  const sel = window.getSelection();
+  let range = saveRichEditorSelection(editorEl) ?? savedRange ?? null;
+  if (range && !editorEl.contains(range.commonAncestorContainer)) {
+    range = savedRange && editorEl.contains(savedRange.commonAncestorContainer)
+      ? savedRange
+      : null;
+  }
+  if (range) {
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+  }
   document.execCommand("insertText", false, text);
-  return editorEl.innerHTML;
+  return sanitizeTemplateEmailHtml(normalizeEditorHtml(editorEl.innerHTML));
 }

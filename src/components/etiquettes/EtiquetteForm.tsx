@@ -23,6 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { 
   createEtiquette, 
   updateEtiquette,
+  getEtiquetteById,
   getAllEtiquettes,
   getContrastColor,
   stringifyConditionConfig,
@@ -363,6 +364,21 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       }
     }
   }, [open, etiquette]);
+
+  // Rafraîchir le modèle email depuis la base (liaison faite côté Templates email).
+  useEffect(() => {
+    if (!open || !etiquette?.id) return;
+    let cancelled = false;
+    void getEtiquetteById(etiquette.id)
+      .then((fresh) => {
+        if (cancelled) return;
+        setEmailTemplateId(fresh.email_template_id);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, etiquette?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

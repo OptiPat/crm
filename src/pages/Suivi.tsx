@@ -410,6 +410,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           setActiveTab("envois");
           return;
         case "sent_waiting":
+        case "scheduled":
         case "incomplete":
           toast.info(resolution.message);
           setActiveTab("envois");

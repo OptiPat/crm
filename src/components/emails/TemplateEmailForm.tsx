@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,7 +14,9 @@ import { Label } from "@/components/ui/label";
 import {
   RichTextEmailEditor,
   insertTextInRichEditor,
+  saveRichEditorSelection,
 } from "@/components/emails/RichTextEmailEditor";
+import { insertTextInPlainField } from "@/lib/emails/insert-text-at-cursor";
 import {
   getTemplateCorpsHtml,
   htmlToPlainEmail,
@@ -42,16 +45,24 @@ import {
   type NewTemplateEmail,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import {
   TemplateEmailRelancePanel,
   type TemplateRelanceDraft,
 } from "@/components/emails/TemplateEmailRelancePanel";
 import { parseTemplateEmailMeta } from "@/lib/emails/template-email-html";
 import {
+  buildRelanceTemplateNom,
+  DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
+  DEFAULT_TEMPLATE_EMAIL_RELANCE,
   parseTemplateEmailRelance,
+  relanceJoursFromConfig,
   setTemplateEmailRelanceInMeta,
   TEMPLATE_EMAIL_RELANCE_KEY,
 } from "@/lib/emails/template-email-relance";
+import {
+  serializeEmailEnvoiJoursSemaine,
+} from "@/lib/emails/email-envoi-schedule";
 import {
   parseTemplateEmailSuiviReponse,
   setTemplateEmailSuiviReponseInMeta,
@@ -84,7 +95,7 @@ interface TemplateEmailFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template?: TemplateEmail | null;
-  onSuccess: () => void;
+  onSuccess?: () => void | Promise<void>;
 }
 
 export function TemplateEmailForm({
@@ -103,6 +114,9 @@ export function TemplateEmailForm({
     sujet: "",
     corpsHtml: "",
     attendreReponse: true,
+    delaiJours: DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? 7,
+    envoiHeure: DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
+    envoiJours: null,
   });
   const [relanceTemplateId, setRelanceTemplateId] = useState<number | null>(null);
   const [emailTrigger, setEmailTrigger] = useState<TemplateEmailTriggerConfig>(
@@ -115,6 +129,9 @@ export function TemplateEmailForm({
   const [linkedEtiquetteIds, setLinkedEtiquetteIds] = useState<number[]>([]);
   const [corpsHtml, setCorpsHtml] = useState("");
   const richEditorRef = useRef<HTMLDivElement>(null);
+  const sujetInputRef = useRef<HTMLInputElement>(null);
+  const sujetSelectionRef = useRef({ start: 0, end: 0 });
+  const editorSelectionRef = useRef<Range | null>(null);
   const [formData, setFormData] = useState<NewTemplateEmail>({
     nom: "",
     sujet: "",
@@ -124,6 +141,77 @@ export function TemplateEmailForm({
     agenda_link_id: null,
     relance_template_id: null,
   });
+
+  const hydrateFromTemplate = useCallback((source: TemplateEmail) => {
+    setFormData({
+      nom: source.nom,
+      sujet: source.sujet,
+      corps: source.corps,
+      categorie: source.categorie,
+      variables: source.variables,
+      agenda_link_id: source.agenda_link_id,
+      relance_template_id: source.relance_template_id,
+    });
+    const storedHtml = getTemplateCorpsHtml(source.variables);
+    setCorpsHtml(storedHtml ?? plainTextToTemplateHtml(source.corps));
+    setEmailTrigger(parseTemplateEmailTrigger(source.variables));
+    setRelanceTemplateId(source.relance_template_id);
+    const meta = parseTemplateEmailMeta(source.variables);
+    const hasDedicated = source.relance_template_id != null;
+    const relanceCfg = parseTemplateEmailRelance(source.variables);
+    const relanceEnabled = TEMPLATE_EMAIL_RELANCE_KEY in meta
+      ? relanceCfg.enabled
+      : hasDedicated;
+    setRelanceDraft({
+      enabled: relanceEnabled,
+      useSameMessage: !hasDedicated,
+      sujet: "",
+      corpsHtml: "",
+      attendreReponse: parseTemplateEmailSuiviReponse(source.variables).attendre_reponse,
+      delaiJours: relanceCfg.delai_jours ?? DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? 7,
+      envoiHeure: relanceCfg.envoi_heure ?? DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
+      envoiJours: relanceJoursFromConfig(relanceCfg.envoi_jours_semaine),
+    });
+    if (hasDedicated && source.relance_template_id) {
+      void getTemplateEmailById(source.relance_template_id)
+        .then((rel) => {
+          const relHtml = getTemplateCorpsHtml(rel.variables);
+          setRelanceDraft((prev) => ({
+            ...prev,
+            sujet: rel.sujet,
+            corpsHtml: relHtml ?? plainTextToTemplateHtml(rel.corps),
+          }));
+        })
+        .catch(() => undefined);
+    }
+  }, []);
+
+  const resetCreateForm = useCallback(() => {
+    setFormData({
+      nom: "",
+      sujet: "",
+      corps: "",
+      categorie: "RELANCE",
+      variables: null,
+      agenda_link_id: null,
+      relance_template_id: null,
+    });
+    setCorpsHtml("");
+    setEmailTrigger(DEFAULT_TEMPLATE_EMAIL_TRIGGER);
+    setRelanceDraft({
+      enabled: false,
+      useSameMessage: true,
+      sujet: "",
+      corpsHtml: "",
+      attendreReponse: true,
+      delaiJours: DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? 7,
+      envoiHeure: DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
+      envoiJours: null,
+    });
+    setRelanceTemplateId(null);
+    setPreviewContactId("sample");
+    setLinkedEtiquetteIds([]);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -136,68 +224,23 @@ export function TemplateEmailForm({
   }, [open]);
 
   useEffect(() => {
-    if (template) {
-      setFormData({
-        nom: template.nom,
-        sujet: template.sujet,
-        corps: template.corps,
-        categorie: template.categorie,
-        variables: template.variables,
-        agenda_link_id: template.agenda_link_id,
-        relance_template_id: template.relance_template_id,
-      });
-      const storedHtml = getTemplateCorpsHtml(template.variables);
-      setCorpsHtml(storedHtml ?? plainTextToTemplateHtml(template.corps));
-      setEmailTrigger(parseTemplateEmailTrigger(template.variables));
-      setRelanceTemplateId(template.relance_template_id);
-      const meta = parseTemplateEmailMeta(template.variables);
-      const hasDedicated = template.relance_template_id != null;
-      const relanceEnabled = TEMPLATE_EMAIL_RELANCE_KEY in meta
-        ? parseTemplateEmailRelance(template.variables).enabled
-        : hasDedicated;
-      setRelanceDraft({
-        enabled: relanceEnabled,
-        useSameMessage: !hasDedicated,
-        sujet: "",
-        corpsHtml: "",
-        attendreReponse: parseTemplateEmailSuiviReponse(template.variables).attendre_reponse,
-      });
-      if (hasDedicated && template.relance_template_id) {
-        void getTemplateEmailById(template.relance_template_id)
-          .then((rel) => {
-            const relHtml = getTemplateCorpsHtml(rel.variables);
-            setRelanceDraft((prev) => ({
-              ...prev,
-              sujet: rel.sujet,
-              corpsHtml: relHtml ?? plainTextToTemplateHtml(rel.corps),
-            }));
-          })
-          .catch(() => undefined);
-      }
-    } else {
-      setFormData({
-        nom: "",
-        sujet: "",
-        corps: "",
-        categorie: "RELANCE",
-        variables: null,
-        agenda_link_id: null,
-        relance_template_id: null,
-      });
-      setCorpsHtml("");
-      setEmailTrigger(DEFAULT_TEMPLATE_EMAIL_TRIGGER);
-      setRelanceDraft({
-        enabled: false,
-        useSameMessage: true,
-        sujet: "",
-        corpsHtml: "",
-        attendreReponse: true,
-      });
-      setRelanceTemplateId(null);
-      setPreviewContactId("sample");
-      setLinkedEtiquetteIds([]);
+    if (!open) return;
+    if (!template?.id) {
+      if (!template) resetCreateForm();
+      return;
     }
-  }, [template, open]);
+    let cancelled = false;
+    void getTemplateEmailById(template.id)
+      .then((fresh) => {
+        if (!cancelled) hydrateFromTemplate(fresh);
+      })
+      .catch(() => {
+        if (!cancelled) hydrateFromTemplate(template);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, template?.id, template, hydrateFromTemplate, resetCreateForm]);
 
   useEffect(() => {
     if (!open || !template?.id) {
@@ -266,9 +309,7 @@ export function TemplateEmailForm({
       let linkedRelanceId = relanceTemplateId;
       if (relanceDraft.enabled && !relanceDraft.useSameMessage) {
         const relPlain = htmlToPlainEmail(relanceDraft.corpsHtml);
-        const relNom = formData.nom.trim()
-          ? `Relance — ${formData.nom.trim()}`
-          : "Relance";
+        const relNom = buildRelanceTemplateNom(formData.nom);
         const relPayload: NewTemplateEmail = {
           nom: relNom,
           sujet: relanceDraft.sujet.trim(),
@@ -290,6 +331,15 @@ export function TemplateEmailForm({
       variables = setTemplateEmailTriggerInMeta(variables, emailTrigger);
       variables = setTemplateEmailRelanceInMeta(variables, {
         enabled: relanceDraft.enabled,
+        delai_jours: relanceDraft.enabled ? relanceDraft.delaiJours : null,
+        envoi_heure:
+          relanceDraft.enabled && relanceDraft.envoiHeure.trim()
+            ? relanceDraft.envoiHeure.trim()
+            : null,
+        envoi_jours_semaine:
+          relanceDraft.enabled
+            ? serializeEmailEnvoiJoursSemaine(relanceDraft.envoiJours)
+            : null,
       });
       variables = setTemplateEmailSuiviReponseInMeta(variables, {
         attendre_reponse: relanceDraft.attendreReponse,
@@ -317,8 +367,9 @@ export function TemplateEmailForm({
       }
       if (templateId != null) {
         await setTemplateEtiquetteLinks(templateId, linkedEtiquetteIds);
+        notifyEtiquettesChanged();
       }
-      onSuccess();
+      await onSuccess?.();
     } catch (error) {
       console.error("Error saving template:", error);
       toast.error("Erreur lors de l'enregistrement");
@@ -337,16 +388,75 @@ export function TemplateEmailForm({
     }));
   };
 
+  const captureSujetSelection = useCallback(() => {
+    const el = sujetInputRef.current;
+    if (!el) return;
+    sujetSelectionRef.current = {
+      start: el.selectionStart ?? el.value.length,
+      end: el.selectionEnd ?? el.value.length,
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onSelectionChange = () => {
+      if (sujetInputRef.current === document.activeElement) {
+        captureSujetSelection();
+      }
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [open, captureSujetSelection]);
+
+  const captureSelectionsBeforeVariableInsert = () => {
+    if (sujetInputRef.current === document.activeElement) {
+      captureSujetSelection();
+    }
+    if (richEditorRef.current?.contains(document.activeElement)) {
+      editorSelectionRef.current = saveRichEditorSelection(richEditorRef.current);
+    }
+  };
+
+  const handleVariableInsert = (
+    event: React.MouseEvent,
+    variable: string,
+    field: "sujet" | "corps"
+  ) => {
+    event.preventDefault();
+    captureSelectionsBeforeVariableInsert();
+    insertVariable(variable, field);
+  };
+
   const insertVariable = (variable: string, field: "sujet" | "corps") => {
     if (field === "corps") {
-      const html = insertTextInRichEditor(richEditorRef.current, ` ${variable}`.trim());
+      const html = insertTextInRichEditor(
+        richEditorRef.current,
+        variable,
+        editorSelectionRef.current
+      );
       applyCorpsHtml(html);
+      richEditorRef.current?.focus();
       return;
     }
-    setFormData({
-      ...formData,
-      [field]: `${formData[field]} ${variable}`.trim(),
+    const sujetInput = sujetInputRef.current;
+    const selection =
+      sujetInput === document.activeElement && sujetInput
+        ? {
+            start: sujetInput.selectionStart ?? formData.sujet.length,
+            end: sujetInput.selectionEnd ?? formData.sujet.length,
+          }
+        : { ...sujetSelectionRef.current };
+
+    const { value, caret } = insertTextInPlainField(formData.sujet, variable, selection);
+    sujetSelectionRef.current = { start: caret, end: caret };
+    flushSync(() => {
+      setFormData((prev) => ({ ...prev, sujet: value }));
     });
+    const input = sujetInputRef.current;
+    if (input) {
+      input.focus();
+      input.setSelectionRange(caret, caret);
+    }
   };
 
   const toggleEtiquetteLink = (id: number) => {
@@ -425,12 +535,32 @@ export function TemplateEmailForm({
                       </p>
                     </div>
 
-                    <details className="group rounded-lg border bg-muted/20">
+                    <div className="space-y-2">
+                      <Label htmlFor="sujet">Objet *</Label>
+                      <Input
+                        ref={sujetInputRef}
+                        id="sujet"
+                        value={formData.sujet}
+                        onChange={(e) => setFormData({ ...formData, sujet: e.target.value })}
+                        onSelect={captureSujetSelection}
+                        onKeyUp={captureSujetSelection}
+                        onClick={captureSujetSelection}
+                        onFocus={captureSujetSelection}
+                        onBlur={captureSujetSelection}
+                        placeholder="Ex. {{prenom}}, votre déclaration d'impôts"
+                        required
+                      />
+                    </div>
+
+                    <details className="group rounded-lg border bg-muted/20" open>
                       <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-sm font-medium [&::-webkit-details-marker]:hidden">
                         Variables à insérer
                         <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground transition-transform group-open:rotate-180" />
                       </summary>
-                      <div className="px-3 pb-3 space-y-2 border-t">
+                      <div
+                        className="px-3 pb-3 space-y-2 border-t"
+                        onMouseDownCapture={captureSelectionsBeforeVariableInsert}
+                      >
                         <div className="flex flex-wrap gap-2 pt-2">
                           {EMAIL_TEMPLATE_VARIABLES.map((v) => (
                             <span key={v.token} className="inline-flex gap-0.5">
@@ -438,7 +568,9 @@ export function TemplateEmailForm({
                                 variant="outline"
                                 className="cursor-pointer hover:bg-primary hover:text-primary-foreground rounded-r-none text-[11px]"
                                 title={`${v.label} → message`}
-                                onClick={() => insertVariable(v.token, "corps")}
+                                onMouseDown={(event) =>
+                                  handleVariableInsert(event, v.token, "corps")
+                                }
                               >
                                 {v.token}
                               </Badge>
@@ -446,7 +578,9 @@ export function TemplateEmailForm({
                                 variant="secondary"
                                 className="cursor-pointer rounded-l-none text-[10px] px-1"
                                 title="→ objet"
-                                onClick={() => insertVariable(v.token, "sujet")}
+                                onMouseDown={(event) =>
+                                  handleVariableInsert(event, v.token, "sujet")
+                                }
                               >
                                 obj
                               </Badge>
@@ -457,14 +591,18 @@ export function TemplateEmailForm({
                               <Badge
                                 variant="outline"
                                 className="cursor-pointer rounded-r-none text-[11px] border-amber-300"
-                                onClick={() => insertVariable(v.token, "corps")}
+                                onMouseDown={(event) =>
+                                  handleVariableInsert(event, v.token, "corps")
+                                }
                               >
                                 {v.token}
                               </Badge>
                               <Badge
                                 variant="secondary"
                                 className="cursor-pointer rounded-l-none text-[10px] px-1"
-                                onClick={() => insertVariable(v.token, "sujet")}
+                                onMouseDown={(event) =>
+                                  handleVariableInsert(event, v.token, "sujet")
+                                }
                               >
                                 obj
                               </Badge>
@@ -472,21 +610,11 @@ export function TemplateEmailForm({
                           ))}
                         </div>
                         <p className="text-[11px] text-muted-foreground">
-                          Clic sur la variable → corps ; « obj » → objet.
+                          Curseur dans l&apos;objet ou le message : clic variable → corps, « obj
+                          » → objet.
                         </p>
                       </div>
                     </details>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="sujet">Objet *</Label>
-                      <Input
-                        id="sujet"
-                        value={formData.sujet}
-                        onChange={(e) => setFormData({ ...formData, sujet: e.target.value })}
-                        placeholder="Ex. {{prenom}}, votre déclaration d'impôts"
-                        required
-                      />
-                    </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="corps">Message *</Label>
@@ -494,6 +622,9 @@ export function TemplateEmailForm({
                         ref={richEditorRef}
                         value={corpsHtml}
                         onChange={applyCorpsHtml}
+                        onSelectionSave={(range) => {
+                          editorSelectionRef.current = range;
+                        }}
                         minHeight="240px"
                       />
                     </div>
@@ -531,6 +662,7 @@ export function TemplateEmailForm({
                       draft={relanceDraft}
                       onChange={setRelanceDraft}
                       parentNom={formData.nom}
+                      fallbackDelaiJours={DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS}
                     />
                   </TabsContent>
 

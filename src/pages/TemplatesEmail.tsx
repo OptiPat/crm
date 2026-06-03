@@ -24,6 +24,7 @@ import {
   EMAIL_TEMPLATE_CATEGORIES,
 } from "@/lib/emails/template-email-meta";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
+import { filterLibraryTemplates } from "@/lib/emails/template-library";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { getTemplateCorpsHtml } from "@/lib/emails/template-email-html";
 import { useTemplatesEmailAutoRefresh } from "@/hooks/useTemplatesEmailAutoRefresh";
@@ -80,11 +81,6 @@ export function TemplatesEmail() {
 
   useEffect(() => {
     void (async () => {
-      try {
-        await seedDefaultEmailTemplates();
-      } catch {
-        /* ignore */
-      }
       await Promise.all([loadTemplates(), loadEtiquetteLinks()]);
       void getCgpConfig().then(setCgp).catch(() => setCgp(null));
     })();
@@ -100,17 +96,22 @@ export function TemplatesEmail() {
     return m;
   }, [etiquettes]);
 
+  const libraryTemplates = useMemo(
+    () => filterLibraryTemplates(templates),
+    [templates]
+  );
+
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {};
-    for (const t of templates) {
+    for (const t of libraryTemplates) {
       counts[t.categorie] = (counts[t.categorie] ?? 0) + 1;
     }
     return counts;
-  }, [templates]);
+  }, [libraryTemplates]);
 
   const filtered = useMemo(
-    () => filterTemplatesEmail(templates, searchQuery, categoryFilter),
-    [templates, searchQuery, categoryFilter]
+    () => filterTemplatesEmail(libraryTemplates, searchQuery, categoryFilter),
+    [libraryTemplates, searchQuery, categoryFilter]
   );
 
   const previewTemplate = templates.find((t) => t.id === previewId) ?? null;
@@ -152,13 +153,22 @@ export function TemplatesEmail() {
   };
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Supprimer ce modèle ? Les étiquettes liées perdront ce template.")) return;
+    if (
+      !confirm(
+        "Supprimer ce modèle ? Les étiquettes liées seront détachées ; les modèles qui l'utilisaient comme relance le seront aussi."
+      )
+    ) {
+      return;
+    }
     try {
       await deleteTemplateEmail(id);
       if (previewId === id) setPreviewId(null);
       toast.success("Modèle supprimé");
-    } catch {
-      toast.error("Erreur lors de la suppression");
+      await loadTemplates();
+    } catch (error) {
+      console.error("Error deleting template:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      toast.error(msg.includes("Failed") ? "Erreur lors de la suppression" : msg);
     }
   };
 
@@ -205,7 +215,7 @@ export function TemplatesEmail() {
                 <CardDescription>
                   {filtered.length} modèle{filtered.length !== 1 ? "s" : ""}
                   {searchQuery || categoryFilter !== "all"
-                    ? ` (sur ${templates.length})`
+                    ? ` (sur ${libraryTemplates.length})`
                     : ""}
                 </CardDescription>
               </div>
@@ -321,7 +331,8 @@ export function TemplatesEmail() {
         open={showForm}
         onOpenChange={handleFormClose}
         template={selectedTemplate}
-        onSuccess={() => {
+        onSuccess={async () => {
+          await loadTemplates({ silent: true });
           handleFormClose();
         }}
       />

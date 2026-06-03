@@ -4,7 +4,7 @@ import { Label } from "@/components/ui/label";
 import { CalendarPlus, GripVertical, Plus, Trash2 } from "lucide-react";
 import {
   createEmptyAgendaLink,
-  slugifyAgendaLinkId,
+  normalizeAgendaLinkId,
   type AgendaLink,
 } from "@/lib/emails/agenda-links";
 
@@ -95,8 +95,8 @@ export function AgendaLinksEditor({ links, onChange, embedded }: AgendaLinksEdit
                     onBlur={(e) => {
                       const raw = e.target.value.trim();
                       const normalized = raw
-                        ? slugifyAgendaLinkId(raw)
-                        : slugifyAgendaLinkId(link.label);
+                        ? normalizeAgendaLinkId(raw)
+                        : normalizeAgendaLinkId(link.label);
                       if (normalized) update(index, { id: normalized });
                     }}
                     placeholder="suivi"

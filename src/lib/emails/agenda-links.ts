@@ -16,16 +16,54 @@ export function slugifyAgendaLinkId(label: string): string {
   return base || `lien_${Date.now()}`;
 }
 
+/** Identifiant stocké sans préfixe redondant `lien_agenda_`. */
+export function normalizeAgendaLinkId(raw: string): string {
+  const slug = slugifyAgendaLinkId(raw);
+  if (slug === "lien_agenda") return "principal";
+  const prefix = "lien_agenda_";
+  if (slug.startsWith(prefix)) {
+    const trimmed = slug.slice(prefix.length).replace(/^_|_$/g, "");
+    return trimmed || "principal";
+  }
+  return slug;
+}
+
+/** Clé variable template (`lien_agenda_suivi`) sans double préfixe. */
+export function agendaLinkVariableKey(linkId: string): string {
+  const id = normalizeAgendaLinkId(linkId);
+  if (id === "lien_agenda") return "lien_agenda";
+  return `lien_agenda_${id}`;
+}
+
+export function agendaLinkVariableToken(linkId: string): string {
+  return `{{${agendaLinkVariableKey(linkId)}}}`;
+}
+
 /** Liens Google Agenda du profil CGP (migration depuis ancien lien unique). */
 export function normalizeAgendaLinks(cgp: CgpConfig | null | undefined): AgendaLink[] {
+  const mapLink = (link: AgendaLink): AgendaLink => ({
+    ...link,
+    id: normalizeAgendaLinkId(link.id),
+  });
+
   if (cgp?.agenda_links?.length) {
-    return cgp.agenda_links.filter((l) => l.url.trim());
+    return cgp.agenda_links.filter((l) => l.url.trim()).map(mapLink);
   }
   const legacy = cgp?.lien_agenda ?? cgp?.lien_calendly;
   if (legacy?.trim()) {
     return [{ id: "principal", label: "Principal", url: legacy.trim() }];
   }
   return [];
+}
+
+function findAgendaLink(links: AgendaLink[], linkId: string): AgendaLink | undefined {
+  const normalized = normalizeAgendaLinkId(linkId);
+  return links.find(
+    (l) =>
+      l.id === linkId ||
+      l.id === normalized ||
+      normalizeAgendaLinkId(l.id) === normalized
+  );
 }
 
 export function resolveAgendaUrl(
@@ -35,7 +73,7 @@ export function resolveAgendaUrl(
   const links = normalizeAgendaLinks(cgp);
   if (!links.length) return "";
   if (agendaLinkId) {
-    return links.find((l) => l.id === agendaLinkId)?.url ?? "";
+    return findAgendaLink(links, agendaLinkId)?.url ?? "";
   }
   return links[0]?.url ?? "";
 }
@@ -51,7 +89,7 @@ export function buildAgendaTemplateVariables(
     lien_calendly: resolveAgendaUrl(cgp, templateAgendaLinkId),
   };
   for (const link of links) {
-    vars[`lien_agenda_${link.id}`] = link.url;
+    vars[agendaLinkVariableKey(link.id)] = link.url;
   }
   return vars;
 }
@@ -59,4 +97,11 @@ export function buildAgendaTemplateVariables(
 export function createEmptyAgendaLink(): AgendaLink {
   const id = `lien_${Date.now()}`;
   return { id, label: "Nouveau lien", url: "" };
+}
+
+/** Corrige les tokens dupliqués (ex. {{lien_agenda_lien_agenda_suivi}}). */
+export function normalizeBrokenAgendaTokens(text: string): string {
+  return text
+    .replace(/\{\{lien_agenda_lien_agenda_([^}]+)\}\}/g, "{{lien_agenda_$1}}")
+    .replace(/\{\{lien_agenda_lien_agenda\}\}/g, "{{lien_agenda}}");
 }

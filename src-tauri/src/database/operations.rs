@@ -1141,6 +1141,10 @@ impl Database {
     }
 
     pub fn delete_template_email(&self, id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
+            params![id],
+        )?;
         self.conn
             .execute("DELETE FROM templates_email WHERE id = ?1", params![id])?;
         Ok(())
@@ -1155,8 +1159,19 @@ impl Database {
         Ok(n > 0)
     }
 
-    /// Crée les modèles par défaut manquants (sans modifier les existants).
-    pub fn ensure_default_email_templates(&self) -> Result<usize> {
+    /// Crée les modèles par défaut. Si `only_if_empty`, ne fait rien dès qu’au moins un modèle existe.
+    pub fn ensure_default_email_templates(&self, only_if_empty: bool) -> Result<usize> {
+        if only_if_empty {
+            let count: i64 = self.conn.query_row(
+                "SELECT COUNT(*) FROM templates_email",
+                [],
+                |row| row.get(0),
+            )?;
+            if count > 0 {
+                return Ok(0);
+            }
+        }
+
         use super::models::NewTemplateEmail;
 
         let defaults: Vec<NewTemplateEmail> = vec![
@@ -1224,15 +1239,6 @@ impl Database {
                 relance_template_id: None,
             },
             NewTemplateEmail {
-                nom: "Relance — suite sans réponse".into(),
-                sujet: "{{prenom}}, je me permets de revenir vers vous".into(),
-                corps: "Bonjour {{prenom}} {{nom}},\n\nJe me permets de revenir vers vous suite à mon précédent message. N'hésitez pas à me répondre ou à réserver un créneau : {{lien_agenda}}\n\nBien cordialement,\n{{cgp_prenom}} {{cgp_nom}}\n{{cgp_telephone}}".into(),
-                categorie: "RELANCE".into(),
-                variables: None,
-                agenda_link_id: Some("principal".into()),
-                relance_template_id: None,
-            },
-            NewTemplateEmail {
                 nom: "Exceltis — remboursement et arbitrage".into(),
                 sujet: "Exceltis {{millesime}} — remboursement et prochaines étapes, {{prenom}}".into(),
                 corps: "Bonjour {{prenom}} {{nom}},\n\n\
@@ -1259,11 +1265,10 @@ Bien cordialement,\n\
                 created += 1;
             }
         }
-        created += self.link_default_relance_templates()?;
         Ok(created)
     }
 
-    /// Lie les modèles initiaux à un template de relance (sans écraser une config existante).
+    #[allow(dead_code)]
     fn link_default_relance_templates(&self) -> Result<usize> {
         let pairs: [(&str, &str); 5] = [
             ("Prise de rendez-vous suivi", "Relance — suite sans réponse"),
@@ -2765,7 +2770,7 @@ Bien cordialement,\n\
             let fixed = etiquette.email_envoi_prevu;
             self.conn.execute(
                 "UPDATE contact_etiquettes SET email_date_prevue = ?1
-                 WHERE etiquette_id = ?2 AND email_envoye = 0",
+                 WHERE etiquette_id = ?2 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
                 params![fixed, etiquette_id],
             )?;
             return Ok(());
@@ -2773,7 +2778,7 @@ Bien cordialement,\n\
 
         let mut stmt = self.conn.prepare(
             "SELECT id, date_attribution FROM contact_etiquettes
-             WHERE etiquette_id = ?1 AND email_envoye = 0",
+             WHERE etiquette_id = ?1 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
         )?;
         let rows: Vec<(i64, i64)> = stmt
             .query_map(params![etiquette_id], |row| Ok((row.get(0)?, row.get(1)?)))?
@@ -4075,7 +4080,7 @@ Bien cordialement,\n\
         Ok(count > 0)
     }
 
-    /// File d'envoi manuel : ready | incomplete | sent | followup
+    /// File d'envoi manuel : ready | scheduled | incomplete | sent | followup
     pub fn get_etiquette_email_queue(
         &self,
         queue_status: &str,
@@ -4085,13 +4090,7 @@ Bien cordialement,\n\
             .unwrap()
             .as_secs() as i64;
 
-        let delai_jours = self
-            .get_cgp_config()
-            .ok()
-            .and_then(|c| c.email_suivi_delai_jours)
-            .filter(|d| *d > 0)
-            .unwrap_or(5);
-        let delai_secs = delai_jours * 86_400;
+        let default_delai_jours = super::template_email_relance::DEFAULT_RELANCE_DELAI_JOURS;
 
         const TEMPLATE_JOINS: &str = "
                  LEFT JOIN templates_email t ON e.email_template_id = t.id
@@ -4122,8 +4121,32 @@ Bien cordialement,\n\
                  {TEMPLATE_JOINS}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 0
+                   AND COALESCE(ce.email_annule, 0) = 0
                    AND ce.email_date_prevue IS NOT NULL
                    AND ce.email_date_prevue <= ?1
+                   AND e.email_template_id IS NOT NULL
+                   AND c.email IS NOT NULL
+                   AND TRIM(c.email) != ''
+                 ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
+                )
+            }
+            "scheduled" => {
+                format!(
+                    "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
+                        {TEMPLATE_FIELDS},
+                        'SCHEDULED',
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        COALESCE(ce.email_relance_active, 0)
+                 FROM contact_etiquettes ce
+                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+                 INNER JOIN contacts c ON ce.contact_id = c.id
+                 {TEMPLATE_JOINS}
+                 WHERE e.actif = 1 AND e.email_actif = 1
+                   AND ce.email_envoye = 0
+                   AND COALESCE(ce.email_annule, 0) = 0
+                   AND ce.email_date_prevue IS NOT NULL
+                   AND ce.email_date_prevue > ?1
                    AND e.email_template_id IS NOT NULL
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
@@ -4139,7 +4162,6 @@ Bien cordialement,\n\
                           WHEN c.email IS NULL OR TRIM(c.email) = '' THEN 'NO_EMAIL'
                           WHEN e.email_template_id IS NULL THEN 'NO_TEMPLATE'
                           WHEN ce.email_date_prevue IS NULL THEN 'NO_DATE'
-                          WHEN ce.email_date_prevue > ?1 THEN 'SCHEDULED'
                           ELSE 'OTHER'
                         END,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
@@ -4150,12 +4172,13 @@ Bien cordialement,\n\
                  {TEMPLATE_JOINS}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 0
+                   AND COALESCE(ce.email_annule, 0) = 0
                    AND (
                      c.email IS NULL OR TRIM(c.email) = ''
                      OR e.email_template_id IS NULL
                      OR ce.email_date_prevue IS NULL
-                     OR ce.email_date_prevue > ?1
                    )
+                   AND ?1 IS NOT NULL
                  ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
                 )
             }
@@ -4174,7 +4197,6 @@ Bien cordialement,\n\
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 1
                    AND ce.email_date_envoi IS NOT NULL
-                   AND ce.email_date_envoi + ?2 > ?1
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
                    AND COALESCE(t.categorie, '') != 'NEWSLETTER'
@@ -4182,7 +4204,7 @@ Bien cordialement,\n\
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
                  ORDER BY ce.email_date_envoi DESC
-                 LIMIT 100"
+                 LIMIT 200"
                 )
             }
             "followup" => {
@@ -4200,7 +4222,6 @@ Bien cordialement,\n\
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 1
                    AND ce.email_date_envoi IS NOT NULL
-                   AND ce.email_date_envoi + ?2 <= ?1
                    AND ce.email_reponse_at IS NULL
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
                    AND COALESCE(t.categorie, '') != 'NEWSLETTER'
@@ -4208,7 +4229,8 @@ Bien cordialement,\n\
                    AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
                    AND c.email IS NOT NULL
                    AND TRIM(c.email) != ''
-                 ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom"
+                 ORDER BY ce.email_date_envoi ASC, c.nom, c.prenom
+                 LIMIT 200"
                 )
             }
             _ => {
@@ -4248,15 +4270,22 @@ Bien cordialement,\n\
 
         let mut items = if queue_status == "sent" || queue_status == "followup" {
             let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map(params![now, delai_secs], map_row)?;
-            rows.collect::<Result<Vec<_>, _>>()?
+            let rows = stmt.query_map(params![], map_row)?;
+            let raw = rows.collect::<Result<Vec<_>, _>>()?;
+            super::template_email_relance::filter_queue_by_relance_schedule(
+                raw,
+                queue_status,
+                now,
+                default_delai_jours,
+            )
         } else {
             let mut stmt = self.conn.prepare(&sql)?;
             let rows = stmt.query_map(params![now], map_row)?;
             rows.collect::<Result<Vec<_>, _>>()?
         };
 
-        let mut template_items = self.get_template_email_queue(queue_status, now, delai_secs)?;
+        let mut template_items =
+            self.get_template_email_queue(queue_status, now, default_delai_jours)?;
         items.append(&mut template_items);
 
         items.sort_by(|a, b| {
@@ -4669,6 +4698,30 @@ Bien cordialement,\n\
         if updated == 0 {
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "Envoi introuvable: {}",
+                row_id
+            )));
+        }
+        Ok(())
+    }
+
+    /// Retire un envoi planifié de la file « Prêts à envoyer » sans l'envoyer.
+    pub fn cancel_pending_email_campaign(&self, row_id: i64) -> Result<()> {
+        let updated = self.conn.execute(
+            "UPDATE contact_etiquettes SET email_annule = 1
+             WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
+            params![row_id],
+        )?;
+        if updated > 0 {
+            return Ok(());
+        }
+        let updated = self.conn.execute(
+            "UPDATE contact_template_envois SET email_annule = 1
+             WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
+            params![row_id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Envoi planifié introuvable ou déjà traité: {}",
                 row_id
             )));
         }
@@ -5627,7 +5680,7 @@ Bien cordialement,\n\
         &self,
         contact_id: i64,
     ) -> Result<Option<super::models::ContactPendingEmail>> {
-        for status in ["ready", "followup", "sent", "incomplete"] {
+        for status in ["ready", "followup", "sent", "incomplete", "scheduled"] {
             let queue = self.get_etiquette_email_queue(status)?;
             if let Some(item) = queue.into_iter().find(|q| q.contact_id == contact_id) {
                 return Ok(Some(super::models::ContactPendingEmail::from_queue_item(
@@ -7495,6 +7548,110 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn cancel_pending_email_campaign_removes_from_ready_queue() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Tpl cancel".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+            })
+            .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Campagne cancel".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("cancel@example.com".into()),
+                ..sample_contact("Durand", "Paul")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+
+        let ready = db.get_etiquette_email_queue("ready").unwrap();
+        assert_eq!(ready.len(), 1);
+        let row_id = ready[0].contact_etiquette_id;
+
+        db.cancel_pending_email_campaign(row_id).unwrap();
+        assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
+
+        db.sync_pending_email_dates_for_etiquette(etiqu.id).unwrap();
+        assert!(
+            db.get_etiquette_email_queue("ready").unwrap().is_empty(),
+            "un envoi annulé ne doit pas revenir après recalcul des dates"
+        );
+    }
+
+    #[test]
+    fn delete_template_email_clears_relance_link_on_parent() {
+        use crate::database::models::NewTemplateEmail;
+
+        let db = test_db();
+        let relance = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Relance — test orphan".into(),
+                sujet: "Suite".into(),
+                corps: "Corps".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+            })
+            .unwrap();
+        let parent = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Parent test".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: Some(relance.id),
+            })
+            .unwrap();
+
+        db.delete_template_email(relance.id).unwrap();
+
+        let updated = db.get_template_email_by_id(parent.id).unwrap();
+        assert!(updated.relance_template_id.is_none());
+        assert!(db.get_template_email_by_id(relance.id).is_err());
+    }
+
+    #[test]
     fn etiquette_email_queue_ready_incomplete_sent() {
         use crate::database::models::{NewEtiquette, NewTemplateEmail};
 
@@ -7589,9 +7746,10 @@ mod database_integration_tests {
             .unwrap();
 
         assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
-        let scheduled = db.get_etiquette_email_queue("incomplete").unwrap();
+        let scheduled = db.get_etiquette_email_queue("scheduled").unwrap();
         assert_eq!(scheduled.len(), 1);
         assert_eq!(scheduled[0].queue_issue.as_deref(), Some("SCHEDULED"));
+        assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
 
         db.update_etiquette(
             etiqu.id,

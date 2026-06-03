@@ -46,6 +46,25 @@ const templates: TemplateEmail[] = [
 ];
 
 describe("suggestTemplateIdForEtiquette", () => {
+  it("privilégie un modèle au même nom que l'étiquette", () => {
+    const withExact = [
+      ...templates,
+      {
+        id: 9,
+        nom: "Suivi > 1 an",
+        sujet: "",
+        corps: "",
+        categorie: "SUIVI_ANNUEL",
+        variables: null,
+        agenda_link_id: null,
+        relance_template_id: null,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    expect(suggestTemplateIdForEtiquette("Suivi > 1 an", withExact)).toBe(9);
+  });
+
   it("mappe les noms d'étiquettes système", () => {
     expect(suggestTemplateIdForEtiquette("Suivi > 1 an", templates)).toBe(1);
     expect(suggestTemplateIdForEtiquette("Déclaration IR", templates)).toBe(2);

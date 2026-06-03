@@ -64,16 +64,27 @@ export async function getEtiquetteIdsForTemplate(templateId: number): Promise<nu
 }
 
 /** Modèles métier par défaut (idempotent : n'écrase pas les existants). */
-export async function seedDefaultEmailTemplates(): Promise<number> {
-  return invoke<number>("seed_default_email_templates");
+export async function seedDefaultEmailTemplates(options?: {
+  onlyIfEmpty?: boolean;
+}): Promise<number> {
+  return invoke<number>("seed_default_email_templates", {
+    onlyIfEmpty: options?.onlyIfEmpty ?? false,
+  });
+}
+
+import { normalizeBrokenAgendaTokens } from "@/lib/emails/agenda-links";
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 // Fonction utilitaire pour remplacer les variables dans un template
 export function replaceTemplateVariables(text: string, variables: Record<string, string>): string {
-  let result = text;
-  Object.entries(variables).forEach(([key, value]) => {
-    const regex = new RegExp(`{{${key}}}`, 'g');
-    result = result.replace(regex, value);
-  });
+  let result = normalizeBrokenAgendaTokens(text);
+  const keys = Object.keys(variables).sort((a, b) => b.length - a.length);
+  for (const key of keys) {
+    const regex = new RegExp(`\\{\\{${escapeRegExp(key)}\\}\\}`, "g");
+    result = result.replace(regex, variables[key] ?? "");
+  }
   return result;
 }

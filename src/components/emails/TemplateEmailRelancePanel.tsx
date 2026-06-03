@@ -1,8 +1,14 @@
+import { EmailEnvoiWeekdayPicker } from "@/components/emails/EmailEnvoiWeekdayPicker";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import {
+  buildRelanceTemplateNom,
+  formatTemplateRelanceScheduleSummary,
+} from "@/lib/emails/template-email-relance";
+import type { EmailEnvoiJourCode } from "@/lib/emails/email-envoi-schedule";
 import { MessageCircle, RotateCcw } from "lucide-react";
 
 export type TemplateRelanceDraft = {
@@ -12,17 +18,39 @@ export type TemplateRelanceDraft = {
   corpsHtml: string;
   /** Attendre une réponse client (bandeau + relance auto). */
   attendreReponse: boolean;
+  delaiJours: number;
+  envoiHeure: string;
+  envoiJours: EmailEnvoiJourCode[] | null;
 };
 
 type Props = {
   draft: TemplateRelanceDraft;
   onChange: (next: TemplateRelanceDraft) => void;
   parentNom: string;
+  /** Repli pour modèles sans délai explicite (constant 5 j). */
+  fallbackDelaiJours?: number;
 };
 
-export function TemplateEmailRelancePanel({ draft, onChange, parentNom }: Props) {
+export function TemplateEmailRelancePanel({
+  draft,
+  onChange,
+  parentNom,
+  fallbackDelaiJours = 5,
+}: Props) {
   const patch = (partial: Partial<TemplateRelanceDraft>) =>
     onChange({ ...draft, ...partial });
+
+  const scheduleSummary = formatTemplateRelanceScheduleSummary(
+    {
+      delai_jours: draft.delaiJours,
+      envoi_heure: draft.envoiHeure,
+      envoi_jours_semaine:
+        draft.envoiJours && draft.envoiJours.length > 0
+          ? JSON.stringify(draft.envoiJours)
+          : null,
+    },
+    fallbackDelaiJours
+  );
 
   return (
     <div className="space-y-5">
@@ -58,8 +86,7 @@ export function TemplateEmailRelancePanel({ draft, onChange, parentNom }: Props)
               Relance (2ᵉ email)
             </Label>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Sans réponse après le délai défini dans Paramètres → Profil, proposition dans Suivi →
-              Envois → À relancer.
+              Sans réponse après le délai ci-dessous → proposition dans Suivi → Envois → À relancer.
             </p>
           </div>
         </div>
@@ -78,6 +105,48 @@ export function TemplateEmailRelancePanel({ draft, onChange, parentNom }: Props)
 
       {draft.enabled && (
         <div className="space-y-4 rounded-lg border p-4">
+          <div className="space-y-2 border-b pb-4">
+            <Label className="text-sm font-medium">Quand proposer la relance ?</Label>
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="space-y-1">
+                <Label htmlFor="rel-delai" className="text-xs text-muted-foreground">
+                  Délai (jours après le 1er envoi)
+                </Label>
+                <Input
+                  id="rel-delai"
+                  type="number"
+                  min={0}
+                  max={365}
+                  className="w-24"
+                  value={draft.delaiJours}
+                  onChange={(e) =>
+                    patch({ delaiJours: Math.max(0, parseInt(e.target.value, 10) || 0) })
+                  }
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="rel-heure" className="text-xs text-muted-foreground">
+                  Heure
+                </Label>
+                <Input
+                  id="rel-heure"
+                  type="time"
+                  className="w-[160px]"
+                  value={draft.envoiHeure}
+                  onChange={(e) => patch({ envoiHeure: e.target.value })}
+                />
+              </div>
+            </div>
+            <EmailEnvoiWeekdayPicker
+              id="rel-jours-semaine"
+              value={draft.envoiJours}
+              onChange={(days) => patch({ envoiJours: days })}
+            />
+            <p className="text-xs text-muted-foreground">
+              En résumé : <strong>{scheduleSummary}</strong> → onglet À relancer (validation manuelle).
+            </p>
+          </div>
+
           <div className="flex items-start gap-2">
             <Checkbox
               id="relance-same"
@@ -100,7 +169,7 @@ export function TemplateEmailRelancePanel({ draft, onChange, parentNom }: Props)
                 Modèle lié :{" "}
                 <strong>
                   {parentNom.trim()
-                    ? `Relance — ${parentNom.trim()}`
+                    ? buildRelanceTemplateNom(parentNom)
                     : "Relance — (nom du modèle principal)"}
                 </strong>
               </p>

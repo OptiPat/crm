@@ -73,6 +73,7 @@ export function consumeSuiviNavigationIntent(): SuiviNavigationIntent {
 
   const envoisSubTab =
     rawSub === "ready" ||
+    rawSub === "scheduled" ||
     rawSub === "incomplete" ||
     rawSub === "sent" ||
     rawSub === "followup"

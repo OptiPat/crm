@@ -5,12 +5,16 @@ import {
   type EtiquetteEmailQueueItem,
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
-import { getIncompleteQueueLabel } from "@/lib/etiquettes/etiquette-email-preview";
+import {
+  formatEtiquetteSendDatetime,
+  getIncompleteQueueLabel,
+} from "@/lib/etiquettes/etiquette-email-preview";
 
 export type AlerteEmailResolution =
   | { kind: "send"; item: EtiquetteEmailQueueItem }
   | { kind: "followup"; item: EtiquetteEmailQueueItem }
   | { kind: "incomplete"; message: string }
+  | { kind: "scheduled"; message: string }
   | { kind: "sent_waiting"; message: string }
   | { kind: "no_campaign" };
 
@@ -64,6 +68,15 @@ export async function resolveAlerteEmailAction(
     return {
       kind: "incomplete",
       message: getIncompleteQueueLabel(incompleteItem.queue_issue),
+    };
+  }
+
+  const scheduled = await getEtiquetteEmailQueue("scheduled");
+  const scheduledItem = match(scheduled);
+  if (scheduledItem) {
+    return {
+      kind: "scheduled",
+      message: `Envoi planifié le ${formatEtiquetteSendDatetime(scheduledItem.email_date_prevue)} — rien à faire pour l'instant.`,
     };
   }
 

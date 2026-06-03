@@ -3,6 +3,7 @@ import { AlertTriangle, ChevronDown, Mail } from "lucide-react";
 
 export function EnvoisQueueStats({
   ready,
+  scheduled,
   incomplete,
   sent,
   followup,
@@ -10,11 +11,12 @@ export function EnvoisQueueStats({
   onSelect,
 }: {
   ready: number;
+  scheduled: number;
   incomplete: number;
   sent: number;
   followup: number;
-  active: "ready" | "incomplete" | "sent" | "followup";
-  onSelect: (tab: "ready" | "incomplete" | "sent" | "followup") => void;
+  active: "ready" | "scheduled" | "incomplete" | "sent" | "followup";
+  onSelect: (tab: "ready" | "scheduled" | "incomplete" | "sent" | "followup") => void;
 }) {
   const items: {
     id: typeof active;
@@ -23,13 +25,14 @@ export function EnvoisQueueStats({
     accent?: boolean;
   }[] = [
     { id: "ready", label: "Prêts", count: ready, accent: ready > 0 },
+    { id: "scheduled", label: "Planifiés", count: scheduled },
     { id: "incomplete", label: "À compléter", count: incomplete, accent: incomplete > 0 },
     { id: "sent", label: "Envoyés", count: sent },
     { id: "followup", label: "À relancer", count: followup, accent: followup > 0 },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
       {items.map((item) => (
         <button
           key={item.id}
@@ -67,7 +70,15 @@ export function EnvoisQueueHelp() {
         <p>
           <strong className="text-foreground">2. Prêts à envoyer</strong> — Le CRM prépare les
           emails ; vous les relisez et confirmez un par un (CRM ouvert, boîte connectée dans
-          Paramètres → Email).
+          Paramètres → Email). Bouton ✕ pour ignorer un envoi planifié sans l&apos;envoyer.
+        </p>
+        <p>
+          <strong className="text-foreground">Planifiés</strong> — Date d&apos;envoi pas encore
+          atteinte : rien à faire, passage automatique dans Prêts à la date prévue.
+        </p>
+        <p>
+          <strong className="text-foreground">À compléter</strong> — Vrais blocages uniquement
+          (email manquant, modèle ou date sur l&apos;étiquette).
         </p>
         <p>
           <strong className="text-foreground">3. Suivi</strong> — « En attente de réponse » seulement

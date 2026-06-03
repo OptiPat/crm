@@ -33,6 +33,7 @@ impl Database {
                 email_reponse_body TEXT,
                 email_reponse_gmail_message_id TEXT,
                 email_suivi_ignore INTEGER NOT NULL DEFAULT 0,
+                email_annule INTEGER NOT NULL DEFAULT 0,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
                 FOREIGN KEY (template_id) REFERENCES templates_email(id) ON DELETE CASCADE
@@ -115,7 +116,10 @@ impl Database {
             self.conn.execute(
                 "UPDATE contact_template_envois SET
                     trigger_event_at = ?1,
-                    email_date_prevue = CASE WHEN email_envoye = 0 THEN ?2 ELSE email_date_prevue END
+                    email_date_prevue = CASE
+                        WHEN email_envoye = 0 AND COALESCE(email_annule, 0) = 0 THEN ?2
+                        ELSE email_date_prevue
+                    END
                  WHERE id = ?3",
                 params![eligible_at, email_date_prevue, id],
             )?;
@@ -271,7 +275,7 @@ impl Database {
             let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, eligible_at);
             let n = self.conn.execute(
                 "UPDATE contact_template_envois SET email_date_prevue = ?1
-                 WHERE id = ?2 AND email_envoye = 0",
+                 WHERE id = ?2 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
                 params![email_date_prevue, row_id],
             )?;
             updated += n;
@@ -342,7 +346,7 @@ impl Database {
         &self,
         queue_status: &str,
         now: i64,
-        delai_secs: i64,
+        default_delai_jours: i64,
     ) -> Result<Vec<EtiquetteEmailQueueItem>> {
         const TRIGGER_FILTER: &str = "json_extract(t.variables, '$.email_trigger.enabled') = 1
             AND (
@@ -373,8 +377,27 @@ impl Database {
                  INNER JOIN contacts c ON cte.contact_id = c.id
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
+                   AND COALESCE(cte.email_annule, 0) = 0
                    AND cte.email_date_prevue IS NOT NULL
                    AND cte.email_date_prevue <= ?1
+                   AND c.email IS NOT NULL AND TRIM(c.email) != ''"
+            ),
+            "scheduled" => format!(
+                "SELECT cte.id, cte.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        t.id, ('Modèle · ' || t.nom), cte.email_date_prevue, cte.email_date_envoi,
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
+                        t.variables, t.categorie,
+                        'SCHEDULED',
+                        cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
+                        0
+                 FROM contact_template_envois cte
+                 INNER JOIN templates_email t ON cte.template_id = t.id
+                 INNER JOIN contacts c ON cte.contact_id = c.id
+                 WHERE {TRIGGER_FILTER}
+                   AND cte.email_envoye = 0
+                   AND COALESCE(cte.email_annule, 0) = 0
+                   AND cte.email_date_prevue IS NOT NULL
+                   AND cte.email_date_prevue > ?1
                    AND c.email IS NOT NULL AND TRIM(c.email) != ''"
             ),
             "incomplete" => format!(
@@ -385,7 +408,6 @@ impl Database {
                         CASE
                           WHEN c.email IS NULL OR TRIM(c.email) = '' THEN 'NO_EMAIL'
                           WHEN cte.email_date_prevue IS NULL THEN 'NO_DATE'
-                          WHEN cte.email_date_prevue > ?1 THEN 'SCHEDULED'
                           ELSE 'OTHER'
                         END,
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
@@ -395,14 +417,14 @@ impl Database {
                  INNER JOIN contacts c ON cte.contact_id = c.id
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
+                   AND COALESCE(cte.email_annule, 0) = 0
                    AND (
                      c.email IS NULL OR TRIM(c.email) = ''
                      OR cte.email_date_prevue IS NULL
-                     OR cte.email_date_prevue > ?1
-                   )"
+                   )
+                   AND ?1 IS NOT NULL"
             ),
             "sent" | "followup" => {
-                let cmp = if queue_status == "sent" { ">" } else { "<=" };
                 let relance_filter = if queue_status == "followup" {
                     " AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1"
                 } else {
@@ -421,7 +443,6 @@ impl Database {
                      WHERE {TRIGGER_FILTER}
                        AND cte.email_envoye = 1
                        AND cte.email_date_envoi IS NOT NULL
-                       AND cte.email_date_envoi + ?2 {cmp} ?1
                        AND cte.email_reponse_at IS NULL
                        AND COALESCE(cte.email_suivi_ignore, 0) = 0
                        AND COALESCE(t.categorie, '') != 'NEWSLETTER'
@@ -462,8 +483,14 @@ impl Database {
 
         if queue_status == "sent" || queue_status == "followup" {
             let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map(params![now, delai_secs], map_row)?;
-            return rows.collect();
+            let rows = stmt.query_map([], map_row)?;
+            let raw = rows.collect::<Result<Vec<_>, _>>()?;
+            return Ok(super::template_email_relance::filter_queue_by_relance_schedule(
+                raw,
+                queue_status,
+                now,
+                default_delai_jours,
+            ));
         }
 
         let mut stmt = self.conn.prepare(&sql)?;

@@ -9,6 +9,7 @@ import { appendEmailSignature } from "@/lib/emails/email-signature";
 import {
   buildAgendaTemplateVariables,
   normalizeAgendaLinks,
+  agendaLinkVariableToken,
   type AgendaLink,
 } from "@/lib/emails/agenda-links";
 import {
@@ -78,7 +79,7 @@ export function getAgendaVariableTokens(links: AgendaLink[]) {
   ];
   for (const link of links) {
     tokens.push({
-      token: `{{lien_agenda_${link.id}}}`,
+      token: agendaLinkVariableToken(link.id),
       label: link.label,
       hint: "Lien fixe (tous templates)",
     });
@@ -172,6 +173,11 @@ export function suggestTemplateIdForEtiquette(
   etiquetteNom: string,
   templates: TemplateEmail[]
 ): number | null {
+  const trimmed = etiquetteNom.trim();
+  if (trimmed) {
+    const exact = templates.find((t) => t.nom.trim() === trimmed);
+    if (exact) return exact.id;
+  }
   if (isExceltisEtiquetteNom(etiquetteNom)) {
     const exceltis = templates.find((t) => t.nom === EXCELITIS_EMAIL_TEMPLATE_NOM);
     if (exceltis) return exceltis.id;

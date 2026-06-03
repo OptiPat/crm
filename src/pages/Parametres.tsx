@@ -74,7 +74,7 @@ const SETTINGS_NAV: SettingsNavItem[] = [
   {
     id: "suivi",
     label: "Suivi",
-    description: "Agenda et relances",
+    description: "Liens Google Agenda",
     icon: CalendarClock,
   },
   {

@@ -85,6 +85,7 @@ function envoisSubTabForPending(
 ): EtiquetteEmailQueueStatus {
   if (pending.queue_status === "followup") return "followup";
   if (pending.queue_status === "incomplete") return "incomplete";
+  if (pending.queue_status === "scheduled") return "scheduled";
   if (pending.queue_status === "sent") return "sent";
   return "ready";
 }
@@ -97,6 +98,8 @@ function pendingEmailActionLabel(pending: ContactPendingEmail): string {
       return "Ouvrir Envois — à relancer";
     case "incomplete":
       return "Ouvrir Envois — à compléter";
+    case "scheduled":
+      return "Ouvrir Envois — planifié";
     case "sent":
       return "Ouvrir Envois — en attente de réponse";
     default:
@@ -112,7 +115,9 @@ function pendingEmailSummary(pending: ContactPendingEmail): string {
         ? "relance à envisager"
         : pending.queue_status === "sent"
           ? "en attente de réponse client"
-          : "configuration ou date à compléter";
+          : pending.queue_status === "scheduled"
+            ? "envoi planifié"
+            : "configuration à compléter";
   const kind =
     pending.queue_row_kind === "template" ? "Modèle" : "Étiquette";
   return `${kind} « ${pending.etiquette_nom} » — ${status}`;

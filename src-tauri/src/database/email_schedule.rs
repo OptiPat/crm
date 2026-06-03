@@ -107,7 +107,7 @@ fn apply_jours_semaine(date: NaiveDate, jours_semaine: Option<&str>) -> NaiveDat
 }
 
 /// Créneau horaire le jour calendaire de `anchor_unix` (sans report « immédiat » si l'heure est passée).
-fn calendar_slot_on_anchor_day(
+pub(crate) fn calendar_slot_on_anchor_day(
     anchor_unix: i64,
     heure: &str,
     jours_semaine: Option<&str>,

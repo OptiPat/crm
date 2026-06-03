@@ -14,11 +14,15 @@ import {
   X,
   RotateCcw,
 } from "lucide-react";
-import { isTemplateEmailRelanceEnabledForQueue } from "@/lib/emails/template-email-relance";
+import {
+  DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
+  isTemplateEmailRelanceEnabledForQueue,
+} from "@/lib/emails/template-email-relance";
 import {
   getEtiquetteEmailQueue,
   markEmailCampaignResponse,
   dismissEmailCampaignFollowup,
+  cancelPendingEmailCampaign,
   prepareEmailCampaignRelance,
   getContrastColor,
   type EtiquetteEmailQueueItem,
@@ -36,6 +40,16 @@ import {
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   EnvoisEmailConnectionBanner,
   EnvoisQueueHelp,
@@ -59,15 +73,19 @@ interface EtiquetteEnvoisTabProps {
 
 export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteEnvoisTabProps) {
   const [ready, setReady] = useState<EtiquetteEmailQueueItem[]>([]);
+  const [scheduled, setScheduled] = useState<EtiquetteEmailQueueItem[]>([]);
   const [incomplete, setIncomplete] = useState<EtiquetteEmailQueueItem[]>([]);
   const [sent, setSent] = useState<EtiquetteEmailQueueItem[]>([]);
   const [followup, setFollowup] = useState<EtiquetteEmailQueueItem[]>([]);
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState<
-    "ready" | "incomplete" | "sent" | "followup"
+    "ready" | "scheduled" | "incomplete" | "sent" | "followup"
   >("ready");
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
+  const [cancelConfirmItem, setCancelConfirmItem] =
+    useState<EtiquetteEmailQueueItem | null>(null);
+  const [cancelling, setCancelling] = useState(false);
   const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
@@ -102,6 +120,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     const raw = sessionStorage.getItem("crm_nav_suivi_envois_subtab");
     if (
       raw === "ready" ||
+      raw === "scheduled" ||
       raw === "incomplete" ||
       raw === "sent" ||
       raw === "followup"
@@ -117,9 +136,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     const silent = options?.silent ?? false;
     try {
       if (!silent) setLoading(true);
-      const [cgp, r, i, s, f, emailConn] = await Promise.all([
+      const [cgp, r, sch, i, s, f, emailConn] = await Promise.all([
         getCgpConfig(),
         getEtiquetteEmailQueue("ready"),
+        getEtiquetteEmailQueue("scheduled"),
         getEtiquetteEmailQueue("incomplete"),
         getEtiquetteEmailQueue("sent"),
         getEtiquetteEmailQueue("followup"),
@@ -127,6 +147,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       ]);
       setCgpConfig(cgp);
       setReady(r);
+      setScheduled(sch);
       setIncomplete(i);
       setSent(s);
       setFollowup(f);
@@ -158,6 +179,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       items: EtiquetteEmailQueueItem[];
     }> = [
       { mode: "ready", items: ready },
+      { mode: "scheduled", items: scheduled },
       { mode: "incomplete", items: incomplete },
       { mode: "followup", items: followup },
       { mode: "sent", items: sent },
@@ -180,13 +202,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       }
     }
     setHighlightContactId(null);
-  }, [highlightContactId, loading, ready, incomplete, sent, followup]);
+  }, [highlightContactId, loading, ready, scheduled, incomplete, sent, followup]);
 
   const openConfirm = (item: EtiquetteEmailQueueItem) => {
     setConfirmItem(item);
   };
-
-  const suiviJours = cgpConfig?.email_suivi_delai_jours ?? 5;
 
   const handleMarkResponse = async (
     item: EtiquetteEmailQueueItem,
@@ -212,6 +232,23 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     }
   };
 
+  const handleCancelPendingConfirmed = async () => {
+    const item = cancelConfirmItem;
+    if (!item) return;
+    try {
+      setCancelling(true);
+      await cancelPendingEmailCampaign(item.contact_etiquette_id);
+      setCancelConfirmItem(null);
+      toast.success("Envoi retiré de la file");
+      await loadQueue({ silent: true });
+      onQueueChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   const handlePrepareRelance = async (item: EtiquetteEmailQueueItem) => {
     try {
       await prepareEmailCampaignRelance(item.contact_etiquette_id);
@@ -225,7 +262,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   const renderList = (
     items: EtiquetteEmailQueueItem[],
-    options: { mode: "ready" | "incomplete" | "sent" | "followup" }
+    options: { mode: "ready" | "scheduled" | "incomplete" | "sent" | "followup" }
   ) => {
     if (loading) {
       return (
@@ -236,10 +273,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       const empty =
         options.mode === "ready"
           ? "Rien à envoyer pour le moment. Vérifiez la campagne sur l'étiquette (onglet Email), recalculez les étiquettes, et que chaque contact a un email en fiche."
-          : options.mode === "incomplete"
-            ? "Aucun contact bloqué — parfait. Les manques (email, modèle, date) apparaîtront ici."
-            : options.mode === "followup"
-              ? `Aucune relance suggérée (${suiviJours} j sans réponse mail ou RDV).`
+          : options.mode === "scheduled"
+            ? "Aucun envoi planifié pour le moment."
+            : options.mode === "incomplete"
+              ? "Aucun blocage — parfait. Email manquant, modèle ou date manquante apparaîtront ici."
+              : options.mode === "followup"
+              ? `Aucune relance suggérée (délai selon chaque modèle, repli ${DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS} j).`
               : "Aucun envoi en attente de réponse client.";
       return <div className="text-center py-8 text-muted-foreground">{empty}</div>;
     }
@@ -281,6 +320,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                     <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
                     {getIncompleteQueueLabel(item.queue_issue)}
                   </p>
+                ) : options.mode === "scheduled" ? (
+                  <p className="text-sm text-muted-foreground">
+                    Passera dans Prêts à envoyer à la date prévue — rien à faire.
+                  </p>
                 ) : (
                   <p className="text-sm text-muted-foreground truncate">
                     {item.contact_email ?? "—"}
@@ -301,7 +344,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   )}
                 {options.mode === "followup" && (
                   <p className="text-xs text-amber-800">
-                    Aucun retour enregistré depuis {suiviJours} jours (mail ou RDV).
+                    Aucun retour enregistré — relance selon le délai du modèle (onglet Relance).
                   </p>
                 )}
                 {options.mode === "ready" && item.email_is_relance && (
@@ -322,10 +365,20 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               </div>
               <div className="flex gap-2 shrink-0">
                 {options.mode === "ready" && (
-                  <Button size="sm" onClick={() => openConfirm(item)}>
-                    <Send className="h-4 w-4 mr-1" />
-                    Confirmer et envoyer
-                  </Button>
+                  <>
+                    <Button size="sm" onClick={() => openConfirm(item)}>
+                      <Send className="h-4 w-4 mr-1" />
+                      Confirmer et envoyer
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Ignorer cet envoi"
+                      onClick={() => setCancelConfirmItem(item)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
                 )}
                 {options.mode === "followup" && (
                   <>
@@ -407,6 +460,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       )}
       <EnvoisQueueStats
         ready={ready.length}
+        scheduled={scheduled.length}
         incomplete={incomplete.length}
         sent={sent.length}
         followup={followup.length}
@@ -450,6 +504,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   <Badge variant="secondary">{ready.length}</Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="scheduled" className="gap-2">
+                Planifiés
+                {scheduled.length > 0 && (
+                  <Badge variant="outline">{scheduled.length}</Badge>
+                )}
+              </TabsTrigger>
               <TabsTrigger value="incomplete" className="gap-2">
                 À compléter
                 {incomplete.length > 0 && (
@@ -476,6 +536,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             <TabsContent value="ready" className="mt-4">
               {renderList(ready, { mode: "ready" })}
             </TabsContent>
+            <TabsContent value="scheduled" className="mt-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                Dates futures des campagnes — passage automatique dans Prêts à envoyer.
+              </p>
+              {renderList(scheduled, { mode: "scheduled" })}
+            </TabsContent>
             <TabsContent value="incomplete" className="mt-4">
               {renderList(incomplete, { mode: "incomplete" })}
             </TabsContent>
@@ -484,7 +550,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             </TabsContent>
             <TabsContent value="followup" className="mt-4">
               <p className="text-xs text-muted-foreground mb-3">
-                Relance proposée après {suiviJours} j sans réponse (Paramètres → Profil). Google
+                Délai et horaire définis sur chaque modèle (Templates → onglet Relance). Google
                 connecté : détection mail + Agenda automatique.
               </p>
               {renderList(followup, { mode: "followup" })}
@@ -500,6 +566,53 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         cgpConfig={cgpConfig}
         onSent={() => void loadQueue()}
       />
+
+      <AlertDialog
+        open={!!cancelConfirmItem}
+        onOpenChange={(open) => {
+          if (!open && !cancelling) setCancelConfirmItem(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ignorer cet envoi ?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">
+                    {cancelConfirmItem?.contact_prenom} {cancelConfirmItem?.contact_nom}
+                  </strong>
+                  {" — "}
+                  {cancelConfirmItem?.etiquette_nom}
+                </p>
+                {cancelConfirmItem && cgpConfig && (
+                  <p>
+                    Objet :{" "}
+                    {renderEtiquetteEmailPreview(cancelConfirmItem, cgpConfig).subject}
+                  </p>
+                )}
+                <p>
+                  L&apos;email ne sera pas envoyé et ne reviendra pas dans la file pour ce
+                  contact.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelling}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancelling}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                void handleCancelPendingConfirmed();
+              }}
+            >
+              {cancelling ? "Retrait…" : "Ignorer cet envoi"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

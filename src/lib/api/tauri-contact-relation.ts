@@ -5,7 +5,7 @@ export interface ContactPendingEmail {
   contact_etiquette_id: number;
   queue_row_kind?: "etiquette" | "template" | string;
   etiquette_nom: string;
-  queue_status: "ready" | "incomplete" | "followup" | "sent" | string;
+  queue_status: "ready" | "scheduled" | "incomplete" | "followup" | "sent" | string;
   email_date_prevue: number | null;
 }
 
