@@ -123,6 +123,7 @@ const BASE_EMPTY: NewContact = {
   date_dernier_contact_filleul: "",
   date_prochain_suivi_filleul: "",
   statut_suivi: "ACTIF",
+  registre: "VOUS",
   notes: "",
   parrain_id: undefined,
   prescripteur_id: undefined,
@@ -191,6 +192,7 @@ export function contactToFormData(contact: Contact): NewContact {
     date_dernier_contact: toDateInput(contact.date_dernier_contact),
     date_prochain_suivi: toDateInput(contact.date_prochain_suivi),
     statut_suivi: contact.statut_suivi || "ACTIF",
+    registre: contact.registre?.trim() || "VOUS",
     notes: contact.notes || "",
   };
 }
@@ -237,6 +239,7 @@ export function buildSubmitPayload(formData: NewContact): NewContact {
       ? dateFieldToIso(formData.date_prochain_suivi_filleul)
       : undefined,
     date_naissance: dateFieldToIso(formData.date_naissance),
+    registre: formData.registre?.trim().toUpperCase() === "TU" ? "TU" : "VOUS",
   };
 }
 

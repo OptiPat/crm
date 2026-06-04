@@ -31,6 +31,8 @@ export interface Contact {
   date_dernier_contact_filleul?: number;
   date_prochain_suivi_filleul?: number;
   statut_suivi: string;
+  /** `VOUS` (défaut) ou `TU` — variante du modèle email lié */
+  registre?: string | null;
   notes?: string;
   created_at: number;
   updated_at: number;
@@ -65,6 +67,7 @@ export interface NewContact {
   date_dernier_contact_filleul?: string;
   date_prochain_suivi_filleul?: string;
   statut_suivi?: string;
+  registre?: string | null;
   notes?: string;
 }
 

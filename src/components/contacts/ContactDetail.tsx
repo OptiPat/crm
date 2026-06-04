@@ -75,6 +75,7 @@ import {
 } from "@/lib/api/tauri-etiquettes";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { ContactAutoEtiquetteLog } from "@/components/contacts/ContactAutoEtiquetteLog";
+import { ContactRegistreSwitch } from "@/components/contacts/ContactRegistreSwitch";
 import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
@@ -732,6 +733,13 @@ export function ContactDetail({
             selectedIds={etiquettes.map((e) => e.etiquette_id)}
             onAdd={handleAddEtiquette}
             onRemove={handleRemoveEtiquetteClick}
+          />
+          <ContactRegistreSwitch
+            contact={contact}
+            onUpdated={(updated) => {
+              onContactRefreshed?.(updated);
+              onUpdate?.();
+            }}
           />
           {contact.id != null && <ContactAutoEtiquetteLog contactId={contact.id} />}
           {excludedEtiquettes.length > 0 && (

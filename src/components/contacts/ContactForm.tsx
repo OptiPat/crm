@@ -447,6 +447,29 @@ export function ContactForm({
             </Select>
           </div>
           <div className="space-y-2">
+            <Label htmlFor="registre">Registre (emails)</Label>
+            <Select
+              value={formData.registre === "TU" ? "TU" : "VOUS"}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  registre: value as "TU" | "VOUS",
+                }))
+              }
+            >
+              <SelectTrigger id="registre">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="VOUS">Vouvoiement</SelectItem>
+                <SelectItem value="TU">Tutoiement</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Choix du modèle lié (tu) lors des campagnes email.
+            </p>
+          </div>
+          <div className="space-y-2">
             <Label htmlFor="situation_familiale">Situation familiale</Label>
             <Select
               value={formData.situation_familiale || SELECT_NONE}

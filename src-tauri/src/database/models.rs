@@ -31,6 +31,8 @@ pub struct Contact {
     pub date_dernier_contact_filleul: Option<i64>,
     pub date_prochain_suivi_filleul: Option<i64>,
     pub statut_suivi: String,
+    /// `VOUS` (défaut) ou `TU` — choix du modèle email lié à l'envoi
+    pub registre: Option<String>,
     pub notes: Option<String>,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
@@ -66,6 +68,8 @@ pub struct NewContact {
     pub date_dernier_contact_filleul: Option<String>,
     pub date_prochain_suivi_filleul: Option<String>,
     pub statut_suivi: Option<String>,
+    #[serde(default)]
+    pub registre: Option<String>,
     pub notes: Option<String>,
 }
 
@@ -188,6 +192,8 @@ pub struct TemplateEmail {
     pub agenda_link_id: Option<String>,
     /// Template utilisé pour le 2e envoi (À relancer), si défini
     pub relance_template_id: Option<i64>,
+    /// Variante tutoiement liée (modèle principal = vouvoiement)
+    pub tutoiement_template_id: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -203,6 +209,8 @@ pub struct NewTemplateEmail {
     pub agenda_link_id: Option<String>,
     #[serde(default)]
     pub relance_template_id: Option<i64>,
+    #[serde(default)]
+    pub tutoiement_template_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -506,6 +514,8 @@ pub struct EtiquetteEmailQueueItem {
     pub contact_date_dernier_contact: Option<i64>,
     /// File « Prêts » après un clic Relancer : utiliser le template de relance lié
     pub email_is_relance: bool,
+    /// `VOUS` ou `TU` (fiche contact)
+    pub contact_registre: Option<String>,
 }
 
 /// Email campagne en attente pour un contact (fiche relation).

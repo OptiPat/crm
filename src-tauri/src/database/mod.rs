@@ -4,12 +4,14 @@ use tauri::{AppHandle, Manager};
 pub mod email_schedule;
 pub mod etiquette_rule_ast;
 pub mod etiquettes_auto_engine;
+pub mod contact_row;
 pub mod models;
 pub mod operations;
 pub mod segments;
 pub mod template_email_trigger;
 pub mod template_email_relance;
 pub mod template_email_queue;
+pub mod template_formality_sql;
 
 pub struct Database {
     conn: Connection,
@@ -361,6 +363,8 @@ impl Database {
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
         self.migrate_templates_email_relance_template_id()?;
+        self.migrate_templates_email_tutoiement_template_id()?;
+        self.migrate_contacts_registre()?;
         self.migrate_contact_etiquettes_email_suivi()?;
         self.migrate_contact_etiquette_auto_exclusions()?;
         self.migrate_segments_and_rule_engine()?;
@@ -613,6 +617,28 @@ impl Database {
                 [],
             )?;
             println!("✅ Migration: relance_template_id sur templates_email");
+        }
+        Ok(())
+    }
+
+    fn migrate_templates_email_tutoiement_template_id(&self) -> Result<()> {
+        if !self.table_has_column("templates_email", "tutoiement_template_id")? {
+            self.conn.execute(
+                "ALTER TABLE templates_email ADD COLUMN tutoiement_template_id INTEGER REFERENCES templates_email(id)",
+                [],
+            )?;
+            println!("✅ Migration: tutoiement_template_id sur templates_email");
+        }
+        Ok(())
+    }
+
+    fn migrate_contacts_registre(&self) -> Result<()> {
+        if !self.table_has_column("contacts", "registre")? {
+            self.conn.execute(
+                "ALTER TABLE contacts ADD COLUMN registre TEXT NOT NULL DEFAULT 'VOUS'",
+                [],
+            )?;
+            println!("✅ Migration: registre (TU/VOUS) sur contacts");
         }
         Ok(())
     }

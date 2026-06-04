@@ -50,6 +50,11 @@ import {
   TemplateEmailRelancePanel,
   type TemplateRelanceDraft,
 } from "@/components/emails/TemplateEmailRelancePanel";
+import {
+  TemplateEmailTutoiementPanel,
+  type TemplateTutoiementDraft,
+} from "@/components/emails/TemplateEmailTutoiementPanel";
+import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import { parseTemplateEmailMeta } from "@/lib/emails/template-email-html";
 import {
   buildRelanceTemplateNom,
@@ -105,9 +110,9 @@ export function TemplateEmailForm({
   onSuccess,
 }: TemplateEmailFormProps) {
   const [loading, setLoading] = useState(false);
-  const [formTab, setFormTab] = useState<"message" | "relance" | "declencheur" | "liaisons">(
-    "message"
-  );
+  const [formTab, setFormTab] = useState<
+    "message" | "tutoiement" | "relance" | "declencheur" | "liaisons"
+  >("message");
   const [relanceDraft, setRelanceDraft] = useState<TemplateRelanceDraft>({
     enabled: false,
     useSameMessage: true,
@@ -119,6 +124,19 @@ export function TemplateEmailForm({
     envoiJours: null,
   });
   const [relanceTemplateId, setRelanceTemplateId] = useState<number | null>(null);
+  const [tutoiementDraft, setTutoiementDraft] = useState<TemplateTutoiementDraft>({
+    enabled: false,
+    sujet: "",
+    corpsHtml: "",
+  });
+  const [tutoiementTemplateId, setTutoiementTemplateId] = useState<number | null>(null);
+  const [relanceTuDraft, setRelanceTuDraft] = useState<TemplateTutoiementDraft>({
+    enabled: false,
+    sujet: "",
+    corpsHtml: "",
+  });
+  const [relanceTuTemplateId, setRelanceTuTemplateId] = useState<number | null>(null);
+  const [previewRegistre, setPreviewRegistre] = useState<"VOUS" | "TU">("VOUS");
   const [emailTrigger, setEmailTrigger] = useState<TemplateEmailTriggerConfig>(
     DEFAULT_TEMPLATE_EMAIL_TRIGGER
   );
@@ -140,6 +158,7 @@ export function TemplateEmailForm({
     variables: null,
     agenda_link_id: null,
     relance_template_id: null,
+    tutoiement_template_id: null,
   });
 
   const hydrateFromTemplate = useCallback((source: TemplateEmail) => {
@@ -151,11 +170,31 @@ export function TemplateEmailForm({
       variables: source.variables,
       agenda_link_id: source.agenda_link_id,
       relance_template_id: source.relance_template_id,
+      tutoiement_template_id: source.tutoiement_template_id,
     });
     const storedHtml = getTemplateCorpsHtml(source.variables);
     setCorpsHtml(storedHtml ?? plainTextToTemplateHtml(source.corps));
     setEmailTrigger(parseTemplateEmailTrigger(source.variables));
     setRelanceTemplateId(source.relance_template_id);
+    setTutoiementTemplateId(source.tutoiement_template_id ?? null);
+    const hasTu = source.tutoiement_template_id != null;
+    setTutoiementDraft({
+      enabled: hasTu,
+      sujet: "",
+      corpsHtml: "",
+    });
+    if (hasTu && source.tutoiement_template_id) {
+      void getTemplateEmailById(source.tutoiement_template_id)
+        .then((tu) => {
+          const tuHtml = getTemplateCorpsHtml(tu.variables);
+          setTutoiementDraft({
+            enabled: true,
+            sujet: tu.sujet,
+            corpsHtml: tuHtml ?? plainTextToTemplateHtml(tu.corps),
+          });
+        })
+        .catch(() => undefined);
+    }
     const meta = parseTemplateEmailMeta(source.variables);
     const hasDedicated = source.relance_template_id != null;
     const relanceCfg = parseTemplateEmailRelance(source.variables);
@@ -181,6 +220,22 @@ export function TemplateEmailForm({
             sujet: rel.sujet,
             corpsHtml: relHtml ?? plainTextToTemplateHtml(rel.corps),
           }));
+          const relTuId = rel.tutoiement_template_id ?? null;
+          setRelanceTuTemplateId(relTuId);
+          if (relTuId != null) {
+            void getTemplateEmailById(relTuId)
+              .then((relTu) => {
+                const relTuHtml = getTemplateCorpsHtml(relTu.variables);
+                setRelanceTuDraft({
+                  enabled: true,
+                  sujet: relTu.sujet,
+                  corpsHtml: relTuHtml ?? plainTextToTemplateHtml(relTu.corps),
+                });
+              })
+              .catch(() => undefined);
+          } else {
+            setRelanceTuDraft({ enabled: false, sujet: "", corpsHtml: "" });
+          }
         })
         .catch(() => undefined);
     }
@@ -195,6 +250,7 @@ export function TemplateEmailForm({
       variables: null,
       agenda_link_id: null,
       relance_template_id: null,
+      tutoiement_template_id: null,
     });
     setCorpsHtml("");
     setEmailTrigger(DEFAULT_TEMPLATE_EMAIL_TRIGGER);
@@ -209,6 +265,11 @@ export function TemplateEmailForm({
       envoiJours: null,
     });
     setRelanceTemplateId(null);
+    setTutoiementDraft({ enabled: false, sujet: "", corpsHtml: "" });
+    setTutoiementTemplateId(null);
+    setRelanceTuDraft({ enabled: false, sujet: "", corpsHtml: "" });
+    setRelanceTuTemplateId(null);
+    setPreviewRegistre("VOUS");
     setPreviewContactId("sample");
     setLinkedEtiquetteIds([]);
   }, []);
@@ -258,6 +319,16 @@ export function TemplateEmailForm({
     return contacts.find((c) => c.id === id) ?? null;
   }, [previewContactId, contacts]);
 
+  const previewTutoiement = useMemo(() => {
+    if (!tutoiementDraft.enabled) return null;
+    const plain = htmlToPlainEmail(tutoiementDraft.corpsHtml);
+    return {
+      sujet: tutoiementDraft.sujet,
+      corps: plain || formData.corps,
+      corpsHtml: tutoiementDraft.corpsHtml,
+    };
+  }, [tutoiementDraft, formData.corps]);
+
   const agendaLinks = useMemo(() => normalizeAgendaLinks(cgp), [cgp]);
   const agendaVariables = useMemo(() => getAgendaVariableTokens(agendaLinks), [agendaLinks]);
 
@@ -302,14 +373,76 @@ export function TemplateEmailForm({
         setFormTab("relance");
         return;
       }
+      if (tutoiementDraft.enabled) {
+        const relTuPlain = htmlToPlainEmail(relanceTuDraft.corpsHtml);
+        if (!relanceTuDraft.sujet.trim() || !relTuPlain) {
+          toast.error(
+            "Relance : renseignez aussi l'objet et le message tutoiement (onglet Relance)"
+          );
+          setFormTab("relance");
+          return;
+        }
+      }
+    }
+    if (tutoiementDraft.enabled) {
+      const tuPlain = htmlToPlainEmail(tutoiementDraft.corpsHtml);
+      if (!tutoiementDraft.sujet.trim() || !tuPlain) {
+        toast.error("Tutoiement : renseignez l'objet et le message (onglet Tutoiement)");
+        setFormTab("tutoiement");
+        return;
+      }
     }
 
     setLoading(true);
     try {
+      let linkedTuId = tutoiementTemplateId;
+      if (tutoiementDraft.enabled) {
+        const tuPlain = htmlToPlainEmail(tutoiementDraft.corpsHtml);
+        const tuPayload: NewTemplateEmail = {
+          nom: buildTutoiementTemplateNom(formData.nom),
+          sujet: tutoiementDraft.sujet.trim(),
+          corps: tuPlain,
+          categorie: formData.categorie,
+          variables: setTemplateCorpsHtmlInMeta(null, tutoiementDraft.corpsHtml.trim() || null),
+          agenda_link_id: formData.agenda_link_id,
+          relance_template_id: null,
+          tutoiement_template_id: null,
+        };
+        if (linkedTuId != null) {
+          await updateTemplateEmail(linkedTuId, tuPayload);
+        } else {
+          const createdTu = await createTemplateEmail(tuPayload);
+          linkedTuId = createdTu.id;
+        }
+      }
+
       let linkedRelanceId = relanceTemplateId;
       if (relanceDraft.enabled && !relanceDraft.useSameMessage) {
         const relPlain = htmlToPlainEmail(relanceDraft.corpsHtml);
         const relNom = buildRelanceTemplateNom(formData.nom);
+        let linkedRelanceTuId = relanceTuTemplateId;
+        if (tutoiementDraft.enabled) {
+          const relTuPlain = htmlToPlainEmail(relanceTuDraft.corpsHtml);
+          const relTuPayload: NewTemplateEmail = {
+            nom: buildTutoiementTemplateNom(relNom),
+            sujet: relanceTuDraft.sujet.trim(),
+            corps: relTuPlain,
+            categorie: "RELANCE",
+            variables: setTemplateCorpsHtmlInMeta(
+              null,
+              relanceTuDraft.corpsHtml.trim() || null
+            ),
+            agenda_link_id: formData.agenda_link_id,
+            relance_template_id: null,
+            tutoiement_template_id: null,
+          };
+          if (linkedRelanceTuId != null) {
+            await updateTemplateEmail(linkedRelanceTuId, relTuPayload);
+          } else {
+            const createdRelTu = await createTemplateEmail(relTuPayload);
+            linkedRelanceTuId = createdRelTu.id;
+          }
+        }
         const relPayload: NewTemplateEmail = {
           nom: relNom,
           sujet: relanceDraft.sujet.trim(),
@@ -318,6 +451,7 @@ export function TemplateEmailForm({
           variables: setTemplateCorpsHtmlInMeta(null, relanceDraft.corpsHtml.trim() || null),
           agenda_link_id: formData.agenda_link_id,
           relance_template_id: null,
+          tutoiement_template_id: tutoiementDraft.enabled ? linkedRelanceTuId : null,
         };
         if (linkedRelanceId != null) {
           await updateTemplateEmail(linkedRelanceId, relPayload);
@@ -354,6 +488,7 @@ export function TemplateEmailForm({
             ? null
             : linkedRelanceId
           : formData.relance_template_id,
+        tutoiement_template_id: tutoiementDraft.enabled ? linkedTuId : null,
       };
 
       let templateId = template?.id;
@@ -481,12 +616,20 @@ export function TemplateEmailForm({
               <Tabs
                 value={formTab}
                 onValueChange={(v) =>
-                  setFormTab(v as "message" | "relance" | "declencheur" | "liaisons")
+                  setFormTab(
+                    v as "message" | "tutoiement" | "relance" | "declencheur" | "liaisons"
+                  )
                 }
                 className="flex flex-col flex-1 min-h-0"
               >
-                <TabsList className="mx-6 mt-4 grid w-auto grid-cols-4 shrink-0">
+                <TabsList className="mx-6 mt-4 grid w-auto grid-cols-5 shrink-0">
                   <TabsTrigger value="message">Message</TabsTrigger>
+                  <TabsTrigger value="tutoiement">
+                    Tutoiement
+                    {tutoiementDraft.enabled && (
+                      <span className="ml-1.5 text-[10px] text-violet-700">on</span>
+                    )}
+                  </TabsTrigger>
                   <TabsTrigger value="relance">
                     Relance
                     {relanceDraft.enabled && (
@@ -652,17 +795,40 @@ export function TemplateEmailForm({
                         cgp={cgp}
                         agendaLinkId={formData.agenda_link_id}
                         contact={previewContact}
+                        tutoiement={previewTutoiement}
+                        previewRegistre={previewContact ? undefined : previewRegistre}
                         allowSendTest
                       />
                     </div>
                   </TabsContent>
 
+                  <TabsContent value="tutoiement" className="mt-0 data-[state=inactive]:hidden">
+                    <TemplateEmailTutoiementPanel
+                      draft={tutoiementDraft}
+                      onChange={setTutoiementDraft}
+                      parentNom={formData.nom}
+                    />
+                  </TabsContent>
+
                   <TabsContent value="relance" className="mt-0 data-[state=inactive]:hidden">
                     <TemplateEmailRelancePanel
                       draft={relanceDraft}
-                      onChange={setRelanceDraft}
+                      onChange={(next) => {
+                        setRelanceDraft(next);
+                        if (
+                          tutoiementDraft.enabled &&
+                          !next.useSameMessage &&
+                          !relanceTuDraft.sujet &&
+                          !relanceTuDraft.corpsHtml
+                        ) {
+                          setRelanceTuDraft((prev) => ({ ...prev, enabled: true }));
+                        }
+                      }}
                       parentNom={formData.nom}
                       fallbackDelaiJours={DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS}
+                      mainTutoiementEnabled={tutoiementDraft.enabled}
+                      tutoiementDraft={relanceTuDraft}
+                      onTutoiementChange={setRelanceTuDraft}
                     />
                   </TabsContent>
 
@@ -764,6 +930,20 @@ export function TemplateEmailForm({
                   ))}
                 </SelectContent>
               </Select>
+              {!previewContact && tutoiementDraft.enabled && (
+                <Select
+                  value={previewRegistre}
+                  onValueChange={(v) => setPreviewRegistre(v as "VOUS" | "TU")}
+                >
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="VOUS">Aperçu vouvoiement</SelectItem>
+                    <SelectItem value="TU">Aperçu tutoiement</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <TemplateEmailPreviewPanel
                 sujet={formData.sujet}
                 corps={formData.corps}
@@ -772,6 +952,8 @@ export function TemplateEmailForm({
                 cgp={cgp}
                 agendaLinkId={formData.agenda_link_id}
                 contact={previewContact}
+                tutoiement={previewTutoiement}
+                previewRegistre={previewContact ? undefined : previewRegistre}
                 label=""
                 allowSendTest
               />

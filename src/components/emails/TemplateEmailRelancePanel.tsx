@@ -9,6 +9,8 @@ import {
   formatTemplateRelanceScheduleSummary,
 } from "@/lib/emails/template-email-relance";
 import type { EmailEnvoiJourCode } from "@/lib/emails/email-envoi-schedule";
+import type { TemplateTutoiementDraft } from "@/components/emails/TemplateEmailTutoiementPanel";
+import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import { MessageCircle, RotateCcw } from "lucide-react";
 
 export type TemplateRelanceDraft = {
@@ -29,6 +31,10 @@ type Props = {
   parentNom: string;
   /** Repli pour modèles sans délai explicite (constant 5 j). */
   fallbackDelaiJours?: number;
+  /** Variante tu de la relance (si le 1er mail a un modèle tu lié). */
+  tutoiementDraft?: TemplateTutoiementDraft;
+  onTutoiementChange?: (next: TemplateTutoiementDraft) => void;
+  mainTutoiementEnabled?: boolean;
 };
 
 export function TemplateEmailRelancePanel({
@@ -36,6 +42,9 @@ export function TemplateEmailRelancePanel({
   onChange,
   parentNom,
   fallbackDelaiJours = 5,
+  tutoiementDraft,
+  onTutoiementChange,
+  mainTutoiementEnabled = false,
 }: Props) {
   const patch = (partial: Partial<TemplateRelanceDraft>) =>
     onChange({ ...draft, ...partial });
@@ -166,7 +175,7 @@ export function TemplateEmailRelancePanel({
           {!draft.useSameMessage && (
             <div className="space-y-4 border-t pt-4">
               <p className="text-xs text-muted-foreground">
-                Modèle lié :{" "}
+                Modèle lié (vouvoiement) :{" "}
                 <strong>
                   {parentNom.trim()
                     ? buildRelanceTemplateNom(parentNom)
@@ -190,7 +199,49 @@ export function TemplateEmailRelancePanel({
                   minHeight="160px"
                 />
               </div>
+
+              {mainTutoiementEnabled && tutoiementDraft && onTutoiementChange && (
+                <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50/50 p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Le 1er email a une variante tutoiement : prévoyez aussi la relance en{" "}
+                    <strong>tu</strong> (
+                    {buildTutoiementTemplateNom(
+                      parentNom.trim()
+                        ? buildRelanceTemplateNom(parentNom)
+                        : "Relance"
+                    )}
+                    ).
+                  </p>
+                  <div className="space-y-2">
+                    <Label htmlFor="relance-tu-sujet">Objet relance (tu) *</Label>
+                    <Input
+                      id="relance-tu-sujet"
+                      value={tutoiementDraft.sujet}
+                      onChange={(e) =>
+                        onTutoiementChange({ ...tutoiementDraft, sujet: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Message relance (tu) *</Label>
+                    <RichTextEmailEditor
+                      value={tutoiementDraft.corpsHtml}
+                      onChange={(html) =>
+                        onTutoiementChange({ ...tutoiementDraft, corpsHtml: html })
+                      }
+                      minHeight="140px"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+
+          {draft.useSameMessage && mainTutoiementEnabled && (
+            <p className="text-xs text-violet-900 bg-violet-50 border border-violet-200 rounded-md px-3 py-2">
+              Même message que le 1er envoi : la relance reprendra automatiquement la variante tu
+              ou vous selon la fiche contact.
+            </p>
           )}
         </div>
       )}

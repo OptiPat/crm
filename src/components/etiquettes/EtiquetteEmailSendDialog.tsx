@@ -20,6 +20,7 @@ import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { EMAIL_PREVIEW_HTML_CLASS } from "@/lib/emails/email-preview-html-styles";
 import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
+import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { cn } from "@/lib/utils";
@@ -139,7 +140,8 @@ export function EtiquetteEmailSendDialog({
             {item && (
               <>
                 À <strong>{item.contact_email}</strong> —{" "}
-                <strong>{item.etiquette_nom}</strong>
+                <strong>{item.etiquette_nom}</strong>{" "}
+                <ContactRegistreBadge registre={item.contact_registre} className="align-middle" />
               </>
             )}
           </DialogDescription>

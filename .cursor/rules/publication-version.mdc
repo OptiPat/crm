@@ -9,7 +9,7 @@ Quand l'utilisateur demande de **publier**, **release**, **tagger**, **bump** ou
 
 ## Commandes (dans l'ordre)
 
-1. `.\scripts\bump-version.ps1 X.Y.Z` — aligne `package.json`, `tauri.conf.json`, `Cargo.toml`
+1. `.\scripts\bump-version.ps1 X.Y.Z` — aligne `package.json`, `tauri.conf.json`, `Cargo.toml` et `Cargo.lock`
 2. Commit + push `main` (workflow `.github/workflows/release.yml` doit déjà être sur `main`)
 3. `.\scripts\release-tag.ps1 X.Y.Z` — tag `vX.Y.Z` → GitHub Actions (~15–30 min)
 
@@ -22,7 +22,7 @@ Quand l'utilisateur demande de **publier**, **release**, **tagger**, **bump** ou
    npx npm@10.9.2 ci               # doit passer avant commit lockfile
    ```
 3. **`bump-version.ps1`** — écrit UTF-8 **sans BOM** (obligatoire : sinon CI → `Couldn't locate or parse tauri config`).
-4. Committer le lockfile si modifié **avant** le commit `chore: version X.Y.Z`.
+4. Committer le lockfile si modifié **avant** le commit `chore: version X.Y.Z` (normalement fait par `bump-version.ps1`).
 
 ## Interdits / pièges
 

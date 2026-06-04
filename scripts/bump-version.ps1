@@ -1,4 +1,4 @@
-# Met a jour la version dans les 3 fichiers du projet
+# Met a jour la version dans package.json, tauri.conf.json, Cargo.toml et Cargo.lock
 # Usage: .\scripts\bump-version.ps1 0.1.1
 # Ensuite: commit + push main, puis .\scripts\release-tag.ps1 0.1.1
 
@@ -47,13 +47,26 @@ $oldCargo = if ($cargo -match '(?m)^version\s*=\s*"([^"]+)"') { $Matches[1] } el
 $cargo = $cargo -replace '(?m)^version\s*=\s*"[^"]+"', "version = `"$Version`""
 Write-Utf8NoBom -Path $cargoPath -Content $cargo
 
+# Cargo.lock (version du crate racine alignee sur Cargo.toml)
+Write-Host "Synchronisation Cargo.lock ..." -ForegroundColor Cyan
+Push-Location (Join-Path $Root "src-tauri")
+try {
+    & cargo check -q
+    if ($LASTEXITCODE -ne 0) {
+        throw "cargo check a echoue (code $LASTEXITCODE)"
+    }
+} finally {
+    Pop-Location
+}
+
 Write-Host "Version $Version appliquee:" -ForegroundColor Green
 Write-Host "  package.json     : $oldPkg -> $Version"
 Write-Host "  tauri.conf.json  : $oldTauri -> $Version"
 Write-Host "  Cargo.toml       : $oldCargo -> $Version"
+Write-Host "  Cargo.lock       : synchronise"
 Write-Host ""
 Write-Host "Etapes suivantes:" -ForegroundColor Cyan
-Write-Host "  git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml"
+Write-Host "  git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock"
 Write-Host "  git commit -m `"chore: version $Version`""
 Write-Host "  git push origin main"
 Write-Host "  .\scripts\release-tag.ps1 $Version"

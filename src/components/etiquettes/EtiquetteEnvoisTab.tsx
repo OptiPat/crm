@@ -40,6 +40,7 @@ import {
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
+import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -305,6 +306,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   <span className="font-medium">
                     {item.contact_prenom} {item.contact_nom}
                   </span>
+                  <ContactRegistreBadge registre={item.contact_registre} />
                   <span
                     className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
                     style={{

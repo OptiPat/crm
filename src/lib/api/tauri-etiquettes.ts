@@ -97,6 +97,7 @@ export interface EtiquetteEmailQueueItem {
   email_reponse_type?: string | null;
   contact_date_dernier_contact?: number | null;
   email_is_relance?: boolean;
+  contact_registre?: string | null;
 }
 
 export type EtiquetteEmailQueueStatus =

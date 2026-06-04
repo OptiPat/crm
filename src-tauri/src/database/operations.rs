@@ -79,50 +79,13 @@ impl Database {
     }
 
     pub fn get_all_contacts(&self) -> Result<Vec<Contact>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
-                    adresse, code_postal, ville, date_naissance, profession, situation_familiale,
-                    source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
-                    date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                    statut_suivi, notes, created_at, updated_at
-             FROM contacts
-             ORDER BY created_at DESC"
-        )?;
+        use super::contact_row::{map_contact_row, CONTACT_SELECT};
 
-        let contacts = stmt.query_map([], |row| {
-            Ok(Contact {
-                id: row.get(0)?,
-                famille_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                role_foyer: row.get(3)?,
-                role_famille: row.get(4)?,
-                categorie: row.get(5)?,
-                filleul_categorie: row.get(6)?,
-                parrain_id: row.get(7)?,
-                prescripteur_id: row.get(8)?,
-                civilite: row.get(9)?,
-                nom: row.get(10)?,
-                prenom: row.get(11)?,
-                email: row.get(12)?,
-                telephone: row.get(13)?,
-                adresse: row.get(14)?,
-                code_postal: row.get(15)?,
-                ville: row.get(16)?,
-                date_naissance: row.get(17)?,
-                profession: row.get(18)?,
-                situation_familiale: row.get(19)?,
-                source_lead: row.get(20)?,
-                profil_risque_sri: row.get(21)?,
-                date_dernier_contact: row.get(22)?,
-                date_prochain_suivi: row.get(23)?,
-                date_dernier_contact_filleul: row.get(24)?,
-                date_prochain_suivi_filleul: row.get(25)?,
-                statut_suivi: row.get(26)?,
-                notes: row.get(27)?,
-                created_at: row.get(28)?,
-                updated_at: row.get(29)?,
-            })
-        })?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CONTACT_SELECT} FROM contacts ORDER BY created_at DESC"
+        ))?;
+
+        let contacts = stmt.query_map([], map_contact_row)?;
 
         contacts.collect()
     }
@@ -171,14 +134,16 @@ impl Database {
                 .map(|dt| dt.timestamp())
         });
 
+        let registre = super::contact_row::normalize_contact_registre(new_contact.registre.as_deref());
+
         self.conn.execute(
             "INSERT INTO contacts (
                 famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
                 adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                 source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                 date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                statut_suivi, notes
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27)",
+                statut_suivi, registre, notes
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28)",
             params![
                 new_contact.famille_id,
                 new_contact.foyer_id,
@@ -206,6 +171,7 @@ impl Database {
                 date_dernier_contact_filleul_timestamp,
                 date_prochain_suivi_filleul_timestamp,
                 statut,
+                registre,
                 new_contact.notes,
             ],
         )?;
@@ -217,48 +183,12 @@ impl Database {
     }
 
     pub fn get_contact_by_id(&self, id: i64) -> Result<Contact> {
+        use super::contact_row::{map_contact_row, CONTACT_SELECT};
+
         self.conn.query_row(
-            "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
-                    adresse, code_postal, ville, date_naissance, profession, situation_familiale,
-                    source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
-                    date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                    statut_suivi, notes, created_at, updated_at
-             FROM contacts WHERE id = ?1",
+            &format!("SELECT {CONTACT_SELECT} FROM contacts WHERE id = ?1"),
             params![id],
-            |row| {
-                Ok(Contact {
-                    id: row.get(0)?,
-                    famille_id: row.get(1)?,
-                    foyer_id: row.get(2)?,
-                    role_foyer: row.get(3)?,
-                    role_famille: row.get(4)?,
-                    categorie: row.get(5)?,
-                    filleul_categorie: row.get(6)?,
-                    parrain_id: row.get(7)?,
-                    prescripteur_id: row.get(8)?,
-                    civilite: row.get(9)?,
-                    nom: row.get(10)?,
-                    prenom: row.get(11)?,
-                    email: row.get(12)?,
-                    telephone: row.get(13)?,
-                    adresse: row.get(14)?,
-                    code_postal: row.get(15)?,
-                    ville: row.get(16)?,
-                    date_naissance: row.get(17)?,
-                    profession: row.get(18)?,
-                    situation_familiale: row.get(19)?,
-                    source_lead: row.get(20)?,
-                    profil_risque_sri: row.get(21)?,
-                    date_dernier_contact: row.get(22)?,
-                    date_prochain_suivi: row.get(23)?,
-                    date_dernier_contact_filleul: row.get(24)?,
-                    date_prochain_suivi_filleul: row.get(25)?,
-                    statut_suivi: row.get(26)?,
-                    notes: row.get(27)?,
-                    created_at: row.get(28)?,
-                    updated_at: row.get(29)?,
-                })
-            },
+            map_contact_row,
         )
     }
 
@@ -316,48 +246,12 @@ impl Database {
     }
 
     pub fn find_contact_by_email(&self, email: &str) -> Result<Option<Contact>> {
+        use super::contact_row::{map_contact_row, CONTACT_SELECT};
+
         match self.conn.query_row(
-            "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
-                    adresse, code_postal, ville, date_naissance, profession, situation_familiale,
-                    source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
-                    date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                    statut_suivi, notes, created_at, updated_at
-             FROM contacts WHERE email = ?1",
+            &format!("SELECT {CONTACT_SELECT} FROM contacts WHERE email = ?1"),
             params![email],
-            |row| {
-                Ok(Contact {
-                    id: row.get(0)?,
-                    famille_id: row.get(1)?,
-                    foyer_id: row.get(2)?,
-                    role_foyer: row.get(3)?,
-                    role_famille: row.get(4)?,
-                    categorie: row.get(5)?,
-                    filleul_categorie: row.get(6)?,
-                    parrain_id: row.get(7)?,
-                    prescripteur_id: row.get(8)?,
-                    civilite: row.get(9)?,
-                    nom: row.get(10)?,
-                    prenom: row.get(11)?,
-                    email: row.get(12)?,
-                    telephone: row.get(13)?,
-                    adresse: row.get(14)?,
-                    code_postal: row.get(15)?,
-                    ville: row.get(16)?,
-                    date_naissance: row.get(17)?,
-                    profession: row.get(18)?,
-                    situation_familiale: row.get(19)?,
-                    source_lead: row.get(20)?,
-                    profil_risque_sri: row.get(21)?,
-                    date_dernier_contact: row.get(22)?,
-                    date_prochain_suivi: row.get(23)?,
-                    date_dernier_contact_filleul: row.get(24)?,
-                    date_prochain_suivi_filleul: row.get(25)?,
-                    statut_suivi: row.get(26)?,
-                    notes: row.get(27)?,
-                    created_at: row.get(28)?,
-                    updated_at: row.get(29)?,
-                })
-            },
+            map_contact_row,
         ) {
             Ok(contact) => Ok(Some(contact)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
@@ -503,11 +397,12 @@ impl Database {
                 date_dernier_contact_filleul = ?22,
                 date_prochain_suivi_filleul = ?23,
                 statut_suivi = ?24,
-                notes = ?25,
-                role_foyer = ?26,
-                role_famille = ?27,
+                registre = ?25,
+                notes = ?26,
+                role_foyer = ?27,
+                role_famille = ?28,
                 updated_at = unixepoch()
-            WHERE id = ?28",
+            WHERE id = ?29",
             params![
                 &contact.famille_id,
                 &contact.foyer_id,
@@ -533,6 +428,7 @@ impl Database {
                 date_dernier_contact_filleul_timestamp,
                 date_prochain_suivi_filleul_timestamp,
                 &statut_suivi,
+                super::contact_row::normalize_contact_registre(contact.registre.as_deref()),
                 &contact.notes,
                 &contact.role_foyer,
                 &contact.role_famille,
@@ -1049,14 +945,15 @@ impl Database {
             variables: row.get(5)?,
             agenda_link_id: row.get(6)?,
             relance_template_id: row.get(7)?,
-            created_at: row.get(8)?,
-            updated_at: row.get(9)?,
+            tutoiement_template_id: row.get(8)?,
+            created_at: row.get(9)?,
+            updated_at: row.get(10)?,
         })
     }
 
     pub fn get_all_templates_email(&self) -> Result<Vec<super::models::TemplateEmail>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, created_at, updated_at
+            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, tutoiement_template_id, created_at, updated_at
              FROM templates_email 
              ORDER BY created_at DESC",
         )?;
@@ -1075,8 +972,8 @@ impl Database {
         template: super::models::NewTemplateEmail,
     ) -> Result<super::models::TemplateEmail> {
         self.conn.execute(
-            "INSERT INTO templates_email (nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO templates_email (nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, tutoiement_template_id) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
                 &template.nom,
                 &template.sujet,
@@ -1085,6 +982,7 @@ impl Database {
                 &template.variables,
                 &template.agenda_link_id,
                 &template.relance_template_id,
+                &template.tutoiement_template_id,
             ],
         )?;
 
@@ -1094,7 +992,7 @@ impl Database {
 
     pub fn get_template_email_by_id(&self, id: i64) -> Result<super::models::TemplateEmail> {
         self.conn.query_row(
-            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, created_at, updated_at
+            "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, tutoiement_template_id, created_at, updated_at
              FROM templates_email 
              WHERE id = ?1",
             params![id],
@@ -1112,6 +1010,11 @@ impl Database {
                 "Le template de relance ne peut pas être le modèle lui-même".into(),
             ));
         }
+        if template.tutoiement_template_id == Some(id) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "Le modèle tutoiement lié ne peut pas être le modèle lui-même".into(),
+            ));
+        }
         self.conn.execute(
             "UPDATE templates_email SET 
                 nom = ?1,
@@ -1121,8 +1024,9 @@ impl Database {
                 variables = ?5,
                 agenda_link_id = ?6,
                 relance_template_id = ?7,
+                tutoiement_template_id = ?8,
                 updated_at = unixepoch()
-            WHERE id = ?8",
+            WHERE id = ?9",
             params![
                 &template.nom,
                 &template.sujet,
@@ -1131,6 +1035,7 @@ impl Database {
                 &template.variables,
                 &template.agenda_link_id,
                 &template.relance_template_id,
+                &template.tutoiement_template_id,
                 id
             ],
         )?;
@@ -1143,6 +1048,10 @@ impl Database {
     pub fn delete_template_email(&self, id: i64) -> Result<()> {
         self.conn.execute(
             "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
+            params![id],
+        )?;
+        self.conn.execute(
+            "UPDATE templates_email SET tutoiement_template_id = NULL WHERE tutoiement_template_id = ?1",
             params![id],
         )?;
         self.conn
@@ -1183,6 +1092,7 @@ impl Database {
                 variables: None,
                 agenda_link_id: Some("principal".into()),
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Relance — prospect 6 mois".into(),
@@ -1192,6 +1102,7 @@ impl Database {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Rappel déclaration IR".into(),
@@ -1201,6 +1112,7 @@ impl Database {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Prise de rendez-vous suivi".into(),
@@ -1210,6 +1122,7 @@ impl Database {
                 variables: None,
                 agenda_link_id: Some("suivi".into()),
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Bienvenue nouveau client".into(),
@@ -1219,6 +1132,7 @@ impl Database {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Relance — échéance patrimoine".into(),
@@ -1228,6 +1142,7 @@ impl Database {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Rappel assurance-vie 69 ans".into(),
@@ -1237,6 +1152,7 @@ impl Database {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
             NewTemplateEmail {
                 nom: "Exceltis — remboursement et arbitrage".into(),
@@ -1255,6 +1171,7 @@ Bien cordialement,\n\
                 variables: None,
                 agenda_link_id: Some("principal".into()),
                 relance_template_id: None,
+                tutoiement_template_id: None,
             },
         ];
 
@@ -2580,51 +2497,13 @@ Bien cordialement,\n\
 
     // Récupérer tous les filleuls d'un contact (parrain)
     pub fn get_filleuls_by_parrain(&self, parrain_id: i64) -> Result<Vec<Contact>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
-                    adresse, code_postal, ville, date_naissance, profession, situation_familiale,
-                    source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
-                    date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                    statut_suivi, notes, created_at, updated_at
-             FROM contacts
-             WHERE parrain_id = ?1
-             ORDER BY created_at DESC"
-        )?;
+        use super::contact_row::{map_contact_row, CONTACT_SELECT};
 
-        let filleuls = stmt.query_map(params![parrain_id], |row| {
-            Ok(Contact {
-                id: row.get(0)?,
-                famille_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                role_foyer: row.get(3)?,
-                role_famille: row.get(4)?,
-                categorie: row.get(5)?,
-                filleul_categorie: row.get(6)?,
-                parrain_id: row.get(7)?,
-                prescripteur_id: row.get(8)?,
-                civilite: row.get(9)?,
-                nom: row.get(10)?,
-                prenom: row.get(11)?,
-                email: row.get(12)?,
-                telephone: row.get(13)?,
-                adresse: row.get(14)?,
-                code_postal: row.get(15)?,
-                ville: row.get(16)?,
-                date_naissance: row.get(17)?,
-                profession: row.get(18)?,
-                situation_familiale: row.get(19)?,
-                source_lead: row.get(20)?,
-                profil_risque_sri: row.get(21)?,
-                date_dernier_contact: row.get(22)?,
-                date_prochain_suivi: row.get(23)?,
-                date_dernier_contact_filleul: row.get(24)?,
-                date_prochain_suivi_filleul: row.get(25)?,
-                statut_suivi: row.get(26)?,
-                notes: row.get(27)?,
-                created_at: row.get(28)?,
-                updated_at: row.get(29)?,
-            })
-        })?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CONTACT_SELECT} FROM contacts WHERE parrain_id = ?1 ORDER BY created_at DESC"
+        ))?;
+
+        let filleuls = stmt.query_map(params![parrain_id], map_contact_row)?;
 
         filleuls.collect()
     }
@@ -2647,51 +2526,13 @@ Bien cordialement,\n\
 
     // 🔥 Récupérer tous les contacts recommandés par un prescripteur
     pub fn get_clients_by_prescripteur(&self, prescripteur_id: i64) -> Result<Vec<Contact>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, famille_id, foyer_id, role_foyer, role_famille, categorie, filleul_categorie, parrain_id, prescripteur_id, civilite, nom, prenom, email, telephone,
-                    adresse, code_postal, ville, date_naissance, profession, situation_familiale,
-                    source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
-                    date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                    statut_suivi, notes, created_at, updated_at
-             FROM contacts
-             WHERE prescripteur_id = ?1
-             ORDER BY created_at DESC"
-        )?;
+        use super::contact_row::{map_contact_row, CONTACT_SELECT};
 
-        let clients = stmt.query_map(params![prescripteur_id], |row| {
-            Ok(Contact {
-                id: row.get(0)?,
-                famille_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                role_foyer: row.get(3)?,
-                role_famille: row.get(4)?,
-                categorie: row.get(5)?,
-                filleul_categorie: row.get(6)?,
-                parrain_id: row.get(7)?,
-                prescripteur_id: row.get(8)?,
-                civilite: row.get(9)?,
-                nom: row.get(10)?,
-                prenom: row.get(11)?,
-                email: row.get(12)?,
-                telephone: row.get(13)?,
-                adresse: row.get(14)?,
-                code_postal: row.get(15)?,
-                ville: row.get(16)?,
-                date_naissance: row.get(17)?,
-                profession: row.get(18)?,
-                situation_familiale: row.get(19)?,
-                source_lead: row.get(20)?,
-                profil_risque_sri: row.get(21)?,
-                date_dernier_contact: row.get(22)?,
-                date_prochain_suivi: row.get(23)?,
-                date_dernier_contact_filleul: row.get(24)?,
-                date_prochain_suivi_filleul: row.get(25)?,
-                statut_suivi: row.get(26)?,
-                notes: row.get(27)?,
-                created_at: row.get(28)?,
-                updated_at: row.get(29)?,
-            })
-        })?;
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CONTACT_SELECT} FROM contacts WHERE prescripteur_id = ?1 ORDER BY created_at DESC"
+        ))?;
+
+        let clients = stmt.query_map(params![prescripteur_id], map_contact_row)?;
 
         clients.collect()
     }
@@ -3386,52 +3227,17 @@ Bien cordialement,\n\
 
     /// Récupérer tous les contacts ayant une étiquette spécifique
     pub fn get_contacts_by_etiquette(&self, etiquette_id: i64) -> Result<Vec<Contact>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT c.id, c.famille_id, c.foyer_id, c.role_foyer, c.role_famille, c.categorie, c.filleul_categorie, c.parrain_id, c.prescripteur_id, c.civilite, c.nom, c.prenom, c.email, c.telephone,
-                    c.adresse, c.code_postal, c.ville, c.date_naissance, c.profession, c.situation_familiale,
-                    c.source_lead, c.profil_risque_sri, c.date_dernier_contact, c.date_prochain_suivi,
-                    c.date_dernier_contact_filleul, c.date_prochain_suivi_filleul,
-                    c.statut_suivi, c.notes, c.created_at, c.updated_at
+        use super::contact_row::{map_contact_row, CONTACT_SELECT};
+
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CONTACT_SELECT}
              FROM contacts c
              INNER JOIN contact_etiquettes ce ON c.id = ce.contact_id
              WHERE ce.etiquette_id = ?1
              ORDER BY c.nom, c.prenom"
-        )?;
+        ))?;
 
-        let contacts = stmt.query_map(params![etiquette_id], |row| {
-            Ok(Contact {
-                id: row.get(0)?,
-                famille_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                role_foyer: row.get(3)?,
-                role_famille: row.get(4)?,
-                categorie: row.get(5)?,
-                filleul_categorie: row.get(6)?,
-                parrain_id: row.get(7)?,
-                prescripteur_id: row.get(8)?,
-                civilite: row.get(9)?,
-                nom: row.get(10)?,
-                prenom: row.get(11)?,
-                email: row.get(12)?,
-                telephone: row.get(13)?,
-                adresse: row.get(14)?,
-                code_postal: row.get(15)?,
-                ville: row.get(16)?,
-                date_naissance: row.get(17)?,
-                profession: row.get(18)?,
-                situation_familiale: row.get(19)?,
-                source_lead: row.get(20)?,
-                profil_risque_sri: row.get(21)?,
-                date_dernier_contact: row.get(22)?,
-                date_prochain_suivi: row.get(23)?,
-                date_dernier_contact_filleul: row.get(24)?,
-                date_prochain_suivi_filleul: row.get(25)?,
-                statut_suivi: row.get(26)?,
-                notes: row.get(27)?,
-                created_at: row.get(28)?,
-                updated_at: row.get(29)?,
-            })
-        })?;
+        let contacts = stmt.query_map(params![etiquette_id], map_contact_row)?;
 
         contacts.collect()
     }
@@ -4092,33 +3898,28 @@ Bien cordialement,\n\
 
         let default_delai_jours = super::template_email_relance::DEFAULT_RELANCE_DELAI_JOURS;
 
+        use super::template_formality_sql::{
+            template_queue_fields_simple_sql, template_queue_fields_sql, TEMPLATE_TU_RELANCE_JOINS,
+        };
         const TEMPLATE_JOINS: &str = "
-                 LEFT JOIN templates_email t ON e.email_template_id = t.id
-                 LEFT JOIN templates_email t_rel ON t.relance_template_id = t_rel.id";
-        const TEMPLATE_FIELDS: &str = "
-                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN COALESCE(t_rel.sujet, '') ELSE COALESCE(t.sujet, '') END,
-                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN COALESCE(t_rel.corps, '') ELSE COALESCE(t.corps, '') END,
-                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN t_rel.agenda_link_id ELSE t.agenda_link_id END,
-                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN t_rel.variables ELSE t.variables END,
-                        CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN t_rel.categorie ELSE t.categorie END";
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id";
+        let template_fields = template_queue_fields_sql();
+        let template_fields_simple = template_queue_fields_simple_sql();
+        let template_joins_full = format!("{TEMPLATE_JOINS}{TEMPLATE_TU_RELANCE_JOINS}");
 
         let sql = match queue_status {
             "ready" => {
                 format!(
                     "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        {TEMPLATE_FIELDS}, NULL,
+                        {template_fields}, NULL,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         COALESCE(ce.email_relance_active, 0)
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 {TEMPLATE_JOINS}
+                 {template_joins_full}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 0
                    AND COALESCE(ce.email_annule, 0) = 0
@@ -4134,14 +3935,16 @@ Bien cordialement,\n\
                 format!(
                     "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        {TEMPLATE_FIELDS},
+                        {template_fields_simple},
                         'SCHEDULED',
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         COALESCE(ce.email_relance_active, 0)
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 {TEMPLATE_JOINS}
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 0
                    AND COALESCE(ce.email_annule, 0) = 0
@@ -4157,7 +3960,7 @@ Bien cordialement,\n\
                 format!(
                     "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
-                        {TEMPLATE_FIELDS},
+                        {template_fields_simple},
                         CASE
                           WHEN c.email IS NULL OR TRIM(c.email) = '' THEN 'NO_EMAIL'
                           WHEN e.email_template_id IS NULL THEN 'NO_TEMPLATE'
@@ -4165,11 +3968,13 @@ Bien cordialement,\n\
                           ELSE 'OTHER'
                         END,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         COALESCE(ce.email_relance_active, 0)
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 {TEMPLATE_JOINS}
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 0
                    AND COALESCE(ce.email_annule, 0) = 0
@@ -4189,11 +3994,12 @@ Bien cordialement,\n\
                         COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
                         t.variables, t.categorie, NULL,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         0
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 {TEMPLATE_JOINS}
+                 {template_joins_full}
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 1
                    AND ce.email_date_envoi IS NOT NULL
@@ -4214,11 +4020,12 @@ Bien cordialement,\n\
                         COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
                         t.variables, t.categorie, 'FOLLOWUP',
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         0
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
-                 {TEMPLATE_JOINS}
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
                  WHERE e.actif = 1 AND e.email_actif = 1
                    AND ce.email_envoye = 1
                    AND ce.email_date_envoi IS NOT NULL
@@ -4264,7 +4071,8 @@ Bien cordialement,\n\
                 email_reponse_at: row.get(17)?,
                 email_reponse_type: row.get(18)?,
                 contact_date_dernier_contact: row.get(19)?,
-                email_is_relance: row.get::<_, i64>(20)? != 0,
+                contact_registre: row.get(20)?,
+                email_is_relance: row.get::<_, i64>(21)? != 0,
             })
         };
 
@@ -4377,45 +4185,28 @@ Bien cordialement,\n\
     }
 
     fn resolve_sent_template_nom(&self, contact_etiquette_id: i64) -> Result<String> {
-        let (etiquette_id, relance): (i64, i64) = self.conn.query_row(
-            "SELECT ce.etiquette_id, COALESCE(ce.email_relance_active, 0)
-             FROM contact_etiquettes ce WHERE ce.id = ?1",
-            params![contact_etiquette_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?;
-        let mut template_id: Option<i64> = self.conn.query_row(
-            "SELECT email_template_id FROM etiquettes WHERE id = ?1",
-            params![etiquette_id],
-            |row| row.get(0),
-        )?;
-        if relance != 0 {
-            if let Some(tid) = template_id {
-                template_id = self
-                    .conn
-                    .query_row(
-                        "SELECT relance_template_id FROM templates_email WHERE id = ?1",
-                        params![tid],
-                        |row| row.get(0),
-                    )
-                    .ok();
-            }
-        }
-        if let Some(tid) = template_id {
-            if let Ok(nom) = self.conn.query_row(
-                "SELECT nom FROM templates_email WHERE id = ?1",
-                params![tid],
-                |row| row.get::<_, String>(0),
-            ) {
-                if !nom.trim().is_empty() {
-                    return Ok(nom);
-                }
-            }
-        }
-        self.conn.query_row(
-            "SELECT nom FROM etiquettes WHERE id = ?1",
-            params![etiquette_id],
-            |row| row.get(0),
-        )
+        use super::template_formality_sql::TEMPLATE_TU_RELANCE_JOINS;
+        let sql = format!(
+            "SELECT COALESCE(
+                CASE WHEN COALESCE(ce.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL THEN
+                    CASE WHEN UPPER(COALESCE(c.registre, 'VOUS')) = 'TU' AND t_rel_tu.id IS NOT NULL
+                         THEN NULLIF(TRIM(t_rel_tu.nom), '') ELSE NULLIF(TRIM(t_rel.nom), '') END
+                ELSE
+                    CASE WHEN UPPER(COALESCE(c.registre, 'VOUS')) = 'TU' AND t_tu.id IS NOT NULL
+                         THEN NULLIF(TRIM(t_tu.nom), '') ELSE NULLIF(TRIM(t.nom), '') END
+                END,
+                NULLIF(TRIM(e.nom), ''),
+                'Email campagne'
+             )
+             FROM contact_etiquettes ce
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             LEFT JOIN templates_email t ON e.email_template_id = t.id
+             {TEMPLATE_TU_RELANCE_JOINS}
+             WHERE ce.id = ?1"
+        );
+        self.conn
+            .query_row(&sql, params![contact_etiquette_id], |row| row.get(0))
     }
 
     pub(crate) fn insert_campaign_interaction(
@@ -6253,6 +6044,7 @@ Bien cordialement,\n\
             variables: Some(html_meta.into()),
             agenda_link_id: None,
             relance_template_id: None,
+            tutoiement_template_id: None,
         };
 
         if let Some(template_id) = etiquette.email_template_id {
@@ -6656,6 +6448,7 @@ mod database_integration_tests {
             date_dernier_contact_filleul: None,
             date_prochain_suivi_filleul: None,
             notes: None,
+            registre: None,
         }
     }
 
@@ -7566,6 +7359,7 @@ mod database_integration_tests {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             })
             .unwrap();
 
@@ -7630,6 +7424,7 @@ mod database_integration_tests {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             })
             .unwrap();
         let parent = db
@@ -7641,6 +7436,7 @@ mod database_integration_tests {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: Some(relance.id),
+                tutoiement_template_id: None,
             })
             .unwrap();
 
@@ -7697,6 +7493,7 @@ mod database_integration_tests {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             })
             .unwrap();
         let relance_tpl = db
@@ -7708,6 +7505,7 @@ mod database_integration_tests {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             })
             .unwrap();
         db.update_template_email(
@@ -7720,6 +7518,7 @@ mod database_integration_tests {
                 variables: tpl.variables.clone(),
                 agenda_link_id: tpl.agenda_link_id.clone(),
                 relance_template_id: Some(relance_tpl.id),
+                tutoiement_template_id: None,
             },
         )
         .unwrap();
@@ -7913,6 +7712,171 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn etiquette_email_queue_registre_tu_main_and_relance() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        fn sample_etiquette(nom: &str, template_id: i64, envoi_prevu: i64) -> NewEtiquette {
+            NewEtiquette {
+                nom: nom.into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(template_id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(envoi_prevu),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            }
+        }
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let main_vous = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Campagne registre".into(),
+                sujet: "SUJET_VOUS_MAIN".into(),
+                corps: "CORPS_VOUS_MAIN".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let main_tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Campagne registre (tu)".into(),
+                sujet: "SUJET_TU_MAIN".into(),
+                corps: "CORPS_TU_MAIN".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let rel_vous = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Relance — Campagne registre".into(),
+                sujet: "SUJET_VOUS_REL".into(),
+                corps: "CORPS_VOUS_REL".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let rel_tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Relance — Campagne registre (tu)".into(),
+                sujet: "SUJET_TU_REL".into(),
+                corps: "CORPS_TU_REL".into(),
+                categorie: "RELANCE".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        db.update_template_email(
+            rel_vous.id,
+            &NewTemplateEmail {
+                nom: rel_vous.nom.clone(),
+                sujet: rel_vous.sujet.clone(),
+                corps: rel_vous.corps.clone(),
+                categorie: rel_vous.categorie.clone(),
+                variables: rel_vous.variables.clone(),
+                agenda_link_id: rel_vous.agenda_link_id.clone(),
+                relance_template_id: None,
+                tutoiement_template_id: Some(rel_tu.id),
+            },
+        )
+        .unwrap();
+        db.update_template_email(
+            main_vous.id,
+            &NewTemplateEmail {
+                nom: main_vous.nom.clone(),
+                sujet: main_vous.sujet.clone(),
+                corps: main_vous.corps.clone(),
+                categorie: main_vous.categorie.clone(),
+                variables: main_vous.variables.clone(),
+                agenda_link_id: main_vous.agenda_link_id.clone(),
+                relance_template_id: Some(rel_vous.id),
+                tutoiement_template_id: Some(main_tu.id),
+            },
+        )
+        .unwrap();
+
+        let etiqu = db
+            .create_etiquette(sample_etiquette(
+                "Campagne registre tu",
+                main_vous.id,
+                now - 60,
+            ))
+            .unwrap();
+
+        let mut contact_tu = sample_contact("Tuto", "Client");
+        contact_tu.registre = Some("TU".into());
+        contact_tu.email = Some("tu@example.com".into());
+        let cid_tu = db.create_contact(contact_tu).unwrap().id.unwrap();
+        db.attribuer_etiquette(cid_tu, etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+
+        let ready_tu = db.get_etiquette_email_queue("ready").unwrap();
+        let row_tu = ready_tu
+            .iter()
+            .find(|q| q.contact_id == cid_tu)
+            .expect("file prête contact TU");
+        assert_eq!(row_tu.template_sujet, "SUJET_TU_MAIN");
+        assert_eq!(row_tu.template_corps, "CORPS_TU_MAIN");
+        assert_eq!(row_tu.contact_registre.as_deref(), Some("TU"));
+
+        let ce_tu = row_tu.contact_etiquette_id;
+        db.mark_etiquette_email_sent(ce_tu, None, None, Some("Envoi 1"), None)
+            .unwrap();
+
+        let mut contact_vous = sample_contact("Vouvoi", "Client");
+        contact_vous.registre = Some("VOUS".into());
+        contact_vous.email = Some("vous@example.com".into());
+        let cid_vous = db.create_contact(contact_vous).unwrap().id.unwrap();
+        db.attribuer_etiquette(cid_vous, etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+        let row_vous = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid_vous)
+            .expect("file prête contact VOUS");
+        assert_eq!(row_vous.template_sujet, "SUJET_VOUS_MAIN");
+        assert_eq!(row_vous.template_corps, "CORPS_VOUS_MAIN");
+
+        db.prepare_email_campaign_relance(ce_tu).unwrap();
+        let relance_row = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_etiquette_id == ce_tu)
+            .expect("relance prête pour contact TU");
+        assert!(relance_row.email_is_relance);
+        assert_eq!(relance_row.template_sujet, "SUJET_TU_REL");
+        assert_eq!(relance_row.template_corps, "CORPS_TU_REL");
+    }
+
+    #[test]
     fn etiquette_email_queue_sent_excludes_after_response_and_followup_after_delay() {
         use crate::database::models::{NewEtiquette, NewTemplateEmail};
 
@@ -7931,6 +7895,7 @@ mod database_integration_tests {
                 variables: None,
                 agenda_link_id: None,
                 relance_template_id: None,
+                tutoiement_template_id: None,
             })
             .unwrap();
 

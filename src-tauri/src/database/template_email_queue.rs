@@ -354,27 +354,29 @@ impl Database {
               OR json_extract(t.variables, '$.email_trigger.trigger_type') = 'EVENEMENT_SOUSCRIPTION'
             )";
 
+        use super::template_formality_sql::{
+            template_queue_fields_simple_sql, template_queue_fields_sql_cte,
+            TEMPLATE_TU_RELANCE_JOINS,
+        };
+        let template_fields = template_queue_fields_sql_cte();
+        let template_fields_simple = template_queue_fields_simple_sql();
+        let template_joins = format!(
+            "INNER JOIN templates_email t ON cte.template_id = t.id
+                 {TEMPLATE_TU_RELANCE_JOINS}
+                 INNER JOIN contacts c ON cte.contact_id = c.id"
+        );
+
         let sql = match queue_status {
             "ready" => format!(
                 "SELECT cte.id, cte.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         t.id, ('Modèle · ' || t.nom), cte.email_date_prevue, cte.email_date_envoi,
-                        CASE WHEN COALESCE(cte.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN COALESCE(t_rel.sujet, '') ELSE COALESCE(t.sujet, '') END,
-                        CASE WHEN COALESCE(cte.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN COALESCE(t_rel.corps, '') ELSE COALESCE(t.corps, '') END,
-                        CASE WHEN COALESCE(cte.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN t_rel.agenda_link_id ELSE t.agenda_link_id END,
-                        CASE WHEN COALESCE(cte.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN t_rel.variables ELSE t.variables END,
-                        CASE WHEN COALESCE(cte.email_relance_active, 0) = 1 AND t_rel.id IS NOT NULL
-                             THEN t_rel.categorie ELSE t.categorie END,
+                        {template_fields},
                         NULL,
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         COALESCE(cte.email_relance_active, 0)
                  FROM contact_template_envois cte
-                 INNER JOIN templates_email t ON cte.template_id = t.id
-                 LEFT JOIN templates_email t_rel ON t.relance_template_id = t_rel.id
-                 INNER JOIN contacts c ON cte.contact_id = c.id
+                 {template_joins}
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
                    AND COALESCE(cte.email_annule, 0) = 0
@@ -385,13 +387,14 @@ impl Database {
             "scheduled" => format!(
                 "SELECT cte.id, cte.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         t.id, ('Modèle · ' || t.nom), cte.email_date_prevue, cte.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
-                        t.variables, t.categorie,
+                        {template_fields_simple},
                         'SCHEDULED',
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         0
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
+                 LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
                  INNER JOIN contacts c ON cte.contact_id = c.id
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
@@ -403,17 +406,18 @@ impl Database {
             "incomplete" => format!(
                 "SELECT cte.id, cte.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         t.id, ('Modèle · ' || t.nom), cte.email_date_prevue, cte.email_date_envoi,
-                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
-                        t.variables, t.categorie,
+                        {template_fields_simple},
                         CASE
                           WHEN c.email IS NULL OR TRIM(c.email) = '' THEN 'NO_EMAIL'
                           WHEN cte.email_date_prevue IS NULL THEN 'NO_DATE'
                           ELSE 'OTHER'
                         END,
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
                         0
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
+                 LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
                  INNER JOIN contacts c ON cte.contact_id = c.id
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
@@ -436,6 +440,7 @@ impl Database {
                             COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
                             t.variables, t.categorie, NULL,
                             cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
+                            c.registre,
                             0
                      FROM contact_template_envois cte
                      INNER JOIN templates_email t ON cte.template_id = t.id
@@ -477,7 +482,8 @@ impl Database {
                 email_reponse_at: row.get(16)?,
                 email_reponse_type: row.get(17)?,
                 contact_date_dernier_contact: row.get(18)?,
-                email_is_relance: row.get::<_, i64>(19).unwrap_or(0) != 0,
+                contact_registre: row.get(19)?,
+                email_is_relance: row.get::<_, i64>(20).unwrap_or(0) != 0,
             })
         };
 

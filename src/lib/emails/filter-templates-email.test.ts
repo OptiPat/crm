@@ -11,6 +11,7 @@ const base: TemplateEmail = {
   variables: null,
   agenda_link_id: null,
   relance_template_id: null,
+  tutoiement_template_id: null,
   created_at: 0,
   updated_at: 0,
 };

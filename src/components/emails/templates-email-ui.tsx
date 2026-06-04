@@ -16,8 +16,9 @@ export function TemplatesEmailHelp() {
       </summary>
       <div className="px-4 pb-4 space-y-2 text-xs text-muted-foreground leading-relaxed border-t pt-3">
         <p>
-          <strong className="text-foreground">1. Créer</strong> un modèle ici (objet + message avec{" "}
-          {"{{prenom}}"}, etc.).
+          <strong className="text-foreground">1. Créer</strong> un modèle ici (vouvoiement + onglet{" "}
+          <strong className="text-foreground">Tutoiement</strong> pour lier une variante). Variables{" "}
+          {"{{prenom}}"}, etc.
         </p>
         <p>
           <strong className="text-foreground">2. Déclencheur</strong> (onglet du modèle) : événement

@@ -4,6 +4,11 @@ import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import {
+  isContactTu,
+  pickTemplateContentForRegistre,
+  type ContactRegistre,
+} from "@/lib/emails/template-email-formality";
+import {
   renderTemplatePreview,
   SAMPLE_PREVIEW_CONTACT,
 } from "@/lib/emails/template-email-meta";
@@ -21,7 +26,11 @@ type TemplateEmailPreviewPanelProps = {
   templateVariables?: string | null;
   /** HTML live de l’éditeur (évite le décalage avec `variables` JSON). */
   corpsHtml?: string | null;
-  contact?: Pick<Contact, "prenom" | "nom" | "email" | "telephone"> | null;
+  contact?: Pick<Contact, "prenom" | "nom" | "email" | "telephone" | "registre"> | null;
+  /** Variante tutoiement liée (si activée). */
+  tutoiement?: { sujet: string; corps: string; corpsHtml?: string | null } | null;
+  /** Aperçu forcé tu/vous (sans contact réel). */
+  previewRegistre?: ContactRegistre;
   label?: string;
   /** Bouton « M’envoyer un test » (compte OAuth Paramètres → Email). */
   allowSendTest?: boolean;
@@ -35,6 +44,8 @@ export function TemplateEmailPreviewPanel({
   templateVariables,
   corpsHtml,
   contact,
+  tutoiement,
+  previewRegistre,
   label = "Aperçu (exemple)",
   allowSendTest = false,
 }: TemplateEmailPreviewPanelProps) {
@@ -58,22 +69,36 @@ export function TemplateEmailPreviewPanel({
     [templateVariables, corpsHtml]
   );
 
+  const effective = useMemo(
+    () =>
+      pickTemplateContentForRegistre(
+        { sujet, corps },
+        tutoiement ?? null,
+        contact?.registre ?? previewRegistre
+      ),
+    [sujet, corps, tutoiement, contact?.registre, previewRegistre]
+  );
+
+  const useTuVariant = isContactTu(contact?.registre ?? previewRegistre);
+  const effectiveHtml =
+    useTuVariant && tutoiement?.corpsHtml?.trim() ? tutoiement.corpsHtml : corpsHtml;
+
   const preview = useMemo(
     () =>
       renderTemplatePreview(
-        sujet,
-        corps,
+        effective.sujet,
+        effective.corps,
         sample,
         cgp,
         agendaLinkId,
         mergedVariables,
-        corpsHtml
+        effectiveHtml
       ),
-    [sujet, corps, sample, cgp, agendaLinkId, mergedVariables, corpsHtml]
+    [effective.sujet, effective.corps, sample, cgp, agendaLinkId, mergedVariables, effectiveHtml]
   );
 
   const handleSendTest = async () => {
-    if (!sujet.trim() || !corps.trim()) {
+    if (!effective.sujet.trim() || !effective.corps.trim()) {
       toast.error("Renseignez au moins l'objet et le message avant le test");
       return;
     }
