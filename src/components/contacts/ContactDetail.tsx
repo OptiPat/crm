@@ -18,16 +18,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
-  Mail,
-  Phone,
-  MapPin,
-  Calendar,
   Edit,
   Trash2,
-  User,
   Wallet,
   Home,
   X,
@@ -69,12 +63,12 @@ import {
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { ContactAutoEtiquetteLog } from "@/components/contacts/ContactAutoEtiquetteLog";
 import { ContactDetailFoyerTab } from "@/components/contacts/ContactDetailFoyerTab";
+import { ContactDetailSyntheseTab } from "@/components/contacts/ContactDetailSyntheseTab";
 import { ContactRegistreSwitch } from "@/components/contacts/ContactRegistreSwitch";
 import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
 import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
-import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import {
   mergeContactPatrimoineRows,
   type InvestissementWithOwner,
@@ -823,218 +817,7 @@ export function ContactDetail({
             </TabsList>
 
             <TabsContent value="synthese" className="space-y-4 mt-3 focus-visible:outline-none">
-            {/* Informations de contact */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Informations de contact
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {contact.email && (
-                  <div className="flex items-center gap-2">
-                    <Mail className="h-4 w-4 text-muted-foreground" />
-                    <a
-                      href={`mailto:${contact.email}`}
-                      className="text-primary hover:underline"
-                    >
-                      {contact.email}
-                    </a>
-                  </div>
-                )}
-                {contact.telephone && (
-                  <div className="flex items-center gap-2">
-                    <Phone className="h-4 w-4 text-muted-foreground" />
-                    <a
-                      href={`tel:${contact.telephone}`}
-                      className="text-primary hover:underline"
-                    >
-                      {contact.telephone}
-                    </a>
-                  </div>
-                )}
-                {(contact.adresse || contact.ville) && (
-                  <div className="flex items-start gap-2">
-                    <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
-                    <div>
-                      {contact.adresse && <div>{contact.adresse}</div>}
-                      {(contact.code_postal || contact.ville) && (
-                        <div>
-                          {contact.code_postal} {contact.ville}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Informations personnelles */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">
-                  Informations personnelles
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {contact.civilite && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">Civilité : </span>
-                    {formatCiviliteLabel(contact.civilite)}
-                  </div>
-                )}
-                {contact.situation_familiale && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">Situation familiale : </span>
-                    {formatSituationLabel(contact.situation_familiale)}
-                  </div>
-                )}
-                {contact.profession && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">Profession : </span>
-                    {contact.profession}
-                  </div>
-                )}
-                {contact.source_lead && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">Source / lead : </span>
-                    {contact.source_lead}
-                  </div>
-                )}
-                {contact.profil_risque_sri && (
-                  <div>
-                    <span className="text-muted-foreground text-sm">Profil investisseur (SRI) : </span>
-                    {contact.profil_risque_sri}
-                  </div>
-                )}
-                {contact.date_naissance && (
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <span className="text-muted-foreground text-sm">
-                        Date de naissance:{" "}
-                      </span>
-                      {(() => {
-                        try {
-                          if (typeof contact.date_naissance === "number") {
-                            return formatCalendarDateFr(contact.date_naissance);
-                          }
-                          const date = new Date(contact.date_naissance);
-                          return isNaN(date.getTime())
-                            ? "Non renseignée"
-                            : formatCalendarDateFr(Math.floor(date.getTime() / 1000));
-                        } catch {
-                          return "Non renseignée";
-                        }
-                      })()}
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Suivi client */}
-            {(contact.date_dernier_contact || contact.date_prochain_suivi) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Suivi client</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {contact.date_dernier_contact && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <span className="text-muted-foreground text-sm">Dernier contact :</span>
-                        <p className="font-medium text-blue-700">
-                          {formatCalendarDateFr(contact.date_dernier_contact)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {contact.date_prochain_suivi && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <span className="text-muted-foreground text-sm">Prochain suivi prévu le :</span>
-                        <p className="font-medium text-orange-700">
-                          {formatCalendarDateFr(contact.date_prochain_suivi)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Suivi filleul */}
-            {(contact.date_dernier_contact_filleul || contact.date_prochain_suivi_filleul) && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Suivi filleul</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {contact.date_dernier_contact_filleul && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <span className="text-muted-foreground text-sm">Dernier contact filleul :</span>
-                        <p className="font-medium text-indigo-700">
-                          {formatCalendarDateFr(contact.date_dernier_contact_filleul!)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {contact.date_prochain_suivi_filleul && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <span className="text-muted-foreground text-sm">Prochain suivi filleul :</span>
-                        <p className="font-medium text-orange-700">
-                          {formatCalendarDateFr(contact.date_prochain_suivi_filleul!)}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Notes */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {contact.notes ? (
-                  <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans">
-                    {contact.notes}
-                  </pre>
-                ) : (
-                  <p className="text-sm text-muted-foreground italic">
-                    Aucune note pour ce contact
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Métadonnées */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Informations système</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-muted-foreground space-y-1">
-                <div>
-                  Créé le:{" "}
-                  {new Date(contact.created_at * 1000).toLocaleString("fr-FR")}
-                </div>
-                <div>
-                  Mis à jour le:{" "}
-                  {new Date(contact.updated_at * 1000).toLocaleString("fr-FR")}
-                </div>
-              </CardContent>
-            </Card>
-
+              <ContactDetailSyntheseTab contact={contact} />
             </TabsContent>
 
             <TabsContent value="relation" className="mt-3 focus-visible:outline-none">
