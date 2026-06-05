@@ -45,6 +45,7 @@ import { FoyerCreateModal } from "@/components/foyers/FoyerCreateModal";
 import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
 import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
 import { EtiquetteSelector } from "@/components/etiquettes/EtiquetteSelector";
+import { ContactCreateMenu } from "@/components/contacts/ContactCreateMenu";
 import {
   isAutoEtiquetteAttribution,
   RemoveAutoEtiquetteDialog,
@@ -138,6 +139,7 @@ export function ContactDetail({
   const [showFoyerLinkModal, setShowFoyerLinkModal] = useState(false);
   const [etiquettes, setEtiquettes] = useState<ContactEtiquetteDetails[]>([]);
   const [showDeleteContactDialog, setShowDeleteContactDialog] = useState(false);
+  const [etiquetteSelectorOpen, setEtiquetteSelectorOpen] = useState(false);
   const [foyerRenamePrompt, setFoyerRenamePrompt] = useState<{
     foyer: Foyer;
     suggestedNom: string;
@@ -723,6 +725,8 @@ export function ContactDetail({
             selectedIds={etiquettes.map((e) => e.etiquette_id)}
             onAdd={handleAddEtiquette}
             onRemove={handleRemoveEtiquetteClick}
+            open={etiquetteSelectorOpen}
+            onOpenChange={setEtiquetteSelectorOpen}
           />
           <ContactRegistreSwitch
             contact={contact}
@@ -751,6 +755,13 @@ export function ContactDetail({
         </div>
       </div>
       <div className="flex shrink-0 gap-1">
+        {contact.id != null && (
+          <ContactCreateMenu
+            contactId={contact.id}
+            onCreated={() => void refreshContactAfterMutation()}
+            onOpenEtiquettes={() => setEtiquetteSelectorOpen(true)}
+          />
+        )}
         <Button
           type="button"
           variant="outline"

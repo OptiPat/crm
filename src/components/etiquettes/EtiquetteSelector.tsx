@@ -26,6 +26,10 @@ interface EtiquetteSelectorProps {
   disabled?: boolean;
   /** Classe CSS additionnelle */
   className?: string;
+  /** Ouverture contrôlée (optionnel : permet d'ouvrir le popover depuis l'extérieur). */
+  open?: boolean;
+  /** Notifie le parent du changement d'ouverture (mode contrôlé). */
+  onOpenChange?: (open: boolean) => void;
 }
 
 /**
@@ -46,8 +50,15 @@ export function EtiquetteSelector({
   onRemove,
   disabled = false,
   className,
+  open: controlledOpen,
+  onOpenChange,
 }: EtiquetteSelectorProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = (next: boolean) => {
+    if (controlledOpen === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");

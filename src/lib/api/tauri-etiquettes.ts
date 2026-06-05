@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import { notifyTachesChanged } from "@/lib/taches/tache-events";
 
 // ==================== INTERFACES ====================
 
@@ -281,11 +282,14 @@ export async function attribuerEtiquette(
   etiquetteId: number, 
   attribuePar?: string
 ): Promise<ContactEtiquette> {
-  return invoke<ContactEtiquette>("attribuer_etiquette", { 
+  const result = await invoke<ContactEtiquette>("attribuer_etiquette", { 
     contactId, 
     etiquetteId, 
     attribuePar 
   });
+  // L'étiquette peut déclencher la création d'une tâche (action « créer une tâche »).
+  notifyTachesChanged();
+  return result;
 }
 
 /**

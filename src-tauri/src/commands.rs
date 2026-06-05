@@ -1024,9 +1024,20 @@ pub fn attribuer_etiquette(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    database
+    let result = database
         .attribuer_etiquette(contact_id, etiquette_id, attribue_par, None)
-        .map_err(|e| format!("Failed to assign etiquette: {}", e))
+        .map_err(|e| format!("Failed to assign etiquette: {}", e))?;
+
+    // Déclenche l'action « créer une tâche » de l'étiquette aussi sur pose manuelle.
+    // Idempotent (dédup via contact_etiquettes.tache_id) : aucun doublon. Sur pose AUTO,
+    // l'appel se fait déjà dans le moteur d'étiquettes, donc pas de double déclenchement ici.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let _ = database.apply_etiquette_tache_action(contact_id, etiquette_id, now);
+
+    Ok(result)
 }
 
 #[tauri::command]

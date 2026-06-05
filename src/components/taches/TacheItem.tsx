@@ -2,6 +2,7 @@ import { Pencil, Trash2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
+import { TacheChainMenu } from "@/components/taches/TacheChainMenu";
 import type { Tache, TacheWithContact } from "@/lib/api/tauri-taches";
 import {
   ECHEANCE_TONE_CLASS,
@@ -78,6 +79,7 @@ export function TacheItem({
       </div>
 
       <div className="flex shrink-0 gap-1">
+        <TacheChainMenu tache={tache} />
         <Button type="button" variant="ghost" size="icon" onClick={() => onEdit(tache)}>
           <Pencil className="h-4 w-4" />
         </Button>
