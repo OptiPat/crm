@@ -144,6 +144,14 @@ export function ParametresNewsletterSection({
               placeholder={DEFAULT_MISTRAL_MODEL}
             />
           </div>
+          <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+            {saving ?
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Enregistrement…
+              </>
+            : "Enregistrer la clé Mistral"}
+          </Button>
         </div>
       </SettingsPanel>
 
