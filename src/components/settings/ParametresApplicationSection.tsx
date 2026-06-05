@@ -1,12 +1,15 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { useAppUpdate } from "@/components/system/app-update-context";
+import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
 import { Bell, Download, Lock, Shield } from "lucide-react";
 
 export function ParametresApplicationSection() {
   const { pendingUpdate } = useAppUpdate();
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
   return (
     <div className="space-y-6">
@@ -34,28 +37,26 @@ export function ParametresApplicationSection() {
         title="Sécurité locale"
         description="Protection de l'accès au CRM sur ce poste."
       >
-        <div className="flex items-start gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-4">
+        <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-4">
           <Shield className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="space-y-3 flex-1">
             <p className="text-sm text-muted-foreground">
-              Mot de passe de déverrouillage et clé de récupération — disponibles dans une prochaine
-              version. Vous utilisez déjà le verrouillage au lancement de l&apos;application.
+              Vos données sont chiffrées (SQLCipher) et protégées par votre mot de passe maître.
+              Changer le mot de passe régénère votre clé de récupération.
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" size="sm" disabled>
-                <Lock className="h-4 w-4 mr-1.5" />
-                Changer le mot de passe
-              </Button>
-              <Button variant="outline" size="sm" disabled>
-                Clé de récupération
-              </Button>
-              <Badge variant="secondary" className="font-normal self-center">
-                Bientôt
-              </Badge>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setChangePasswordOpen(true)}
+            >
+              <Lock className="h-4 w-4 mr-1.5" />
+              Changer le mot de passe
+            </Button>
           </div>
         </div>
       </SettingsPanel>
+
+      <ChangePasswordDialog open={changePasswordOpen} onOpenChange={setChangePasswordOpen} />
 
       <SettingsPanel title="Notifications" description="Rappels et alertes dans le CRM.">
         <div className="flex items-start gap-3">
