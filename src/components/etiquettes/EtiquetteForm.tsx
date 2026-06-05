@@ -59,6 +59,7 @@ import {
 import { suggestTemplateIdForEtiquette } from "@/lib/emails/template-email-meta";
 import { EtiquetteEmailCampaignFields } from "@/components/etiquettes/EtiquetteEmailCampaignFields";
 import { EtiquetteTacheActionFields } from "@/components/etiquettes/EtiquetteTacheActionFields";
+import { setEtiquettePipelineActif } from "@/lib/api/tauri-pipeline";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import {
   CONDITION_TYPE_LABELS,
@@ -171,6 +172,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [tacheTitre, setTacheTitre] = useState("");
   const [tachePriorite, setTachePriorite] = useState<TacheActionPriorite>("NORMALE");
   const [tacheDelaiJours, setTacheDelaiJours] = useState(0);
+  const [pipelineActif, setPipelineActif] = useState(false);
 
   const ruleSummary = useMemo(
     () =>
@@ -256,6 +258,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setDescription(etiquette.description || "");
         setPriorite(etiquette.priorite);
         setActif(etiquette.actif !== false);
+        setPipelineActif(etiquette.pipeline_actif === true);
 
         // Attribution automatique
         setSegmentId(etiquette.segment_id ?? null);
@@ -381,6 +384,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setTacheTitre("");
         setTachePriorite("NORMALE");
         setTacheDelaiJours(0);
+        setPipelineActif(false);
       }
     }
   }, [open, etiquette]);
@@ -548,6 +552,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         tache_priorite: tachePriorite,
         tache_delai_jours: tacheDelaiJours,
       });
+      await setEtiquettePipelineActif(savedId, pipelineActif);
 
       notifyEtiquettesChanged();
       onSuccess();
@@ -1153,6 +1158,15 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   tacheDelaiJours={tacheDelaiJours}
                   onTacheDelaiJoursChange={setTacheDelaiJours}
                 />
+                <div className="flex items-center justify-between rounded-lg border px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Pipeline de suivi</p>
+                    <p className="text-xs text-muted-foreground">
+                      Kanban dans Suivi → Contacts étiquetés (À traiter → Mail → RDV → Terminé).
+                    </p>
+                  </div>
+                  <Switch checked={pipelineActif} onCheckedChange={setPipelineActif} />
+                </div>
               </TabsContent>
             </div>
           </Tabs>

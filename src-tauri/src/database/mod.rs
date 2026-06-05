@@ -4,20 +4,30 @@ use tauri::{AppHandle, Manager};
 pub mod email_schedule;
 pub mod etiquette_rule_ast;
 pub mod etiquette_actions;
+pub mod etiquette_assignments;
+pub mod etiquette_email;
+pub mod etiquettes;
 pub mod etiquettes_auto_engine;
 pub mod alertes;
 pub mod contact_row;
+pub mod contacts;
 pub mod custom_fields;
 pub mod dashboard_stats;
 pub mod documents;
+pub mod exchange_history;
+pub mod email_send_log;
+pub mod etiquette_pipeline;
+pub mod calendar_events;
 pub mod familles;
 pub mod filleuls;
 pub mod foyers;
+pub mod interactions;
 pub mod investissements;
 pub mod partenaires;
 pub mod settings;
 pub mod templates_email;
 pub mod models;
+pub mod newsletter_ops;
 pub mod operations;
 pub mod segments;
 pub mod taches;
@@ -486,7 +496,83 @@ impl Database {
         self.migrate_contact_template_envois()?;
         self.migrate_email_campaign_cancelled()?;
         self.migrate_fix_agenda_template_token_typos()?;
+        self.migrate_email_send_log()?;
+        self.migrate_etiquette_pipeline()?;
+        self.migrate_calendar_events()?;
 
+        Ok(())
+    }
+
+    fn migrate_email_send_log(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS email_send_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                contact_etiquette_id INTEGER,
+                etiquette_id INTEGER,
+                etiquette_nom TEXT,
+                template_nom TEXT,
+                subject TEXT,
+                status TEXT NOT NULL,
+                error_message TEXT,
+                gmail_message_id TEXT,
+                batch_id TEXT,
+                send_mode TEXT NOT NULL DEFAULT 'individual',
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS email_send_log_created_idx ON email_send_log (created_at DESC)",
+            [],
+        )?;
+        Ok(())
+    }
+
+    fn migrate_etiquette_pipeline(&self) -> Result<()> {
+        if !self.table_has_column("etiquettes", "pipeline_actif")? {
+            self.conn.execute(
+                "ALTER TABLE etiquettes ADD COLUMN pipeline_actif INTEGER NOT NULL DEFAULT 0",
+                [],
+            )?;
+            println!("✅ Migration: pipeline_actif sur etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "pipeline_status")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN pipeline_status TEXT",
+                [],
+            )?;
+            println!("✅ Migration: pipeline_status sur contact_etiquettes");
+        }
+        Ok(())
+    }
+
+    fn migrate_calendar_events(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS calendar_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL,
+                alerte_id INTEGER,
+                tache_id INTEGER,
+                google_event_id TEXT NOT NULL,
+                title TEXT NOT NULL,
+                start_at INTEGER NOT NULL,
+                end_at INTEGER NOT NULL,
+                attendee_email TEXT,
+                attendee_status TEXT,
+                event_status TEXT NOT NULL DEFAULT 'confirmed',
+                rdv_effectue INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS calendar_events_start_idx ON calendar_events (start_at)",
+            [],
+        )?;
         Ok(())
     }
 

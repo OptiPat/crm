@@ -249,6 +249,7 @@ mod tests {
             is_default: false,
             actif: true,
             segment_id: None,
+            pipeline_actif: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -287,6 +288,7 @@ mod tests {
             is_default: false,
             actif: true,
             segment_id: None,
+            pipeline_actif: false,
             created_at: 0,
             updated_at: 0,
         };

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CheckCircle2 } from "lucide-react";
+import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
 import {
   markEtiquetteEmailSent,
   type EtiquetteEmailQueueItem,
@@ -125,6 +126,19 @@ export function EtiquetteEmailSendDialog({
     } catch (error) {
       console.error("Error sending etiquette email:", error);
       const hint = error instanceof Error ? error.message : "Erreur lors de l'envoi";
+      if (item) {
+        await logEmailSendError({
+          contactId: item.contact_id,
+          contactEtiquetteId: item.contact_etiquette_id,
+          etiquetteNom:
+            item.queue_row_kind === "template" ? null : item.etiquette_nom,
+          templateNom:
+            item.queue_row_kind === "template" ? item.template_sujet : null,
+          subject: subject.trim(),
+          errorMessage: hint,
+          sendMode: "individual",
+        }).catch(() => {});
+      }
       toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Email)`);
     } finally {
       setSending(false);

@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef } from "react";
-import { syncEmailCampaignResponses } from "@/lib/api/tauri-email";
-import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
-import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import { useWakeIntervalRefresh } from "@/hooks/useWakeIntervalRefresh";
 
 const SYNC_INTERVAL_MS = 120_000;
 
 /**
- * Détection Gmail + Agenda en arrière-plan (toute l'app, Google connecté).
- * Le bouton « Vérifier maintenant » dans Envois reste un déclenchement immédiat optionnel.
+ * Sync Gmail + Agenda en arrière-plan (toute l'app, Google connecté).
+ * Les boutons « Vérifier maintenant » restent un déclenchement immédiat optionnel.
  */
 export function useEmailCampaignAutoSync(enabled = true): void {
   const runningRef = useRef(false);
@@ -17,26 +15,10 @@ export function useEmailCampaignAutoSync(enabled = true): void {
     if (!enabled || runningRef.current) return;
     runningRef.current = true;
     try {
-      const status = await getEmailConnectionStatus();
-      if (status.provider !== "google" || !status.connected) return;
-
-      const result = await syncEmailCampaignResponses();
-      if (result.mail_detected > 0 || result.rdv_detected > 0) {
-        notifyRelationChanged();
-      }
+      const result = await runRelationAutoSync();
+      if (result.skipped) return;
       if (result.errors.length > 0) {
-        console.warn("Sync campagnes email:", result.errors.join(" ; "));
-      }
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      if (
-        msg.includes("Connectez Google") ||
-        msg.includes("reconnectez") ||
-        msg.includes("Agenda")
-      ) {
-        console.warn("Sync campagnes email:", msg);
-      } else {
-        console.warn("Sync campagnes email:", msg);
+        console.warn("Sync relation:", result.errors.join(" ; "));
       }
     } finally {
       runningRef.current = false;

@@ -43,6 +43,7 @@ const etiquettes: EtiquetteWithCount[] = [
     is_default: true,
     actif: true,
     segment_id: null,
+    pipeline_actif: false,
     created_at: 1,
     updated_at: 1,
     contact_count: 1,

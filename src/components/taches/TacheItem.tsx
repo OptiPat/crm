@@ -1,4 +1,4 @@
-import { Pencil, Trash2, User } from "lucide-react";
+import { Calendar, Pencil, Trash2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,7 @@ interface TacheItemProps {
   onEdit: (tache: Tache | TacheWithContact) => void;
   onDelete: (tache: Tache | TacheWithContact) => void;
   onOpenContact?: (contactId: number) => void;
+  onPlanifierRdv?: (tache: Tache | TacheWithContact) => void;
 }
 
 export function TacheItem({
@@ -28,6 +29,7 @@ export function TacheItem({
   onEdit,
   onDelete,
   onOpenContact,
+  onPlanifierRdv,
 }: TacheItemProps) {
   const done = tache.statut === "FAIT";
   const state = echeanceState(tache.date_echeance, tache.statut);
@@ -79,6 +81,17 @@ export function TacheItem({
       </div>
 
       <div className="flex shrink-0 gap-1">
+        {onPlanifierRdv && contacts.length > 0 && !done && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            title="Planifier un RDV"
+            onClick={() => onPlanifierRdv(tache)}
+          >
+            <Calendar className="h-4 w-4" />
+          </Button>
+        )}
         <TacheChainMenu tache={tache} />
         <Button type="button" variant="ghost" size="icon" onClick={() => onEdit(tache)}>
           <Pencil className="h-4 w-4" />

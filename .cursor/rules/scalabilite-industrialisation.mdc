@@ -15,12 +15,27 @@ Objectif : rester **puissant mais simple**. Pas d'usine à gaz. Diff minimal, pa
 | Module logique `.ts` | < 400 lignes | > 500 | Séparer par responsabilité |
 | Module Rust `.rs` | < 600 lignes | > 800 | Découper par sous-domaine |
 
-- **`database/operations.rs` est gelé** : ne plus l'agrandir. La découpe est **commencée**
-  (domaines déjà sortis : `alertes.rs`, `foyers.rs`, `familles.rs`, `filleuls.rs`,
-  `investissements.rs`, `partenaires.rs`, `documents.rs`, `templates_email.rs`,
-  `dashboard_stats.rs`, `settings.rs`) mais `operations.rs` reste volumineux (~5700 l, surtout
-  contacts + import). « Gelé » = on n'y ajoute rien ; tout **nouveau** code va dans son module de
-  domaine, et on continue à en extraire le cœur **contacts/import** avant d'ajouter du lourd.
+- **`database/operations.rs` est GELÉ — interdiction stricte de l'agrandir.**
+  - **Aucune** nouvelle méthode/fonction ne doit y être ajoutée. Toute nouvelle méthode `impl Database`
+    va dans le module de domaine correspondant (ex. `etiquette_email.rs`, `interactions.rs`).
+  - En Rust, `impl Database` peut être **éclaté sur plusieurs fichiers** du module `database`. Un
+    nouveau domaine = nouveau fichier `database/<domaine>.rs` avec `impl Database { … }` + `pub mod`
+    dans `mod.rs`. Le champ privé `conn` et les helpers `pub(super)`/`pub(crate)` restent accessibles.
+  - Si une extraction a besoin d'un helper privé resté dans `operations.rs`, élargir sa visibilité
+    en `pub(super)` (sûr, sans impact comportemental) plutôt que de dupliquer.
+  - Domaines déjà sortis : `alertes.rs`, `foyers.rs`, `familles.rs`, `filleuls.rs`,
+    `investissements.rs`, `partenaires.rs`, `documents.rs`, `templates_email.rs`,
+    `dashboard_stats.rs`, `settings.rs`, `newsletter_ops.rs`, `interactions.rs`,
+    `exchange_history.rs`, `etiquette_email.rs`, `contacts.rs` (CRUD + `update_contact`),
+    `etiquettes.rs` (CRUD/validation/links) et `etiquette_assignments.rs`
+    (attribution/exclusion/seed/merge).
+  - Reste dans `operations.rs` (~2200 l., quasi exclusivement le module de tests d'intégration
+    + 2 helpers `pub(crate)` du moteur auto `contact_has_investment_*`). Ne rien y rajouter ;
+    tout nouveau code va dans son module de domaine.
+- **Extraction = déplacement pur** : on déplace le code à l'identique (seuls les `use` suivent),
+  sans changer le SQL ni la logique. Vérifier avec `cargo test` (les 35 tests d'intégration de
+  `operations.rs` font filet) que tout reste vert et sans warning (imports orphelins, doc-comments
+  orphelins avant `}`).
 - Quand on touche un gros fichier existant, en profiter pour en extraire un morceau cohérent (boy-scout rule), sans changer le comportement.
 
 ## Séparation des responsabilités

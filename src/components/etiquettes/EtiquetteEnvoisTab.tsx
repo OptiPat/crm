@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Mail,
   Send,
@@ -13,7 +14,10 @@ import {
   CalendarCheck,
   X,
   RotateCcw,
+  History,
 } from "lucide-react";
+import { EmailSendLogTab } from "@/components/etiquettes/EmailSendLogTab";
+import { EtiquetteBatchSendDialog } from "@/components/etiquettes/EtiquetteBatchSendDialog";
 import {
   DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
   isTemplateEmailRelanceEnabledForQueue,
@@ -28,7 +32,7 @@ import {
   type EtiquetteEmailQueueItem,
 } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
-import { syncEmailCampaignResponses } from "@/lib/api/tauri-email";
+import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import {
   getEmailConnectionStatus,
   type EmailConnectionStatus,
@@ -81,8 +85,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState<
-    "ready" | "scheduled" | "incomplete" | "sent" | "followup"
+    "ready" | "scheduled" | "incomplete" | "sent" | "followup" | "journal"
   >("ready");
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [batchOpen, setBatchOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
   const [cancelConfirmItem, setCancelConfirmItem] =
     useState<EtiquetteEmailQueueItem | null>(null);
@@ -96,13 +102,18 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
     try {
       setSyncing(true);
-      const r = await syncEmailCampaignResponses();
-      if (r.mail_detected > 0 || r.rdv_detected > 0) {
-        const parts: string[] = [];
-        if (r.mail_detected > 0) parts.push(`${r.mail_detected} réponse(s) mail`);
-        if (r.rdv_detected > 0) parts.push(`${r.rdv_detected} RDV Agenda`);
-        toast.success(`Détection auto : ${parts.join(", ")}`);
-        notifyRelationChanged();
+      const r = await runRelationAutoSync();
+      if (r.skipped) return;
+      const parts: string[] = [];
+      if (r.mail_detected > 0) parts.push(`${r.mail_detected} réponse(s) mail`);
+      if (r.rdv_campaign_detected > 0) {
+        parts.push(`${r.rdv_campaign_detected} RDV campagne`);
+      }
+      if (r.calendar_accepted > 0) {
+        parts.push(`${r.calendar_accepted} RDV confirmé(s)`);
+      }
+      if (parts.length > 0) {
+        toast.success(`Détection : ${parts.join(", ")}`);
       }
       if (r.errors.length > 0) {
         toast.warning(r.errors[0]);
@@ -110,7 +121,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!msg.includes("reconnectez") && !msg.includes("Connectez Google")) {
-        console.warn("sync email:", msg);
+        console.warn("sync relation:", msg);
       }
     } finally {
       setSyncing(false);
@@ -124,7 +135,8 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       raw === "scheduled" ||
       raw === "incomplete" ||
       raw === "sent" ||
-      raw === "followup"
+      raw === "followup" ||
+      raw === "journal"
     ) {
       setSubTab(raw);
       sessionStorage.removeItem("crm_nav_suivi_envois_subtab");
@@ -208,6 +220,18 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const openConfirm = (item: EtiquetteEmailQueueItem) => {
     setConfirmItem(item);
   };
+
+  const toggleSelected = (id: number, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const selectedReadyItems = ready.filter((i) => selectedIds.has(i.contact_etiquette_id));
+  const allReadySelected = ready.length > 0 && selectedReadyItems.length === ready.length;
 
   const handleMarkResponse = async (
     item: EtiquetteEmailQueueItem,
@@ -301,7 +325,17 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 highlightRowKey === item.contact_etiquette_id && "ring-2 ring-primary/40"
               )}
             >
-              <div className="space-y-1 min-w-0">
+              {options.mode === "ready" && (
+                <Checkbox
+                  checked={selectedIds.has(item.contact_etiquette_id)}
+                  onCheckedChange={(v) =>
+                    toggleSelected(item.contact_etiquette_id, v === true)
+                  }
+                  className="shrink-0"
+                  aria-label={`Sélectionner ${item.contact_prenom} ${item.contact_nom}`}
+                />
+              )}
+              <div className="space-y-1 min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">
                     {item.contact_prenom} {item.contact_nom}
@@ -477,7 +511,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               File d&apos;envoi
             </CardTitle>
             <CardDescription>
-              Confirmation manuelle pour chaque envoi — la file se remplit en arrière-plan.
+              Envoi individuel ou groupé — chaque envoi est tracé dans le journal.
             </CardDescription>
           </div>
           <div className="flex gap-2">
@@ -534,8 +568,36 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   </Badge>
                 )}
               </TabsTrigger>
+              <TabsTrigger value="journal" className="gap-2">
+                <History className="h-4 w-4" />
+                Journal
+              </TabsTrigger>
             </TabsList>
-            <TabsContent value="ready" className="mt-4">
+            <TabsContent value="ready" className="mt-4 space-y-3">
+              {ready.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Checkbox
+                    checked={allReadySelected}
+                    onCheckedChange={(v) => {
+                      if (v === true) {
+                        setSelectedIds(new Set(ready.map((i) => i.contact_etiquette_id)));
+                      } else {
+                        setSelectedIds(new Set());
+                      }
+                    }}
+                  />
+                  <span className="text-sm text-muted-foreground">Tout sélectionner</span>
+                  <Button
+                    size="sm"
+                    className="ml-auto"
+                    disabled={selectedReadyItems.length === 0 || loading}
+                    onClick={() => setBatchOpen(true)}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    Envoyer la sélection ({selectedReadyItems.length})
+                  </Button>
+                </div>
+              )}
               {renderList(ready, { mode: "ready" })}
             </TabsContent>
             <TabsContent value="scheduled" className="mt-4">
@@ -553,9 +615,15 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             <TabsContent value="followup" className="mt-4">
               <p className="text-xs text-muted-foreground mb-3">
                 Délai et horaire définis sur chaque modèle (Templates → onglet Relance). Google
-                connecté : détection mail + Agenda automatique.
+                connecté : détection mail + Agenda automatique en arrière-plan (toutes les 2 min).
               </p>
               {renderList(followup, { mode: "followup" })}
+            </TabsContent>
+            <TabsContent value="journal" className="mt-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                Historique de tous les envois (individuels et groupés) avec statut et horodatage.
+              </p>
+              <EmailSendLogTab />
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -566,7 +634,21 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         open={!!confirmItem}
         onOpenChange={(o) => !o && setConfirmItem(null)}
         cgpConfig={cgpConfig}
-        onSent={() => void loadQueue()}
+        onSent={() => {
+          setSelectedIds(new Set());
+          void loadQueue();
+        }}
+      />
+
+      <EtiquetteBatchSendDialog
+        items={selectedReadyItems}
+        open={batchOpen}
+        onOpenChange={setBatchOpen}
+        cgpConfig={cgpConfig}
+        onDone={() => {
+          setSelectedIds(new Set());
+          void loadQueue();
+        }}
       />
 
       <AlertDialog

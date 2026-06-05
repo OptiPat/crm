@@ -6,6 +6,7 @@ import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart"
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { TachesPreview } from "@/components/dashboard/TachesPreview";
+import { CalendarTodayPreview } from "@/components/dashboard/CalendarTodayPreview";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import {
   DashboardPageHeader,
@@ -196,10 +197,14 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
               onOpenContact={onOpenContact}
             />
           </div>
-          <div className="lg:col-span-5 min-h-[280px]">
+          <div className="lg:col-span-5 space-y-5 min-h-[280px]">
             <TachesPreview
               key={`taches-${refreshKey}`}
               onNavigate={onNavigate}
+              onOpenContact={onOpenContact}
+            />
+            <CalendarTodayPreview
+              key={`rdv-${refreshKey}`}
               onOpenContact={onOpenContact}
             />
           </div>

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/select";
 import { TacheForm } from "@/components/taches/TacheForm";
 import { TacheItem } from "@/components/taches/TacheItem";
+import { PlanifierRdvDialog } from "@/components/calendar/PlanifierRdvDialog";
 import {
   getAllTaches,
   setTacheStatut,
@@ -32,6 +33,7 @@ export function Taches({ onNavigate }: TachesProps) {
   const [filter, setFilter] = useState<StatutFilter>("ACTIVES");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<TacheWithContact | null>(null);
+  const [rdvTache, setRdvTache] = useState<TacheWithContact | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -145,6 +147,7 @@ export function Taches({ onNavigate }: TachesProps) {
               }}
               onDelete={(x) => void handleDelete(x as TacheWithContact)}
               onOpenContact={openContact}
+              onPlanifierRdv={(t) => setRdvTache(t as TacheWithContact)}
             />
           ))}
         </div>
@@ -155,6 +158,20 @@ export function Taches({ onNavigate }: TachesProps) {
         onOpenChange={setFormOpen}
         tache={editing}
         onSuccess={() => void load()}
+      />
+
+      <PlanifierRdvDialog
+        open={!!rdvTache}
+        onOpenChange={(o) => !o && setRdvTache(null)}
+        contactId={rdvTache?.contacts[0]?.contact_id ?? 0}
+        contactLabel={
+          rdvTache?.contacts[0]
+            ? `${rdvTache.contacts[0].prenom} ${rdvTache.contacts[0].nom}`.trim()
+            : ""
+        }
+        tacheId={rdvTache?.id}
+        defaultTitle={rdvTache ? `RDV — ${rdvTache.titre}` : undefined}
+        onCreated={() => void load()}
       />
     </div>
   );

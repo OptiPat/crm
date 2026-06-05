@@ -416,6 +416,8 @@ pub struct Etiquette {
     pub actif: bool,
     /// Segment réutilisable (règle héritée si renseigné)
     pub segment_id: Option<i64>,
+    /// Pipeline de suivi campagne (kanban Suivi)
+    pub pipeline_actif: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -871,6 +873,73 @@ pub struct ContactGmailMessage {
     pub attachments_json: Option<String>,
     pub sent_at: i64,
     pub synced_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EmailSendLogEntry {
+    pub id: i64,
+    pub contact_id: i64,
+    pub contact_prenom: String,
+    pub contact_nom: String,
+    pub contact_etiquette_id: Option<i64>,
+    pub etiquette_id: Option<i64>,
+    pub etiquette_nom: Option<String>,
+    pub template_nom: Option<String>,
+    pub subject: Option<String>,
+    pub status: String,
+    pub error_message: Option<String>,
+    pub gmail_message_id: Option<String>,
+    pub batch_id: Option<String>,
+    pub send_mode: String,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EtiquettePipelineContact {
+    pub contact_etiquette_id: i64,
+    pub contact_id: i64,
+    pub contact_prenom: String,
+    pub contact_nom: String,
+    pub email_envoye: bool,
+    pub email_date_envoi: Option<i64>,
+    pub pipeline_status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EtiquettePipelineBoard {
+    pub etiquette_id: i64,
+    pub contacts: Vec<EtiquettePipelineContact>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CalendarEventEntry {
+    pub id: i64,
+    pub contact_id: i64,
+    pub alerte_id: Option<i64>,
+    pub tache_id: Option<i64>,
+    pub google_event_id: String,
+    pub title: String,
+    pub start_at: i64,
+    pub end_at: i64,
+    pub attendee_email: Option<String>,
+    pub attendee_status: Option<String>,
+    pub event_status: String,
+    pub rdv_effectue: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_prenom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_nom: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CalendarSyncResult {
+    pub checked: u32,
+    pub accepted: u32,
+    pub declined: u32,
+    pub cancelled: u32,
+    pub errors: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

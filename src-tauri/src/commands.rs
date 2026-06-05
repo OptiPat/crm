@@ -10,7 +10,8 @@ use crate::database::{
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation, NewInteraction,
         NewTemplateEmail, NewSegment, NewTache, Partenaire,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, Tache,
-        TemplateEmail, YearlyActivityStats,
+        TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
+        CalendarEventEntry, CalendarSyncResult,
     },
     Database,
 };
@@ -1274,6 +1275,8 @@ pub fn mark_etiquette_email_sent(
     email_subject: Option<String>,
     email_body: Option<String>,
     queue_row_kind: Option<String>,
+    batch_id: Option<String>,
+    send_mode: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -1286,6 +1289,8 @@ pub fn mark_etiquette_email_sent(
                 gmail_thread_id.as_deref(),
                 email_subject.as_deref(),
                 email_body.as_deref(),
+                batch_id.as_deref(),
+                send_mode.as_deref(),
             )
             .map_err(|e| format!("Failed to mark email sent: {}", e));
     }
@@ -1297,8 +1302,153 @@ pub fn mark_etiquette_email_sent(
             gmail_thread_id.as_deref(),
             email_subject.as_deref(),
             email_body.as_deref(),
+            batch_id.as_deref(),
+            send_mode.as_deref(),
         )
         .map_err(|e| format!("Failed to mark email sent: {}", e))
+}
+
+#[tauri::command]
+pub fn log_email_send_error(
+    db: State<'_, DbState>,
+    contact_id: i64,
+    contact_etiquette_id: Option<i64>,
+    etiquette_nom: Option<String>,
+    template_nom: Option<String>,
+    subject: Option<String>,
+    error_message: String,
+    batch_id: Option<String>,
+    send_mode: Option<String>,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let etiquette_id = contact_etiquette_id
+        .and_then(|ce_id| database.etiquette_id_for_contact_etiquette(ce_id));
+    database
+        .insert_email_send_log(
+            contact_id,
+            contact_etiquette_id,
+            etiquette_id,
+            etiquette_nom.as_deref(),
+            template_nom.as_deref(),
+            subject.as_deref(),
+            "error",
+            Some(error_message.as_str()),
+            None,
+            batch_id.as_deref(),
+            send_mode.as_deref().unwrap_or("individual"),
+        )
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_email_send_log(
+    db: State<'_, DbState>,
+    limit: Option<u32>,
+) -> Result<Vec<EmailSendLogEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_email_send_log(limit.unwrap_or(200))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_etiquette_pipeline_actif(
+    db: State<'_, DbState>,
+    etiquette_id: i64,
+    actif: bool,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .set_etiquette_pipeline_actif(etiquette_id, actif)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_etiquette_pipeline_board(
+    db: State<'_, DbState>,
+    etiquette_id: i64,
+) -> Result<EtiquettePipelineBoard, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_etiquette_pipeline_board(etiquette_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_contact_pipeline_status(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+    status: String,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .set_contact_pipeline_status(contact_etiquette_id, &status)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn create_calendar_rdv(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+    contact_id: i64,
+    alerte_id: Option<i64>,
+    tache_id: Option<i64>,
+    title: String,
+    start_at: i64,
+    end_at: i64,
+) -> Result<CalendarEventEntry, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    crate::email::calendar_ops::create_google_calendar_rdv(
+        &app_handle,
+        database,
+        contact_id,
+        alerte_id,
+        tache_id,
+        &title,
+        start_at,
+        end_at,
+    )
+}
+
+#[tauri::command]
+pub fn sync_calendar_rdv(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+) -> Result<CalendarSyncResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    crate::email::calendar_ops::sync_calendar_rdv_status(&app_handle, database)
+}
+
+#[tauri::command]
+pub fn get_calendar_events_today(
+    db: State<'_, DbState>,
+) -> Result<Vec<CalendarEventEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_calendar_events_today()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn mark_calendar_rdv_effectue(
+    db: State<'_, DbState>,
+    event_id: i64,
+    contact_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_calendar_rdv_effectue(event_id, contact_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

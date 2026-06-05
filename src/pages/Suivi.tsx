@@ -54,6 +54,8 @@ import {
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
+import { EtiquettePipelineBoard } from "@/components/etiquettes/EtiquettePipelineBoard";
+import { PlanifierRdvDialog } from "@/components/calendar/PlanifierRdvDialog";
 import { StelliumExceltisAlerts } from "@/components/etiquettes/StelliumExceltisAlerts";
 import {
   isAutoEtiquetteAttribution,
@@ -115,6 +117,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   const [uniqueContactsTagged, setUniqueContactsTagged] = useState(0);
   const [alerteCategoryFilter, setAlerteCategoryFilter] =
     useState<AlerteCategoryFilter>("all");
+  const [rdvAlerte, setRdvAlerte] = useState<AlerteWithContact | null>(null);
 
   const alerteCategoryCounts = useMemo(
     () => countAlertesByCategory(alertes),
@@ -648,6 +651,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
                           onEnvoyerEmail={() =>
                             void handleEnvoyerEmailDepuisAlerte(alerte)
                           }
+                          onPlanifierRdv={() => setRdvAlerte(alerte)}
                           onSupprimer={() => void handleSupprimer(alerte.alerte_id)}
                           onOpenEtiquettesTab={() => setActiveTab("etiquettes")}
                         />
@@ -746,7 +750,13 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                {selectedEtiquette?.pipeline_actif && (
+                  <EtiquettePipelineBoard
+                    etiquetteId={selectedEtiquette.id}
+                    onOpenContact={openContact}
+                  />
+                )}
                 {!selectedEtiquette ? (
                   <div className="text-center py-8">
                     <Tag className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -867,6 +877,19 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           void loadEmailQueueCount();
           void fetchAlertesList({ silent: true });
         }}
+      />
+
+      <PlanifierRdvDialog
+        open={!!rdvAlerte}
+        onOpenChange={(o) => !o && setRdvAlerte(null)}
+        contactId={rdvAlerte?.contact_id ?? 0}
+        contactLabel={
+          rdvAlerte
+            ? `${rdvAlerte.contact_prenom} ${rdvAlerte.contact_nom}`.trim()
+            : ""
+        }
+        alerteId={rdvAlerte?.alerte_id}
+        onCreated={() => void fetchAlertesList({ silent: true })}
       />
 
       <RemoveAutoEtiquetteDialog

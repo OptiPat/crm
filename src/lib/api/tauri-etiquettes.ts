@@ -30,6 +30,8 @@ export interface Etiquette {
   actif: boolean;
   /** Segment réutilisable (règle héritée) */
   segment_id: number | null;
+  /** Pipeline kanban de suivi campagne */
+  pipeline_actif: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -374,7 +376,9 @@ export async function markEtiquetteEmailSent(
   gmailThreadId?: string | null,
   emailSubject?: string | null,
   emailBody?: string | null,
-  queueRowKind?: string | null
+  queueRowKind?: string | null,
+  batchId?: string | null,
+  sendMode?: string | null
 ): Promise<void> {
   return invoke<void>("mark_etiquette_email_sent", {
     contactEtiquetteId,
@@ -383,6 +387,8 @@ export async function markEtiquetteEmailSent(
     emailSubject: emailSubject ?? null,
     emailBody: emailBody ?? null,
     queueRowKind: queueRowKind ?? null,
+    batchId: batchId ?? null,
+    sendMode: sendMode ?? "individual",
   });
 }
 

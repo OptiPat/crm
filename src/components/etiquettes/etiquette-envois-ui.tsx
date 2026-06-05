@@ -15,8 +15,8 @@ export function EnvoisQueueStats({
   incomplete: number;
   sent: number;
   followup: number;
-  active: "ready" | "scheduled" | "incomplete" | "sent" | "followup";
-  onSelect: (tab: "ready" | "scheduled" | "incomplete" | "sent" | "followup") => void;
+  active: "ready" | "scheduled" | "incomplete" | "sent" | "followup" | "journal";
+  onSelect: (tab: "ready" | "scheduled" | "incomplete" | "sent" | "followup" | "journal") => void;
 }) {
   const items: {
     id: typeof active;
@@ -69,8 +69,13 @@ export function EnvoisQueueHelp() {
         </p>
         <p>
           <strong className="text-foreground">2. Prêts à envoyer</strong> — Le CRM prépare les
-          emails ; vous les relisez et confirmez un par un (CRM ouvert, boîte connectée dans
-          Paramètres → Email). Bouton ✕ pour ignorer un envoi planifié sans l&apos;envoyer.
+          emails ; vous confirmez un par un ou en <strong>sélection groupée</strong> (cases à
+          cocher). CRM ouvert, boîte connectée dans Paramètres → Email. Bouton ✕ pour ignorer un
+          envoi planifié.
+        </p>
+        <p>
+          <strong className="text-foreground">Journal</strong> — Chaque envoi (individuel, groupé,
+          étiquette ou modèle seul) est tracé avec horodatage et statut.
         </p>
         <p>
           <strong className="text-foreground">Planifiés</strong> — Date d&apos;envoi pas encore

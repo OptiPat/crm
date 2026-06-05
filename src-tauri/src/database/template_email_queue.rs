@@ -290,6 +290,8 @@ impl Database {
         gmail_thread_id: Option<&str>,
         email_subject: Option<&str>,
         email_body: Option<&str>,
+        batch_id: Option<&str>,
+        send_mode: Option<&str>,
     ) -> Result<()> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -339,6 +341,20 @@ impl Database {
             template_nom
         );
         self.insert_campaign_interaction(contact_id, "EMAIL", sujet, &contenu, now)?;
+        let mode = send_mode.unwrap_or("individual");
+        let _ = self.insert_email_send_log(
+            contact_id,
+            None,
+            None,
+            None,
+            Some(template_nom.as_str()),
+            Some(sujet),
+            "success",
+            None,
+            gmail_message_id,
+            batch_id,
+            mode,
+        );
         Ok(())
     }
 
