@@ -1,3 +1,5 @@
+// ⚠️ DEV / DOC uniquement (inspection Drizzle). Le runtime utilise Rust + rusqlite.
+// Aucun code applicatif n'importe ce module ; ne pas l'utiliser en production.
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import * as schema from "./schema";

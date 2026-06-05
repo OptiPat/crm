@@ -1,0 +1,60 @@
+---
+description: Conventions de scalabilité, maintenance et industrialisation (taille fichiers, découpage par domaine, tests filet, sécurité données)
+alwaysApply: true
+---
+
+# Scalabilité & industrialisation — Patrimoine CRM
+
+Objectif : rester **puissant mais simple**. Pas d'usine à gaz. Diff minimal, patterns réutilisés.
+
+## Taille des fichiers (garde-fous)
+
+| Type | Cible | Alerte | Action |
+|----|----|----|----|
+| Composant `.tsx` | < 300 lignes | > 400 | Extraire sous-composants / hooks |
+| Module logique `.ts` | < 400 lignes | > 500 | Séparer par responsabilité |
+| Module Rust `.rs` | < 600 lignes | > 800 | Découper par sous-domaine |
+
+- **`database/operations.rs` est gelé** : ne plus l'agrandir. Tout **nouveau** code métier va dans un module de domaine (`database/<domaine>.rs` ou `database/<domaine>/`).
+- Quand on touche un gros fichier existant, en profiter pour en extraire un morceau cohérent (boy-scout rule), sans changer le comportement.
+
+## Séparation des responsabilités
+
+- **UI ≠ logique**. Les règles métier pures vivent dans `src/lib/<domaine>/` et sont testables **sans React**.
+- Composant = affichage + orchestration légère. La logique lourde sort dans un hook (`src/hooks/`) ou `src/lib/`.
+- **Rust** : 1 module = 1 domaine. `commands.rs` reste une **façade fine** (validation + appel `Database`), jamais de logique métier.
+- Wrappers IPC : un fichier `src/lib/api/tauri-<domaine>.ts` par domaine, pas de logique dedans.
+
+## Tests filet AVANT refactor (obligatoire)
+
+Avant de découper ou factoriser du code existant :
+1. Écrire des **tests de caractérisation** qui figent le comportement actuel (entrées → sorties).
+2. Refactorer.
+3. Relancer les tests : comportement identique = vert.
+
+- Logique pure TS → Vitest (`*.test.ts` à côté du fichier ou dans `lib/`).
+- Logique Rust → `#[test]` dans le module (SQLite en mémoire pour l'intégration).
+- **Pas de refactor structurel sans filet de tests.**
+
+## Données = priorité absolue (CGP)
+
+- **Sauvegarde automatique + rotation** : toujours une copie récente récupérable.
+- **Chiffrement de la base** (SQLCipher) = cible ; sinon avertir explicitement.
+- **Une seule source de vérité du schéma** : migrations Rust runtime (`database/mod.rs`). Drizzle (`src/lib/db/`) = dev/doc only et doit rester synchrone.
+- Après toute mutation de données → `notify<Domaine>Changed()` (CustomEvent) pour rafraîchir l'UI.
+
+## Industrialisation
+
+- Après modif `src/`, `src-tauri/`, `scripts/`, config build : **l'agent lance** `npm run verify` (ou `verify:quick` si frontend seul). Pas l'utilisateur.
+- `ReadLints` sur les fichiers modifiés ; corriger les erreurs introduites.
+- Messages UI en **français**, identifiants code en **anglais**.
+- Ne pas annoncer « terminé » tant que verify/lints bloquants sont rouges.
+- Pas de `git commit` / `push` sauf demande explicite.
+
+## Checklist nouveau module / fonctionnalité
+
+- [ ] Logique métier isolée et testée (hors UI).
+- [ ] Aucun fichier dépassant le seuil d'alerte sans justification.
+- [ ] Schéma DB modifié = migration Rust (+ Drizzle synchronisé).
+- [ ] `notify*Changed()` appelé après mutation.
+- [ ] `npm run verify` au vert.

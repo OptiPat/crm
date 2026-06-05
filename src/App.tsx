@@ -40,12 +40,8 @@ function App() {
       try {
         const firstLaunch = await invoke<boolean>("is_first_launch");
         setIsFirstLaunch(firstLaunch);
-        
-        // Si pas premier lancement, vérifier si le wizard est complété
-        if (!firstLaunch) {
-          const wizardDone = await isWizardCompleted();
-          setShowWizard(!wizardDone);
-        }
+        // Le statut du wizard est vérifié APRÈS déverrouillage : la base
+        // chiffrée n'est ouverte qu'une fois le mot de passe saisi.
       } catch (error) {
         console.error("Error checking first launch:", error);
       }

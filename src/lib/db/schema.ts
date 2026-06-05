@@ -1,3 +1,7 @@
+// ⚠️ SOURCE DE VÉRITÉ DU SCHÉMA = migrations Rust runtime : `src-tauri/src/database/mod.rs`.
+// Ce schéma Drizzle est DEV / DOC uniquement (génération SQL, inspection via `db:studio`).
+// Il n'est importé par aucun code applicatif et ne doit PAS servir en production.
+// Toute modification de structure se fait d'abord côté Rust, puis on synchronise ici.
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 

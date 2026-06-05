@@ -73,6 +73,36 @@ pub fn create_manual_backup(app_data_dir: &Path, db_path: &Path) -> std::io::Res
     create_pre_migration_backup(app_data_dir, db_path)
 }
 
+/// Sauvegarde automatique régulière : crée une copie horodatée au plus une fois
+/// par jour. La rotation (MAX_BACKUPS dernières) est gérée par
+/// `create_pre_migration_backup`. Retourne `None` si une copie du jour existe déjà.
+pub fn create_daily_backup_if_needed(
+    app_data_dir: &Path,
+    db_path: &Path,
+) -> std::io::Result<Option<PathBuf>> {
+    if !db_path.exists() {
+        return Ok(None);
+    }
+
+    let backups_dir = app_data_dir.join("backups");
+    let today_prefix = format!("patrimoine-crm_{}", chrono::Local::now().format("%Y%m%d"));
+
+    if backups_dir.exists() {
+        let already_today = fs::read_dir(&backups_dir)?
+            .filter_map(|e| e.ok())
+            .any(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with(&today_prefix)
+            });
+        if already_today {
+            return Ok(None);
+        }
+    }
+
+    Ok(Some(create_pre_migration_backup(app_data_dir, db_path)?))
+}
+
 /// Restaure la base depuis une copie du dossier backups (nom de fichier uniquement).
 /// Cree d'abord une copie de securite de la base actuelle si elle existe.
 pub fn restore_db_from_backup(
@@ -164,6 +194,40 @@ mod tests {
             .filter_map(|e| e.ok())
             .count();
         assert!(backup_count >= 2, "expected backup + safety copy");
+
+        let _ = fs::remove_dir_all(&app_data);
+    }
+
+    #[test]
+    fn create_daily_backup_runs_once_per_day() {
+        let app_data = unique_temp_dir();
+        fs::create_dir_all(&app_data).expect("temp dir");
+        let db_path = app_data.join("patrimoine-crm.db");
+        write_marker_db(&db_path, "live");
+
+        let first =
+            create_daily_backup_if_needed(&app_data, &db_path).expect("première sauvegarde");
+        assert!(first.is_some(), "la première sauvegarde du jour doit être créée");
+
+        let second =
+            create_daily_backup_if_needed(&app_data, &db_path).expect("seconde sauvegarde");
+        assert!(
+            second.is_none(),
+            "aucune seconde sauvegarde le même jour ne doit être créée"
+        );
+
+        let _ = fs::remove_dir_all(&app_data);
+    }
+
+    #[test]
+    fn create_daily_backup_skips_when_db_absent() {
+        let app_data = unique_temp_dir();
+        fs::create_dir_all(&app_data).expect("temp dir");
+        let db_path = app_data.join("patrimoine-crm.db");
+
+        let result =
+            create_daily_backup_if_needed(&app_data, &db_path).expect("pas d'erreur sans base");
+        assert!(result.is_none(), "aucune sauvegarde si la base n'existe pas");
 
         let _ = fs::remove_dir_all(&app_data);
     }

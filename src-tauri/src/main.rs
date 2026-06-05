@@ -36,31 +36,12 @@ fn main() {
         .setup(|app| {
             // Initialiser l'authentification
             let auth = AuthManager::new(&app.handle()).expect("Failed to initialize auth");
-
-            // Récupérer la clé de chiffrement si elle existe
-            let encryption_key = if !auth.is_first_launch() {
-                match auth.get_db_encryption_key() {
-                    Ok(key) => Some(key),
-                    Err(e) => {
-                        eprintln!("Warning: Failed to get encryption key: {}", e);
-                        None
-                    }
-                }
-            } else {
-                None
-            };
-
             app.manage(Mutex::new(Some(auth)));
 
-            // Initialiser la base de données avec la clé de chiffrement
-            let db = if let Some(key) = encryption_key {
-                Database::new_with_key(&app.handle(), Some(&key))
-                    .expect("Failed to initialize encrypted database")
-            } else {
-                Database::new(&app.handle()).expect("Failed to initialize database")
-            };
-
-            app.manage(Mutex::new(Some(db)));
+            // La base reste FERMÉE tant que l'utilisateur n'a pas saisi son mot de passe
+            // (chiffrement par enveloppe). Elle est ouverte par les commandes
+            // `create_master_password` / `unlock` / `recover_account`.
+            app.manage(Mutex::new(Option::<Database>::None));
 
             email::legacy_cleanup::remove_legacy_smtp_config(&app.handle());
 
@@ -189,7 +170,10 @@ fn main() {
             is_first_launch,
             create_master_password,
             verify_master_password,
-            get_recovery_key,
+            unlock,
+            recover_account,
+            change_master_password,
+            get_pending_recovery_key,
             send_email,
             get_email_connection_status,
             get_oauth_app_settings,

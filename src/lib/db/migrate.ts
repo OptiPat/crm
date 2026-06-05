@@ -1,3 +1,6 @@
+// ⚠️ DEV / DOC uniquement. Les migrations de PRODUCTION sont exécutées côté Rust
+// (`src-tauri/src/database/mod.rs`). Ne pas lancer ceci contre la base prod
+// (AppData) : ce script ouvre un fichier `patrimoine-crm.db` en chemin relatif.
 import { migrate } from "drizzle-orm/better-sqlite3/migrator";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";

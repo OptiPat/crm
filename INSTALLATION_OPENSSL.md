@@ -1,56 +1,41 @@
-# Installation d'OpenSSL pour SQLCipher
+# Chiffrement SQLCipher — prérequis de BUILD
 
-## Problème
-SQLCipher nécessite OpenSSL pour fonctionner sur Windows.
+Le chiffrement de la base (SQLCipher / AES-256) est **actif**. OpenSSL est compilé
+depuis ses sources et embarqué dans le binaire (feature `bundled-sqlcipher-vendored-openssl`).
 
-## Solution : Installer OpenSSL
+> Aucune dépendance OpenSSL à installer chez l'**utilisateur final** : tout est dans l'exécutable.
 
-### 1. Télécharger OpenSSL
-Téléchargez l'installateur depuis : https://slproweb.com/products/Win32OpenSSL.html
-- Choisissez "Win64 OpenSSL v3.x.x" (version complète, pas Light)
+## Prérequis pour COMPILER (développeurs + CI uniquement)
 
-### 2. Installer OpenSSL
-- Exécutez l'installateur
-- Installez dans le dossier par défaut : `C:\Program Files\OpenSSL-Win64`
+La compilation d'OpenSSL depuis les sources nécessite **Perl** et **NASM** sur le PATH.
 
-### 3. Configurer les variables d'environnement
-Ajoutez ces variables d'environnement système :
-
-**PowerShell (Admin)** :
-```powershell
-[System.Environment]::SetEnvironmentVariable("OPENSSL_DIR", "C:\Program Files\OpenSSL-Win64", "Machine")
-[System.Environment]::SetEnvironmentVariable("OPENSSL_LIB_DIR", "C:\Program Files\OpenSSL-Win64\lib\VC\x64\MD", "Machine")
-[System.Environment]::SetEnvironmentVariable("OPENSSL_INCLUDE_DIR", "C:\Program Files\OpenSSL-Win64\include", "Machine")
-```
-
-### 4. Redémarrer le terminal
-Fermez et rouvrez VSCode/Terminal pour charger les nouvelles variables.
-
-### 5. Relancer la compilation
-```bash
-npm run tauri:dev
-```
-
----
-
-## Alternative : Utiliser SQLite sans chiffrement (temporaire)
-
-Si vous voulez tester l'application rapidement sans OpenSSL :
-
-1. Modifiez `src-tauri/Cargo.toml` :
-   ```toml
-   rusqlite = { version = "0.32", features = ["bundled"] }
-   ```
-   (au lieu de `bundled-sqlcipher`)
-
-2. L'application fonctionnera SANS chiffrement de la base de données
-
----
-
-## Vérifier l'installation OpenSSL
+### Windows (poste de dev)
 
 ```powershell
-openssl version
+winget install --id StrawberryPerl.StrawberryPerl -e
+winget install --id NASM.NASM -e
 ```
 
-Devrait afficher : `OpenSSL 3.x.x ...`
+Puis **rouvrir le terminal** (rafraîchit le PATH). Vérification :
+
+```powershell
+perl --version ; nasm -v
+```
+
+### CI (GitHub Actions, `windows-latest`)
+
+- **Perl** : Strawberry Perl est préinstallé sur l'image.
+- **NASM** : installé par le workflow `.github/workflows/release.yml`
+  (`choco install nasm`).
+
+## Modèle de chiffrement (résumé)
+
+- Une **clé de données** (DEK) aléatoire chiffre la base via SQLCipher.
+- La DEK est scellée (chiffrée) par une clé dérivée du **mot de passe maître**
+  (Argon2id) et par la **clé de récupération** — jamais stockée en clair.
+- Au déverrouillage, le mot de passe désemballe la DEK puis ouvre la base.
+- Les bases des anciennes versions (en clair) sont **migrées automatiquement**
+  vers SQLCipher au premier déverrouillage, après sauvegarde.
+
+Détails du code : `src-tauri/src/auth/crypto.rs`, `src-tauri/src/auth/mod.rs`,
+`src-tauri/src/database/mod.rs` (`open_encrypted`).

@@ -53,6 +53,14 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # SQLCipher compile OpenSSL depuis les sources (vendored) : nécessite NASM.
+      # Perl (Strawberry) est déjà préinstallé sur l'image windows-latest.
+      - name: Install NASM (build OpenSSL/SQLCipher)
+        run: |
+          choco install nasm -y --no-progress
+          echo "C:\Program Files\NASM" >> $env:GITHUB_PATH
+        shell: pwsh
+
       - name: Build & publish release
         uses: tauri-apps/tauri-action@v0
         env:
