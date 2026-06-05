@@ -57,189 +57,20 @@ import {
   contactToUpdatePayload,
   resolveImportContactCategories,
 } from "@/lib/contacts/contact-form-utils";
-
-// ============================================
-// FUZZY MATCHING POUR LES PARTENAIRES
-// ============================================
-
-// Normaliser une chaîne : lowercase, sans accents, sans espaces multiples
-const normalizeString = (str: string): string => {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // Supprimer les accents
-    .replace(/[^a-z0-9]/g, " ")      // Remplacer les caractères spéciaux par des espaces
-    .replace(/\s+/g, " ")            // Supprimer les espaces multiples
-    .trim();
-};
-
-// 🔥 Helper: Prendre la date la plus récente entre deux dates (pour consolidation multi-lignes)
-const getMostRecentDate = (
-  newDateISO: string | undefined, 
-  existingTimestamp: number | undefined
-): string | undefined => {
-  // Si aucune date, retourner undefined
-  if (!newDateISO && !existingTimestamp) return undefined;
-  
-  // Si une seule date existe, la retourner
-  if (!newDateISO && existingTimestamp) {
-    return new Date(existingTimestamp * 1000).toISOString();
-  }
-  if (newDateISO && !existingTimestamp) {
-    return newDateISO;
-  }
-  
-  // Comparer les deux dates et retourner la plus récente
-  const newDate = new Date(newDateISO!);
-  const existingDate = new Date(existingTimestamp! * 1000);
-  
-  if (newDate > existingDate) {
-    return newDateISO;
-  } else {
-    return existingDate.toISOString();
-  }
-};
-
-// Alias connus pour les partenaires (variations courantes)
-const PARTENAIRE_ALIASES: Record<string, string[]> = {
-  "vie plus": ["vie+", "vie +", "vieplus"],
-  "apicil": ["apcil", "apicill", "appicil"],
-  "primonial": ["primoniale", "primmonial"],
-  "praemia": ["praemie", "praémia", "premia"],
-  "generali": ["generalli", "générali"],
-  "suravenir": ["suravnir", "suravennir"],
-  "swiss life": ["swisslife", "swiss-life", "suisse life"],
-  "cardif": ["kardif", "carrdif"],
-  "spirica": ["spiricca", "sprica"],
-  "corum": ["corrum", "coorum"],
-  "sofidy": ["sofiddy", "soffidy"],
-  "perial": ["périal", "periall"],
-  "la francaise": ["la française", "lafrancaise"],
-  "epargne pierre": ["épargne pierre", "epargnepierre"],
-  "primovie": ["primo vie", "primo-vie"],
-  "ncap regions": ["n cap regions", "ncap régions", "n-cap regions"],
-};
-
-// Distance de Levenshtein (pour détecter les fautes de frappe)
-const levenshteinDistance = (a: string, b: string): number => {
-  const matrix: number[][] = [];
-  
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
-  
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
-      }
-    }
-  }
-  
-  return matrix[b.length][a.length];
-};
-
-// Trouver le partenaire le plus proche (fuzzy matching)
-const findMatchingPartenaire = (searchName: string, partenaires: Partenaire[]): Partenaire | null => {
-  const normalizedSearch = normalizeString(searchName);
-  
-  // 1. Correspondance exacte (après normalisation)
-  for (const p of partenaires) {
-    if (normalizeString(p.raison_sociale) === normalizedSearch) {
-      return p;
-    }
-  }
-  
-  // 2. Vérifier les alias connus
-  for (const [canonical, aliases] of Object.entries(PARTENAIRE_ALIASES)) {
-    if (aliases.some(alias => normalizeString(alias) === normalizedSearch) || 
-        normalizeString(canonical) === normalizedSearch) {
-      for (const p of partenaires) {
-        const normalizedP = normalizeString(p.raison_sociale);
-        if (normalizedP === normalizeString(canonical) || 
-            aliases.some(alias => normalizeString(alias) === normalizedP)) {
-          return p;
-        }
-      }
-    }
-  }
-  
-  // 3. Correspondance partielle (contient)
-  for (const p of partenaires) {
-    const normalizedP = normalizeString(p.raison_sociale);
-    if (normalizedP.includes(normalizedSearch) || normalizedSearch.includes(normalizedP)) {
-      if (normalizedSearch.length >= 4 && normalizedP.length >= 4) {
-        return p;
-      }
-    }
-  }
-  
-  // 4. Distance de Levenshtein (fautes de frappe)
-  let bestMatch: Partenaire | null = null;
-  let bestDistance = Infinity;
-  const maxDistance = Math.max(2, Math.floor(normalizedSearch.length * 0.3));
-  
-  for (const p of partenaires) {
-    const normalizedP = normalizeString(p.raison_sociale);
-    const distance = levenshteinDistance(normalizedSearch, normalizedP);
-    
-    if (distance < bestDistance && distance <= maxDistance) {
-      bestDistance = distance;
-      bestMatch = p;
-    }
-  }
-  
-  if (bestMatch) {
-    return bestMatch;
-  }
-  
-  return null;
-};
-
-// Déduire le type de partenaire depuis le type de produit
-const deduireTypePartenaire = (typeProduit: string): string => {
-  const t = typeProduit.toUpperCase();
-  if (t.includes("AV") || t.includes("ASSURANCE") || t.includes("VIE") || t.includes("PER")) {
-    return "ASSUREUR";
-  } else if (t.includes("PINEL") || t.includes("IMMOBILIER") || t.includes("MALRAUX")) {
-    return "PROMOTEUR";
-  } else if (t.includes("FIP") || t.includes("FCPI") || t.includes("FCPR") || t.includes("G3F")) {
-    return "SOCIETE_GESTION_FIP";
-  } else {
-    return "SOCIETE_GESTION_SCPI"; // Par défaut pour SCPI
-  }
-};
-
-// ============================================
+import {
+  deduireTypePartenaire,
+  findMatchingPartenaire,
+} from "@/lib/contacts/partenaire-match";
+import {
+  getMostRecentDate,
+  markImportRowsCancelled,
+  type ImportRow,
+} from "@/lib/contacts/import-row";
 
 interface ContactImportProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
-}
-
-interface ImportRow {
-  data: Record<string, any>;
-  status: "pending" | "success" | "error" | "duplicate" | "skipped";
-  message?: string;
-}
-
-/** Après rollback SQLite : le rapport ne doit plus afficher des lignes « succès ». */
-function markImportRowsCancelled(rows: ImportRow[]): ImportRow[] {
-  return rows.map((r) =>
-    r.status === "success"
-      ? { ...r, status: "error", message: "Import annulé — aucune donnée enregistrée" }
-      : r
-  );
 }
 
 export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportProps) {

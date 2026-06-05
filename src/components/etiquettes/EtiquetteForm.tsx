@@ -61,6 +61,7 @@ import {
   type ConditionType,
 } from "@/lib/etiquettes/etiquette-condition-labels";
 import { formatEtiquetteRuleSummary } from "@/lib/etiquettes/etiquette-form-summary";
+import { validateEtiquetteForm } from "@/lib/etiquettes/etiquette-form-validation";
 import {
   formatSouscriptionDuplicateWarning,
   templateHasSouscriptionTrigger,
@@ -382,42 +383,28 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!nom.trim()) {
-      toast.error("Le nom est obligatoire");
+
+    const validationError = validateEtiquetteForm({
+      nom,
+      emailActif,
+      emailTemplateId,
+      emailEnvoiMode,
+      emailEnvoiHeure,
+      emailEnvoiLocal,
+      actif,
+      isAuto,
+      segmentId,
+      useComboRule,
+      categoriesSelectionnees,
+      ruleChildren,
+      conditionType,
+      typesProduitSelectionnes,
+    });
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
-    if (emailActif) {
-      if (!emailTemplateId) {
-        toast.error("Sélectionnez un template d'email");
-        return;
-      }
-      if (emailEnvoiMode === "eligibility" && !emailEnvoiHeure.trim()) {
-        toast.error("Indiquez l'heure d'envoi (éligibilité)");
-        return;
-      }
-      if (emailEnvoiMode === "fixed" && !emailEnvoiLocal.trim()) {
-        toast.error("Indiquez la date et l'heure de la campagne");
-        return;
-      }
-    }
-
-    if (actif && isAuto && !segmentId && !useComboRule && categoriesSelectionnees.length === 0) {
-      toast.error("Sélectionnez au moins une catégorie de contact");
-      return;
-    }
-
-    if (actif && isAuto && useComboRule && ruleChildren.some((c) => c.categories.length === 0)) {
-      toast.error("Chaque condition combinée doit avoir une catégorie");
-      return;
-    }
-
-    if (actif && isAuto && !segmentId && !useComboRule && conditionType === "TYPE_PRODUIT" && typesProduitSelectionnes.length === 0) {
-      toast.error("Sélectionnez au moins un type de produit");
-      return;
-    }
-    
     setLoading(true);
 
     try {
