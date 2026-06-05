@@ -226,6 +226,13 @@ fn main() {
             start_newsletter_edition_send,
             record_newsletter_edition_send,
             finish_newsletter_edition_send,
+            // Champs personnalisés
+            get_custom_field_defs,
+            create_custom_field_def,
+            update_custom_field_def,
+            delete_custom_field_def,
+            get_contact_custom_fields,
+            set_contact_custom_fields,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

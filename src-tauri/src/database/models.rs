@@ -756,6 +756,66 @@ pub struct TacheWithContact {
     pub updated_at: i64,
 }
 
+// ==================== CHAMPS PERSONNALISÉS ====================
+
+/// Définition d'un champ personnalisé (créé par l'utilisateur).
+/// `field_type` : `text` | `number` | `date` | `boolean` | `select`.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomFieldDef {
+    pub id: i64,
+    /// Entité concernée (`contact` en phase 1).
+    pub entity: String,
+    /// Clé technique stable (slug du libellé), unique par entité.
+    pub field_key: String,
+    pub label: String,
+    pub field_type: String,
+    /// Choix possibles (JSON array de chaînes) pour `select`.
+    pub options: Option<String>,
+    pub position: i64,
+    pub actif: bool,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewCustomFieldDef {
+    #[serde(default)]
+    pub entity: Option<String>,
+    pub label: String,
+    pub field_type: Option<String>,
+    pub options: Option<String>,
+    pub position: Option<i64>,
+    pub actif: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateCustomFieldDef {
+    pub label: String,
+    pub field_type: Option<String>,
+    pub options: Option<String>,
+    pub position: Option<i64>,
+    pub actif: Option<bool>,
+}
+
+/// Champ personnalisé d'un contact : définition + valeur courante (jointure).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ContactCustomField {
+    pub def_id: i64,
+    pub field_key: String,
+    pub label: String,
+    pub field_type: String,
+    pub options: Option<String>,
+    pub position: i64,
+    pub value: Option<String>,
+}
+
+/// Couple (définition, valeur) reçu du frontend pour enregistrer en lot.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CustomFieldValueInput {
+    pub def_id: i64,
+    pub value: Option<String>,
+}
+
 // ==================== SETTINGS ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

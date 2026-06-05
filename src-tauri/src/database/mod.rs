@@ -7,6 +7,7 @@ pub mod etiquette_actions;
 pub mod etiquettes_auto_engine;
 pub mod alertes;
 pub mod contact_row;
+pub mod custom_fields;
 pub mod dashboard_stats;
 pub mod documents;
 pub mod familles;
@@ -472,6 +473,51 @@ impl Database {
 
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS taches_statut_echeance_idx ON taches (statut, date_echeance)",
+            [],
+        )?;
+
+        // Champs personnalisés : définitions + valeurs (modèle clé-valeur générique,
+        // pas de table par champ ni de SQL dynamique).
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS custom_field_defs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                entity TEXT NOT NULL DEFAULT 'contact',
+                field_key TEXT NOT NULL,
+                label TEXT NOT NULL,
+                field_type TEXT NOT NULL DEFAULT 'text',
+                options TEXT,
+                position INTEGER NOT NULL DEFAULT 0,
+                actif INTEGER NOT NULL DEFAULT 1,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS custom_field_defs_entity_key
+             ON custom_field_defs (entity, field_key)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS custom_field_values (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                def_id INTEGER NOT NULL,
+                entity_id INTEGER NOT NULL,
+                value TEXT,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (def_id) REFERENCES custom_field_defs(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS custom_field_values_def_entity
+             ON custom_field_values (def_id, entity_id)",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS custom_field_values_entity_idx
+             ON custom_field_values (entity_id)",
             [],
         )?;
 

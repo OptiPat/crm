@@ -1,7 +1,9 @@
 use crate::database::{
     models::{
         Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
-        ContactEtiquetteDetails, DashboardStats, Document, Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
+        ContactCustomField, ContactEtiquetteDetails, CustomFieldDef, CustomFieldValueInput,
+        DashboardStats, Document, Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
+        NewCustomFieldDef, UpdateCustomFieldDef,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation, NewPartenaire,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation, NewInteraction,
@@ -1733,4 +1735,78 @@ pub fn get_contact_mail_sync_state(
     database
         .get_contact_mail_sync_state(contact_id)
         .map_err(|e| e.to_string())
+}
+
+// ==================== CHAMPS PERSONNALISÉS ====================
+
+#[tauri::command]
+pub fn get_custom_field_defs(
+    db: State<'_, DbState>,
+    entity: Option<String>,
+) -> Result<Vec<CustomFieldDef>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let entity = entity.unwrap_or_else(|| "contact".to_string());
+    database
+        .get_custom_field_defs(&entity)
+        .map_err(|e| format!("Failed to list custom fields: {}", e))
+}
+
+#[tauri::command]
+pub fn create_custom_field_def(
+    db: State<'_, DbState>,
+    def: NewCustomFieldDef,
+) -> Result<CustomFieldDef, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_custom_field_def(def)
+        .map_err(|e| format!("Failed to create custom field: {}", e))
+}
+
+#[tauri::command]
+pub fn update_custom_field_def(
+    db: State<'_, DbState>,
+    id: i64,
+    def: UpdateCustomFieldDef,
+) -> Result<CustomFieldDef, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_custom_field_def(id, &def)
+        .map_err(|e| format!("Failed to update custom field: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_custom_field_def(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .delete_custom_field_def(id)
+        .map_err(|e| format!("Failed to delete custom field: {}", e))
+}
+
+#[tauri::command]
+pub fn get_contact_custom_fields(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<ContactCustomField>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_contact_custom_fields(contact_id)
+        .map_err(|e| format!("Failed to get contact custom fields: {}", e))
+}
+
+#[tauri::command]
+pub fn set_contact_custom_fields(
+    db: State<'_, DbState>,
+    contact_id: i64,
+    values: Vec<CustomFieldValueInput>,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .set_contact_custom_fields(contact_id, values)
+        .map_err(|e| format!("Failed to save contact custom fields: {}", e))
 }

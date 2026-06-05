@@ -68,6 +68,7 @@ import { ContactRegistreSwitch } from "@/components/contacts/ContactRegistreSwit
 import { toast } from "sonner";
 import { ContactInteractionsPanel } from "@/components/interactions/ContactInteractionsPanel";
 import { ContactTachesPanel } from "@/components/taches/ContactTachesPanel";
+import { ContactCustomFieldsPanel } from "@/components/contacts/ContactCustomFieldsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
 import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
 import {
@@ -819,6 +820,7 @@ export function ContactDetail({
 
             <TabsContent value="synthese" className="space-y-4 mt-3 focus-visible:outline-none">
               <ContactDetailSyntheseTab contact={contact} />
+              {contact.id && <ContactCustomFieldsPanel contactId={contact.id} />}
             </TabsContent>
 
             <TabsContent value="relation" className="mt-3 focus-visible:outline-none">

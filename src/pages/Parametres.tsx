@@ -14,6 +14,7 @@ import { ParametresSuiviSection } from "@/components/settings/ParametresSuiviSec
 import { ParametresDatabaseSection } from "@/components/settings/ParametresDatabaseSection";
 import { ParametresApplicationSection } from "@/components/settings/ParametresApplicationSection";
 import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
+import { ParametresCustomFieldsSection } from "@/components/settings/ParametresCustomFieldsSection";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
@@ -29,6 +30,7 @@ import {
   CalendarClock,
   Database,
   Sparkles,
+  SlidersHorizontal,
 } from "lucide-react";
 
 const EMPTY_CGP_CONFIG: CgpConfig = {
@@ -76,6 +78,12 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     label: "Suivi",
     description: "Liens Google Agenda",
     icon: CalendarClock,
+  },
+  {
+    id: "champs",
+    label: "Champs personnalisés",
+    description: "Champs sur mesure des fiches contact",
+    icon: SlidersHorizontal,
   },
   {
     id: "donnees",
@@ -214,7 +222,12 @@ export function Parametres() {
   };
 
   const renderSection = () => {
-    if (loadingConfig && activeSection !== "accueil" && activeSection !== "donnees") {
+    if (
+      loadingConfig &&
+      activeSection !== "accueil" &&
+      activeSection !== "donnees" &&
+      activeSection !== "champs"
+    ) {
       return <SettingsLoading />;
     }
 
@@ -241,6 +254,8 @@ export function Parametres() {
         );
       case "newsletter":
         return <ParametresNewsletterSection />;
+      case "champs":
+        return <ParametresCustomFieldsSection />;
       case "suivi":
         return (
           <ParametresSuiviSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
