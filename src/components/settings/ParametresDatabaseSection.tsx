@@ -166,6 +166,7 @@ export function ParametresDatabaseSection({
 
   return (
     <>
+      <div className="space-y-6">
       <SettingsPanel
         title="Où sont stockées vos données ?"
         description="Tout le CRM vit sur ce PC — rien n'est envoyé sur Internet (sauf vos emails OAuth)."
@@ -355,6 +356,7 @@ export function ParametresDatabaseSection({
           </Button>
         </div>
       </SettingsPanel>
+      </div>
 
       <AlertDialog
         open={restoreTarget != null}
