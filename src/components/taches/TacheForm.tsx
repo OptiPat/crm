@@ -34,8 +34,10 @@ interface TacheFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tache?: Tache | null;
-  /** Contact pré-rempli et figé (ouverture depuis une fiche). */
+  /** Contact pré-rempli (ouverture depuis une fiche). */
   fixedContactId?: number;
+  /** Plusieurs contacts pré-remplis (ex. rappel de suivi d'une tâche multi-contacts). */
+  fixedContactIds?: number[];
   onSuccess?: () => void;
 }
 
@@ -47,11 +49,21 @@ interface FormState {
   contactIds: number[];
 }
 
-function buildState(tache?: Tache | null, fixedContactId?: number): FormState {
+function buildState(
+  tache?: Tache | null,
+  fixedContactId?: number,
+  fixedContactIds?: number[],
+): FormState {
   const linked = tache?.contacts?.map((c) => c.contact_id) ?? [];
-  // En création depuis une fiche, pré-rattacher ce contact.
-  const contactIds =
-    !tache && fixedContactId != null ? [fixedContactId] : linked;
+  // En création depuis une fiche, pré-rattacher le(s) contact(s) fourni(s).
+  let contactIds = linked;
+  if (!tache) {
+    if (fixedContactIds && fixedContactIds.length > 0) {
+      contactIds = fixedContactIds;
+    } else if (fixedContactId != null) {
+      contactIds = [fixedContactId];
+    }
+  }
   return {
     titre: tache?.titre ?? "",
     description: tache?.description ?? "",
@@ -66,11 +78,15 @@ export function TacheForm({
   onOpenChange,
   tache,
   fixedContactId,
+  fixedContactIds,
   onSuccess,
 }: TacheFormProps) {
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
-  const [form, setForm] = useState<FormState>(buildState(tache, fixedContactId));
+  const [form, setForm] = useState<FormState>(
+    buildState(tache, fixedContactId, fixedContactIds),
+  );
+  const fixedContactIdsKey = fixedContactIds?.join(",") ?? "";
 
   useEffect(() => {
     if (!open) return;
@@ -86,8 +102,9 @@ export function TacheForm({
   }, [open]);
 
   useEffect(() => {
-    if (open) setForm(buildState(tache, fixedContactId));
-  }, [open, tache?.id, fixedContactId]);
+    if (open) setForm(buildState(tache, fixedContactId, fixedContactIds));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, tache?.id, fixedContactId, fixedContactIdsKey]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

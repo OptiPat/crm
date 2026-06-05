@@ -47,8 +47,8 @@ function MenuItem({
  */
 export function TacheChainMenu({ tache }: TacheChainMenuProps) {
   const contacts = tache.contacts ?? [];
+  const contactIds = contacts.map((c) => c.contact_id);
   const singleContactId = contacts.length === 1 ? contacts[0].contact_id : null;
-  const seedContactId = singleContactId ?? contacts[0]?.contact_id;
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [tacheOpen, setTacheOpen] = useState(false);
@@ -72,7 +72,9 @@ export function TacheChainMenu({ tache }: TacheChainMenuProps) {
         </PopoverTrigger>
         <PopoverContent align="end" className="w-56 p-1.5">
           <p className="px-2 pb-1 pt-0.5 text-xs text-muted-foreground">
-            Suite pour ce contact
+            {singleContactId != null
+              ? `Suite pour ${contacts[0].prenom}`
+              : `Suite (${contacts.length} contacts)`}
           </p>
           {singleContactId != null && (
             <MenuItem
@@ -107,14 +109,12 @@ export function TacheChainMenu({ tache }: TacheChainMenuProps) {
         </PopoverContent>
       </Popover>
 
-      {seedContactId != null && (
-        <TacheForm
-          open={tacheOpen}
-          onOpenChange={setTacheOpen}
-          fixedContactId={seedContactId}
-          onSuccess={() => setTacheOpen(false)}
-        />
-      )}
+      <TacheForm
+        open={tacheOpen}
+        onOpenChange={setTacheOpen}
+        fixedContactIds={contactIds}
+        onSuccess={() => setTacheOpen(false)}
+      />
       {singleContactId != null && (
         <>
           <InteractionForm
