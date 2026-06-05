@@ -18,14 +18,26 @@ alwaysApply: true
 
 ## Modules métier (repères)
 
-| Domaine | Frontend | Backend |
-|---------|----------|---------|
-| Contacts / foyers | `src/pages/Contacts.tsx`, `components/contacts/` | `operations.rs`, `commands.rs` |
-| Étiquettes | `src/pages/Etiquettes.tsx`, `lib/etiquettes/` | `etiquettes_auto_engine.rs` |
-| Suivi / alertes | `src/pages/Suivi.tsx` | alertes + étiquettes dans `operations.rs` |
-| Investissements | `ContactDetail`, API `tauri-investissements` | `operations.rs` |
+Backend découpé par domaine dans `src-tauri/src/database/` (déclarés dans `database/mod.rs`).
+`operations.rs` est l'ancien monolithe **gelé** : tout nouveau code va dans le module de domaine.
 
-Doc étiquettes : `docs/ETIQUETTES.md`.
+| Domaine | Frontend | Backend (`database/`) |
+|---------|----------|---------|
+| Contacts / foyers | `components/contacts/` (`ContactDetail` + onglets `*Tab`) | `operations.rs`, `foyers.rs`, `familles.rs` |
+| Étiquettes | `pages/Etiquettes.tsx`, `lib/etiquettes/`, `components/etiquettes/` | `etiquettes_auto_engine.rs`, `etiquette_rule_ast.rs` |
+| Suivi / alertes | `pages/Suivi.tsx` | `alertes.rs` |
+| Investissements / partenaires | `ContactPatrimoinePanel`, API `tauri-investissements/-partenaires` | `investissements.rs`, `partenaires.rs` |
+| Filleuls / parrainage | `components/contacts/` | `filleuls.rs` |
+| Dashboard / stats | `pages/Dashboard` | `dashboard_stats.rs` |
+| Documents | `components/...` | `documents.rs` |
+| Emails / templates | `lib/emails/`, `components/etiquettes/` | `templates_email.rs`, `template_email_*` |
+| Réglages | `pages/Parametres`, `components/settings/` | `settings.rs` |
+| Auth / chiffrement | `pages/UnlockScreen.tsx`, `SetupPassword`, `ChangePasswordDialog` | `src-tauri/src/auth/` (`crypto.rs`, `mod.rs`, `commands.rs`) + `database/mod.rs` |
+
+Logique métier pure côté frontend dans `src/lib/<domaine>/` (testable sans React) :
+ex. `lib/contacts/partenaire-match.ts`, `lib/contacts/import-row.ts`, `lib/etiquettes/etiquette-form-validation.ts`.
+
+Doc étiquettes : `docs/ETIQUETTES.md`. Doc chiffrement : `docs/CHIFFREMENT.md`.
 
 ## Flux données étiquettes (résumé)
 
@@ -33,6 +45,20 @@ Doc étiquettes : `docs/ETIQUETTES.md`.
 2. Save contact / investissement / étiquette → recalcul **incrémental** Rust.
 3. Import / bouton Recalculer / 1× session → recalcul **complet** (transaction).
 4. UI → `notifyEtiquettesChanged()` pour compteurs Suivi / Étiquettes / Contacts.
+
+## Sécurité & chiffrement (données au repos)
+
+- Base **chiffrée SQLCipher** (clé AES-256). Voir `docs/CHIFFREMENT.md` pour le détail.
+- **Chiffrement par enveloppe** : une DEK aléatoire chiffre la base ; elle est scellée
+  (XChaCha20-Poly1305) par deux clés dérivées (Argon2id) — l'une du mot de passe, l'autre
+  d'une clé de récupération. La DEK n'est **jamais** stockée en clair. `auth.json` v2 ne
+  contient que sels + DEK scellées.
+- **Ouverture différée** : la base n'est ouverte qu'**après** authentification
+  (commandes `unlock` / `create_master_password` / `recover_account`), pas au démarrage.
+- Migration auto base-en-clair → chiffrée au 1er déverrouillage (sauvegarde préalable).
+- Changer le mot de passe **régénère** la clé de récupération (l'ancienne devient caduque),
+  affichée une seule fois via `get_pending_recovery_key`.
+- Prérequis build (dev/CI uniquement) : Perl + NASM — voir `INSTALLATION_OPENSSL.md`.
 
 ## Après modification de code
 
@@ -51,4 +77,6 @@ Doc étiquettes : `docs/ETIQUETTES.md`.
 
 ## Fichiers sensibles
 
-- `.env`, tokens OAuth / `email_oauth.json`, `patrimoine-crm.db` prod → voir `donnees-sensibles.mdc`.
+- `.env`, tokens OAuth / `email_oauth.json`, `patrimoine-crm.db` prod (chiffrée), `auth.json`
+  (sels + DEK scellées), `pending_recovery_key.txt` → voir `donnees-sensibles.mdc` et
+  `docs/SECURITE_AVANT_PUBLIC.md`. Tous dans `%APPDATA%\com.patrimoine-crm.app\`, hors dépôt.

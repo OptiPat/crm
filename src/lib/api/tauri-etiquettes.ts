@@ -73,6 +73,24 @@ export interface EtiquetteWithCount extends Etiquette {
   contact_count: number;
 }
 
+/** Priorité d'une tâche créée par une action d'étiquette. */
+export type TacheActionPriorite = "BASSE" | "NORMALE" | "HAUTE";
+
+/**
+ * Action automatique d'une étiquette : créer une tâche quand l'étiquette est
+ * posée automatiquement sur un contact (déclenchée une fois par contact).
+ */
+export interface EtiquetteAction {
+  etiquette_id: number;
+  /** Active la création de tâche à l'attribution auto. */
+  tache_actif: boolean;
+  /** Modèle de titre — `{prenom}` et `{nom}` sont remplacés par le contact. */
+  tache_titre: string | null;
+  tache_priorite: TacheActionPriorite;
+  /** Échéance = jour d'attribution + N jours (0 = le jour même). */
+  tache_delai_jours: number;
+}
+
 export interface EtiquetteEmailQueueItem {
   /** `etiquette` (défaut) ou `template` (modèle sans étiquette) */
   queue_row_kind?: string;
@@ -229,6 +247,18 @@ export async function updateEtiquette(id: number, etiquette: NewEtiquette): Prom
  */
 export async function deleteEtiquette(id: number): Promise<void> {
   return invoke<void>("delete_etiquette", { id });
+}
+
+/** Récupère l'action « tâche » d'une étiquette (null si jamais configurée). */
+export async function getEtiquetteAction(
+  etiquetteId: number
+): Promise<EtiquetteAction | null> {
+  return invoke<EtiquetteAction | null>("get_etiquette_action", { etiquetteId });
+}
+
+/** Crée ou met à jour l'action « tâche » d'une étiquette. */
+export async function setEtiquetteAction(action: EtiquetteAction): Promise<void> {
+  return invoke<void>("set_etiquette_action", { action });
 }
 
 /**

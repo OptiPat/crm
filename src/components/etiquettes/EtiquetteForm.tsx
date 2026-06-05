@@ -30,10 +30,13 @@ import {
   stringifyCategories,
   parseConditionConfig,
   parseCategories,
+  getEtiquetteAction,
+  setEtiquetteAction,
   COULEURS_ETIQUETTES,
   MOIS_LABELS,
   type NewEtiquette, 
   type EtiquetteWithCount,
+  type TacheActionPriorite,
   type ConditionDelaiSansContact,
   type ConditionDateApproche,
   type ConditionDateApprocheInvestissement,
@@ -55,6 +58,7 @@ import {
 } from "@/lib/emails/email-envoi-schedule";
 import { suggestTemplateIdForEtiquette } from "@/lib/emails/template-email-meta";
 import { EtiquetteEmailCampaignFields } from "@/components/etiquettes/EtiquetteEmailCampaignFields";
+import { EtiquetteTacheActionFields } from "@/components/etiquettes/EtiquetteTacheActionFields";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import {
   CONDITION_TYPE_LABELS,
@@ -110,7 +114,7 @@ const CONDITION_TYPES_ORDER: ConditionType[] = [
   "AGE_APPROCHE",
 ];
 
-type FormTab = "general" | "rule" | "email";
+type FormTab = "general" | "rule" | "email" | "action";
 
 export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: EtiquetteFormProps) {
   const [loading, setLoading] = useState(false);
@@ -159,6 +163,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   );
   const [eventTypesProduit, setEventTypesProduit] = useState<string[]>([]);
   const [eventAChaqueSouscription, setEventAChaqueSouscription] = useState(true);
+
+  // Action : créer une tâche à l'attribution automatique
+  const [tacheActif, setTacheActif] = useState(false);
+  const [tacheTitre, setTacheTitre] = useState("");
+  const [tachePriorite, setTachePriorite] = useState<TacheActionPriorite>("NORMALE");
+  const [tacheDelaiJours, setTacheDelaiJours] = useState(0);
 
   const ruleSummary = useMemo(
     () =>
@@ -362,9 +372,38 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setEmailDelaiJours(0);
         setEventTypesProduit([]);
         setEventAChaqueSouscription(true);
+        setTacheActif(false);
+        setTacheTitre("");
+        setTachePriorite("NORMALE");
+        setTacheDelaiJours(0);
       }
     }
   }, [open, etiquette]);
+
+  // Charger l'action « tâche » existante (édition).
+  useEffect(() => {
+    if (!open || !etiquette?.id) return;
+    let cancelled = false;
+    void getEtiquetteAction(etiquette.id)
+      .then((action) => {
+        if (cancelled) return;
+        if (action) {
+          setTacheActif(action.tache_actif);
+          setTacheTitre(action.tache_titre ?? "");
+          setTachePriorite(action.tache_priorite);
+          setTacheDelaiJours(action.tache_delai_jours);
+        } else {
+          setTacheActif(false);
+          setTacheTitre("");
+          setTachePriorite("NORMALE");
+          setTacheDelaiJours(0);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, etiquette?.id]);
 
   // Rafraîchir le modèle email depuis la base (liaison faite côté Templates email).
   useEffect(() => {
@@ -402,6 +441,11 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
     });
     if (validationError) {
       toast.error(validationError);
+      return;
+    }
+    if (tacheActif && !tacheTitre.trim()) {
+      toast.error("Indiquez un titre pour la tâche à créer");
+      setFormTab("action");
       return;
     }
 
@@ -481,14 +525,25 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         actif,
       };
 
+      let savedId: number;
       if (etiquette) {
         await updateEtiquette(etiquette.id, data);
+        savedId = etiquette.id;
         toast.success("Étiquette modifiée");
       } else {
-        await createEtiquette(data);
+        const created = await createEtiquette(data);
+        savedId = created.id;
         toast.success("Étiquette créée");
       }
-      
+
+      await setEtiquetteAction({
+        etiquette_id: savedId,
+        tache_actif: tacheActif,
+        tache_titre: tacheTitre.trim() || null,
+        tache_priorite: tachePriorite,
+        tache_delai_jours: tacheDelaiJours,
+      });
+
       notifyEtiquettesChanged();
       onSuccess();
       onOpenChange(false);
@@ -566,7 +621,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             onValueChange={(v) => setFormTab(v as FormTab)}
             className="flex flex-col flex-1 min-h-0"
           >
-            <TabsList className="mx-6 mt-4 grid w-auto grid-cols-3 shrink-0">
+            <TabsList className="mx-6 mt-4 grid w-auto grid-cols-4 shrink-0">
               <TabsTrigger value="general">Général</TabsTrigger>
               <TabsTrigger value="rule">
                 Règle auto
@@ -577,6 +632,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
               <TabsTrigger value="email">
                 Email
                 {emailActif && (
+                  <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="action">
+                Action
+                {tacheActif && (
                   <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
                 )}
               </TabsTrigger>
@@ -1071,6 +1132,20 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   nom={nom}
                   isAuto={isAuto}
                   isEventSouscription={conditionType === "EVENEMENT_SOUSCRIPTION"}
+                />
+              </TabsContent>
+
+              <TabsContent value="action" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+                <EtiquetteTacheActionFields
+                  isAuto={isAuto}
+                  tacheActif={tacheActif}
+                  onTacheActifChange={setTacheActif}
+                  tacheTitre={tacheTitre}
+                  onTacheTitreChange={setTacheTitre}
+                  tachePriorite={tachePriorite}
+                  onTachePrioriteChange={setTachePriorite}
+                  tacheDelaiJours={tacheDelaiJours}
+                  onTacheDelaiJoursChange={setTacheDelaiJours}
                 />
               </TabsContent>
             </div>

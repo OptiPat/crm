@@ -1,13 +1,13 @@
 use crate::database::{
     models::{
         Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
-        ContactEtiquetteDetails, DashboardStats, Document, Etiquette, EtiquetteWithCount, Famille,
+        ContactEtiquetteDetails, DashboardStats, Document, Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation, NewPartenaire,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation, NewInteraction,
-        NewTemplateEmail, NewSegment, Partenaire,
-        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, TemplateEmail,
-        YearlyActivityStats,
+        NewTemplateEmail, NewSegment, NewTache, Partenaire,
+        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, Tache, TacheWithContact,
+        TemplateEmail, YearlyActivityStats,
     },
     Database,
 };
@@ -328,6 +328,75 @@ pub fn delete_partenaire(db: State<'_, DbState>, id: i64) -> Result<(), String> 
     database
         .delete_partenaire(id)
         .map_err(|e| format!("Failed to delete partenaire: {}", e))
+}
+
+// ========== TACHES ==========
+
+#[tauri::command]
+pub fn get_all_taches(db: State<'_, DbState>) -> Result<Vec<TacheWithContact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_all_taches_with_contact()
+        .map_err(|e| format!("Failed to get taches: {}", e))
+}
+
+#[tauri::command]
+pub fn get_taches_by_contact(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<Tache>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_taches_by_contact(contact_id)
+        .map_err(|e| format!("Failed to get taches by contact: {}", e))
+}
+
+#[tauri::command]
+pub fn create_tache(db: State<'_, DbState>, new_tache: NewTache) -> Result<Tache, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .create_tache(new_tache)
+        .map_err(|e| format!("Failed to create tache: {}", e))
+}
+
+#[tauri::command]
+pub fn update_tache(db: State<'_, DbState>, id: i64, tache: NewTache) -> Result<Tache, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .update_tache(id, &tache)
+        .map_err(|e| format!("Failed to update tache: {}", e))
+}
+
+#[tauri::command]
+pub fn set_tache_statut(
+    db: State<'_, DbState>,
+    id: i64,
+    statut: String,
+) -> Result<Tache, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .set_tache_statut(id, &statut)
+        .map_err(|e| format!("Failed to update tache statut: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_tache(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .delete_tache(id)
+        .map_err(|e| format!("Failed to delete tache: {}", e))
 }
 
 // ========== DOCUMENTS ==========
@@ -889,6 +958,32 @@ pub fn delete_etiquette(db: State<'_, DbState>, id: i64) -> Result<(), String> {
     database
         .delete_etiquette(id)
         .map_err(|e| format!("Failed to delete etiquette: {}", e))
+}
+
+#[tauri::command]
+pub fn get_etiquette_action(
+    db: State<'_, DbState>,
+    etiquette_id: i64,
+) -> Result<Option<EtiquetteAction>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_etiquette_action(etiquette_id)
+        .map_err(|e| format!("Failed to get etiquette action: {}", e))
+}
+
+#[tauri::command]
+pub fn set_etiquette_action(
+    db: State<'_, DbState>,
+    action: EtiquetteAction,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .set_etiquette_action(&action)
+        .map_err(|e| format!("Failed to save etiquette action: {}", e))
 }
 
 #[tauri::command]

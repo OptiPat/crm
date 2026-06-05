@@ -1,13 +1,12 @@
 import {
-  Building2,
   Bell,
-  MessageSquare,
+  History,
+  House,
   UserPlus,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { DashboardPanel } from "./dashboard-ui";
 
 interface QuickAction {
   id: string;
@@ -30,7 +29,7 @@ const ACTIONS: QuickAction[] = [
   {
     id: "suivi",
     page: "suivi",
-    title: "Suivi",
+    title: "Suivi & alertes",
     icon: Bell,
     iconBg: "bg-red-50",
     iconColor: "text-red-600",
@@ -39,15 +38,15 @@ const ACTIONS: QuickAction[] = [
     id: "foyer",
     page: "foyers",
     title: "Foyers",
-    icon: Building2,
+    icon: House,
     iconBg: "bg-emerald-50",
     iconColor: "text-emerald-700",
   },
   {
     id: "interaction",
     page: "interactions",
-    title: "Interactions",
-    icon: MessageSquare,
+    title: "Historique des échanges",
+    icon: History,
     iconBg: "bg-blue-50",
     iconColor: "text-blue-700",
   },
@@ -67,40 +66,38 @@ interface QuickActionsProps {
 
 export function QuickActions({ onNavigate }: QuickActionsProps) {
   return (
-    <DashboardPanel title="Raccourcis" className="h-full">
-      <nav
-        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-1 xl:grid-cols-2 gap-2"
-        aria-label="Raccourcis navigation"
-      >
-        {ACTIONS.map((action) => {
-          const Icon = action.icon;
-          return (
-            <button
-              key={action.id}
-              type="button"
-              onClick={() => onNavigate?.(action.page)}
-              disabled={!onNavigate}
+    <nav
+      className="flex gap-2 min-w-0"
+      aria-label="Raccourcis navigation"
+    >
+      {ACTIONS.map((action) => {
+        const Icon = action.icon;
+        return (
+          <button
+            key={action.id}
+            type="button"
+            onClick={() => onNavigate?.(action.page)}
+            disabled={!onNavigate}
+            className={cn(
+              "group flex flex-1 flex-col lg:flex-row items-center justify-center gap-1.5 lg:gap-2 rounded-xl border border-border/70 bg-card px-2 py-3 lg:px-3",
+              "hover:bg-muted/50 hover:border-primary/25 hover:shadow-sm transition-all",
+              "disabled:opacity-60 min-w-0"
+            )}
+          >
+            <span
               className={cn(
-                "group flex items-center gap-3 rounded-xl border border-border/70 bg-background/80 px-3 py-3",
-                "hover:bg-muted/50 hover:border-primary/25 hover:shadow-sm transition-all text-left",
-                "disabled:opacity-60 min-h-[3.25rem]"
+                "inline-flex h-8 w-8 items-center justify-center rounded-lg shrink-0",
+                action.iconBg
               )}
             >
-              <span
-                className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-lg shrink-0",
-                  action.iconBg
-                )}
-              >
-                <Icon className={cn("h-4 w-4", action.iconColor)} />
-              </span>
-              <span className="font-medium text-sm text-foreground group-hover:text-primary transition-colors">
-                {action.title}
-              </span>
-            </button>
-          );
-        })}
-      </nav>
-    </DashboardPanel>
+              <Icon className={cn("h-4 w-4", action.iconColor)} />
+            </span>
+            <span className="font-medium text-xs lg:text-sm text-foreground group-hover:text-primary transition-colors text-center lg:text-left leading-tight">
+              {action.title}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
   );
 }

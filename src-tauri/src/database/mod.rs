@@ -3,6 +3,7 @@ use tauri::{AppHandle, Manager};
 
 pub mod email_schedule;
 pub mod etiquette_rule_ast;
+pub mod etiquette_actions;
 pub mod etiquettes_auto_engine;
 pub mod alertes;
 pub mod contact_row;
@@ -18,6 +19,7 @@ pub mod templates_email;
 pub mod models;
 pub mod operations;
 pub mod segments;
+pub mod taches;
 pub mod template_email_trigger;
 pub mod template_email_relance;
 pub mod template_email_queue;
@@ -377,6 +379,7 @@ impl Database {
                 email_date_prevue INTEGER,
                 email_date_envoi INTEGER,
                 notes TEXT,
+                tache_id INTEGER,
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
                 FOREIGN KEY (etiquette_id) REFERENCES etiquettes(id) ON DELETE CASCADE
             )",
@@ -385,6 +388,22 @@ impl Database {
 
         self.conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS contact_etiquettes_unique ON contact_etiquettes (contact_id, etiquette_id)",
+            [],
+        )?;
+
+        // Action « créer une tâche » liée à une étiquette (déclenchée à l'attribution AUTO).
+        // Table dédiée : actions génériques extensibles sans toucher au modèle Etiquette.
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS etiquette_actions (
+                etiquette_id INTEGER PRIMARY KEY,
+                tache_actif INTEGER NOT NULL DEFAULT 0,
+                tache_titre TEXT,
+                tache_priorite TEXT NOT NULL DEFAULT 'NORMALE',
+                tache_delai_jours INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (etiquette_id) REFERENCES etiquettes(id) ON DELETE CASCADE
+            )",
             [],
         )?;
 
@@ -428,6 +447,34 @@ impl Database {
             [],
         )?;
 
+        // Table taches (tâches / rappels, liés ou non à un contact)
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS taches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER,
+                titre TEXT NOT NULL,
+                description TEXT,
+                date_echeance INTEGER,
+                priorite TEXT NOT NULL DEFAULT 'NORMALE',
+                statut TEXT NOT NULL DEFAULT 'A_FAIRE',
+                completed_at INTEGER,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                updated_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS taches_contact_idx ON taches (contact_id)",
+            [],
+        )?;
+
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS taches_statut_echeance_idx ON taches (statut, date_echeance)",
+            [],
+        )?;
+
         println!("✅ Database tables initialized");
 
         // Migration automatique : Rendre contact_id optionnel dans investissements
@@ -462,6 +509,7 @@ impl Database {
         self.migrate_newsletter_editions()?;
         self.migrate_protect_newsletter_etiquette()?;
         self.migrate_contact_etiquettes_contact_index()?;
+        self.migrate_contact_etiquettes_tache_id()?;
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
         self.migrate_templates_email_relance_template_id()?;
@@ -818,6 +866,18 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS contact_etiquettes_contact_idx ON contact_etiquettes (contact_id)",
             [],
         )?;
+        Ok(())
+    }
+
+    /// Colonne de déduplication pour l'action « tâche » d'une étiquette (1 tâche / liaison).
+    fn migrate_contact_etiquettes_tache_id(&self) -> Result<()> {
+        if !self.table_has_column("contact_etiquettes", "tache_id")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN tache_id INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne tache_id sur contact_etiquettes");
+        }
         Ok(())
     }
 

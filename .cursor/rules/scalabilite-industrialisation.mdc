@@ -15,7 +15,12 @@ Objectif : rester **puissant mais simple**. Pas d'usine à gaz. Diff minimal, pa
 | Module logique `.ts` | < 400 lignes | > 500 | Séparer par responsabilité |
 | Module Rust `.rs` | < 600 lignes | > 800 | Découper par sous-domaine |
 
-- **`database/operations.rs` est gelé** : ne plus l'agrandir. Tout **nouveau** code métier va dans un module de domaine (`database/<domaine>.rs` ou `database/<domaine>/`).
+- **`database/operations.rs` est gelé** : ne plus l'agrandir. La découpe est **commencée**
+  (domaines déjà sortis : `alertes.rs`, `foyers.rs`, `familles.rs`, `filleuls.rs`,
+  `investissements.rs`, `partenaires.rs`, `documents.rs`, `templates_email.rs`,
+  `dashboard_stats.rs`, `settings.rs`) mais `operations.rs` reste volumineux (~5700 l, surtout
+  contacts + import). « Gelé » = on n'y ajoute rien ; tout **nouveau** code va dans son module de
+  domaine, et on continue à en extraire le cœur **contacts/import** avant d'ajouter du lourd.
 - Quand on touche un gros fichier existant, en profiter pour en extraire un morceau cohérent (boy-scout rule), sans changer le comportement.
 
 ## Séparation des responsabilités
@@ -38,18 +43,16 @@ Avant de découper ou factoriser du code existant :
 
 ## Données = priorité absolue (CGP)
 
-- **Sauvegarde automatique + rotation** : toujours une copie récente récupérable.
-- **Chiffrement de la base** (SQLCipher) = cible ; sinon avertir explicitement.
+- **Sauvegarde automatique + rotation** : toujours une copie récente récupérable (faite).
+- **Chiffrement de la base** (SQLCipher, enveloppe DEK/KEK) **actif** — voir `docs/CHIFFREMENT.md`. Ne jamais ouvrir la base avant authentification ; ne jamais stocker de secret en clair.
 - **Une seule source de vérité du schéma** : migrations Rust runtime (`database/mod.rs`). Drizzle (`src/lib/db/`) = dev/doc only et doit rester synchrone.
 - Après toute mutation de données → `notify<Domaine>Changed()` (CustomEvent) pour rafraîchir l'UI.
 
 ## Industrialisation
 
-- Après modif `src/`, `src-tauri/`, `scripts/`, config build : **l'agent lance** `npm run verify` (ou `verify:quick` si frontend seul). Pas l'utilisateur.
-- `ReadLints` sur les fichiers modifiés ; corriger les erreurs introduites.
-- Messages UI en **français**, identifiants code en **anglais**.
-- Ne pas annoncer « terminé » tant que verify/lints bloquants sont rouges.
-- Pas de `git commit` / `push` sauf demande explicite.
+Vérification (verify/lints, agent et non utilisateur), conventions FR/UI / EN/code, et règle
+« pas de commit/push sans demande » : voir `verification-automatique.mdc`, `architecture.mdc`,
+`shell-commands.mdc`. Pas de duplication ici.
 
 ## Checklist nouveau module / fonctionnalité
 

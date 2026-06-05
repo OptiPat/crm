@@ -444,6 +444,21 @@ pub struct NewEtiquette {
     pub segment_id: Option<i64>,
 }
 
+/// Action automatique rattachée à une étiquette (déclenchée à l'attribution AUTO).
+/// Aujourd'hui : créer une tâche. Conçue pour accueillir d'autres actions plus tard.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EtiquetteAction {
+    pub etiquette_id: i64,
+    /// Crée une tâche pour le contact quand l'étiquette est posée automatiquement.
+    pub tache_actif: bool,
+    /// Modèle de titre : `{prenom}` et `{nom}` sont remplacés par le contact.
+    pub tache_titre: Option<String>,
+    /// `BASSE` | `NORMALE` | `HAUTE`
+    pub tache_priorite: String,
+    /// Échéance = jour d'éligibilité + N jours (0 = le jour même).
+    pub tache_delai_jours: i64,
+}
+
 // ==================== SEGMENTS ====================
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -691,6 +706,54 @@ pub struct ExchangeHistoryEntry {
     pub sujet: Option<String>,
     pub contenu: Option<String>,
     pub created_at: Option<i64>,
+}
+
+// ==================== TACHES ====================
+
+/// Tâche / rappel libre, éventuellement rattaché à un contact.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Tache {
+    pub id: i64,
+    pub contact_id: Option<i64>,
+    pub titre: String,
+    pub description: Option<String>,
+    /// Échéance (timestamp Unix, minuit UTC). `None` = sans date.
+    pub date_echeance: Option<i64>,
+    /// `BASSE` | `NORMALE` | `HAUTE`
+    pub priorite: String,
+    /// `A_FAIRE` | `FAIT`
+    pub statut: String,
+    /// Date de complétion (timestamp Unix) si la tâche est faite.
+    pub completed_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct NewTache {
+    pub contact_id: Option<i64>,
+    pub titre: String,
+    pub description: Option<String>,
+    pub date_echeance: Option<i64>,
+    pub priorite: Option<String>,
+    pub statut: Option<String>,
+}
+
+/// Tâche enrichie du nom du contact lié (pour la page Tâches globale).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TacheWithContact {
+    pub id: i64,
+    pub contact_id: Option<i64>,
+    pub contact_nom: Option<String>,
+    pub contact_prenom: Option<String>,
+    pub titre: String,
+    pub description: Option<String>,
+    pub date_echeance: Option<i64>,
+    pub priorite: String,
+    pub statut: String,
+    pub completed_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 // ==================== SETTINGS ====================

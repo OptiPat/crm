@@ -26,6 +26,8 @@ import {
 } from "@/lib/api/tauri-contact-relation";
 import type { EtiquetteEmailQueueStatus } from "@/lib/api/tauri-etiquettes";
 import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { subscribeTachesChanged } from "@/lib/taches/tache-events";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { getTypeAlerteLabel } from "@/lib/alertes/alerte-labels";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { navigateToInteractions } from "@/lib/navigation/interactions-navigation";
@@ -341,6 +343,15 @@ export function ContactInteractionsPanel({
     });
   }, [contactId, onContactUpdated]);
 
+  useEffect(() => {
+    const unsubTaches = subscribeTachesChanged(() => void load());
+    const unsubInvest = subscribeInvestissementsChanged(() => void load());
+    return () => {
+      unsubTaches();
+      unsubInvest();
+    };
+  }, [load]);
+
   const goToSuiviAlertes = () => {
     if (!onNavigate) {
       toast.info("Ouvrez l'écran Suivi depuis le menu latéral.");
@@ -453,7 +464,8 @@ export function ContactInteractionsPanel({
                 )}
                 {!dernierClient && !dernierFilleul && !loading && timeline.length === 0 && (
                   <span>
-                    CRM (campagnes, notes) et boîte mail — suivi client complet
+                    Campagnes, notes, investissements, documents, tâches et boîte mail —
+                    historique complet
                   </span>
                 )}
                 {lastSyncLabel && (

@@ -22,7 +22,11 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
       <Sidebar currentPage={currentPage} onPageChange={onPageChange} />
       
       <div className="flex-1 flex flex-col">
-        <Header onLogout={onLogout} />
+        <Header
+          onLogout={onLogout}
+          currentPage={currentPage}
+          onPageChange={onPageChange}
+        />
         <AppNotificationsBar onPageChange={onPageChange} currentPage={currentPage} />
         <AppUpdateBanner />
 

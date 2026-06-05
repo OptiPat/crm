@@ -3,6 +3,12 @@ import type { ExchangeHistoryEntry, Interaction } from "@/lib/api/tauri-interact
 import { getInteractionsByContact } from "@/lib/api/tauri-interactions";
 import { getContactGmailMessages } from "@/lib/api/tauri-contact-gmail";
 import { groupMailboxMessagesByThread } from "@/lib/contacts/contact-mail-threads";
+import type { Investissement } from "@/lib/api/tauri-investissements";
+import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
+import type { Document } from "@/lib/api/tauri-documents";
+import { getAllDocuments } from "@/lib/api/tauri-documents";
+import type { Tache } from "@/lib/api/tauri-taches";
+import { getTachesByContact } from "@/lib/api/tauri-taches";
 import {
   exchangeEntryKey,
   getEmailResponseTypeLabel,
@@ -23,7 +29,28 @@ export type ContactRelationTimelineItem =
       latest: ContactGmailMessage;
       key: string;
       sort_date: number;
-    };
+    }
+  | { kind: "investissement"; investissement: Investissement; key: string; sort_date: number }
+  | { kind: "document"; document: Document; key: string; sort_date: number }
+  | { kind: "tache"; tache: Tache; key: string; sort_date: number };
+
+/** Événements internes CRM (hors boîte mail) — pour le filtre « CRM ». */
+const CRM_KINDS = new Set([
+  "email",
+  "manual",
+  "investissement",
+  "document",
+  "tache",
+]);
+
+/** Date d'un document (`date_document` texte) → timestamp Unix, sinon `created_at`. */
+function documentSortDate(doc: Document): number {
+  if (doc.date_document) {
+    const ms = Date.parse(doc.date_document);
+    if (!isNaN(ms)) return Math.floor(ms / 1000);
+  }
+  return doc.created_at;
+}
 
 /** Trace `interactions` liée à une campagne — affichée via le fil email unifié. */
 export function isLegacyCampaignInteraction(item: Interaction): boolean {
@@ -38,10 +65,17 @@ export function isLegacyCampaignInteraction(item: Interaction): boolean {
   );
 }
 
+export interface RelationTimelineExtras {
+  investissements?: Investissement[];
+  documents?: Document[];
+  taches?: Tache[];
+}
+
 export function buildContactRelationTimeline(
   emailEntries: ExchangeHistoryEntry[],
   manualInteractions: Interaction[],
-  mailboxMessages: ContactGmailMessage[]
+  mailboxMessages: ContactGmailMessage[],
+  extras: RelationTimelineExtras = {}
 ): ContactRelationTimelineItem[] {
   const threads = groupMailboxMessagesByThread(mailboxMessages);
   const items: ContactRelationTimelineItem[] = [
@@ -67,6 +101,24 @@ export function buildContactRelationTimeline(
       key: `thread-${t.threadId}`,
       sort_date: t.sortDate,
     })),
+    ...(extras.investissements ?? []).map((investissement) => ({
+      kind: "investissement" as const,
+      investissement,
+      key: `investissement-${investissement.id}`,
+      sort_date: investissement.date_souscription ?? investissement.created_at,
+    })),
+    ...(extras.documents ?? []).map((document) => ({
+      kind: "document" as const,
+      document,
+      key: `document-${document.id}`,
+      sort_date: documentSortDate(document),
+    })),
+    ...(extras.taches ?? []).map((tache) => ({
+      kind: "tache" as const,
+      tache,
+      key: `tache-${tache.id}`,
+      sort_date: tache.date_echeance ?? tache.created_at,
+    })),
   ];
   return items.sort((a, b) => b.sort_date - a.sort_date);
 }
@@ -77,7 +129,7 @@ export function filterRelationTimeline(
 ): ContactRelationTimelineItem[] {
   if (filter === "all") return items;
   if (filter === "crm") {
-    return items.filter((i) => i.kind === "email" || i.kind === "manual");
+    return items.filter((i) => CRM_KINDS.has(i.kind));
   }
   return items.filter((i) => i.kind === "mailbox_thread");
 }
@@ -102,6 +154,27 @@ export function relationTimelineMatchesSearch(
   }
   if (item.kind === "manual") {
     const hay = [item.interaction.sujet, item.interaction.contenu]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  }
+  if (item.kind === "investissement") {
+    const hay = [item.investissement.nom_produit, item.investissement.type_produit]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  }
+  if (item.kind === "document") {
+    const hay = [item.document.nom_fichier, item.document.type_document, item.document.notes]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  }
+  if (item.kind === "tache") {
+    const hay = [item.tache.titre, item.tache.description]
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
@@ -134,15 +207,24 @@ export async function loadContactRelationTimeline(
   const { getExchangeHistoryTimelineForContact } = await import(
     "@/lib/api/tauri-interactions"
   );
-  const [allExchanges, manual, mailbox] = await Promise.all([
-    getExchangeHistoryTimelineForContact(contactId),
-    getInteractionsByContact(contactId),
-    getContactGmailMessages(contactId, true),
-  ]);
+  const [allExchanges, manual, mailbox, investissements, allDocuments, taches] =
+    await Promise.all([
+      getExchangeHistoryTimelineForContact(contactId),
+      getInteractionsByContact(contactId),
+      getContactGmailMessages(contactId, true),
+      getInvestissementsByContact(contactId),
+      getAllDocuments(),
+      getTachesByContact(contactId),
+    ]);
   const emailEntries = allExchanges.filter(
     (e) => e.contact_id === contactId && isEmailCampaignEntry(e)
   );
-  return buildContactRelationTimeline(emailEntries, manual, mailbox);
+  const documents = allDocuments.filter((d) => d.contact_id === contactId);
+  return buildContactRelationTimeline(emailEntries, manual, mailbox, {
+    investissements,
+    documents,
+    taches,
+  });
 }
 
 export function emailRelationTitle(entry: ExchangeHistoryEntry): string {

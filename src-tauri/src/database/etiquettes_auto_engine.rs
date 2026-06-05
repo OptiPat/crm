@@ -297,6 +297,7 @@ impl Database {
         should_assign: bool,
         assignment_info: Option<AssignmentInfo>,
         assignments: Option<&mut HashMap<AssignmentKey, AssignmentInfo>>,
+        now: i64,
     ) -> Result<usize> {
         let mut newly_assigned = 0;
         match (should_assign, assignment_info) {
@@ -306,6 +307,8 @@ impl Database {
                     .is_ok()
                 {
                     newly_assigned = 1;
+                    // Action « tâche » éventuelle (dédupliquée par liaison).
+                    let _ = self.apply_etiquette_tache_action(contact_id, etiquette_id, now);
                     if let Some(map) = assignments {
                         if let Ok(row) = self.conn.query_row(
                             "SELECT id, COALESCE(attribue_par, '') FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
@@ -388,6 +391,7 @@ impl Database {
             should_assign,
             assignment_info,
             assignments,
+            now,
         )
     }
 
@@ -586,6 +590,7 @@ impl Database {
                 .is_ok()
             {
                 assigned += 1;
+                let _ = self.apply_etiquette_tache_action(contact_id, etiqu.id, eligible_at);
             }
         }
         Ok(assigned)

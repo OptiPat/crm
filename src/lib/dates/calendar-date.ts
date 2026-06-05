@@ -13,6 +13,14 @@ export function unixToDateInput(ts: number): string {
   return `${date.getUTCFullYear()}-${pad2(date.getUTCMonth() + 1)}-${pad2(date.getUTCDate())}`;
 }
 
+/** `YYYY-MM-DD` (`<input type="date">`) → timestamp Unix (minuit UTC). `null` si vide. */
+export function dateInputToUnix(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const ms = Date.parse(`${value}T00:00:00Z`);
+  if (isNaN(ms)) return null;
+  return Math.floor(ms / 1000);
+}
+
 /** Timestamp Unix → `JJ/MM/AAAA` (jour calendaire UTC, affichage FR). */
 export function formatCalendarDateFr(ts: number): string {
   const date = new Date(ts * 1000);

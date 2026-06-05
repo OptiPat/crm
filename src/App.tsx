@@ -14,6 +14,7 @@ import { Partenaires } from "@/pages/Partenaires";
 import { Investissements } from "@/pages/Investissements";
 import { Documents } from "@/pages/Documents";
 import { Interactions } from "@/pages/Interactions";
+import { Taches } from "@/pages/Taches";
 import { Parametres } from "@/pages/Parametres";
 import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
@@ -154,6 +155,8 @@ function App() {
             onOpenContact={(contactId) => openContact(contactId)}
           />
         );
+      case "taches":
+        return <Taches onNavigate={setCurrentPage} />;
       case "templates-email":
         return <TemplatesEmail />;
       case "newsletter":

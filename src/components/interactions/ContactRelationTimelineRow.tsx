@@ -6,6 +6,7 @@ import {
   ExternalLink,
   FileText,
   Inbox,
+  ListTodo,
   Loader2,
   Mail,
   MessageSquareReply,
@@ -14,7 +15,9 @@ import {
   Phone,
   Send,
   Trash2,
+  Wallet,
 } from "lucide-react";
+import { echeanceLabel } from "@/lib/taches/tache-display";
 import type { Interaction } from "@/lib/api/tauri-interactions";
 import {
   emailRelationSubtitle,
@@ -54,6 +57,15 @@ function formatInteractionDate(ts: number): string {
 
 function getTypeLabel(value: string): string {
   return INTERACTION_TYPES.find((t) => t.value === value)?.label || value;
+}
+
+function formatEuroFromCents(cents: number | null | undefined): string | null {
+  if (cents == null) return null;
+  return new Intl.NumberFormat("fr-FR", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
 }
 
 /** Corps déjà importé avant correction HTML → forcer un nouveau fetch Gmail. */
@@ -414,6 +426,96 @@ export function ContactRelationTimelineRow({
 
   if (item.kind === "mailbox_thread") {
     return <MailboxThreadBlock item={item} />;
+  }
+
+  if (item.kind === "investissement") {
+    const inv = item.investissement;
+    const montant = formatEuroFromCents(inv.montant_initial);
+    return (
+      <li className="relative flex items-start gap-3 p-3 pl-1 border border-border/80 rounded-lg bg-card text-sm">
+        <span className="p-2 rounded-lg bg-amber-50 shrink-0 h-fit">
+          <Wallet className="h-4 w-4 text-amber-600" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <Badge variant="outline" className="text-xs">
+              Investissement
+            </Badge>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {formatInteractionDate(item.sort_date)}
+            </span>
+          </div>
+          <p className="font-medium leading-snug">{inv.nom_produit}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {inv.type_produit}
+            {montant ? ` · ${montant}` : ""}
+          </p>
+        </div>
+      </li>
+    );
+  }
+
+  if (item.kind === "document") {
+    const doc = item.document;
+    return (
+      <li className="relative flex items-start gap-3 p-3 pl-1 border border-border/80 rounded-lg bg-card text-sm">
+        <span className="p-2 rounded-lg bg-slate-100 shrink-0 h-fit">
+          <FileText className="h-4 w-4 text-slate-600" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <Badge variant="outline" className="text-xs">
+              Document
+            </Badge>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {formatInteractionDate(item.sort_date)}
+            </span>
+          </div>
+          <p className="font-medium leading-snug break-all">{doc.nom_fichier}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{doc.type_document}</p>
+        </div>
+      </li>
+    );
+  }
+
+  if (item.kind === "tache") {
+    const tache = item.tache;
+    const done = tache.statut === "FAIT";
+    return (
+      <li className="relative flex items-start gap-3 p-3 pl-1 border border-border/80 rounded-lg bg-card text-sm">
+        <span className="p-2 rounded-lg bg-primary/5 shrink-0 h-fit">
+          <ListTodo className="h-4 w-4 text-primary" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <Badge variant="outline" className="text-xs">
+              Tâche
+            </Badge>
+            <Badge
+              variant="outline"
+              className={`text-[10px] h-5 px-1.5 ${
+                done
+                  ? "border-emerald-200 text-emerald-800"
+                  : "border-amber-200 text-amber-800"
+              }`}
+            >
+              {done ? "Faite" : "À faire"}
+            </Badge>
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {echeanceLabel(tache.date_echeance, tache.statut)}
+            </span>
+          </div>
+          <p className={`font-medium leading-snug ${done ? "line-through text-muted-foreground" : ""}`}>
+            {tache.titre}
+          </p>
+          {tache.description && (
+            <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">
+              {tache.description}
+            </p>
+          )}
+        </div>
+      </li>
+    );
   }
 
   const { interaction } = item;

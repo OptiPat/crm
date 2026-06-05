@@ -84,13 +84,24 @@ const CommandItem = React.forwardRef<
 ))
 CommandItem.displayName = CommandPrimitive.Item.displayName
 
+type CommandDialogProps = React.ComponentProps<typeof Dialog> &
+  Pick<React.ComponentProps<typeof Command>, "shouldFilter" | "filter" | "loop">
+
 const CommandDialog = ({
   children,
+  shouldFilter,
+  filter,
+  loop,
   ...props
-}: React.ComponentProps<typeof Dialog>) => (
+}: CommandDialogProps) => (
   <Dialog {...props}>
     <DialogContent className="overflow-hidden p-0">
-      <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground">
+      <Command
+        shouldFilter={shouldFilter}
+        filter={filter}
+        loop={loop}
+        className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground"
+      >
         {children}
       </Command>
     </DialogContent>

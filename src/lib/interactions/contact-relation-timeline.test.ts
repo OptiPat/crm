@@ -63,4 +63,50 @@ describe("contact-relation-timeline", () => {
     expect(items[0].kind).toBe("email");
     expect(items[1].kind).toBe("manual");
   });
+
+  it("intègre investissements, documents et tâches, triés par date décroissante", () => {
+    const items = buildContactRelationTimeline([], [], [], {
+      investissements: [
+        {
+          id: 1,
+          type_produit: "PER",
+          nom_produit: "PER Eres",
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          date_souscription: 1_700_000_000,
+          created_at: 1_650_000_000,
+          updated_at: 1_700_000_000,
+        },
+      ],
+      documents: [
+        {
+          id: 5,
+          type_document: "CNI",
+          nom_fichier: "cni.pdf",
+          chemin_fichier: "/x/cni.pdf",
+          taille_fichier: 1,
+          date_document: "2026-01-10",
+          created_at: 1_600_000_000,
+          updated_at: 1_600_000_000,
+        },
+      ],
+      taches: [
+        {
+          id: 9,
+          titre: "Préparer bilan",
+          priorite: "NORMALE",
+          statut: "A_FAIRE",
+          date_echeance: 1_800_000_000,
+          created_at: 1_600_000_000,
+          updated_at: 1_600_000_000,
+        },
+      ],
+    });
+    expect(items.map((i) => i.kind)).toEqual([
+      "tache",
+      "document",
+      "investissement",
+    ]);
+  });
 });

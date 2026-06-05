@@ -5,6 +5,7 @@ import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
 import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
+import { TachesPreview } from "@/components/dashboard/TachesPreview";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import {
   DashboardPageHeader,
@@ -176,11 +177,18 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
       </section>
 
       <section className="space-y-4">
-        <DashboardSectionTitle subtitle="Relances et raccourcis">
+        <DashboardSectionTitle subtitle="Accès rapide aux pages principales">
+          Raccourcis
+        </DashboardSectionTitle>
+        <QuickActions onNavigate={onNavigate} />
+      </section>
+
+      <section className="space-y-4">
+        <DashboardSectionTitle subtitle="Relances et tâches du jour">
           Suivi &amp; actions
         </DashboardSectionTitle>
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-          <div className="lg:col-span-8 min-h-[280px]">
+          <div className="lg:col-span-7 min-h-[280px]">
             <AlertsPreview
               key={`alerts-${refreshKey}`}
               currentPage={currentPage}
@@ -188,8 +196,12 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
               onOpenContact={onOpenContact}
             />
           </div>
-          <div className="lg:col-span-4 min-h-[280px]">
-            <QuickActions onNavigate={onNavigate} />
+          <div className="lg:col-span-5 min-h-[280px]">
+            <TachesPreview
+              key={`taches-${refreshKey}`}
+              onNavigate={onNavigate}
+              onOpenContact={onOpenContact}
+            />
           </div>
         </div>
       </section>
