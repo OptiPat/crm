@@ -32,7 +32,7 @@ Backend découpé par domaine dans `src-tauri/src/database/` (déclarés dans `d
 | Documents | `components/...` | `documents.rs` |
 | Emails / templates | `lib/emails/`, `components/etiquettes/` | `templates_email.rs`, `template_email_*` |
 | Réglages | `pages/Parametres`, `components/settings/` | `settings.rs` |
-| Auth / chiffrement | `pages/UnlockScreen.tsx`, `SetupPassword`, `ChangePasswordDialog` | `src-tauri/src/auth/` (`crypto.rs`, `mod.rs`, `commands.rs`) + `database/mod.rs` |
+| Auth (verrou d'accès) | `pages/UnlockScreen.tsx`, `SetupPassword`, `ChangePasswordDialog` | `src-tauri/src/auth/` (`mod.rs`, `commands.rs`) + `database/mod.rs` |
 
 Logique métier pure côté frontend dans `src/lib/<domaine>/` (testable sans React) :
 ex. `lib/contacts/partenaire-match.ts`, `lib/contacts/import-row.ts`, `lib/etiquettes/etiquette-form-validation.ts`.
@@ -46,19 +46,19 @@ Doc étiquettes : `docs/ETIQUETTES.md`. Doc chiffrement : `docs/CHIFFREMENT.md`.
 3. Import / bouton Recalculer / 1× session → recalcul **complet** (transaction).
 4. UI → `notifyEtiquettesChanged()` pour compteurs Suivi / Étiquettes / Contacts.
 
-## Sécurité & chiffrement (données au repos)
+## Sécurité & accès (données au repos)
 
-- Base **chiffrée SQLCipher** (clé AES-256). Voir `docs/CHIFFREMENT.md` pour le détail.
-- **Chiffrement par enveloppe** : une DEK aléatoire chiffre la base ; elle est scellée
-  (XChaCha20-Poly1305) par deux clés dérivées (Argon2id) — l'une du mot de passe, l'autre
-  d'une clé de récupération. La DEK n'est **jamais** stockée en clair. `auth.json` v2 ne
-  contient que sels + DEK scellées.
-- **Ouverture différée** : la base n'est ouverte qu'**après** authentification
-  (commandes `unlock` / `create_master_password` / `recover_account`), pas au démarrage.
-- Migration auto base-en-clair → chiffrée au 1er déverrouillage (sauvegarde préalable).
-- Changer le mot de passe **régénère** la clé de récupération (l'ancienne devient caduque),
-  affichée une seule fois via `get_pending_recovery_key`.
-- Prérequis build (dev/CI uniquement) : Perl + NASM — voir `INSTALLATION_OPENSSL.md`.
+- Base SQLite **non chiffrée** (`rusqlite` feature `bundled`). Le chiffrement applicatif
+  a été retiré : une base en clair s'ouvre toujours, **aucune clé ne peut être perdue**.
+  Pour une protection au repos, utiliser le chiffrement disque de l'OS (BitLocker).
+- **Mot de passe = simple verrou d'accès** : hash Argon2id dans `auth.json`
+  (`{ password_hash, created_at }`). Perdre/réinitialiser ce fichier **ne perd aucune donnée**.
+- **Ouverture différée** : la base n'est ouverte qu'**après** le verrou
+  (commandes `unlock` / `create_master_password`), via `Database::open` — pas de clé.
+- **Secrets applicatifs** (tokens OAuth, clé API Mistral) chiffrés au repos (XOR + nonce)
+  avec une clé propre à l'installation : `secrets.key` (générée auto, indépendante de la base).
+  Voir `docs/CHIFFREMENT.md`.
+- Aucun prérequis build particulier (plus de SQLCipher/OpenSSL/NASM).
 
 ## Après modification de code
 
@@ -77,6 +77,7 @@ Doc étiquettes : `docs/ETIQUETTES.md`. Doc chiffrement : `docs/CHIFFREMENT.md`.
 
 ## Fichiers sensibles
 
-- `.env`, tokens OAuth / `email_oauth.json`, `patrimoine-crm.db` prod (chiffrée), `auth.json`
-  (sels + DEK scellées), `pending_recovery_key.txt` → voir `donnees-sensibles.mdc` et
-  `docs/SECURITE_AVANT_PUBLIC.md`. Tous dans `%APPDATA%\com.patrimoine-crm.app\`, hors dépôt.
+- `.env`, tokens OAuth / `email_oauth.json`, `patrimoine-crm.db` prod (en clair), `auth.json`
+  (hash du mot de passe), `secrets.key` (clé de chiffrement des secrets) → voir
+  `donnees-sensibles.mdc` et `docs/SECURITE_AVANT_PUBLIC.md`. Tous dans
+  `%APPDATA%\com.patrimoine-crm.app\`, hors dépôt.

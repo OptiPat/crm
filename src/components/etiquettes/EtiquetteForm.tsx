@@ -73,6 +73,7 @@ import {
 import { EtiquetteSouscriptionGuide } from "@/components/etiquettes/EtiquetteSouscriptionGuide";
 import { SouscriptionRepeatModeRadios } from "@/components/etiquettes/SouscriptionRepeatModeRadios";
 import { getAllSegments, type Segment } from "@/lib/api/tauri-segments";
+import { getCustomFieldDefs, type CustomFieldDef } from "@/lib/api/tauri-custom-fields";
 import { ConditionBuilder } from "@/components/etiquettes/ConditionBuilder";
 import {
   leafFromLegacy,
@@ -146,6 +147,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [categoriesSelectionnees, setCategoriesSelectionnees] = useState<string[]>(["CLIENT"]);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [allEtiquettes, setAllEtiquettes] = useState<{ id: number; nom: string }[]>([]);
+  const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
   const [segmentId, setSegmentId] = useState<number | null>(null);
   const [useComboRule, setUseComboRule] = useState(false);
   const [ruleOp, setRuleOp] = useState<RuleOp>("and");
@@ -236,6 +238,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         .catch(console.error);
       getAllEtiquettes()
         .then((list) => setAllEtiquettes(list.map((e) => ({ id: e.id, nom: e.nom }))))
+        .catch(console.error);
+      getCustomFieldDefs()
+        .then(setCustomFields)
         .catch(console.error);
     }
   }, [open]);
@@ -802,6 +807,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                           children={ruleChildren}
                           onChange={setRuleChildren}
                           etiquettesOptions={allEtiquettes}
+                          customFieldsOptions={customFields}
                           showPreview
                         />
                       ) : !segmentId ? (

@@ -66,7 +66,7 @@ impl EmailOAuthStore {
         }
 
         // Fichier legacy (tokens en clair) — re-sauvegarde chiffrée si possible
-        let mut legacy: EmailOAuthStore =
+        let legacy: EmailOAuthStore =
             serde_json::from_str(&raw).map_err(|e| format!("Parse OAuth store: {}", e))?;
         if legacy.connection.is_some() && storage_key.is_some() {
             legacy.save(app)?;
@@ -99,10 +99,7 @@ impl EmailOAuthStore {
         ) {
             (Some(enc), Some(key)) => Some(decrypt_secret(enc, key)?),
             (Some(_), None) => {
-                return Err(
-                    "Code secret Google chiffré : ouvrez le CRM avec votre mot de passe maître."
-                        .into(),
-                );
+                return Err("Code secret Google illisible (clé de stockage indisponible).".into());
             }
             (None, _) => None,
         };
@@ -126,7 +123,7 @@ impl EmailOAuthStore {
             }
             (Some(_), None) => {
                 return Err(
-                    "Impossible de sauvegarder le code secret Google sans mot de passe maître CRM."
+                    "Impossible de sauvegarder le code secret Google (clé de stockage indisponible)."
                         .into(),
                 );
             }

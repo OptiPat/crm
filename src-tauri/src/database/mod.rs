@@ -31,14 +31,14 @@ pub struct Database {
 }
 
 impl Database {
-    /// Ouvre (et chiffre si besoin) la base avec la clé de données `dek_hex`
-    /// (64 caractères hexadécimaux = clé brute 256 bits pour SQLCipher).
+    /// Ouvre la base SQLite locale (non chiffrée) et garantit le schéma à jour.
     ///
-    /// - Base déjà chiffrée : ouverture directe.
-    /// - Base héritée **en clair** (anciennes versions sans chiffrement) : migration
-    ///   automatique vers SQLCipher, après sauvegarde de sécurité.
-    /// - Première utilisation (fichier absent/vide) : base chiffrée dès sa création.
-    pub fn open_encrypted(app_handle: &AppHandle, dek_hex: &str) -> Result<Self> {
+    /// - Fichier absent : base créée automatiquement.
+    /// - Fichier présent : ouverture directe + migrations idempotentes (`init_tables`).
+    ///
+    /// Une sauvegarde de sécurité est créée avant toute migration de schéma, puis
+    /// une sauvegarde quotidienne si nécessaire.
+    pub fn open(app_handle: &AppHandle) -> Result<Self> {
         let app_data_dir = app_handle
             .path()
             .app_data_dir()
@@ -55,122 +55,20 @@ impl Database {
             }
         }
 
-        let conn = Self::open_conn_with_key(&db_path, dek_hex, &app_data_dir)?;
+        let conn = Connection::open(&db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
 
         let db = Database { conn };
-        db.init_tables()?;
+        db.init_tables().map_err(|e| {
+            eprintln!("❌ Échec init_tables / migration : {e}");
+            e
+        })?;
 
         if let Err(e) = crate::backup::create_daily_backup_if_needed(&app_data_dir, &db_path) {
             eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
         }
 
         Ok(db)
-    }
-
-    /// Ouvre une connexion chiffrée. Si le fichier existant est en clair, le migre.
-    fn open_conn_with_key(
-        db_path: &std::path::Path,
-        dek_hex: &str,
-        app_data_dir: &std::path::Path,
-    ) -> Result<Connection> {
-        let conn = Connection::open(db_path)?;
-        Self::apply_key(&conn, dek_hex)?;
-
-        // Tente de lire le schéma : succès = base déchiffrée (ou neuve/vide).
-        if conn
-            .query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-            .is_ok()
-        {
-            return Ok(conn);
-        }
-        drop(conn);
-
-        // Échec : soit base en clair (à migrer), soit clé incorrecte.
-        if Self::is_plaintext_db(db_path) {
-            println!("ℹ️ Base en clair détectée : migration vers SQLCipher…");
-            if let Err(e) = crate::backup::create_manual_backup(app_data_dir, db_path) {
-                eprintln!("⚠️ Sauvegarde avant chiffrement échouée : {e}");
-            }
-            if let Err(e) = Self::encrypt_plaintext_db(db_path, dek_hex) {
-                eprintln!("❌ Migration chiffrement échouée : {e}");
-                return Err(e);
-            }
-            let conn = Connection::open(db_path)?;
-            Self::apply_key(&conn, dek_hex)?;
-            if let Err(e) = conn.query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(())) {
-                eprintln!("❌ Réouverture base chiffrée échouée : {e}");
-                return Err(e);
-            }
-            println!("✅ Base chiffrée avec succès");
-            return Ok(conn);
-        }
-
-        Err(rusqlite::Error::SqliteFailure(
-            rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_NOTADB),
-            Some("Clé incorrecte ou base illisible".to_string()),
-        ))
-    }
-
-    fn apply_key(conn: &Connection, dek_hex: &str) -> Result<()> {
-        // Clé brute : SQLCipher n'applique pas de KDF sur un format x'...'.
-        conn.execute_batch(&format!("PRAGMA key = \"x'{}'\";", dek_hex))
-    }
-
-    /// Vrai si le fichier s'ouvre comme une base SQLite **non chiffrée**.
-    fn is_plaintext_db(db_path: &std::path::Path) -> bool {
-        match Connection::open(db_path) {
-            Ok(conn) => conn
-                .query_row("SELECT count(*) FROM sqlite_master", [], |_| Ok(()))
-                .is_ok(),
-            Err(_) => false,
-        }
-    }
-
-    /// Chiffre sur place une base en clair via `sqlcipher_export`, puis remplace le fichier.
-    fn encrypt_plaintext_db(db_path: &std::path::Path, dek_hex: &str) -> Result<()> {
-        let io_err = |ctx: &str, e: std::io::Error| {
-            rusqlite::Error::SqliteFailure(
-                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_IOERR),
-                Some(format!("{ctx} : {e}")),
-            )
-        };
-
-        let tmp_path = db_path.with_extension("db.enc-tmp");
-        let _ = std::fs::remove_file(&tmp_path);
-
-        let tmp_sql = tmp_path.to_string_lossy().replace('\'', "''");
-        {
-            let conn = Connection::open(db_path)?;
-            // Bascule en mode journal simple pour libérer d'éventuels fichiers -wal/-shm.
-            let _ = conn.pragma_update(None, "journal_mode", "DELETE");
-            conn.execute_batch(&format!(
-                "ATTACH DATABASE '{}' AS encrypted KEY \"x'{}'\"; \
-                 SELECT sqlcipher_export('encrypted'); \
-                 DETACH DATABASE encrypted;",
-                tmp_sql, dek_hex
-            ))?;
-        } // la connexion source est fermée ici
-
-        // Nettoyage des éventuels fichiers annexes restants.
-        for sidecar in ["-wal", "-shm", "-journal"] {
-            let mut p = db_path.as_os_str().to_owned();
-            p.push(sidecar);
-            let _ = std::fs::remove_file(std::path::PathBuf::from(p));
-        }
-
-        // Remplacement sûr : original -> .old, puis tmp -> original, puis suppression .old.
-        let old_path = db_path.with_extension("db.pre-encrypt-old");
-        let _ = std::fs::remove_file(&old_path);
-        std::fs::rename(db_path, &old_path)
-            .map_err(|e| io_err("Mise de côté de la base en clair impossible", e))?;
-        if let Err(e) = std::fs::rename(&tmp_path, db_path) {
-            // Restauration de l'original en cas d'échec.
-            let _ = std::fs::rename(&old_path, db_path);
-            return Err(io_err("Remplacement par la base chiffrée impossible", e));
-        }
-        let _ = std::fs::remove_file(&old_path);
-        Ok(())
     }
 
     fn init_tables(&self) -> Result<()> {
@@ -476,6 +374,23 @@ impl Database {
             [],
         )?;
 
+        // Liaison tâche ↔ contacts (N-N) : une tâche peut concerner plusieurs contacts.
+        // Source de vérité des contacts liés (la colonne taches.contact_id reste pour l'historique).
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS tache_contacts (
+                tache_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                PRIMARY KEY (tache_id, contact_id),
+                FOREIGN KEY (tache_id) REFERENCES taches(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS tache_contacts_contact_idx ON tache_contacts (contact_id)",
+            [],
+        )?;
+
         // Champs personnalisés : définitions + valeurs (modèle clé-valeur générique,
         // pas de table par champ ni de SQL dynamique).
         self.conn.execute(
@@ -556,6 +471,7 @@ impl Database {
         self.migrate_protect_newsletter_etiquette()?;
         self.migrate_contact_etiquettes_contact_index()?;
         self.migrate_contact_etiquettes_tache_id()?;
+        self.migrate_taches_multi_contacts()?;
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
         self.migrate_templates_email_relance_template_id()?;
@@ -923,6 +839,38 @@ impl Database {
                 [],
             )?;
             println!("✅ Migration: colonne tache_id sur contact_etiquettes");
+        }
+        Ok(())
+    }
+
+    /// Table de liaison tâche ↔ contacts + reprise des liens mono-contact existants.
+    fn migrate_taches_multi_contacts(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS tache_contacts (
+                tache_id INTEGER NOT NULL,
+                contact_id INTEGER NOT NULL,
+                PRIMARY KEY (tache_id, contact_id),
+                FOREIGN KEY (tache_id) REFERENCES taches(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS tache_contacts_contact_idx ON tache_contacts (contact_id)",
+            [],
+        )?;
+        // Backfill : reprendre les tâches déjà liées à un contact encore existant.
+        // Le JOIN évite toute violation de clé étrangère si un contact a été supprimé.
+        let migrated = self.conn.execute(
+            "INSERT OR IGNORE INTO tache_contacts (tache_id, contact_id)
+             SELECT t.id, t.contact_id
+             FROM taches t
+             JOIN contacts c ON c.id = t.contact_id
+             WHERE t.contact_id IS NOT NULL",
+            [],
+        )?;
+        if migrated > 0 {
+            println!("✅ Migration: {} liaison(s) tâche↔contact reprises", migrated);
         }
         Ok(())
     }
@@ -1424,6 +1372,7 @@ impl Database {
     }
 
     /// Base SQLite en mémoire pour les tests (`cargo test`).
+    #[cfg(test)]
     pub fn open_in_memory_for_tests() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
@@ -1432,6 +1381,7 @@ impl Database {
         Ok(db)
     }
 
+    #[cfg(test)]
     pub fn get_connection(&self) -> &Connection {
         &self.conn
     }
@@ -1454,82 +1404,17 @@ impl Database {
 }
 
 #[cfg(test)]
-mod encryption_tests {
+mod open_tests {
     use super::*;
-    use std::sync::atomic::{AtomicU64, Ordering};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    const TEST_DEK: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
-
-    fn temp_dir() -> std::path::PathBuf {
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!("crm_enc_test_{nanos}_{n}"));
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
+    /// La base en mémoire (ouverture sans clé) initialise bien le schéma.
     #[test]
-    fn plaintext_db_is_migrated_to_encrypted() {
-        let dir = temp_dir();
-        let db_path = dir.join("patrimoine-crm.db");
-
-        // Base en clair avec une donnée témoin (simule une ancienne version).
-        {
-            let conn = Connection::open(&db_path).unwrap();
-            conn.execute_batch(
-                "CREATE TABLE marqueur (val TEXT); INSERT INTO marqueur VALUES ('coucou');",
-            )
+    fn in_memory_db_initializes_schema() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let count: i64 = db
+            .get_connection()
+            .query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get(0))
             .unwrap();
-        }
-
-        // Ouverture avec clé : doit détecter le clair et migrer.
-        let conn = Database::open_conn_with_key(&db_path, TEST_DEK, &dir).unwrap();
-        let val: String = conn
-            .query_row("SELECT val FROM marqueur", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(val, "coucou", "les données doivent survivre à la migration");
-        drop(conn);
-
-        // Le fichier est désormais chiffré : illisible sans clé.
-        assert!(
-            !Database::is_plaintext_db(&db_path),
-            "après migration la base ne doit plus être en clair"
-        );
-
-        // Réouverture avec la bonne clé : OK.
-        let conn = Database::open_conn_with_key(&db_path, TEST_DEK, &dir).unwrap();
-        let val: String = conn
-            .query_row("SELECT val FROM marqueur", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(val, "coucou");
-
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn wrong_key_is_rejected() {
-        let dir = temp_dir();
-        let db_path = dir.join("patrimoine-crm.db");
-
-        // Crée une base chiffrée avec la bonne clé.
-        {
-            let conn = Connection::open(&db_path).unwrap();
-            Database::apply_key(&conn, TEST_DEK).unwrap();
-            conn.execute_batch("CREATE TABLE t (x INTEGER); INSERT INTO t VALUES (1);")
-                .unwrap();
-        }
-
-        let bad_key = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
-        assert!(
-            Database::open_conn_with_key(&db_path, bad_key, &dir).is_err(),
-            "une mauvaise clé doit être refusée, pas traitée comme une base en clair"
-        );
-
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(count > 0, "le schéma doit contenir des tables");
     }
 }

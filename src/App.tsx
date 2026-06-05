@@ -42,7 +42,7 @@ function App() {
         const firstLaunch = await invoke<boolean>("is_first_launch");
         setIsFirstLaunch(firstLaunch);
         // Le statut du wizard est vérifié APRÈS déverrouillage : la base
-        // chiffrée n'est ouverte qu'une fois le mot de passe saisi.
+        // n'est ouverte qu'une fois le mot de passe d'accès saisi.
       } catch (error) {
         console.error("Error checking first launch:", error);
       }

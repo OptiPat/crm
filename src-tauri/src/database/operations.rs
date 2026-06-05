@@ -16,7 +16,7 @@ use crate::newsletter::db::{
     NewsletterEditionDetail, NewsletterEditionRecipient, NewsletterEditionSummary,
     NewsletterEligibleContact, NewsletterUnsubscribedContact, QueuedNewsletterContact,
 };
-use rusqlite::{params, OptionalExtension, Result};
+use rusqlite::{params, Result};
 
 const REDUCTION_IMPOT_ETIQUETTE_CANONICAL: &str = "Réduction d'impôt fin d'année";
 
@@ -49,7 +49,7 @@ impl Database {
     }
 
     pub fn create_contact(&self, new_contact: NewContact) -> Result<Contact> {
-        use chrono::{DateTime, Utc};
+        use chrono::DateTime;
 
         Self::validate_contact_identity(&new_contact.nom, &new_contact.prenom)?;
 
@@ -2380,31 +2380,6 @@ impl Database {
         Ok(())
     }
 
-    /// Contexte Gmail pour importer ou détecter la réponse d'un envoi.
-    pub fn campaign_response_check_item(
-        &self,
-        row_id: i64,
-    ) -> Result<super::models::PendingCampaignResponseCheck, String> {
-        if let Ok(item) = self.conn.query_row(
-            "SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
-             FROM contact_etiquettes ce
-             INNER JOIN contacts c ON ce.contact_id = c.id
-             WHERE ce.id = ?1 AND ce.email_date_envoi IS NOT NULL",
-            params![row_id],
-            |row| {
-                Ok(super::models::PendingCampaignResponseCheck {
-                    contact_etiquette_id: row.get(0)?,
-                    contact_email: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                    email_date_envoi: row.get(2)?,
-                    email_gmail_thread_id: row.get(3)?,
-                })
-            },
-        ) {
-            return Ok(item);
-        }
-        self.template_envoi_response_check_item(row_id)
-    }
-
     /// Campagnes envoyées sans réponse enregistrée (pour sync Gmail / Agenda).
     pub fn list_campaigns_pending_response_check(
         &self,
@@ -3547,7 +3522,7 @@ impl Database {
 
     fn load_contacts_for_newsletter_audience(&self) -> Result<Vec<ContactAudienceRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, nom, prenom, categorie, filleul_categorie, statut_suivi, newsletter_desinscrit_at, email
+            "SELECT id, nom, prenom, categorie, filleul_categorie, newsletter_desinscrit_at, email
              FROM contacts
              ORDER BY nom, prenom",
         )?;
@@ -3558,9 +3533,8 @@ impl Database {
                 prenom: row.get(2)?,
                 categorie: row.get(3)?,
                 filleul_categorie: row.get(4)?,
-                statut_suivi: row.get(5)?,
-                newsletter_desinscrit_at: row.get(6)?,
-                email: row.get(7)?,
+                newsletter_desinscrit_at: row.get(5)?,
+                email: row.get(6)?,
             })
         })?;
         rows.collect()

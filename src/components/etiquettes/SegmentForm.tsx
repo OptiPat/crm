@@ -29,6 +29,7 @@ import {
   type RuleOp,
 } from "@/lib/etiquettes/rule-ast";
 import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
+import { getCustomFieldDefs, type CustomFieldDef } from "@/lib/api/tauri-custom-fields";
 
 interface SegmentFormProps {
   open: boolean;
@@ -47,10 +48,12 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
     leafFromLegacy("DELAI_SANS_CONTACT", { jours: 365, inclure_sans_date: false }, ["CLIENT"]),
   ]);
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
+  const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
 
   useEffect(() => {
     if (open) {
       getAllEtiquettes().then(setEtiquettes).catch(console.error);
+      getCustomFieldDefs().then(setCustomFields).catch(console.error);
     }
   }, [open]);
 
@@ -141,6 +144,7 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
               children={children}
               onChange={setChildren}
               etiquettesOptions={etiquettes.map((e) => ({ id: e.id, nom: e.nom }))}
+              customFieldsOptions={customFields}
               showPreview={false}
             />
             <SegmentRulePreview op={op} children={children} />

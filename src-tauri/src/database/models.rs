@@ -589,15 +589,6 @@ pub struct ContactEtiquette {
     pub notes: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct NewContactEtiquette {
-    pub contact_id: i64,
-    pub etiquette_id: i64,
-    pub attribue_par: Option<String>, // Défaut: "AUTO"
-    pub email_date_prevue: Option<i64>,
-    pub notes: Option<String>,
-}
-
 // Étiquette enrichie avec le compteur de contacts
 #[derive(Debug, Serialize, Deserialize)]
 pub struct EtiquetteWithCount {
@@ -710,11 +701,18 @@ pub struct ExchangeHistoryEntry {
 
 // ==================== TACHES ====================
 
-/// Tâche / rappel libre, éventuellement rattaché à un contact.
+/// Contact rattaché à une tâche (identité minimale pour l'affichage).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct TacheContactRef {
+    pub contact_id: i64,
+    pub nom: String,
+    pub prenom: String,
+}
+
+/// Tâche / rappel libre, rattachée à 0, 1 ou plusieurs contacts.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Tache {
     pub id: i64,
-    pub contact_id: Option<i64>,
     pub titre: String,
     pub description: Option<String>,
     /// Échéance (timestamp Unix, minuit UTC). `None` = sans date.
@@ -727,33 +725,20 @@ pub struct Tache {
     pub completed_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// Contacts liés (vide = tâche libre).
+    pub contacts: Vec<TacheContactRef>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct NewTache {
-    pub contact_id: Option<i64>,
+    /// Contacts à rattacher (vide = tâche libre).
+    #[serde(default)]
+    pub contact_ids: Vec<i64>,
     pub titre: String,
     pub description: Option<String>,
     pub date_echeance: Option<i64>,
     pub priorite: Option<String>,
     pub statut: Option<String>,
-}
-
-/// Tâche enrichie du nom du contact lié (pour la page Tâches globale).
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct TacheWithContact {
-    pub id: i64,
-    pub contact_id: Option<i64>,
-    pub contact_nom: Option<String>,
-    pub contact_prenom: Option<String>,
-    pub titre: String,
-    pub description: Option<String>,
-    pub date_echeance: Option<i64>,
-    pub priorite: String,
-    pub statut: String,
-    pub completed_at: Option<i64>,
-    pub created_at: i64,
-    pub updated_at: i64,
 }
 
 // ==================== CHAMPS PERSONNALISÉS ====================
@@ -813,6 +798,14 @@ pub struct ContactCustomField {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CustomFieldValueInput {
     pub def_id: i64,
+    pub value: Option<String>,
+}
+
+/// Ligne valeur d'un champ perso, tous contacts confondus (export en lot).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CustomFieldValueRow {
+    pub field_key: String,
+    pub entity_id: i64,
     pub value: Option<String>,
 }
 

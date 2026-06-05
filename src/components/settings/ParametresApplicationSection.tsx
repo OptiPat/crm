@@ -41,8 +41,8 @@ export function ParametresApplicationSection() {
           <Shield className="h-5 w-5 text-muted-foreground shrink-0 mt-0.5" />
           <div className="space-y-3 flex-1">
             <p className="text-sm text-muted-foreground">
-              Vos données sont chiffrées (SQLCipher) et protégées par votre mot de passe maître.
-              Changer le mot de passe régénère votre clé de récupération.
+              L'accès à l'application est protégé par un mot de passe sur ce poste.
+              Vos données restent stockées localement sur cet ordinateur.
             </p>
             <Button
               variant="outline"

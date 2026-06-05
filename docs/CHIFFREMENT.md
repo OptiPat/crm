@@ -1,72 +1,63 @@
-# Chiffrement des données (au repos)
+# Sécurité des données (au repos)
 
-La base SQLite est **chiffrée** avec SQLCipher (AES-256). Objectif : si le fichier
-`patrimoine-crm.db` est volé, il est **illisible** sans le mot de passe maître.
+> **Important** : le chiffrement applicatif de la base a été **retiré**. La base
+> `patrimoine-crm.db` est désormais en **SQLite simple (non chiffré)**. Ce choix est
+> assumé : une base en clair s'ouvre **toujours**, donc **aucune clé ne peut être perdue
+> ou écrasée** et entraîner une perte définitive des données (ce qui était le risque du
+> chiffrement par enveloppe précédent).
 
-## Principe : chiffrement par enveloppe
+## Modèle actuel
 
-On ne dérive pas la clé de la base directement du mot de passe (sinon changer de mot
-de passe imposerait de tout re-chiffrer). On utilise une **enveloppe** :
+| Élément | État | Détail |
+|--------|------|--------|
+| Base `patrimoine-crm.db` | **En clair** | `rusqlite` feature `bundled` (SQLite standard). Ouverte par `Database::open`, sans clé. |
+| Mot de passe | **Verrou d'accès** | Hash **Argon2id** dans `auth.json` (`{ password_hash, created_at }`). Ne chiffre rien. |
+| Secrets applicatifs | **Chiffrés au repos** | Tokens OAuth (`email_oauth.json`), clé API Mistral (`newsletter_config.json`) — XOR + nonce avec `secrets.key`. |
 
-```
-Mot de passe maître ──Argon2id(sel_pw)──▶ KEK_pw ─┐
-                                                  ├─▶ (dé)scelle la DEK ──▶ ouvre la base SQLCipher
-Clé de récupération ──Argon2id(sel_rec)─▶ KEK_rec ┘
-```
+### Conséquences
 
-- **DEK** (Data Encryption Key) : clé aléatoire (32 o) qui chiffre réellement la base.
-- **KEK** (Key Encryption Key) : dérivée d'un secret utilisateur via **Argon2id**.
-- La DEK est **scellée** (chiffrée + authentifiée) par chaque KEK avec **XChaCha20-Poly1305**.
-- La DEK n'est **jamais** stockée en clair.
+- **Oublier le mot de passe ≠ perte de données** : il suffit de supprimer/réinitialiser
+  `auth.json` pour redéfinir un mot de passe. La base reste lisible.
+- **Plus de clé de récupération** : inutile, puisque la base n'est plus chiffrée.
+- **Protection au repos** : si tu veux protéger le fichier en cas de vol du poste, active
+  le **chiffrement disque de l'OS** (BitLocker sur Windows). C'est le niveau recommandé.
 
-Primitives : `src-tauri/src/auth/crypto.rs` (`derive_kek`, `wrap_dek`, `unwrap_dek`).
+## Verrou d'accès (`auth.json`)
 
-## `auth.json` (schéma v2)
-
-Stocké dans `%APPDATA%\com.patrimoine-crm.app\`. Ne contient **aucun secret en clair** :
+Stocké dans `%APPDATA%\com.patrimoine-crm.app\`. Contient uniquement :
 
 | Champ | Rôle |
 |------|------|
-| `version` | `2` (enveloppe) |
-| `password_hash` | hash Argon2 du mot de passe (vérif. rapide) |
-| `kdf_salt` / `recovery_salt` | sels de dérivation des KEK |
-| `dek_wrapped_pw` / `dek_wrapped_rec` | DEK scellée par le mot de passe / la clé de récupération |
+| `password_hash` | hash Argon2id du mot de passe (vérification rapide) |
+| `created_at` | horodatage de création |
 
-Migration v1 → v2 automatique (l'ancien format stockait la DEK en clair).
+Flux (`src-tauri/src/auth/`) :
 
-## Flux d'ouverture (ouverture différée)
+1. `create_master_password` (1ʳᵉ fois) : enregistre le hash, puis ouvre la base.
+2. `unlock` : vérifie le hash, puis ouvre la base (`Database::open`, sans clé).
+3. `change_master_password` : vérifie l'actuel, re-hache le nouveau.
 
-La base n'est **pas** ouverte au démarrage. Elle ne l'est qu'après authentification :
+La base n'est **pas** ouverte au démarrage : elle ne l'est qu'après le verrou.
 
-1. `create_master_password` (1ʳᵉ fois) : génère DEK + clé de récupération, scelle, ouvre la base.
-2. `unlock` : dérive KEK_pw, descelle la DEK, ouvre la base.
-3. `recover_account` : dérive KEK_rec depuis la clé de récupération, descelle la DEK,
-   redéfinit un mot de passe (et une nouvelle clé de récupération).
+## Secrets applicatifs (`secrets.key`)
 
-Commandes : `src-tauri/src/auth/commands.rs`. Ouverture chiffrée : `database/mod.rs::open_encrypted`.
+Les secrets sensibles (jetons OAuth Google, clé API Mistral) restent **chiffrés au repos**
+pour ne pas traîner en clair sur le disque :
 
-## Migration d'une base existante (en clair → chiffrée)
-
-Au 1ᵉʳ déverrouillage, si la base est détectée en clair :
-1. **Sauvegarde préalable** automatique.
-2. Conversion via `sqlcipher_export` puis **échange de fichier sûr** (compatible Windows :
-   `original → .old`, `tmp → original`, rollback si échec).
-
-## Clé de récupération
-
-- Affichée **une seule fois** (création / changement de mot de passe / récupération),
-  via `get_pending_recovery_key` (fichier annexe `pending_recovery_key.txt`, lu puis effacé).
-- **Changer le mot de passe régénère la clé de récupération** : l'ancienne devient caduque.
-  La DEK, elle, ne change pas → les données restent lisibles, les sauvegardes aussi.
+- Clé de stockage = `secrets.key` (32 octets aléatoires), **propre à l'installation**,
+  générée automatiquement à la première utilisation. **Indépendante de la base** : elle ne
+  peut plus être perdue avec elle.
+- Primitive : `src-tauri/src/email/oauth_secrets.rs` (`encrypt_secret` / `decrypt_secret`,
+  XOR + nonce). Obfuscation au repos, pas une garantie cryptographique forte — la vraie
+  protection au repos reste le chiffrement disque OS.
 
 ## Sauvegardes
 
-Les sauvegardes (auto quotidienne + pré-migration + manuelles, rotation des 10 dernières)
-d'une base chiffrée sont **également chiffrées** : elles nécessitent la même DEK / le même
-mot de passe pour être restaurées.
+Sauvegardes automatiques (quotidienne + pré-migration + manuelles, rotation des 10 dernières)
+dans `%APPDATA%\com.patrimoine-crm.app\backups\`. Étant en clair, elles sont **restaurables
+sans clé**.
 
-## Build (dev / CI uniquement)
+## Build
 
-SQLCipher embarque OpenSSL (`bundled-sqlcipher-vendored-openssl`). Compilation Windows :
-**Perl** + **NASM** requis. Détails : `INSTALLATION_OPENSSL.md`. Côté **utilisateur final**,
-rien à installer.
+Aucun prérequis particulier : SQLite standard compilé depuis les sources (`bundled`).
+Plus de SQLCipher, d'OpenSSL ni d'outils NASM/Perl.

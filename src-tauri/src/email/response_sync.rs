@@ -37,8 +37,6 @@ struct GmailThread {
 #[derive(Debug, Deserialize)]
 struct GmailMessageRef {
     id: String,
-    #[serde(rename = "threadId", default)]
-    thread_id: Option<String>,
     #[serde(rename = "internalDate", default, deserialize_with = "deserialize_optional_internal_date")]
     internal_date: Option<String>,
 }
@@ -114,8 +112,6 @@ struct CalendarEventTime {
 #[derive(Debug, Deserialize)]
 struct CalendarAttendee {
     email: Option<String>,
-    #[serde(rename = "responseStatus")]
-    response_status: Option<String>,
 }
 
 pub fn parse_gmail_send_response(body: &str) -> Option<(String, String)> {

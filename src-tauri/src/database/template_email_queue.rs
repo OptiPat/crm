@@ -630,26 +630,4 @@ impl Database {
         }
     }
 
-    pub fn template_envoi_response_check_item(
-        &self,
-        row_id: i64,
-    ) -> Result<super::models::PendingCampaignResponseCheck, String> {
-        self.conn
-            .query_row(
-                "SELECT cte.id, c.email, cte.email_date_envoi, cte.email_gmail_thread_id
-                 FROM contact_template_envois cte
-                 INNER JOIN contacts c ON cte.contact_id = c.id
-                 WHERE cte.id = ?1 AND cte.email_date_envoi IS NOT NULL",
-                params![row_id],
-                |row| {
-                    Ok(super::models::PendingCampaignResponseCheck {
-                        contact_etiquette_id: row.get(0)?,
-                        contact_email: row.get::<_, Option<String>>(1)?.unwrap_or_default(),
-                        email_date_envoi: row.get(2)?,
-                        email_gmail_thread_id: row.get(3)?,
-                    })
-                },
-            )
-            .map_err(|e| format!("Envoi modèle introuvable: {}", e))
-    }
 }

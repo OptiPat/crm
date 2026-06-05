@@ -6,8 +6,8 @@
 //! Phase 1 : entité `contact`.
 
 use super::models::{
-    ContactCustomField, CustomFieldDef, CustomFieldValueInput, NewCustomFieldDef,
-    UpdateCustomFieldDef,
+    ContactCustomField, CustomFieldDef, CustomFieldValueInput, CustomFieldValueRow,
+    NewCustomFieldDef, UpdateCustomFieldDef,
 };
 use rusqlite::{params, OptionalExtension, Result};
 
@@ -230,6 +230,44 @@ impl super::Database {
         Ok(())
     }
 
+    /// Toutes les valeurs de champs perso actifs d'une entité (lecture en lot pour l'export).
+    pub fn get_all_custom_values(&self, entity: &str) -> Result<Vec<CustomFieldValueRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT d.field_key, v.entity_id, v.value
+             FROM custom_field_values v
+             JOIN custom_field_defs d ON d.id = v.def_id
+             WHERE d.entity = ?1 AND d.actif = 1",
+        )?;
+        let rows = stmt.query_map(params![entity], |row| {
+            Ok(CustomFieldValueRow {
+                field_key: row.get(0)?,
+                entity_id: row.get(1)?,
+                value: row.get(2)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Valeur d'un champ personnalisé d'un contact, par clé technique.
+    /// Utilisé par le moteur de règles (condition `CHAMP_PERSO`). `None` si absente.
+    pub(crate) fn get_contact_custom_value_by_key(
+        &self,
+        contact_id: i64,
+        field_key: &str,
+    ) -> Result<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT v.value
+                 FROM custom_field_values v
+                 JOIN custom_field_defs d ON d.id = v.def_id
+                 WHERE d.entity = 'contact' AND d.field_key = ?1 AND v.entity_id = ?2",
+                params![field_key, contact_id],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .optional()
+            .map(|opt| opt.flatten())
+    }
+
     /// Valeur unique d'un champ pour un contact (utilitaire / tests).
     #[cfg(test)]
     fn get_contact_custom_field_value(
@@ -251,10 +289,47 @@ impl super::Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::models::NewContact;
     use crate::database::Database;
 
     fn mem_db() -> Database {
         Database::open_in_memory_for_tests().expect("db mémoire")
+    }
+
+    fn insert_contact(db: &Database) -> i64 {
+        db.create_contact(NewContact {
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            categorie: "CLIENT".to_string(),
+            filleul_categorie: None,
+            parrain_id: None,
+            prescripteur_id: None,
+            civilite: None,
+            nom: "Test".to_string(),
+            prenom: "Champ".to_string(),
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            date_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            statut_suivi: None,
+            registre: None,
+            notes: None,
+        })
+        .unwrap()
+        .id
+        .unwrap()
     }
 
     fn new_def(label: &str, field_type: &str) -> NewCustomFieldDef {
@@ -373,6 +448,41 @@ mod tests {
         assert_eq!(fields.len(), 1);
         assert_eq!(fields[0].label, "Hobby");
         assert_eq!(fields[0].value.as_deref(), Some("Voile"));
+    }
+
+    #[test]
+    fn rule_engine_matches_custom_field_condition() {
+        let db = mem_db();
+        let def = db.create_custom_field_def(new_def("Numéro client", "text")).unwrap();
+        let cid = insert_contact(&db);
+
+        let rule = |operator: &str, value: &str| {
+            format!(
+                r#"{{"v":1,"op":"and","children":[{{"type":"CHAMP_PERSO","config":{{"field_key":"{}","operator":"{}","value":"{}"}},"categories":["CLIENT"]}}]}}"#,
+                def.field_key, operator, value
+            )
+        };
+
+        // Sans valeur : "vide" vrai, "rempli" faux.
+        assert!(db.evaluate_rule_tree_for_contact(cid, &rule("vide", "")).unwrap());
+        assert!(!db.evaluate_rule_tree_for_contact(cid, &rule("rempli", "")).unwrap());
+
+        db.set_contact_custom_fields(
+            cid,
+            vec![CustomFieldValueInput {
+                def_id: def.id,
+                value: Some("ABC123".to_string()),
+            }],
+        )
+        .unwrap();
+
+        assert!(db.evaluate_rule_tree_for_contact(cid, &rule("rempli", "")).unwrap());
+        assert!(!db.evaluate_rule_tree_for_contact(cid, &rule("vide", "")).unwrap());
+        // Comparaison insensible à la casse.
+        assert!(db.evaluate_rule_tree_for_contact(cid, &rule("egal", "abc123")).unwrap());
+        assert!(!db.evaluate_rule_tree_for_contact(cid, &rule("egal", "autre")).unwrap());
+        assert!(db.evaluate_rule_tree_for_contact(cid, &rule("contient", "bc1")).unwrap());
+        assert!(db.evaluate_rule_tree_for_contact(cid, &rule("different", "autre")).unwrap());
     }
 
     #[test]

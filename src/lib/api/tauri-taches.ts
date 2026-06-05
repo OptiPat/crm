@@ -4,9 +4,15 @@ import { notifyTachesChanged } from "@/lib/taches/tache-events";
 export type TacheStatut = "A_FAIRE" | "FAIT";
 export type TachePriorite = "BASSE" | "NORMALE" | "HAUTE";
 
+/** Contact rattaché à une tâche (identité minimale pour l'affichage). */
+export interface TacheContactRef {
+  contact_id: number;
+  nom: string;
+  prenom: string;
+}
+
 export interface Tache {
   id: number;
-  contact_id?: number | null;
   titre: string;
   description?: string | null;
   /** Échéance en timestamp Unix (secondes, minuit UTC). */
@@ -16,15 +22,16 @@ export interface Tache {
   completed_at?: number | null;
   created_at: number;
   updated_at: number;
+  /** Contacts liés (vide = tâche libre). */
+  contacts: TacheContactRef[];
 }
 
-export interface TacheWithContact extends Tache {
-  contact_nom?: string | null;
-  contact_prenom?: string | null;
-}
+/** Conservé pour compat : une tâche porte désormais directement ses contacts. */
+export type TacheWithContact = Tache;
 
 export interface NewTache {
-  contact_id?: number | null;
+  /** Contacts à rattacher (vide = tâche libre). */
+  contact_ids?: number[];
   titre: string;
   description?: string | null;
   date_echeance?: number | null;
@@ -32,8 +39,8 @@ export interface NewTache {
   statut?: TacheStatut;
 }
 
-export async function getAllTaches(): Promise<TacheWithContact[]> {
-  return invoke<TacheWithContact[]>("get_all_taches");
+export async function getAllTaches(): Promise<Tache[]> {
+  return invoke<Tache[]>("get_all_taches");
 }
 
 export async function getTachesByContact(contactId: number): Promise<Tache[]> {

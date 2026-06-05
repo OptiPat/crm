@@ -10,6 +10,7 @@ export type ConditionType =
   | "AGE_APPROCHE"
   | "JAMAIS_CONTACT"
   | "A_ETIQUETTE"
+  | "CHAMP_PERSO"
   | "RULE_TREE";
 
 export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
@@ -22,6 +23,7 @@ export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
   AGE_APPROCHE: "Âge approchant",
   JAMAIS_CONTACT: "Jamais contacté (catégories cochées)",
   A_ETIQUETTE: "Possède une étiquette",
+  CHAMP_PERSO: "Champ personnalisé",
   RULE_TREE: "Règle combinée",
 };
 

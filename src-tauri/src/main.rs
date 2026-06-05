@@ -39,8 +39,8 @@ fn main() {
             app.manage(Mutex::new(Some(auth)));
 
             // La base reste FERMÉE tant que l'utilisateur n'a pas saisi son mot de passe
-            // (chiffrement par enveloppe). Elle est ouverte par les commandes
-            // `create_master_password` / `unlock` / `recover_account`.
+            // (simple verrou d'accès). Elle est ouverte par les commandes
+            // `create_master_password` / `unlock`.
             app.manage(Mutex::new(Option::<Database>::None));
 
             email::legacy_cleanup::remove_legacy_smtp_config(&app.handle());
@@ -179,9 +179,7 @@ fn main() {
             create_master_password,
             verify_master_password,
             unlock,
-            recover_account,
             change_master_password,
-            get_pending_recovery_key,
             send_email,
             get_email_connection_status,
             get_oauth_app_settings,
@@ -233,6 +231,7 @@ fn main() {
             delete_custom_field_def,
             get_contact_custom_fields,
             set_contact_custom_fields,
+            get_all_contact_custom_values,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

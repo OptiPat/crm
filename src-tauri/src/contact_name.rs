@@ -45,6 +45,7 @@ pub fn contact_name_key(nom: &str, prenom: &str) -> String {
 }
 
 /// Clé canonique (nom/prénom inversés = même personne).
+#[cfg(test)]
 pub fn contact_name_key_canonical(nom: &str, prenom: &str) -> String {
     let a = normalize_contact_name(nom);
     let b = normalize_contact_name(prenom);

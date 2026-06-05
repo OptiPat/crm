@@ -4,7 +4,7 @@ import { ArrowRight, CheckCircle2, ListTodo } from "lucide-react";
 import {
   getAllTaches,
   setTacheStatut,
-  type TacheWithContact,
+  type Tache,
 } from "@/lib/api/tauri-taches";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import {
@@ -24,7 +24,7 @@ interface TachesPreviewProps {
 const MAX_PREVIEW = 5;
 
 export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps) {
-  const [taches, setTaches] = useState<TacheWithContact[]>([]);
+  const [taches, setTaches] = useState<Tache[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
@@ -45,7 +45,7 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
 
   const visibles = taches.slice(0, MAX_PREVIEW);
 
-  const handleDone = async (tache: TacheWithContact) => {
+  const handleDone = async (tache: Tache) => {
     try {
       await setTacheStatut(tache.id, "FAIT");
     } catch (error) {
@@ -98,10 +98,8 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
         <ul className="space-y-2">
           {visibles.map((tache) => {
             const state = echeanceState(tache.date_echeance, tache.statut);
-            const contactNom =
-              tache.contact_nom || tache.contact_prenom
-                ? `${tache.contact_prenom ?? ""} ${tache.contact_nom ?? ""}`.trim()
-                : null;
+            const firstContact = tache.contacts?.[0] ?? null;
+            const extraCount = (tache.contacts?.length ?? 0) - 1;
             return (
               <li
                 key={tache.id}
@@ -120,13 +118,14 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
                     <span className={cn(ECHEANCE_TONE_CLASS[state])}>
                       {echeanceLabel(tache.date_echeance, tache.statut)}
                     </span>
-                    {contactNom && tache.contact_id != null && (
+                    {firstContact && (
                       <button
                         type="button"
                         className="text-muted-foreground hover:text-foreground truncate"
-                        onClick={() => onOpenContact?.(tache.contact_id!)}
+                        onClick={() => onOpenContact?.(firstContact.contact_id)}
                       >
-                        · {contactNom}
+                        · {firstContact.prenom} {firstContact.nom}
+                        {extraCount > 0 ? ` +${extraCount}` : ""}
                       </button>
                     )}
                   </div>

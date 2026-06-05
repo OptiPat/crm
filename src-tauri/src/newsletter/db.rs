@@ -156,7 +156,6 @@ pub struct ContactAudienceRow {
     pub prenom: String,
     pub categorie: String,
     pub filleul_categorie: Option<String>,
-    pub statut_suivi: String,
     pub newsletter_desinscrit_at: Option<i64>,
     pub email: Option<String>,
 }

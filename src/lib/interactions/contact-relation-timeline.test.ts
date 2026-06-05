@@ -100,6 +100,7 @@ describe("contact-relation-timeline", () => {
           date_echeance: 1_800_000_000,
           created_at: 1_600_000_000,
           updated_at: 1_600_000_000,
+          contacts: [],
         },
       ],
     });

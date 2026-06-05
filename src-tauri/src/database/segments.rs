@@ -136,19 +136,6 @@ impl super::Database {
         Ok(())
     }
 
-    pub fn get_segment_id_for_alerte_type(&self, type_alerte: &str) -> Result<Option<i64>> {
-        if !self.segments_table_exists() {
-            return Ok(None);
-        }
-        self.conn
-            .query_row(
-                "SELECT segment_id FROM alerte_segment_links WHERE type_alerte = ?1",
-                params![type_alerte],
-                |row| row.get(0),
-            )
-            .optional()
-    }
-
     pub fn ensure_default_segments_and_alerte_links(&self) -> Result<()> {
         if !self.segments_table_exists() {
             return Ok(());

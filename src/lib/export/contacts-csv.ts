@@ -7,12 +7,21 @@ import {
 } from "@/lib/contacts/contact-form-utils";
 import { rowsToCsv } from "@/lib/export/csv-export";
 
+/** Colonne de champ personnalisé à ajouter à l'export (libellé + valeurs déjà formatées). */
+export interface CustomFieldColumn {
+  key: string;
+  label: string;
+  /** Valeur formatée par contact (clé = id contact). */
+  valuesByContact: Record<number, string>;
+}
+
 export function buildContactsCsv(
   contacts: Contact[],
   foyers: Foyer[],
   patrimoines: Record<string, number>,
   patrimoinesAvecMoi: Record<string, number>,
-  etiquettesParContact: Record<number, ContactEtiquetteDetails[]>
+  etiquettesParContact: Record<number, ContactEtiquetteDetails[]>,
+  customColumns: CustomFieldColumn[] = []
 ): string {
   const foyerById = new Map(foyers.map((f) => [f.id, f.nom]));
 
@@ -29,6 +38,7 @@ export function buildContactsCsv(
     "Étiquettes",
     "Ville",
     "Code postal",
+    ...customColumns.map((col) => col.label),
   ];
 
   const rows = contacts.map((c) => {
@@ -54,6 +64,7 @@ export function buildContactsCsv(
       etiqs,
       c.ville ?? "",
       c.code_postal ?? "",
+      ...customColumns.map((col) => (c.id != null ? col.valuesByContact[c.id] ?? "" : "")),
     ];
   });
 

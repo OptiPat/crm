@@ -52,6 +52,13 @@ export interface CustomFieldValueInput {
   value: string | null;
 }
 
+/** Valeur d'un champ perso pour un contact donné (lecture en lot, export). */
+export interface CustomFieldValueRow {
+  field_key: string;
+  entity_id: number;
+  value: string | null;
+}
+
 export const CUSTOM_FIELD_TYPE_LABELS: Record<CustomFieldType, string> = {
   text: "Texte",
   number: "Nombre",
@@ -94,6 +101,13 @@ export async function setContactCustomFields(
   values: CustomFieldValueInput[]
 ): Promise<void> {
   return invoke<void>("set_contact_custom_fields", { contactId, values });
+}
+
+/** Toutes les valeurs de champs perso actifs (export segment/contacts). */
+export async function getAllContactCustomValues(
+  entity = "contact"
+): Promise<CustomFieldValueRow[]> {
+  return invoke<CustomFieldValueRow[]>("get_all_contact_custom_values", { entity });
 }
 
 /** Parse la liste de choix JSON d'un champ `select`. */

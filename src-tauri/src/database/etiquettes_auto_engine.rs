@@ -251,6 +251,38 @@ impl Database {
                 }
                 false
             }
+            // Champ personnalisé du contact (texte stocké, comparaison insensible à la casse).
+            "CHAMP_PERSO" => {
+                if let Some(config_str) = config {
+                    if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
+                        let field_key = parsed["field_key"].as_str().unwrap_or("");
+                        if field_key.is_empty() {
+                            return Ok(false);
+                        }
+                        let operator = parsed["operator"].as_str().unwrap_or("rempli");
+                        let target = parsed["value"].as_str().unwrap_or("").trim().to_lowercase();
+                        let current = self
+                            .get_contact_custom_value_by_key(contact_id, field_key)?
+                            .map(|v| v.trim().to_string())
+                            .filter(|v| !v.is_empty());
+                        let current_lc = current.as_ref().map(|v| v.to_lowercase());
+                        match operator {
+                            "rempli" => current.is_some(),
+                            "vide" => current.is_none(),
+                            "egal" => current_lc.as_deref() == Some(target.as_str()),
+                            "different" => current_lc.as_deref() != Some(target.as_str()),
+                            "contient" => {
+                                current_lc.map(|v| v.contains(&target)).unwrap_or(false)
+                            }
+                            _ => false,
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
             // Déclenché uniquement à l'enregistrement d'une souscription (voir apply_souscription_event_etiquettes).
             "EVENEMENT_SOUSCRIPTION" => false,
             "AGE_APPROCHE" => {

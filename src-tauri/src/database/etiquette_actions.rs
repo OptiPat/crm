@@ -127,11 +127,17 @@ impl super::Database {
         let echeance = tache_echeance(eligible_at, action.tache_delai_jours);
 
         self.conn.execute(
-            "INSERT INTO taches (contact_id, titre, date_echeance, priorite, statut)
-             VALUES (?1, ?2, ?3, ?4, 'A_FAIRE')",
-            params![contact_id, titre, echeance, priorite],
+            "INSERT INTO taches (titre, date_echeance, priorite, statut)
+             VALUES (?1, ?2, ?3, 'A_FAIRE')",
+            params![titre, echeance, priorite],
         )?;
         let tache_id = self.conn.last_insert_rowid();
+
+        // Lien tâche ↔ contact (source de vérité des contacts liés).
+        self.conn.execute(
+            "INSERT OR IGNORE INTO tache_contacts (tache_id, contact_id) VALUES (?1, ?2)",
+            params![tache_id, contact_id],
+        )?;
 
         self.conn.execute(
             "UPDATE contact_etiquettes SET tache_id = ?1 WHERE id = ?2",

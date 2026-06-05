@@ -30,10 +30,7 @@ export function TacheItem({
 }: TacheItemProps) {
   const done = tache.statut === "FAIT";
   const state = echeanceState(tache.date_echeance, tache.statut);
-  const contactNom =
-    "contact_nom" in tache && (tache.contact_nom || tache.contact_prenom)
-      ? `${tache.contact_prenom ?? ""} ${tache.contact_nom ?? ""}`.trim()
-      : null;
+  const contacts = tache.contacts ?? [];
   const priorite = PRIORITE_META[tache.priorite];
 
   return (
@@ -61,16 +58,18 @@ export function TacheItem({
             </span>
           )}
 
-          {showContact && contactNom && tache.contact_id != null && (
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
-              onClick={() => onOpenContact?.(tache.contact_id!)}
-            >
-              <User className="h-3 w-3" />
-              {contactNom}
-            </button>
-          )}
+          {showContact &&
+            contacts.map((c) => (
+              <button
+                key={c.contact_id}
+                type="button"
+                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+                onClick={() => onOpenContact?.(c.contact_id)}
+              >
+                <User className="h-3 w-3" />
+                {c.prenom} {c.nom}
+              </button>
+            ))}
         </div>
 
         {tache.description && (

@@ -5,13 +5,12 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { AlertCircle, Check, Copy, Eye, EyeOff, Lock } from "lucide-react";
+import { Eye, EyeOff, Lock } from "lucide-react";
 import { APP_DISPLAY_NAME } from "@/lib/app-branding";
 
 interface SetupPasswordProps {
@@ -25,8 +24,6 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [recoveryKey, setRecoveryKey] = useState("");
-  const [copied, setCopied] = useState(false);
 
   const getPasswordStrength = (pwd: string) => {
     if (pwd.length === 0) return { level: 0, text: "", color: "" };
@@ -66,102 +63,13 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
     setLoading(true);
 
     try {
-      const key = await invoke<string>("create_master_password", { password });
-      setRecoveryKey(key);
+      await invoke("create_master_password", { password });
+      onPasswordCreated();
     } catch (err) {
       setError(String(err));
       setLoading(false);
     }
   };
-
-  const handleCopyRecoveryKey = () => {
-    navigator.clipboard.writeText(recoveryKey);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleContinue = () => {
-    onPasswordCreated();
-  };
-
-  if (recoveryKey) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-8">
-        <Card className="max-w-2xl w-full">
-          <CardHeader>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="p-2 bg-green-100 rounded-full">
-                <Check className="h-6 w-6 text-green-600" />
-              </div>
-              <CardTitle>Mot de passe créé avec succès</CardTitle>
-            </div>
-            <CardDescription>
-              Sauvegardez votre clé de récupération en lieu sûr
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="h-5 w-5 text-yellow-600 mt-0.5 shrink-0" />
-                <div className="text-sm text-yellow-800">
-                  <p className="font-semibold mb-1">Important !</p>
-                  <p>
-                    Cette clé de récupération vous permet de récupérer l'accès à
-                    votre CRM si vous oubliez votre mot de passe. Sauvegardez-la
-                    dans un endroit sûr (gestionnaire de mots de passe, coffre-fort, etc.).
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <Label className="text-sm font-medium mb-2 block">
-                Clé de récupération
-              </Label>
-              <div className="relative">
-                <Input
-                  value={recoveryKey}
-                  readOnly
-                  className="font-mono text-sm pr-10"
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-8 w-8"
-                  onClick={handleCopyRecoveryKey}
-                >
-                  {copied ? (
-                    <Check className="h-4 w-4 text-green-600" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-              {copied && (
-                <p className="text-sm text-green-600 mt-1">
-                  Clé copiée dans le presse-papiers
-                </p>
-              )}
-            </div>
-
-            <div className="bg-muted p-4 rounded-lg">
-              <p className="text-sm text-muted-foreground">
-                <strong>Conseil :</strong> Notez cette clé et conservez-la dans un
-                endroit sûr, séparé de votre ordinateur. Vous en aurez besoin si
-                vous oubliez votre mot de passe.
-              </p>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button onClick={handleContinue} className="w-full" size="lg">
-              J'ai sauvegardé ma clé, continuer
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-8">
@@ -174,7 +82,7 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
             Bienvenue dans {APP_DISPLAY_NAME}
           </h1>
           <p className="text-muted-foreground">
-            Créez un mot de passe maître pour sécuriser vos données
+            Créez un mot de passe pour protéger l'accès au CRM sur ce poste
           </p>
         </div>
 
@@ -182,13 +90,13 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
           <CardHeader>
             <CardTitle>Créer un mot de passe</CardTitle>
             <CardDescription>
-              Ce mot de passe protégera toutes vos données clients
+              Ce mot de passe verrouille l'accès à l'application sur cet ordinateur.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="password">Mot de passe maître</Label>
+                <Label htmlFor="password">Mot de passe</Label>
                 <div className="relative">
                   <Input
                     id="password"

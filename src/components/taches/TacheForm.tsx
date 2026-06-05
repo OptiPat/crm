@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
+import { ContactMultiSelect } from "@/components/contacts/ContactMultiSelect";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import {
   createTache,
@@ -44,16 +44,20 @@ interface FormState {
   description: string;
   dateEcheance: string;
   priorite: TachePriorite;
-  contactId: number | undefined;
+  contactIds: number[];
 }
 
 function buildState(tache?: Tache | null, fixedContactId?: number): FormState {
+  const linked = tache?.contacts?.map((c) => c.contact_id) ?? [];
+  // En création depuis une fiche, pré-rattacher ce contact.
+  const contactIds =
+    !tache && fixedContactId != null ? [fixedContactId] : linked;
   return {
     titre: tache?.titre ?? "",
     description: tache?.description ?? "",
     dateEcheance: tache?.date_echeance ? unixToDateInput(tache.date_echeance) : "",
     priorite: tache?.priorite ?? "NORMALE",
-    contactId: tache?.contact_id ?? fixedContactId ?? undefined,
+    contactIds,
   };
 }
 
@@ -69,7 +73,7 @@ export function TacheForm({
   const [form, setForm] = useState<FormState>(buildState(tache, fixedContactId));
 
   useEffect(() => {
-    if (!open || fixedContactId) return;
+    if (!open) return;
     let cancelled = false;
     getAllContacts()
       .then((list) => {
@@ -79,7 +83,7 @@ export function TacheForm({
     return () => {
       cancelled = true;
     };
-  }, [open, fixedContactId]);
+  }, [open]);
 
   useEffect(() => {
     if (open) setForm(buildState(tache, fixedContactId));
@@ -95,7 +99,7 @@ export function TacheForm({
     setLoading(true);
     try {
       const payload: NewTache = {
-        contact_id: fixedContactId ?? form.contactId ?? null,
+        contact_ids: form.contactIds,
         titre,
         description: form.description.trim() || null,
         date_echeance: dateInputToUnix(form.dateEcheance),
@@ -123,7 +127,7 @@ export function TacheForm({
         <DialogHeader>
           <DialogTitle>{tache ? "Modifier la tâche" : "Nouvelle tâche"}</DialogTitle>
           <DialogDescription>
-            Un rappel simple, avec une échéance et un contact (facultatif).
+            Un rappel simple, avec une échéance et un ou plusieurs contacts (facultatif).
           </DialogDescription>
         </DialogHeader>
 
@@ -165,15 +169,13 @@ export function TacheForm({
             </div>
           </div>
 
-          {!fixedContactId && (
-            <ContactPersonSearch
-              label="Contact lié (facultatif)"
-              placeholder="Aucun contact"
-              contacts={contacts}
-              value={form.contactId}
-              onChange={(id) => setForm({ ...form, contactId: id })}
-            />
-          )}
+          <ContactMultiSelect
+            label="Contacts liés (facultatif)"
+            hint="Une tâche peut concerner plusieurs contacts."
+            contacts={contacts}
+            value={form.contactIds}
+            onChange={(ids) => setForm({ ...form, contactIds: ids })}
+          />
 
           <div className="space-y-2">
             <Label>Notes</Label>

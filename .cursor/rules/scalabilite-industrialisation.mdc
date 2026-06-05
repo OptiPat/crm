@@ -44,7 +44,7 @@ Avant de découper ou factoriser du code existant :
 ## Données = priorité absolue (CGP)
 
 - **Sauvegarde automatique + rotation** : toujours une copie récente récupérable (faite).
-- **Chiffrement de la base** (SQLCipher, enveloppe DEK/KEK) **actif** — voir `docs/CHIFFREMENT.md`. Ne jamais ouvrir la base avant authentification ; ne jamais stocker de secret en clair.
+- **Base non chiffrée** (SQLite simple) : choix assumé pour ne jamais reperdre les données via une clé. Protection au repos = chiffrement disque OS (BitLocker). Ne jamais ouvrir la base avant le verrou d'accès. Secrets (tokens/clé API) chiffrés via `secrets.key` — voir `docs/CHIFFREMENT.md`.
 - **Une seule source de vérité du schéma** : migrations Rust runtime (`database/mod.rs`). Drizzle (`src/lib/db/`) = dev/doc only et doit rester synchrone.
 - Après toute mutation de données → `notify<Domaine>Changed()` (CustomEvent) pour rafraîchir l'UI.
 

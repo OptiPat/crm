@@ -15,6 +15,7 @@ import {
 } from "@/lib/etiquettes/etiquette-condition-labels";
 import { RuleLeafFields } from "@/components/etiquettes/RuleLeafFields";
 import { SegmentRulePreview } from "@/components/etiquettes/SegmentRulePreview";
+import type { CustomFieldDef } from "@/lib/api/tauri-custom-fields";
 
 const CONDITION_TYPES: ConditionType[] = [
   "DELAI_SANS_CONTACT",
@@ -27,7 +28,10 @@ const CONDITION_TYPES: ConditionType[] = [
   "A_ETIQUETTE",
 ];
 
-function newLeaf(type: ConditionType = "DELAI_SANS_CONTACT"): RuleLeaf {
+function newLeaf(
+  type: ConditionType = "DELAI_SANS_CONTACT",
+  customFieldsOptions: CustomFieldDef[] = []
+): RuleLeaf {
   const config: Record<string, unknown> =
     type === "DELAI_SANS_CONTACT"
       ? { jours: 365, inclure_sans_date: true }
@@ -49,11 +53,17 @@ function newLeaf(type: ConditionType = "DELAI_SANS_CONTACT"): RuleLeaf {
                     }
                   : type === "AGE_APPROCHE"
                     ? { age: 69, jours_avant: 30 }
-                    : {};
+                    : type === "CHAMP_PERSO"
+                      ? {
+                          field_key: customFieldsOptions[0]?.field_key ?? "",
+                          operator: "rempli",
+                          value: "",
+                        }
+                      : {};
   return {
     type,
     config,
-    categories: type === "JAMAIS_CONTACT" ? ["CLIENT"] : ["CLIENT"],
+    categories: ["CLIENT"],
   };
 }
 
@@ -63,6 +73,7 @@ export interface ConditionBuilderProps {
   children: RuleLeaf[];
   onChange: (children: RuleLeaf[]) => void;
   etiquettesOptions?: { id: number; nom: string }[];
+  customFieldsOptions?: CustomFieldDef[];
   showPreview?: boolean;
 }
 
@@ -72,8 +83,13 @@ export function ConditionBuilder({
   children,
   onChange,
   etiquettesOptions = [],
+  customFieldsOptions = [],
   showPreview = true,
 }: ConditionBuilderProps) {
+  const availableTypes: ConditionType[] =
+    customFieldsOptions.length > 0
+      ? [...CONDITION_TYPES, "CHAMP_PERSO"]
+      : CONDITION_TYPES;
   return (
     <div className="space-y-3 rounded-lg border p-3 bg-muted/20">
       <div className="flex flex-wrap items-center gap-2">
@@ -92,7 +108,7 @@ export function ConditionBuilder({
           variant="outline"
           size="sm"
           className="ml-auto"
-          onClick={() => onChange([...children, newLeaf()])}
+          onClick={() => onChange([...children, newLeaf("DELAI_SANS_CONTACT", customFieldsOptions)])}
         >
           <Plus className="h-3.5 w-3.5 mr-1" />
           Condition
@@ -104,13 +120,19 @@ export function ConditionBuilder({
           <div className="flex items-center justify-between gap-2">
             <Select
               value={leaf.type}
-              onValueChange={(t) => onChange(children.map((c, i) => (i === index ? newLeaf(t as ConditionType) : c)))}
+              onValueChange={(t) =>
+                onChange(
+                  children.map((c, i) =>
+                    i === index ? newLeaf(t as ConditionType, customFieldsOptions) : c
+                  )
+                )
+              }
             >
               <SelectTrigger className="flex-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {CONDITION_TYPES.map((t) => (
+                {availableTypes.map((t) => (
                   <SelectItem key={t} value={t}>
                     {CONDITION_TYPE_LABELS[t] ?? t}
                   </SelectItem>
@@ -132,6 +154,7 @@ export function ConditionBuilder({
             leaf={leaf}
             onChange={(next) => onChange(children.map((c, i) => (i === index ? next : c)))}
             etiquettesOptions={etiquettesOptions}
+            customFieldsOptions={customFieldsOptions}
           />
         </div>
       ))}

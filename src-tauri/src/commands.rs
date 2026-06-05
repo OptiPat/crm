@@ -2,13 +2,14 @@ use crate::database::{
     models::{
         Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
         ContactCustomField, ContactEtiquetteDetails, CustomFieldDef, CustomFieldValueInput,
+        CustomFieldValueRow,
         DashboardStats, Document, Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
         NewCustomFieldDef, UpdateCustomFieldDef,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation, NewPartenaire,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation, NewInteraction,
         NewTemplateEmail, NewSegment, NewTache, Partenaire,
-        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, Tache, TacheWithContact,
+        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, Tache,
         TemplateEmail, YearlyActivityStats,
     },
     Database,
@@ -335,7 +336,7 @@ pub fn delete_partenaire(db: State<'_, DbState>, id: i64) -> Result<(), String> 
 // ========== TACHES ==========
 
 #[tauri::command]
-pub fn get_all_taches(db: State<'_, DbState>) -> Result<Vec<TacheWithContact>, String> {
+pub fn get_all_taches(db: State<'_, DbState>) -> Result<Vec<Tache>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -1343,50 +1344,6 @@ pub fn mark_email_campaign_response(
 }
 
 #[tauri::command]
-pub fn import_campaign_reply_from_gmail(
-    app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
-    contact_etiquette_id: i64,
-) -> Result<String, String> {
-    let item = {
-        let db_guard = db.lock().unwrap();
-        let database = db_guard.as_ref().ok_or("Database not initialized")?;
-        database.campaign_response_check_item(contact_etiquette_id)?
-    };
-
-    let store = crate::email::oauth_store::EmailOAuthStore::load(&app_handle)?;
-    let mut conn = store
-        .connection
-        .clone()
-        .ok_or("Connectez Google dans Paramètres → Email.")?;
-    if conn.provider != "google" {
-        return Err("L'import de réponse nécessite un compte Google.".into());
-    }
-    crate::email::oauth_send::refresh_connection_if_needed(&app_handle, &mut conn)?;
-    let client = reqwest::blocking::Client::new();
-    let reply = crate::email::response_sync::gmail_find_contact_reply(
-        &client,
-        &conn.access_token,
-        &item,
-    )?
-    .ok_or("Aucune réponse Gmail trouvée pour ce contact après l'envoi.")?;
-
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    database
-        .mark_email_campaign_response(
-            contact_etiquette_id,
-            "mail",
-            Some(reply.body_text.as_str()),
-            Some(reply.message_id.as_str()),
-            reply.subject.as_deref(),
-        )
-        .map_err(|e| format!("Failed to mark response: {}", e))?;
-
-    Ok(reply.body_text)
-}
-
-#[tauri::command]
 pub fn dismiss_email_campaign_followup(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
@@ -1808,5 +1765,22 @@ pub fn set_contact_custom_fields(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
         .set_contact_custom_fields(contact_id, values)
-        .map_err(|e| format!("Failed to save contact custom fields: {}", e))
+        .map_err(|e| format!("Failed to save contact custom fields: {}", e))?;
+    // Recalcul incrémental des étiquettes auto (mêmes effets qu'une sauvegarde de fiche :
+    // une condition « champ perso » peut poser/retirer une étiquette, donc créer une tâche).
+    let _ = database.check_auto_etiquettes_for_contact(contact_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_all_contact_custom_values(
+    db: State<'_, DbState>,
+    entity: Option<String>,
+) -> Result<Vec<CustomFieldValueRow>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let entity = entity.unwrap_or_else(|| "contact".to_string());
+    database
+        .get_all_custom_values(&entity)
+        .map_err(|e| format!("Failed to list custom values: {}", e))
 }

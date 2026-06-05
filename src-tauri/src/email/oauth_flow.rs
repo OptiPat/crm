@@ -12,16 +12,12 @@ use tauri::AppHandle;
 use url::Url;
 
 struct ProviderOAuth {
-    auth_url: &'static str,
-    token_url: &'static str,
     scopes: &'static [&'static str],
 }
 
 fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
     match provider {
         "google" => Ok(ProviderOAuth {
-            auth_url: "https://accounts.google.com/o/oauth2/v2/auth",
-            token_url: "https://oauth2.googleapis.com/token",
             scopes: &[
                 "https://www.googleapis.com/auth/gmail.send",
                 "https://www.googleapis.com/auth/gmail.readonly",
@@ -32,8 +28,6 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
             ],
         }),
         "microsoft" => Ok(ProviderOAuth {
-            auth_url: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
-            token_url: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
             scopes: &[
                 "offline_access",
                 "https://graph.microsoft.com/Mail.Send",

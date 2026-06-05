@@ -12,6 +12,21 @@ import type { RuleLeaf } from "@/lib/etiquettes/rule-ast";
 import { MOIS_LABELS } from "@/lib/api/tauri-etiquettes";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
 import { CategoryTogglePills } from "@/components/etiquettes/etiquette-form-ui";
+import {
+  parseSelectOptions,
+  type CustomFieldDef,
+} from "@/lib/api/tauri-custom-fields";
+
+/** Opérateurs disponibles pour une condition « champ personnalisé ». */
+const CUSTOM_FIELD_OPERATORS = [
+  { value: "rempli", label: "est rempli" },
+  { value: "vide", label: "est vide" },
+  { value: "egal", label: "est égal à" },
+  { value: "different", label: "est différent de" },
+  { value: "contient", label: "contient" },
+] as const;
+
+const OPERATORS_WITH_VALUE = ["egal", "different", "contient"];
 
 const CATEGORIES = [
   { value: "CLIENT", label: "Client" },
@@ -26,10 +41,12 @@ export function RuleLeafFields({
   leaf,
   onChange,
   etiquettesOptions = [],
+  customFieldsOptions = [],
 }: {
   leaf: RuleLeaf;
   onChange: (leaf: RuleLeaf) => void;
   etiquettesOptions?: { id: number; nom: string }[];
+  customFieldsOptions?: CustomFieldDef[];
 }) {
   const setConfig = (patch: Record<string, unknown>) =>
     onChange({ ...leaf, config: { ...leaf.config, ...patch } });
@@ -252,6 +269,77 @@ export function RuleLeafFields({
           </SelectContent>
         </Select>
       )}
+
+      {leaf.type === "CHAMP_PERSO" &&
+        (() => {
+          const fieldKey = String(leaf.config.field_key ?? "");
+          const operator = String(leaf.config.operator ?? "rempli");
+          const def = customFieldsOptions.find((d) => d.field_key === fieldKey);
+          const showValue = OPERATORS_WITH_VALUE.includes(operator);
+          return (
+            <div className="grid sm:grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Champ</Label>
+                <Select value={fieldKey} onValueChange={(v) => setConfig({ field_key: v })}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Choisir un champ" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customFieldsOptions.map((d) => (
+                      <SelectItem key={d.field_key} value={d.field_key}>
+                        {d.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Condition</Label>
+                <Select value={operator} onValueChange={(v) => setConfig({ operator: v })}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CUSTOM_FIELD_OPERATORS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {showValue && (
+                <div className="sm:col-span-2">
+                  <Label className="text-xs">Valeur</Label>
+                  {def?.field_type === "select" ? (
+                    <Select
+                      value={String(leaf.config.value ?? "")}
+                      onValueChange={(v) => setConfig({ value: v })}
+                    >
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Choisir…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {parseSelectOptions(def.options).map((opt) => (
+                          <SelectItem key={opt} value={opt}>
+                            {opt}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      className="mt-1"
+                      value={String(leaf.config.value ?? "")}
+                      onChange={(e) => setConfig({ value: e.target.value })}
+                      placeholder="Valeur à comparer"
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
       {leaf.type !== "JAMAIS_CONTACT" && (
         <CategoryTogglePills

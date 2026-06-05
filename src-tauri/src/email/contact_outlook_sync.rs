@@ -39,8 +39,6 @@ struct GraphMessage {
     sent_date_time: Option<String>,
     #[serde(default)]
     from: Option<GraphEmailAddressWrapper>,
-    #[serde(rename = "toRecipients", default)]
-    to_recipients: Vec<GraphEmailAddressWrapper>,
     #[serde(rename = "hasAttachments", default)]
     has_attachments: bool,
 }

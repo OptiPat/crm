@@ -132,7 +132,7 @@ fn parse_internal_date_sec(internal_date: &str) -> Option<i64> {
         .map(|ms| ms / 1000)
 }
 
-pub(crate) fn header_value<'a>(headers: Option<&'a [GmailHeader]>, name: &str) -> String {
+fn header_value<'a>(headers: Option<&'a [GmailHeader]>, name: &str) -> String {
     headers
         .and_then(|hs| {
             hs.iter()
@@ -412,14 +412,6 @@ pub fn sync_contact_mail_history(
         );
     }
     sync_contact_gmail_history_google(app, db_state, contact_id)
-}
-
-pub fn sync_contact_gmail_history(
-    app: &AppHandle,
-    db_state: &DbState,
-    contact_id: i64,
-) -> Result<ContactGmailSyncResult, String> {
-    sync_contact_mail_history(app, db_state, contact_id)
 }
 
 fn sync_contact_gmail_history_google(

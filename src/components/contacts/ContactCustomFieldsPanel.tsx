@@ -17,6 +17,8 @@ import {
   type ContactCustomField,
 } from "@/lib/api/tauri-custom-fields";
 import { subscribeCustomFieldsChanged } from "@/lib/custom-fields/custom-field-events";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { notifyTachesChanged } from "@/lib/taches/tache-events";
 import { SlidersHorizontal } from "lucide-react";
 import { toast } from "sonner";
 
@@ -80,6 +82,9 @@ export function ContactCustomFieldsPanel({ contactId }: ContactCustomFieldsPanel
         }))
       );
       setInitial({ ...values });
+      // Le backend a recalculé les étiquettes auto : rafraîchir compteurs et tâches du contact.
+      notifyEtiquettesChanged();
+      notifyTachesChanged();
       toast.success("Champs enregistrés");
     } catch (error) {
       console.error("Erreur sauvegarde champs personnalisés:", error);

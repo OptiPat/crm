@@ -201,9 +201,7 @@ impl NewsletterStore {
                 Some(encrypt_secret(key.trim(), storage)?)
             }
             (Some(_), None) => {
-                return Err(
-                    "Clé API Mistral : ouvrez le CRM avec votre mot de passe maître.".into(),
-                );
+                return Err("Clé API Mistral : clé de stockage indisponible.".into());
             }
             (Some(_), Some(_)) | (None, _) => {
                 existing_enc.filter(|s| !s.trim().is_empty())

@@ -168,6 +168,7 @@ impl Database {
         Ok(n)
     }
 
+    #[cfg(test)]
     pub fn evaluate_rule_tree_for_contact(
         &self,
         contact_id: i64,
@@ -241,63 +242,6 @@ fn legacy_leaf_from_etiquette(
         config: cfg,
         categories: cats,
     })
-}
-
-/// Enveloppe legacy en arbre v1 pour stockage RULE_TREE.
-pub fn wrap_single_leaf_as_tree(
-    condition_type: &str,
-    config: &str,
-    categories: &str,
-) -> Result<String, rusqlite::Error> {
-    let leaf = RuleNode::Leaf {
-        condition_type: condition_type.to_string(),
-        config: serde_json::from_str(config).unwrap_or(Value::Object(Default::default())),
-        categories: serde_json::from_str(categories).unwrap_or_default(),
-    };
-    let tree = RuleNode::Tree {
-        v: RULE_VERSION,
-        op: "and".to_string(),
-        children: vec![leaf],
-    };
-    serde_json::to_string(&tree).map_err(|e| {
-        rusqlite::Error::InvalidParameterName(format!("Sérialisation règle: {}", e))
-    })
-}
-
-pub fn merge_rule_tree_and(
-    existing_json: Option<&str>,
-    new_leaf: RuleNode,
-) -> Result<String, rusqlite::Error> {
-    let tree = if let Some(raw) = existing_json {
-        parse_rule_json(Some(&raw.to_string()), None, None, None).unwrap_or(RuleNode::Tree {
-            v: RULE_VERSION,
-            op: "and".to_string(),
-            children: vec![],
-        })
-    } else {
-        RuleNode::Tree {
-            v: RULE_VERSION,
-            op: "and".to_string(),
-            children: vec![],
-        }
-    };
-    match tree {
-        RuleNode::Tree { op, mut children, .. } if op.eq_ignore_ascii_case("and") => {
-            children.push(new_leaf);
-            serde_json::to_string(&RuleNode::Tree {
-                v: RULE_VERSION,
-                op: "and".to_string(),
-                children,
-            })
-            .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string()))
-        }
-        other => serde_json::to_string(&RuleNode::Tree {
-            v: RULE_VERSION,
-            op: "and".to_string(),
-            children: vec![other, new_leaf],
-        })
-        .map_err(|e| rusqlite::Error::InvalidParameterName(e.to_string())),
-    }
 }
 
 #[cfg(test)]

@@ -248,7 +248,7 @@ impl super::Database {
         &self,
         investissement: super::models::NewInvestissement,
     ) -> Result<super::models::Investissement> {
-        use chrono::{DateTime, Utc};
+        use chrono::DateTime;
 
         let versement_programme = if investissement.versement_programme.unwrap_or(false) {
             1
@@ -339,7 +339,7 @@ impl super::Database {
         id: i64,
         investissement: &super::models::NewInvestissement,
     ) -> Result<super::models::Investissement> {
-        use chrono::{DateTime, Utc};
+        use chrono::DateTime;
 
         let versement_programme = if investissement.versement_programme.unwrap_or(false) {
             1
