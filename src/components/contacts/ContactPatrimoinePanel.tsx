@@ -89,6 +89,7 @@ function PatrimoineSection({
   onEdit,
   onDelete,
   onEncours,
+  onOpenOwnerContact,
 }: {
   title: string;
   icon: typeof Home;
@@ -100,6 +101,7 @@ function PatrimoineSection({
   onEdit: (inv: Investissement) => void;
   onDelete: (inv: Investissement) => void;
   onEncours?: (inv: Investissement) => void;
+  onOpenOwnerContact?: (contactId: number) => void;
 }) {
   if (items.length === 0) return null;
 
@@ -120,7 +122,15 @@ function PatrimoineSection({
         </p>
       </div>
       <div className="space-y-2">
-        {items.map((inv) => (
+        {items.map((inv) => {
+          const ownerContactId =
+            inv._proprietaireId != null &&
+            inv._proprietaireId > 0 &&
+            inv._proprietaire !== "Foyer"
+              ? inv._proprietaireId
+              : null;
+
+          return (
           <InvestissementCard
             key={`${inv.id}-${inv._proprietaire ?? "self"}`}
             inv={inv}
@@ -132,6 +142,13 @@ function PatrimoineSection({
                 : inv._proprietaire === "Foyer"
                   ? "foyer"
                   : "member"
+            }
+            onProprietaireClick={
+              onOpenOwnerContact &&
+              ownerContactId != null &&
+              ownerContactId !== contactId
+                ? () => onOpenOwnerContact(ownerContactId)
+                : undefined
             }
             actions={
               <>
@@ -168,7 +185,8 @@ function PatrimoineSection({
               </>
             }
           />
-        ))}
+          );
+        })}
       </div>
     </section>
   );
@@ -186,6 +204,7 @@ export function ContactPatrimoinePanel({
   onEdit,
   onDelete,
   onRefresh,
+  onOpenOwnerContact,
 }: {
   contactId: number;
   contactPrenom: string;
@@ -198,6 +217,7 @@ export function ContactPatrimoinePanel({
   onEdit: (inv: Investissement) => void;
   onDelete: (inv: Investissement) => void;
   onRefresh: () => void;
+  onOpenOwnerContact?: (contactId: number) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
@@ -549,6 +569,7 @@ export function ContactPatrimoinePanel({
                     onEdit={onEdit}
                     onDelete={onDelete}
                     onEncours={(inv) => setEncoursInvestissement(inv)}
+                    onOpenOwnerContact={onOpenOwnerContact}
                   />
                   <PatrimoineSection
                     title="Placements financiers"
@@ -561,10 +582,19 @@ export function ContactPatrimoinePanel({
                     onEdit={onEdit}
                     onDelete={onDelete}
                     onEncours={(inv) => setEncoursInvestissement(inv)}
+                    onOpenOwnerContact={onOpenOwnerContact}
                   />
                   {showFlatList && (
                     <div className="space-y-2">
-                      {filtered.map((inv) => (
+                      {filtered.map((inv) => {
+                        const ownerContactId =
+                          inv._proprietaireId != null &&
+                          inv._proprietaireId > 0 &&
+                          inv._proprietaire !== "Foyer"
+                            ? inv._proprietaireId
+                            : null;
+
+                        return (
                         <InvestissementCard
                           key={`flat-${inv.id}-${inv._proprietaire ?? "self"}`}
                           inv={inv}
@@ -576,6 +606,13 @@ export function ContactPatrimoinePanel({
                               : inv._proprietaire === "Foyer"
                                 ? "foyer"
                                 : "member"
+                          }
+                          onProprietaireClick={
+                            onOpenOwnerContact &&
+                            ownerContactId != null &&
+                            ownerContactId !== contactId
+                              ? () => onOpenOwnerContact(ownerContactId)
+                              : undefined
                           }
                           actions={
                             <>
@@ -612,7 +649,8 @@ export function ContactPatrimoinePanel({
                             </>
                           }
                         />
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>

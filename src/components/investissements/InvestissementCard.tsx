@@ -39,6 +39,8 @@ export interface InvestissementCardProps {
   proprietaireVariant?: InvestissementProprietaireVariant;
   /** Clic sur la ligne → ouvrir la fiche contact (onglet Patrimoine côté appelant). */
   onOpenContactClick?: () => void;
+  /** Clic sur le badge détenteur → ouvrir la fiche du contact propriétaire. */
+  onProprietaireClick?: () => void;
   actions?: React.ReactNode;
 }
 
@@ -69,6 +71,7 @@ export function InvestissementCard({
   proprietaireLabel,
   proprietaireVariant,
   onOpenContactClick,
+  onProprietaireClick,
   actions,
 }: InvestissementCardProps) {
   const interactive = Boolean(onOpenContactClick);
@@ -115,18 +118,36 @@ export function InvestissementCard({
             {inv.origine === "EXISTANT_CLIENT" && (
               <span className="text-xs text-gray-500 italic">à côté</span>
             )}
-            {proprietaireLabel && (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 text-xs rounded-md border px-2 py-0.5 font-medium",
-                  proprietaireBadgeClass(proprietaireVariant),
-                  interactive && "group-hover:underline"
-                )}
-              >
-                <User className="h-3 w-3 shrink-0" aria-hidden />
-                {proprietaireLabel}
-              </span>
-            )}
+            {proprietaireLabel &&
+              (onProprietaireClick ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "inline-flex items-center gap-1 text-xs rounded-md border px-2 py-0.5 font-medium transition-colors",
+                    proprietaireBadgeClass(proprietaireVariant),
+                    "hover:underline hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onProprietaireClick();
+                  }}
+                  aria-label={`Voir la fiche de ${proprietaireLabel}`}
+                >
+                  <User className="h-3 w-3 shrink-0" aria-hidden />
+                  {proprietaireLabel}
+                </button>
+              ) : (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 text-xs rounded-md border px-2 py-0.5 font-medium",
+                    proprietaireBadgeClass(proprietaireVariant),
+                    interactive && "group-hover:underline"
+                  )}
+                >
+                  <User className="h-3 w-3 shrink-0" aria-hidden />
+                  {proprietaireLabel}
+                </span>
+              ))}
           </div>
           {nomProduitDistinctDuType(inv) && (
             <p className="font-medium text-foreground">

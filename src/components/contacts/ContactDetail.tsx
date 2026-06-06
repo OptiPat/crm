@@ -195,6 +195,24 @@ export function ContactDetail({
     handleOpenLinkedContact(member);
   };
 
+  const handleOpenOwnerContact = async (ownerId: number) => {
+    if (!onOpenContact || ownerId === contact?.id) return;
+
+    const fromFoyer = foyerMembers.find((m) => m.id === ownerId);
+    if (fromFoyer) {
+      handleOpenLinkedContact(fromFoyer);
+      return;
+    }
+
+    try {
+      const fetched = await getContactById(ownerId);
+      handleOpenLinkedContact(fetched);
+    } catch (error) {
+      console.error("Erreur ouverture fiche détenteur:", error);
+      toast.error("Impossible d'ouvrir la fiche contact");
+    }
+  };
+
   // Charger les partenaires au montage
   useEffect(() => {
     const loadPartenaires = async () => {
@@ -878,6 +896,9 @@ export function ContactDetail({
                 onEdit={handleEditInvestissement}
                 onDelete={handleDeleteInvestissement}
                 onRefresh={loadInvestissements}
+                onOpenOwnerContact={
+                  onOpenContact ? handleOpenOwnerContact : undefined
+                }
               />
             </TabsContent>
 

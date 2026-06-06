@@ -6,8 +6,10 @@ import {
   Eye,
   EyeOff,
   Home,
+  Link2,
   Trash2,
   TrendingUp,
+  UserPlus,
   Wallet,
 } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
@@ -36,6 +38,8 @@ type PrescripteurTreeViewProps = {
   onToggleInvestissements: (id: number) => void;
   onNodeClick: (contact: Contact) => void;
   onDeletePrescripteur: (contact: Contact) => void;
+  onAddClientRecommande?: (contact: Contact) => void;
+  onLinkClient?: (contact: Contact) => void;
   selectedContactId?: number;
 };
 
@@ -56,6 +60,8 @@ function TreeNode({
   onToggleInvestissements,
   onNodeClick,
   onDeletePrescripteur,
+  onAddClientRecommande,
+  onLinkClient,
   selectedContactId,
 }: {
   node: PrescripteurNode;
@@ -69,6 +75,7 @@ function TreeNode({
   const brancheClients = countTreeClients(node);
   const branchePatrimoine = calculateTreePatrimoine(node) - node.patrimoine;
   const isSelected = selectedContactId === node.contact.id;
+  const displayName = getContactDisplayName(node.contact, foyersInfo);
 
   return (
     <div className={cn(node.niveau > 0 && "ml-3 sm:ml-4 border-l-2 border-border/50 pl-3 sm:pl-4")}>
@@ -140,7 +147,32 @@ function TreeNode({
             <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-2 group-hover:text-primary" />
           </button>
 
-          <div className="flex flex-col gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex flex-row items-center gap-0.5 shrink-0"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {onAddClientRecommande && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-primary hover:text-primary"
+                onClick={() => onAddClientRecommande(node.contact)}
+                title={`Nouveau client recommandé par ${displayName}`}
+              >
+                <UserPlus className="h-3 w-3" />
+              </Button>
+            )}
+            {onLinkClient && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-primary hover:text-primary"
+                onClick={() => onLinkClient(node.contact)}
+                title={`Lier un contact à ${displayName}`}
+              >
+                <Link2 className="h-3 w-3" />
+              </Button>
+            )}
             {node.investissements.length > 0 && (
               <Button
                 variant="ghost"
@@ -236,6 +268,8 @@ function TreeNode({
               onToggleInvestissements={onToggleInvestissements}
               onNodeClick={onNodeClick}
               onDeletePrescripteur={onDeletePrescripteur}
+              onAddClientRecommande={onAddClientRecommande}
+              onLinkClient={onLinkClient}
               selectedContactId={selectedContactId}
             />
           ))}
@@ -254,12 +288,17 @@ export function PrescripteurTreeView({
   onToggleInvestissements,
   onNodeClick,
   onDeletePrescripteur,
+  onAddClientRecommande,
+  onLinkClient,
   selectedContactId,
 }: PrescripteurTreeViewProps) {
   return (
     <div>
       <p className="text-xs text-muted-foreground mb-3">
-        Arbre des recommandations — cliquez sur un nom pour ouvrir la fiche contact.
+        Clic sur le nom → fiche contact. Sur chaque ligne :{" "}
+        <UserPlus className="inline h-3 w-3 -mt-0.5" aria-hidden /> nouveau recommandé,{" "}
+        <Link2 className="inline h-3 w-3 -mt-0.5" aria-hidden /> lier un existant — sous
+        cette personne (ex. Julien), pas seulement la racine.
       </p>
       <TreeNode
         node={root}
@@ -270,6 +309,8 @@ export function PrescripteurTreeView({
         onToggleInvestissements={onToggleInvestissements}
         onNodeClick={onNodeClick}
         onDeletePrescripteur={onDeletePrescripteur}
+        onAddClientRecommande={onAddClientRecommande}
+        onLinkClient={onLinkClient}
         selectedContactId={selectedContactId}
       />
     </div>

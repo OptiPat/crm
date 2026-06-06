@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -12,7 +11,6 @@ import {
 } from "@/components/ui/select";
 import {
   Plus,
-  Search,
   Users,
   Home,
   Filter,
@@ -43,6 +41,7 @@ import {
   SplitDetailPane,
   SplitDetailStack,
   SplitListColumn,
+  ListSearchField,
   splitCardClassName,
   splitCardContentClassName,
   splitCardHeaderClassName,
@@ -279,55 +278,37 @@ export function Foyers({ onNavigate }: FoyersProps) {
         />
       </div>
 
+      <div className="sticky top-0 z-10 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 rounded-lg border border-border/60 bg-background/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <ListSearchField
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Nom du foyer ou membre…"
+          className="flex-1 min-w-[220px]"
+        />
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-full sm:w-[200px]">
+            <Filter className="h-4 w-4 mr-2 shrink-0" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">Tous les types</SelectItem>
+            <SelectItem value="COUPLE">Couples</SelectItem>
+            <SelectItem value="FAMILLE">Avec enfant(s)</SelectItem>
+            <SelectItem value="CELIBATAIRE">Célibataires</SelectItem>
+            <SelectItem value="DIVORCE">Divorcé(e)s</SelectItem>
+            <SelectItem value="VEUF">Veuf(ve)s</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
         <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3 lg:justify-between">
-            <div>
-              <CardTitle className="font-serif text-lg">Liste des foyers</CardTitle>
-              <CardDescription>
-                {hasActiveFilters
-                  ? `${filteredFoyers.length} résultat(s) filtré(s)`
-                  : "Recherche par nom ou membre, filtre par type"}
-              </CardDescription>
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-              <div className="relative flex-1 sm:min-w-[220px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Rechercher…"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-                {searchQuery && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                    onClick={() => setSearchQuery("")}
-                    aria-label="Effacer"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <Filter className="h-4 w-4 mr-2 shrink-0" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">Tous les types</SelectItem>
-                  <SelectItem value="COUPLE">Couples</SelectItem>
-                  <SelectItem value="FAMILLE">Avec enfant(s)</SelectItem>
-                  <SelectItem value="CELIBATAIRE">Célibataires</SelectItem>
-                  <SelectItem value="DIVORCE">Divorcé(e)s</SelectItem>
-                  <SelectItem value="VEUF">Veuf(ve)s</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          <CardTitle className="font-serif text-lg">Liste des foyers</CardTitle>
+          <CardDescription>
+            {hasActiveFilters
+              ? `${filteredFoyers.length} résultat(s) filtré(s)`
+              : "Cliquez sur un foyer pour la fiche et les membres"}
+          </CardDescription>
           {hasActiveFilters && (
             <div className="flex flex-wrap gap-2 pt-2">
               {typeFilter !== "ALL" && (

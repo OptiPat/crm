@@ -1,8 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Users, ChevronDown, ChevronUp, Share2, TrendingUp, Plus, X, ArrowLeft } from "lucide-react";
+import {
+  Users,
+  ChevronDown,
+  ChevronUp,
+  Share2,
+  TrendingUp,
+  Plus,
+  X,
+  ArrowLeft,
+  Pencil,
+  UserPlus,
+  Link2,
+} from "lucide-react";
 import { getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
@@ -18,6 +29,7 @@ import {
 } from "@/lib/prescripteurs/prescripteur-tree";
 import { PrescripteurSummaryCard } from "@/components/prescripteurs/PrescripteurSummaryCard";
 import { PrescripteurTreeView } from "@/components/prescripteurs/PrescripteurTreeView";
+import { PrescripteurLinkModal } from "@/components/prescripteurs/PrescripteurLinkModal";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
@@ -29,6 +41,7 @@ import {
   SplitDetailPane,
   SplitDetailStack,
   SplitListColumn,
+  ListSearchField,
   embeddedDetailShellClassName,
   splitCardClassName,
   splitCardContentClassName,
@@ -54,6 +67,10 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
     new Set()
   );
   const [showPrescripteurForm, setShowPrescripteurForm] = useState(false);
+  const [showEditPrescripteurForm, setShowEditPrescripteurForm] = useState(false);
+  const [showClientRecommandeForm, setShowClientRecommandeForm] = useState(false);
+  const [showLinkClientModal, setShowLinkClientModal] = useState(false);
+  const [actionPrescripteur, setActionPrescripteur] = useState<Contact | null>(null);
   const [selectedPrescripteurId, setSelectedPrescripteurId] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showContactDetail, setShowContactDetail] = useState(false);
@@ -192,6 +209,56 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
     }
   };
 
+  const prescripteurForModals = actionPrescripteur ?? selectedStats?.contact ?? null;
+
+  const openAddClientFor = (contact: Contact) => {
+    setActionPrescripteur(contact);
+    setShowClientRecommandeForm(true);
+  };
+
+  const openLinkClientFor = (contact: Contact) => {
+    setActionPrescripteur(contact);
+    setShowLinkClientModal(true);
+  };
+
+  const renderPrescripteurActions = (contact: Contact) => (
+    <div className="flex flex-wrap gap-2">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => {
+          setActionPrescripteur(contact);
+          setSelectedPrescripteurId(contact.id);
+          setShowEditPrescripteurForm(true);
+        }}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        Modifier
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => openAddClientFor(contact)}
+      >
+        <UserPlus className="h-3.5 w-3.5" />
+        Nouveau client recommandé
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => openLinkClientFor(contact)}
+      >
+        <Link2 className="h-3.5 w-3.5" />
+        Lier un contact existant
+      </Button>
+    </div>
+  );
+
   const handleDeletePrescripteur = async (contact: Contact) => {
     const clientsRecommandes = contacts.filter((c) => c.prescripteur_id === contact.id);
     let confirmMessage = `Supprimer ${contact.prenom} ${contact.nom} ?`;
@@ -307,39 +374,23 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         />
       </div>
 
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <ListSearchField
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Nom, foyer ou membre…"
+          className="flex-1 min-w-[220px] max-w-xl"
+        />
+      </div>
+
       <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
         <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-            <div>
-              <CardTitle className="font-serif text-lg">Liste des prescripteurs</CardTitle>
-              <CardDescription>
-                {searchQuery
-                  ? `${filteredPrescripteurs.length} résultat(s)`
-                  : "Recherche par nom, foyer ou membre"}
-              </CardDescription>
-            </div>
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-              {searchQuery && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Effacer"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          </div>
+          <CardTitle className="font-serif text-lg">Liste des prescripteurs</CardTitle>
+          <CardDescription>
+            {searchQuery
+              ? `${filteredPrescripteurs.length} résultat(s)`
+              : "Arbre des recommandations — cliquez pour ouvrir l'arbre"}
+          </CardDescription>
         </CardHeader>
 
         <CardContent className={splitCardContentClassName(showSplit, "pt-0", true)}>
@@ -410,7 +461,8 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                         </button>
                       </div>
                       {isExpanded && (
-                        <div className="border-t border-border/60 bg-muted/15 px-4 py-4">
+                        <div className="border-t border-border/60 bg-muted/15 px-4 py-4 space-y-3">
+                          {!showSplit && renderPrescripteurActions(prescripteur.contact)}
                           <PrescripteurTreeView
                             root={tree}
                             foyersInfo={foyersInfo}
@@ -420,6 +472,8 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                             onToggleInvestissements={toggleInvestissements}
                             onNodeClick={openMember}
                             onDeletePrescripteur={handleDeletePrescripteur}
+                            onAddClientRecommande={openAddClientFor}
+                            onLinkClient={openLinkClientFor}
                           />
                         </div>
                       )}
@@ -464,8 +518,8 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                   </SplitDetailStack>
                 ) : (
                   <div className={embeddedDetailShellClassName("shadow-md")}>
-                    <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border/60 bg-muted/30 px-4 py-3">
-                      <div className="min-w-0">
+                    <div className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/60 bg-muted/30 px-4 py-3">
+                      <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                           Arbre
                         </p>
@@ -478,6 +532,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                           {formatEuroCentimes(selectedStats.patrimoineApporteTotal)} apporté
                         </p>
                       </div>
+                      {renderPrescripteurActions(selectedStats.contact)}
                       <Button
                         type="button"
                         variant="ghost"
@@ -499,6 +554,8 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                         onToggleInvestissements={toggleInvestissements}
                         onNodeClick={openMember}
                         onDeletePrescripteur={handleDeletePrescripteur}
+                        onAddClientRecommande={openAddClientFor}
+                        onLinkClient={openLinkClientFor}
                         selectedContactId={undefined}
                       />
                     </div>
@@ -516,7 +573,47 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         onOpenChange={setShowPrescripteurForm}
         createContext="prescripteurs"
         onSuccess={() => void loadData()}
+        onCreated={(created) => {
+          void loadData();
+          setActionPrescripteur(created);
+          openPrescripteur({
+            contact: created,
+            nombreClientsTotal: 0,
+            nombreClientsDirects: 0,
+            patrimoineApporteTotal: 0,
+            patrimoinePersonnel: 0,
+          });
+        }}
       />
+
+      {prescripteurForModals && (
+        <>
+          <ContactForm
+            open={showEditPrescripteurForm}
+            onOpenChange={setShowEditPrescripteurForm}
+            contact={prescripteurForModals}
+            createContext="detail"
+            onSuccess={() => void loadData()}
+          />
+          <ContactForm
+            open={showClientRecommandeForm}
+            onOpenChange={setShowClientRecommandeForm}
+            createContext="clients"
+            defaultPrescripteurId={prescripteurForModals.id}
+            onSuccess={() => void loadData()}
+            onCreated={(created) => {
+              void loadData();
+              openMember(created);
+            }}
+          />
+          <PrescripteurLinkModal
+            open={showLinkClientModal}
+            onOpenChange={setShowLinkClientModal}
+            prescripteur={prescripteurForModals}
+            onSuccess={() => void loadData()}
+          />
+        </>
+      )}
 
       {!isWideLayout && selectedContact && (
         <ContactDetail

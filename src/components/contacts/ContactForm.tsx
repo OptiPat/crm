@@ -91,6 +91,8 @@ interface ContactFormProps {
     options: { addInvestissement: boolean }
   ) => void;
   createContext?: ContactFormContext;
+  /** Préremplit le champ prescripteur à la création (page Prescripteurs). */
+  defaultPrescripteurId?: number;
   onOpenContact?: (contact: Contact) => void;
 }
 
@@ -222,6 +224,7 @@ export function ContactForm({
   onSuccess,
   onCreated,
   createContext = "clients",
+  defaultPrescripteurId,
   onOpenContact,
 }: ContactFormProps) {
   const isEdit = !!contact;
@@ -256,7 +259,10 @@ export function ContactForm({
   useEffect(() => {
     if (!open) return;
 
-    const data = contact ? contactToFormData(contact) : getEmptyForm(createContext);
+    let data = contact ? contactToFormData(contact) : getEmptyForm(createContext);
+    if (!contact && defaultPrescripteurId) {
+      data = { ...data, prescripteur_id: defaultPrescripteurId };
+    }
     setFormData(data);
     initialSnapshot.current = serializeFormSnapshot(data);
     setDirty(false);
@@ -271,7 +277,7 @@ export function ContactForm({
     } else {
       setMesFilleulsCount(0);
     }
-  }, [open, contact?.id, createContext]);
+  }, [open, contact?.id, createContext, defaultPrescripteurId]);
 
   useEffect(() => {
     if (!open) return;

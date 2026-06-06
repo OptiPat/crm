@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Search, Users, ChevronDown, ChevronUp, Home, ArrowLeft, X, TreePine } from "lucide-react";
+import { Users, ChevronDown, ChevronUp, Home, ArrowLeft, TreePine } from "lucide-react";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
@@ -30,6 +29,7 @@ import {
   SplitDetailPane,
   SplitDetailStack,
   SplitListColumn,
+  ListSearchField,
   embeddedDetailShellClassName,
   splitCardClassName,
   splitCardContentClassName,
@@ -289,39 +289,23 @@ export function Familles({ onNavigate }: FamillesProps) {
         />
       </div>
 
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <ListSearchField
+          value={searchQuery}
+          onChange={setSearchQuery}
+          placeholder="Nom de famille ou membre…"
+          className="flex-1 min-w-[220px] max-w-xl"
+        />
+      </div>
+
       <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
         <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-            <div>
-              <CardTitle className="font-serif text-lg">Liste des familles</CardTitle>
-              <CardDescription>
-                {searchQuery
-                  ? `${filteredFamilles.length} résultat(s) pour « ${searchQuery} »`
-                  : "Recherchez par nom de famille ou par membre"}
-              </CardDescription>
-            </div>
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Rechercher…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-              {searchQuery && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Effacer la recherche"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          </div>
+          <CardTitle className="font-serif text-lg">Liste des familles</CardTitle>
+          <CardDescription>
+            {searchQuery
+              ? `${filteredFamilles.length} résultat(s) pour « ${searchQuery} »`
+              : "Cliquez sur une famille pour voir les membres et foyers"}
+          </CardDescription>
         </CardHeader>
 
         <CardContent className={splitCardContentClassName(showSplit, "pt-0", true)}>
