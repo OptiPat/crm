@@ -371,7 +371,7 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
                   <SelectItem value="PER">PER</SelectItem>
                   <SelectItem value="IMMOBILIER">Immobilier</SelectItem>
                   <SelectItem value="FIP_FCPI">FIP/FCPI</SelectItem>
-                  <SelectItem value="FCPR">FCPR</SelectItem>
+                  <SelectItem value="FCPR">FCPR / FPCI</SelectItem>
                   <SelectItem value="G3F">G3F</SelectItem>
                   <SelectItem value="AUTRE">Autre</SelectItem>
                 </SelectContent>

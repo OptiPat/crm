@@ -9,6 +9,15 @@ pub const CONTACT_SELECT: &str = "id, famille_id, foyer_id, role_foyer, role_fam
                     date_dernier_contact_filleul, date_prochain_suivi_filleul,
                     statut_suivi, registre, notes, created_at, updated_at";
 
+/// CONTACT_SELECT avec préfixe table (requêtes JOIN sur `contacts`).
+pub fn contact_select_prefixed(prefix: &str) -> String {
+    CONTACT_SELECT
+        .split(',')
+        .map(|col| format!("{prefix}.{}", col.trim()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 pub fn normalize_contact_registre(value: Option<&str>) -> String {
     match value.map(str::trim).filter(|s| !s.is_empty()) {
         Some(v) if v.eq_ignore_ascii_case("TU") => "TU".to_string(),

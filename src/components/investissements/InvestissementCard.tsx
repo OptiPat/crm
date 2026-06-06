@@ -13,6 +13,10 @@ import {
   isPlacementEncoursEligible,
 } from "@/lib/investissements/investissement-encours";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
+import {
+  parseDemembrementDuree,
+  parseModeDetention,
+} from "@/lib/investissements/investissement-demembrement";
 import { cn } from "@/lib/utils";
 import {
   ArrowRight,
@@ -167,29 +171,32 @@ export function InvestissementCard({
                     ` (${inv.frequence_versement})`}
                 </InvestissementMetaRow>
               )}
-            {inv.notes?.match(/Mode de détention:\s*([^\|]+)/i) && (
-              <InvestissementMetaRow icon={Tag} tone="tag">
-                {inv.notes
-                  .match(/Mode de détention:\s*([^\|]+)/i)?.[1]
-                  .trim()}
-              </InvestissementMetaRow>
-            )}
-            {inv.notes?.match(/Durée:\s*([^\|]+)/i) &&
+            {inv.type_produit === "SCPI_DEMEMBREMENT" &&
+              parseModeDetention(inv.notes) &&
               (() => {
-                const dureeStr = inv.notes
-                  .match(/Durée:\s*([^\|]+)/i)?.[1]
-                  .trim();
-
-                if (dureeStr?.toLowerCase().includes("viager")) {
+                const mode = parseModeDetention(inv.notes);
+                const label =
+                  mode === "USUFRUIT" ? "Usufruit" : "Nue-propriété";
+                return (
+                  <InvestissementMetaRow icon={Tag} tone="tag">
+                    {label}
+                  </InvestissementMetaRow>
+                );
+              })()}
+            {inv.type_produit === "SCPI_DEMEMBREMENT" &&
+              (() => {
+                const parsed = parseDemembrementDuree(inv.notes);
+                if (parsed.kind === "VIAGER") {
                   return (
                     <InvestissementMetaRow icon={RefreshCw} tone="term">
                       Viager
                     </InvestissementMetaRow>
                   );
                 }
-                const dureeMatch = dureeStr?.match(/(\d+)\s*ans/i);
-                if (dureeMatch?.[1] && inv.date_fin_demembrement) {
+                if (inv.date_fin_demembrement) {
                   const dateFin = formatCalendarDateFr(inv.date_fin_demembrement);
+                  const yearsLabel =
+                    parsed.annees != null ? `${parsed.annees}\u00a0ans` : "Fin";
                   return (
                     <span
                       className={`text-sm ${INVESTISSEMENT_META_TONE_CLASS.term}`}
@@ -198,7 +205,7 @@ export function InvestissementCard({
                         className="h-3.5 w-3.5 shrink-0"
                         aria-hidden
                       />
-                      <span>{dureeMatch[1]}&nbsp;ans</span>
+                      <span>{yearsLabel}</span>
                       <ArrowRight
                         className="h-3 w-3 shrink-0 opacity-60"
                         aria-hidden

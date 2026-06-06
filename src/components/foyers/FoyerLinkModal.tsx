@@ -133,7 +133,7 @@ export function FoyerLinkModal({
             Regrouper avec un autre contact
           </DialogTitle>
           <DialogDescription>
-            Couple, conjoint ou co-titulaire — les noms de famille peuvent être différents.
+            Couple ou conjoint — les noms de famille peuvent être différents.
             Rejoignez le foyer d’un contact existant ou créez un foyer commun à deux.
           </DialogDescription>
         </DialogHeader>
@@ -141,7 +141,7 @@ export function FoyerLinkModal({
         <div className="space-y-4 py-4">
           {/* Recherche */}
           <div className="space-y-2">
-            <Label htmlFor="search">Rechercher le conjoint ou co-titulaire</Label>
+            <Label htmlFor="search">Rechercher le conjoint</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input

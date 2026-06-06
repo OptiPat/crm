@@ -6,6 +6,7 @@ export const IMMOBILIER_TYPES = [
   "PINEL",
   "MALRAUX",
   "DENORMANDIE",
+  "JEANBRUN",
   "RP",
   "RS",
   "DEFICIT_FONCIER",
@@ -26,9 +27,10 @@ const PRODUCT_TYPE_LABELS: Record<string, string> = {
   PER: "PER",
   IMMOBILIER: "Immobilier",
   FIP_FCPI: "FIP/FCPI",
-  FCPR: "FCPR",
+  FCPR: "FCPR / FPCI",
   G3F: "G3F",
   PINEL: "Pinel",
+  JEANBRUN: "Jeanbrun",
   AUTRE: "Autre",
 };
 
@@ -36,7 +38,8 @@ const PRODUCT_TYPE_LABELS: Record<string, string> = {
 const PRODUCT_NAME_ALIASES: Record<string, string> = {
   fip: "FIP",
   fcpi: "FCPI",
-  fcpr: "FCPR",
+  fcpr: "FCPR / FPCI",
+  fpci: "FCPR / FPCI",
   scpi: "SCPI",
   per: "PER",
   g3f: "G3F",

@@ -160,8 +160,8 @@ export function FoyerCreateModal({
             Créer un foyer
           </DialogTitle>
           <DialogDescription>
-            Partez de ce contact et ajoutez conjoint, enfants ou autres membres.
-            Utile pour regrouper plus de deux personnes d’un coup.
+            Couple seul ou plusieurs membres (conjoint, enfants) — un seul
+            parcours pour créer le foyer et y rattacher les contacts.
           </DialogDescription>
         </DialogHeader>
 

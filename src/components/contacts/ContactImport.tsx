@@ -697,10 +697,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                     typeProduit = "ASSURANCE_VIE";
                   } else if (produitUpper.includes('PER')) {
                     typeProduit = "PER";
+                  } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
+                    typeProduit = "FCPR";
                   } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
                     typeProduit = "FIP_FCPI";
-                  } else if (produitUpper.includes('FCPR')) {
-                    typeProduit = "FCPR";
                   } else if (produitUpper.includes('G3F')) {
                     typeProduit = "G3F";
                   } else if (produitUpper.includes('LMNP')) {
@@ -1402,10 +1402,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 typeProduit = "ASSURANCE_VIE";
               } else if (produitUpper.includes('PER')) {
                 typeProduit = "PER";
+              } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
+                typeProduit = "FCPR";
               } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
                 typeProduit = "FIP_FCPI";
-              } else if (produitUpper.includes('FCPR')) {
-                typeProduit = "FCPR";
               } else if (produitUpper.includes('G3F')) {
                 typeProduit = "G3F";
               } else if (produitUpper.includes('LMNP')) {
@@ -1646,10 +1646,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               typeProduit = "ASSURANCE_VIE";
             } else if (produitUpper.includes('PER')) {
               typeProduit = "PER";
+            } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
+              typeProduit = "FCPR";
             } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
               typeProduit = "FIP_FCPI";
-            } else if (produitUpper.includes('FCPR')) {
-              typeProduit = "FCPR";
             } else if (produitUpper.includes('G3F')) {
               typeProduit = "G3F";
             } else if (produitUpper.includes('LMNP')) {
@@ -1896,10 +1896,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           typeProduit = "ASSURANCE_VIE";
         } else if (produitUpper.includes('PER')) {
           typeProduit = "PER";
+        } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
+          typeProduit = "FCPR";
         } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
           typeProduit = "FIP_FCPI";
-        } else if (produitUpper.includes('FCPR')) {
-          typeProduit = "FCPR";
         } else if (produitUpper.includes('G3F')) {
           typeProduit = "G3F";
         } else if (produitUpper.includes('LMNP')) {

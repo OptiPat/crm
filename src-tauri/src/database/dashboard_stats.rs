@@ -62,7 +62,7 @@ impl super::Database {
         // Nombre de biens immobiliers
         let nombre_biens_immobiliers: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM investissements i
-             WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE')
+             WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'JEANBRUN', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE')
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
                     OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
             [],

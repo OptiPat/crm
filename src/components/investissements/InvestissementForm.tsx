@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -19,6 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
+const TYPE_PRODUIT_GROUP_LABEL =
+  "py-2.5 pl-6 pr-2 text-base font-bold uppercase tracking-wide text-foreground";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers } from "@/lib/api/tauri-foyers";
 import { getAllPartenaires } from "@/lib/api/tauri-partenaires";
@@ -42,6 +46,18 @@ import {
 } from "@/lib/etiquettes/exceltis";
 import { dateFieldToIso } from "@/lib/contacts/contact-form-utils";
 import { unixToDateInput } from "@/lib/dates/calendar-date";
+import {
+  addYearsToDateInput,
+  detectDemembrementKind,
+  parseDemembrementDuree,
+  parseModeDetention,
+  stripStructuredDemembrementFromNotes,
+  upsertDemembrementDureeInNotes,
+  upsertModeDetentionInNotes,
+  yearsBetweenDateInputs,
+  type DemembrementKind,
+  type DetentionDemembrement,
+} from "@/lib/investissements/investissement-demembrement";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 
@@ -79,6 +95,12 @@ export function InvestissementForm({
   const [montantInitial, setMontantInitial] = useState("");
   const [dateSouscription, setDateSouscription] = useState("");
   const [dateFinDemembrement, setDateFinDemembrement] = useState("");
+  const [demembrementKind, setDemembrementKind] =
+    useState<DemembrementKind>("TEMPORAIRE");
+  const [dureeDemembrementAns, setDureeDemembrementAns] = useState("");
+  const [detentionMode, setDetentionMode] = useState<DetentionDemembrement | null>(
+    null
+  );
   const [dateFinPret, setDateFinPret] = useState("");
   const [versementProgramme, setVersementProgramme] = useState(false);
   const [montantVersementProgramme, setMontantVersementProgramme] = useState("");
@@ -129,7 +151,29 @@ export function InvestissementForm({
     if (!isExceltisEligibleProductType(typeProduit)) {
       setExceltisChoice({ hasExceltis: false });
     }
+    if (typeProduit !== "SCPI_DEMEMBREMENT") {
+      setDemembrementKind("TEMPORAIRE");
+      setDureeDemembrementAns("");
+      setDetentionMode(null);
+    }
   }, [typeProduit, accepteVersementProgramme, accepteReinvestissement]);
+
+  useEffect(() => {
+    if (typeProduit !== "SCPI_DEMEMBREMENT" || demembrementKind !== "TEMPORAIRE") {
+      return;
+    }
+    const years = parseInt(dureeDemembrementAns, 10);
+    if (!dateSouscription || !Number.isFinite(years) || years <= 0) return;
+    const computed = addYearsToDateInput(dateSouscription, years);
+    if (computed) setDateFinDemembrement(computed);
+  }, [typeProduit, demembrementKind, dureeDemembrementAns, dateSouscription]);
+
+  useEffect(() => {
+    if (demembrementKind === "VIAGER") {
+      setDateFinDemembrement("");
+      setDureeDemembrementAns("");
+    }
+  }, [demembrementKind]);
 
   const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -159,11 +203,29 @@ export function InvestissementForm({
             ? unixToDateInput(investissement.date_souscription)
             : ""
         );
-        setDateFinDemembrement(
-          investissement.date_fin_demembrement
-            ? unixToDateInput(investissement.date_fin_demembrement)
-            : ""
+        const dateFinDemembInput = investissement.date_fin_demembrement
+          ? unixToDateInput(investissement.date_fin_demembrement)
+          : "";
+        setDateFinDemembrement(dateFinDemembInput);
+        const parsedDemembrement = parseDemembrementDuree(investissement.notes);
+        setDemembrementKind(
+          detectDemembrementKind({
+            typeProduit: investissement.type_produit,
+            hasDateFin: !!dateFinDemembInput,
+            notes: investissement.notes,
+          })
         );
+        const souscriptionInput = investissement.date_souscription
+          ? unixToDateInput(investissement.date_souscription)
+          : "";
+        setDureeDemembrementAns(
+          parsedDemembrement.annees != null
+            ? String(parsedDemembrement.annees)
+            : yearsBetweenDateInputs(souscriptionInput, dateFinDemembInput) != null
+              ? String(yearsBetweenDateInputs(souscriptionInput, dateFinDemembInput))
+              : ""
+        );
+        setDetentionMode(parseModeDetention(investissement.notes));
         setDateFinPret(
           investissement.date_fin_pret ? unixToDateInput(investissement.date_fin_pret) : ""
         );
@@ -172,7 +234,7 @@ export function InvestissementForm({
         setFrequenceVersement(investissement.frequence_versement || "");
         setReinvestissementDividendes(investissement.reinvestissement_dividendes);
         setPourcentageReinvestissement(investissement.notes?.match(/Réinv\. (\d+)%/)?.[1] || "100");
-        setNotes(investissement.notes || "");
+        setNotes(stripStructuredDemembrementFromNotes(investissement.notes || ""));
         setLiveEncours({
           actuel: investissement.encours_actuel,
           date: investissement.encours_date,
@@ -218,6 +280,9 @@ export function InvestissementForm({
     setMontantInitial("");
     setDateSouscription("");
     setDateFinDemembrement("");
+    setDemembrementKind("TEMPORAIRE");
+    setDureeDemembrementAns("");
+    setDetentionMode(null);
     setDateFinPret("");
     setVersementProgramme(false);
     setMontantVersementProgramme("");
@@ -260,12 +325,32 @@ export function InvestissementForm({
         }
       }
 
-      // Stocker le pourcentage dans les notes si réinvestissement activé
       let finalNotes = notes || "";
+      if (typeProduit === "SCPI_DEMEMBREMENT") {
+        const annees =
+          demembrementKind === "TEMPORAIRE" && dureeDemembrementAns.trim()
+            ? parseInt(dureeDemembrementAns, 10)
+            : null;
+        finalNotes = upsertDemembrementDureeInNotes(
+          finalNotes,
+          demembrementKind,
+          Number.isFinite(annees) ? annees : null
+        );
+        finalNotes = upsertModeDetentionInNotes(finalNotes, detentionMode);
+      }
+
+      // Stocker le pourcentage dans les notes si réinvestissement activé
       if (reinvestissementDividendes && accepteReinvestissement) {
         const pourcentageInfo = `Réinv. ${pourcentageReinvestissement}%`;
         finalNotes = finalNotes ? `${pourcentageInfo}\n${finalNotes}` : pourcentageInfo;
       }
+
+      const dateFinDemembrementIso =
+        typeProduit === "SCPI_DEMEMBREMENT"
+          ? demembrementKind === "VIAGER"
+            ? undefined
+            : dateFieldToIso(dateFinDemembrement)
+          : undefined;
 
       const newInvestissement: NewInvestissement = {
         contact_id: contactId ? parseInt(contactId) : undefined,
@@ -275,7 +360,7 @@ export function InvestissementForm({
         nom_produit: nomProduit,
         montant_initial: montantInitial ? Math.round(parseFloat(montantInitial) * 100) : undefined,
         date_souscription: dateFieldToIso(dateSouscription),
-        date_fin_demembrement: dateFieldToIso(dateFinDemembrement),
+        date_fin_demembrement: dateFinDemembrementIso,
         date_fin_pret: dateFieldToIso(dateFinPret),
         versement_programme: accepteVersementProgramme ? versementProgramme : false,
         montant_versement_programme: montantVersementProgramme ? Math.round(parseFloat(montantVersementProgramme) * 100) : undefined,
@@ -391,9 +476,26 @@ export function InvestissementForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
-                  <SelectLabel className="text-xs font-semibold text-muted-foreground">Immobilier</SelectLabel>
+                  <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Placement</SelectLabel>
+                  <SelectItem value="ASSURANCE_VIE">Assurance Vie</SelectItem>
+                  <SelectItem value="CONTRAT_CAPITALISATION">Contrat de Capitalisation</SelectItem>
+                  <SelectItem value="PER">PER</SelectItem>
+                  <SelectItem value="EPARGNE_SALARIALE">Épargne Salariale</SelectItem>
+                  <SelectItem value="FIP_FCPI">FIP/FCPI</SelectItem>
+                  <SelectItem value="FCPR">FCPR / FPCI</SelectItem>
+                  <SelectItem value="G3F">G3F</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>SCPI</SelectLabel>
+                  <SelectItem value="SCPI">SCPI</SelectItem>
+                  <SelectItem value="SCPI_DEMEMBREMENT">SCPI Démembrement</SelectItem>
+                  <SelectItem value="SCPI_FISCALE">SCPI Fiscale</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Immobilier</SelectLabel>
                   <SelectItem value="PINEL">Pinel</SelectItem>
                   <SelectItem value="DENORMANDIE">Denormandie</SelectItem>
+                  <SelectItem value="JEANBRUN">Jeanbrun</SelectItem>
                   <SelectItem value="MALRAUX">Malraux</SelectItem>
                   <SelectItem value="MONUMENT_HISTORIQUE">Monument Historique</SelectItem>
                   <SelectItem value="DEFICIT_FONCIER">Déficit Foncier</SelectItem>
@@ -402,27 +504,11 @@ export function InvestissementForm({
                   <SelectItem value="NUE_PROPRIETE">Nue-Propriété</SelectItem>
                   <SelectItem value="RESIDENCE_PRINCIPALE">Résidence Principale</SelectItem>
                   <SelectItem value="LOCATIF_CLASSIQUE">Locatif Classique</SelectItem>
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel className="text-xs font-semibold text-muted-foreground">SCPI</SelectLabel>
-                  <SelectItem value="SCPI">SCPI</SelectItem>
-                  <SelectItem value="SCPI_DEMEMBREMENT">SCPI Démembrement</SelectItem>
-                  <SelectItem value="SCPI_FISCALE">SCPI Fiscale</SelectItem>
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel className="text-xs font-semibold text-muted-foreground">Placements</SelectLabel>
-                  <SelectItem value="ASSURANCE_VIE">Assurance Vie</SelectItem>
-                  <SelectItem value="CONTRAT_CAPITALISATION">Contrat de Capitalisation</SelectItem>
-                  <SelectItem value="PER">PER</SelectItem>
-                  <SelectItem value="EPARGNE_SALARIALE">Épargne Salariale</SelectItem>
-                  <SelectItem value="FIP_FCPI">FIP/FCPI</SelectItem>
-                  <SelectItem value="FCPR">FCPR</SelectItem>
-                  <SelectItem value="G3F">G3F</SelectItem>
-                </SelectGroup>
-                <SelectGroup>
-                  <SelectLabel className="text-xs font-semibold text-muted-foreground">Autre</SelectLabel>
-                  <SelectItem value="AUTRE">Autre</SelectItem>
                   <SelectItem value="IMMOBILIER">Immobilier (ancien)</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Autre</SelectLabel>
+                  <SelectItem value="AUTRE">Autre</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -490,21 +576,101 @@ export function InvestissementForm({
             />
           </div>
 
-          {/* Date fin démembrement (si SCPI_DEMEMBREMENT) */}
           {typeProduit === "SCPI_DEMEMBREMENT" && (
-            <div className="space-y-2">
-              <Label htmlFor="date-fin-demembrement">Date de fin de démembrement</Label>
-              <Input
-                id="date-fin-demembrement"
-                type="date"
-                value={dateFinDemembrement}
-                onChange={(e) => setDateFinDemembrement(e.target.value)}
-              />
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+              <div className="space-y-2">
+                <Label>Mode de détention</Label>
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="detention-usufruit"
+                      checked={detentionMode === "USUFRUIT"}
+                      onCheckedChange={(checked) =>
+                        setDetentionMode(checked === true ? "USUFRUIT" : null)
+                      }
+                    />
+                    <Label htmlFor="detention-usufruit" className="font-normal cursor-pointer">
+                      Usufruit
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="detention-nue-propriete"
+                      checked={detentionMode === "NUE_PROPRIETE"}
+                      onCheckedChange={(checked) =>
+                        setDetentionMode(checked === true ? "NUE_PROPRIETE" : null)
+                      }
+                    />
+                    <Label
+                      htmlFor="detention-nue-propriete"
+                      className="font-normal cursor-pointer"
+                    >
+                      Nue-propriété
+                    </Label>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="demembrement-kind">Type de démembrement</Label>
+                <Select
+                  value={demembrementKind}
+                  onValueChange={(v) => setDemembrementKind(v as DemembrementKind)}
+                >
+                  <SelectTrigger id="demembrement-kind">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TEMPORAIRE">Temporaire (échéance fixe)</SelectItem>
+                    <SelectItem value="VIAGER">Viager (sans date de fin)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {demembrementKind === "VIAGER" ? (
+                  <p className="text-xs text-muted-foreground">
+                    Pas de date de fin — l&apos;alerte « Fin démembrement » ne s&apos;appliquera pas.
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Renseignez la durée ou la date de fin pour l&apos;alerte ~6 mois avant échéance.
+                  </p>
+                )}
+              </div>
+              {demembrementKind === "TEMPORAIRE" && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="duree-demembrement">Durée (années)</Label>
+                    <Input
+                      id="duree-demembrement"
+                      type="number"
+                      min={1}
+                      max={99}
+                      value={dureeDemembrementAns}
+                      onChange={(e) => setDureeDemembrementAns(e.target.value)}
+                      placeholder="Ex. 10"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="date-fin-demembrement">Date de fin</Label>
+                    <Input
+                      id="date-fin-demembrement"
+                      type="date"
+                      value={dateFinDemembrement}
+                      onChange={(e) => {
+                        setDateFinDemembrement(e.target.value);
+                        const years = yearsBetweenDateInputs(
+                          dateSouscription,
+                          e.target.value
+                        );
+                        setDureeDemembrementAns(years != null ? String(years) : "");
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
           {/* Date fin de prêt (si SCPI ou IMMOBILIER) */}
-          {["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"].includes(typeProduit) && (
+          {["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "JEANBRUN", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"].includes(typeProduit) && (
             <div className="space-y-2">
               <Label htmlFor="date-fin-pret">Date de fin de prêt (si financement par crédit)</Label>
               <Input

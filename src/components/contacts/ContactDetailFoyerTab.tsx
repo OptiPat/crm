@@ -9,7 +9,6 @@ import {
   AlertTriangle,
   Briefcase,
   Home,
-  Plus,
   UserCheck,
   UserPlus,
   Users2,
@@ -131,37 +130,33 @@ export function ContactDetailFoyerTab({
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  Seul(e) dans ce foyer pour l’instant — ajoutez conjoint, enfant ou co-titulaire.
+                  Seul(e) dans ce foyer pour l’instant — ajoutez conjoint ou enfant.
                 </p>
               )}
             </div>
           ) : (
-            <div className="rounded-lg border border-dashed border-primary/25 bg-primary/5 p-4 space-y-4">
-              <div className="space-y-2">
-                <p className="text-sm text-foreground">
-                  Regroupez ce contact avec son conjoint, un co-titulaire ou d’autres membres du
-                  même foyer fiscal — <strong>même si les noms de famille diffèrent</strong>.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Ce n’est pas la page « Familles » du menu, qui classe automatiquement par nom de
-                  famille.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                <Button className="gap-2 shrink-0" onClick={onAddFoyerMember}>
-                  <UserPlus className="h-4 w-4" />
-                  Regrouper avec un autre contact
-                </Button>
-                <div className="flex flex-col gap-1">
-                  <Button variant="outline" className="gap-2" onClick={onCreateFoyer}>
-                    <Plus className="h-4 w-4" />
-                    Créer un foyer vide, puis ajouter des membres
-                  </Button>
-                  <p className="text-xs text-muted-foreground px-0.5">
-                    Conjoint + enfants en une fois
-                  </p>
-                </div>
-              </div>
+            <div className="rounded-lg border border-dashed border-primary/25 bg-primary/5 p-4 space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Conjoint ou enfants —{" "}
+                <strong className="font-medium text-foreground">
+                  même si les noms de famille diffèrent
+                </strong>
+                . Distinct de la page «&nbsp;Familles&nbsp;» (classement automatique par nom).
+              </p>
+              <Button className="gap-2 w-full sm:w-auto" onClick={onCreateFoyer}>
+                <Home className="h-4 w-4" />
+                Constituer un foyer
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Le conjoint a déjà un foyer ?{" "}
+                <button
+                  type="button"
+                  className="text-primary font-medium underline underline-offset-2 hover:no-underline"
+                  onClick={onAddFoyerMember}
+                >
+                  Rejoindre le foyer d&apos;un contact
+                </button>
+              </p>
             </div>
           )}
         </CardContent>

@@ -108,6 +108,7 @@ export const partenaires = sqliteTable("partenaires", {
       // Immobilier - détaillé
       "PINEL",
       "DENORMANDIE",
+      "JEANBRUN",
       "MALRAUX",
       "MONUMENT_HISTORIQUE",
       "DEFICIT_FONCIER",
@@ -158,6 +159,7 @@ export const investissements = sqliteTable("investissements", {
       // Immobilier - détaillé
       "PINEL",
       "DENORMANDIE",
+      "JEANBRUN",
       "MALRAUX",
       "MONUMENT_HISTORIQUE",
       "DEFICIT_FONCIER",

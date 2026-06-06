@@ -130,7 +130,13 @@ export const deduireTypePartenaire = (typeProduit: string): string => {
     return "ASSUREUR";
   } else if (t.includes("PINEL") || t.includes("IMMOBILIER") || t.includes("MALRAUX")) {
     return "PROMOTEUR";
-  } else if (t.includes("FIP") || t.includes("FCPI") || t.includes("FCPR") || t.includes("G3F")) {
+  } else if (
+    t.includes("FCPR") ||
+    t.includes("FPCI") ||
+    t.includes("FIP") ||
+    t.includes("FCPI") ||
+    t.includes("G3F")
+  ) {
     return "SOCIETE_GESTION_FIP";
   } else {
     return "SOCIETE_GESTION_SCPI";

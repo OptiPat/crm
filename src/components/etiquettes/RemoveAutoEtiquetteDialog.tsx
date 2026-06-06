@@ -30,7 +30,7 @@ export function RemoveAutoEtiquetteDialog({
 }) {
   return (
     <AlertDialog open={target != null} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle>Retirer l&apos;étiquette automatique ?</AlertDialogTitle>
           <AlertDialogDescription className="text-left space-y-2">
@@ -41,26 +41,29 @@ export function RemoveAutoEtiquetteDialog({
                   automatique. Au prochain recalcul, elle pourrait réapparaître.
                 </span>
                 <span className="block text-sm">
-                  Choisissez « Exclure du calcul auto » pour que cette étiquette ne soit plus
-                  proposée automatiquement à ce contact.
+                  « Exclure du calcul auto » empêche cette étiquette d&apos;être réappliquée
+                  automatiquement à ce contact.
                 </span>
               </>
             )}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Annuler</AlertDialogCancel>
+        <AlertDialogFooter className="flex flex-col gap-2 sm:flex-col sm:space-x-0">
           <AlertDialogAction
-            onClick={() => target && onConfirm(false)}
-          >
-            Retirer seulement
-          </AlertDialogAction>
-          <AlertDialogAction
-            className="bg-primary"
+            className="mt-0 h-auto min-h-10 w-full whitespace-normal px-3 py-2.5 text-center leading-snug"
             onClick={() => target && onConfirm(true)}
           >
             Retirer et exclure du calcul auto
           </AlertDialogAction>
+          <AlertDialogAction
+            className="mt-0 h-auto min-h-10 w-full whitespace-normal border border-input bg-background px-3 py-2.5 text-center leading-snug text-foreground hover:bg-accent hover:text-accent-foreground"
+            onClick={() => target && onConfirm(false)}
+          >
+            Retirer seulement
+          </AlertDialogAction>
+          <AlertDialogCancel className="mt-0 w-full">
+            Annuler
+          </AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
