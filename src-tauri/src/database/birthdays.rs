@@ -1,7 +1,7 @@
 //! Anniversaires du jour — source pour l'API locale n8n.
 
 use chrono::{Datelike, Local, TimeZone, Utc};
-use rusqlite::{params, Connection, Result};
+use rusqlite::{Connection, Result};
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
