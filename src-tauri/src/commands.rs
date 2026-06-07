@@ -6,8 +6,10 @@ use crate::database::{
         DashboardStats, Document, Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
         NewCustomFieldDef, UpdateCustomFieldDef,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
-        NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation, NewPartenaire,
-        ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation, NewInteraction,
+        NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation,
+        NewInvestissementVersement, NewPartenaire,
+        ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation,
+        InvestissementVersement, NewInteraction,
         NewTemplateEmail, NewSegment, NewTache, Partenaire,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, Tache,
         TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
@@ -864,6 +866,64 @@ pub fn delete_investissement_valorisation(
     database
         .delete_investissement_valorisation(id)
         .map_err(|e| format!("Failed to delete valorisation: {}", e))
+}
+
+fn versement_complementaire_type_ok(type_produit: &str) -> bool {
+    matches!(
+        type_produit,
+        "ASSURANCE_VIE" | "PER" | "CONTRAT_CAPITALISATION"
+    )
+}
+
+#[tauri::command]
+pub fn get_versements_by_investissement(
+    db: State<'_, DbState>,
+    investissement_id: i64,
+) -> Result<Vec<InvestissementVersement>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_versements_by_investissement(investissement_id)
+        .map_err(|e| format!("Failed to get versements: {}", e))
+}
+
+#[tauri::command]
+pub fn create_investissement_versement(
+    db: State<'_, DbState>,
+    versement: NewInvestissementVersement,
+) -> Result<InvestissementVersement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    let inv = database
+        .get_investissement_by_id(versement.investissement_id)
+        .map_err(|e| format!("Investissement introuvable: {}", e))?;
+    if !versement_complementaire_type_ok(&inv.type_produit) {
+        return Err(
+            "Les versements complémentaires sont réservés à l'assurance vie, au PER et au contrat de capitalisation.".into(),
+        );
+    }
+    if versement.montant <= 0 {
+        return Err("Le montant du versement doit être strictement positif.".into());
+    }
+
+    database
+        .create_investissement_versement(versement)
+        .map_err(|e| format!("Failed to create versement: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_investissement_versement(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .delete_investissement_versement(id)
+        .map_err(|e| format!("Failed to delete versement: {}", e))
 }
 
 #[tauri::command]

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Bar,
   CartesianGrid,
+  ComposedChart,
   Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -17,10 +18,19 @@ import {
   getValorisationsByInvestissement,
   type InvestissementValorisation,
 } from "@/lib/api/tauri-investissement-valorisations";
+import {
+  getVersementsByInvestissement,
+  type InvestissementVersement,
+} from "@/lib/api/tauri-investissement-versements";
 import { dateFieldToIso, todayLocal } from "@/lib/contacts/contact-form-utils";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import {
+  buildEncoursChartPoints,
+  type EncoursChartPoint,
+} from "@/lib/investissements/investissement-encours-chart";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import {
   CHART_AXIS_STROKE,
   CHART_GRID_STROKE,
@@ -31,37 +41,12 @@ import { Loader2, Trash2, TrendingUp } from "lucide-react";
 import { toast } from "sonner";
 
 const ENCOURS_COLOR = "#C9A227";
+const COMPLEMENT_COLOR = "#3B82F6";
 
-interface ChartPoint {
-  key: string;
-  label: string;
-  montant: number;
-  kind: "souscription" | "valorisation";
-}
-
-function buildChartPoints(
-  montantInitial?: number,
-  dateSouscription?: number,
-  valorisations: InvestissementValorisation[] = []
-): ChartPoint[] {
-  const points: ChartPoint[] = [];
-  if (montantInitial != null && montantInitial > 0 && dateSouscription) {
-    points.push({
-      key: `sub-${dateSouscription}`,
-      label: formatCalendarDateFr(dateSouscription),
-      montant: montantInitial / 100,
-      kind: "souscription",
-    });
-  }
-  for (const v of valorisations) {
-    points.push({
-      key: `val-${v.id}`,
-      label: formatCalendarDateFr(v.date_valorisation),
-      montant: v.montant / 100,
-      kind: "valorisation",
-    });
-  }
-  return points;
+function kindLabel(kind: EncoursChartPoint["kind"]): string {
+  if (kind === "souscription") return "Souscription";
+  if (kind === "complement") return "Versement complémentaire";
+  return "Relevé d'encours";
 }
 
 export function InvestissementEncoursPanel({
@@ -82,14 +67,19 @@ export function InvestissementEncoursPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [valorisations, setValorisations] = useState<InvestissementValorisation[]>([]);
+  const [versements, setVersements] = useState<InvestissementVersement[]>([]);
   const [montant, setMontant] = useState("");
   const [dateValorisation, setDateValorisation] = useState(todayLocal());
 
-  const loadValorisations = useCallback(async () => {
+  const loadHistory = useCallback(async () => {
     try {
       setLoading(true);
-      const rows = await getValorisationsByInvestissement(investissementId);
-      setValorisations(rows);
+      const [vals, vcs] = await Promise.all([
+        getValorisationsByInvestissement(investissementId),
+        getVersementsByInvestissement(investissementId),
+      ]);
+      setValorisations(vals);
+      setVersements(vcs);
     } catch (error) {
       console.error(error);
       toast.error("Impossible de charger l'historique d'encours");
@@ -99,8 +89,9 @@ export function InvestissementEncoursPanel({
   }, [investissementId]);
 
   useEffect(() => {
-    void loadValorisations();
-  }, [loadValorisations]);
+    void loadHistory();
+    return subscribeInvestissementsChanged(() => void loadHistory());
+  }, [loadHistory]);
 
   useEffect(() => {
     const effective = getEffectiveEncoursCentimes({
@@ -121,9 +112,11 @@ export function InvestissementEncoursPanel({
   }, [investissementId, encoursActuel, encoursDate, montantInitial]);
 
   const chartData = useMemo(
-    () => buildChartPoints(montantInitial, dateSouscription, valorisations),
-    [montantInitial, dateSouscription, valorisations]
+    () => buildEncoursChartPoints(montantInitial, dateSouscription, valorisations, versements),
+    [montantInitial, dateSouscription, valorisations, versements]
   );
+
+  const hasComplements = versements.length > 0;
 
   const handleSaveEncours = async () => {
     const parsed = parseFloat(montant.replace(",", "."));
@@ -139,7 +132,7 @@ export function InvestissementEncoursPanel({
         date_valorisation: dateFieldToIso(dateValorisation),
       });
       toast.success("Encours enregistré");
-      await loadValorisations();
+      await loadHistory();
       onUpdated?.();
     } catch (error) {
       console.error(error);
@@ -154,7 +147,7 @@ export function InvestissementEncoursPanel({
     try {
       await deleteInvestissementValorisation(id);
       toast.success("Relevé supprimé");
-      await loadValorisations();
+      await loadHistory();
       onUpdated?.();
     } catch (error) {
       console.error(error);
@@ -169,23 +162,44 @@ export function InvestissementEncoursPanel({
         <div>
           <p className="text-sm font-medium text-foreground">Encours à date</p>
           <p className="text-xs text-muted-foreground">
-            Met à jour le dashboard et l&apos;encours client — le montant investi reste inchangé.
+            Courbe d&apos;encours, relevés de marché et versements complémentaires (barres bleues).
           </p>
         </div>
       </div>
 
       {loading || saving ? (
-        <ChartLoading height={180} />
+        <ChartLoading height={200} />
       ) : chartData.length === 0 ? (
         <ChartEmpty
           height={160}
           title="Aucun historique"
-          subtitle="Enregistrez un premier encours pour voir la courbe d'évolution."
+          subtitle="Enregistrez une souscription, un complément ou un relevé d'encours."
         />
       ) : (
-        <div className="h-[180px] w-full">
+        <div className="space-y-1">
+          {hasComplements && (
+            <div className="flex justify-center gap-3 text-[10px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <span
+                  className="inline-block h-px w-3 rounded-full"
+                  style={{ backgroundColor: ENCOURS_COLOR }}
+                  aria-hidden
+                />
+                Encours
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span
+                  className="inline-block h-2 w-1 rounded-sm opacity-90"
+                  style={{ backgroundColor: COMPLEMENT_COLOR }}
+                  aria-hidden
+                />
+                Complément
+              </span>
+            </div>
+          )}
+          <div className="h-[180px] w-full">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            <ComposedChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} />
               <XAxis
                 dataKey="label"
@@ -206,28 +220,65 @@ export function InvestissementEncoursPanel({
               <Tooltip
                 content={({ active, payload }) => {
                   if (!active || !payload?.[0]) return null;
-                  const p = payload[0].payload as ChartPoint;
+                  const p = payload[0].payload as EncoursChartPoint;
                   return (
                     <ChartTooltipBox>
                       <p className="font-medium">{p.label}</p>
-                      <p>{formatDashboardCurrency(p.montant)}</p>
-                      {p.kind === "souscription" && (
-                        <p className="text-xs text-muted-foreground">Montant souscrit</p>
+                      <p>{formatDashboardCurrency(p.encours)}</p>
+                      <p className="text-xs text-muted-foreground">{kindLabel(p.kind)}</p>
+                      {p.complementBar > 0 && (
+                        <p className="text-xs text-blue-600 font-medium">
+                          +{formatDashboardCurrency(p.complementBar)}
+                        </p>
                       )}
                     </ChartTooltipBox>
                   );
                 }}
               />
+              {hasComplements && (
+                <Bar
+                  dataKey="complementBar"
+                  name="complementBar"
+                  fill={COMPLEMENT_COLOR}
+                  fillOpacity={0.75}
+                  radius={[2, 2, 0, 0]}
+                  maxBarSize={8}
+                />
+              )}
               <Line
-                type="monotone"
-                dataKey="montant"
+                type={hasComplements ? "stepAfter" : "monotone"}
+                dataKey="encours"
+                name="encours"
                 stroke={ENCOURS_COLOR}
-                strokeWidth={2}
-                dot={{ r: 3, fill: ENCOURS_COLOR }}
-                activeDot={{ r: 5 }}
+                strokeWidth={1.5}
+                dot={(props) => {
+                  const { cx, cy, payload } = props as {
+                    cx: number;
+                    cy: number;
+                    payload: EncoursChartPoint;
+                  };
+                  const fill =
+                    payload.kind === "complement"
+                      ? COMPLEMENT_COLOR
+                      : payload.kind === "souscription"
+                        ? "#10B981"
+                        : ENCOURS_COLOR;
+                  return (
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={payload.kind === "complement" ? 2.5 : 2}
+                      fill={fill}
+                      stroke="#fff"
+                      strokeWidth={1}
+                    />
+                  );
+                }}
+                activeDot={{ r: 3.5 }}
               />
-            </LineChart>
+            </ComposedChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
 

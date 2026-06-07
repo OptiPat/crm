@@ -56,19 +56,22 @@ export function CalendarTodayPreview({
 
   const pending = events.filter((e) => !e.rdv_effectue);
 
+  const description = loading
+    ? "Chargement…"
+    : pending.length > 0
+      ? `${pending.length} rendez-vous`
+      : "Aucun RDV aujourd'hui";
+
   return (
-    <DashboardPanel
-      title="RDV du jour"
-      description={
-        loading
-          ? "Chargement…"
-          : pending.length > 0
-            ? `${pending.length} rendez-vous`
-            : "Aucun RDV planifié aujourd'hui"
-      }
-    >
-      {pending.length === 0 ? (
-        <p className="text-sm text-muted-foreground px-1">—</p>
+    <DashboardPanel title="RDV du jour" description={description} className="h-full">
+      {loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-xl bg-muted/50 animate-pulse" />
+          ))}
+        </div>
+      ) : pending.length === 0 ? (
+        <p className="text-sm text-muted-foreground py-6 text-center">Aucun RDV aujourd&apos;hui</p>
       ) : (
         <ul className="space-y-2">
           {pending.map((ev) => {

@@ -34,7 +34,9 @@ import {
   type NewInvestissement,
 } from "@/lib/api/tauri-investissements";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
+import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { isVersementComplementaireEligible } from "@/lib/investissements/investissement-versements";
 import {
   ContactFormExceltisSection,
   type ExceltisFormChoice,
@@ -118,6 +120,9 @@ export function InvestissementForm({
 
   const showEncoursSection =
     !!investissement && isPlacementEncoursEligible(typeProduit);
+
+  const showVersementsSection =
+    !!investissement && isVersementComplementaireEligible(typeProduit);
 
   const showExceltisSection =
     !investissement &&
@@ -766,6 +771,24 @@ export function InvestissementForm({
                 </div>
               )}
             </div>
+          )}
+
+          {showVersementsSection && investissement && (
+            <InvestissementVersementsPanel
+              investissementId={investissement.id}
+              onUpdated={async () => {
+                try {
+                  const refreshed = await getInvestissementById(investissement.id);
+                  setLiveEncours({
+                    actuel: refreshed.encours_actuel,
+                    date: refreshed.encours_date,
+                  });
+                  onEncoursUpdated?.();
+                } catch (error) {
+                  console.error("Refresh encours:", error);
+                }
+              }}
+            />
           )}
 
           {showEncoursSection && investissement && (

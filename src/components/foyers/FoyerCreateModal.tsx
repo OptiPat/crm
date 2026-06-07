@@ -17,11 +17,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, X, Home } from "lucide-react";
+import { X, Home } from "lucide-react";
 import { type Contact, getAllContacts } from "@/lib/api/tauri-contacts";
 import { createFoyer } from "@/lib/api/tauri-foyers";
 import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
 import { Badge } from "@/components/ui/badge";
+import { ListSearchField } from "@/components/layout/ListSearchField";
+import { contactMatchesSearch } from "@/lib/search-utils";
 
 interface FoyerCreateModalProps {
   open: boolean;
@@ -44,7 +46,7 @@ export function FoyerCreateModal({
   const [foyerName, setFoyerName] = useState("");
   const [members, setMembers] = useState<MemberWithRole[]>([]);
   const [availableContacts, setAvailableContacts] = useState<Contact[]>([]);
-  const [selectedContactId, setSelectedContactId] = useState<string>("");
+  const [memberSearch, setMemberSearch] = useState("");
   const [loading, setLoading] = useState(false);
 
   // Initialiser le nom du foyer avec "Foyer + nom du contact"
@@ -56,6 +58,7 @@ export function FoyerCreateModal({
         contact: currentContact,
         role: "DECLARANT_1"
       }]);
+      setMemberSearch("");
       loadAvailableContacts();
     }
   }, [open, currentContact]);
@@ -93,16 +96,17 @@ export function FoyerCreateModal({
     }
   };
 
-  const handleAddMember = () => {
-    if (!selectedContactId) return;
+  const handleAddMember = (contact: Contact) => {
+    if (members.some((m) => m.contact.id === contact.id)) return;
 
-    const contact = availableContacts.find(c => c.id === Number(selectedContactId));
-    if (!contact) return;
-
-    setMembers([...members, { contact, role: "DECLARANT_2" }]);
-    setAvailableContacts(availableContacts.filter(c => c.id !== contact.id));
-    setSelectedContactId("");
+    setMembers((prev) => [...prev, { contact, role: "DECLARANT_2" }]);
+    setAvailableContacts((prev) => prev.filter((c) => c.id !== contact.id));
+    setMemberSearch("");
   };
+
+  const filteredAvailable = availableContacts.filter((c) =>
+    contactMatchesSearch(memberSearch, c)
+  );
 
   const handleRemoveMember = (contactId: number) => {
     const member = members.find(m => m.contact.id === contactId);
@@ -142,7 +146,7 @@ export function FoyerCreateModal({
       // Reset
       setFoyerName("");
       setMembers([]);
-      setSelectedContactId("");
+      setMemberSearch("");
     } catch (error) {
       console.error("🏠 [FoyerCreateModal] ❌ Erreur:", error);
       alert("Erreur lors de la création du foyer: " + String(error));
@@ -232,30 +236,41 @@ export function FoyerCreateModal({
           {availableContacts.length > 0 && (
             <div className="space-y-2">
               <Label>Ajouter un membre</Label>
-              <div className="flex gap-2">
-                <Select
-                  value={selectedContactId}
-                  onValueChange={setSelectedContactId}
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Sélectionner un contact..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableContacts.map((contact) => (
-                      <SelectItem key={contact.id} value={String(contact.id)}>
+              <p className="text-xs text-muted-foreground">
+                Recherchez puis cliquez sur un contact pour l&apos;ajouter à la liste.
+              </p>
+              <ListSearchField
+                value={memberSearch}
+                onChange={setMemberSearch}
+                placeholder="Nom, prénom, email…"
+                className="w-full"
+              />
+              <div className="max-h-44 overflow-y-auto space-y-1 rounded-md border border-border/70 p-1">
+                {filteredAvailable.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4 px-2">
+                    {memberSearch
+                      ? "Aucun contact sans foyer ne correspond"
+                      : "Saisissez un nom pour rechercher"}
+                  </p>
+                ) : (
+                  filteredAvailable.map((contact) => (
+                    <button
+                      key={contact.id}
+                      type="button"
+                      className="w-full text-left rounded-md px-3 py-2 text-sm hover:bg-accent transition-colors"
+                      onClick={() => handleAddMember(contact)}
+                    >
+                      <span className="font-medium">
                         {contact.prenom} {contact.nom}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  onClick={handleAddMember}
-                  disabled={!selectedContactId}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Ajouter
-                </Button>
+                      </span>
+                      {contact.email && (
+                        <span className="block text-xs text-muted-foreground truncate">
+                          {contact.email}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           )}

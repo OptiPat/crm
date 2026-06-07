@@ -17,7 +17,7 @@ export function isPlacementEncoursEligible(typeProduit: string | undefined): boo
   return (PLACEMENT_ENCOURS_TYPES as readonly string[]).includes(typeProduit);
 }
 
-/** Encours effectif : dernière valorisation, sinon montant initial. */
+/** Encours effectif : valorisation (ou initial) + versements complémentaires postérieurs (calcul backend). */
 export function getEffectiveEncoursCentimes(
   inv: Pick<Investissement, "encours_actuel" | "montant_initial">
 ): number {

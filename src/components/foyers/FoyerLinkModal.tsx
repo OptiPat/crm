@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -17,12 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Home, UserPlus } from "lucide-react";
+import { Home, UserPlus } from "lucide-react";
 import { type Contact, getAllContacts } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, createFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { linkContactToFoyer, buildFoyerNomFromMembers } from "@/lib/foyers/foyer-utils";
 import { Badge } from "@/components/ui/badge";
 import { contactMatchesSearch } from "@/lib/search-utils";
+import { ListSearchField } from "@/components/layout/ListSearchField";
 
 interface FoyerLinkModalProps {
   open: boolean;
@@ -140,19 +140,13 @@ export function FoyerLinkModal({
 
         <div className="space-y-4 py-4">
           {/* Recherche */}
-          <div className="space-y-2">
-            <Label htmlFor="search">Rechercher le conjoint</Label>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                id="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Nom, prénom, email..."
-                className="pl-9"
-              />
-            </div>
-          </div>
+          <ListSearchField
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Nom, prénom, email…"
+            className="w-full"
+            aria-label="Rechercher le conjoint"
+          />
 
           {/* Rôle du contact actuel */}
           <div className="space-y-2">

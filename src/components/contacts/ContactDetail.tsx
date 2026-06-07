@@ -43,6 +43,7 @@ import { InvestissementForm } from "@/components/investissements/InvestissementF
 import { getAllFoyers, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { FoyerCreateModal } from "@/components/foyers/FoyerCreateModal";
 import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
+import { FoyerAddMemberModal } from "@/components/foyers/FoyerAddMemberModal";
 import { EtiquetteList } from "@/components/etiquettes/EtiquetteBadge";
 import { EtiquetteSelector } from "@/components/etiquettes/EtiquetteSelector";
 import { ContactCreateMenu } from "@/components/contacts/ContactCreateMenu";
@@ -137,6 +138,7 @@ export function ContactDetail({
   const [foyerPatrimoine, setFoyerPatrimoine] = useState(0);
   const [showFoyerCreateModal, setShowFoyerCreateModal] = useState(false);
   const [showFoyerLinkModal, setShowFoyerLinkModal] = useState(false);
+  const [showFoyerAddMemberModal, setShowFoyerAddMemberModal] = useState(false);
   const [etiquettes, setEtiquettes] = useState<ContactEtiquetteDetails[]>([]);
   const [showDeleteContactDialog, setShowDeleteContactDialog] = useState(false);
   const [etiquetteSelectorOpen, setEtiquetteSelectorOpen] = useState(false);
@@ -195,6 +197,14 @@ export function ContactDetail({
     handleOpenLinkedContact(member);
   };
 
+  const handleAddFoyerMember = () => {
+    if (contact?.foyer_id && foyer) {
+      setShowFoyerAddMemberModal(true);
+    } else {
+      setShowFoyerLinkModal(true);
+    }
+  };
+
   const handleOpenOwnerContact = async (ownerId: number) => {
     if (!onOpenContact || ownerId === contact?.id) return;
 
@@ -241,17 +251,6 @@ export function ContactDetail({
       setShowInvestissementForm(true);
     }
   }, [contact?.id]);
-
-  const refreshContactAfterMutation = useCallback(async () => {
-    if (!contact?.id) return;
-    try {
-      const fresh = await getContactById(contact.id);
-      onContactRefreshed?.(fresh);
-      onUpdate?.();
-    } catch (error) {
-      console.error("Erreur rechargement contact:", error);
-    }
-  }, [contact?.id, onContactRefreshed, onUpdate]);
 
   const loadEtiquettes = async () => {
     if (!contact?.id) return;
@@ -505,6 +504,18 @@ export function ContactDetail({
       loadEtiquettes(),
     ]);
   }, []);
+
+  const refreshContactAfterMutation = useCallback(async () => {
+    if (!contact?.id) return;
+    try {
+      const fresh = await getContactById(contact.id);
+      onContactRefreshed?.(fresh);
+      onUpdate?.();
+      await reloadAllSections(fresh);
+    } catch (error) {
+      console.error("Erreur rechargement contact:", error);
+    }
+  }, [contact?.id, onContactRefreshed, onUpdate, reloadAllSections]);
 
   const maybeOfferFoyerRename = async (
     before: { nom: string; prenom: string } | null,
@@ -918,7 +929,7 @@ export function ContactDetail({
                 onOpenLinkedContact={handleOpenLinkedContact}
                 onOpenMemberDetail={handleOpenMemberDetail}
                 onDissocierFoyer={handleDissocierFoyer}
-                onAddFoyerMember={() => setShowFoyerLinkModal(true)}
+                onAddFoyerMember={handleAddFoyerMember}
                 onCreateFoyer={() => setShowFoyerCreateModal(true)}
               />
             </TabsContent>
@@ -976,6 +987,16 @@ export function ContactDetail({
             currentContact={contact}
             onSuccess={() => void refreshContactAfterMutation()}
           />
+          {foyer && (
+            <FoyerAddMemberModal
+              open={showFoyerAddMemberModal}
+              onOpenChange={setShowFoyerAddMemberModal}
+              foyer={foyer}
+              currentContact={contact}
+              existingMemberIds={foyerMembers.map((m) => m.id)}
+              onSuccess={() => void refreshContactAfterMutation()}
+            />
+          )}
         </>
       )}
 

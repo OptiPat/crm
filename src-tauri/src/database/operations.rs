@@ -3,11 +3,71 @@ use rusqlite::{params, Result};
 
 pub(crate) const REDUCTION_IMPOT_ETIQUETTE_CANONICAL: &str = "Réduction d'impôt fin d'année";
 
-pub(crate) const EFFECTIVE_ENCOURS_SQL_I: &str = "COALESCE(
-    (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
-    i.montant_initial,
-    0
+/// Encours = dernière valorisation (ou montant initial) + versements complémentaires postérieurs.
+pub(crate) const EFFECTIVE_ENCOURS_SQL_I: &str = "(
+    COALESCE(
+        (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+        COALESCE(i.montant_initial, 0)
+    )
+    + COALESCE(
+        (SELECT SUM(vr.montant) FROM investissement_versements vr
+         WHERE vr.investissement_id = i.id
+           AND vr.date_versement > COALESCE(
+             (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+             -1
+           )),
+        0
+    )
 )";
+
+pub(crate) const EFFECTIVE_ENCOURS_SQL: &str = "(
+    COALESCE(
+        (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+        COALESCE(investissements.montant_initial, 0)
+    )
+    + COALESCE(
+        (SELECT SUM(vr.montant) FROM investissement_versements vr
+         WHERE vr.investissement_id = investissements.id
+           AND vr.date_versement > COALESCE(
+             (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+             -1
+           )),
+        0
+    )
+)";
+
+pub(crate) const EFFECTIVE_ENCOURS_DATE_SQL: &str = "COALESCE(
+    (SELECT vr.date_versement FROM investissement_versements vr
+     WHERE vr.investissement_id = investissements.id
+       AND vr.date_versement > COALESCE(
+         (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+         -1
+       )
+     ORDER BY vr.date_versement DESC, vr.id DESC LIMIT 1),
+    (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+    investissements.date_souscription
+)";
+
+pub(crate) const EFFECTIVE_ENCOURS_DATE_SQL_I: &str = "COALESCE(
+    (SELECT vr.date_versement FROM investissement_versements vr
+     WHERE vr.investissement_id = i.id
+       AND vr.date_versement > COALESCE(
+         (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+         -1
+       )
+     ORDER BY vr.date_versement DESC, vr.id DESC LIMIT 1),
+    (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
+    i.date_souscription
+)";
+
+// Colonnes encours effectif (montant + date) pour les SELECT investissements.
+pub(crate) fn investissement_encours_select_cols() -> String {
+    format!("{EFFECTIVE_ENCOURS_SQL}, {EFFECTIVE_ENCOURS_DATE_SQL}")
+}
+
+pub(crate) fn investissement_encours_select_cols_i() -> String {
+    format!("{EFFECTIVE_ENCOURS_SQL_I}, {EFFECTIVE_ENCOURS_DATE_SQL_I}")
+}
 
 impl Database {
 
@@ -92,7 +152,10 @@ impl Database {
 mod database_integration_tests {
     use super::*;
     use chrono::TimeZone;
-    use crate::database::models::{NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation};
+    use crate::database::models::{
+        NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation,
+        NewInvestissementVersement,
+    };
     use crate::database::Database;
 
     fn test_db() -> Database {
@@ -207,6 +270,57 @@ mod database_integration_tests {
         let refreshed = db.get_investissement_by_id(inv.id).unwrap();
         assert_eq!(refreshed.encours_actuel, Some(2_500_000));
         assert_eq!(refreshed.montant_initial, Some(2_000_000));
+    }
+
+    #[test]
+    fn dashboard_encours_includes_versements_complementaires() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Bernard", "Marie")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV test".into(),
+                montant_initial: Some(10_000_00),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        let complement_ts = chrono::Utc.with_ymd_and_hms(2025, 3, 15, 0, 0, 0).unwrap().timestamp();
+        let complement_iso = chrono::DateTime::from_timestamp(complement_ts, 0)
+            .unwrap()
+            .to_rfc3339();
+
+        db.create_investissement_versement(NewInvestissementVersement {
+            investissement_id: inv.id,
+            montant: 2_500_00,
+            date_versement: Some(complement_iso),
+            notes: None,
+        })
+        .unwrap();
+
+        let stats = db.get_dashboard_stats().unwrap();
+        assert!((stats.encours_placements - 12_500.0).abs() < 0.01);
+
+        let refreshed = db.get_investissement_by_id(inv.id).unwrap();
+        assert_eq!(refreshed.encours_actuel, Some(12_500_00));
+
+        let yearly = db.get_yearly_activity_stats().unwrap();
+        let y2025 = yearly.iter().find(|s| s.year == 2025).unwrap();
+        assert_eq!(y2025.clients, 1);
+        assert!((y2025.panier_moyen - 2_500.0).abs() < 0.01);
     }
 
     #[test]

@@ -471,6 +471,8 @@ impl Database {
 
         self.migrate_investissement_valorisations()?;
 
+        self.migrate_investissement_versements()?;
+
         self.migrate_alertes_crud_schema()?;
         self.migrate_backfill_filleul_categorie()?;
         self.migrate_add_email_envoi_prevu()?;
@@ -1155,6 +1157,28 @@ impl Database {
                 updated
             );
         }
+        Ok(())
+    }
+
+    /// Migration : versements complémentaires ponctuels (AV, PER, capi…)
+    fn migrate_investissement_versements(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS investissement_versements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                investissement_id INTEGER NOT NULL,
+                montant INTEGER NOT NULL,
+                date_versement INTEGER NOT NULL,
+                notes TEXT,
+                created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (investissement_id) REFERENCES investissements(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS investissement_versements_inv_idx
+             ON investissement_versements (investissement_id, date_versement DESC)",
+            [],
+        )?;
         Ok(())
     }
 

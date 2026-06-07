@@ -191,21 +191,38 @@ impl super::Database {
         Ok(stats)
     }
 
-    /// Clients et panier moyen par année de souscription — montant_initial uniquement (pas encours).
+    /// Clients et panier moyen par année — souscriptions initiales + versements complémentaires.
     pub fn get_yearly_activity_stats(&self) -> Result<Vec<super::models::YearlyActivityStats>> {
         let mut stmt = self.conn.prepare(
-            "SELECT
-                CAST(strftime('%Y', datetime(i.date_souscription, 'unixepoch')) AS INTEGER) AS year,
-                COUNT(DISTINCT i.contact_id) AS clients,
-                COALESCE(SUM(i.montant_initial), 0) AS total_centimes
-             FROM investissements i
-             WHERE i.origine = 'MON_CONSEIL'
-               AND i.date_souscription IS NOT NULL
-               AND i.contact_id IS NOT NULL
-               AND EXISTS (
-                   SELECT 1 FROM contacts c
-                   WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
-               )
+            "SELECT year, COUNT(DISTINCT contact_id) AS clients, COALESCE(SUM(amount_centimes), 0) AS total_centimes
+             FROM (
+                 SELECT
+                     CAST(strftime('%Y', datetime(i.date_souscription, 'unixepoch')) AS INTEGER) AS year,
+                     i.contact_id AS contact_id,
+                     COALESCE(i.montant_initial, 0) AS amount_centimes
+                 FROM investissements i
+                 WHERE i.origine = 'MON_CONSEIL'
+                   AND i.date_souscription IS NOT NULL
+                   AND i.contact_id IS NOT NULL
+                   AND COALESCE(i.montant_initial, 0) > 0
+                   AND EXISTS (
+                       SELECT 1 FROM contacts c
+                       WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
+                   )
+                 UNION ALL
+                 SELECT
+                     CAST(strftime('%Y', datetime(vr.date_versement, 'unixepoch')) AS INTEGER) AS year,
+                     i.contact_id AS contact_id,
+                     vr.montant AS amount_centimes
+                 FROM investissement_versements vr
+                 INNER JOIN investissements i ON i.id = vr.investissement_id
+                 WHERE i.origine = 'MON_CONSEIL'
+                   AND i.contact_id IS NOT NULL
+                   AND EXISTS (
+                       SELECT 1 FROM contacts c
+                       WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
+                   )
+             ) flows
              GROUP BY year
              ORDER BY year ASC",
         )?;

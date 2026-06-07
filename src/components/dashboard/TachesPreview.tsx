@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, CheckCircle2, ListTodo } from "lucide-react";
+import { ArrowRight, ListTodo } from "lucide-react";
 import {
   getAllTaches,
   setTacheStatut,
@@ -13,6 +13,7 @@ import {
   echeanceState,
 } from "@/lib/taches/tache-display";
 import { Checkbox } from "@/components/ui/checkbox";
+import { TacheForm } from "@/components/taches/TacheForm";
 import { cn } from "@/lib/utils";
 import { DashboardPanel } from "./dashboard-ui";
 
@@ -26,6 +27,8 @@ const MAX_PREVIEW = 5;
 export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps) {
   const [taches, setTaches] = useState<Tache[]>([]);
   const [loading, setLoading] = useState(true);
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Tache | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +54,11 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
     } catch (error) {
       console.error(error);
     }
+  };
+
+  const openTache = (tache: Tache) => {
+    setEditing(tache);
+    setFormOpen(true);
   };
 
   const description = loading
@@ -85,15 +93,7 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
           ))}
         </div>
       ) : visibles.length === 0 ? (
-        <div className="py-12 flex flex-col items-center justify-center text-center">
-          <div className="inline-flex p-3 rounded-full bg-emerald-50 mb-3">
-            <CheckCircle2 className="h-8 w-8 text-emerald-600" />
-          </div>
-          <p className="font-medium text-foreground">Aucune tâche en attente</p>
-          <p className="text-sm text-muted-foreground mt-1 max-w-xs">
-            Ajoutez un rappel depuis une fiche contact ou la page Tâches.
-          </p>
-        </div>
+        <p className="text-sm text-muted-foreground py-6 text-center">Aucune tâche en attente</p>
       ) : (
         <ul className="space-y-2">
           {visibles.map((tache) => {
@@ -103,14 +103,19 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
             return (
               <li
                 key={tache.id}
-                className="flex items-center gap-3 p-3 rounded-xl border border-border/70 bg-background/80"
+                className="flex items-center gap-3 p-3 rounded-xl border border-border/70 bg-background/80 hover:bg-accent/50 transition-colors"
               >
                 <Checkbox
                   checked={false}
                   onCheckedChange={() => void handleDone(tache)}
+                  onClick={(e) => e.stopPropagation()}
                   aria-label="Marquer comme faite"
                 />
-                <div className="flex-1 min-w-0">
+                <button
+                  type="button"
+                  className="flex-1 min-w-0 text-left"
+                  onClick={() => openTache(tache)}
+                >
                   <p className="font-medium text-sm text-foreground truncate">
                     {tache.titre}
                   </p>
@@ -119,23 +124,36 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
                       {echeanceLabel(tache.date_echeance, tache.statut)}
                     </span>
                     {firstContact && (
-                      <button
-                        type="button"
-                        className="text-muted-foreground hover:text-foreground truncate"
-                        onClick={() => onOpenContact?.(firstContact.contact_id)}
-                      >
+                      <span className="text-muted-foreground truncate">
                         · {firstContact.prenom} {firstContact.nom}
                         {extraCount > 0 ? ` +${extraCount}` : ""}
-                      </button>
+                      </span>
                     )}
                   </div>
-                </div>
+                </button>
+                {firstContact && onOpenContact ? (
+                  <button
+                    type="button"
+                    className="text-xs text-muted-foreground hover:text-foreground shrink-0 max-w-[5rem] truncate"
+                    title={`Ouvrir ${firstContact.prenom} ${firstContact.nom}`}
+                    onClick={() => onOpenContact(firstContact.contact_id)}
+                  >
+                    {firstContact.prenom} {firstContact.nom.charAt(0)}.
+                    {extraCount > 0 ? ` +${extraCount}` : ""}
+                  </button>
+                ) : null}
                 <ListTodo className="h-4 w-4 text-muted-foreground/40 shrink-0" />
               </li>
             );
           })}
         </ul>
       )}
+      <TacheForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        tache={editing}
+        onSuccess={() => void load()}
+      />
     </DashboardPanel>
   );
 }

@@ -8,13 +8,7 @@ const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit
     versement_programme, montant_versement_programme, frequence_versement,
     reinvestissement_dividendes, notes, origine, created_at, updated_at";
 
-const INVESTISSEMENT_ENCOURS_COLS: &str = "
-    (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
-    (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = investissements.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
-
-const INVESTISSEMENT_ENCOURS_COLS_I: &str = "
-    (SELECT v.montant FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1),
-    (SELECT v.date_valorisation FROM investissement_valorisations v WHERE v.investissement_id = i.id ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
+use super::operations::{investissement_encours_select_cols, investissement_encours_select_cols_i};
 
 impl super::Database {
     fn map_investissement_row(
@@ -48,9 +42,10 @@ impl super::Database {
 
     pub fn get_all_investissements(&self) -> Result<Vec<super::models::Investissement>> {
         let sql = format!(
-            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {}
              FROM investissements 
-             ORDER BY date_souscription DESC"
+             ORDER BY date_souscription DESC",
+            investissement_encours_select_cols()
         );
         let mut stmt = self.conn.prepare(&sql)?;
 
@@ -68,10 +63,11 @@ impl super::Database {
         contact_id: i64,
     ) -> Result<Vec<super::models::Investissement>> {
         let sql = format!(
-            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {}
              FROM investissements 
              WHERE contact_id = ?1
-             ORDER BY date_souscription DESC"
+             ORDER BY date_souscription DESC",
+            investissement_encours_select_cols()
         );
         let mut stmt = self.conn.prepare(&sql)?;
 
@@ -89,10 +85,11 @@ impl super::Database {
         foyer_id: i64,
     ) -> Result<Vec<super::models::Investissement>> {
         let sql = format!(
-            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {}
              FROM investissements 
              WHERE foyer_id = ?1
-             ORDER BY date_souscription DESC"
+             ORDER BY date_souscription DESC",
+            investissement_encours_select_cols()
         );
         let mut stmt = self.conn.prepare(&sql)?;
 
@@ -118,13 +115,14 @@ impl super::Database {
                     i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at,
-                    {INVESTISSEMENT_ENCOURS_COLS_I}
+                    {}
              FROM investissements i
              LEFT JOIN contacts c ON i.contact_id = c.id
              LEFT JOIN foyers f ON i.foyer_id = f.id
              LEFT JOIN partenaires p ON i.partenaire_id = p.id
              WHERE i.contact_id IS NOT NULL OR i.foyer_id IS NOT NULL
-             ORDER BY i.date_souscription DESC"
+             ORDER BY i.date_souscription DESC",
+                investissement_encours_select_cols_i()
             ),
         )?;
 
@@ -326,9 +324,10 @@ impl super::Database {
 
     pub fn get_investissement_by_id(&self, id: i64) -> Result<super::models::Investissement> {
         let sql = format!(
-            "SELECT {INVESTISSEMENT_SELECT_COLS}, {INVESTISSEMENT_ENCOURS_COLS}
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {}
              FROM investissements 
-             WHERE id = ?1"
+             WHERE id = ?1",
+            investissement_encours_select_cols()
         );
         self.conn
             .query_row(&sql, params![id], Self::map_investissement_row)
@@ -540,6 +539,112 @@ impl super::Database {
             "DELETE FROM investissement_valorisations WHERE id = ?1",
             params![id],
         )?;
+        Ok(())
+    }
+
+    fn assert_versement_complementaire_eligible(&self, investissement_id: i64) -> Result<()> {
+        let type_produit: String = self.conn.query_row(
+            "SELECT type_produit FROM investissements WHERE id = ?1",
+            params![investissement_id],
+            |row| row.get(0),
+        )?;
+        if matches!(
+            type_produit.as_str(),
+            "ASSURANCE_VIE" | "PER" | "CONTRAT_CAPITALISATION"
+        ) {
+            Ok(())
+        } else {
+            Err(rusqlite::Error::InvalidParameterName(
+                "versement_complementaire_ineligible".into(),
+            ))
+        }
+    }
+
+    pub fn get_versements_by_investissement(
+        &self,
+        investissement_id: i64,
+    ) -> Result<Vec<super::models::InvestissementVersement>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, investissement_id, montant, date_versement, notes, created_at
+             FROM investissement_versements
+             WHERE investissement_id = ?1
+             ORDER BY date_versement ASC, id ASC",
+        )?;
+        let rows = stmt.query_map(params![investissement_id], |row| {
+            Ok(super::models::InvestissementVersement {
+                id: row.get(0)?,
+                investissement_id: row.get(1)?,
+                montant: row.get(2)?,
+                date_versement: row.get(3)?,
+                notes: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    fn get_versement_by_id(&self, id: i64) -> Result<super::models::InvestissementVersement> {
+        self.conn.query_row(
+            "SELECT id, investissement_id, montant, date_versement, notes, created_at
+             FROM investissement_versements WHERE id = ?1",
+            params![id],
+            |row| {
+                Ok(super::models::InvestissementVersement {
+                    id: row.get(0)?,
+                    investissement_id: row.get(1)?,
+                    montant: row.get(2)?,
+                    date_versement: row.get(3)?,
+                    notes: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            },
+        )
+    }
+
+    pub fn create_investissement_versement(
+        &self,
+        versement: super::models::NewInvestissementVersement,
+    ) -> Result<super::models::InvestissementVersement> {
+        use chrono::{DateTime, Utc};
+
+        self.assert_versement_complementaire_eligible(versement.investissement_id)?;
+
+        if versement.montant <= 0 {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "versement_montant_invalide".into(),
+            ));
+        }
+
+        let date_ts = versement
+            .date_versement
+            .and_then(|date_str| {
+                DateTime::parse_from_rfc3339(&date_str)
+                    .ok()
+                    .map(|dt| dt.timestamp())
+            })
+            .unwrap_or_else(|| Utc::now().timestamp());
+
+        self.conn.execute(
+            "INSERT INTO investissement_versements (investissement_id, montant, date_versement, notes)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                versement.investissement_id,
+                versement.montant,
+                date_ts,
+                versement.notes,
+            ],
+        )?;
+        let id = self.conn.last_insert_rowid();
+        self.get_versement_by_id(id)
+    }
+
+    pub fn delete_investissement_versement(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM investissement_versements WHERE id = ?1", params![id])?;
         Ok(())
     }
 

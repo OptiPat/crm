@@ -5,8 +5,7 @@ import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
 import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
-import { TachesPreview } from "@/components/dashboard/TachesPreview";
-import { CalendarTodayPreview } from "@/components/dashboard/CalendarTodayPreview";
+import { DashboardTodayGrid } from "@/components/dashboard/DashboardTodayGrid";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import {
   DashboardPageHeader,
@@ -106,14 +105,15 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
   };
 
   return (
-    <div className="space-y-10 max-w-[1600px] mx-auto pb-8">
-      <DashboardPageHeader />
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-8">
+      <div className="space-y-3">
+        <DashboardPageHeader />
 
-      <section className="space-y-4">
-        <DashboardSectionTitle subtitle="Chiffres consolidés du portefeuille">
-          Vue d&apos;ensemble
-        </DashboardSectionTitle>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+        <section className="space-y-3">
+          <DashboardSectionTitle subtitle="Chiffres consolidés du portefeuille">
+            Vue d&apos;ensemble
+          </DashboardSectionTitle>
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
           {loading ? (
             Array.from({ length: 5 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : stats ? (
@@ -174,44 +174,37 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
               </button>
             </div>
           )}
-        </div>
-      </section>
+          </div>
+        </section>
+      </div>
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         <DashboardSectionTitle subtitle="Accès rapide aux pages principales">
           Raccourcis
         </DashboardSectionTitle>
         <QuickActions onNavigate={onNavigate} />
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         <DashboardSectionTitle subtitle="Relances et tâches du jour">
           Suivi &amp; actions
         </DashboardSectionTitle>
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-          <div className="lg:col-span-7 min-h-[280px]">
-            <AlertsPreview
-              key={`alerts-${refreshKey}`}
-              currentPage={currentPage}
-              onNavigate={onNavigate}
-              onOpenContact={onOpenContact}
-            />
-          </div>
-          <div className="lg:col-span-5 space-y-5 min-h-[280px]">
-            <TachesPreview
-              key={`taches-${refreshKey}`}
-              onNavigate={onNavigate}
-              onOpenContact={onOpenContact}
-            />
-            <CalendarTodayPreview
-              key={`rdv-${refreshKey}`}
-              onOpenContact={onOpenContact}
-            />
-          </div>
+        <div className="flex flex-col gap-5">
+          <DashboardTodayGrid
+            key={`today-${refreshKey}`}
+            onNavigate={onNavigate}
+            onOpenContact={onOpenContact}
+          />
+          <AlertsPreview
+            key={`alerts-${refreshKey}`}
+            currentPage={currentPage}
+            onNavigate={onNavigate}
+            onOpenContact={onOpenContact}
+          />
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         <DashboardSectionTitle subtitle="Catégories et produits">
           Répartition
         </DashboardSectionTitle>
@@ -221,7 +214,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         <DashboardSectionTitle subtitle="Souscriptions et funnel commercial">
           Activité
         </DashboardSectionTitle>

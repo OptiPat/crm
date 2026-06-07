@@ -229,6 +229,19 @@ export const investissements = sqliteTable("investissements", {
     .notNull(),
 });
 
+export const investissementVersements = sqliteTable("investissement_versements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  investissementId: integer("investissement_id")
+    .notNull()
+    .references(() => investissements.id, { onDelete: "cascade" }),
+  montant: integer("montant").notNull(),
+  dateVersement: integer("date_versement", { mode: "timestamp" }).notNull(),
+  notes: text("notes"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
 // ============================================
 // DOCUMENTS
 // ============================================

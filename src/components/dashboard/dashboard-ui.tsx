@@ -184,14 +184,11 @@ export function DashboardPageHeader() {
   }).format(new Date());
 
   return (
-    <header className="border-b border-border/60 pb-6">
+    <header className="border-b border-border/60 pb-3">
       <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
-      <h2 className="text-3xl font-serif font-bold text-primary tracking-tight mt-1">
+      <h2 className="text-2xl font-serif font-bold text-primary tracking-tight mt-0.5">
         Tableau de bord
       </h2>
-      <p className="text-muted-foreground mt-1 text-sm max-w-xl">
-        Priorités du jour, indicateurs portefeuille et tendances — sans action manuelle.
-      </p>
     </header>
   );
 }

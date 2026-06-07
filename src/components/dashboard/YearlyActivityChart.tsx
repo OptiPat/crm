@@ -62,12 +62,12 @@ export function YearlyActivityChart() {
       title="Activité par année"
       description={
         !loading && data.length > 0
-          ? `Date de souscription · ${summary.totalClients} client${summary.totalClients > 1 ? "s" : ""} au total${
+          ? `Souscriptions et compléments · ${summary.totalClients} client${summary.totalClients > 1 ? "s" : ""} au total${
               summary.latest
-                ? ` · ${formatDashboardCurrency(summary.latest.panier_moyen)} panier moyen souscrit en ${summary.latest.year}`
+                ? ` · ${formatDashboardCurrency(summary.latest.panier_moyen)} panier moyen en ${summary.latest.year}`
                 : ""
             }`
-          : "Clients et panier moyen (montant souscrit) par année"
+          : "Clients et panier moyen par année (souscription + compléments)"
       }
       className="h-full"
     >
@@ -77,7 +77,7 @@ export function YearlyActivityChart() {
         <ChartEmpty
           height={300}
           title="Aucune souscription enregistrée"
-          subtitle="Les graphiques apparaîtront dès qu'un investissement « Mon conseil » aura une date de souscription."
+          subtitle="Les graphiques apparaîtront dès qu'un placement « Mon conseil » aura une souscription ou un versement complémentaire daté."
         />
       ) : (
         <ResponsiveContainer width="100%" height={300}>
