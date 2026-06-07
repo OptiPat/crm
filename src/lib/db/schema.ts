@@ -87,6 +87,10 @@ export const contacts = sqliteTable("contacts", {
   
   // Notes
   notes: text("notes"),
+
+  familleRegroupementExclu: integer("famille_regroupement_exclu", { mode: "boolean" })
+    .default(false)
+    .notNull(),
   
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })

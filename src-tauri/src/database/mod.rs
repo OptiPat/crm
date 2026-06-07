@@ -28,6 +28,7 @@ pub mod settings;
 pub mod templates_email;
 pub mod models;
 pub mod newsletter_ops;
+pub mod birthdays;
 pub mod operations;
 pub mod segments;
 pub mod taches;
@@ -41,6 +42,10 @@ pub struct Database {
 }
 
 impl Database {
+    pub(crate) fn connection(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Ouvre la base SQLite locale (non chiffrée) et garantit le schéma à jour.
     ///
     /// - Fichier absent : base créée automatiquement.
@@ -456,6 +461,8 @@ impl Database {
 
         // Migration automatique : Ajouter role_famille aux contacts
         self.migrate_add_role_famille()?;
+
+        self.migrate_add_famille_regroupement_exclu()?;
 
         // Migration automatique : Ajouter filleul_categorie aux contacts
         self.migrate_add_filleul_categorie()?;
@@ -1330,6 +1337,35 @@ impl Database {
 
         println!("✅ Migration role_famille appliquée");
 
+        Ok(())
+    }
+
+    /// Migration : exclure un contact du regroupement automatique par nom (homonymes)
+    fn migrate_add_famille_regroupement_exclu(&self) -> Result<()> {
+        let has_col = {
+            let mut stmt = self.conn.prepare("PRAGMA table_info(contacts)")?;
+            let mut rows = stmt.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                let col_name: String = row.get(1)?;
+                if col_name == "famille_regroupement_exclu" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+
+        if has_col {
+            return Ok(());
+        }
+
+        println!("🔄 Migration : Ajout de famille_regroupement_exclu aux contacts...");
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN famille_regroupement_exclu INTEGER NOT NULL DEFAULT 0",
+            [],
+        )?;
+        println!("✅ Migration famille_regroupement_exclu appliquée");
         Ok(())
     }
 

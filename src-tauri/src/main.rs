@@ -7,6 +7,8 @@ mod commands;
 mod contact_name;
 mod database;
 mod email;
+mod export_archive;
+mod local_api;
 mod newsletter;
 mod system_commands;
 
@@ -16,6 +18,7 @@ use commands::*;
 use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
+use local_api::{get_local_api_settings_cmd, regenerate_local_api_token_cmd, save_local_api_settings_cmd};
 use newsletter::*;
 use std::sync::Mutex;
 use system_commands::*;
@@ -181,6 +184,9 @@ fn main() {
             set_setting,
             delete_setting,
             get_all_settings,
+            get_local_api_settings_cmd,
+            save_local_api_settings_cmd,
+            regenerate_local_api_token_cmd,
             get_cgp_config,
             save_cgp_config,
             is_wizard_completed,
@@ -204,6 +210,7 @@ fn main() {
             list_db_backups,
             create_manual_db_backup,
             restore_db_backup,
+            export_full_archive,
             open_document_file,
             open_gmail_message,
             open_external_url,

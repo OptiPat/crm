@@ -34,6 +34,8 @@ export interface Contact {
   /** `VOUS` (défaut) ou `TU` — variante du modèle email lié */
   registre?: string | null;
   notes?: string;
+  /** Hors regroupement automatique par nom (onglet Familles). */
+  famille_regroupement_exclu?: boolean;
   created_at: number;
   updated_at: number;
 }
@@ -69,6 +71,7 @@ export interface NewContact {
   statut_suivi?: string;
   registre?: string | null;
   notes?: string;
+  famille_regroupement_exclu?: boolean;
 }
 
 export async function getAllContacts(): Promise<Contact[]> {

@@ -13,6 +13,7 @@ import { ParametresEmailSection } from "@/components/settings/ParametresEmailSec
 import { ParametresSuiviSection } from "@/components/settings/ParametresSuiviSection";
 import { ParametresDatabaseSection } from "@/components/settings/ParametresDatabaseSection";
 import { ParametresApplicationSection } from "@/components/settings/ParametresApplicationSection";
+import { ParametresIntegrationsSection } from "@/components/settings/ParametresIntegrationsSection";
 import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
 import { ParametresCustomFieldsSection } from "@/components/settings/ParametresCustomFieldsSection";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
@@ -31,6 +32,7 @@ import {
   Database,
   Sparkles,
   SlidersHorizontal,
+  Workflow,
 } from "lucide-react";
 
 const EMPTY_CGP_CONFIG: CgpConfig = {
@@ -78,6 +80,12 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     label: "Suivi",
     description: "Liens Google Agenda",
     icon: CalendarClock,
+  },
+  {
+    id: "integrations",
+    label: "Intégration n8n",
+    description: "API locale anniversaires",
+    icon: Workflow,
   },
   {
     id: "champs",
@@ -260,6 +268,8 @@ export function Parametres() {
         return (
           <ParametresSuiviSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
         );
+      case "integrations":
+        return <ParametresIntegrationsSection />;
       case "donnees":
         return (
           <ParametresDatabaseSection

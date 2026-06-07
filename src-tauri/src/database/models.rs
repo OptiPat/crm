@@ -34,6 +34,8 @@ pub struct Contact {
     /// `VOUS` (défaut) ou `TU` — choix du modèle email lié à l'envoi
     pub registre: Option<String>,
     pub notes: Option<String>,
+    /// Hors regroupement automatique par nom (homonymes) sur l'onglet Familles.
+    pub famille_regroupement_exclu: bool,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
 }
@@ -71,6 +73,8 @@ pub struct NewContact {
     #[serde(default)]
     pub registre: Option<String>,
     pub notes: Option<String>,
+    #[serde(default)]
+    pub famille_regroupement_exclu: Option<bool>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -337,8 +337,9 @@ impl Database {
                 notes = ?26,
                 role_foyer = ?27,
                 role_famille = ?28,
+                famille_regroupement_exclu = ?29,
                 updated_at = unixepoch()
-            WHERE id = ?29",
+            WHERE id = ?30",
             params![
                 &contact.famille_id,
                 &contact.foyer_id,
@@ -368,6 +369,11 @@ impl Database {
                 &contact.notes,
                 &contact.role_foyer,
                 &contact.role_famille,
+                if contact.famille_regroupement_exclu.unwrap_or(false) {
+                    1i64
+                } else {
+                    0i64
+                },
                 id
             ],
         )?;

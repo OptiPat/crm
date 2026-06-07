@@ -192,6 +192,7 @@ mod database_integration_tests {
             date_prochain_suivi_filleul: None,
             notes: None,
             registre: None,
+            famille_regroupement_exclu: None,
         }
     }
 

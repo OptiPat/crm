@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   Archive,
+  FolderOutput,
   HardDrive,
   HelpCircle,
   RotateCcw,
@@ -23,9 +24,11 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { cleanupOrphanedData, getAllContacts, deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import {
   createManualDbBackup,
+  exportFullArchive,
   restoreDbBackup,
   listDbBackups,
   type DbBackupEntry,
@@ -55,6 +58,7 @@ export function ParametresDatabaseSection({
 }: ParametresDatabaseSectionProps) {
   const [cleaningUp, setCleaningUp] = useState(false);
   const [creatingBackup, setCreatingBackup] = useState(false);
+  const [exportingArchive, setExportingArchive] = useState(false);
   const [restoreTarget, setRestoreTarget] = useState<DbBackupEntry | null>(null);
   const [restoring, setRestoring] = useState(false);
   const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
@@ -104,6 +108,34 @@ export function ParametresDatabaseSection({
       toast.error("Impossible de créer la copie de secours");
     } finally {
       setCreatingBackup(false);
+    }
+  };
+
+  const handleExportArchive = async () => {
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Choisir le dossier de destination (clé USB, OneDrive, etc.)",
+    });
+    if (!selected || typeof selected !== "string") return;
+
+    setExportingArchive(true);
+    try {
+      const result = await exportFullArchive(selected);
+      const fileName = result.zip_path.split(/[\\/]/).pop() ?? result.zip_path;
+      toast.success("Archive complète exportée", {
+        description: `${fileName} — ${formatBackupSize(result.zip_size)} · ${result.files_included} fichier(s). Votre base actuelle n'a pas été modifiée.`,
+        duration: 10000,
+      });
+    } catch (error) {
+      console.error("Erreur export archive:", error);
+      toast.error(
+        typeof error === "string"
+          ? error
+          : "Impossible de créer l'archive. Réessayez ou choisissez un autre dossier."
+      );
+    } finally {
+      setExportingArchive(false);
     }
   };
 
@@ -199,11 +231,37 @@ export function ParametresDatabaseSection({
               variant="outline"
               size="sm"
               className="gap-2"
-              disabled={creatingBackup || !dbPath}
+              disabled={creatingBackup || exportingArchive || !dbPath}
               onClick={() => void handleCreateBackup()}
             >
               <Archive className="h-4 w-4" />
               {creatingBackup ? "Copie en cours…" : "Créer une copie de secours maintenant"}
+            </Button>
+          </div>
+
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-medium mb-1">
+                <FolderOutput className="h-4 w-4 text-primary" />
+                Exporter une archive complète (hors PC)
+              </div>
+              <Explainer>
+                Copie <strong>tout</strong> le dossier applicatif : base, documents PDF, logo,
+                mot de passe, connexion email OAuth, newsletter… sur une clé USB, OneDrive, etc.{" "}
+                <strong>Votre base actuelle n&apos;est jamais modifiée</strong> — lecture seule via
+                une copie cohérente SQLite. Seules les copies locales redondantes (dossier{" "}
+                <code className="text-xs bg-muted px-1 rounded">backups/</code>) sont exclues.
+              </Explainer>
+            </div>
+            <Button
+              variant="default"
+              size="sm"
+              className="gap-2"
+              disabled={exportingArchive || creatingBackup || !dbPath}
+              onClick={() => void handleExportArchive()}
+            >
+              <FolderOutput className="h-4 w-4" />
+              {exportingArchive ? "Export en cours…" : "Exporter vers un dossier externe…"}
             </Button>
           </div>
 

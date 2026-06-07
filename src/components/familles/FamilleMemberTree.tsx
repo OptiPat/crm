@@ -7,7 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronDown, ChevronRight, Home, Wallet } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, ChevronRight, Home, UserMinus, Wallet } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Foyer } from "@/lib/api/tauri-foyers";
 import {
@@ -24,6 +25,7 @@ type FamilleMemberTreeProps = {
   foyers: Foyer[];
   onRoleChange: (contact: Contact, newRole: string) => void;
   onMemberClick: (contact: Contact) => void;
+  onExcludeFromFamille?: (contact: Contact) => void;
   selectedContactId?: number;
   showTitle?: boolean;
 };
@@ -96,12 +98,14 @@ function MemberCard({
   isSelected,
   onRoleChange,
   onMemberClick,
+  onExcludeFromFamille,
 }: {
   membre: MemberWithInvestments;
   foyer?: Foyer;
   isSelected: boolean;
   onRoleChange: (contact: Contact, newRole: string) => void;
   onMemberClick: (contact: Contact) => void;
+  onExcludeFromFamille?: (contact: Contact) => void;
 }) {
   const [investOpen, setInvestOpen] = useState(false);
   const hasInvest = membre.investissements.length > 0;
@@ -174,7 +178,10 @@ function MemberCard({
           <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-3 group-hover:text-primary transition-colors" />
         </button>
 
-        <div className="shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="flex shrink-0 items-center gap-1 pt-0.5"
+          onClick={(e) => e.stopPropagation()}
+        >
           {!membre.isSpouse ? (
             <Select
               value={membre.contact.role_famille || ""}
@@ -195,6 +202,19 @@ function MemberCard({
             <Badge variant="outline" className="h-8 text-xs text-sky-700 border-sky-300">
               Conjoint(e)
             </Badge>
+          )}
+          {!membre.isSpouse && onExcludeFromFamille && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              title="Retirer du regroupement (homonyme)"
+              aria-label={`Retirer ${membre.contact.prenom} ${membre.contact.nom} du regroupement`}
+              onClick={() => onExcludeFromFamille(membre.contact)}
+            >
+              <UserMinus className="h-4 w-4" />
+            </Button>
           )}
         </div>
       </div>
@@ -233,6 +253,7 @@ export function FamilleMemberTree({
   foyers,
   onRoleChange,
   onMemberClick,
+  onExcludeFromFamille,
   selectedContactId,
   showTitle = true,
 }: FamilleMemberTreeProps) {
@@ -245,7 +266,8 @@ export function FamilleMemberTree({
     <div className="space-y-3">
       {showTitle && (
         <p className="text-xs text-muted-foreground">
-          Cliquez sur un membre pour ouvrir sa fiche contact.
+          Cliquez sur un membre pour ouvrir sa fiche. Icône − pour retirer un homonyme du
+          regroupement.
         </p>
       )}
       {famille.membres.map((membre) => (
@@ -256,6 +278,7 @@ export function FamilleMemberTree({
           isSelected={selectedContactId === membre.contact.id}
           onRoleChange={onRoleChange}
           onMemberClick={onMemberClick}
+          onExcludeFromFamille={onExcludeFromFamille}
         />
       ))}
     </div>

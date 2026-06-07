@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, ChevronDown, ChevronUp, Home, ArrowLeft, TreePine } from "lucide-react";
+import { toast } from "sonner";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
@@ -110,6 +111,11 @@ export function Familles({ onNavigate }: FamillesProps) {
     [contacts, foyers, investissementsByContact, investissementsByFoyer]
   );
 
+  const excludedHomonyms = useMemo(
+    () => contacts.filter((c) => c.famille_regroupement_exclu),
+    [contacts]
+  );
+
   const filteredFamilles = useMemo(() => {
     if (!searchQuery) return familleGroups;
     return familleGroups.filter(
@@ -188,6 +194,41 @@ export function Familles({ onNavigate }: FamillesProps) {
       );
     } catch (error) {
       console.error("Erreur mise à jour rôle famille:", error);
+    }
+  };
+
+  const handleExcludeFromFamille = async (contact: Contact) => {
+    const msg = `Retirer ${contact.prenom} ${contact.nom} du regroupement « ${contact.nom.toUpperCase()} » ?\n\nCe contact reste dans le CRM mais ne sera plus listé avec les autres homonymes.`;
+    if (!confirm(msg)) return;
+    try {
+      await updateContact(
+        contact.id,
+        contactToUpdatePayload(contact, { famille_regroupement_exclu: true })
+      );
+      await loadData();
+      if (selectedContact?.id === contact.id) {
+        setSelectedContact((prev) =>
+          prev ? { ...prev, famille_regroupement_exclu: true } : prev
+        );
+      }
+      toast.success(`${contact.prenom} ${contact.nom} retiré du regroupement`);
+    } catch (error) {
+      console.error("Erreur exclusion famille:", error);
+      toast.error("Impossible de retirer ce contact du regroupement");
+    }
+  };
+
+  const handleReintegrateFamille = async (contact: Contact) => {
+    try {
+      await updateContact(
+        contact.id,
+        contactToUpdatePayload(contact, { famille_regroupement_exclu: false })
+      );
+      await loadData();
+      toast.success(`${contact.prenom} ${contact.nom} réintégré au regroupement`);
+    } catch (error) {
+      console.error("Erreur réintégration famille:", error);
+      toast.error("Impossible de réintégrer ce contact");
     }
   };
 
@@ -298,13 +339,46 @@ export function Familles({ onNavigate }: FamillesProps) {
         />
       </div>
 
+      {excludedHomonyms.length > 0 && (
+        <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-3 py-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            Hors regroupement ({excludedHomonyms.length}) — homonymes retirés manuellement
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {excludedHomonyms.map((c) => (
+              <li
+                key={c.id}
+                className="inline-flex items-center gap-2 rounded-md border border-border/60 bg-card px-2.5 py-1 text-xs"
+              >
+                <button
+                  type="button"
+                  className="hover:text-primary font-medium"
+                  onClick={() => openMember(c)}
+                >
+                  {c.prenom} {c.nom}
+                </button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => void handleReintegrateFamille(c)}
+                >
+                  Réintégrer
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
         <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
           <CardTitle className="font-serif text-lg">Liste des familles</CardTitle>
           <CardDescription>
             {searchQuery
               ? `${filteredFamilles.length} résultat(s) pour « ${searchQuery} »`
-              : "Cliquez sur une famille pour voir les membres et foyers"}
+              : "Regroupement par nom — retirez les homonymes qui ne sont pas de la même famille"}
           </CardDescription>
         </CardHeader>
 
@@ -383,6 +457,7 @@ export function Familles({ onNavigate }: FamillesProps) {
                             foyers={foyers}
                             onRoleChange={handleRoleFamilleChange}
                             onMemberClick={openMember}
+                            onExcludeFromFamille={handleExcludeFromFamille}
                             showTitle={false}
                           />
                         </div>
@@ -441,7 +516,7 @@ export function Familles({ onNavigate }: FamillesProps) {
                         foyers={foyers}
                         onRoleChange={handleRoleFamilleChange}
                         onMemberClick={openMember}
-                        selectedContactId={undefined}
+                        onExcludeFromFamille={handleExcludeFromFamille}
                       />
                     </div>
                   </div>

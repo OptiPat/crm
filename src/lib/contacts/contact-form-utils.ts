@@ -194,6 +194,7 @@ export function contactToFormData(contact: Contact): NewContact {
     statut_suivi: contact.statut_suivi || "ACTIF",
     registre: contact.registre?.trim() || "VOUS",
     notes: contact.notes || "",
+    famille_regroupement_exclu: contact.famille_regroupement_exclu ?? false,
   };
 }
 

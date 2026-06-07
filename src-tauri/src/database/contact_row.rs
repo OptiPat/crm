@@ -7,7 +7,7 @@ pub const CONTACT_SELECT: &str = "id, famille_id, foyer_id, role_foyer, role_fam
                     adresse, code_postal, ville, date_naissance, profession, situation_familiale,
                     source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                     date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                    statut_suivi, registre, notes, created_at, updated_at";
+                    statut_suivi, registre, notes, famille_regroupement_exclu, created_at, updated_at";
 
 /// CONTACT_SELECT avec préfixe table (requêtes JOIN sur `contacts`).
 pub fn contact_select_prefixed(prefix: &str) -> String {
@@ -56,7 +56,8 @@ pub fn map_contact_row(row: &Row<'_>) -> rusqlite::Result<Contact> {
         statut_suivi: row.get(26)?,
         registre: row.get(27)?,
         notes: row.get(28)?,
-        created_at: row.get(29)?,
-        updated_at: row.get(30)?,
+        famille_regroupement_exclu: row.get::<_, i64>(29)? != 0,
+        created_at: row.get(30)?,
+        updated_at: row.get(31)?,
     })
 }

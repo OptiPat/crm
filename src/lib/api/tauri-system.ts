@@ -38,6 +38,20 @@ export async function restoreDbBackup(
   return invoke<RestoreDbBackupResult>("restore_db_backup", { backupFilename });
 }
 
+export interface ExportFullArchiveResult {
+  zip_path: string;
+  zip_size: number;
+  files_included: number;
+}
+
+export async function exportFullArchive(
+  destinationDir: string
+): Promise<ExportFullArchiveResult> {
+  return invoke<ExportFullArchiveResult>("export_full_archive", {
+    destinationDir,
+  });
+}
+
 export async function openExternalUrl(url: string): Promise<void> {
   return invoke<void>("open_external_url", { url });
 }

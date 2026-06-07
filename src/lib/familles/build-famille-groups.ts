@@ -71,7 +71,9 @@ export function buildFamilleGroups(
 ): FamilleGroup[] {
   const groupMap = new Map<string, Contact[]>();
 
-  contacts.forEach((contact) => {
+  const eligible = contacts.filter((c) => !c.famille_regroupement_exclu);
+
+  eligible.forEach((contact) => {
     const nomNormalized = contact.nom.trim().toUpperCase();
     if (!groupMap.has(nomNormalized)) {
       groupMap.set(nomNormalized, []);
@@ -114,7 +116,7 @@ export function buildFamilleGroups(
       });
 
       if (membre.foyer_id) {
-        const foyerMembers = contacts.filter(
+        const foyerMembers = eligible.filter(
           (c) => c.foyer_id === membre.foyer_id && c.id !== membre.id
         );
         foyerMembers.forEach((spouse) => {

@@ -14,6 +14,9 @@ fn open_database(app: &AppHandle, db: &State<'_, DbState>) -> Result<(), String>
         eprintln!("❌ open_database: échec ouverture base : {e}");
         format!("Échec d'ouverture de la base : {e}")
     })?;
+    if let Err(e) = crate::local_api::start_for_app(app, &database) {
+        eprintln!("⚠️ API locale n8n : {e}");
+    }
     *db.lock().unwrap() = Some(database);
     Ok(())
 }

@@ -40,10 +40,6 @@ export function PipelineChart() {
   const [loading, setLoading] = useState(true);
 
   const total = useMemo(() => data.reduce((s, i) => s + i.count, 0), [data]);
-  const clientShare = useMemo(() => {
-    const clients = data.find((d) => d.stage === "Clients");
-    return clients && total > 0 ? ((clients.count / total) * 100).toFixed(1) : "0";
-  }, [data, total]);
 
   useEffect(() => {
     (async () => {
@@ -64,15 +60,7 @@ export function PipelineChart() {
   }, []);
 
   return (
-    <DashboardPanel
-      title="Pipeline commercial"
-      description={
-        !loading && total > 0
-          ? `${clientShare} % de clients dans le portefeuille actif`
-          : "Suspects, prospects et clients"
-      }
-      className="h-full"
-    >
+    <DashboardPanel title="Pipeline commercial" className="h-full">
         {loading ? (
           <ChartLoading height={300} />
         ) : total === 0 ? (

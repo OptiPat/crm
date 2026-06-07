@@ -194,6 +194,7 @@ mod tests {
             statut_suivi: None,
             registre: None,
             notes: None,
+            famille_regroupement_exclu: None,
         })
         .unwrap()
         .id

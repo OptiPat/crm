@@ -38,12 +38,6 @@ export function YearlyActivityChart() {
     [data]
   );
 
-  const summary = useMemo(() => {
-    const totalClients = data.reduce((s, d) => s + d.clients, 0);
-    const latest = data[data.length - 1];
-    return { totalClients, latest };
-  }, [data]);
-
   useEffect(() => {
     (async () => {
       try {
@@ -58,19 +52,7 @@ export function YearlyActivityChart() {
   }, []);
 
   return (
-    <DashboardPanel
-      title="Activité par année"
-      description={
-        !loading && data.length > 0
-          ? `Souscriptions et compléments · ${summary.totalClients} client${summary.totalClients > 1 ? "s" : ""} au total${
-              summary.latest
-                ? ` · ${formatDashboardCurrency(summary.latest.panier_moyen)} panier moyen en ${summary.latest.year}`
-                : ""
-            }`
-          : "Clients et panier moyen par année (souscription + compléments)"
-      }
-      className="h-full"
-    >
+    <DashboardPanel title="Activité par année" className="h-full">
       {loading ? (
         <ChartLoading height={300} />
       ) : data.length === 0 ? (

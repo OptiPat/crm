@@ -81,6 +81,48 @@ pub fn create_manual_db_backup(app: AppHandle) -> Result<String, String> {
     Ok(dest.to_string_lossy().into_owned())
 }
 
+#[derive(Serialize)]
+pub struct ExportFullArchiveResult {
+    pub zip_path: String,
+    pub zip_size: u64,
+    pub files_included: usize,
+}
+
+#[tauri::command]
+pub fn export_full_archive(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    destination_dir: String,
+) -> Result<ExportFullArchiveResult, String> {
+    let dest = std::path::Path::new(destination_dir.trim());
+    if destination_dir.trim().is_empty() {
+        return Err("Choisissez un dossier de destination.".into());
+    }
+    if !dest.is_dir() {
+        return Err("Le dossier de destination est introuvable.".into());
+    }
+
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let db_guard = db
+        .lock()
+        .map_err(|_| "Impossible d'accéder à la base.".to_string())?;
+    let database = db_guard.as_ref().ok_or("Base non initialisée")?;
+
+    let output = crate::export_archive::export_full_archive(
+        crate::export_archive::ExportArchiveInput {
+            source_db: database.connection(),
+            app_data_dir: &app_data_dir,
+            destination_dir: dest,
+        },
+    )?;
+
+    Ok(ExportFullArchiveResult {
+        zip_path: output.zip_path.to_string_lossy().into_owned(),
+        zip_size: output.zip_size,
+        files_included: output.files_included,
+    })
+}
+
 #[tauri::command]
 pub fn open_document_file(path: String) -> Result<(), String> {
     let p = std::path::Path::new(&path);
