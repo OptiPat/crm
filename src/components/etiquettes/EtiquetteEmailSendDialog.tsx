@@ -23,6 +23,7 @@ import { EMAIL_PREVIEW_HTML_CLASS } from "@/lib/emails/email-preview-html-styles
 import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
+import { isEtiquetteQueueItemBatchLocked } from "@/lib/etiquettes/etiquette-email-send-runner";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -90,8 +91,15 @@ export function EtiquetteEmailSendDialog({
     );
   }, [item, cgpConfig, subject, body, bodyEdited]);
 
+  const batchLocked =
+    item != null && isEtiquetteQueueItemBatchLocked(item.contact_etiquette_id);
+
   const handleSend = async () => {
     if (!item?.contact_email || !sendPreview) return;
+    if (batchLocked) {
+      toast.warning("Cet envoi fait partie d'une salve en cours.");
+      return;
+    }
     setSending(true);
     try {
       const sent = await sendEmail({
@@ -233,7 +241,13 @@ export function EtiquetteEmailSendDialog({
           </Button>
           <Button
             onClick={() => void handleSend()}
-            disabled={sending || !subject.trim() || !body.trim() || !item?.contact_email}
+            disabled={
+              sending ||
+              batchLocked ||
+              !subject.trim() ||
+              !body.trim() ||
+              !item?.contact_email
+            }
           >
             {sending ? (
               "Envoi..."

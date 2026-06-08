@@ -1345,6 +1345,19 @@ pub fn get_etiquette_email_queue(
 }
 
 #[tauri::command]
+pub fn get_envois_snapshot(
+    db: State<'_, DbState>,
+    active_status: Option<String>,
+) -> Result<crate::database::models::EnvoisSnapshot, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_envois_snapshot(active_status.as_deref())
+        .map_err(|e| format!("Failed to get envois snapshot: {}", e))
+}
+
+#[tauri::command]
 pub fn mark_etiquette_email_sent(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,

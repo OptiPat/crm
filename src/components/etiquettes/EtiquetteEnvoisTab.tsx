@@ -23,7 +23,7 @@ import {
   isTemplateEmailRelanceEnabledForQueue,
 } from "@/lib/emails/template-email-relance";
 import {
-  getEtiquetteEmailQueue,
+  getEnvoisSnapshot,
   markEmailCampaignResponse,
   dismissEmailCampaignFollowup,
   cancelPendingEmailCampaign,
@@ -32,6 +32,7 @@ import {
   prepareEmailCampaignRelance,
   getContrastColor,
   type EtiquetteEmailQueueItem,
+  type EtiquetteEmailQueueStatus,
 } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
@@ -65,7 +66,7 @@ import {
 import {
   notifyRelationChanged,
   subscribeEtiquettesChanged,
-  subscribeRelationChanged,
+  subscribeRelationChangedDebounced,
 } from "@/lib/etiquettes/etiquette-events";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
@@ -73,6 +74,16 @@ import { consumeEnvoisContactFocus } from "@/lib/navigation/suivi-navigation";
 import {
   buildSentQueueItem,
 } from "@/lib/etiquettes/etiquette-queue-incremental";
+import {
+  getEnvoisQueueCache,
+  setEnvoisQueueCache,
+  type EnvoisQueueCache,
+} from "@/lib/etiquettes/etiquette-envois-cache";
+import {
+  isEtiquetteBatchSendRunning,
+  isEtiquetteQueueItemBatchLocked,
+  subscribeEtiquetteBatchSend,
+} from "@/lib/etiquettes/etiquette-email-send-runner";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -80,6 +91,21 @@ import { toast } from "sonner";
 interface EtiquetteEnvoisTabProps {
   onOpenContact?: (contactId: number) => void;
   onQueueChanged?: () => void;
+}
+
+type EnvoisSubTab =
+  | "ready"
+  | "scheduled"
+  | "incomplete"
+  | "cancelled"
+  | "sent"
+  | "followup"
+  | "journal";
+
+function patchEnvoisQueueCache(patch: Partial<EnvoisQueueCache>): void {
+  const prev = getEnvoisQueueCache();
+  if (!prev) return;
+  setEnvoisQueueCache({ ...prev, ...patch });
 }
 
 export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteEnvoisTabProps) {
@@ -113,7 +139,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [syncing, setSyncing] = useState(false);
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
   const [highlightRowKey, setHighlightRowKey] = useState<number | null>(null);
-  const initialRecalcDone = useRef(false);
+  const [batchSendRunning, setBatchSendRunning] = useState(false);
+  const [, setBatchUiPulse] = useState(0);
+  const subTabRef = useRef<EnvoisSubTab>(subTab);
+  subTabRef.current = subTab;
 
   const runAutoSync = useCallback(async () => {
     if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
@@ -167,24 +196,29 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     const silent = options?.silent ?? false;
     try {
       if (!silent) setLoading(true);
-      const [cgp, r, sch, i, can, s, f, emailConn] = await Promise.all([
+      const [cgp, snap, emailConn] = await Promise.all([
         getCgpConfig(),
-        getEtiquetteEmailQueue("ready"),
-        getEtiquetteEmailQueue("scheduled"),
-        getEtiquetteEmailQueue("incomplete"),
-        getEtiquetteEmailQueue("cancelled"),
-        getEtiquetteEmailQueue("sent"),
-        getEtiquetteEmailQueue("followup"),
+        getEnvoisSnapshot(null),
         getEmailConnectionStatus(),
       ]);
       setCgpConfig(cgp);
-      setReady(r);
-      setScheduled(sch);
-      setIncomplete(i);
-      setCancelled(can);
-      setSent(s);
-      setFollowup(f);
+      setReady(snap.ready);
+      setScheduled(snap.scheduled ?? []);
+      setIncomplete(snap.incomplete ?? []);
+      setCancelled(snap.cancelled ?? []);
+      setSent(snap.sent ?? []);
+      setFollowup(snap.followup ?? []);
       setEmailStatus(emailConn);
+      setEnvoisQueueCache({
+        ready: snap.ready,
+        scheduled: snap.scheduled ?? [],
+        incomplete: snap.incomplete ?? [],
+        cancelled: snap.cancelled ?? [],
+        sent: snap.sent ?? [],
+        followup: snap.followup ?? [],
+        cgpConfig: cgp,
+        emailStatus: emailConn,
+      });
       onQueueChanged?.();
     } catch (error) {
       console.error("Error loading email queue:", error);
@@ -194,38 +228,87 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     }
   }, [onQueueChanged]);
 
-  useEffect(() => {
-    void loadQueue();
-  }, [loadQueue]);
+  /** Au focus fenêtre : compteur Prêts + onglet actif (pas les 6 files). */
+  const loadQueuePartial = useCallback(async () => {
+    const active = subTabRef.current;
+    if (active === "journal") return;
+    try {
+      const status = active as EtiquetteEmailQueueStatus;
+      const snap = await getEnvoisSnapshot(active === "ready" ? "ready" : status);
+      setReady(snap.ready);
+      patchEnvoisQueueCache({ ready: snap.ready });
+
+      if (snap.scheduled) {
+        setScheduled(snap.scheduled);
+        patchEnvoisQueueCache({ scheduled: snap.scheduled });
+      }
+      if (snap.incomplete) {
+        setIncomplete(snap.incomplete);
+        patchEnvoisQueueCache({ incomplete: snap.incomplete });
+      }
+      if (snap.cancelled) {
+        setCancelled(snap.cancelled);
+        patchEnvoisQueueCache({ cancelled: snap.cancelled });
+      }
+      if (snap.sent) {
+        setSent(snap.sent);
+        patchEnvoisQueueCache({ sent: snap.sent });
+      }
+      if (snap.followup) {
+        setFollowup(snap.followup);
+        patchEnvoisQueueCache({ followup: snap.followup });
+      }
+
+      onQueueChanged?.();
+    } catch (error) {
+      console.error("Error partial email queue refresh:", error);
+    }
+  }, [onQueueChanged]);
 
   useEffect(() => {
-    if (initialRecalcDone.current) return;
-    initialRecalcDone.current = true;
-    void (async () => {
-      try {
-        setSyncing(true);
-        await runFullEtiquettesRecalc();
-        const conn = await getEmailConnectionStatus();
-        if (conn.provider === "google" && conn.connected) {
-          await runRelationAutoSync();
-        }
-        await loadQueue({ silent: true });
-      } catch (error) {
-        console.error("Error on initial envois recalc:", error);
-      } finally {
-        setSyncing(false);
-      }
-    })();
+    return subscribeEtiquetteBatchSend((_progress, running) => {
+      setBatchSendRunning(running);
+      setBatchUiPulse((n) => n + 1);
+    });
+  }, []);
+
+  useEffect(() => {
+    const cached = getEnvoisQueueCache();
+    if (cached) {
+      setCgpConfig(cached.cgpConfig);
+      setReady(cached.ready);
+      setScheduled(cached.scheduled);
+      setIncomplete(cached.incomplete);
+      setCancelled(cached.cancelled);
+      setSent(cached.sent);
+      setFollowup(cached.followup);
+      setEmailStatus(cached.emailStatus);
+      setLoading(false);
+    }
+    void loadQueue({ silent: cached != null });
   }, [loadQueue]);
 
   useEventAutoRefresh(
     () => loadQueue({ silent: true }),
     subscribeEtiquettesChanged,
-    subscribeContactsChanged
+    subscribeContactsChanged,
+    { wake: false }
   );
 
   useEffect(() => {
-    return subscribeRelationChanged((detail) => {
+    const onWake = () => {
+      if (!document.hidden) void loadQueuePartial();
+    };
+    document.addEventListener("visibilitychange", onWake);
+    window.addEventListener("focus", onWake);
+    return () => {
+      document.removeEventListener("visibilitychange", onWake);
+      window.removeEventListener("focus", onWake);
+    };
+  }, [loadQueuePartial]);
+
+  useEffect(() => {
+    return subscribeRelationChangedDebounced((detail) => {
       if (detail.skipQueueReload) return;
       void loadQueue({ silent: true });
     });
@@ -282,6 +365,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   }, [highlightContactId, loading, ready, scheduled, incomplete, sent, followup]);
 
   const openConfirm = (item: EtiquetteEmailQueueItem) => {
+    if (isEtiquetteQueueItemBatchLocked(item.contact_etiquette_id)) {
+      toast.warning("Cet envoi fait partie d'une salve en cours.");
+      return;
+    }
     setConfirmItem(item);
   };
 
@@ -412,6 +499,9 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             options.mode === "ready" && cgpConfig
               ? renderEtiquetteEmailPreview(item, cgpConfig)
               : null;
+          const batchLocked =
+            options.mode === "ready" &&
+            isEtiquetteQueueItemBatchLocked(item.contact_etiquette_id);
 
           return (
             <div
@@ -419,12 +509,14 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               key={item.contact_etiquette_id}
               className={cn(
                 "p-4 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center gap-3 justify-between",
-                highlightRowKey === item.contact_etiquette_id && "ring-2 ring-primary/40"
+                highlightRowKey === item.contact_etiquette_id && "ring-2 ring-primary/40",
+                batchLocked && "opacity-60"
               )}
             >
               {options.mode === "ready" && (
                 <Checkbox
                   checked={selectedIds.has(item.contact_etiquette_id)}
+                  disabled={batchLocked || batchSendRunning}
                   onCheckedChange={(v) =>
                     toggleSelected(item.contact_etiquette_id, v === true)
                   }
@@ -503,13 +595,18 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               <div className="flex gap-2 shrink-0">
                 {options.mode === "ready" && (
                   <>
-                    <Button size="sm" onClick={() => openConfirm(item)}>
+                    <Button
+                      size="sm"
+                      disabled={batchLocked}
+                      onClick={() => openConfirm(item)}
+                    >
                       <Send className="h-4 w-4 mr-1" />
                       Confirmer et envoyer
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
+                      disabled={batchLocked}
                       title="Ignorer cet envoi"
                       onClick={() => setCancelConfirmItem(item)}
                     >
@@ -720,6 +817,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 <div className="flex flex-wrap items-center gap-2">
                   <Checkbox
                     checked={allReadySelected}
+                    disabled={batchSendRunning}
                     onCheckedChange={(v) => {
                       if (v === true) {
                         setSelectedIds(new Set(ready.map((i) => i.contact_etiquette_id)));
@@ -732,7 +830,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   <Button
                     size="sm"
                     className="ml-auto"
-                    disabled={selectedReadyItems.length === 0 || loading}
+                    disabled={
+                      selectedReadyItems.length === 0 ||
+                      loading ||
+                      batchSendRunning ||
+                      isEtiquetteBatchSendRunning()
+                    }
                     onClick={() => setBatchOpen(true)}
                   >
                     <Send className="h-4 w-4 mr-1" />

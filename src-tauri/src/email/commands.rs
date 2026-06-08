@@ -21,19 +21,27 @@ pub struct SendEmailResult {
 }
 
 #[tauri::command]
-pub fn send_email(app_handle: AppHandle, email_data: SendEmailInput) -> Result<SendEmailResult, String> {
-    let sent = send_email_unified(
-        &app_handle,
-        &email_data.to_email,
-        email_data.to_name.as_deref(),
-        &email_data.subject,
-        &email_data.body,
-        email_data.body_html.as_deref(),
-        email_data.thread_id.as_deref(),
-        email_data.in_reply_to_message_id.as_deref(),
-    )?;
-    Ok(SendEmailResult {
-        gmail_message_id: sent.gmail_message_id,
-        gmail_thread_id: sent.gmail_thread_id,
+pub async fn send_email(
+    app_handle: AppHandle,
+    email_data: SendEmailInput,
+) -> Result<SendEmailResult, String> {
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let sent = send_email_unified(
+            &app,
+            &email_data.to_email,
+            email_data.to_name.as_deref(),
+            &email_data.subject,
+            &email_data.body,
+            email_data.body_html.as_deref(),
+            email_data.thread_id.as_deref(),
+            email_data.in_reply_to_message_id.as_deref(),
+        )?;
+        Ok(SendEmailResult {
+            gmail_message_id: sent.gmail_message_id,
+            gmail_thread_id: sent.gmail_thread_id,
+        })
     })
+    .await
+    .map_err(|e| format!("Envoi interrompu: {}", e))?
 }

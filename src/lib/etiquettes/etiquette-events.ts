@@ -45,3 +45,31 @@ export function subscribeRelationChanged(
   window.addEventListener(RELATION_CHANGED_EVENT, listener);
   return () => window.removeEventListener(RELATION_CHANGED_EVENT, listener);
 }
+
+const RELATION_DEBOUNCE_MS = 300;
+
+/** Même bus relation, regroupé sur 300 ms pour limiter les rafales SQLite. */
+export function subscribeRelationChangedDebounced(
+  handler: (detail: RelationChangedDetail) => void,
+  debounceMs = RELATION_DEBOUNCE_MS
+): () => void {
+  let timeout: number | null = null;
+  let pending: RelationChangedDetail = {};
+
+  return subscribeRelationChanged((detail) => {
+    pending = {
+      ...pending,
+      ...detail,
+      skipQueueReload: pending.skipQueueReload || detail.skipQueueReload,
+      skipEtiquettesChanged:
+        pending.skipEtiquettesChanged || detail.skipEtiquettesChanged,
+    };
+    if (timeout != null) window.clearTimeout(timeout);
+    timeout = window.setTimeout(() => {
+      timeout = null;
+      const snapshot = pending;
+      pending = {};
+      handler(snapshot);
+    }, debounceMs);
+  });
+}

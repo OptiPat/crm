@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -10,11 +10,12 @@ import {
 import { Button } from "@/components/ui/button";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import type { EtiquetteBatchSendProgress } from "@/lib/etiquettes/etiquette-batch-send";
 import {
-  sendEtiquetteBatch,
-  type EtiquetteBatchSendProgress,
-} from "@/lib/etiquettes/etiquette-batch-send";
-import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+  isEtiquetteBatchSendRunning,
+  startEtiquetteBatchSend,
+  subscribeEtiquetteBatchSend,
+} from "@/lib/etiquettes/etiquette-email-send-runner";
 import { toast } from "sonner";
 
 export function EtiquetteBatchSendDialog({
@@ -34,51 +35,27 @@ export function EtiquetteBatchSendDialog({
 }) {
   const [progress, setProgress] = useState<EtiquetteBatchSendProgress | null>(null);
   const [running, setRunning] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    if (!open) {
-      setProgress(null);
-      setRunning(false);
-      abortRef.current?.abort();
-      abortRef.current = null;
-    }
-  }, [open]);
+    return subscribeEtiquetteBatchSend((p, isRunning) => {
+      setProgress(p);
+      setRunning(isRunning);
+    });
+  }, []);
 
   const start = async () => {
-    if (items.length === 0 || running) return;
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setRunning(true);
+    if (items.length === 0 || running || isEtiquetteBatchSendRunning()) return;
+    onOpenChange(false);
+    toast.info("Envoi en arrière-plan — vous pouvez continuer à utiliser le CRM.");
     try {
-      const result = await sendEtiquetteBatch({
+      await startEtiquetteBatchSend({
         items,
         cgp: cgpConfig,
-        signal: controller.signal,
-        onProgress: (p) => {
-          setProgress(p);
-          if (p.lastSent && onItemSent) {
-            onItemSent(p.lastSent.item, p.lastSent.subject, p.lastSent.sentAtSec);
-          }
-        },
+        onItemSent,
+        onDone,
       });
-      notifyRelationChanged(undefined, {
-        skipQueueReload: true,
-        skipEtiquettesChanged: true,
-      });
-      if (result.errors.length === 0) {
-        toast.success(`${result.sent} email${result.sent > 1 ? "s" : ""} envoyé${result.sent > 1 ? "s" : ""}`);
-      } else {
-        toast.warning(
-          `${result.sent} envoyé${result.sent > 1 ? "s" : ""}, ${result.errors.length} erreur${result.errors.length > 1 ? "s" : ""}`
-        );
-      }
-      onDone?.();
-      onOpenChange(false);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur envoi groupé");
-    } finally {
-      setRunning(false);
     }
   };
 
@@ -88,7 +65,7 @@ export function EtiquetteBatchSendDialog({
       : 0;
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !running && onOpenChange(o)}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Envoi groupé</DialogTitle>
@@ -112,14 +89,18 @@ export function EtiquetteBatchSendDialog({
           </div>
         ) : (
           <p className="text-sm text-muted-foreground py-2">
-            Chaque destinataire recevra son email personnalisé. Le journal enregistrera chaque envoi.
+            Chaque destinataire recevra son email personnalisé. L&apos;envoi se poursuit en
+            arrière-plan — barre de progression visible dans la file d&apos;envoi.
           </p>
         )}
         <DialogFooter>
-          <Button variant="outline" disabled={running} onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button disabled={running || items.length === 0} onClick={() => void start()}>
+          <Button
+            disabled={running || items.length === 0 || isEtiquetteBatchSendRunning()}
+            onClick={() => void start()}
+          >
             {running ? "Envoi en cours…" : `Envoyer ${items.length} email${items.length > 1 ? "s" : ""}`}
           </Button>
         </DialogFooter>

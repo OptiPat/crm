@@ -259,6 +259,49 @@ impl Database {
         Ok(items)
     }
 
+    /// Une seule transaction IPC : toutes les files ou ready + onglet actif.
+    pub fn get_envois_snapshot(
+        &self,
+        active_status: Option<&str>,
+    ) -> Result<super::models::EnvoisSnapshot> {
+        use super::models::EnvoisSnapshot;
+
+        let ready = self.get_etiquette_email_queue("ready")?;
+        let fetch_all = active_status.is_none();
+
+        let mut snap = EnvoisSnapshot {
+            ready,
+            scheduled: None,
+            incomplete: None,
+            cancelled: None,
+            sent: None,
+            followup: None,
+        };
+
+        if fetch_all {
+            snap.scheduled = Some(self.get_etiquette_email_queue("scheduled")?);
+            snap.incomplete = Some(self.get_etiquette_email_queue("incomplete")?);
+            snap.cancelled = Some(self.get_etiquette_email_queue("cancelled")?);
+            snap.sent = Some(self.get_etiquette_email_queue("sent")?);
+            snap.followup = Some(self.get_etiquette_email_queue("followup")?);
+            return Ok(snap);
+        }
+
+        if let Some(status) = active_status.filter(|s| *s != "ready" && *s != "journal") {
+            let items = self.get_etiquette_email_queue(status)?;
+            match status {
+                "scheduled" => snap.scheduled = Some(items),
+                "incomplete" => snap.incomplete = Some(items),
+                "cancelled" => snap.cancelled = Some(items),
+                "sent" => snap.sent = Some(items),
+                "followup" => snap.followup = Some(items),
+                _ => {}
+            }
+        }
+
+        Ok(snap)
+    }
+
     /// Compatibilité : file « prêts à envoyer »
     pub fn get_pending_etiquette_emails(&self) -> Result<Vec<(i64, i64, i64, String, String)>> {
         let queue = self.get_etiquette_email_queue("ready")?;

@@ -564,6 +564,22 @@ pub struct EtiquetteEmailQueueItem {
     pub contact_registre: Option<String>,
 }
 
+/// Snapshot des files d'envoi (1 appel IPC au lieu de 6).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EnvoisSnapshot {
+    pub ready: Vec<EtiquetteEmailQueueItem>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scheduled: Option<Vec<EtiquetteEmailQueueItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub incomplete: Option<Vec<EtiquetteEmailQueueItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cancelled: Option<Vec<EtiquetteEmailQueueItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sent: Option<Vec<EtiquetteEmailQueueItem>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub followup: Option<Vec<EtiquetteEmailQueueItem>>,
+}
+
 /// Email campagne en attente pour un contact (fiche relation).
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ContactPendingEmail {

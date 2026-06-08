@@ -54,6 +54,7 @@ import {
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
+import { EtiquetteBatchSendBanner } from "@/components/etiquettes/EtiquetteBatchSendBanner";
 import { EtiquettePipelineBoard } from "@/components/etiquettes/EtiquettePipelineBoard";
 import { PlanifierRdvDialog } from "@/components/calendar/PlanifierRdvDialog";
 import { StelliumExceltisAlerts } from "@/components/etiquettes/StelliumExceltisAlerts";
@@ -84,6 +85,7 @@ import {
 import { toast } from "sonner";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { countUniqueTaggedContacts } from "@/lib/etiquettes/etiquettes-unique-count";
+import { isEtiquetteQueueItemBatchLocked } from "@/lib/etiquettes/etiquette-email-send-runner";
 
 interface SuiviProps {
   currentPage?: string;
@@ -403,6 +405,10 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
             onOpenContact?.(alerte.contact_id);
             return;
           }
+          if (isEtiquetteQueueItemBatchLocked(resolution.item.contact_etiquette_id)) {
+            toast.warning("Envoi groupé en cours pour ce contact — patientez ou annulez la salve.");
+            return;
+          }
           setAlertEmailItem(resolution.item);
           return;
         }
@@ -560,6 +566,8 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           onNavigate ? () => onNavigate("etiquettes") : undefined
         }
       />
+
+      <EtiquetteBatchSendBanner />
 
       <Tabs
         value={activeTab}

@@ -3,7 +3,7 @@ import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   subscribeEtiquettesChanged,
-  subscribeRelationChanged,
+  subscribeRelationChangedDebounced,
 } from "@/lib/etiquettes/etiquette-events";
 
 const DEBOUNCE_MS = 120;
@@ -52,7 +52,7 @@ export function useSuiviAutoRefresh(handlers: SuiviAutoRefreshHandlers): void {
     const unsubEtiquettes = subscribeEtiquettesChanged(() => {
       void handlersRef.current.onRefreshEtiquettes();
     });
-    const unsubRelation = subscribeRelationChanged(() => {
+    const unsubRelation = subscribeRelationChangedDebounced(() => {
       scheduleAlertRefresh(false);
       void handlersRef.current.onRefreshEmailQueue();
     });

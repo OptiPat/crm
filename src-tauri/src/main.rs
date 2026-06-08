@@ -161,6 +161,7 @@ fn main() {
             get_contact_auto_etiquette_log,
             get_pending_etiquette_emails,
             get_etiquette_email_queue,
+            get_envois_snapshot,
             mark_etiquette_email_sent,
             log_email_send_error,
             get_email_send_log,

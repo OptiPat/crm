@@ -129,6 +129,15 @@ export type EtiquetteEmailQueueStatus =
   | "sent"
   | "followup";
 
+export interface EnvoisSnapshot {
+  ready: EtiquetteEmailQueueItem[];
+  scheduled?: EtiquetteEmailQueueItem[];
+  incomplete?: EtiquetteEmailQueueItem[];
+  cancelled?: EtiquetteEmailQueueItem[];
+  sent?: EtiquetteEmailQueueItem[];
+  followup?: EtiquetteEmailQueueItem[];
+}
+
 export interface ContactEtiquetteDetails {
   id: number;
   contact_id: number;
@@ -360,6 +369,15 @@ export async function getEtiquetteEmailQueue(
 ): Promise<EtiquetteEmailQueueItem[]> {
   return invoke<EtiquetteEmailQueueItem[]>("get_etiquette_email_queue", {
     queueStatus,
+  });
+}
+
+/** Toutes les files ou ready + onglet actif en un seul appel IPC. */
+export async function getEnvoisSnapshot(
+  activeStatus?: EtiquetteEmailQueueStatus | null
+): Promise<EnvoisSnapshot> {
+  return invoke<EnvoisSnapshot>("get_envois_snapshot", {
+    activeStatus: activeStatus ?? null,
   });
 }
 
