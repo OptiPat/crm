@@ -129,7 +129,10 @@ export function InteractionForm({
         await createInteraction(payload);
         await touchContactAfterInteraction(formData.contact_id, dateIso);
       }
-      notifyRelationChanged(formData.contact_id, { skipEtiquettesChanged: true });
+      notifyRelationChanged(formData.contact_id, {
+        skipEtiquettesChanged: true,
+        skipTimelineReload: true,
+      });
       onSuccess?.();
       onOpenChange(false);
     } catch (error) {

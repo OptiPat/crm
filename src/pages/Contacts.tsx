@@ -61,6 +61,7 @@ import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contact
 import {
   getContactsListInitialState,
   patchContactInListCache,
+  patchFoyersInListCache,
   removeContactFromListCache,
   setContactsListCache,
 } from "@/lib/contacts/contacts-list-cache";
@@ -207,6 +208,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
     if (detail?.removedContactId != null) {
       beginRefreshGeneration(contactsRefreshGenRef);
+      const token = contactsRefreshGenRef.current;
       const id = detail.removedContactId;
       removeContactFromListCache(id);
       setContacts((prev) => prev.filter((c) => c.id !== id));
@@ -216,6 +218,14 @@ export function Contacts({ onNavigate }: ContactsProps) {
         delete next[id];
         return next;
       });
+      try {
+        const dataFoyers = await getAllFoyers();
+        if (!isRefreshGenerationCurrent(contactsRefreshGenRef, token)) return;
+        setFoyers(dataFoyers);
+        patchFoyersInListCache(dataFoyers);
+      } catch (error) {
+        console.error("Error refreshing foyers after delete:", error);
+      }
       setLoading(false);
       setIsInitialLoad(false);
       return;

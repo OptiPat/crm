@@ -340,6 +340,7 @@ export function ContactInteractionsPanel({
   useEffect(() => {
     return subscribeRelationChanged((detail) => {
       if (detail.contactId != null && detail.contactId !== contactId) return;
+      if (detail.skipTimelineReload) return;
       void load();
       onContactUpdated?.();
     });
@@ -355,6 +356,11 @@ export function ContactInteractionsPanel({
       unsubDocs();
     };
   }, [load]);
+
+  const handleInteractionSuccess = useCallback(() => {
+    void load();
+    onContactUpdated?.();
+  }, [load, onContactUpdated]);
 
   const goToSuiviAlertes = () => {
     if (!onNavigate) {
@@ -696,6 +702,7 @@ export function ContactInteractionsPanel({
         onOpenChange={setShowForm}
         interaction={editing}
         defaultContactId={contactId}
+        onSuccess={handleInteractionSuccess}
       />
     </>
   );

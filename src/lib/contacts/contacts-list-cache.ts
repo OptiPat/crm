@@ -24,6 +24,11 @@ export function removeContactFromListCache(contactId: number): void {
   };
 }
 
+export function patchFoyersInListCache(foyers: Foyer[]): void {
+  if (!cache) return;
+  cache = { ...cache, foyers };
+}
+
 export function patchContactInListCache(contact: Contact): void {
   if (!cache || !contact.id) return;
   cache = {

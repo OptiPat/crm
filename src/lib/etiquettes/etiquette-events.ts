@@ -10,6 +10,8 @@ export type RelationChangedDetail = {
   skipQueueReload?: boolean;
   /** Évite le recalcul étiquettes global (compteurs mis à jour autrement). */
   skipEtiquettesChanged?: boolean;
+  /** Le panel Relation recharge la timeline via onSuccess (évite double load). */
+  skipTimelineReload?: boolean;
 };
 
 export function notifyEtiquettesChanged(): void {
@@ -18,7 +20,10 @@ export function notifyEtiquettesChanged(): void {
 
 export function notifyRelationChanged(
   contactId?: number,
-  options?: Pick<RelationChangedDetail, "skipQueueReload" | "skipEtiquettesChanged">
+  options?: Pick<
+    RelationChangedDetail,
+    "skipQueueReload" | "skipEtiquettesChanged" | "skipTimelineReload"
+  >
 ): void {
   window.dispatchEvent(
     new CustomEvent<RelationChangedDetail>(RELATION_CHANGED_EVENT, {
@@ -63,6 +68,7 @@ export function subscribeRelationChangedDebounced(
       skipQueueReload: pending.skipQueueReload || detail.skipQueueReload,
       skipEtiquettesChanged:
         pending.skipEtiquettesChanged || detail.skipEtiquettesChanged,
+      skipTimelineReload: pending.skipTimelineReload || detail.skipTimelineReload,
     };
     if (timeout != null) window.clearTimeout(timeout);
     timeout = window.setTimeout(() => {

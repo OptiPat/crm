@@ -189,7 +189,7 @@ export async function ensureNewsletterEtiquette(
   });
 }
 
-/** @deprecated PrÃ©fÃ©rer prepareNewsletterEdition */
+/** @deprecated Préférer prepareNewsletterEdition */
 export async function activateNewsletterCampaign(
   etiquetteId: number,
   templateId: number
