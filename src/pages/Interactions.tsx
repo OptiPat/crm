@@ -63,6 +63,8 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
   const [editing, setEditing] = useState<InteractionWithContact | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<ExchangeHistoryEntry | null>(null);
   const [contactFilterId, setContactFilterId] = useState<number | null>(null);
+  const [historyLimit, setHistoryLimit] = useState(400);
+  const [historyTruncated, setHistoryTruncated] = useState(false);
   const focusConsumedRef = useRef(false);
   const contactFilterIdRef = useRef(contactFilterId);
   contactFilterIdRef.current = contactFilterId;
@@ -75,9 +77,12 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
     try {
       const contactId = contactFilterIdRef.current;
       const data = await loadExchangeHistory(
-        contactId != null ? { contactId } : undefined
+        contactId != null ? { contactId } : { maxEntries: historyLimit }
       );
       setItems(data);
+      setHistoryTruncated(
+        contactId == null && data.length >= historyLimit && historyLimit > 0
+      );
       setSelectedEntry((prev) => {
         if (!prev) return prev;
         return data.find((e) => exchangeEntryKey(e) === exchangeEntryKey(prev)) ?? null;
@@ -87,10 +92,11 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
       setLoadError(String(error));
       setItems([]);
       setSelectedEntry(null);
+      setHistoryTruncated(false);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [historyLimit]);
 
   useEffect(() => {
     if (focusConsumedRef.current) return;
@@ -102,8 +108,13 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
   }, []);
 
   useEffect(() => {
+    setHistoryLimit(400);
+  }, [contactFilterId]);
+
+  useEffect(() => {
+    setLoading(true);
     void load();
-  }, [load, contactFilterId]);
+  }, [load, contactFilterId, historyLimit]);
 
   useAppNavigationListener((detail) => {
     if (detail.type !== "interactions") return;
@@ -234,10 +245,23 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
           <CardDescription>
             {items.length} échange{items.length !== 1 ? "s" : ""} enregistré
             {items.length !== 1 ? "s" : ""}
+            {historyTruncated ? " (affichage limité)" : ""}
           </CardDescription>
         </CardHeader>
 
         <CardContent className={splitCardContentClassName(showSplit, "space-y-4 pt-0", true)}>
+          {historyTruncated && contactFilterId == null ? (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setHistoryLimit((n) => n + 400)}
+              >
+                Charger plus d&apos;échanges
+              </Button>
+            </div>
+          ) : null}
           {contactFilterId != null && (
             <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm">
               <span>

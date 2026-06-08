@@ -102,6 +102,7 @@ function App() {
         /* déjà initialisé */
       }
       try {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
         await runFullEtiquettesRecalc();
       } catch (error) {
         console.error("Erreur recalcul étiquettes (arrière-plan):", error);

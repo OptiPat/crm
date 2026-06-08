@@ -33,10 +33,24 @@ pub fn get_all_contacts(db: State<'_, DbState>) -> Result<Vec<Contact>, String> 
 }
 
 #[tauri::command]
+pub fn get_contacts_by_foyer(
+    db: State<'_, DbState>,
+    foyer_id: i64,
+) -> Result<Vec<Contact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_contacts_by_foyer(foyer_id)
+        .map_err(|e| format!("Failed to get contacts by foyer: {}", e))
+}
+
+#[tauri::command]
 pub fn create_contact(
     app: AppHandle,
     db: State<'_, DbState>,
     new_contact: NewContact,
+    skip_post_save_hooks: Option<bool>,
 ) -> Result<Contact, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -45,16 +59,37 @@ pub fn create_contact(
         .create_contact(new_contact)
         .map_err(|e| format!("Failed to create contact: {}", e))?;
     if let Some(id) = contact.id {
-        let _ = database.check_auto_etiquettes_for_contact(id);
-        drop(db_guard);
-        crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
-        let db_guard = db.lock().unwrap();
-        let database = db_guard.as_ref().ok_or("Database not initialized")?;
-        return database
-            .get_contact_by_id(id)
-            .map_err(|e| format!("Failed to get contact: {}", e));
+        if !skip_post_save_hooks.unwrap_or(false) {
+            let _ = database.check_auto_etiquettes_for_contact(id);
+            drop(db_guard);
+            crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
+            let db_guard = db.lock().unwrap();
+            let database = db_guard.as_ref().ok_or("Database not initialized")?;
+            return database
+                .get_contact_by_id(id)
+                .map_err(|e| format!("Failed to get contact: {}", e));
+        }
     }
     Ok(contact)
+}
+
+#[tauri::command]
+pub fn create_contacts_bulk(
+    db: State<'_, DbState>,
+    new_contacts: Vec<NewContact>,
+    skip_post_save_hooks: Option<bool>,
+) -> Result<Vec<Contact>, String> {
+    if !skip_post_save_hooks.unwrap_or(false) {
+        return Err(
+            "create_contacts_bulk requiert skip_post_save_hooks — recalcul unique en fin d'import"
+                .into(),
+        );
+    }
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_contacts_bulk(new_contacts)
+        .map_err(|e| format!("Failed to bulk create contacts: {}", e))
 }
 
 #[tauri::command]
@@ -103,6 +138,7 @@ pub fn update_contact(
     db: State<'_, DbState>,
     id: i64,
     contact: NewContact,
+    skip_post_save_hooks: Option<bool>,
 ) -> Result<Contact, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -110,9 +146,13 @@ pub fn update_contact(
     database
         .update_contact(id, &contact)
         .map_err(|e| format!("Failed to update contact: {}", e))?;
-    let _ = database.check_auto_etiquettes_for_contact(id);
-    drop(db_guard);
-    crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
+    if !skip_post_save_hooks.unwrap_or(false) {
+        let _ = database.check_auto_etiquettes_for_contact(id);
+        drop(db_guard);
+        crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
+    } else {
+        drop(db_guard);
+    }
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
@@ -436,6 +476,19 @@ pub fn get_all_documents(db: State<'_, DbState>) -> Result<Vec<Document>, String
 }
 
 #[tauri::command]
+pub fn get_documents_by_contact(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<Vec<Document>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_documents_by_contact(contact_id)
+        .map_err(|e| format!("Failed to get documents: {}", e))
+}
+
+#[tauri::command]
 pub fn create_document(
     db: State<'_, DbState>,
     new_document: NewDocument,
@@ -607,6 +660,19 @@ pub fn get_alertes_non_traitees(db: State<'_, DbState>) -> Result<Vec<Alerte>, S
 }
 
 #[tauri::command]
+pub fn get_app_notifications_summary(
+    db: State<'_, DbState>,
+) -> Result<crate::database::notifications_summary::AppNotificationsSummaryDto, String> {
+    let stellium =
+        crate::email::stellium_exceltis::get_stellium_exceltis_signals(&db).unwrap_or_default();
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_app_notifications_summary(stellium)
+        .map_err(|e| format!("Failed to get notifications summary: {}", e))
+}
+
+#[tauri::command]
 pub fn create_alerte(db: State<'_, DbState>, new_alerte: NewAlerte) -> Result<Alerte, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -772,6 +838,19 @@ pub fn get_investissements_by_foyer(
 }
 
 #[tauri::command]
+pub fn get_investissements_by_foyer_contacts(
+    db: State<'_, DbState>,
+    foyer_id: i64,
+) -> Result<Vec<Investissement>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_investissements_by_foyer_contacts(foyer_id)
+        .map_err(|e| format!("Failed to get investissements by foyer contacts: {}", e))
+}
+
+#[tauri::command]
 pub fn get_investissements_with_details(
     db: State<'_, DbState>,
 ) -> Result<Vec<InvestissementWithDetails>, String> {
@@ -787,6 +866,7 @@ pub fn get_investissements_with_details(
 pub fn create_investissement(
     db: State<'_, DbState>,
     new_investissement: NewInvestissement,
+    skip_post_save_hooks: Option<bool>,
 ) -> Result<Investissement, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -794,11 +874,13 @@ pub fn create_investissement(
     let inv = database
         .create_investissement(new_investissement)
         .map_err(|e| format!("Failed to create investissement: {}", e))?;
-    let _ = database.sync_auto_etiquettes_after_investissement(
-        inv.contact_id,
-        inv.foyer_id,
-        Some(inv.id),
-    );
+    if !skip_post_save_hooks.unwrap_or(false) {
+        let _ = database.sync_auto_etiquettes_after_investissement(
+            inv.contact_id,
+            inv.foyer_id,
+            Some(inv.id),
+        );
+    }
     Ok(inv)
 }
 
@@ -817,6 +899,7 @@ pub fn update_investissement(
     db: State<'_, DbState>,
     id: i64,
     investissement: NewInvestissement,
+    skip_post_save_hooks: Option<bool>,
 ) -> Result<Investissement, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -824,11 +907,13 @@ pub fn update_investissement(
     let inv = database
         .update_investissement(id, &investissement)
         .map_err(|e| format!("Failed to update investissement: {}", e))?;
-    let _ = database.sync_auto_etiquettes_after_investissement(
-        inv.contact_id,
-        inv.foyer_id,
-        Some(inv.id),
-    );
+    if !skip_post_save_hooks.unwrap_or(false) {
+        let _ = database.sync_auto_etiquettes_after_investissement(
+            inv.contact_id,
+            inv.foyer_id,
+            Some(inv.id),
+        );
+    }
     Ok(inv)
 }
 
@@ -1196,13 +1281,20 @@ pub fn seed_default_etiquettes(db: State<'_, DbState>) -> Result<usize, String> 
 }
 
 #[tauri::command]
-pub fn check_and_apply_auto_etiquettes(db: State<'_, DbState>) -> Result<usize, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-
-    database
-        .check_and_apply_auto_etiquettes()
-        .map_err(|e| format!("Failed to apply auto etiquettes: {}", e))
+pub async fn check_and_apply_auto_etiquettes(
+    app_handle: tauri::AppHandle,
+) -> Result<usize, String> {
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        let db_guard = db.inner().lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .check_and_apply_auto_etiquettes()
+            .map_err(|e| format!("Failed to apply auto etiquettes: {}", e))
+    })
+    .await
+    .map_err(|e| format!("Recalcul interrompu: {}", e))?
 }
 
 #[tauri::command]
@@ -1509,13 +1601,18 @@ pub fn create_calendar_rdv(
 }
 
 #[tauri::command]
-pub fn sync_calendar_rdv(
+pub async fn sync_calendar_rdv(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
 ) -> Result<CalendarSyncResult, String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
-    crate::email::calendar_ops::sync_calendar_rdv_status(&app_handle, database)
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        let db_guard = db.inner().lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        crate::email::calendar_ops::sync_calendar_rdv_status(&app, database)
+    })
+    .await
+    .map_err(|e| format!("Sync calendrier interrompu: {}", e))?
 }
 
 #[tauri::command]
@@ -1543,35 +1640,40 @@ pub fn mark_calendar_rdv_effectue(
 }
 
 #[tauri::command]
-pub fn sync_email_campaign_responses(
+pub async fn sync_email_campaign_responses(
     app_handle: tauri::AppHandle,
-    db: State<'_, DbState>,
 ) -> Result<crate::email::response_sync::EmailCampaignSyncResult, String> {
-    let pending = {
-        let db_guard = db.lock().unwrap();
-        let database = db_guard.as_ref().ok_or("Database not initialized")?;
-        database
-            .list_campaigns_pending_response_check()
-            .map_err(|e| e.to_string())?
-    };
-
-    crate::email::response_sync::sync_email_campaign_responses(
-        &app_handle,
-        pending,
-        |contact_etiquette_id, response_type, body, gmail_msg, subject| {
-            let db_guard = db.lock().unwrap();
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db_state = app.state::<DbState>();
+        let pending = {
+            let db_guard = db_state.inner().lock().unwrap();
             let database = db_guard.as_ref().ok_or("Database not initialized")?;
             database
-                .mark_email_campaign_response(
-                    contact_etiquette_id,
-                    response_type,
-                    body,
-                    gmail_msg,
-                    subject,
-                )
-                .map_err(|e| e.to_string())
-        },
-    )
+                .list_campaigns_pending_response_check()
+                .map_err(|e| e.to_string())?
+        };
+
+        crate::email::response_sync::sync_email_campaign_responses(
+            &app,
+            pending,
+            |contact_etiquette_id, response_type, body, gmail_msg, subject| {
+                let db_guard = db_state.inner().lock().unwrap();
+                let database = db_guard.as_ref().ok_or("Database not initialized")?;
+                database
+                    .mark_email_campaign_response(
+                        contact_etiquette_id,
+                        response_type,
+                        body,
+                        gmail_msg,
+                        subject,
+                    )
+                    .map_err(|e| e.to_string())
+            },
+        )
+    })
+    .await
+    .map_err(|e| format!("Sync interrompu: {}", e))?
 }
 
 #[tauri::command]
@@ -1656,11 +1758,16 @@ pub fn prepare_email_campaign_relance(
 }
 
 #[tauri::command]
-pub fn scan_stellium_exceltis_emails(
-    app: tauri::AppHandle,
-    db: State<'_, DbState>,
+pub async fn scan_stellium_exceltis_emails(
+    app_handle: tauri::AppHandle,
 ) -> Result<crate::email::stellium_exceltis::StelliumExceltisScanResult, String> {
-    crate::email::stellium_exceltis::scan_stellium_exceltis_emails(&app, &db)
+    let app = app_handle.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = app.state::<DbState>();
+        crate::email::stellium_exceltis::scan_stellium_exceltis_emails(&app, db.inner())
+    })
+    .await
+    .map_err(|e| format!("Scan Stellium interrompu: {}", e))?
 }
 
 #[tauri::command]
@@ -1815,11 +1922,12 @@ pub fn get_all_interactions_with_contacts(
 #[tauri::command]
 pub fn get_exchange_history_timeline(
     db: State<'_, DbState>,
+    max_entries: Option<u32>,
 ) -> Result<Vec<ExchangeHistoryEntry>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .get_exchange_history_timeline()
+        .get_exchange_history_timeline(max_entries.map(|n| n as usize))
         .map_err(|e| format!("Failed to get exchange history: {}", e))
 }
 
@@ -1827,11 +1935,12 @@ pub fn get_exchange_history_timeline(
 pub fn get_exchange_history_timeline_for_contact(
     db: State<'_, DbState>,
     contact_id: i64,
+    max_entries: Option<u32>,
 ) -> Result<Vec<ExchangeHistoryEntry>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .get_exchange_history_timeline_for_contact(contact_id)
+        .get_exchange_history_timeline_for_contact(contact_id, max_entries.map(|n| n as usize))
         .map_err(|e| format!("Failed to get exchange history: {}", e))
 }
 

@@ -1,4 +1,9 @@
-import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
+import {
+  markEtiquetteEmailSent,
+  type EtiquetteEmailQueueItem,
+} from "@/lib/api/tauri-etiquettes";
+import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
+import { sendEmail } from "@/lib/api/tauri-email";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import {
   sendEtiquetteBatch,
@@ -12,20 +17,45 @@ import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { buildSentQueueItem } from "@/lib/etiquettes/etiquette-queue-incremental";
 import { toast } from "sonner";
 
+export type EtiquetteEmailSendActivity = {
+  batchRunning: boolean;
+  batchProgress: EtiquetteBatchSendProgress | null;
+  individualRunning: boolean;
+  individualLabel: string | null;
+};
+
 export type EtiquetteBatchSendListener = (
   progress: EtiquetteBatchSendProgress | null,
   running: boolean
 ) => void;
 
-let running = false;
-let progress: EtiquetteBatchSendProgress | null = null;
+type ActivityListener = (activity: EtiquetteEmailSendActivity) => void;
+
+let batchRunning = false;
+let batchProgress: EtiquetteBatchSendProgress | null = null;
+let individualRunning = false;
+let individualLabel: string | null = null;
 let abortController: AbortController | null = null;
 const lockedContactEtiquetteIds = new Set<number>();
-const listeners = new Set<EtiquetteBatchSendListener>();
+const batchListeners = new Set<EtiquetteBatchSendListener>();
+const activityListeners = new Set<ActivityListener>();
+
+function getActivity(): EtiquetteEmailSendActivity {
+  return {
+    batchRunning,
+    batchProgress,
+    individualRunning,
+    individualLabel,
+  };
+}
 
 function notifyListeners() {
-  for (const listener of listeners) {
-    listener(progress, running);
+  const activity = getActivity();
+  for (const listener of activityListeners) {
+    listener(activity);
+  }
+  for (const listener of batchListeners) {
+    listener(batchProgress, batchRunning);
   }
 }
 
@@ -50,28 +80,125 @@ function unlockContactEtiquette(id: number): void {
   lockedContactEtiquetteIds.delete(id);
 }
 
-export function isEtiquetteBatchSendRunning(): boolean {
-  return running;
+function assertNoConcurrentSend(): void {
+  if (batchRunning) {
+    throw new Error("Un envoi groupé est déjà en cours.");
+  }
+  if (individualRunning) {
+    throw new Error("Un envoi est déjà en cours.");
+  }
 }
 
-/** Ligne incluse dans une salve en cours (pas encore traitée). */
+export function isEtiquetteBatchSendRunning(): boolean {
+  return batchRunning;
+}
+
+export function isIndividualEtiquetteEmailSendRunning(): boolean {
+  return individualRunning;
+}
+
+export function isEtiquetteEmailSendActive(): boolean {
+  return batchRunning || individualRunning;
+}
+
+/** Ligne incluse dans une salve en cours (pas encore traitée) ou envoi individuel. */
 export function isEtiquetteQueueItemBatchLocked(contactEtiquetteId: number): boolean {
   return lockedContactEtiquetteIds.has(contactEtiquetteId);
 }
 
 export function getEtiquetteBatchSendProgress(): EtiquetteBatchSendProgress | null {
-  return progress;
+  return batchProgress;
 }
 
 export function subscribeEtiquetteBatchSend(listener: EtiquetteBatchSendListener): () => void {
-  listeners.add(listener);
-  listener(progress, running);
-  return () => listeners.delete(listener);
+  batchListeners.add(listener);
+  listener(batchProgress, batchRunning);
+  return () => batchListeners.delete(listener);
+}
+
+export function subscribeEtiquetteEmailSendActivity(
+  listener: ActivityListener
+): () => void {
+  activityListeners.add(listener);
+  listener(getActivity());
+  return () => activityListeners.delete(listener);
 }
 
 export function abortEtiquetteBatchSend(): void {
-  if (!running) return;
+  if (!batchRunning) return;
   abortController?.abort();
+}
+
+export function startIndividualEtiquetteEmailSend(input: {
+  item: EtiquetteEmailQueueItem;
+  subject: string;
+  body: string;
+  body_html?: string | null;
+  onSent?: (meta: { subject: string; sentAtSec: number }) => void;
+}): void {
+  assertNoConcurrentSend();
+
+  const { item } = input;
+  const name = `${item.contact_prenom} ${item.contact_nom}`.trim();
+  lockedContactEtiquetteIds.add(item.contact_etiquette_id);
+  individualRunning = true;
+  individualLabel = name;
+  notifyListeners();
+
+  void (async () => {
+    try {
+      const sent = await sendEmail({
+        to_email: item.contact_email!,
+        to_name: name,
+        subject: input.subject,
+        body: input.body,
+        body_html: input.body_html ?? undefined,
+      });
+      try {
+        await markEtiquetteEmailSent(
+          item.contact_etiquette_id,
+          sent.gmail_message_id,
+          sent.gmail_thread_id,
+          input.subject,
+          input.body,
+          item.queue_row_kind ?? "etiquette"
+        );
+      } catch (markError) {
+        console.error(markError);
+        toast.warning(
+          "Email envoyé, mais l'enregistrement CRM a échoué — ne renvoyez pas sans vérifier la fiche."
+        );
+        input.onSent?.({ subject: input.subject, sentAtSec: Math.floor(Date.now() / 1000) });
+        return;
+      }
+      const sentAtSec = Math.floor(Date.now() / 1000);
+      patchCacheAfterSent(item, input.subject, sentAtSec);
+      notifyRelationChanged(item.contact_id, {
+        skipQueueReload: true,
+        skipEtiquettesChanged: true,
+      });
+      toast.success(`Email envoyé à ${name}`);
+      input.onSent?.({ subject: input.subject, sentAtSec });
+    } catch (error) {
+      console.error("Error sending etiquette email:", error);
+      const hint = error instanceof Error ? error.message : "Erreur lors de l'envoi";
+      await logEmailSendError({
+        contactId: item.contact_id,
+        contactEtiquetteId: item.contact_etiquette_id,
+        etiquetteNom: item.queue_row_kind === "template" ? null : item.etiquette_nom,
+        templateNom: item.queue_row_kind === "template" ? item.template_sujet : null,
+        subject: input.subject,
+        errorMessage: hint,
+        sendMode: "individual",
+      }).catch(() => {});
+      toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Email)`);
+    } finally {
+      unlockContactEtiquette(item.contact_etiquette_id);
+      individualRunning = false;
+      individualLabel = null;
+      notifyListeners();
+    }
+  })();
 }
 
 export async function startEtiquetteBatchSend(input: {
@@ -80,14 +207,12 @@ export async function startEtiquetteBatchSend(input: {
   onItemSent?: (item: EtiquetteEmailQueueItem, subject: string, sentAtSec: number) => void;
   onDone?: () => void;
 }): Promise<EtiquetteBatchSendProgress> {
-  if (running) {
-    throw new Error("Un envoi groupé est déjà en cours.");
-  }
+  assertNoConcurrentSend();
 
   const controller = new AbortController();
   abortController = controller;
-  running = true;
-  progress = null;
+  batchRunning = true;
+  batchProgress = null;
   lockedContactEtiquetteIds.clear();
   for (const item of input.items) {
     lockedContactEtiquetteIds.add(item.contact_etiquette_id);
@@ -100,7 +225,7 @@ export async function startEtiquetteBatchSend(input: {
       cgp: input.cgp,
       signal: controller.signal,
       onProgress: (p) => {
-        progress = p;
+        batchProgress = p;
         if (p.lastProcessedContactEtiquetteId != null) {
           unlockContactEtiquette(p.lastProcessedContactEtiquetteId);
         }
@@ -123,7 +248,7 @@ export async function startEtiquetteBatchSend(input: {
 
     if (controller.signal.aborted) {
       toast.info(
-        `Envoi interrompu — ${result.sent} envoyé${result.sent > 1 ? "s" : ""}, ${result.errors.length} erreur${result.errors.length > 1 ? "s" : ""}.`
+        `Envoi interrompu — ${result.sent} envoyé${result.sent > 1 ? "s" : ""}, ${result.errors.length} erreur${result.errors.length > 1 ? "s" : ""}. Les emails déjà partis ne peuvent pas être rappelés.`
       );
     } else if (result.errors.length === 0) {
       toast.success(
@@ -140,8 +265,8 @@ export async function startEtiquetteBatchSend(input: {
     input.onDone?.();
     return result;
   } finally {
-    running = false;
-    progress = null;
+    batchRunning = false;
+    batchProgress = null;
     abortController = null;
     lockedContactEtiquetteIds.clear();
     notifyListeners();

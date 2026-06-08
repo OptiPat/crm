@@ -135,4 +135,18 @@ describe("exchange-history-display", () => {
     const merged = mergeEmailEntriesByContact([send, responseOnly]);
     expect(merged[0].email_reponse_body).toContain("disponible mardi");
   });
+
+  it("tronque le journal global après fusion", async () => {
+    const { truncateExchangeHistory } = await import(
+      "@/lib/interactions/exchange-history-display"
+    );
+    const entries = Array.from({ length: 500 }, (_, i) => ({
+      ...emailEntry,
+      sort_date: 500 - i,
+      contact_id: i + 1,
+    }));
+    const truncated = truncateExchangeHistory(entries, 400);
+    expect(truncated).toHaveLength(400);
+    expect(truncated[0].sort_date).toBe(500);
+  });
 });

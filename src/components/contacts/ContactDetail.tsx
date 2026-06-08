@@ -28,7 +28,7 @@ import {
   LayoutGrid,
   History,
 } from "lucide-react";
-import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, updateContact } from "@/lib/api/tauri-contacts";
+import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, getContactsByFoyer, updateContact } from "@/lib/api/tauri-contacts";
 import {
   contactToUpdatePayload,
   formatCiviliteLabel,
@@ -37,7 +37,7 @@ import {
   getFilleulLabel,
 } from "@/lib/contacts/contact-form-utils";
 import { ContactForm } from "./ContactForm";
-import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer } from "@/lib/api/tauri-investissements";
+import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer, getInvestissementsByFoyerContacts } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
 import { getAllFoyers, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
@@ -357,36 +357,31 @@ export function ContactDetail({
         return;
       }
 
-      const [foyerInvs, allContacts] = await Promise.all([
+      const [foyerInvs, memberInvs, foyerMembers] = await Promise.all([
         getInvestissementsByFoyer(c.foyer_id),
-        getAllContacts(),
+        getInvestissementsByFoyerContacts(c.foyer_id),
+        getContactsByFoyer(c.foyer_id),
       ]);
 
-      const otherMembers = allContacts.filter(
-        (member) =>
-          member.foyer_id === c.foyer_id && member.id && member.id !== c.id
+      const memberById = new Map(
+        foyerMembers.filter((m) => m.id && m.id !== c.id).map((m) => [m.id!, m])
       );
-      const memberRows = (
-        await Promise.all(
-          otherMembers.map(async (member) => {
-            const invs = await getInvestissementsByContact(member.id!);
-            return invs.map((inv) => ({
-              ...inv,
-              _proprietaire: `${member.prenom} ${member.nom}`.trim(),
-              _proprietaireId: member.id,
-            }));
-          })
-        )
-      ).flat();
+      const memberRows: InvestissementWithOwner[] = memberInvs
+        .filter((inv) => inv.contact_id != null && inv.contact_id !== c.id)
+        .map((inv) => {
+          const member = memberById.get(inv.contact_id!);
+          const label = member
+            ? `${member.prenom} ${member.nom}`.trim()
+            : "Membre foyer";
+          return {
+            ...inv,
+            _proprietaire: label,
+            _proprietaireId: inv.contact_id,
+          };
+        });
 
       setInvestissements(
-        mergeContactPatrimoineRows(
-          c.id,
-          contactLabel,
-          own,
-          foyerInvs,
-          memberRows
-        )
+        mergeContactPatrimoineRows(c.id, contactLabel, own, foyerInvs, memberRows)
       );
     } catch (error) {
       console.error("Error loading investissements:", error);
@@ -506,16 +501,17 @@ export function ContactDetail({
   }, []);
 
   const refreshContactAfterMutation = useCallback(async () => {
-    if (!contact?.id) return;
+    const id = contactRef.current?.id;
+    if (!id) return;
     try {
-      const fresh = await getContactById(contact.id);
+      const fresh = await getContactById(id);
       onContactRefreshed?.(fresh);
       onUpdate?.();
       await reloadAllSections(fresh);
     } catch (error) {
       console.error("Erreur rechargement contact:", error);
     }
-  }, [contact?.id, onContactRefreshed, onUpdate, reloadAllSections]);
+  }, [onContactRefreshed, onUpdate, reloadAllSections]);
 
   const maybeOfferFoyerRename = async (
     before: { nom: string; prenom: string } | null,
@@ -574,21 +570,8 @@ export function ContactDetail({
 
   useEffect(() => {
     if (!contact?.id || !detailActive) return;
-    void loadInvestissements();
-    void loadParrain();
-    void loadPrescripteur();
-    void loadFilleuls();
-    void loadFoyer();
-    void loadEtiquettes();
-  }, [
-    contact?.id,
-    contact?.updated_at,
-    contact?.foyer_id,
-    contact?.role_foyer,
-    contact?.parrain_id,
-    contact?.prescripteur_id,
-    detailActive,
-  ]);
+    void reloadAllSections(contact);
+  }, [contact?.id, detailActive, reloadAllSections]);
 
   useEffect(() => {
     if (detailTab === "patrimoine" && contact?.id && detailActive) {
@@ -601,15 +584,22 @@ export function ContactDetail({
 
     const syncOpenContactFromServer = () => {
       void (async () => {
-        if (!contact?.id) return;
+        const id = contactRef.current?.id;
+        if (!id || !detailActive) return;
         try {
           if (investissementFormOpenRef.current) {
             await loadInvestissements();
             return;
           }
-          const fresh = await getContactById(contact.id);
+          const fresh = await getContactById(id);
           onContactRefreshed?.(fresh);
+          onUpdate?.();
           await reloadAllSections(fresh);
+          const before = identityBeforeEditRef.current;
+          if (before) {
+            identityBeforeEditRef.current = null;
+            await maybeOfferFoyerRename(before, fresh);
+          }
         } catch (error) {
           console.error("Sync fiche contact:", error);
         }
@@ -696,10 +686,7 @@ export function ContactDetail({
     setSelectedInvestissement(null);
   };
 
-  const handleInvestissementSuccess = async () => {
-    loadInvestissements();
-    notifyEtiquettesChanged();
-    await refreshContactAfterMutation();
+  const handleInvestissementSuccess = () => {
     handleInvestissementFormClose();
   };
 
@@ -948,20 +935,8 @@ export function ContactDetail({
         contact={contact}
         createContext="detail"
         onOpenContact={onOpenContact}
-        onSuccess={async () => {
+        onSuccess={() => {
           setShowEditForm(false);
-          const before = identityBeforeEditRef.current;
-          identityBeforeEditRef.current = null;
-          if (!contact?.id) return;
-          try {
-            const fresh = await getContactById(contact.id);
-            onContactRefreshed?.(fresh);
-            onUpdate?.();
-            await reloadAllSections(fresh);
-            await maybeOfferFoyerRename(before, fresh);
-          } catch (error) {
-            console.error("Erreur rechargement contact:", error);
-          }
         }}
       />
 

@@ -42,27 +42,28 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
   const loadStats = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      try {
-        await seedDefaultEtiquettes();
-      } catch {
-        /* déjà initialisé */
-      }
-      try {
-        await genererAlertesAutomatiques();
-      } catch (error) {
-        console.error("Erreur génération alertes:", error);
+      if (!silent) {
+        try {
+          await seedDefaultEtiquettes();
+        } catch {
+          /* déjà initialisé */
+        }
+        try {
+          await genererAlertesAutomatiques();
+        } catch (error) {
+          console.error("Erreur génération alertes:", error);
+        }
       }
       setStats(await getDashboardStats());
     } catch (error) {
       console.error("Erreur statistiques:", error);
-      setStats(null);
+      if (!silent) setStats(null);
     } finally {
       if (!silent) setLoading(false);
     }
   }, []);
 
   const refreshAll = useCallback(() => {
-    setRefreshKey((k) => k + 1);
     void loadStats(true);
   }, [loadStats]);
 
@@ -72,6 +73,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
 
   useEffect(() => {
     const debounceRef = { id: null as number | null };
+    const wakeDebounceRef = { id: null as number | null };
     const schedule = () => {
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
       debounceRef.id = window.setTimeout(() => {
@@ -84,7 +86,12 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
     const unsubAlertes = subscribeAlertesChanged(schedule);
     const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
     const onWake = () => {
-      if (!document.hidden) refreshAll();
+      if (document.hidden) return;
+      if (wakeDebounceRef.id != null) window.clearTimeout(wakeDebounceRef.id);
+      wakeDebounceRef.id = window.setTimeout(() => {
+        wakeDebounceRef.id = null;
+        refreshAll();
+      }, 300);
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
@@ -96,6 +103,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
+      if (wakeDebounceRef.id != null) window.clearTimeout(wakeDebounceRef.id);
     };
   }, [refreshAll]);
 

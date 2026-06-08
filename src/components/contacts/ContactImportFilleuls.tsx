@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, ClipboardList, Check, AlertTriangle, Circle } from "lucide-react";
 import * as XLSX from "xlsx";
-import { createContact, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
+import { createContactsBulk, getAllContacts, updateContact, type NewContact } from "@/lib/api/tauri-contacts";
 import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import {
@@ -38,6 +38,8 @@ import { parseImportDate } from "@/lib/contacts/parse-import-date";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+
+const IMPORT_SAVE_OPTS = { skipPostSaveHooks: true } as const;
 
 interface ContactImportFilleulsProps {
   open: boolean;
@@ -294,7 +296,15 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
       existingContacts.filter((c): c is typeof c & { id: number } => !!c.id)
     );
 
-    // === PASSE 1 : Créer les contacts qui n'existent pas ===
+    // === PASSE 1 : Créer les contacts qui n'existent pas (bulk IPC) ===
+    type PendingCreate = {
+      rowIndex: number;
+      nom: string;
+      prenom: string;
+      newContact: NewContact;
+    };
+    const pendingCreates: PendingCreate[] = [];
+
     for (let i = 0; i < updatedRows.length; i++) {
       const row = updatedRows[i];
       
@@ -312,11 +322,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             status: "success",
             message: `✓ Déjà existant (ID: ${existingId})`
           };
-          setImportRows([...updatedRows]);
-          continue; // Passer au suivant
+          continue;
         }
         
-        // 🔥 Mapper la catégorie FILLEUL depuis l'Excel (indépendante de la catégorie client)
         let filleulCategorie: string;
         const catStr = String(row.data.categorie || "").trim().toUpperCase();
         
@@ -340,16 +348,14 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             filleulCategorie = "FILLEUL_DESINSCRIT";
             break;
           default:
-            filleulCategorie = "SUSPECT_FILLEUL"; // Par défaut
+            filleulCategorie = "SUSPECT_FILLEUL";
         }
 
         const dateDernierContact = parseImportDate(row.data.date_dernier_suivi);
         const dateNaissance = parseImportDate(row.data.date_naissance);
 
-        // Construire les notes
         let notes = row.data.commentaire ? String(row.data.commentaire).trim() : undefined;
         
-        // Ajouter la date d'inscription aux notes si présente
         if (row.data.date_inscription) {
           const dateInscription = String(row.data.date_inscription).trim();
           const prefix = notes ? "\n\n" : "";
@@ -358,48 +364,64 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             : `Date inscription: ${dateInscription}`;
         }
 
-        // 🔥 Créer le contact (il n'existe pas encore)
-        // categorie = "AUCUN" → PAS un client, n'apparaît PAS dans l'onglet CLIENTS
-        // filleul_categorie = statut dans le réseau filleul
-        const newContact: NewContact = {
-          nom: nom,
-          prenom: prenom,
-          email: row.data.email ? String(row.data.email).trim() : undefined,
-          telephone: row.data.telephone ? String(row.data.telephone).trim() : undefined,
-          date_naissance: dateNaissance,
-          categorie: "AUCUN", // 🔥 PAS un client → n'apparaît pas dans CLIENTS
-          filleul_categorie: filleulCategorie, // 🔥 Catégorie FILLEUL indépendante
-          // parrain_id: undefined - sera lié en passe 2
-          // 🔥 date_dernier_contact_filleul = date de suivi FILLEUL (indépendant de client)
-          date_dernier_contact_filleul: dateDernierContact,
-          statut_suivi: "ACTIF",
-          notes: notes,
-        };
-
-        const createdContact = await createContact(newContact);
-        
-        // Stocker dans la map pour éviter les doublons dans le même import
-        const directKey = contactNameKey(nom, prenom);
-        contactsMap.set(directKey, createdContact.id!);
-        const swappedKey = contactNameKey(prenom, nom);
-        if (!contactsMap.has(swappedKey)) {
-          contactsMap.set(swappedKey, createdContact.id!);
-        }
-        
-        // Stocker les infos pour la passe 2
-        (row as any)._createdId = createdContact.id;
-        
-        updatedRows[i] = { 
-          ...row, 
-          status: "success",
-          message: "Créé (liaison parrain en cours...)"
-        };
+        pendingCreates.push({
+          rowIndex: i,
+          nom,
+          prenom,
+          newContact: {
+            nom,
+            prenom,
+            email: row.data.email ? String(row.data.email).trim() : undefined,
+            telephone: row.data.telephone ? String(row.data.telephone).trim() : undefined,
+            date_naissance: dateNaissance,
+            categorie: "AUCUN",
+            filleul_categorie: filleulCategorie,
+            date_dernier_contact_filleul: dateDernierContact,
+            statut_suivi: "ACTIF",
+            notes,
+          },
+        });
       } catch (error) {
         updatedRows[i] = { ...row, status: "error", message: String(error) };
       }
-
-      setImportRows([...updatedRows]);
     }
+
+    if (pendingCreates.length > 0) {
+      try {
+        const created = await createContactsBulk(
+          pendingCreates.map((p) => p.newContact),
+          IMPORT_SAVE_OPTS
+        );
+        for (let j = 0; j < created.length; j++) {
+          const { rowIndex, nom, prenom } = pendingCreates[j];
+          const createdContact = created[j];
+          const row = updatedRows[rowIndex];
+          const directKey = contactNameKey(nom, prenom);
+          contactsMap.set(directKey, createdContact.id!);
+          const swappedKey = contactNameKey(prenom, nom);
+          if (!contactsMap.has(swappedKey)) {
+            contactsMap.set(swappedKey, createdContact.id!);
+          }
+          (row as any)._createdId = createdContact.id;
+          updatedRows[rowIndex] = {
+            ...row,
+            status: "success",
+            message: "Créé (liaison parrain en cours...)",
+          };
+        }
+      } catch (error) {
+        const msg = String(error);
+        for (const pending of pendingCreates) {
+          updatedRows[pending.rowIndex] = {
+            ...updatedRows[pending.rowIndex],
+            status: "error",
+            message: msg,
+          };
+        }
+      }
+    }
+
+    setImportRows([...updatedRows]);
 
     // === PASSE 2 : Lier les parrains ET mettre à jour filleul_categorie ===
     // 🔥 FIX: Traiter TOUS les contacts, pas seulement ceux avec parrain
@@ -493,7 +515,8 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
               (contact.date_dernier_contact_filleul
                 ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString()
                 : undefined),
-          })
+          }),
+          IMPORT_SAVE_OPTS
         );
         
         const prefix = alreadyExists ? "✓ Existant" : "✓ Créé";
@@ -544,7 +567,8 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
               currentFilleulCat === "SUSPECT_FILLEUL") {
             await updateContact(
               parrainId,
-              contactToUpdatePayload(parrain, { filleul_categorie: "FILLEUL" })
+              contactToUpdatePayload(parrain, { filleul_categorie: "FILLEUL" }),
+              IMPORT_SAVE_OPTS
             );
           }
           // Si FILLEUL ou FILLEUL_DESINSCRIT → on ne change rien

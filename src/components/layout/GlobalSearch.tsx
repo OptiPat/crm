@@ -24,25 +24,27 @@ import {
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import {
   getInvestissementsWithDetails,
-  type InvestissementWithDetails,
 } from "@/lib/api/tauri-investissements";
-import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
-import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
-import { getAllDocuments, type Document } from "@/lib/api/tauri-documents";
+import { getAllFoyers } from "@/lib/api/tauri-foyers";
+import { getAllPartenaires } from "@/lib/api/tauri-partenaires";
+import {
+  getGlobalSearchCache,
+  invalidateGlobalSearchCache,
+  setGlobalSearchCache,
+  type GlobalSearchData,
+} from "@/lib/search/global-search-cache";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
+import { subscribePartenairesChanged } from "@/lib/partenaires/partenaire-events";
+import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
+import { getAllDocuments } from "@/lib/api/tauri-documents";
 
 const MAX_PER_GROUP = 6;
 
 interface GlobalSearchProps {
   currentPage: string;
   onPageChange: (page: string) => void;
-}
-
-interface SearchData {
-  contacts: Contact[];
-  investissements: InvestissementWithDetails[];
-  foyers: Foyer[];
-  partenaires: Partenaire[];
-  documents: Document[];
 }
 
 interface SearchResult {
@@ -53,7 +55,7 @@ interface SearchResult {
   onSelect: () => void;
 }
 
-const EMPTY_DATA: SearchData = {
+const EMPTY_DATA: GlobalSearchData = {
   contacts: [],
   investissements: [],
   foyers: [],
@@ -64,8 +66,22 @@ const EMPTY_DATA: SearchData = {
 export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [data, setData] = useState<SearchData>(EMPTY_DATA);
+  const [data, setData] = useState<GlobalSearchData>(() => getGlobalSearchCache() ?? EMPTY_DATA);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const invalidate = () => invalidateGlobalSearchCache();
+    const unsubs = [
+      subscribeContactsChanged(invalidate),
+      subscribeInvestissementsChanged(invalidate),
+      subscribeFoyersChanged(invalidate),
+      subscribePartenairesChanged(invalidate),
+      subscribeDocumentsChanged(invalidate),
+    ];
+    return () => {
+      for (const unsub of unsubs) unsub();
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -79,6 +95,11 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
   }, []);
 
   const loadData = useCallback(async () => {
+    const cached = getGlobalSearchCache();
+    if (cached) {
+      setData(cached);
+      return;
+    }
     setLoading(true);
     try {
       const [contacts, investissements, foyers, partenaires, documents] =
@@ -89,7 +110,15 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
           getAllPartenaires(),
           getAllDocuments(),
         ]);
-      setData({ contacts, investissements, foyers, partenaires, documents });
+      const next: GlobalSearchData = {
+        contacts,
+        investissements,
+        foyers,
+        partenaires,
+        documents,
+      };
+      setGlobalSearchCache(next);
+      setData(next);
     } catch (error) {
       console.error("Erreur recherche globale:", error);
     } finally {

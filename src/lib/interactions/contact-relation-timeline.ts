@@ -6,7 +6,7 @@ import { groupMailboxMessagesByThread } from "@/lib/contacts/contact-mail-thread
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
 import type { Document } from "@/lib/api/tauri-documents";
-import { getAllDocuments } from "@/lib/api/tauri-documents";
+import { getDocumentsByContact } from "@/lib/api/tauri-documents";
 import type { Tache } from "@/lib/api/tauri-taches";
 import { getTachesByContact } from "@/lib/api/tauri-taches";
 import {
@@ -207,19 +207,18 @@ export async function loadContactRelationTimeline(
   const { getExchangeHistoryTimelineForContact } = await import(
     "@/lib/api/tauri-interactions"
   );
-  const [allExchanges, manual, mailbox, investissements, allDocuments, taches] =
+  const [allExchanges, manual, mailbox, investissements, documents, taches] =
     await Promise.all([
       getExchangeHistoryTimelineForContact(contactId),
       getInteractionsByContact(contactId),
       getContactGmailMessages(contactId, true),
       getInvestissementsByContact(contactId),
-      getAllDocuments(),
+      getDocumentsByContact(contactId),
       getTachesByContact(contactId),
     ]);
   const emailEntries = allExchanges.filter(
     (e) => e.contact_id === contactId && isEmailCampaignEntry(e)
   );
-  const documents = allDocuments.filter((d) => d.contact_id === contactId);
   return buildContactRelationTimeline(emailEntries, manual, mailbox, {
     investissements,
     documents,

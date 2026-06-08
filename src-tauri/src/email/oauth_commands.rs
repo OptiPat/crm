@@ -85,17 +85,21 @@ pub fn save_oauth_app_settings(
 }
 
 #[tauri::command]
-pub fn connect_email_oauth(
+pub async fn connect_email_oauth(
     app_handle: AppHandle,
     provider: String,
 ) -> Result<EmailConnectionStatus, String> {
-    let conn = run_oauth_connect(&app_handle, &provider)?;
-    Ok(EmailConnectionStatus {
-        connected: true,
-        provider: Some(conn.provider),
-        email: Some(conn.email),
-        method: "oauth".into(),
+    tauri::async_runtime::spawn_blocking(move || {
+        let conn = run_oauth_connect(&app_handle, &provider)?;
+        Ok(EmailConnectionStatus {
+            connected: true,
+            provider: Some(conn.provider),
+            email: Some(conn.email),
+            method: "oauth".into(),
+        })
     })
+    .await
+    .map_err(|e| format!("OAuth interrompu: {}", e))?
 }
 
 #[tauri::command]

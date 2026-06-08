@@ -29,6 +29,7 @@ pub mod settings;
 pub mod templates_email;
 pub mod models;
 pub mod newsletter_ops;
+pub mod notifications_summary;
 pub mod birthdays;
 pub mod operations;
 pub mod segments;

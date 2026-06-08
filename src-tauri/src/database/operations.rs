@@ -1684,7 +1684,7 @@ mod database_integration_tests {
             db.get_etiquette_email_queue("followup").unwrap().is_empty(),
             "envoi récent : pas encore en relance"
         );
-        let timeline_after_send = db.get_exchange_history_timeline().unwrap();
+        let timeline_after_send = db.get_exchange_history_timeline(None).unwrap();
         let sent_row = timeline_after_send
             .iter()
             .find(|e| e.entry_kind == "email_campagne" && e.contact_id == cid)
@@ -1693,7 +1693,7 @@ mod database_integration_tests {
         assert_eq!(sent_row.sent_subject.as_deref(), Some("Objet test"));
 
         db.prepare_email_campaign_relance(ce_id).unwrap();
-        let timeline_after_relance_prep = db.get_exchange_history_timeline().unwrap();
+        let timeline_after_relance_prep = db.get_exchange_history_timeline(None).unwrap();
         assert!(
             timeline_after_relance_prep
                 .iter()
@@ -1803,7 +1803,7 @@ mod database_integration_tests {
         );
         assert!(db.get_alertes_for_contact(cid_rdv).unwrap().is_empty());
 
-        let timeline = db.get_exchange_history_timeline().unwrap();
+        let timeline = db.get_exchange_history_timeline(None).unwrap();
         let bruno_email = timeline
             .iter()
             .find(|e| e.entry_kind == "email_campagne" && e.contact_id == cid)

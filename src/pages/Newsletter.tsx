@@ -72,6 +72,7 @@ import {
   saveNewsletterComposerDraft,
 } from "@/lib/newsletter/newsletter-composer-draft";
 import { mergeNewsletterAudienceFilters } from "@/lib/newsletter/newsletter-audience-utils";
+import { beginBackgroundActivity } from "@/lib/background-activity";
 import { toast } from "sonner";
 
 function buildHtmlOptions(
@@ -466,6 +467,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     batchAbortRef.current = new AbortController();
     setBatchSending(true);
     setBatchProgress({ sent: 0, total: preparedQueueCount });
+    const endActivity = beginBackgroundActivity("newsletter-send");
     try {
       const result = await sendNewsletterBatch({
         etiquetteId: etiquetteInfo.id,
@@ -496,6 +498,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setBatchSending(false);
       setBatchProgress(null);
       batchAbortRef.current = null;
+      endActivity();
     }
   };
 

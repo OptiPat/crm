@@ -1,10 +1,7 @@
-import { getAlertesNonTraitees } from "@/lib/api/tauri-alertes";
-import {
-  getEtiquetteEmailQueue,
-  type EtiquetteEmailQueueStatus,
-} from "@/lib/api/tauri-etiquettes";
-import { getStelliumExceltisSignals } from "@/lib/api/tauri-stellium-exceltis";
+import type { StelliumExceltisSignal } from "@/lib/api/tauri-stellium-exceltis";
+import type { EtiquetteEmailQueueStatus } from "@/lib/api/tauri-etiquettes";
 import type { SuiviMainTab } from "@/lib/navigation/suivi-navigation";
+import { invoke } from "@tauri-apps/api/core";
 
 export type NotificationSeverity = "info" | "warning" | "urgent";
 
@@ -23,11 +20,8 @@ export type AppNotificationItem = {
   severity: NotificationSeverity;
   suiviTab: SuiviMainTab;
   envoisSubTab?: EtiquetteEmailQueueStatus;
-  /** Si une seule action : focus contact dans Suivi (alerte ou file email). */
   focusContactId?: number;
-  /** Onglet Étiquettes : présélectionner cette étiquette (signal Stellium). */
   focusEtiquetteId?: number;
-  /** Pour masquer un signal Stellium après traitement. */
   stelliumMessageId?: string;
 };
 
@@ -36,79 +30,67 @@ export type AppNotificationsSummary = {
   totalCount: number;
 };
 
-export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSummary> {
-  const [alertes, ready, followup, incomplete, sent, stelliumSignals] =
-    await Promise.all([
-      getAlertesNonTraitees(),
-      getEtiquetteEmailQueue("ready"),
-      getEtiquetteEmailQueue("followup"),
-      getEtiquetteEmailQueue("incomplete"),
-      getEtiquetteEmailQueue("sent"),
-      getStelliumExceltisSignals().catch(() => []),
-    ]);
+export type NotificationQueueBucketDto = {
+  count: number;
+  focus_contact_id?: number | null;
+};
 
+export type AppNotificationsSummaryDto = {
+  ready: NotificationQueueBucketDto;
+  followup: NotificationQueueBucketDto;
+  incomplete: NotificationQueueBucketDto;
+  sent: NotificationQueueBucketDto;
+  alertes: NotificationQueueBucketDto;
+  stellium_signals: StelliumExceltisSignal[];
+};
+
+export function buildAppNotificationsSummary(
+  dto: AppNotificationsSummaryDto
+): AppNotificationsSummary {
   const items: AppNotificationItem[] = [];
 
-  if (ready.length > 0) {
+  const pushQueue = (
+    id: AppNotificationKind,
+    label: string,
+    severity: NotificationSeverity,
+    envoisSubTab: EtiquetteEmailQueueStatus,
+    bucket: NotificationQueueBucketDto
+  ) => {
+    if (bucket.count <= 0) return;
     items.push({
-      id: "emails_ready",
-      label: "Email à envoyer",
-      count: ready.length,
-      severity: "urgent",
+      id,
+      label,
+      count: bucket.count,
+      severity,
       suiviTab: "envois",
-      envoisSubTab: "ready",
-      focusContactId: ready.length === 1 ? ready[0].contact_id : undefined,
+      envoisSubTab,
+      focusContactId:
+        bucket.count === 1 && bucket.focus_contact_id != null
+          ? bucket.focus_contact_id
+          : undefined,
     });
-  }
+  };
 
-  if (followup.length > 0) {
-    items.push({
-      id: "emails_followup",
-      label: "Relance sans réponse",
-      count: followup.length,
-      severity: "warning",
-      suiviTab: "envois",
-      envoisSubTab: "followup",
-      focusContactId: followup.length === 1 ? followup[0].contact_id : undefined,
-    });
-  }
+  pushQueue("emails_ready", "Email à envoyer", "urgent", "ready", dto.ready);
+  pushQueue("emails_followup", "Relance sans réponse", "warning", "followup", dto.followup);
+  pushQueue("emails_incomplete", "Envoi à compléter", "warning", "incomplete", dto.incomplete);
+  pushQueue("emails_sent", "En attente de réponse client", "info", "sent", dto.sent);
 
-  if (incomplete.length > 0) {
-    items.push({
-      id: "emails_incomplete",
-      label: "Envoi à compléter",
-      count: incomplete.length,
-      severity: "warning",
-      suiviTab: "envois",
-      envoisSubTab: "incomplete",
-      focusContactId: incomplete.length === 1 ? incomplete[0].contact_id : undefined,
-    });
-  }
-
-  if (sent.length > 0) {
-    items.push({
-      id: "emails_sent",
-      label: "En attente de réponse client",
-      count: sent.length,
-      severity: "info",
-      suiviTab: "envois",
-      envoisSubTab: "sent",
-      focusContactId: sent.length === 1 ? sent[0].contact_id : undefined,
-    });
-  }
-
-  if (alertes.length > 0) {
+  if (dto.alertes.count > 0) {
     items.push({
       id: "alertes_suivi",
       label: "Alerte de suivi",
-      count: alertes.length,
+      count: dto.alertes.count,
       severity: "warning",
       suiviTab: "alertes",
-      focusContactId: alertes.length === 1 ? alertes[0].contact_id : undefined,
+      focusContactId:
+        dto.alertes.count === 1 && dto.alertes.focus_contact_id != null
+          ? dto.alertes.focus_contact_id
+          : undefined,
     });
   }
 
-  for (const sig of stelliumSignals) {
+  for (const sig of dto.stellium_signals) {
     const clients = sig.contact_count;
     const disinvestFrom = sig.operation_from_label?.trim();
     const disinvestSuffix = disinvestFrom
@@ -127,4 +109,9 @@ export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSu
 
   const totalCount = items.reduce((s, i) => s + i.count, 0);
   return { items, totalCount };
+}
+
+export async function fetchAppNotificationsSummary(): Promise<AppNotificationsSummary> {
+  const dto = await invoke<AppNotificationsSummaryDto>("get_app_notifications_summary");
+  return buildAppNotificationsSummary(dto);
 }

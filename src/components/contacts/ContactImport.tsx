@@ -20,7 +20,17 @@ import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, Target, Phone, Sp
 import * as XLSX from "xlsx";
 import { createContact, getAllContacts, updateContact, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
 import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
-import { createInvestissement, updateInvestissement, getAllInvestissements, type NewInvestissement, type Investissement } from "@/lib/api/tauri-investissements";
+import {
+  notifyInvestissementsChanged,
+  suppressInvestissementsChangedNotify,
+} from "@/lib/investissements/investissement-events";
+import {
+  createInvestissement,
+  updateInvestissement,
+  getAllInvestissements,
+  type NewInvestissement,
+  type Investissement,
+} from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenaire } from "@/lib/api/tauri-partenaires";
 import { createFoyer, getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
@@ -66,6 +76,9 @@ import {
   markImportRowsCancelled,
   type ImportRow,
 } from "@/lib/contacts/import-row";
+
+/** Pendant l'import : pas de recalc étiquettes ni sync Google par ligne. */
+const IMPORT_SAVE_OPTS = { skipPostSaveHooks: true } as const;
 
 interface ContactImportProps {
   open: boolean;
@@ -467,9 +480,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     const updatedRows = [...importRows];
     let importTxActive = false;
     let releaseSuppress: (() => void) | null = null;
+    let releaseSuppressInv: (() => void) | null = null;
 
     try {
       releaseSuppress = suppressContactsChangedNotify();
+      releaseSuppressInv = suppressInvestissementsChangedNotify();
       await beginImportTransaction();
       importTxActive = true;
 
@@ -544,14 +559,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       );
       
       if (existing) {
-        const updated = await updateInvestissement(existing.id, newInv);
+        const updated = await updateInvestissement(existing.id, newInv, IMPORT_SAVE_OPTS);
         const idx = allInvestissementsCache.findIndex(i => i.id === existing.id);
         if (idx !== -1) {
           allInvestissementsCache[idx] = updated;
         }
         return { created: false, investissement: updated };
       } else {
-        const created = await createInvestissement(newInv);
+        const created = await createInvestissement(newInv, IMPORT_SAVE_OPTS);
         allInvestissementsCache.push(created);
         return { created: true, investissement: created };
       }
@@ -1002,10 +1017,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               
               // Associer les 2 contacts au foyer (s'ils ne le sont pas déjà)
               if (coupleAnalysis.contact1.foyer_id !== foyerToUse.id) {
-                await linkContactToFoyer(coupleAnalysis.contact1, foyerToUse.id, "DECLARANT_1");
+                await linkContactToFoyer(coupleAnalysis.contact1, foyerToUse.id, "DECLARANT_1", IMPORT_SAVE_OPTS);
               }
               if (coupleAnalysis.contact2.foyer_id !== foyerToUse.id) {
-                await linkContactToFoyer(coupleAnalysis.contact2, foyerToUse.id, "DECLARANT_2");
+                await linkContactToFoyer(coupleAnalysis.contact2, foyerToUse.id, "DECLARANT_2", IMPORT_SAVE_OPTS);
               }
               
               // 🔥 FIX: Mettre à jour le cache pour que les prochaines lignes trouvent le foyer
@@ -1093,12 +1108,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   categorie: categorieCouple,
                   statut_suivi: "ACTIF",
                 };
-                const createdContact1 = await createContact(newContact1);
+                const createdContact1 = await createContact(newContact1, IMPORT_SAVE_OPTS);
                 allContactsCache.push(createdContact1);
                 
                 // Mettre à jour contact2 pour le rattacher au foyer
                 if (coupleAnalysis.contact2.foyer_id !== foyerToUse.id) {
-                  await linkContactToFoyer(coupleAnalysis.contact2, foyerToUse.id, "DECLARANT_2");
+                  await linkContactToFoyer(coupleAnalysis.contact2, foyerToUse.id, "DECLARANT_2", IMPORT_SAVE_OPTS);
                   const idx2 = allContactsCache.findIndex(c => c.id === coupleAnalysis.contact2!.id);
                   if (idx2 !== -1) {
                     allContactsCache[idx2] = {
@@ -1120,12 +1135,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   categorie: categorieCouple,
                   statut_suivi: "ACTIF",
                 };
-                const createdContact2 = await createContact(newContact2);
+                const createdContact2 = await createContact(newContact2, IMPORT_SAVE_OPTS);
                 allContactsCache.push(createdContact2);
                 
                 // Mettre à jour contact1 pour le rattacher au foyer
                 if (coupleAnalysis.contact1.foyer_id !== foyerToUse.id) {
-                  await linkContactToFoyer(coupleAnalysis.contact1, foyerToUse.id, "DECLARANT_1");
+                  await linkContactToFoyer(coupleAnalysis.contact1, foyerToUse.id, "DECLARANT_1", IMPORT_SAVE_OPTS);
                   const idx1 = allContactsCache.findIndex(c => c.id === coupleAnalysis.contact1!.id);
                   if (idx1 !== -1) {
                     allContactsCache[idx1] = {
@@ -1203,7 +1218,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 categorie: categorieCoupleNew,
                 statut_suivi: "ACTIF",
               };
-              const createdContact1 = await createContact(newContact1);
+              const createdContact1 = await createContact(newContact1, IMPORT_SAVE_OPTS);
               
               // Créer contact 2
               const newContact2: NewContact = {
@@ -1214,7 +1229,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 categorie: categorieCoupleNew,
                 statut_suivi: "ACTIF",
               };
-              const createdContact2 = await createContact(newContact2);
+              const createdContact2 = await createContact(newContact2, IMPORT_SAVE_OPTS);
               
               // Mettre à jour le cache
               allContactsCache.push(createdContact1, createdContact2);
@@ -1376,7 +1391,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   : undefined,
             });
 
-            await updateContact(existingInCache.id, updatePayload);
+            await updateContact(existingInCache.id, updatePayload, IMPORT_SAVE_OPTS);
             
             // Mettre à jour le cache aussi
             const cacheIdx = allContactsCache.findIndex(c => c.id === existingInCache.id);
@@ -1621,7 +1636,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           notes: finalNotes,
         };
         
-        const createdContact = await createContact(newContact);
+        const createdContact = await createContact(newContact, IMPORT_SAVE_OPTS);
         
         // 🔥 FIX: Mettre à jour le cache pour que les lignes "couple" trouvent ces contacts
         allContactsCache.push(createdContact);
@@ -2184,6 +2199,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
       setImportCompleted(true);
     } finally {
       releaseSuppress?.();
+      releaseSuppressInv?.();
     }
   };
 
@@ -2206,6 +2222,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     handleClose();
     if (refresh) {
       notifyContactsChanged();
+      notifyInvestissementsChanged();
       onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)
@@ -2218,6 +2235,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     handleClose();
     if (refresh) {
       notifyContactsChanged();
+      notifyInvestissementsChanged();
       onSuccess?.();
       void runFullEtiquettesRecalc().catch((e) =>
         console.error("Recalcul étiquettes après import:", e)

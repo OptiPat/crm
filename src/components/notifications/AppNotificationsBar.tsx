@@ -50,7 +50,8 @@ export function AppNotificationsBar({
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async (silent = false) => {
+  const load = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     if (!silent) setLoading(true);
     try {
       const summary = await fetchAppNotificationsSummary();
@@ -58,8 +59,10 @@ export function AppNotificationsBar({
       setTotalCount(summary.totalCount);
     } catch (error) {
       console.error("Notifications:", error);
-      setItems([]);
-      setTotalCount(0);
+      if (!silent) {
+        setItems([]);
+        setTotalCount(0);
+      }
     } finally {
       if (!silent) setLoading(false);
     }
@@ -70,7 +73,7 @@ export function AppNotificationsBar({
   }, [load]);
 
   useEffect(() => {
-    const onStellium = () => void load(true);
+    const onStellium = () => void load({ silent: true });
     window.addEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onStellium);
     return () =>
       window.removeEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onStellium);
@@ -82,7 +85,7 @@ export function AppNotificationsBar({
       if (debounceRef.id != null) window.clearTimeout(debounceRef.id);
       debounceRef.id = window.setTimeout(() => {
         debounceRef.id = null;
-        void load(true);
+        void load({ silent: true });
       }, 120);
     };
 
@@ -92,7 +95,7 @@ export function AppNotificationsBar({
     const unsubRelation = subscribeRelationChanged(schedule);
 
     const onWake = () => {
-      if (!document.hidden) void load(true);
+      if (!document.hidden) void load({ silent: true });
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
@@ -184,7 +187,7 @@ export function AppNotificationsBar({
                           item.stelliumMessageId!
                         );
                         notifyStelliumExceltisChanged();
-                        await load(true);
+                        await load({ silent: true });
                       } catch (error) {
                         console.error("Dismiss Stellium:", error);
                       }

@@ -12,19 +12,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CheckCircle2 } from "lucide-react";
-import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
-import {
-  markEtiquetteEmailSent,
-  type EtiquetteEmailQueueItem,
-} from "@/lib/api/tauri-etiquettes";
+import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
-import { sendEmail } from "@/lib/api/tauri-email";
 import { EMAIL_PREVIEW_HTML_CLASS } from "@/lib/emails/email-preview-html-styles";
 import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
-import { isEtiquetteQueueItemBatchLocked } from "@/lib/etiquettes/etiquette-email-send-runner";
-import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import {
+  isEtiquetteEmailSendActive,
+  isEtiquetteQueueItemBatchLocked,
+  startIndividualEtiquetteEmailSend,
+} from "@/lib/etiquettes/etiquette-email-send-runner";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -47,7 +45,6 @@ export function EtiquetteEmailSendDialog({
   const [body, setBody] = useState("");
   const [initialBody, setInitialBody] = useState("");
   const [editPlain, setEditPlain] = useState(false);
-  const [sending, setSending] = useState(false);
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(cgpConfigProp ?? null);
 
   useEffect(() => {
@@ -93,67 +90,36 @@ export function EtiquetteEmailSendDialog({
 
   const batchLocked =
     item != null && isEtiquetteQueueItemBatchLocked(item.contact_etiquette_id);
+  const sendBlocked = batchLocked || isEtiquetteEmailSendActive();
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!item?.contact_email || !sendPreview) return;
     if (batchLocked) {
       toast.warning("Cet envoi fait partie d'une salve en cours.");
       return;
     }
-    setSending(true);
+    if (isEtiquetteEmailSendActive()) {
+      toast.warning("Un envoi est déjà en cours.");
+      return;
+    }
+
+    const subjectTrim = subject.trim();
+    const itemSnapshot = item;
+    onOpenChange(false);
+    toast.info(
+      `Envoi en arrière-plan — ${item.contact_prenom} ${item.contact_nom}. Vous pouvez continuer à utiliser le CRM.`
+    );
+
     try {
-      const sent = await sendEmail({
-        to_email: item.contact_email,
-        to_name: `${item.contact_prenom} ${item.contact_nom}`,
-        subject: subject.trim(),
+      startIndividualEtiquetteEmailSend({
+        item: itemSnapshot,
+        subject: subjectTrim,
         body: sendPreview.body,
         body_html: sendPreview.body_html,
+        onSent: (meta) => onSent?.(meta),
       });
-      try {
-        await markEtiquetteEmailSent(
-          item.contact_etiquette_id,
-          sent.gmail_message_id,
-          sent.gmail_thread_id,
-          subject.trim(),
-          sendPreview.body,
-          item.queue_row_kind ?? "etiquette"
-        );
-      } catch (markError) {
-        console.error(markError);
-        toast.warning(
-          "Email envoyé, mais l'enregistrement CRM a échoué — ne renvoyez pas sans vérifier la fiche."
-        );
-        onOpenChange(false);
-        onSent?.();
-        return;
-      }
-      toast.success(`Email envoyé à ${item.contact_prenom} ${item.contact_nom}`);
-      const sentAtSec = Math.floor(Date.now() / 1000);
-      notifyRelationChanged(item.contact_id, {
-        skipQueueReload: true,
-        skipEtiquettesChanged: true,
-      });
-      onOpenChange(false);
-      onSent?.({ subject: subject.trim(), sentAtSec });
     } catch (error) {
-      console.error("Error sending etiquette email:", error);
-      const hint = error instanceof Error ? error.message : "Erreur lors de l'envoi";
-      if (item) {
-        await logEmailSendError({
-          contactId: item.contact_id,
-          contactEtiquetteId: item.contact_etiquette_id,
-          etiquetteNom:
-            item.queue_row_kind === "template" ? null : item.etiquette_nom,
-          templateNom:
-            item.queue_row_kind === "template" ? item.template_sujet : null,
-          subject: subject.trim(),
-          errorMessage: hint,
-          sendMode: "individual",
-        }).catch(() => {});
-      }
-      toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Email)`);
-    } finally {
-      setSending(false);
+      toast.error(error instanceof Error ? error.message : "Erreur envoi");
     }
   };
 
@@ -195,24 +161,24 @@ export function EtiquetteEmailSendDialog({
                 )}
                 dangerouslySetInnerHTML={{ __html: sendPreview.body_html }}
               />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setEditPlain((v) => !v)}
+              >
+                {editPlain ? "Masquer l'éditeur" : "Modifier le texte brut"}
+              </Button>
             </div>
-          )}
-
-          {sendPreview?.body_html && bodyEdited && (
-            <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-              Vous avez modifié le texte brut : l&apos;envoi sera en <strong>texte seul</strong>{" "}
-              (sans mise en forme HTML).
-            </p>
           )}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <Label htmlFor="confirm-body">
-                {sendPreview?.body_html && !editPlain
-                  ? "Modifier le texte (optionnel)"
-                  : "Message"}
+                {sendPreview?.body_html && !bodyEdited ? "Texte brut (référence)" : "Message"}
               </Label>
-              {sendPreview?.body_html && (
+              {sendPreview?.body_html && bodyEdited && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -236,27 +202,22 @@ export function EtiquetteEmailSendDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
           <Button
-            onClick={() => void handleSend()}
+            onClick={handleSend}
             disabled={
-              sending ||
-              batchLocked ||
+              sendBlocked ||
               !subject.trim() ||
               !body.trim() ||
               !item?.contact_email
             }
           >
-            {sending ? (
-              "Envoi..."
-            ) : (
-              <>
-                <CheckCircle2 className="h-4 w-4 mr-1" />
-                Envoyer maintenant
-              </>
-            )}
+            <>
+              <CheckCircle2 className="h-4 w-4 mr-1" />
+              Envoyer maintenant
+            </>
           </Button>
         </DialogFooter>
       </DialogContent>

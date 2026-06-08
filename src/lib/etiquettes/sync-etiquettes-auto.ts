@@ -1,4 +1,5 @@
 import { checkAndApplyAutoEtiquettes } from "@/lib/api/tauri-etiquettes";
+import { beginBackgroundActivity } from "@/lib/background-activity";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 
 /**
@@ -6,7 +7,12 @@ import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
  * Les sauvegardes contact / investissement / étiquette déclenchent un recalcul incrémental côté Rust.
  */
 export async function runFullEtiquettesRecalc(): Promise<number> {
-  const n = await checkAndApplyAutoEtiquettes();
-  notifyEtiquettesChanged();
-  return n;
+  const endActivity = beginBackgroundActivity("etiquettes-recalc");
+  try {
+    const n = await checkAndApplyAutoEtiquettes();
+    notifyEtiquettesChanged();
+    return n;
+  } finally {
+    endActivity();
+  }
 }

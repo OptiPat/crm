@@ -3,13 +3,14 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
 
 const DEBOUNCE_MS = 120;
+const WAKE_DEBOUNCE_MS = 300;
 
 /**
  * Rafraîchissement page Contacts : modifs métier + retour sur la fenêtre.
- * Pas de polling périodique (import / fusion peuvent émettre plusieurs événements).
+ * Les saves utilisateur passent par notifyContactsChanged → refresh immédiat (debouncé).
  */
 export function useContactsAutoRefresh(
-  onContactsRefresh: () => void | Promise<void>,
+  onContactsRefresh: (options?: { silent?: boolean }) => void | Promise<void>,
   onAlertsRefresh: () => void | Promise<void>
 ): void {
   const contactsRef = useRef(onContactsRefresh);
@@ -17,25 +18,30 @@ export function useContactsAutoRefresh(
   contactsRef.current = onContactsRefresh;
   alertsRef.current = onAlertsRefresh;
   const debounceRef = useRef<number | null>(null);
+  const wakeDebounceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const scheduleContactsRefresh = () => {
+    const scheduleContactsRefresh = (silent = false) => {
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
       debounceRef.current = window.setTimeout(() => {
         debounceRef.current = null;
-        void contactsRef.current();
+        void contactsRef.current({ silent });
       }, DEBOUNCE_MS);
     };
 
     const refreshAlerts = () => void alertsRef.current();
 
-    const unsubContacts = subscribeContactsChanged(scheduleContactsRefresh);
+    const unsubContacts = subscribeContactsChanged(() => scheduleContactsRefresh(false));
     const unsubRelation = subscribeRelationChanged(refreshAlerts);
 
     const onWake = () => {
       if (document.hidden) return;
-      void contactsRef.current();
-      void alertsRef.current();
+      if (wakeDebounceRef.current != null) window.clearTimeout(wakeDebounceRef.current);
+      wakeDebounceRef.current = window.setTimeout(() => {
+        wakeDebounceRef.current = null;
+        void contactsRef.current({ silent: true });
+        void alertsRef.current();
+      }, WAKE_DEBOUNCE_MS);
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
@@ -46,6 +52,7 @@ export function useContactsAutoRefresh(
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
+      if (wakeDebounceRef.current != null) window.clearTimeout(wakeDebounceRef.current);
     };
   }, []);
 }

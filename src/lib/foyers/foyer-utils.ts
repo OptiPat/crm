@@ -20,7 +20,8 @@ export function getContactsForFoyer(
 export async function linkContactToFoyer(
   contact: Contact,
   foyerId: number,
-  roleFoyer: string
+  roleFoyer: string,
+  options?: { skipPostSaveHooks?: boolean }
 ): Promise<Contact> {
   if (!contact.id) {
     throw new Error("Contact invalide");
@@ -30,7 +31,8 @@ export async function linkContactToFoyer(
     contactToUpdatePayload(contact, {
       foyer_id: foyerId,
       role_foyer: roleFoyer,
-    })
+    }),
+    options
   );
 }
 

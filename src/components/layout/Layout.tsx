@@ -1,8 +1,9 @@
 import { ReactNode } from "react";
 import { AppUpdateBanner } from "@/components/system/AppUpdateBanner";
 import { AppNotificationsBar } from "@/components/notifications/AppNotificationsBar";
-import { useEmailCampaignAutoSync } from "@/hooks/useEmailCampaignAutoSync";
-import { useStelliumExceltisScan } from "@/hooks/useStelliumExceltisScan";
+import { BackgroundActivityBanner } from "@/components/layout/BackgroundActivityBanner";
+import { EtiquetteEmailSendBanner } from "@/components/etiquettes/EtiquetteEmailSendBanner";
+import { useBackgroundSync } from "@/hooks/useBackgroundSync";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
 
@@ -14,8 +15,7 @@ interface LayoutProps {
 }
 
 export function Layout({ children, currentPage, onPageChange, onLogout }: LayoutProps) {
-  useEmailCampaignAutoSync();
-  useStelliumExceltisScan();
+  useBackgroundSync();
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -28,6 +28,8 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
           onPageChange={onPageChange}
         />
         <AppNotificationsBar onPageChange={onPageChange} currentPage={currentPage} />
+        <EtiquetteEmailSendBanner />
+        <BackgroundActivityBanner />
         <AppUpdateBanner />
 
         <main className="flex-1 p-6 overflow-auto">

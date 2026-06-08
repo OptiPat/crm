@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -54,7 +54,6 @@ import {
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
-import { EtiquetteBatchSendBanner } from "@/components/etiquettes/EtiquetteBatchSendBanner";
 import { EtiquettePipelineBoard } from "@/components/etiquettes/EtiquettePipelineBoard";
 import { PlanifierRdvDialog } from "@/components/calendar/PlanifierRdvDialog";
 import { StelliumExceltisAlerts } from "@/components/etiquettes/StelliumExceltisAlerts";
@@ -120,6 +119,10 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   const [alerteCategoryFilter, setAlerteCategoryFilter] =
     useState<AlerteCategoryFilter>("all");
   const [rdvAlerte, setRdvAlerte] = useState<AlerteWithContact | null>(null);
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const alertesTabLoadedRef = useRef(false);
+  const etiquettesTabLoadedRef = useRef(false);
 
   const alerteCategoryCounts = useMemo(
     () => countAlertesByCategory(alertes),
@@ -295,6 +298,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     onFetchAlertes: () => fetchAlertesList({ silent: true }),
     onRefreshEtiquettes: refreshEtiquetteCounts,
     onRefreshEmailQueue: loadEmailQueueCount,
+    skipEmailQueueOnWake: () => activeTabRef.current === "envois",
   });
 
   useEffect(() => {
@@ -306,12 +310,32 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   useEffect(() => {
     const { tab, envoisSubTab, contactId, etiquetteId } = consumeSuiviNavigationIntent();
     applySuiviNavigation(tab, envoisSubTab, contactId, etiquetteId);
-    void regenerateAndLoadAlertes();
-    void loadEtiquettes();
+    const initialTab = tab ?? "alertes";
+    if (initialTab === "etiquettes") {
+      etiquettesTabLoadedRef.current = true;
+      void loadEtiquettes();
+    } else if (initialTab === "envois") {
+      void loadEmailQueueCount();
+    } else {
+      alertesTabLoadedRef.current = true;
+      void regenerateAndLoadAlertes();
+    }
     void loadEmailQueueCount();
     // Chargement initial à l'ouverture de la page Suivi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "alertes" && !alertesTabLoadedRef.current) {
+      alertesTabLoadedRef.current = true;
+      void regenerateAndLoadAlertes();
+    } else if (activeTab === "etiquettes" && !etiquettesTabLoadedRef.current) {
+      etiquettesTabLoadedRef.current = true;
+      void loadEtiquettes();
+    } else if (activeTab === "envois") {
+      void loadEmailQueueCount();
+    }
+  }, [activeTab, regenerateAndLoadAlertes, loadEtiquettes, loadEmailQueueCount]);
 
   useAppNavigationListener((detail) => {
     if (detail.type !== "suivi") return;
@@ -566,8 +590,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           onNavigate ? () => onNavigate("etiquettes") : undefined
         }
       />
-
-      <EtiquetteBatchSendBanner />
 
       <Tabs
         value={activeTab}

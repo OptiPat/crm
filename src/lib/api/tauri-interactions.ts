@@ -74,15 +74,21 @@ export async function getAllInteractionsWithContacts(): Promise<InteractionWithC
   return invoke<InteractionWithContact[]>("get_all_interactions_with_contacts");
 }
 
-export async function getExchangeHistoryTimeline(): Promise<ExchangeHistoryEntry[]> {
-  return invoke<ExchangeHistoryEntry[]>("get_exchange_history_timeline");
+export async function getExchangeHistoryTimeline(
+  maxEntries?: number
+): Promise<ExchangeHistoryEntry[]> {
+  return invoke<ExchangeHistoryEntry[]>("get_exchange_history_timeline", {
+    maxEntries: maxEntries ?? null,
+  });
 }
 
 export async function getExchangeHistoryTimelineForContact(
-  contactId: number
+  contactId: number,
+  maxEntries?: number
 ): Promise<ExchangeHistoryEntry[]> {
   return invoke<ExchangeHistoryEntry[]>("get_exchange_history_timeline_for_contact", {
     contactId,
+    maxEntries: maxEntries ?? null,
   });
 }
 

@@ -58,6 +58,11 @@ import {
   getPrioriteFilleul,
 } from "@/lib/contacts/contact-priority";
 import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contacts-session";
+import {
+  getContactsListInitialState,
+  patchContactInListCache,
+  setContactsListCache,
+} from "@/lib/contacts/contacts-list-cache";
 import { useContactsAutoRefresh } from "@/hooks/useContactsAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
@@ -87,9 +92,10 @@ interface ContactsProps {
 }
 
 export function Contacts({ onNavigate }: ContactsProps) {
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [foyers, setFoyers] = useState<Foyer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [initialListState] = useState(() => getContactsListInitialState());
+  const [contacts, setContacts] = useState<Contact[]>(initialListState.contacts);
+  const [foyers, setFoyers] = useState<Foyer[]>(initialListState.foyers);
+  const [loading, setLoading] = useState(initialListState.loading);
   const [searchQuery, setSearchQuery] = useState("");
   const [mainTab, setMainTab] = useState<MainTab>("clients");
   const [clientSubTab, setClientSubTab] = useState<ClientSubTab>("CLIENT");
@@ -174,7 +180,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
     }
   }, []);
 
-  const loadContacts = useCallback(async () => {
+  const loadContacts = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
       const [dataContacts, dataFoyers] = await Promise.all([
         getAllContacts(),
@@ -182,6 +189,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
       ]);
       setContacts(dataContacts);
       setFoyers(dataFoyers);
+      setContactsListCache({ contacts: dataContacts, foyers: dataFoyers });
       setSelectedContact((prev) => {
         if (!prev?.id) return prev;
         return dataContacts.find((c) => c.id === prev.id) ?? prev;
@@ -190,19 +198,22 @@ export function Contacts({ onNavigate }: ContactsProps) {
       setIsInitialLoad(false);
     } catch (error) {
       if (isInitialLoad && error instanceof Error && error.message.includes("Invalid column type")) {
-        setTimeout(() => void loadContacts(), 500);
+        setTimeout(() => void loadContacts(options), 500);
       } else {
         console.error("Error loading contacts:", error);
-        setLoading(false);
+        if (!silent) setLoading(false);
         setIsInitialLoad(false);
       }
     }
   }, [isInitialLoad]);
 
   useEffect(() => {
-    void loadContacts();
+    void loadContacts({ silent: initialListState.hasCache });
+  }, [loadContacts, initialListState.hasCache]);
+
+  useEffect(() => {
     void loadAlertContactIds();
-  }, [loadContacts, loadAlertContactIds]);
+  }, [loadAlertContactIds]);
 
   useContactsAutoRefresh(loadContacts, loadAlertContactIds);
 
@@ -231,17 +242,43 @@ export function Contacts({ onNavigate }: ContactsProps) {
   // categorie = statut commercial (CLIENT, PROSPECT_CLIENT, SUSPECT_CLIENT)
   // filleul_categorie = statut réseau filleul (FILLEUL, PROSPECT_FILLEUL, etc.) - INDÉPENDANT
   const categoryCounts = useMemo(() => {
-    return {
-      // Clients - basé sur categorie
-      CLIENT: contacts.filter(c => c.categorie === "CLIENT").length,
-      PROSPECT_CLIENT: contacts.filter(c => c.categorie === "PROSPECT_CLIENT").length,
-      SUSPECT_CLIENT: contacts.filter(c => c.categorie === "SUSPECT_CLIENT").length,
-      // Filleuls - basé sur filleul_categorie (INDÉPENDANT de categorie)
-      FILLEUL: contacts.filter(c => c.filleul_categorie === "FILLEUL").length,
-      PROSPECT_FILLEUL: contacts.filter(c => c.filleul_categorie === "PROSPECT_FILLEUL").length,
-      SUSPECT_FILLEUL: contacts.filter(c => c.filleul_categorie === "SUSPECT_FILLEUL").length,
-      FILLEUL_DESINSCRIT: contacts.filter(c => c.filleul_categorie === "FILLEUL_DESINSCRIT").length,
+    const counts = {
+      CLIENT: 0,
+      PROSPECT_CLIENT: 0,
+      SUSPECT_CLIENT: 0,
+      FILLEUL: 0,
+      PROSPECT_FILLEUL: 0,
+      SUSPECT_FILLEUL: 0,
+      FILLEUL_DESINSCRIT: 0,
     };
+    for (const c of contacts) {
+      switch (c.categorie) {
+        case "CLIENT":
+          counts.CLIENT++;
+          break;
+        case "PROSPECT_CLIENT":
+          counts.PROSPECT_CLIENT++;
+          break;
+        case "SUSPECT_CLIENT":
+          counts.SUSPECT_CLIENT++;
+          break;
+      }
+      switch (c.filleul_categorie) {
+        case "FILLEUL":
+          counts.FILLEUL++;
+          break;
+        case "PROSPECT_FILLEUL":
+          counts.PROSPECT_FILLEUL++;
+          break;
+        case "SUSPECT_FILLEUL":
+          counts.SUSPECT_FILLEUL++;
+          break;
+        case "FILLEUL_DESINSCRIT":
+          counts.FILLEUL_DESINSCRIT++;
+          break;
+      }
+    }
+    return counts;
   }, [contacts]);
 
   // Déterminer la catégorie active selon l'onglet sélectionné
@@ -957,7 +994,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   if (!open) closeContactDetail();
                 }}
                 onDelete={handleDeleteContact}
-                onContactRefreshed={setSelectedContact}
+                onContactRefreshed={(updated) => {
+                  setSelectedContact(updated);
+                  setContacts((prev) =>
+                    prev.map((c) => (c.id === updated.id ? updated : c))
+                  );
+                  patchContactInListCache(updated);
+                }}
                 onNavigate={onNavigate}
                 onOpenContact={openLinkedContact}
               />
@@ -1013,7 +1056,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
           }}
           contact={selectedContact}
           onDelete={handleDeleteContact}
-          onContactRefreshed={setSelectedContact}
+          onContactRefreshed={(updated) => {
+            setSelectedContact(updated);
+            setContacts((prev) =>
+              prev.map((c) => (c.id === updated.id ? updated : c))
+            );
+            patchContactInListCache(updated);
+          }}
           onNavigate={onNavigate}
           onOpenContact={openLinkedContact}
         />

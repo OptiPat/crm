@@ -26,6 +26,18 @@ impl Database {
         contacts.collect()
     }
 
+    pub fn get_contacts_by_foyer(&self, foyer_id: i64) -> Result<Vec<Contact>> {
+        use super::contact_row::{map_contact_row, CONTACT_SELECT};
+
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CONTACT_SELECT} FROM contacts WHERE foyer_id = ?1 ORDER BY nom, prenom"
+        ))?;
+
+        let contacts = stmt.query_map(params![foyer_id], map_contact_row)?;
+
+        contacts.collect()
+    }
+
     pub fn create_contact(&self, new_contact: NewContact) -> Result<Contact> {
         use chrono::DateTime;
 
@@ -116,6 +128,14 @@ impl Database {
 
         // Récupérer le contact créé
         self.get_contact_by_id(id)
+    }
+
+    pub fn create_contacts_bulk(&self, new_contacts: Vec<NewContact>) -> Result<Vec<Contact>> {
+        let mut out = Vec::with_capacity(new_contacts.len());
+        for nc in new_contacts {
+            out.push(self.create_contact(nc)?);
+        }
+        Ok(out)
     }
 
     pub fn get_contact_by_id(&self, id: i64) -> Result<Contact> {

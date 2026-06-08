@@ -84,14 +84,28 @@ export async function getInvestissementsByFoyer(foyerId: number): Promise<Invest
   return await invoke<Investissement[]>("get_investissements_by_foyer", { foyerId });
 }
 
+export async function getInvestissementsByFoyerContacts(
+  foyerId: number
+): Promise<Investissement[]> {
+  return await invoke<Investissement[]>("get_investissements_by_foyer_contacts", { foyerId });
+}
+
 export async function getInvestissementsWithDetails(): Promise<InvestissementWithDetails[]> {
   return await invoke<InvestissementWithDetails[]>("get_investissements_with_details");
 }
 
-export async function createInvestissement(newInvestissement: NewInvestissement): Promise<Investissement> {
-  const created = await invoke<Investissement>("create_investissement", { newInvestissement });
-  notifyContactsChanged();
-  notifyInvestissementsChanged();
+export async function createInvestissement(
+  newInvestissement: NewInvestissement,
+  options?: { skipPostSaveHooks?: boolean }
+): Promise<Investissement> {
+  const created = await invoke<Investissement>("create_investissement", {
+    newInvestissement,
+    skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
+  });
+  if (!options?.skipPostSaveHooks) {
+    notifyContactsChanged();
+    notifyInvestissementsChanged();
+  }
   return created;
 }
 
@@ -99,10 +113,20 @@ export async function getInvestissementById(id: number): Promise<Investissement>
   return await invoke<Investissement>("get_investissement_by_id", { id });
 }
 
-export async function updateInvestissement(id: number, investissement: NewInvestissement): Promise<Investissement> {
-  const updated = await invoke<Investissement>("update_investissement", { id, investissement });
-  notifyContactsChanged();
-  notifyInvestissementsChanged();
+export async function updateInvestissement(
+  id: number,
+  investissement: NewInvestissement,
+  options?: { skipPostSaveHooks?: boolean }
+): Promise<Investissement> {
+  const updated = await invoke<Investissement>("update_investissement", {
+    id,
+    investissement,
+    skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
+  });
+  if (!options?.skipPostSaveHooks) {
+    notifyContactsChanged();
+    notifyInvestissementsChanged();
+  }
   return updated;
 }
 

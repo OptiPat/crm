@@ -7,6 +7,7 @@ import {
 } from "@/lib/etiquettes/etiquette-events";
 
 const DEBOUNCE_MS = 120;
+const WAKE_DEBOUNCE_MS = 300;
 
 type SuiviAutoRefreshHandlers = {
   /** Regénération segments + relecture liste (contacts / investissements modifiés). */
@@ -15,6 +16,8 @@ type SuiviAutoRefreshHandlers = {
   onFetchAlertes: () => void | Promise<void>;
   onRefreshEtiquettes: () => void | Promise<void>;
   onRefreshEmailQueue: () => void | Promise<void>;
+  /** Onglet Envois monté : évite un IPC doublon (refresh géré par EtiquetteEnvoisTab). */
+  skipEmailQueueOnWake?: () => boolean;
 };
 
 /**
@@ -25,6 +28,7 @@ export function useSuiviAutoRefresh(handlers: SuiviAutoRefreshHandlers): void {
   const handlersRef = useRef(handlers);
   handlersRef.current = handlers;
   const debounceRef = useRef<number | null>(null);
+  const wakeDebounceRef = useRef<number | null>(null);
   const needsRegenRef = useRef(false);
 
   useEffect(() => {
@@ -59,9 +63,15 @@ export function useSuiviAutoRefresh(handlers: SuiviAutoRefreshHandlers): void {
 
     const onWake = () => {
       if (document.hidden) return;
-      scheduleAlertRefresh(true);
-      void handlersRef.current.onRefreshEtiquettes();
-      void handlersRef.current.onRefreshEmailQueue();
+      if (wakeDebounceRef.current != null) window.clearTimeout(wakeDebounceRef.current);
+      wakeDebounceRef.current = window.setTimeout(() => {
+        wakeDebounceRef.current = null;
+        scheduleAlertRefresh(false);
+        void handlersRef.current.onRefreshEtiquettes();
+        if (!handlersRef.current.skipEmailQueueOnWake?.()) {
+          void handlersRef.current.onRefreshEmailQueue();
+        }
+      }, WAKE_DEBOUNCE_MS);
     };
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
@@ -74,6 +84,7 @@ export function useSuiviAutoRefresh(handlers: SuiviAutoRefreshHandlers): void {
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
+      if (wakeDebounceRef.current != null) window.clearTimeout(wakeDebounceRef.current);
     };
   }, []);
 }

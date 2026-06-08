@@ -78,18 +78,46 @@ export async function getAllContacts(): Promise<Contact[]> {
   return await invoke<Contact[]>("get_all_contacts");
 }
 
+export async function getContactsByFoyer(foyerId: number): Promise<Contact[]> {
+  return await invoke<Contact[]>("get_contacts_by_foyer", { foyerId });
+}
+
 export async function getContactById(id: number): Promise<Contact> {
   return await invoke<Contact>("get_contact_by_id", { id });
 }
 
-export async function createContact(newContact: NewContact): Promise<Contact> {
-  const created = await invoke<Contact>("create_contact", { newContact });
+export async function createContact(
+  newContact: NewContact,
+  options?: { skipPostSaveHooks?: boolean }
+): Promise<Contact> {
+  const created = await invoke<Contact>("create_contact", {
+    newContact,
+    skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
+  });
   notifyContactsChanged();
   return created;
 }
 
-export async function updateContact(id: number, contact: NewContact): Promise<Contact> {
-  const updated = await invoke<Contact>("update_contact", { id, contact });
+export async function createContactsBulk(
+  newContacts: NewContact[],
+  options?: { skipPostSaveHooks?: boolean }
+): Promise<Contact[]> {
+  return await invoke<Contact[]>("create_contacts_bulk", {
+    newContacts,
+    skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
+  });
+}
+
+export async function updateContact(
+  id: number,
+  contact: NewContact,
+  options?: { skipPostSaveHooks?: boolean }
+): Promise<Contact> {
+  const updated = await invoke<Contact>("update_contact", {
+    id,
+    contact,
+    skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
+  });
   notifyContactsChanged();
   return updated;
 }

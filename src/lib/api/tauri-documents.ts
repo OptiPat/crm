@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyDocumentsChanged } from "@/lib/documents/document-events";
 import { open } from "@tauri-apps/plugin-dialog";
 import { copyFile, exists, mkdir, stat } from "@tauri-apps/plugin-fs";
 import { appDataDir, join } from "@tauri-apps/api/path";
@@ -34,20 +35,29 @@ export async function getAllDocuments(): Promise<Document[]> {
   return await invoke<Document[]>("get_all_documents");
 }
 
+export async function getDocumentsByContact(contactId: number): Promise<Document[]> {
+  return await invoke<Document[]>("get_documents_by_contact", { contactId });
+}
+
 export async function getDocumentById(id: number): Promise<Document> {
   return await invoke<Document>("get_document_by_id", { id });
 }
 
 export async function createDocument(newDocument: NewDocument): Promise<Document> {
-  return await invoke<Document>("create_document", { newDocument });
+  const created = await invoke<Document>("create_document", { newDocument });
+  notifyDocumentsChanged();
+  return created;
 }
 
 export async function updateDocument(id: number, document: NewDocument): Promise<Document> {
-  return await invoke<Document>("update_document", { id, document });
+  const updated = await invoke<Document>("update_document", { id, document });
+  notifyDocumentsChanged();
+  return updated;
 }
 
 export async function deleteDocument(id: number): Promise<void> {
-  return await invoke<void>("delete_document", { id });
+  await invoke<void>("delete_document", { id });
+  notifyDocumentsChanged();
 }
 
 // Fonction pour uploader un fichier

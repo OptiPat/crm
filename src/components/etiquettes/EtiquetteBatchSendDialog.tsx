@@ -12,7 +12,7 @@ import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { EtiquetteBatchSendProgress } from "@/lib/etiquettes/etiquette-batch-send";
 import {
-  isEtiquetteBatchSendRunning,
+  isEtiquetteEmailSendActive,
   startEtiquetteBatchSend,
   subscribeEtiquetteBatchSend,
 } from "@/lib/etiquettes/etiquette-email-send-runner";
@@ -44,7 +44,7 @@ export function EtiquetteBatchSendDialog({
   }, []);
 
   const start = async () => {
-    if (items.length === 0 || running || isEtiquetteBatchSendRunning()) return;
+    if (items.length === 0 || running || isEtiquetteEmailSendActive()) return;
     onOpenChange(false);
     toast.info("Envoi en arrière-plan — vous pouvez continuer à utiliser le CRM.");
     try {
@@ -98,7 +98,7 @@ export function EtiquetteBatchSendDialog({
             Annuler
           </Button>
           <Button
-            disabled={running || items.length === 0 || isEtiquetteBatchSendRunning()}
+            disabled={running || items.length === 0 || isEtiquetteEmailSendActive()}
             onClick={() => void start()}
           >
             {running ? "Envoi en cours…" : `Envoyer ${items.length} email${items.length > 1 ? "s" : ""}`}

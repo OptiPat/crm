@@ -215,6 +215,17 @@ export function mergeEmailEntriesByContact(
   return [...mergedEmails, ...manual].sort((a, b) => b.sort_date - a.sort_date);
 }
 
+/** Tronque après tri chronologique (journal global paginé). */
+export function truncateExchangeHistory(
+  entries: ExchangeHistoryEntry[],
+  maxEntries?: number
+): ExchangeHistoryEntry[] {
+  if (maxEntries == null || maxEntries <= 0 || entries.length <= maxEntries) {
+    return entries;
+  }
+  return entries.slice(0, maxEntries);
+}
+
 export function isEmailCampaignEntry(entry: ExchangeHistoryEntry): boolean {
   return (
     entry.entry_kind === "email_campagne" ||
@@ -353,15 +364,20 @@ export function interactionToExchangeEntry(
 export type LoadExchangeHistoryOptions = {
   /** Charge uniquement ce contact (timeline + traces legacy filtrées). */
   contactId?: number | null;
+  /** Limite le journal global (défaut 400 entrées). */
+  maxEntries?: number;
 };
+
+const DEFAULT_GLOBAL_HISTORY_LIMIT = 400;
 
 /** Charge le journal : timeline `contact_etiquettes` d'abord, puis traces `interactions`. */
 export async function loadExchangeHistory(
   options?: LoadExchangeHistoryOptions
 ): Promise<ExchangeHistoryEntry[]> {
   const contactId = options?.contactId ?? undefined;
+  const maxEntries =
+    options?.maxEntries ?? (contactId == null ? DEFAULT_GLOBAL_HISTORY_LIMIT : undefined);
   const {
-    getAllInteractionsWithContacts,
     getExchangeHistoryTimeline,
     getExchangeHistoryTimelineForContact,
     getInteractionsByContact,
@@ -371,8 +387,8 @@ export async function loadExchangeHistory(
 
   try {
     const timeline = contactId
-      ? await getExchangeHistoryTimelineForContact(contactId)
-      : await getExchangeHistoryTimeline();
+      ? await getExchangeHistoryTimelineForContact(contactId, maxEntries)
+      : await getExchangeHistoryTimeline(maxEntries);
     for (const t of timeline) {
       const key = exchangeEntryKey(t);
       byKey.set(key, mergeExchangeEntries(byKey.get(key), t));
@@ -407,16 +423,10 @@ export async function loadExchangeHistory(
       const key = exchangeEntryKey(entry);
       byKey.set(key, mergeExchangeEntries(byKey.get(key), entry));
     }
-  } else {
-    const legacy = await getAllInteractionsWithContacts();
-    for (const row of legacy) {
-      const entry = interactionToExchangeEntry(row);
-      const key = exchangeEntryKey(entry);
-      byKey.set(key, mergeExchangeEntries(byKey.get(key), entry));
-    }
   }
 
-  return mergeEmailEntriesByContact(Array.from(byKey.values()));
+  const merged = mergeEmailEntriesByContact(Array.from(byKey.values()));
+  return contactId == null ? truncateExchangeHistory(merged, maxEntries) : merged;
 }
 
 export function manualEntryToInteraction(

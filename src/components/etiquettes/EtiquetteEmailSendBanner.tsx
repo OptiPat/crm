@@ -1,32 +1,52 @@
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { EtiquetteBatchSendProgress } from "@/lib/etiquettes/etiquette-batch-send";
 import {
   abortEtiquetteBatchSend,
-  subscribeEtiquetteBatchSend,
+  subscribeEtiquetteEmailSendActivity,
+  type EtiquetteEmailSendActivity,
 } from "@/lib/etiquettes/etiquette-email-send-runner";
 
-/** @deprecated Utiliser EtiquetteEmailSendBanner (Layout global). */
-export function EtiquetteBatchSendBanner() {
-  const [progress, setProgress] = useState<EtiquetteBatchSendProgress | null>(null);
-  const [running, setRunning] = useState(false);
+/** Bannière globale — envoi groupé ou individuel en arrière-plan. */
+export function EtiquetteEmailSendBanner() {
+  const [activity, setActivity] = useState<EtiquetteEmailSendActivity>({
+    batchRunning: false,
+    batchProgress: null,
+    individualRunning: false,
+    individualLabel: null,
+  });
 
   useEffect(() => {
-    return subscribeEtiquetteBatchSend((p, isRunning) => {
-      setProgress(p);
-      setRunning(isRunning);
-    });
+    return subscribeEtiquetteEmailSendActivity(setActivity);
   }, []);
 
-  if (!running) return null;
+  if (!activity.batchRunning && !activity.individualRunning) return null;
 
+  if (activity.individualRunning && !activity.batchRunning) {
+    return (
+      <div
+        className="border-b border-primary/20 bg-primary/5 px-4 py-2 flex items-center gap-2 text-sm"
+        role="status"
+        aria-live="polite"
+      >
+        <Loader2 className="h-4 w-4 animate-spin shrink-0 text-primary" />
+        <span>
+          Envoi en cours
+          {activity.individualLabel ? ` — ${activity.individualLabel}` : ""}
+          …
+        </span>
+      </div>
+    );
+  }
+
+  const progress = activity.batchProgress;
   const done = progress ? progress.sent + progress.errors.length : 0;
   const total = progress?.total ?? 0;
   const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
   return (
     <div
-      className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 space-y-2"
+      className="border-b border-primary/20 bg-primary/5 px-4 py-3 space-y-2"
       role="status"
       aria-live="polite"
     >

@@ -35,6 +35,39 @@ impl super::Database {
         Ok(result)
     }
 
+    pub fn get_documents_by_contact(&self, contact_id: i64) -> Result<Vec<super::models::Document>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
+                    taille_fichier, mime_type, date_document, notes, created_at, updated_at
+             FROM documents
+             WHERE contact_id = ?1
+             ORDER BY created_at DESC",
+        )?;
+
+        let documents = stmt.query_map(params![contact_id], |row| {
+            Ok(super::models::Document {
+                id: row.get(0)?,
+                contact_id: row.get(1)?,
+                foyer_id: row.get(2)?,
+                type_document: row.get(3)?,
+                nom_fichier: row.get(4)?,
+                chemin_fichier: row.get(5)?,
+                taille_fichier: row.get(6)?,
+                mime_type: row.get(7)?,
+                date_document: row.get(8)?,
+                notes: row.get(9)?,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for document in documents {
+            result.push(document?);
+        }
+        Ok(result)
+    }
+
     pub fn create_document(
         &self,
         document: super::models::NewDocument,

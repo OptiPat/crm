@@ -171,21 +171,24 @@ impl Database {
     /// Journal fusionné : échanges manuels + un fil par envoi campagne (envoi + réponse).
     pub fn get_exchange_history_timeline(
         &self,
+        max_entries: Option<usize>,
     ) -> Result<Vec<super::models::ExchangeHistoryEntry>> {
-        self.get_exchange_history_timeline_filtered(None)
+        self.get_exchange_history_timeline_filtered(None, max_entries)
     }
 
     /// Même journal, limité à un contact (évite de charger tout le CRM).
     pub fn get_exchange_history_timeline_for_contact(
         &self,
         contact_id: i64,
+        max_entries: Option<usize>,
     ) -> Result<Vec<super::models::ExchangeHistoryEntry>> {
-        self.get_exchange_history_timeline_filtered(Some(contact_id))
+        self.get_exchange_history_timeline_filtered(Some(contact_id), max_entries)
     }
 
     fn get_exchange_history_timeline_filtered(
         &self,
         only_contact_id: Option<i64>,
+        max_entries: Option<usize>,
     ) -> Result<Vec<super::models::ExchangeHistoryEntry>> {
         let mut entries: Vec<super::models::ExchangeHistoryEntry> = Vec::new();
 
@@ -597,6 +600,11 @@ impl Database {
                         .cmp(&a.interaction_id.unwrap_or(0))
                 })
         });
+        if let Some(max) = max_entries {
+            if entries.len() > max {
+                entries.truncate(max);
+            }
+        }
         Ok(entries)
     }
 }

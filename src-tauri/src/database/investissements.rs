@@ -102,6 +102,28 @@ impl super::Database {
         Ok(result)
     }
 
+    pub fn get_investissements_by_foyer_contacts(
+        &self,
+        foyer_id: i64,
+    ) -> Result<Vec<super::models::Investissement>> {
+        let sql = format!(
+            "SELECT {INVESTISSEMENT_SELECT_COLS}, {}
+             FROM investissements
+             WHERE contact_id IN (SELECT id FROM contacts WHERE foyer_id = ?1)
+             ORDER BY date_souscription DESC",
+            investissement_encours_select_cols()
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+
+        let investissements = stmt.query_map(params![foyer_id], Self::map_investissement_row)?;
+
+        let mut result = Vec::new();
+        for investissement in investissements {
+            result.push(investissement?);
+        }
+        Ok(result)
+    }
+
     pub fn get_investissements_with_details(
         &self,
     ) -> Result<Vec<super::models::InvestissementWithDetails>> {

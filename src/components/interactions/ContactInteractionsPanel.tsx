@@ -217,8 +217,9 @@ export function ContactInteractionsPanel({
   }, [contactId]);
 
   useEffect(() => {
-    if (contactId) void load();
-  }, [contactId, load]);
+    if (!contactId || !relationTabActive) return;
+    void load();
+  }, [contactId, relationTabActive, load]);
 
   useEffect(() => {
     getEmailConnectionStatus()
