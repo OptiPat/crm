@@ -6,10 +6,25 @@ use super::{
     Database,
 };
 use rusqlite::{params, Result};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 type AssignmentKey = (i64, i64);
 type AssignmentInfo = (i64, String);
+
+/// Options recalc complet vs incrémental (1 contact).
+struct SyncAutoPairOpts<'a> {
+    log_eval: bool,
+    exclusions: Option<&'a HashSet<(i64, i64)>>,
+}
+
+impl Default for SyncAutoPairOpts<'_> {
+    fn default() -> Self {
+        Self {
+            log_eval: true,
+            exclusions: None,
+        }
+    }
+}
 
 impl Database {
     pub(crate) fn etiquette_has_auto_rule(etiquette: &Etiquette) -> bool {
@@ -84,6 +99,20 @@ impl Database {
             map.insert(key, info);
         }
         Ok(map)
+    }
+
+    fn load_auto_exclusion_set(&self) -> Result<HashSet<(i64, i64)>> {
+        let mut set = HashSet::new();
+        let mut stmt = self
+            .conn
+            .prepare("SELECT contact_id, etiquette_id FROM contact_etiquette_auto_exclusions")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?))
+        })?;
+        for row in rows {
+            set.insert(row?);
+        }
+        Ok(set)
     }
 
     fn get_assignment_from_map(
@@ -442,12 +471,18 @@ impl Database {
         now: i64,
         current_month: i32,
         assignments: Option<&mut HashMap<AssignmentKey, AssignmentInfo>>,
+        opts: &SyncAutoPairOpts<'_>,
     ) -> Result<usize> {
         let contact_id = match contact.id {
             Some(id) => id,
             None => return Ok(0),
         };
-        if self.is_auto_etiquette_excluded(contact_id, etiquette.id)? {
+        let excluded = if let Some(set) = opts.exclusions {
+            set.contains(&(contact_id, etiquette.id))
+        } else {
+            self.is_auto_etiquette_excluded(contact_id, etiquette.id)?
+        };
+        if excluded {
             return Ok(0);
         }
         if contact.statut_suivi == "EN_PAUSE" || contact.statut_suivi == "ARCHIVE" {
@@ -469,16 +504,18 @@ impl Database {
             self.lookup_assignment(contact_id, etiquette.id, assignments.as_deref());
         let should_assign =
             self.contact_matches_rule_tree(contact, &rule.tree, now, current_month)?;
-        let _ = self.log_auto_etiquette_event(
-            contact_id,
-            etiquette.id,
-            should_assign,
-            if should_assign {
-                "rule_match"
-            } else {
-                "rule_no_match"
-            },
-        );
+        if opts.log_eval {
+            let _ = self.log_auto_etiquette_event(
+                contact_id,
+                etiquette.id,
+                should_assign,
+                if should_assign {
+                    "rule_match"
+                } else {
+                    "rule_no_match"
+                },
+            );
+        }
         self.apply_auto_etiquette_decision(
             contact_id,
             etiquette.id,
@@ -494,6 +531,11 @@ impl Database {
         let (now, current_month) = Self::auto_etiquette_now_and_month();
         let mut total_assigned = 0;
         let mut assignments = self.load_auto_assignment_map()?;
+        let exclusions = self.load_auto_exclusion_set()?;
+        let bulk_opts = SyncAutoPairOpts {
+            log_eval: false,
+            exclusions: Some(&exclusions),
+        };
 
         let etiquettes = self.get_all_etiquettes()?;
         let auto_etiquettes: Vec<_> = etiquettes
@@ -503,13 +545,20 @@ impl Database {
         let contacts = self.get_all_contacts()?;
 
         for etiquette in &auto_etiquettes {
+            let categories = Self::parse_auto_categories(etiquette);
             for contact in &contacts {
+                if !categories.is_empty()
+                    && !Self::contact_matches_auto_categories(contact, &categories)
+                {
+                    continue;
+                }
                 total_assigned += self.sync_auto_pair(
                     contact,
                     etiquette,
                     now,
                     current_month,
                     Some(&mut assignments),
+                    &bulk_opts,
                 )?;
             }
         }
@@ -562,6 +611,7 @@ impl Database {
                 now,
                 current_month,
                 None,
+                &SyncAutoPairOpts::default(),
             )?;
         }
         total += self.sync_template_email_triggers_for_contact(contact_id)?;
@@ -580,14 +630,26 @@ impl Database {
         let (now, current_month) = Self::auto_etiquette_now_and_month();
         let mut total = 0;
         let mut assignments = self.load_auto_assignment_map()?;
+        let exclusions = self.load_auto_exclusion_set()?;
+        let bulk_opts = SyncAutoPairOpts {
+            log_eval: false,
+            exclusions: Some(&exclusions),
+        };
         let contacts = self.get_all_contacts()?;
+        let categories = Self::parse_auto_categories(&etiquette);
         for contact in &contacts {
+            if !categories.is_empty()
+                && !Self::contact_matches_auto_categories(contact, &categories)
+            {
+                continue;
+            }
             total += self.sync_auto_pair(
                 contact,
                 &etiquette,
                 now,
                 current_month,
                 Some(&mut assignments),
+                &bulk_opts,
             )?;
         }
         Ok(total)

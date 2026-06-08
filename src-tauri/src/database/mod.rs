@@ -500,6 +500,7 @@ impl Database {
         self.migrate_contacts_registre()?;
         self.migrate_contact_etiquettes_email_suivi()?;
         self.migrate_contact_etiquette_auto_exclusions()?;
+        self.migrate_investissements_lookup_indexes()?;
         self.migrate_segments_and_rule_engine()?;
         self.migrate_contact_gmail_messages()?;
         self.migrate_contact_mail_sync_state()?;
@@ -765,6 +766,20 @@ impl Database {
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
                 FOREIGN KEY (etiquette_id) REFERENCES etiquettes(id) ON DELETE CASCADE
             )",
+            [],
+        )?;
+        Ok(())
+    }
+
+    fn migrate_investissements_lookup_indexes(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_investissements_contact_id
+             ON investissements(contact_id) WHERE contact_id IS NOT NULL",
+            [],
+        )?;
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_investissements_foyer_id
+             ON investissements(foyer_id) WHERE foyer_id IS NOT NULL",
             [],
         )?;
         Ok(())
