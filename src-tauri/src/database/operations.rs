@@ -892,6 +892,134 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn get_alertes_with_contacts_excludes_paused_contact_suivi_alerts() {
+        let db = test_db();
+        let contact = db
+            .create_contact(NewContact {
+                statut_suivi: Some("EN_PAUSE".into()),
+                ..sample_contact("Pause", "Jean")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.get_connection()
+            .execute(
+                "INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee)
+                 VALUES (?1, 'SUIVI_CLIENT_1AN', 'Suivi client', ?2, 0, 0)",
+                params![contact_id, chrono::Utc::now().timestamp()],
+            )
+            .unwrap();
+
+        assert!(
+            db.get_alertes_with_contacts(None).unwrap().is_empty(),
+            "alerte relationnelle masquée si suivi en pause"
+        );
+
+        db.get_connection()
+            .execute(
+                "INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee)
+                 VALUES (?1, 'FIN_DEMEMBREMENT', 'Fin SCPI', ?2, 0, 0)",
+                params![contact_id, chrono::Utc::now().timestamp()],
+            )
+            .unwrap();
+
+        let patrimoine = db.get_alertes_with_contacts(None).unwrap();
+        assert_eq!(patrimoine.len(), 1);
+        assert_eq!(patrimoine[0].type_alerte, "FIN_DEMEMBREMENT");
+    }
+
+    #[test]
+    fn auto_etiquette_exclusion_suppresses_matching_suivi_alerte() {
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 400 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let contact = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                ..sample_contact("Petit", "Alain")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.generer_alertes_automatiques().unwrap();
+        let before = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .filter(|a| a.contact_id == contact_id && a.type_alerte == "SUIVI_CLIENT_1AN")
+            .count();
+        assert_eq!(before, 1, "alerte suivi client attendue avant exclusion");
+
+        let etiquette_id: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT id FROM etiquettes WHERE LOWER(TRIM(nom)) = LOWER(TRIM('Suivi > 1 an'))",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        db.exclude_contact_from_auto_etiquette(contact_id, etiquette_id)
+            .unwrap();
+
+        let visible = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .any(|a| a.contact_id == contact_id && a.type_alerte == "SUIVI_CLIENT_1AN");
+        assert!(
+            !visible,
+            "alerte masquée après exclusion du calcul auto Suivi > 1 an"
+        );
+
+        db.generer_alertes_automatiques().unwrap();
+        let recreated = db
+            .get_alertes_with_contacts(None)
+            .unwrap()
+            .into_iter()
+            .any(|a| a.contact_id == contact_id && a.type_alerte == "SUIVI_CLIENT_1AN");
+        assert!(
+            !recreated,
+            "alerte non recréée après exclusion du calcul auto"
+        );
+    }
+
+    #[test]
+    fn generer_alertes_closes_orphan_suivi_alerts_for_paused_contacts() {
+        let db = test_db();
+        let contact = db
+            .create_contact(NewContact {
+                statut_suivi: Some("EN_PAUSE".into()),
+                ..sample_contact("Orphelin", "Marie")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.get_connection()
+            .execute(
+                "INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee)
+                 VALUES (?1, 'LEAD_SUIVI_6MOIS', 'Lead', ?2, 0, 0)",
+                params![contact_id, chrono::Utc::now().timestamp()],
+            )
+            .unwrap();
+
+        db.generer_alertes_automatiques().unwrap();
+
+        let open: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT COUNT(*) FROM alertes WHERE contact_id = ?1 AND traitee = 0",
+                params![contact_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(open, 0, "alertes orphelines clôturées à la régénération");
+    }
+
+    #[test]
     fn demembrement_alert_when_investissement_has_foyer_only() {
         let db = test_db();
         let foyer = db
@@ -1201,8 +1329,200 @@ mod database_integration_tests {
         db.sync_pending_email_dates_for_etiquette(etiqu.id).unwrap();
         assert!(
             db.get_etiquette_email_queue("ready").unwrap().is_empty(),
-            "un envoi annulé ne doit pas revenir après recalcul des dates"
+            "un envoi annulé ne doit pas revenir après recalcul des dates seul"
         );
+        assert_eq!(db.get_etiquette_email_queue("cancelled").unwrap().len(), 1);
+        db.restore_pending_email_campaign(row_id).unwrap();
+        assert_eq!(db.get_etiquette_email_queue("ready").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn auto_recalc_restores_cancelled_suivi_when_rule_still_matches() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi tpl".into(),
+                sujet: "Bonjour {{prenom}}".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let etiqu_before = db
+            .get_all_etiquettes()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.nom.trim().eq_ignore_ascii_case("Suivi > 1 an"))
+            .expect("étiquette Suivi > 1 an");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        db.update_etiquette(
+            etiqu_before.id,
+            &NewEtiquette {
+                nom: etiqu_before.nom.clone(),
+                couleur: Some(etiqu_before.couleur.clone()),
+                icone: etiqu_before.icone.clone(),
+                description: etiqu_before.description.clone(),
+                priorite: Some(etiqu_before.priorite),
+                auto_condition_type: etiqu_before.auto_condition_type.clone(),
+                auto_condition_config: etiqu_before.auto_condition_config.clone(),
+                auto_categories: etiqu_before.auto_categories.clone(),
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: etiqu_before.email_envoi_heure.clone(),
+                email_envoi_jours_semaine: etiqu_before.email_envoi_jours_semaine.clone(),
+                email_actif: Some(true),
+                is_default: Some(etiqu_before.is_default),
+                actif: Some(etiqu_before.actif),
+                segment_id: etiqu_before.segment_id,
+            },
+        )
+        .unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 400 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let cid = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                registre: Some("VOUS".into()),
+                email: Some("vous.restore@example.com".into()),
+                ..sample_contact("Boller", "Myriam")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+        let row_id = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("contact en file prête")
+            .contact_etiquette_id;
+
+        db.cancel_pending_email_campaign(row_id).unwrap();
+        assert!(db.get_etiquette_email_queue("ready").unwrap().iter().all(|q| q.contact_id != cid));
+        assert_eq!(db.get_etiquette_email_queue("cancelled").unwrap().len(), 1);
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .any(|q| q.contact_id == cid),
+            "recalcul auto remet en file un envoi annulé encore éligible"
+        );
+        assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
+    }
+
+    #[test]
+    fn dismiss_cancelled_pending_keeps_out_of_queue_after_recalc() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi tpl dismiss".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let etiqu_before = db
+            .get_all_etiquettes()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.nom.trim().eq_ignore_ascii_case("Suivi > 1 an"))
+            .expect("étiquette Suivi > 1 an");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        db.update_etiquette(
+            etiqu_before.id,
+            &NewEtiquette {
+                nom: etiqu_before.nom.clone(),
+                couleur: Some(etiqu_before.couleur.clone()),
+                icone: etiqu_before.icone.clone(),
+                description: etiqu_before.description.clone(),
+                priorite: Some(etiqu_before.priorite),
+                auto_condition_type: etiqu_before.auto_condition_type.clone(),
+                auto_condition_config: etiqu_before.auto_condition_config.clone(),
+                auto_categories: etiqu_before.auto_categories.clone(),
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: etiqu_before.email_envoi_heure.clone(),
+                email_envoi_jours_semaine: etiqu_before.email_envoi_jours_semaine.clone(),
+                email_actif: Some(true),
+                is_default: Some(etiqu_before.is_default),
+                actif: Some(etiqu_before.actif),
+                segment_id: etiqu_before.segment_id,
+            },
+        )
+        .unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 400 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let cid = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                email: Some("dismiss.cancel@example.com".into()),
+                ..sample_contact("Laplace", "Philippe")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+        let row_id = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("contact en file prête")
+            .contact_etiquette_id;
+
+        db.cancel_pending_email_campaign(row_id).unwrap();
+        assert_eq!(db.get_etiquette_email_queue("cancelled").unwrap().len(), 1);
+
+        db.dismiss_cancelled_pending_email_campaign(row_id).unwrap();
+        assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid)
+        );
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid),
+            "ignoré définitivement : pas de retour en file après recalcul"
+        );
+        assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
     }
 
     #[test]
@@ -1669,6 +1989,234 @@ mod database_integration_tests {
         assert!(relance_row.email_is_relance);
         assert_eq!(relance_row.template_sujet, "SUJET_TU_REL");
         assert_eq!(relance_row.template_corps, "CORPS_TU_REL");
+    }
+
+    #[test]
+    fn suivi_1an_email_queue_includes_vous_and_tu_after_full_recalc() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let tpl_vous = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi 1an vous".into(),
+                sujet: "Bonjour {{prenom}}, vos investissements".into(),
+                corps: "Corps vous".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let tpl_tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi 1an (tu)".into(),
+                sujet: "Bonjour {{prenom}}, tes investissements".into(),
+                corps: "Corps tu".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        db.update_template_email(
+            tpl_vous.id,
+            &NewTemplateEmail {
+                nom: tpl_vous.nom.clone(),
+                sujet: tpl_vous.sujet.clone(),
+                corps: tpl_vous.corps.clone(),
+                categorie: tpl_vous.categorie.clone(),
+                variables: tpl_vous.variables.clone(),
+                agenda_link_id: tpl_vous.agenda_link_id.clone(),
+                relance_template_id: None,
+                tutoiement_template_id: Some(tpl_tu.id),
+            },
+        )
+        .unwrap();
+
+        let etiqu_before = db
+            .get_all_etiquettes()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.nom.trim().eq_ignore_ascii_case("Suivi > 1 an"))
+            .expect("étiquette Suivi > 1 an");
+        let etiquette_id = etiqu_before.id;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        db.update_etiquette(
+            etiquette_id,
+            &NewEtiquette {
+                nom: etiqu_before.nom.clone(),
+                couleur: Some(etiqu_before.couleur.clone()),
+                icone: etiqu_before.icone.clone(),
+                description: etiqu_before.description.clone(),
+                priorite: Some(etiqu_before.priorite),
+                auto_condition_type: etiqu_before.auto_condition_type.clone(),
+                auto_condition_config: etiqu_before.auto_condition_config.clone(),
+                auto_categories: etiqu_before.auto_categories.clone(),
+                email_template_id: Some(tpl_vous.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: etiqu_before.email_envoi_heure.clone(),
+                email_envoi_jours_semaine: etiqu_before.email_envoi_jours_semaine.clone(),
+                email_actif: Some(true),
+                is_default: Some(etiqu_before.is_default),
+                actif: Some(etiqu_before.actif),
+                segment_id: etiqu_before.segment_id,
+            },
+        )
+        .unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 400 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+
+        let cid_vous = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso.clone()),
+                registre: Some("VOUS".into()),
+                email: Some("vous.client@example.com".into()),
+                ..sample_contact("Martin", "Franck")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        let cid_tu = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                registre: Some("TU".into()),
+                email: Some("tu.client@example.com".into()),
+                ..sample_contact("Amari", "Rayane")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+
+        let ready = db.get_etiquette_email_queue("ready").unwrap();
+        let row_vous = ready
+            .iter()
+            .find(|q| q.contact_id == cid_vous)
+            .expect("contact VOUS dans la file prête");
+        let row_tu = ready
+            .iter()
+            .find(|q| q.contact_id == cid_tu)
+            .expect("contact TU dans la file prête");
+        assert_eq!(row_vous.contact_registre.as_deref(), Some("VOUS"));
+        assert_eq!(row_tu.contact_registre.as_deref(), Some("TU"));
+        assert!(row_vous.template_sujet.contains("vos"));
+        assert!(row_tu.template_sujet.contains("tes"));
+    }
+
+    #[test]
+    fn stale_sent_suivi_campaign_reopens_into_ready_for_vous() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        db.ensure_default_segments_and_alerte_links().unwrap();
+        db.ensure_default_etiquettes().unwrap();
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi vous".into(),
+                sujet: "Bonjour {{prenom}}, vos placements".into(),
+                corps: "Corps vous".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let etiqu_before = db
+            .get_all_etiquettes()
+            .unwrap()
+            .into_iter()
+            .find(|e| e.nom.trim().eq_ignore_ascii_case("Suivi > 1 an"))
+            .expect("étiquette Suivi > 1 an");
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        db.update_etiquette(
+            etiqu_before.id,
+            &NewEtiquette {
+                nom: etiqu_before.nom.clone(),
+                couleur: Some(etiqu_before.couleur.clone()),
+                icone: etiqu_before.icone.clone(),
+                description: etiqu_before.description.clone(),
+                priorite: Some(etiqu_before.priorite),
+                auto_condition_type: etiqu_before.auto_condition_type.clone(),
+                auto_condition_config: etiqu_before.auto_condition_config.clone(),
+                auto_categories: etiqu_before.auto_categories.clone(),
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: etiqu_before.email_envoi_heure.clone(),
+                email_envoi_jours_semaine: etiqu_before.email_envoi_jours_semaine.clone(),
+                email_actif: Some(true),
+                is_default: Some(etiqu_before.is_default),
+                actif: Some(etiqu_before.actif),
+                segment_id: etiqu_before.segment_id,
+            },
+        )
+        .unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 400 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let cid = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                registre: Some("VOUS".into()),
+                email: Some("vous.stale@example.com".into()),
+                ..sample_contact("Durand", "Claire")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+        let ce_id = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("première attribution en file prête")
+            .contact_etiquette_id;
+
+        let sent_at = now - 10 * 24 * 3600;
+        db.get_connection()
+            .execute(
+                "UPDATE contact_etiquettes SET email_envoye = 1, email_date_envoi = ?1, email_date_prevue = NULL
+                 WHERE id = ?2",
+                rusqlite::params![sent_at, ce_id],
+            )
+            .unwrap();
+
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid),
+            "contact envoyé absent de la file prête"
+        );
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+        let row = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("campagne stale réouverte en file prête");
+        assert_eq!(row.contact_registre.as_deref(), Some("VOUS"));
+        assert!(row.template_sujet.contains("vos"));
     }
 
     #[test]

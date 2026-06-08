@@ -38,6 +38,13 @@ pub struct Contact {
     pub famille_regroupement_exclu: bool,
     pub created_at: Option<i64>,
     pub updated_at: Option<i64>,
+    /// Lien technique Google People API (`people/…`) — non exposé à l'UI.
+    #[serde(skip)]
+    pub google_contact_resource_name: Option<String>,
+    #[serde(skip)]
+    /// Horodatage dernière sync Google (colonne DB ; écrit par `set_google_contact_link`).
+    #[allow(dead_code)]
+    pub google_synced_at: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

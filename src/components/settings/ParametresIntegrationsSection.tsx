@@ -93,7 +93,7 @@ export function ParametresIntegrationsSection() {
     <div className="space-y-6">
       <SettingsPanel
         title="Intégration n8n"
-        description="API locale en lecture seule. Le CRM doit rester ouvert et déverrouillé pour que n8n lise les anniversaires."
+        description="API locale en lecture seule. Le CRM (app desktop) doit être ouvert et déverrouillé — pas seulement n8n."
         action={
           <Workflow className="h-5 w-5 text-muted-foreground" aria-hidden />
         }
@@ -166,8 +166,8 @@ export function ParametresIntegrationsSection() {
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            Workflow Anniversaires : Telegram = rappel + brouillon Mistral pour vous uniquement. Aucun
-            envoi automatique au contact.
+            Workflow Anniversaires : Telegram = rappel + brouillon SMS (templates Patrimoine
+            Sarcasme) pour vous uniquement. Aucun envoi automatique au contact.
           </p>
 
           <Button onClick={() => void handleSave()} disabled={saving}>

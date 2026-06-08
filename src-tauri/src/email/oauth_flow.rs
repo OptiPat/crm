@@ -24,6 +24,7 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
                 "https://www.googleapis.com/auth/gmail.settings.basic",
                 "https://www.googleapis.com/auth/calendar.readonly",
                 "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/contacts",
                 "https://www.googleapis.com/auth/userinfo.email",
                 "openid",
             ],
@@ -286,6 +287,7 @@ pub fn run_oauth_connect(app: &AppHandle, provider: &str) -> Result<EmailOAuthCo
 }
 
 pub fn disconnect_oauth(app: &AppHandle) -> Result<(), String> {
+    crate::email::google_contacts::clear_session_index();
     let mut store = EmailOAuthStore::load(app)?;
     store.connection = None;
     store.save(app)

@@ -2,17 +2,30 @@
 // Extrait de ContactDetail : entièrement piloté par l'objet `contact`,
 // aucun état ni callback.
 
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar, Mail, MapPin, Phone, User } from "lucide-react";
-import { type Contact } from "@/lib/api/tauri-contacts";
+import { Calendar, Contact, Loader2, Mail, MapPin, Phone, User } from "lucide-react";
+import { type Contact as ContactRecord } from "@/lib/api/tauri-contacts";
+import {
+  syncContactGoogle,
+  googleContactSyncToastMessage,
+} from "@/lib/api/tauri-google-contacts";
+import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
+import {
+  canSyncContactToGoogle,
+  googleSyncNeedsContactRefresh,
+} from "@/lib/contacts/google-contact-sync-ui";
 import {
   formatCiviliteLabel,
   formatSituationLabel,
 } from "@/lib/contacts/contact-form-utils";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
+import { toast } from "sonner";
 
 interface ContactDetailSyntheseTabProps {
-  contact: Contact;
+  contact: ContactRecord;
+  onContactUpdated?: () => void;
 }
 
 const formatDateNaissance = (value: string | number): string => {
@@ -29,16 +42,62 @@ const formatDateNaissance = (value: string | number): string => {
   }
 };
 
-export function ContactDetailSyntheseTab({ contact }: ContactDetailSyntheseTabProps) {
+export function ContactDetailSyntheseTab({
+  contact,
+  onContactUpdated,
+}: ContactDetailSyntheseTabProps) {
+  const [syncingGoogle, setSyncingGoogle] = useState(false);
+  const showGoogleSync = contact.id != null && canSyncContactToGoogle(contact);
+
+  const handleSyncGoogle = async () => {
+    if (contact.id == null) return;
+    setSyncingGoogle(true);
+    try {
+      const status = await getEmailConnectionStatus();
+      if (status.provider !== "google" || !status.connected) {
+        toast.error("Connectez Google dans Paramètres → Email.");
+        return;
+      }
+      const result = await syncContactGoogle(contact.id);
+      toast.success(googleContactSyncToastMessage(result));
+      if (googleSyncNeedsContactRefresh(result)) {
+        onContactUpdated?.();
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Sync Google Contacts impossible.");
+    } finally {
+      setSyncingGoogle(false);
+    }
+  };
+
   return (
     <>
       {/* Informations de contact */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <CardTitle className="text-lg flex items-center gap-2">
             <User className="h-5 w-5" />
             Informations de contact
           </CardTitle>
+          {showGoogleSync && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={syncingGoogle}
+              onClick={() => void handleSyncGoogle()}
+              title="Créer ou mettre à jour dans Google Contacts — doublons Google nettoyés si besoin"
+            >
+              {syncingGoogle ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <Contact className="h-4 w-4 mr-1.5" />
+                  Sync Google
+                </>
+              )}
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
           {contact.email && (

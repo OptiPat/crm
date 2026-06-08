@@ -8,8 +8,16 @@ pub type AuthState = Mutex<Option<AuthManager>>;
 
 const MIN_PASSWORD_LEN: usize = 8;
 
+/// Arrête l'API locale n8n et libère la connexion SQLite (verrou d'accès).
+fn close_database(db: &State<'_, DbState>) {
+    crate::local_api::stop();
+    *db.lock().unwrap() = None;
+}
+
 /// Ouvre la base locale (non chiffrée) et la place dans l'état partagé.
 fn open_database(app: &AppHandle, db: &State<'_, DbState>) -> Result<(), String> {
+    close_database(db);
+
     let database = Database::open(app).map_err(|e| {
         eprintln!("❌ open_database: échec ouverture base : {e}");
         format!("Échec d'ouverture de la base : {e}")
@@ -78,6 +86,13 @@ pub fn unlock(
 
     open_database(&app, &db)?;
     Ok(true)
+}
+
+/// Verrouille l'application : ferme la base et l'API locale (écran de déverrouillage).
+#[tauri::command]
+pub fn lock(db: State<'_, DbState>) -> Result<(), String> {
+    close_database(&db);
+    Ok(())
 }
 
 /// Change le mot de passe d'accès (la base reste ouverte).

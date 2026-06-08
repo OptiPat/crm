@@ -381,4 +381,28 @@ impl Database {
         self.auto_close_obsolete_suivi_alertes_for_contact(id)?;
         self.get_contact_by_id(id)
     }
+
+    pub fn set_google_contact_link(&self, contact_id: i64, resource_name: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contacts SET google_contact_resource_name = ?1, google_synced_at = unixepoch(), updated_at = unixepoch() WHERE id = ?2",
+            params![resource_name, contact_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn enrich_contact_email_if_empty(&self, contact_id: i64, email: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contacts SET email = ?1, updated_at = unixepoch() WHERE id = ?2 AND (email IS NULL OR trim(email) = '')",
+            params![email.trim(), contact_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn enrich_contact_phone_if_empty(&self, contact_id: i64, telephone: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contacts SET telephone = ?1, updated_at = unixepoch() WHERE id = ?2 AND (telephone IS NULL OR trim(telephone) = '')",
+            params![telephone.trim(), contact_id],
+        )?;
+        Ok(())
+    }
 }

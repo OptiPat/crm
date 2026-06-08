@@ -1,6 +1,10 @@
 //! Moteur d'étiquettes automatiques — recalcul complet ou incrémental (1000+ contacts).
 
-use super::{models::Contact, models::Etiquette, Database};
+use super::{
+    email_schedule::resolve_email_date_prevue_for_contact,
+    models::{Contact, Etiquette},
+    Database,
+};
 use rusqlite::{params, Result};
 use std::collections::HashMap;
 
@@ -352,7 +356,53 @@ impl Database {
                     }
                 }
             }
-            (true, Some(_)) => {}
+            (true, Some((assignment_id, _source))) => {
+                if !should_assign {
+                    return Ok(newly_assigned);
+                }
+                if let Ok((email_envoye, email_annule, email_suivi_ignore, date_attr)) =
+                    self.conn.query_row(
+                        "SELECT email_envoye, COALESCE(email_annule, 0), COALESCE(email_suivi_ignore, 0),
+                                date_attribution
+                         FROM contact_etiquettes WHERE id = ?1",
+                        params![assignment_id],
+                        |row| {
+                            Ok((
+                                row.get::<_, i64>(0)?,
+                                row.get::<_, i64>(1)?,
+                                row.get::<_, i64>(2)?,
+                                row.get::<_, i64>(3)?,
+                            ))
+                        },
+                    )
+                {
+                    if email_suivi_ignore != 0 {
+                        return Ok(newly_assigned);
+                    }
+                    if email_envoye == 0 && email_annule != 0 {
+                        let _ = self.try_restore_cancelled_pending_campaign(
+                            assignment_id,
+                            etiquette_id,
+                        );
+                    } else if email_envoye != 0 {
+                        let _ = self.try_reopen_sent_campaign_if_still_eligible(
+                            assignment_id,
+                            etiquette_id,
+                        );
+                    } else if let Ok(etiquette) = self.get_etiquette_by_id(etiquette_id) {
+                        if etiquette.email_actif {
+                            let prevue =
+                                resolve_email_date_prevue_for_contact(&etiquette, date_attr);
+                            let _ = self.conn.execute(
+                                "UPDATE contact_etiquettes SET email_date_prevue = ?1
+                                 WHERE id = ?2 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0
+                                   AND COALESCE(email_suivi_ignore, 0) = 0",
+                                params![prevue, assignment_id],
+                            );
+                        }
+                    }
+                }
+            }
             (false, Some((assignment_id, source))) if source == "AUTO" => {
                 let _ = self.conn.execute(
                     "DELETE FROM contact_etiquettes WHERE id = ?1",
@@ -399,6 +449,18 @@ impl Database {
         };
         if self.is_auto_etiquette_excluded(contact_id, etiquette.id)? {
             return Ok(0);
+        }
+        if contact.statut_suivi == "EN_PAUSE" || contact.statut_suivi == "ARCHIVE" {
+            let assignment_info =
+                self.lookup_assignment(contact_id, etiquette.id, assignments.as_deref());
+            return self.apply_auto_etiquette_decision(
+                contact_id,
+                etiquette.id,
+                false,
+                assignment_info,
+                assignments,
+                now,
+            );
         }
         let Some(rule) = self.resolve_etiquette_auto_rule(etiquette)? else {
             return Ok(0);
@@ -451,6 +513,8 @@ impl Database {
                 )?;
             }
         }
+
+        let _ = self.sync_pending_email_dates_for_all_active_campaigns();
 
         if total_assigned > 0 {
             println!(

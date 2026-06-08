@@ -859,7 +859,10 @@ export function ContactDetail({
             </TabsList>
 
             <TabsContent value="synthese" className="space-y-4 mt-3 focus-visible:outline-none">
-              <ContactDetailSyntheseTab contact={contact} />
+              <ContactDetailSyntheseTab
+                contact={contact}
+                onContactUpdated={() => void refreshContactAfterMutation()}
+              />
               {contact.id && <ContactCustomFieldsPanel contactId={contact.id} />}
             </TabsContent>
 

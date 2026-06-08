@@ -3,10 +3,26 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
-import { FileSignature, Loader2, Sparkles } from "lucide-react";
+import { Contact, FileSignature, Loader2, Sparkles } from "lucide-react";
 import { SETTING_CONTACT_MAIL_AUTO_SYNC } from "@/lib/api/tauri-contact-gmail";
 import { fetchGmailSignatureForCgp, getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
+import {
+  syncAllContactsGoogle,
+  googleContactBatchSyncSummary,
+  type GoogleContactBatchSyncResult,
+} from "@/lib/api/tauri-google-contacts";
+import { GoogleContactBatchReportDialog } from "@/components/settings/GoogleContactBatchReportDialog";
 import {
   notifyStelliumExceltisChanged,
   scanStelliumExceltisEmails,
@@ -25,6 +41,10 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
   const [importingSignature, setImportingSignature] = useState(false);
   const [scanningStellium, setScanningStellium] = useState(false);
   const [autoMailSync, setAutoMailSync] = useState(false);
+  const [batchGoogleOpen, setBatchGoogleOpen] = useState(false);
+  const [batchGoogleRunning, setBatchGoogleRunning] = useState(false);
+  const [batchReport, setBatchReport] = useState<GoogleContactBatchSyncResult | null>(null);
+  const [batchReportOpen, setBatchReportOpen] = useState(false);
 
   useEffect(() => {
     getSetting(SETTING_CONTACT_MAIL_AUTO_SYNC)
@@ -55,9 +75,88 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
 
   const hasHtmlPreview = Boolean(cgpConfig.email_signature_html?.trim());
 
+  const handleBatchGoogleSync = async () => {
+    setBatchGoogleRunning(true);
+    try {
+      const status = await getEmailConnectionStatus();
+      if (status.provider !== "google" || !status.connected) {
+        toast.error("Connectez Google dans Paramètres → Email.");
+        return;
+      }
+      const result = await syncAllContactsGoogle();
+      setBatchReport(result);
+      setBatchReportOpen(true);
+      toast.success(googleContactBatchSyncSummary(result));
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Synchronisation Google Contacts impossible.");
+    } finally {
+      setBatchGoogleRunning(false);
+      setBatchGoogleOpen(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <EmailOAuthConnect variant="embedded" />
+
+      <SettingsPanel
+        title="Google Contacts (iPhone)"
+        description="Pousse les contacts CRM (clients, prospects, filleuls, prescripteurs) vers Google Contacts. Complète le CRM si besoin, ne modifie Google que si nécessaire, supprime les doublons Google (même email/tél)."
+      >
+        <Button
+          type="button"
+          variant="outline"
+          disabled={batchGoogleRunning}
+          onClick={() => setBatchGoogleOpen(true)}
+        >
+          {batchGoogleRunning ? (
+            <>
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Synchronisation en cours…
+            </>
+          ) : (
+            <>
+              <Contact className="h-4 w-4 mr-2" />
+              Synchroniser tous les contacts CRM
+            </>
+          )}
+        </Button>
+        <p className="text-xs text-muted-foreground mt-3">
+          Traite tous les contacts avec email ou téléphone. Les doublons Google (même coordonnées)
+          sont fusionnés automatiquement — seule la fiche la plus complète est conservée.
+        </p>
+      </SettingsPanel>
+
+      <AlertDialog open={batchGoogleOpen} onOpenChange={setBatchGoogleOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Synchroniser vers Google Contacts ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Le CRM recherche chaque contact dans Google (email / téléphone), complète le CRM si
+              des coordonnées manquent, crée la fiche si absente, et supprime les doublons Google
+              évidents (même email ou tél). Laissez le CRM ouvert pendant l&apos;opération.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={batchGoogleRunning}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={batchGoogleRunning}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleBatchGoogleSync();
+              }}
+            >
+              Lancer la synchronisation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <GoogleContactBatchReportDialog
+        result={batchReport}
+        open={batchReportOpen}
+        onOpenChange={setBatchReportOpen}
+      />
 
       <SettingsPanel
         title="Signaux Stellium / Exceltis"

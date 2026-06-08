@@ -114,6 +114,9 @@ impl super::Database {
              updated_at = unixepoch() WHERE id = ?5",
             params![input.nom.trim(), input.description, input.rule_json, actif, id],
         )?;
+        if actif == 0 {
+            self.close_suivi_alertes_for_inactive_segment(id)?;
+        }
         Ok(self.get_segment_by_id(id)?.unwrap())
     }
 

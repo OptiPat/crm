@@ -125,6 +125,7 @@ export type EtiquetteEmailQueueStatus =
   | "ready"
   | "scheduled"
   | "incomplete"
+  | "cancelled"
   | "sent"
   | "followup";
 
@@ -412,6 +413,20 @@ export async function cancelPendingEmailCampaign(
   contactEtiquetteId: number
 ): Promise<void> {
   return invoke<void>("cancel_pending_email_campaign", { contactEtiquetteId });
+}
+
+export async function restorePendingEmailCampaign(
+  contactEtiquetteId: number
+): Promise<void> {
+  return invoke<void>("restore_pending_email_campaign", { contactEtiquetteId });
+}
+
+export async function dismissCancelledPendingEmailCampaign(
+  contactEtiquetteId: number
+): Promise<void> {
+  return invoke<void>("dismiss_cancelled_pending_email_campaign", {
+    contactEtiquetteId,
+  });
 }
 
 export async function prepareEmailCampaignRelance(

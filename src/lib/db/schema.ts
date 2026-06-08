@@ -99,6 +99,8 @@ export const contacts = sqliteTable("contacts", {
   updatedAt: integer("updated_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),
+  googleContactResourceName: text("google_contact_resource_name"),
+  googleSyncedAt: integer("google_synced_at", { mode: "timestamp" }),
 });
 
 // ============================================

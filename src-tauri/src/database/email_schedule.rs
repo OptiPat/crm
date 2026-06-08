@@ -170,12 +170,46 @@ pub fn resolve_email_date_prevue_for_contact(
     if etiquette.email_delai_jours > 0 {
         return Some(anchor);
     }
-    None
+    // Sans délai ni créneau : prêt dès l'attribution (évite email_date_prevue NULL → « À compléter »).
+    Some(eligible_at_unix)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_prevue_immediate_when_no_delai_nor_slot() {
+        use super::super::models::Etiquette;
+        let eligible = 1_700_000_000_i64;
+        let etiqu = Etiquette {
+            id: 1,
+            nom: "Test".into(),
+            couleur: "#000".into(),
+            icone: None,
+            description: None,
+            priorite: 0,
+            auto_condition_type: None,
+            auto_condition_config: None,
+            auto_categories: None,
+            email_template_id: Some(1),
+            email_delai_jours: 0,
+            email_envoi_prevu: None,
+            email_envoi_heure: None,
+            email_envoi_jours_semaine: None,
+            email_actif: true,
+            is_default: false,
+            actif: true,
+            segment_id: None,
+            pipeline_actif: false,
+            created_at: 0,
+            updated_at: 0,
+        };
+        assert_eq!(
+            resolve_email_date_prevue_for_contact(&etiqu, eligible),
+            Some(eligible)
+        );
+    }
 
     #[test]
     fn parse_heure_valid() {

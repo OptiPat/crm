@@ -18,7 +18,7 @@ use crate::database::{
     Database,
 };
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{AppHandle, Manager, State};
 
 pub type DbState = Mutex<Option<Database>>;
 
@@ -33,7 +33,11 @@ pub fn get_all_contacts(db: State<'_, DbState>) -> Result<Vec<Contact>, String> 
 }
 
 #[tauri::command]
-pub fn create_contact(db: State<'_, DbState>, new_contact: NewContact) -> Result<Contact, String> {
+pub fn create_contact(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    new_contact: NewContact,
+) -> Result<Contact, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -42,6 +46,13 @@ pub fn create_contact(db: State<'_, DbState>, new_contact: NewContact) -> Result
         .map_err(|e| format!("Failed to create contact: {}", e))?;
     if let Some(id) = contact.id {
         let _ = database.check_auto_etiquettes_for_contact(id);
+        drop(db_guard);
+        crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        return database
+            .get_contact_by_id(id)
+            .map_err(|e| format!("Failed to get contact: {}", e));
     }
     Ok(contact)
 }
@@ -88,6 +99,7 @@ pub fn cleanup_orphaned_data(db: State<'_, DbState>) -> Result<(usize, usize), S
 
 #[tauri::command]
 pub fn update_contact(
+    app: AppHandle,
     db: State<'_, DbState>,
     id: i64,
     contact: NewContact,
@@ -95,11 +107,17 @@ pub fn update_contact(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    let updated = database
+    database
         .update_contact(id, &contact)
         .map_err(|e| format!("Failed to update contact: {}", e))?;
     let _ = database.check_auto_etiquettes_for_contact(id);
-    Ok(updated)
+    drop(db_guard);
+    crate::email::google_contacts::sync_contact_after_save(&app, &db, id);
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_contact_by_id(id)
+        .map_err(|e| format!("Failed to update contact: {}", e))
 }
 
 #[tauri::command]
@@ -1586,6 +1604,30 @@ pub fn cancel_pending_email_campaign(
     database
         .cancel_pending_email_campaign(contact_etiquette_id)
         .map_err(|e| format!("Failed to cancel pending email: {}", e))
+}
+
+#[tauri::command]
+pub fn restore_pending_email_campaign(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .restore_pending_email_campaign(contact_etiquette_id)
+        .map_err(|e| format!("Failed to restore pending email: {}", e))
+}
+
+#[tauri::command]
+pub fn dismiss_cancelled_pending_email_campaign(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .dismiss_cancelled_pending_email_campaign(contact_etiquette_id)
+        .map_err(|e| format!("Failed to dismiss cancelled pending email: {}", e))
 }
 
 #[tauri::command]

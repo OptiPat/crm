@@ -73,7 +73,12 @@ function App() {
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await invoke("lock");
+    } catch (error) {
+      console.error("Erreur verrouillage:", error);
+    }
     setIsAuthenticated(false);
     setCurrentPage("dashboard");
   };

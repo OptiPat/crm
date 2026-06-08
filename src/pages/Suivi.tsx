@@ -412,6 +412,13 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           );
           setActiveTab("envois");
           return;
+        case "cancelled":
+          toast.info(
+            "Envoi retiré de la file — onglet « Retirés » dans Suivi → Envois, bouton Remettre."
+          );
+          sessionStorage.setItem("crm_nav_suivi_envois_subtab", "cancelled");
+          setActiveTab("envois");
+          return;
         case "sent_waiting":
         case "scheduled":
         case "incomplete":

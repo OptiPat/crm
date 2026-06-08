@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,8 @@ import {
   markEmailCampaignResponse,
   dismissEmailCampaignFollowup,
   cancelPendingEmailCampaign,
+  restorePendingEmailCampaign,
+  dismissCancelledPendingEmailCampaign,
   prepareEmailCampaignRelance,
   getContrastColor,
   type EtiquetteEmailQueueItem,
@@ -68,6 +70,7 @@ import {
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { consumeEnvoisContactFocus } from "@/lib/navigation/suivi-navigation";
+import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -80,23 +83,34 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [ready, setReady] = useState<EtiquetteEmailQueueItem[]>([]);
   const [scheduled, setScheduled] = useState<EtiquetteEmailQueueItem[]>([]);
   const [incomplete, setIncomplete] = useState<EtiquetteEmailQueueItem[]>([]);
+  const [cancelled, setCancelled] = useState<EtiquetteEmailQueueItem[]>([]);
   const [sent, setSent] = useState<EtiquetteEmailQueueItem[]>([]);
   const [followup, setFollowup] = useState<EtiquetteEmailQueueItem[]>([]);
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [subTab, setSubTab] = useState<
-    "ready" | "scheduled" | "incomplete" | "sent" | "followup" | "journal"
+    | "ready"
+    | "scheduled"
+    | "incomplete"
+    | "cancelled"
+    | "sent"
+    | "followup"
+    | "journal"
   >("ready");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [batchOpen, setBatchOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
   const [cancelConfirmItem, setCancelConfirmItem] =
     useState<EtiquetteEmailQueueItem | null>(null);
+  const [dismissConfirmItem, setDismissConfirmItem] =
+    useState<EtiquetteEmailQueueItem | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [dismissing, setDismissing] = useState(false);
   const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
   const [highlightRowKey, setHighlightRowKey] = useState<number | null>(null);
+  const initialRecalcDone = useRef(false);
 
   const runAutoSync = useCallback(async () => {
     if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
@@ -134,6 +148,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       raw === "ready" ||
       raw === "scheduled" ||
       raw === "incomplete" ||
+      raw === "cancelled" ||
       raw === "sent" ||
       raw === "followup" ||
       raw === "journal"
@@ -149,11 +164,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     const silent = options?.silent ?? false;
     try {
       if (!silent) setLoading(true);
-      const [cgp, r, sch, i, s, f, emailConn] = await Promise.all([
+      const [cgp, r, sch, i, can, s, f, emailConn] = await Promise.all([
         getCgpConfig(),
         getEtiquetteEmailQueue("ready"),
         getEtiquetteEmailQueue("scheduled"),
         getEtiquetteEmailQueue("incomplete"),
+        getEtiquetteEmailQueue("cancelled"),
         getEtiquetteEmailQueue("sent"),
         getEtiquetteEmailQueue("followup"),
         getEmailConnectionStatus(),
@@ -162,6 +178,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       setReady(r);
       setScheduled(sch);
       setIncomplete(i);
+      setCancelled(can);
       setSent(s);
       setFollowup(f);
       setEmailStatus(emailConn);
@@ -176,6 +193,26 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   useEffect(() => {
     void loadQueue();
+  }, [loadQueue]);
+
+  useEffect(() => {
+    if (initialRecalcDone.current) return;
+    initialRecalcDone.current = true;
+    void (async () => {
+      try {
+        setSyncing(true);
+        await runFullEtiquettesRecalc();
+        const conn = await getEmailConnectionStatus();
+        if (conn.provider === "google" && conn.connected) {
+          await runRelationAutoSync();
+        }
+        await loadQueue({ silent: true });
+      } catch (error) {
+        console.error("Error on initial envois recalc:", error);
+      } finally {
+        setSyncing(false);
+      }
+    })();
   }, [loadQueue]);
 
   useEventAutoRefresh(
@@ -194,6 +231,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       { mode: "ready", items: ready },
       { mode: "scheduled", items: scheduled },
       { mode: "incomplete", items: incomplete },
+      { mode: "cancelled", items: cancelled },
       { mode: "followup", items: followup },
       { mode: "sent", items: sent },
     ];
@@ -274,6 +312,35 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     }
   };
 
+  const handleRestorePending = async (item: EtiquetteEmailQueueItem) => {
+    try {
+      await restorePendingEmailCampaign(item.contact_etiquette_id);
+      toast.success("Contact remis dans « Prêts à envoyer »");
+      setSubTab("ready");
+      await loadQueue();
+      onQueueChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  };
+
+  const handleDismissCancelledConfirmed = async () => {
+    const item = dismissConfirmItem;
+    if (!item) return;
+    try {
+      setDismissing(true);
+      await dismissCancelledPendingEmailCampaign(item.contact_etiquette_id);
+      setDismissConfirmItem(null);
+      toast.success("Envoi retiré de la liste — ne sera plus reproposé");
+      await loadQueue({ silent: true });
+      onQueueChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setDismissing(false);
+    }
+  };
+
   const handlePrepareRelance = async (item: EtiquetteEmailQueueItem) => {
     try {
       await prepareEmailCampaignRelance(item.contact_etiquette_id);
@@ -287,7 +354,9 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   const renderList = (
     items: EtiquetteEmailQueueItem[],
-    options: { mode: "ready" | "scheduled" | "incomplete" | "sent" | "followup" }
+    options: {
+      mode: "ready" | "scheduled" | "incomplete" | "cancelled" | "sent" | "followup";
+    }
   ) => {
     if (loading) {
       return (
@@ -297,12 +366,14 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     if (items.length === 0) {
       const empty =
         options.mode === "ready"
-          ? "Rien à envoyer pour le moment. Vérifiez la campagne sur l'étiquette (onglet Email), recalculez les étiquettes, et que chaque contact a un email en fiche."
+          ? "Rien à envoyer pour le moment. Utilisez « Vérifier maintenant », consultez l'onglet Planifiés, et vérifiez la campagne sur l'étiquette (onglet Email) ainsi que l'email en fiche contact."
           : options.mode === "scheduled"
             ? "Aucun envoi planifié pour le moment."
             : options.mode === "incomplete"
               ? "Aucun blocage — parfait. Email manquant, modèle ou date manquante apparaîtront ici."
-              : options.mode === "followup"
+              : options.mode === "cancelled"
+                ? "Aucun envoi retiré de la file. Le bouton ✕ sur un contact prêt le place ici."
+                : options.mode === "followup"
               ? `Aucune relance suggérée (délai selon chaque modèle, repli ${DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS} j).`
               : "Aucun envoi en attente de réponse client.";
       return <div className="text-center py-8 text-muted-foreground">{empty}</div>;
@@ -359,6 +430,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 ) : options.mode === "scheduled" ? (
                   <p className="text-sm text-muted-foreground">
                     Passera dans Prêts à envoyer à la date prévue — rien à faire.
+                  </p>
+                ) : options.mode === "cancelled" ? (
+                  <p className="text-sm text-amber-700">
+                    Retiré de la file (✕) — étiquette et alerte conservées.
                   </p>
                 ) : (
                   <p className="text-sm text-muted-foreground truncate">
@@ -476,6 +551,22 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                     Compléter la fiche
                   </Button>
                 )}
+                {options.mode === "cancelled" && (
+                  <>
+                    <Button size="sm" onClick={() => void handleRestorePending(item)}>
+                      <RotateCcw className="h-4 w-4 mr-1" />
+                      Remettre en file
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Ne plus proposer cet envoi"
+                      onClick={() => setDismissConfirmItem(item)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           );
@@ -498,6 +589,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         ready={ready.length}
         scheduled={scheduled.length}
         incomplete={incomplete.length}
+        cancelled={cancelled.length}
         sent={sent.length}
         followup={followup.length}
         active={subTab}
@@ -515,20 +607,36 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            {emailStatus?.provider === "google" && emailStatus.connected && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={loading || syncing}
-                onClick={async () => {
-                  await runAutoSync();
-                  await loadQueue();
-                }}
-              >
-                <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} />
-                Vérifier maintenant
-              </Button>
-            )}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading || syncing}
+              onClick={async () => {
+                try {
+                  setSyncing(true);
+                  const assigned = await runFullEtiquettesRecalc();
+                  if (emailStatus?.provider === "google" && emailStatus.connected) {
+                    await runAutoSync();
+                  }
+                  await loadQueue({ silent: true });
+                  if (assigned > 0) {
+                    toast.success(
+                      `${assigned} nouvelle(s) attribution(s) — file actualisée`
+                    );
+                  } else {
+                    toast.success("File d'envoi actualisée");
+                  }
+                } catch (error) {
+                  console.error("Error refreshing email queue:", error);
+                  toast.error("Impossible d'actualiser la file d'envoi");
+                } finally {
+                  setSyncing(false);
+                }
+              }}
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${syncing ? "animate-spin" : ""}`} />
+              Vérifier maintenant
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -551,6 +659,14 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 {incomplete.length > 0 && (
                   <Badge variant="secondary" className="bg-amber-100">
                     {incomplete.length}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value="cancelled" className="gap-2">
+                Retirés
+                {cancelled.length > 0 && (
+                  <Badge variant="secondary" className="bg-slate-200">
+                    {cancelled.length}
                   </Badge>
                 )}
               </TabsTrigger>
@@ -608,6 +724,14 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             </TabsContent>
             <TabsContent value="incomplete" className="mt-4">
               {renderList(incomplete, { mode: "incomplete" })}
+            </TabsContent>
+            <TabsContent value="cancelled" className="mt-4">
+              <p className="text-xs text-muted-foreground mb-3">
+                Retirés avec ✕ depuis Prêts à envoyer. <strong>Remettre en file</strong> ou le
+                recalcul les réintègre. <strong>✕ ici</strong> = ne plus proposer cet envoi (liste
+                propre, étiquette et alerte conservées).
+              </p>
+              {renderList(cancelled, { mode: "cancelled" })}
             </TabsContent>
             <TabsContent value="sent" className="mt-4">
               {renderList(sent, { mode: "sent" })}
@@ -676,8 +800,8 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   </p>
                 )}
                 <p>
-                  L&apos;email ne sera pas envoyé et ne reviendra pas dans la file pour ce
-                  contact.
+                  Le contact passera dans l&apos;onglet <strong>Retirés</strong>. Vous pourrez le
+                  remettre en file ou le retirer définitivement de cette liste.
                 </p>
               </div>
             </AlertDialogDescription>
@@ -692,7 +816,49 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 void handleCancelPendingConfirmed();
               }}
             >
-              {cancelling ? "Retrait…" : "Ignorer cet envoi"}
+              {cancelling ? "Retrait…" : "Mettre dans Retirés"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!dismissConfirmItem}
+        onOpenChange={(open) => {
+          if (!open && !dismissing) setDismissConfirmItem(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ne plus proposer cet envoi ?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  <strong className="text-foreground">
+                    {dismissConfirmItem?.contact_prenom} {dismissConfirmItem?.contact_nom}
+                  </strong>
+                  {" — "}
+                  {dismissConfirmItem?.etiquette_nom}
+                </p>
+                <p>
+                  Le contact disparaît de <strong>Retirés</strong> et ne reviendra plus dans la
+                  file d&apos;envoi (même après recalcul). L&apos;étiquette et l&apos;alerte de
+                  suivi restent — utilisez « Exclure du calcul auto » pour tout couper.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={dismissing}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={dismissing}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDismissCancelledConfirmed();
+              }}
+            >
+              {dismissing ? "Retrait…" : "Ne plus proposer"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

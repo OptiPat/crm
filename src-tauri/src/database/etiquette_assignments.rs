@@ -123,6 +123,7 @@ impl Database {
              WHERE contact_id = ?1 AND etiquette_id = ?2 AND UPPER(TRIM(attribue_par)) = 'AUTO'",
             params![contact_id, etiquette_id],
         )?;
+        self.close_suivi_alertes_for_etiquette_exclusion(contact_id, etiquette_id)?;
         Ok(())
     }
 

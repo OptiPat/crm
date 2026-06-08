@@ -5,6 +5,7 @@ export function EnvoisQueueStats({
   ready,
   scheduled,
   incomplete,
+  cancelled,
   sent,
   followup,
   active,
@@ -13,10 +14,20 @@ export function EnvoisQueueStats({
   ready: number;
   scheduled: number;
   incomplete: number;
+  cancelled: number;
   sent: number;
   followup: number;
-  active: "ready" | "scheduled" | "incomplete" | "sent" | "followup" | "journal";
-  onSelect: (tab: "ready" | "scheduled" | "incomplete" | "sent" | "followup" | "journal") => void;
+  active:
+    | "ready"
+    | "scheduled"
+    | "incomplete"
+    | "cancelled"
+    | "sent"
+    | "followup"
+    | "journal";
+  onSelect: (
+    tab: "ready" | "scheduled" | "incomplete" | "cancelled" | "sent" | "followup" | "journal"
+  ) => void;
 }) {
   const items: {
     id: typeof active;
@@ -27,12 +38,13 @@ export function EnvoisQueueStats({
     { id: "ready", label: "Prêts", count: ready, accent: ready > 0 },
     { id: "scheduled", label: "Planifiés", count: scheduled },
     { id: "incomplete", label: "À compléter", count: incomplete, accent: incomplete > 0 },
+    { id: "cancelled", label: "Retirés", count: cancelled, accent: cancelled > 0 },
     { id: "sent", label: "Envoyés", count: sent },
     { id: "followup", label: "À relancer", count: followup, accent: followup > 0 },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
       {items.map((item) => (
         <button
           key={item.id}
@@ -70,8 +82,9 @@ export function EnvoisQueueHelp() {
         <p>
           <strong className="text-foreground">2. Prêts à envoyer</strong> — Le CRM prépare les
           emails ; vous confirmez un par un ou en <strong>sélection groupée</strong> (cases à
-          cocher). CRM ouvert, boîte connectée dans Paramètres → Email. Bouton ✕ pour ignorer un
-          envoi planifié.
+          cocher).           CRM ouvert, boîte connectée dans Paramètres → Email. ✕ sur Prêts → onglet{" "}
+          <strong>Retirés</strong> ; ✕ sur Retirés → ne plus proposer (hors file, étiquette
+          conservée).
         </p>
         <p>
           <strong className="text-foreground">Journal</strong> — Chaque envoi (individuel, groupé,

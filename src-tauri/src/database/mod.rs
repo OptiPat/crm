@@ -508,7 +508,26 @@ impl Database {
         self.migrate_email_send_log()?;
         self.migrate_etiquette_pipeline()?;
         self.migrate_calendar_events()?;
+        self.migrate_contacts_google_sync()?;
 
+        Ok(())
+    }
+
+    fn migrate_contacts_google_sync(&self) -> Result<()> {
+        if !self.table_has_column("contacts", "google_contact_resource_name")? {
+            self.conn.execute(
+                "ALTER TABLE contacts ADD COLUMN google_contact_resource_name TEXT",
+                [],
+            )?;
+            println!("✅ Migration: google_contact_resource_name sur contacts");
+        }
+        if !self.table_has_column("contacts", "google_synced_at")? {
+            self.conn.execute(
+                "ALTER TABLE contacts ADD COLUMN google_synced_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: google_synced_at sur contacts");
+        }
         Ok(())
     }
 

@@ -6,13 +6,14 @@ mod commands;
 use crate::database::Database;
 use config::{LocalApiConfig, LocalApiSettings};
 use std::io::Result as IoResult;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 use tauri::{AppHandle, Manager};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
+static SERVER_PORT: AtomicU16 = AtomicU16::new(0);
 static SERVER_HANDLE: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 
 pub use commands::{get_local_api_settings_cmd, regenerate_local_api_token_cmd, save_local_api_settings_cmd};
@@ -53,11 +54,17 @@ pub fn start_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {
 
 pub fn stop() {
     SERVER_RUNNING.store(false, Ordering::SeqCst);
+    let port = SERVER_PORT.load(Ordering::SeqCst);
+    if port > 0 {
+        // Débloque incoming_requests() (sinon join() peut attendre indéfiniment).
+        let _ = std::net::TcpStream::connect(format!("127.0.0.1:{port}"));
+    }
     if let Ok(mut guard) = SERVER_HANDLE.lock() {
         if let Some(handle) = guard.take() {
             let _ = handle.join();
         }
     }
+    SERVER_PORT.store(0, Ordering::SeqCst);
 }
 
 pub fn restart_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {
@@ -65,7 +72,10 @@ pub fn restart_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {
 }
 
 fn run_server(config: LocalApiConfig) {
-    let addr = format!("127.0.0.1:{}", config.port);
+    SERVER_PORT.store(config.port, Ordering::SeqCst);
+    // 0.0.0.0 : n8n Docker (host.docker.internal) n'atteint pas toujours 127.0.0.1 sur Windows.
+    // Acces protege par token Bearer ; lecture seule.
+    let addr = format!("0.0.0.0:{}", config.port);
     let server = match Server::http(&addr) {
         Ok(s) => s,
         Err(e) => {
@@ -75,7 +85,10 @@ fn run_server(config: LocalApiConfig) {
     };
 
     SERVER_RUNNING.store(true, Ordering::SeqCst);
-    println!("✅ API locale n8n sur http://{addr}");
+    println!(
+        "✅ API locale n8n sur http://127.0.0.1:{} (n8n Docker : host.docker.internal:{})",
+        config.port, config.port
+    );
 
     for request in server.incoming_requests() {
         if !SERVER_RUNNING.load(Ordering::SeqCst) {

@@ -16,6 +16,7 @@ export type AlerteEmailResolution =
   | { kind: "incomplete"; message: string }
   | { kind: "scheduled"; message: string }
   | { kind: "sent_waiting"; message: string }
+  | { kind: "cancelled"; item: EtiquetteEmailQueueItem }
   | { kind: "no_campaign" };
 
 function findLinkedEtiquette(
@@ -60,6 +61,12 @@ export async function resolveAlerteEmailAction(
   const readyItem = match(ready);
   if (readyItem) {
     return { kind: "send", item: readyItem };
+  }
+
+  const cancelled = await getEtiquetteEmailQueue("cancelled");
+  const cancelledItem = match(cancelled);
+  if (cancelledItem) {
+    return { kind: "cancelled", item: cancelledItem };
   }
 
   const incomplete = await getEtiquetteEmailQueue("incomplete");
