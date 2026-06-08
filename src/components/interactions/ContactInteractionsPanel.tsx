@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/tauri-contact-relation";
 import type { EtiquetteEmailQueueStatus } from "@/lib/api/tauri-etiquettes";
 import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { getTypeAlerteLabel } from "@/lib/alertes/alerte-labels";
@@ -340,16 +341,17 @@ export function ContactInteractionsPanel({
     return subscribeRelationChanged((detail) => {
       if (detail.contactId != null && detail.contactId !== contactId) return;
       void load();
-      onContactUpdated?.();
     });
-  }, [contactId, onContactUpdated]);
+  }, [contactId, load]);
 
   useEffect(() => {
     const unsubTaches = subscribeTachesChanged(() => void load());
     const unsubInvest = subscribeInvestissementsChanged(() => void load());
+    const unsubDocs = subscribeDocumentsChanged(() => void load());
     return () => {
       unsubTaches();
       unsubInvest();
+      unsubDocs();
     };
   }, [load]);
 
@@ -399,11 +401,6 @@ export function ContactInteractionsPanel({
     date_interaction: item.date_interaction,
     created_at: item.created_at,
   });
-
-  const handleSuccess = async () => {
-    await load();
-    onContactUpdated?.();
-  };
 
   const dernierClient = formatTs(dateDernierContact);
   const dernierFilleul = formatTs(dateDernierContactFilleul);
@@ -698,7 +695,6 @@ export function ContactInteractionsPanel({
         onOpenChange={setShowForm}
         interaction={editing}
         defaultContactId={contactId}
-        onSuccess={handleSuccess}
       />
     </>
   );

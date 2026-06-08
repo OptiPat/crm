@@ -47,7 +47,6 @@ import {
   type NewContact,
   type Contact,
 } from "@/lib/api/tauri-contacts";
-import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import {
   ContactFormInvestissementSection,
   type InvestissementFormChoice,
@@ -361,7 +360,6 @@ export function ContactForm({
         });
       }
       setDirty(false);
-      notifyEtiquettesChanged();
       onSuccess?.();
       onOpenChange(false);
       setFormData(getEmptyForm(createContext));

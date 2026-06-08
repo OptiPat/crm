@@ -64,6 +64,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
   }, []);
 
   const refreshAll = useCallback(() => {
+    setRefreshKey((k) => k + 1);
     void loadStats(true);
   }, [loadStats]);
 

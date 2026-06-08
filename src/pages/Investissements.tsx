@@ -33,6 +33,7 @@ import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 type InvestissementsProps = {
   onOpenContact?: (contactId: number) => void;
@@ -105,7 +106,8 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
   useEventAutoRefresh(
     loadInvestissements,
     subscribeContactsChanged,
-    subscribeFoyersChanged
+    subscribeFoyersChanged,
+    subscribeInvestissementsChanged
   );
 
   const handleDelete = async (id: number) => {

@@ -16,6 +16,14 @@ export function setContactsListCache(next: ContactsListCache): void {
   cache = next;
 }
 
+export function removeContactFromListCache(contactId: number): void {
+  if (!cache) return;
+  cache = {
+    ...cache,
+    contacts: cache.contacts.filter((c) => c.id !== contactId),
+  };
+}
+
 export function patchContactInListCache(contact: Contact): void {
   if (!cache || !contact.id) return;
   cache = {

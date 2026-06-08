@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Search,
   Users,
@@ -68,20 +68,8 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
   const [query, setQuery] = useState("");
   const [data, setData] = useState<GlobalSearchData>(() => getGlobalSearchCache() ?? EMPTY_DATA);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    const invalidate = () => invalidateGlobalSearchCache();
-    const unsubs = [
-      subscribeContactsChanged(invalidate),
-      subscribeInvestissementsChanged(invalidate),
-      subscribeFoyersChanged(invalidate),
-      subscribePartenairesChanged(invalidate),
-      subscribeDocumentsChanged(invalidate),
-    ];
-    return () => {
-      for (const unsub of unsubs) unsub();
-    };
-  }, []);
+  const openRef = useRef(false);
+  openRef.current = open;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -125,6 +113,23 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    const invalidate = () => {
+      invalidateGlobalSearchCache();
+      if (openRef.current) void loadData();
+    };
+    const unsubs = [
+      subscribeContactsChanged(invalidate),
+      subscribeInvestissementsChanged(invalidate),
+      subscribeFoyersChanged(invalidate),
+      subscribePartenairesChanged(invalidate),
+      subscribeDocumentsChanged(invalidate),
+    ];
+    return () => {
+      for (const unsub of unsubs) unsub();
+    };
+  }, [loadData]);
 
   useEffect(() => {
     if (open) void loadData();

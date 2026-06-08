@@ -22,6 +22,9 @@ import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import { textMatchesSearch } from "@/lib/search-utils";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { toast } from "sonner";
+import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 
 type DocumentsProps = {
   onNavigate?: (page: string) => void;
@@ -58,6 +61,8 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
   useEffect(() => {
     void loadDocuments();
   }, [loadDocuments]);
+
+  useEventAutoRefresh(loadDocuments, subscribeDocumentsChanged, subscribeContactsChanged);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {

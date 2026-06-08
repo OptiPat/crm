@@ -69,6 +69,10 @@ import {
   subscribeRelationChangedDebounced,
 } from "@/lib/etiquettes/etiquette-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import {
+  beginRefreshGeneration,
+  isRefreshGenerationCurrent,
+} from "@/lib/refresh-generation";
 import { createDebouncedEnvoisReload } from "@/lib/etiquettes/etiquette-envois-reload";
 import { consumeEnvoisContactFocus } from "@/lib/navigation/suivi-navigation";
 import {
@@ -147,6 +151,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [batchSendRunning, setBatchSendRunning] = useState(false);
   const [, setSendUiPulse] = useState(0);
   const subTabRef = useRef<EnvoisSubTab>(subTab);
+  const queueRefreshGenRef = useRef(0);
   subTabRef.current = subTab;
 
   const runAutoSync = useCallback(async () => {
@@ -199,6 +204,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   const loadQueue = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
+    const token = beginRefreshGeneration(queueRefreshGenRef);
     try {
       if (!silent) setLoading(true);
       else setBackgroundRefreshing(true);
@@ -207,6 +213,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         getEnvoisSnapshot(null),
         getEmailConnectionStatus(),
       ]);
+      if (!isRefreshGenerationCurrent(queueRefreshGenRef, token)) return;
       setCgpConfig(cgp);
       setReady(snap.ready);
       setScheduled(snap.scheduled ?? []);
@@ -227,9 +234,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       });
       onQueueChanged?.();
     } catch (error) {
+      if (!isRefreshGenerationCurrent(queueRefreshGenRef, token)) return;
       console.error("Error loading email queue:", error);
       toast.error("Erreur lors du chargement de la file d'envoi");
     } finally {
+      if (!isRefreshGenerationCurrent(queueRefreshGenRef, token)) return;
       if (!silent) setLoading(false);
       else setBackgroundRefreshing(false);
     }
@@ -239,9 +248,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const loadQueuePartial = useCallback(async () => {
     const active = subTabRef.current;
     if (active === "journal") return;
+    const token = beginRefreshGeneration(queueRefreshGenRef);
     try {
       const status = active as EtiquetteEmailQueueStatus;
       const snap = await getEnvoisSnapshot(active === "ready" ? "ready" : status);
+      if (!isRefreshGenerationCurrent(queueRefreshGenRef, token)) return;
       setReady(snap.ready);
       patchEnvoisQueueCache({ ready: snap.ready });
 
@@ -268,6 +279,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
       onQueueChanged?.();
     } catch (error) {
+      if (!isRefreshGenerationCurrent(queueRefreshGenRef, token)) return;
       console.error("Error partial email queue refresh:", error);
     }
   }, [onQueueChanged]);

@@ -2829,4 +2829,59 @@ mod database_integration_tests {
             .unwrap();
         assert_eq!(count, 0);
     }
+
+    #[test]
+    fn auto_etiquette_removed_on_full_recalc_when_category_no_longer_matches() {
+        use crate::database::models::NewEtiquette;
+
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("FullRecalc", "Ann")).unwrap();
+        let cid = contact.id.unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Clients full recalc".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: Some("DELAI_SANS_CONTACT".into()),
+                auto_condition_config: Some(r#"{"jours": 0, "inclure_sans_date": true}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+            })
+            .unwrap();
+
+        db.attribuer_etiquette(cid, etiqu.id, Some("AUTO".into()), None)
+            .unwrap();
+
+        db.update_contact(
+            cid,
+            &NewContact {
+                categorie: "PROSPECT".into(),
+                ..sample_contact("FullRecalc", "Ann")
+            },
+        )
+        .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+    }
 }

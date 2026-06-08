@@ -123,6 +123,28 @@ impl Database {
         map.get(&(contact_id, etiquette_id)).cloned()
     }
 
+    /// Recalc bulk : skip si catégorie incompatible, sauf retrait AUTO ou contact en pause/archivé.
+    fn should_skip_bulk_auto_pair(
+        contact: &Contact,
+        etiquette_id: i64,
+        categories: &[String],
+        assignments: &HashMap<AssignmentKey, AssignmentInfo>,
+    ) -> bool {
+        if categories.is_empty() || Self::contact_matches_auto_categories(contact, categories) {
+            return false;
+        }
+        let Some(contact_id) = contact.id else {
+            return true;
+        };
+        if contact.statut_suivi == "EN_PAUSE" || contact.statut_suivi == "ARCHIVE" {
+            return false;
+        }
+        match Self::get_assignment_from_map(assignments, contact_id, etiquette_id) {
+            Some((_, source)) if source.eq_ignore_ascii_case("AUTO") => false,
+            _ => true,
+        }
+    }
+
     pub(crate) fn evaluate_auto_etiquette_condition(
         &self,
         contact: &Contact,
@@ -547,8 +569,7 @@ impl Database {
         for etiquette in &auto_etiquettes {
             let categories = Self::parse_auto_categories(etiquette);
             for contact in &contacts {
-                if !categories.is_empty()
-                    && !Self::contact_matches_auto_categories(contact, &categories)
+                if Self::should_skip_bulk_auto_pair(contact, etiquette.id, &categories, &assignments)
                 {
                     continue;
                 }
@@ -638,9 +659,7 @@ impl Database {
         let contacts = self.get_all_contacts()?;
         let categories = Self::parse_auto_categories(&etiquette);
         for contact in &contacts {
-            if !categories.is_empty()
-                && !Self::contact_matches_auto_categories(contact, &categories)
-            {
+            if Self::should_skip_bulk_auto_pair(contact, etiquette.id, &categories, &assignments) {
                 continue;
             }
             total += self.sync_auto_pair(

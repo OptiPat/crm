@@ -23,6 +23,7 @@ import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import {
@@ -98,7 +99,12 @@ export function Familles({ onNavigate }: FamillesProps) {
     void loadData();
   }, [loadData]);
 
-  useEventAutoRefresh(loadData, subscribeContactsChanged, subscribeFoyersChanged);
+  useEventAutoRefresh(
+    loadData,
+    subscribeContactsChanged,
+    subscribeFoyersChanged,
+    subscribeInvestissementsChanged
+  );
 
   const familleGroups = useMemo(
     () =>

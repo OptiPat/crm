@@ -1,16 +1,25 @@
 import { useEffect, useRef } from "react";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import {
+  subscribeContactsChanged,
+  type ContactsChangedDetail,
+} from "@/lib/contacts/contact-events";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
 
 const DEBOUNCE_MS = 120;
 const WAKE_DEBOUNCE_MS = 300;
 
+export type ContactsRefreshOptions = {
+  silent?: boolean;
+  detail?: ContactsChangedDetail;
+};
+
 /**
  * Rafraîchissement page Contacts : modifs métier + retour sur la fenêtre.
- * Les saves utilisateur passent par notifyContactsChanged → refresh immédiat (debouncé).
+ * Les saves utilisateur passent par notifyContactsChanged → patch ou refresh (debouncé).
  */
 export function useContactsAutoRefresh(
-  onContactsRefresh: (options?: { silent?: boolean }) => void | Promise<void>,
+  onContactsRefresh: (options?: ContactsRefreshOptions) => void | Promise<void>,
   onAlertsRefresh: () => void | Promise<void>
 ): void {
   const contactsRef = useRef(onContactsRefresh);
@@ -21,17 +30,22 @@ export function useContactsAutoRefresh(
   const wakeDebounceRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const scheduleContactsRefresh = (silent = false) => {
+    const scheduleContactsRefresh = (detail?: ContactsChangedDetail) => {
+      const isPatch =
+        detail?.patchedContact != null || detail?.removedContactId != null;
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
       debounceRef.current = window.setTimeout(() => {
         debounceRef.current = null;
-        void contactsRef.current({ silent });
+        void contactsRef.current({ silent: isPatch, detail });
       }, DEBOUNCE_MS);
     };
 
     const refreshAlerts = () => void alertsRef.current();
 
-    const unsubContacts = subscribeContactsChanged(() => scheduleContactsRefresh(false));
+    const unsubContacts = subscribeContactsChanged((detail) =>
+      scheduleContactsRefresh(detail)
+    );
+    const unsubFoyers = subscribeFoyersChanged(() => scheduleContactsRefresh());
     const unsubRelation = subscribeRelationChanged(refreshAlerts);
 
     const onWake = () => {
@@ -48,6 +62,7 @@ export function useContactsAutoRefresh(
 
     return () => {
       unsubContacts();
+      unsubFoyers();
       unsubRelation();
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);

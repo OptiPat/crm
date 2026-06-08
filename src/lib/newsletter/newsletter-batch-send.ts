@@ -11,6 +11,7 @@ import {
 import { sendEmail } from "@/lib/api/tauri-email";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
+import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 
 export interface NewsletterBatchSendProgress {
   sent: number;
@@ -93,6 +94,8 @@ export async function sendNewsletterBatch(input: {
     editionId: input.editionId,
     cancelled: input.signal?.aborted === true,
   });
+
+  notifyRelationChanged(undefined, { skipEtiquettesChanged: true });
 
   return progress;
 }

@@ -61,9 +61,15 @@ import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contact
 import {
   getContactsListInitialState,
   patchContactInListCache,
+  removeContactFromListCache,
   setContactsListCache,
 } from "@/lib/contacts/contacts-list-cache";
+import type { ContactsChangedDetail } from "@/lib/contacts/contact-events";
 import { useContactsAutoRefresh } from "@/hooks/useContactsAutoRefresh";
+import {
+  beginRefreshGeneration,
+  isRefreshGenerationCurrent,
+} from "@/lib/refresh-generation";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { consumePendingOpenContactId, prepareOpenContactWithInvestissement } from "@/lib/investissements/investissement-navigation";
@@ -120,6 +126,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [alertContactIds, setAlertContactIds] = useState<Set<number>>(new Set());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingOpenContactIdRef = useRef<number | null>(null);
+  const contactsRefreshGenRef = useRef(0);
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
@@ -180,13 +187,47 @@ export function Contacts({ onNavigate }: ContactsProps) {
     }
   }, []);
 
-  const loadContacts = useCallback(async (options?: { silent?: boolean }) => {
+  const loadContacts = useCallback(async (options?: {
+    silent?: boolean;
+    detail?: ContactsChangedDetail;
+  }) => {
     const silent = options?.silent ?? false;
+    const detail = options?.detail;
+
+    if (detail?.patchedContact?.id) {
+      beginRefreshGeneration(contactsRefreshGenRef);
+      const contact = detail.patchedContact;
+      patchContactInListCache(contact);
+      setContacts((prev) => prev.map((c) => (c.id === contact.id ? contact : c)));
+      setSelectedContact((prev) => (prev?.id === contact.id ? contact : prev));
+      setLoading(false);
+      setIsInitialLoad(false);
+      return;
+    }
+
+    if (detail?.removedContactId != null) {
+      beginRefreshGeneration(contactsRefreshGenRef);
+      const id = detail.removedContactId;
+      removeContactFromListCache(id);
+      setContacts((prev) => prev.filter((c) => c.id !== id));
+      setEtiquettesParContact((prev) => {
+        if (!(id in prev)) return prev;
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      setLoading(false);
+      setIsInitialLoad(false);
+      return;
+    }
+
+    const token = beginRefreshGeneration(contactsRefreshGenRef);
     try {
       const [dataContacts, dataFoyers] = await Promise.all([
         getAllContacts(),
         getAllFoyers(),
       ]);
+      if (!isRefreshGenerationCurrent(contactsRefreshGenRef, token)) return;
       setContacts(dataContacts);
       setFoyers(dataFoyers);
       setContactsListCache({ contacts: dataContacts, foyers: dataFoyers });
@@ -197,6 +238,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
       setLoading(false);
       setIsInitialLoad(false);
     } catch (error) {
+      if (!isRefreshGenerationCurrent(contactsRefreshGenRef, token)) return;
       if (isInitialLoad && error instanceof Error && error.message.includes("Invalid column type")) {
         setTimeout(() => void loadContacts(options), 500);
       } else {

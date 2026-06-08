@@ -83,6 +83,10 @@ import {
 } from "@/lib/navigation/suivi-navigation";
 import { toast } from "sonner";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import {
+  beginRefreshGeneration,
+  isRefreshGenerationCurrent,
+} from "@/lib/refresh-generation";
 import { countUniqueTaggedContacts } from "@/lib/etiquettes/etiquettes-unique-count";
 import { isEtiquetteQueueItemBatchLocked } from "@/lib/etiquettes/etiquette-email-send-runner";
 
@@ -123,6 +127,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   activeTabRef.current = activeTab;
   const alertesTabLoadedRef = useRef(false);
   const etiquettesTabLoadedRef = useRef(false);
+  const alertesRefreshGenRef = useRef(0);
 
   const alerteCategoryCounts = useMemo(
     () => countAlertesByCategory(alertes),
@@ -191,20 +196,25 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
 
   const fetchAlertesList = useCallback(async (options?: { silent?: boolean }) => {
     const showLoading = !options?.silent;
+    const token = beginRefreshGeneration(alertesRefreshGenRef);
     try {
       if (showLoading) setLoading(true);
       const data = await getAlertesWithContacts();
+      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
       setAlertes(data);
     } catch (error) {
+      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
       console.error("Error loading alertes:", error);
       if (showLoading) toast.error("Erreur lors du chargement des alertes");
     } finally {
+      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
       if (showLoading) setLoading(false);
     }
   }, []);
 
   const regenerateAndLoadAlertes = useCallback(async (options?: { silent?: boolean }) => {
     const showLoading = !options?.silent;
+    const token = beginRefreshGeneration(alertesRefreshGenRef);
     try {
       if (showLoading) setLoading(true);
 
@@ -222,11 +232,14 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       }
 
       const data = await getAlertesWithContacts();
+      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
       setAlertes(data);
     } catch (error) {
+      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
       console.error("Error loading alertes:", error);
       if (showLoading) toast.error("Erreur lors du chargement des alertes");
     } finally {
+      if (!isRefreshGenerationCurrent(alertesRefreshGenRef, token)) return;
       if (showLoading) setLoading(false);
     }
   }, []);

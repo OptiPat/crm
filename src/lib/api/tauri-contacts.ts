@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 
 export interface Contact {
   id: number;
@@ -94,7 +95,10 @@ export async function createContact(
     newContact,
     skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
   });
-  notifyContactsChanged();
+  if (!options?.skipPostSaveHooks) {
+    notifyContactsChanged();
+    notifyEtiquettesChanged();
+  }
   return created;
 }
 
@@ -118,13 +122,17 @@ export async function updateContact(
     contact,
     skipPostSaveHooks: options?.skipPostSaveHooks ?? null,
   });
-  notifyContactsChanged();
+  if (!options?.skipPostSaveHooks) {
+    notifyContactsChanged({ patchedContact: updated });
+    notifyEtiquettesChanged();
+  }
   return updated;
 }
 
 export async function deleteContact(id: number): Promise<void> {
   await invoke<void>("delete_contact", { id });
-  notifyContactsChanged();
+  notifyContactsChanged({ removedContactId: id });
+  notifyEtiquettesChanged();
 }
 
 export async function findContactByEmail(email: string): Promise<Contact | null> {
