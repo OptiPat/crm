@@ -341,8 +341,9 @@ export function ContactInteractionsPanel({
     return subscribeRelationChanged((detail) => {
       if (detail.contactId != null && detail.contactId !== contactId) return;
       void load();
+      onContactUpdated?.();
     });
-  }, [contactId, load]);
+  }, [contactId, load, onContactUpdated]);
 
   useEffect(() => {
     const unsubTaches = subscribeTachesChanged(() => void load());

@@ -38,6 +38,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [chartsRefreshKey, setChartsRefreshKey] = useState(0);
 
   const loadStats = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -64,7 +65,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
   }, []);
 
   const refreshAll = useCallback(() => {
-    setRefreshKey((k) => k + 1);
+    setChartsRefreshKey((k) => k + 1);
     void loadStats(true);
   }, [loadStats]);
 
@@ -218,8 +219,8 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
           Répartition
         </DashboardSectionTitle>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          <CategoryPieChart key={`cat-${refreshKey}`} />
-          <ProductPieChart key={`prod-${refreshKey}`} />
+          <CategoryPieChart key={`cat-${chartsRefreshKey}`} />
+          <ProductPieChart key={`prod-${chartsRefreshKey}`} />
         </div>
       </section>
 
@@ -228,8 +229,8 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
           Activité
         </DashboardSectionTitle>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          <YearlyActivityChart key={`year-${refreshKey}`} />
-          <PipelineChart key={`pipe-${refreshKey}`} />
+          <YearlyActivityChart key={`year-${chartsRefreshKey}`} />
+          <PipelineChart key={`pipe-${chartsRefreshKey}`} />
         </div>
       </section>
     </div>

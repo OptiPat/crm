@@ -30,12 +30,25 @@ export function useContactsAutoRefresh(
   const wakeDebounceRef = useRef<number | null>(null);
 
   useEffect(() => {
+    const pendingPatchCountRef = useRef(0);
+
     const scheduleContactsRefresh = (detail?: ContactsChangedDetail) => {
       const isPatch =
         detail?.patchedContact != null || detail?.removedContactId != null;
+      if (isPatch) {
+        pendingPatchCountRef.current += 1;
+      } else {
+        pendingPatchCountRef.current = 0;
+      }
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current);
       debounceRef.current = window.setTimeout(() => {
         debounceRef.current = null;
+        const burst = pendingPatchCountRef.current;
+        pendingPatchCountRef.current = 0;
+        if (burst > 1) {
+          void contactsRef.current({ silent: false });
+          return;
+        }
         void contactsRef.current({ silent: isPatch, detail });
       }, DEBOUNCE_MS);
     };
