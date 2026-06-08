@@ -54,14 +54,172 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Convertit un corps texte brut en HTML simple (éditeur / anciens modèles). */
+const GMAIL_LINE_STYLE = "line-height:1.5;margin:0;padding:0";
+const GMAIL_LIST_STYLE = "margin:0;padding-left:1.25em;line-height:1.5";
+const GMAIL_LIST_ITEM_STYLE = "margin:0;padding:0;line-height:1.5";
+
+function gmailBlankLineHtml(): string {
+  return `<div style="${GMAIL_LINE_STYLE}"><br></div>`;
+}
+
+function gmailTextLineHtml(innerHtml: string): string {
+  return `<div style="${GMAIL_LINE_STYLE}">${innerHtml}</div>`;
+}
+
+function wrapGmailHtmlBody(inner: string): string {
+  return `<div dir="ltr">${inner}</div>`;
+}
+
+function isBlankLineContent(innerHtml: string): boolean {
+  return !innerHtml
+    .replace(/<br\s*\/?>/gi, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/<[^>]+>/g, "")
+    .trim();
+}
+
+function styleListElement(el: Element): void {
+  el.setAttribute("style", GMAIL_LIST_STYLE);
+  for (const li of el.querySelectorAll("li")) {
+    li.setAttribute("style", GMAIL_LIST_ITEM_STYLE);
+  }
+}
+
+function isGmailSafeStyle(style: string): boolean {
+  const s = style.replace(/\s/g, "").toLowerCase();
+  if (s === "line-height:1.5;margin:0;padding:0") return true;
+  if (s === "margin:0;padding-left:1.25em;line-height:1.5") return true;
+  if (s === "margin:0;padding:0;line-height:1.5") return true;
+  return false;
+}
+
+/** Une ligne Gmail par Entrée ; ligne vide = `<div><br></div>` (comme la rédaction Gmail). */
+function normalizeTemplateEmailHtmlLikeGmailWithDom(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const lines: string[] = [];
+
+  const appendBlock = (el: Element) => {
+    const tag = el.tagName.toLowerCase();
+    if (tag === "ul" || tag === "ol") {
+      styleListElement(el);
+      lines.push(el.outerHTML);
+      return;
+    }
+    if (tag !== "p" && tag !== "div") {
+      lines.push(gmailTextLineHtml(el.outerHTML));
+      return;
+    }
+    if (el.querySelector(":scope > ul, :scope > ol")) {
+      for (const child of [...el.children]) {
+        appendBlock(child);
+      }
+      return;
+    }
+    if (el.querySelector(":scope > div, :scope > p")) {
+      for (const child of [...el.childNodes]) {
+        if (child.nodeType === Node.TEXT_NODE) {
+          const t = child.textContent?.trim();
+          if (t) lines.push(gmailTextLineHtml(escapeHtml(t)));
+          continue;
+        }
+        if (child.nodeType === Node.ELEMENT_NODE) {
+          appendBlock(child as Element);
+        }
+      }
+      return;
+    }
+    const inner = el.innerHTML.trim();
+    if (isBlankLineContent(inner)) {
+      lines.push(gmailBlankLineHtml());
+    } else {
+      lines.push(gmailTextLineHtml(inner));
+    }
+  };
+
+  const walk = (parent: Element) => {
+    for (const node of [...parent.childNodes]) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = node.textContent?.trim();
+        if (t) lines.push(gmailTextLineHtml(escapeHtml(t)));
+        continue;
+      }
+      if (node.nodeType !== Node.ELEMENT_NODE) continue;
+      const el = node as Element;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "br") {
+        lines.push(gmailBlankLineHtml());
+        continue;
+      }
+      appendBlock(el);
+    }
+  };
+
+  walk(doc.body);
+  return wrapGmailHtmlBody(lines.join(""));
+}
+
+function normalizeTemplateEmailHtmlLikeGmailWithRegex(html: string): string {
+  let rest = html.trim().replace(/<script[\s\S]*?<\/script>/gi, "");
+  const wrap = rest.match(/^<div[^>]*dir=["']ltr["'][^>]*>([\s\S]*)<\/div>$/i);
+  if (wrap) rest = wrap[1].trim();
+
+  const lines: string[] = [];
+  while (rest.length > 0) {
+    rest = rest.replace(/^\s+/, "");
+    if (!rest) break;
+
+    const listMatch = rest.match(/^<(ul|ol)(?:\s[^>]*)?>[\s\S]*?<\/\1>/i);
+    if (listMatch) {
+      let block = listMatch[0];
+      block = block.replace(/<ul(?:\s[^>]*)?>/i, `<ul style="${GMAIL_LIST_STYLE}">`);
+      block = block.replace(/<ol(?:\s[^>]*)?>/i, `<ol style="${GMAIL_LIST_STYLE}">`);
+      block = block.replace(/<li(?:\s[^>]*)?>/gi, `<li style="${GMAIL_LIST_ITEM_STYLE}">`);
+      lines.push(block);
+      rest = rest.slice(listMatch[0].length);
+      continue;
+    }
+
+    const blockMatch = rest.match(/^<(p|div)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i);
+    if (blockMatch) {
+      const inner = blockMatch[2].trim();
+      lines.push(isBlankLineContent(inner) ? gmailBlankLineHtml() : gmailTextLineHtml(inner));
+      rest = rest.slice(blockMatch[0].length);
+      continue;
+    }
+
+    const brMatch = rest.match(/^<br\s*\/?>/i);
+    if (brMatch) {
+      lines.push(gmailBlankLineHtml());
+      rest = rest.slice(brMatch[0].length);
+      continue;
+    }
+    break;
+  }
+
+  return wrapGmailHtmlBody(lines.join(""));
+}
+
+export function normalizeTemplateEmailHtmlLikeGmail(html: string): string {
+  const trimmed = html.trim();
+  if (!trimmed) return "";
+  if (typeof DOMParser !== "undefined") {
+    return normalizeTemplateEmailHtmlLikeGmailWithDom(trimmed);
+  }
+  return normalizeTemplateEmailHtmlLikeGmailWithRegex(trimmed);
+}
+
+/** @deprecated alias — préparation envoi Gmail */
+export function prepareTemplateEmailHtmlForSend(html: string): string {
+  return normalizeTemplateEmailHtmlLikeGmail(html);
+}
+
+/** Convertit un corps texte brut en HTML Gmail (une ligne = un div). */
 export function plainTextToTemplateHtml(text: string): string {
   return text
     .split("\n")
-    .map((line) => {
-      if (line.trim() === "") return "<br>";
-      return `<p style="margin:0 0 0.5em 0">${escapeHtml(line)}</p>`;
-    })
+    .map((line) =>
+      line.trim() === "" ? gmailBlankLineHtml() : gmailTextLineHtml(escapeHtml(line))
+    )
     .join("");
 }
 
@@ -101,7 +259,7 @@ export function injectTemplateSignatureHtml(
   if (!sig || html.includes(sig)) {
     return html;
   }
-  return `${html}<br><br>${sig}`;
+  return `${html}${gmailBlankLineHtml()}${sig}`;
 }
 
 /** Corps final pour l'envoi OAuth (texte + HTML optionnel du modèle). */
@@ -115,7 +273,7 @@ export function buildTemplateSendBodies(
     return buildSendEmailBodies(plainWithSignature, cgp);
   }
   const body_html = injectTemplateSignatureHtml(
-    trimmedHtml,
+    normalizeTemplateEmailHtmlLikeGmail(trimmedHtml),
     cgp?.email_signature_html
   );
   return { body: plainWithSignature, body_html };
@@ -156,6 +314,12 @@ function sanitizeEmailHtmlNode(el: Element): void {
         }
         continue;
       }
+      if (tag === "div" && attr.name === "dir" && attr.value === "ltr") {
+        continue;
+      }
+      if (attr.name === "style" && isGmailSafeStyle(attr.value)) {
+        continue;
+      }
       child.removeAttribute(attr.name);
     }
     sanitizeEmailHtmlNode(child);
@@ -170,8 +334,12 @@ export function sanitizeTemplateEmailHtml(html: string): string {
     return trimmed
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<style[\s\S]*?<\/style>/gi, "")
-      .replace(/\sstyle="[^"]*"/gi, "")
-      .replace(/\sstyle='[^']*'/gi, "");
+      .replace(/\sstyle="([^"]*)"/gi, (full, style: string) =>
+        isGmailSafeStyle(style) ? full : ""
+      )
+      .replace(/\sstyle='([^']*)'/gi, (full, style: string) =>
+        isGmailSafeStyle(style) ? full : ""
+      );
   }
   const doc = new DOMParser().parseFromString(trimmed, "text/html");
   sanitizeEmailHtmlNode(doc.body);

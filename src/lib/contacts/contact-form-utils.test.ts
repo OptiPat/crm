@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildSubmitPayload,
+  contactToFormData,
   defaultProchainSuiviClient,
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
@@ -8,6 +10,7 @@ import {
   resolveImportContactCategories,
   suiviDatesOverrides,
 } from "./contact-form-utils";
+import type { Contact } from "@/lib/api/tauri-contacts";
 
 describe("defaultProchainSuiviClient", () => {
   it("propose J+1 an", () => {
@@ -78,5 +81,30 @@ describe("isAlerteSuiviFilleul", () => {
   it("détecte les types filleul", () => {
     expect(isAlerteSuiviFilleul("FILLEUL_SUIVI_6MOIS")).toBe(true);
     expect(isAlerteSuiviFilleul("SUIVI_CLIENT_1AN")).toBe(false);
+  });
+});
+
+describe("contactToFormData", () => {
+  const prescripteur: Contact = {
+    id: 1,
+    nom: "BOISSEZON",
+    prenom: "Laure",
+    categorie: "PRESCRIPTEUR",
+    statut_suivi: "ACTIF",
+    created_at: 0,
+    updated_at: 0,
+  };
+
+  it("conserve la catégorie PRESCRIPTEUR à l'édition", () => {
+    expect(contactToFormData(prescripteur).categorie).toBe("PRESCRIPTEUR");
+  });
+
+  it("ne remplace pas PRESCRIPTEUR par AUCUN à l'enregistrement", () => {
+    const payload = buildSubmitPayload({
+      ...contactToFormData(prescripteur),
+      telephone: "0612345678",
+    });
+    expect(payload.categorie).toBe("PRESCRIPTEUR");
+    expect(payload.telephone).toBe("0612345678");
   });
 });

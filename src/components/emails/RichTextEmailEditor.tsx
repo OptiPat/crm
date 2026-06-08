@@ -1,4 +1,3 @@
-import { sanitizeTemplateEmailHtml } from "@/lib/emails/template-email-html";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,7 +9,12 @@ import {
   ListOrdered,
   Underline,
 } from "lucide-react";
-
+import {
+  finalizeEditorHtmlForStorage,
+  normalizeEditorHtml,
+  sanitizeEditorHtml,
+  saveRichEditorSelection,
+} from "@/components/emails/rich-text-email-editor-utils";
 type RichTextEmailEditorProps = {
   value: string;
   onChange: (html: string) => void;
@@ -19,14 +23,6 @@ type RichTextEmailEditorProps = {
   placeholder?: string;
   onSelectionSave?: (range: Range | null) => void;
 };
-
-function normalizeEditorHtml(html: string): string {
-  const trimmed = html.trim();
-  if (!trimmed || trimmed === "<br>" || trimmed === "<div><br></div>") {
-    return "";
-  }
-  return html;
-}
 
 export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEditorProps>(
   function RichTextEmailEditor(
@@ -47,6 +43,8 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
   const syncFromValue = useCallback(() => {
     const el = editorRef.current;
     if (!el) return;
+    // Ne pas écraser le DOM pendant la saisie (sinon plus de curseur / aperçu live).
+    if (el.contains(document.activeElement)) return;
     const next = value || "";
     if (el.innerHTML !== next) {
       el.innerHTML = next;
@@ -58,15 +56,18 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
     syncFromValue();
   }, [syncFromValue]);
 
-  const emitChange = () => {
+  const emitChange = (finalize = false) => {
     const el = editorRef.current;
     if (!el) return;
-    const html = sanitizeTemplateEmailHtml(normalizeEditorHtml(el.innerHTML));
+    const raw = normalizeEditorHtml(el.innerHTML);
+    const html = finalize ? finalizeEditorHtmlForStorage(raw) : sanitizeEditorHtml(raw);
+    if (finalize && html !== el.innerHTML) {
+      el.innerHTML = html;
+    }
     if (html === lastEmitted.current) return;
     lastEmitted.current = html;
     onChange(html);
   };
-
   const exec = (command: string, valueArg?: string) => {
     editorRef.current?.focus();
     document.execCommand(command, false, valueArg);
@@ -156,15 +157,14 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground",
           "[&_a]:text-primary [&_a]:underline",
           "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
-          "[&_p]:my-1"
+          "[&_div]:leading-normal [&_>div]:m-0 [&_p]:my-0 [&_p]:leading-normal"
         )}
         style={{ "--editor-min-h": minHeight } as React.CSSProperties}
-        onInput={emitChange}
+        onInput={() => emitChange(false)}
         onBlur={() => {
           onSelectionSave?.(saveRichEditorSelection(editorRef.current));
-          emitChange();
-        }}
-      />
+          emitChange(true);
+        }}      />
       <p className="px-3 pb-2 text-[11px] text-muted-foreground border-t bg-muted/10">
         Mise en forme conservée à l&apos;envoi Gmail (gras, listes, liens). Variables{" "}
         {"{{prenom}}"} etc. : insérez-les via les badges ci-dessus.
@@ -173,36 +173,3 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
   );
   }
 );
-
-/** Sauvegarde la sélection courante dans l'éditeur riche. */
-export function saveRichEditorSelection(editorEl: HTMLDivElement | null): Range | null {
-  if (!editorEl) return null;
-  const sel = window.getSelection();
-  if (!sel || sel.rangeCount === 0) return null;
-  const range = sel.getRangeAt(0);
-  if (!editorEl.contains(range.commonAncestorContainer)) return null;
-  return range.cloneRange();
-}
-
-/** Insère du texte à la position du curseur dans l'éditeur. */
-export function insertTextInRichEditor(
-  editorEl: HTMLDivElement | null,
-  text: string,
-  savedRange?: Range | null
-): string {
-  if (!editorEl) return "";
-  editorEl.focus();
-  const sel = window.getSelection();
-  let range = saveRichEditorSelection(editorEl) ?? savedRange ?? null;
-  if (range && !editorEl.contains(range.commonAncestorContainer)) {
-    range = savedRange && editorEl.contains(savedRange.commonAncestorContainer)
-      ? savedRange
-      : null;
-  }
-  if (range) {
-    sel?.removeAllRanges();
-    sel?.addRange(range);
-  }
-  document.execCommand("insertText", false, text);
-  return sanitizeTemplateEmailHtml(normalizeEditorHtml(editorEl.innerHTML));
-}

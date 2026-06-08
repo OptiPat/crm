@@ -3,6 +3,7 @@ import {
   getTemplateCorpsHtml,
   htmlToPlainEmail,
   plainTextToTemplateHtml,
+  normalizeTemplateEmailHtmlLikeGmail,
   setTemplateCorpsHtmlInMeta,
   buildTemplateSendBodies,
   sanitizeTemplateEmailHtml,
@@ -24,18 +25,36 @@ describe("template-email-html", () => {
     expect(plain).toContain("Un");
   });
 
-  it("convertit texte brut en HTML simple", () => {
-    expect(plainTextToTemplateHtml("Ligne 1\n\nLigne 2")).toContain("Ligne 1");
-    expect(plainTextToTemplateHtml("Ligne 1\n\nLigne 2")).toContain("<br>");
+  it("convertit texte brut en une div Gmail par ligne", () => {
+    const html = plainTextToTemplateHtml("Ligne 1\n\nLigne 2");
+    expect(html).toContain("Ligne 1");
+    expect(html).toContain("Ligne 2");
+    expect(html).toContain('line-height:1.5;margin:0;padding:0');
+    expect(html).toContain("<br></div>");
+    expect(html.match(/<div style=/g)?.length).toBe(3);
   });
 
-  it("envoie en HTML quand le modèle a corps_html", () => {
+  it("normalise comme Gmail : Entrée = div, ligne vide = div br", () => {
+    const out = normalizeTemplateEmailHtmlLikeGmail(
+      "<p>Intro</p><p>Suite</p><p><br></p><p>Fin</p>"
+    );
+    expect(out).toContain('dir="ltr"');
+    expect(out).toContain("Intro");
+    expect(out).toContain("Suite");
+    expect(out).toContain("Fin");
+    expect(out).toContain("<div style=\"line-height:1.5;margin:0;padding:0\"><br></div>");
+    expect(out).not.toMatch(/<p>/);
+  });
+
+  it("envoie en HTML Gmail normalisé quand le modèle a corps_html", () => {
     const { body_html } = buildTemplateSendBodies(
       "Message.\n\n--\nSig",
-      "<p>Message.</p>",
+      "<div>Message.</div>",
       { email_signature_html: "<p>Sig</p>", wizard_completed: true, wizard_step: 4 }
     );
-    expect(body_html).toContain("<p>Message.</p>");
+    expect(body_html).toContain('dir="ltr"');
+    expect(body_html).toContain('line-height:1.5;margin:0;padding:0');
+    expect(body_html).toContain("Message.");
     expect(body_html).toContain("<p>Sig</p>");
   });
 
@@ -46,5 +65,12 @@ describe("template-email-html", () => {
     expect(out).toContain("<strong>X</strong>");
     expect(out).not.toContain("script");
     expect(out).not.toContain("style=");
+  });
+
+  it("sanitize conserve les styles Gmail sûrs sur div", () => {
+    const out = sanitizeTemplateEmailHtml(
+      `<div style="line-height:1.5;margin:0;padding:0">Bonjour</div>`
+    );
+    expect(out).toContain('style="line-height:1.5;margin:0;padding:0"');
   });
 });

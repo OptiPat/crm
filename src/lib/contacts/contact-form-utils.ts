@@ -161,7 +161,10 @@ export function contactToFormData(contact: Contact): NewContact {
   if (!filleul_categorie && isFilleulStatut(contact.categorie)) {
     filleul_categorie = contact.categorie;
     categorie = "AUCUN";
-  } else if (!clientCats.includes(categorie) || isFilleulStatut(categorie)) {
+  } else if (
+    (!clientCats.includes(categorie) || isFilleulStatut(categorie)) &&
+    !isPrescripteurCategorie(categorie)
+  ) {
     categorie = "AUCUN";
   }
 

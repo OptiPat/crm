@@ -11,11 +11,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
 import {
-  RichTextEmailEditor,
   insertTextInRichEditor,
   saveRichEditorSelection,
-} from "@/components/emails/RichTextEmailEditor";
+} from "@/components/emails/rich-text-email-editor-utils";
 import { insertTextInPlainField } from "@/lib/emails/insert-text-at-cursor";
 import {
   getTemplateCorpsHtml,

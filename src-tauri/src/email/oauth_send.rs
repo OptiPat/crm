@@ -67,6 +67,21 @@ pub fn refresh_connection_if_needed(
     Ok(())
 }
 
+fn cgp_sender_display_name(cgp: &CgpConfig) -> Option<String> {
+    let full = [cgp.prenom.as_deref(), cgp.nom.as_deref()]
+        .into_iter()
+        .flatten()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    if full.is_empty() {
+        None
+    } else {
+        Some(full)
+    }
+}
+
 fn format_addresses(
     from_email: &str,
     from_name: Option<&str>,
@@ -158,6 +173,7 @@ fn build_rfc2822(
 
 fn send_via_gmail(
     conn: &EmailOAuthConnection,
+    from_name: Option<&str>,
     to_email: &str,
     to_name: Option<&str>,
     subject: &str,
@@ -166,7 +182,7 @@ fn send_via_gmail(
     reply: Option<&GmailThreadReply>,
 ) -> Result<Option<(String, String)>, String> {
     let raw = build_rfc2822(
-        &conn.email, None, to_email, to_name, subject, body, body_html, reply,
+        &conn.email, from_name, to_email, to_name, subject, body, body_html, reply,
     );
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.as_bytes());
     let mut payload = serde_json::json!({ "raw": encoded });
@@ -252,9 +268,20 @@ pub fn send_with_oauth(
 
     refresh_connection_if_needed(app, &mut conn)?;
 
+    let from_name = cgp_sender_display_name(&load_cgp_config(app));
+
     match conn.provider.as_str() {
         "google" => {
-            let ids = send_via_gmail(&conn, to_email, to_name, subject, body, body_html, reply)?;
+            let ids = send_via_gmail(
+                &conn,
+                from_name.as_deref(),
+                to_email,
+                to_name,
+                subject,
+                body,
+                body_html,
+                reply,
+            )?;
             Ok(OAuthSendResult {
                 gmail_message_id: ids.as_ref().map(|(m, _)| m.clone()),
                 gmail_thread_id: ids.map(|(_, t)| t),
@@ -370,6 +397,21 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn from_header_includes_cgp_display_name() {
+        let raw = build_rfc2822(
+            "nplaza.invest@gmail.com",
+            Some("Nicolas PLAZA"),
+            "client@example.com",
+            Some("Marie"),
+            "Sujet",
+            "Corps",
+            None,
+            None,
+        );
+        assert!(raw.starts_with("From: Nicolas PLAZA <nplaza.invest@gmail.com>"));
+    }
 
     #[test]
     fn html_message_is_single_part_not_multipart() {
