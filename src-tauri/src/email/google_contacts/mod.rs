@@ -60,7 +60,7 @@ struct GooglePersonSource {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-pub(super) struct GooglePerson {
+pub(crate) struct GooglePerson {
     #[serde(rename = "resourceName", default)]
     resource_name: Option<String>,
     #[serde(default)]

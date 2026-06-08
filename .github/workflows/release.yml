@@ -53,6 +53,18 @@ jobs:
         with:
           workspaces: src-tauri
 
+      - name: Cache NSIS (target/.tauri)
+        uses: actions/cache@v4
+        with:
+          path: src-tauri/target/.tauri
+          key: nsis-tauri-v0.5.3-${{ runner.os }}
+          restore-keys: |
+            nsis-tauri-v0.5.3-${{ runner.os }}
+
+      - name: Pre-cache NSIS (retry si 504 GitHub)
+        shell: pwsh
+        run: .\scripts\ci-precache-nsis.ps1
+
       # SQLCipher compile OpenSSL depuis les sources (vendored) : nécessite NASM.
       # Perl (Strawberry) est déjà préinstallé sur l'image windows-latest.
       - name: Install NASM (build OpenSSL/SQLCipher)
