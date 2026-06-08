@@ -345,6 +345,7 @@ pub struct PrepareNewsletterEditionInput {
 
 #[tauri::command]
 pub fn prepare_newsletter_edition(
+    app: AppHandle,
     db: State<'_, DbState>,
     input: PrepareNewsletterEditionInput,
 ) -> Result<PrepareNewsletterEditionResult, String> {
@@ -352,6 +353,9 @@ pub fn prepare_newsletter_edition(
         .duration_since(UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_secs() as i64;
+
+    let settings_filters = NewsletterStore::load(&app)?.default_audience_filters;
+    let filters = settings_filters.merged_with(&input.filters);
 
     let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
     let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
@@ -394,11 +398,11 @@ pub fn prepare_newsletter_edition(
         )
         .map_err(|e| format!("Activation campagne: {}", e))?;
 
-    let filters_json = serde_json::to_string(&input.filters)
+    let filters_json = serde_json::to_string(&filters)
         .map_err(|e| format!("Filtres audience: {}", e))?;
 
     let (queued, skipped_no_email, queued_contacts) = database
-        .queue_newsletter_edition(input.etiquette_id, now, &input.filters)
+        .queue_newsletter_edition(input.etiquette_id, now, &filters)
         .map_err(|e| format!("File newsletter: {}", e))?;
 
     let edition_id = database

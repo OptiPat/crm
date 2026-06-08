@@ -5,8 +5,48 @@ import type {
   NewsletterEligibleContact,
 } from "@/lib/api/tauri-newsletter";
 
+export function mergeExcludeContactIds(
+  settingsExcludeContactIds: number[],
+  editionExcludeContactIds: number[]
+): number[] {
+  return [...new Set([...settingsExcludeContactIds, ...editionExcludeContactIds])];
+}
+
+export function mergeNewsletterAudienceFilters(
+  settingsFilters: NewsletterAudienceFilters,
+  editionFilters: NewsletterAudienceFilters
+): NewsletterAudienceFilters {
+  return {
+    excludePrescripteurs:
+      settingsFilters.excludePrescripteurs || editionFilters.excludePrescripteurs,
+    excludeSuspects: settingsFilters.excludeSuspects || editionFilters.excludeSuspects,
+    excludeArchived: settingsFilters.excludeArchived || editionFilters.excludeArchived,
+    excludeContactIds: mergeExcludeContactIds(
+      settingsFilters.excludeContactIds,
+      editionFilters.excludeContactIds
+    ),
+  };
+}
+
 export function isNewsletterMemberSelectable(member: NewsletterAudienceMember): boolean {
   return member.hasEmail && !member.unsubscribed;
+}
+
+export function isNewsletterMemberSettingsExcluded(
+  member: NewsletterAudienceMember,
+  settingsExcludeContactIds: number[]
+): boolean {
+  return settingsExcludeContactIds.includes(member.contactId);
+}
+
+export function isNewsletterMemberEditionSelectable(
+  member: NewsletterAudienceMember,
+  settingsExcludeContactIds: number[]
+): boolean {
+  return (
+    isNewsletterMemberSelectable(member) &&
+    !isNewsletterMemberSettingsExcluded(member, settingsExcludeContactIds)
+  );
 }
 
 export function isNewsletterMemberSelected(
@@ -36,11 +76,12 @@ export function toggleNewsletterMemberSelection(
 export function setNewsletterMembersSelection(
   members: NewsletterAudienceMember[],
   excludeContactIds: number[],
-  selected: boolean
+  selected: boolean,
+  settingsExcludeContactIds: number[] = []
 ): number[] {
   const ids = new Set(excludeContactIds);
   for (const member of members) {
-    if (!isNewsletterMemberSelectable(member)) continue;
+    if (!isNewsletterMemberEditionSelectable(member, settingsExcludeContactIds)) continue;
     if (selected) {
       ids.delete(member.contactId);
     } else {
@@ -52,17 +93,30 @@ export function setNewsletterMembersSelection(
 
 export function computeNewsletterAudiencePreview(
   members: NewsletterAudienceMember[],
-  filters: NewsletterAudienceFilters
+  editionFilters: NewsletterAudienceFilters,
+  settingsExcludeContactIds: number[] = []
 ): NewsletterAudiencePreview {
+  const effectiveExclude = mergeExcludeContactIds(
+    settingsExcludeContactIds,
+    editionFilters.excludeContactIds
+  );
+  const settingsSet = new Set(settingsExcludeContactIds);
+  const editionSet = new Set(editionFilters.excludeContactIds);
+
   const withEmail = members.filter((m) => m.hasEmail).length;
   const permanentExcluded = members.filter((m) => m.unsubscribed).length;
-  const excludedSet = new Set(filters.excludeContactIds);
-  const manuallyExcluded = members.filter(
-    (m) => isNewsletterMemberSelectable(m) && excludedSet.has(m.contactId)
+  const settingsExcluded = members.filter(
+    (m) => isNewsletterMemberSelectable(m) && settingsSet.has(m.contactId)
+  ).length;
+  const editionOnlyExcluded = members.filter(
+    (m) =>
+      isNewsletterMemberSelectable(m) &&
+      editionSet.has(m.contactId) &&
+      !settingsSet.has(m.contactId)
   ).length;
 
   const recipients: NewsletterEligibleContact[] = members
-    .filter((m) => isNewsletterMemberSelected(m, filters.excludeContactIds))
+    .filter((m) => isNewsletterMemberSelected(m, effectiveExclude))
     .map((m) => ({
       contactId: m.contactId,
       nom: m.nom,
@@ -77,7 +131,7 @@ export function computeNewsletterAudiencePreview(
     withEmail,
     withoutEmail: members.length - withEmail,
     permanentExcluded,
-    excludedByFilters: manuallyExcluded,
+    excludedByFilters: settingsExcluded + editionOnlyExcluded,
     eligible: recipients.length,
     recipients,
   };

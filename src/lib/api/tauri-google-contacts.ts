@@ -31,6 +31,23 @@ export interface GoogleContactBatchSyncResult {
   entries: GoogleContactBatchSyncEntry[];
 }
 
+export interface GoogleContactNameCandidate {
+  resourceName: string;
+  googlePrenom: string;
+  googleNom: string;
+  googleEmail: string | null;
+  googlePhone: string | null;
+}
+
+export interface GoogleContactNameProposal {
+  contactId: number;
+  prenom: string;
+  nom: string;
+  crmEmail: string | null;
+  crmPhone: string | null;
+  candidates: GoogleContactNameCandidate[];
+}
+
 export async function syncContactGoogle(
   contactId: number
 ): Promise<GoogleContactSyncResult> {
@@ -39,6 +56,24 @@ export async function syncContactGoogle(
 
 export async function syncAllContactsGoogle(): Promise<GoogleContactBatchSyncResult> {
   return invoke<GoogleContactBatchSyncResult>("sync_all_contacts_google_cmd");
+}
+
+export async function listGoogleContactNameProposals(): Promise<GoogleContactNameProposal[]> {
+  return invoke<GoogleContactNameProposal[]>("list_google_contact_name_proposals_cmd");
+}
+
+export async function applyGoogleContactNameProposal(
+  contactId: number,
+  resourceName: string
+): Promise<GoogleContactSyncResult> {
+  return invoke<GoogleContactSyncResult>("apply_google_contact_name_proposal_cmd", {
+    contactId,
+    resourceName,
+  });
+}
+
+export async function dismissGoogleContactNameProposal(contactId: number): Promise<void> {
+  return invoke<void>("dismiss_google_contact_name_proposal_cmd", { contactId });
 }
 
 export function googleContactSyncToastMessage(result: GoogleContactSyncResult): string {
@@ -53,6 +88,8 @@ export function googleContactSyncToastMessage(result: GoogleContactSyncResult): 
       return `Contact Google mis à jour.${dedupe}`;
     case "linked_enriched":
       return `Coordonnées complétées depuis Google Contacts.${dedupe}`;
+    case "linked":
+      return `Contact associé à Google Contacts.${dedupe}`;
     case "unchanged":
       return result.message ?? `Déjà synchronisé avec Google Contacts.${dedupe}`;
     case "skipped":

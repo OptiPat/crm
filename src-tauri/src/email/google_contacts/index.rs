@@ -173,6 +173,33 @@ impl GoogleContactIndex {
             list.retain(|r| r != resource_name);
         }
     }
+
+    pub fn iter_persons(&self) -> impl Iterator<Item = &GooglePerson> {
+        self.persons.values()
+    }
+
+    pub fn clone_for_session(&self) -> Self {
+        Self {
+            by_email: self.by_email.clone(),
+            by_phone: self.by_phone.clone(),
+            persons: self.persons.clone(),
+            full_load: self.full_load,
+        }
+    }
+
+    #[cfg(test)]
+    pub fn from_test_data(
+        by_email: HashMap<String, Vec<String>>,
+        by_phone: HashMap<String, Vec<String>>,
+        persons: HashMap<String, GooglePerson>,
+    ) -> Self {
+        Self {
+            by_email,
+            by_phone,
+            persons,
+            full_load: true,
+        }
+    }
 }
 
 #[cfg(test)]

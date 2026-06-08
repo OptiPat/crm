@@ -71,6 +71,7 @@ import {
   loadNewsletterComposerDraft,
   saveNewsletterComposerDraft,
 } from "@/lib/newsletter/newsletter-composer-draft";
+import { mergeNewsletterAudienceFilters } from "@/lib/newsletter/newsletter-audience-utils";
 import { toast } from "sonner";
 
 function buildHtmlOptions(
@@ -423,7 +424,10 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         htmlMeta: serializeNewsletterTemplateMeta(html),
         theme: theme.trim() || null,
         editionInstructions: editionInstructions.trim() || null,
-        filters: audienceFilters,
+        filters: mergeNewsletterAudienceFilters(
+          settings?.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
+          audienceFilters
+        ),
       });
       setPreparedQueueCount(result.queued);
       setActiveEditionId(result.editionId);
@@ -437,6 +441,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setPreviewHtml(reset.previewHtml);
       setChatHistory(reset.chatHistory);
       setChatSessionKey((k) => k + 1);
+      setAudienceFilters({ ...DEFAULT_NEWSLETTER_AUDIENCE_FILTERS, excludeContactIds: [] });
       toast.success(
         `${result.queued} destinataire${result.queued !== 1 ? "s" : ""} en file` +
           (result.skippedNoEmail > 0 ? ` (${result.skippedNoEmail} sans email ignorés)` : "")
@@ -536,6 +541,9 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         <TabsContent value="composer" className="mt-4 space-y-4">
           <NewsletterAudiencePanel
             filters={audienceFilters}
+            settingsExcludeContactIds={
+              settings?.defaultAudienceFilters.excludeContactIds ?? []
+            }
             onFiltersChange={setAudienceFilters}
             onPreviewChange={setAudiencePreview}
             onOpenContact={(id) => onNavigate?.(`contact-${id}`)}
@@ -773,11 +781,11 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             .
           </p>
           <ParametresNewsletterSection
-            onSettingsSaved={(saved) => {
+            switchToComposerAfterSave
+            onSwitchToComposer={() => setTab("composer")}
+            onSettingsSync={(saved) => {
               setSettings(saved);
               setSendDelayMs(saved.sendDelayMs);
-              setAudienceFilters(saved.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS);
-              setTab("composer");
             }}
           />
         </TabsContent>

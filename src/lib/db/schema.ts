@@ -103,6 +103,18 @@ export const contacts = sqliteTable("contacts", {
   googleSyncedAt: integer("google_synced_at", { mode: "timestamp" }),
 });
 
+export const googleContactNameProposalDismissals = sqliteTable(
+  "google_contact_name_proposal_dismissals",
+  {
+    contactId: integer("contact_id")
+      .primaryKey()
+      .references(() => contacts.id, { onDelete: "cascade" }),
+    dismissedAt: integer("dismissed_at", { mode: "timestamp" })
+      .default(sql`(unixepoch())`)
+      .notNull(),
+  }
+);
+
 // ============================================
 // PARTENAIRES (Fournisseurs de produits)
 // ============================================

@@ -1,5 +1,6 @@
 mod phone;
 mod index;
+mod name_proposals;
 
 use index::GoogleContactIndex;
 
@@ -99,7 +100,7 @@ struct CreateContactResponse {
     resource_name: Option<String>,
 }
 
-fn with_db<T, F>(db_state: &DbState, f: F) -> Result<T, String>
+pub(super) fn with_db<T, F>(db_state: &DbState, f: F) -> Result<T, String>
 where
     F: FnOnce(&Database) -> Result<T, String>,
 {
@@ -108,7 +109,7 @@ where
     f(db)
 }
 
-fn google_access_token(app: &AppHandle) -> Result<String, String> {
+pub(super) fn google_access_token(app: &AppHandle) -> Result<String, String> {
     let store = EmailOAuthStore::load(app)?;
     let mut conn = store
         .connection
@@ -121,7 +122,7 @@ fn google_access_token(app: &AppHandle) -> Result<String, String> {
     Ok(conn.access_token)
 }
 
-fn auth_client(token: &str) -> Client {
+pub(super) fn auth_client(token: &str) -> Client {
     let mut headers = reqwest::header::HeaderMap::new();
     headers.insert(
         reqwest::header::AUTHORIZATION,
@@ -149,14 +150,14 @@ pub(super) fn trim_opt(s: Option<&String>) -> Option<String> {
     })
 }
 
-fn person_primary_email(person: &GooglePerson) -> Option<String> {
+pub(super) fn person_primary_email(person: &GooglePerson) -> Option<String> {
     person
         .email_addresses
         .iter()
         .find_map(|e| trim_opt(e.value.as_ref()))
 }
 
-fn person_primary_phone(person: &GooglePerson) -> Option<String> {
+pub(super) fn person_primary_phone(person: &GooglePerson) -> Option<String> {
     person
         .phone_numbers
         .iter()
@@ -168,7 +169,7 @@ fn emails_match(a: &str, b: &str) -> bool {
 }
 
 static SEARCH_WARMUP_DONE: AtomicBool = AtomicBool::new(false);
-static SESSION_INDEX: Mutex<Option<GoogleContactIndex>> = Mutex::new(None);
+pub(super) static SESSION_INDEX: Mutex<Option<GoogleContactIndex>> = Mutex::new(None);
 
 struct ReadRateLimiter {
     window_start: Instant,
@@ -290,7 +291,7 @@ fn search_contacts(client: &Client, query: &str) -> Result<Vec<GooglePerson>, St
     search_contacts_request(client, query)
 }
 
-fn pick_best_match(contact: &Contact, candidates: &[GooglePerson]) -> Option<GooglePerson> {
+pub(super) fn pick_best_match(contact: &Contact, candidates: &[GooglePerson]) -> Option<GooglePerson> {
     let crm_email = trim_opt(contact.email.as_ref());
     let crm_phone = trim_opt(contact.telephone.as_ref());
 
@@ -313,7 +314,7 @@ fn pick_best_match(contact: &Contact, candidates: &[GooglePerson]) -> Option<Goo
     None
 }
 
-fn google_has_crm_email(person: &GooglePerson, email: &str) -> bool {
+pub(super) fn google_has_crm_email(person: &GooglePerson, email: &str) -> bool {
     person.email_addresses.iter().any(|e| {
         trim_opt(e.value.as_ref())
             .map(|v| emails_match(&v, email))
@@ -321,7 +322,7 @@ fn google_has_crm_email(person: &GooglePerson, email: &str) -> bool {
     })
 }
 
-fn google_has_crm_phone(person: &GooglePerson, phone: &str) -> bool {
+pub(super) fn google_has_crm_phone(person: &GooglePerson, phone: &str) -> bool {
     person.phone_numbers.iter().any(|p| {
         trim_opt(p.value.as_ref())
             .map(|v| phones_match(&v, phone))
@@ -380,13 +381,9 @@ fn collect_google_candidates(
     if let Some(ref rn) = contact.google_contact_resource_name {
         if !rn.is_empty() {
             if let Some(person) = index.get_person(rn) {
-                if person_matches_contact(person, contact) {
-                    insert_candidate(&mut by_rn, person.clone());
-                }
+                insert_candidate(&mut by_rn, person.clone());
             } else if let Ok(person) = get_person_by_resource_name(client, rn) {
-                if person_matches_contact(&person, contact) {
-                    insert_candidate(&mut by_rn, person);
-                }
+                insert_candidate(&mut by_rn, person);
             }
         }
     }
@@ -514,7 +511,7 @@ fn needs_google_update(
     !is_fully_synced(contact, email_out, phone_out, person)
 }
 
-fn get_person_by_resource_name(client: &Client, resource_name: &str) -> Result<GooglePerson, String> {
+pub(super) fn get_person_by_resource_name(client: &Client, resource_name: &str) -> Result<GooglePerson, String> {
     before_critical_read();
     let url = format!("{PEOPLE_BASE}/{resource_name}?personFields={READ_MASK}");
     let resp = send_with_rate_limit_retry("Lecture Google Contact", || client.get(&url).send())?;
@@ -1056,6 +1053,32 @@ pub fn sync_all_contacts_google_cmd(
     db: State<'_, DbState>,
 ) -> Result<GoogleContactBatchSyncResult, String> {
     sync_all_contacts_to_google(&app, &db)
+}
+
+#[tauri::command]
+pub fn list_google_contact_name_proposals_cmd(
+    app: AppHandle,
+    db: State<'_, DbState>,
+) -> Result<Vec<name_proposals::GoogleContactNameProposal>, String> {
+    name_proposals::list_google_contact_name_proposals(&app, &db)
+}
+
+#[tauri::command]
+pub fn apply_google_contact_name_proposal_cmd(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    contact_id: i64,
+    resource_name: String,
+) -> Result<GoogleContactSyncResult, String> {
+    name_proposals::apply_google_contact_name_proposal(&app, &db, contact_id, &resource_name)
+}
+
+#[tauri::command]
+pub fn dismiss_google_contact_name_proposal_cmd(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<(), String> {
+    name_proposals::dismiss_google_contact_name_proposal(&db, contact_id)
 }
 
 #[tauri::command]

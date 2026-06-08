@@ -16,6 +16,7 @@ pub mod dashboard_stats;
 pub mod documents;
 pub mod exchange_history;
 pub mod email_send_log;
+pub mod google_contact_name_dismissals;
 pub mod etiquette_pipeline;
 pub mod calendar_events;
 pub mod familles;
@@ -509,7 +510,20 @@ impl Database {
         self.migrate_etiquette_pipeline()?;
         self.migrate_calendar_events()?;
         self.migrate_contacts_google_sync()?;
+        self.migrate_google_contact_name_proposal_dismissals()?;
 
+        Ok(())
+    }
+
+    fn migrate_google_contact_name_proposal_dismissals(&self) -> Result<()> {
+        self.conn.execute(
+            "CREATE TABLE IF NOT EXISTS google_contact_name_proposal_dismissals (
+                contact_id INTEGER NOT NULL PRIMARY KEY,
+                dismissed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE
+            )",
+            [],
+        )?;
         Ok(())
     }
 

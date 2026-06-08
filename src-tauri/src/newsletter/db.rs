@@ -28,6 +28,20 @@ impl Default for NewsletterAudienceFilters {
     }
 }
 
+impl NewsletterAudienceFilters {
+    pub fn merged_with(&self, other: &Self) -> Self {
+        let mut ids: std::collections::HashSet<i64> =
+            self.exclude_contact_ids.iter().copied().collect();
+        ids.extend(&other.exclude_contact_ids);
+        Self {
+            exclude_prescripteurs: self.exclude_prescripteurs || other.exclude_prescripteurs,
+            exclude_suspects: self.exclude_suspects || other.exclude_suspects,
+            exclude_archived: self.exclude_archived || other.exclude_archived,
+            exclude_contact_ids: ids.into_iter().collect(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NewsletterAudienceMember {

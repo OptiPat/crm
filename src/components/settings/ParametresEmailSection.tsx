@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
-import { Contact, FileSignature, Loader2, Sparkles } from "lucide-react";
+import { Contact, FileSignature, Loader2, Sparkles, UserSearch } from "lucide-react";
 import { SETTING_CONTACT_MAIL_AUTO_SYNC } from "@/lib/api/tauri-contact-gmail";
 import { fetchGmailSignatureForCgp, getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import {
@@ -23,6 +23,7 @@ import {
   type GoogleContactBatchSyncResult,
 } from "@/lib/api/tauri-google-contacts";
 import { GoogleContactBatchReportDialog } from "@/components/settings/GoogleContactBatchReportDialog";
+import { GoogleContactNameProposalsDialog } from "@/components/settings/GoogleContactNameProposalsDialog";
 import {
   notifyStelliumExceltisChanged,
   scanStelliumExceltisEmails,
@@ -45,6 +46,7 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
   const [batchGoogleRunning, setBatchGoogleRunning] = useState(false);
   const [batchReport, setBatchReport] = useState<GoogleContactBatchSyncResult | null>(null);
   const [batchReportOpen, setBatchReportOpen] = useState(false);
+  const [nameProposalsOpen, setNameProposalsOpen] = useState(false);
 
   useEffect(() => {
     getSetting(SETTING_CONTACT_MAIL_AUTO_SYNC)
@@ -121,9 +123,34 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
             </>
           )}
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="mt-2"
+          onClick={async () => {
+            try {
+              const status = await getEmailConnectionStatus();
+              if (status.provider !== "google" || !status.connected) {
+                toast.error("Connectez Google dans Paramètres → Email.");
+                return;
+              }
+              setNameProposalsOpen(true);
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "Connexion Google indisponible.");
+            }
+          }}
+        >
+          <UserSearch className="h-4 w-4 mr-2" />
+          Propositions nom / prénom (Google)
+        </Button>
         <p className="text-xs text-muted-foreground mt-3">
           Traite tous les contacts avec email ou téléphone. Les doublons Google (même coordonnées)
           sont fusionnés automatiquement — seule la fiche la plus complète est conservée.
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Pour les fiches sans correspondance email/tél Google : scan manuel par nom/prénom,
+          validation une par une (complète le CRM si Google a des coordonnées). Les propositions
+          ignorées ne réapparaissent plus aux scans suivants.
         </p>
       </SettingsPanel>
 
@@ -156,6 +183,11 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
         result={batchReport}
         open={batchReportOpen}
         onOpenChange={setBatchReportOpen}
+      />
+
+      <GoogleContactNameProposalsDialog
+        open={nameProposalsOpen}
+        onOpenChange={setNameProposalsOpen}
       />
 
       <SettingsPanel

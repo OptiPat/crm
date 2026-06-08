@@ -6,11 +6,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { Loader2 } from "lucide-react";
 import {
+  DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
   ensureNewsletterEtiquette,
   getNewsletterSettings,
   saveNewsletterSettings,
+  type NewsletterAudienceFilters,
   type NewsletterSettings,
 } from "@/lib/api/tauri-newsletter";
+import { NewsletterAudiencePanel } from "@/components/newsletter/NewsletterAudiencePanel";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
   DEFAULT_MISTRAL_MODEL,
@@ -20,9 +23,15 @@ import {
 import { toast } from "sonner";
 
 export function ParametresNewsletterSection({
-  onSettingsSaved,
+  onSettingsSync,
+  switchToComposerAfterSave = false,
+  onSwitchToComposer,
 }: {
-  onSettingsSaved?: (settings: NewsletterSettings) => void;
+  /** Met à jour l'état parent (ex. liste d'exclusions côté composer) sans navigation. */
+  onSettingsSync?: (settings: NewsletterSettings) => void;
+  /** Uniquement après « Enregistrer » Mistral / campagne (pas les exclusions). */
+  switchToComposerAfterSave?: boolean;
+  onSwitchToComposer?: () => void;
 }) {
   const [settings, setSettings] = useState<NewsletterSettings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,6 +42,10 @@ export function ParametresNewsletterSection({
   const [etiquetteNom, setEtiquetteNom] = useState("Newsletter");
   const [sendDelayMs, setSendDelayMs] = useState(3000);
   const [subscriberCount, setSubscriberCount] = useState<number | null>(null);
+  const [audienceFilters, setAudienceFilters] = useState<NewsletterAudienceFilters>(
+    DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
+  );
+  const [savingExclusions, setSavingExclusions] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,6 +56,7 @@ export function ParametresNewsletterSection({
       setModel(s.model);
       setEtiquetteNom(s.etiquetteNom);
       setSendDelayMs(s.sendDelayMs);
+      setAudienceFilters(s.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS);
       const etiq = await ensureNewsletterEtiquette(s.etiquetteNom);
       setSubscriberCount(etiq.contactCount);
     } catch (e) {
@@ -69,6 +83,7 @@ export function ParametresNewsletterSection({
         model,
         etiquetteNom,
         sendDelayMs,
+        defaultAudienceFilters: audienceFilters,
       };
       if (apiKeyInput.trim()) {
         payload.apiKey = apiKeyInput.trim();
@@ -78,7 +93,10 @@ export function ParametresNewsletterSection({
       setApiKeyInput("");
       const etiq = await ensureNewsletterEtiquette(saved.etiquetteNom);
       setSubscriberCount(etiq.contactCount);
-      onSettingsSaved?.(saved);
+      onSettingsSync?.(saved);
+      if (switchToComposerAfterSave) {
+        onSwitchToComposer?.();
+      }
       if (payload.apiKey) {
         toast.success("Clé Mistral enregistrée (masquée pour sécurité)");
       } else {
@@ -88,6 +106,21 @@ export function ParametresNewsletterSection({
       toast.error(e instanceof Error ? e.message : "Erreur enregistrement");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAudienceFiltersChange = async (next: NewsletterAudienceFilters) => {
+    setAudienceFilters(next);
+    setSavingExclusions(true);
+    try {
+      const saved = await saveNewsletterSettings({ defaultAudienceFilters: next });
+      setSettings(saved);
+      setAudienceFilters(saved.defaultAudienceFilters ?? next);
+      onSettingsSync?.(saved);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossible d'enregistrer les exclusions");
+    } finally {
+      setSavingExclusions(false);
     }
   };
 
@@ -224,9 +257,21 @@ export function ParametresNewsletterSection({
         </div>
       </SettingsPanel>
 
+      <NewsletterAudiencePanel
+        mode="settings"
+        filters={audienceFilters}
+        onFiltersChange={(next) => void handleAudienceFiltersChange(next)}
+      />
+      {savingExclusions ?
+        <p className="text-xs text-muted-foreground flex items-center gap-2 -mt-4">
+          <Loader2 className="h-3 w-3 animate-spin" />
+          Enregistrement des exclusions…
+        </p>
+      : null}
+
       <SettingsPanel title="Bonnes pratiques anti-spam">
         <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-5">
-          <li>Destinataires = contacts avec email (toute la base, sauf désinscrits)</li>
+          <li>Destinataires = contacts avec email (sauf désinscrits et exclusions permanentes)</li>
           <li>Un seul lien principal (bouton agenda)</li>
           <li>Envoi via Gmail connecté (Paramètres → Email)</li>
           <li>Testez avec « M&apos;envoyer un test » avant la campagne</li>
