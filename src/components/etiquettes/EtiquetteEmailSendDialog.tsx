@@ -31,7 +31,7 @@ interface EtiquetteEmailSendDialogProps {
   item: EtiquetteEmailQueueItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSent?: () => void;
+  onSent?: (meta?: { subject: string; sentAtSec: number }) => void;
   cgpConfig?: CgpConfig | null;
 }
 
@@ -120,9 +120,13 @@ export function EtiquetteEmailSendDialog({
         return;
       }
       toast.success(`Email envoyé à ${item.contact_prenom} ${item.contact_nom}`);
-      notifyRelationChanged(item.contact_id);
+      const sentAtSec = Math.floor(Date.now() / 1000);
+      notifyRelationChanged(item.contact_id, {
+        skipQueueReload: true,
+        skipEtiquettesChanged: true,
+      });
       onOpenChange(false);
-      onSent?.();
+      onSent?.({ subject: subject.trim(), sentAtSec });
     } catch (error) {
       console.error("Error sending etiquette email:", error);
       const hint = error instanceof Error ? error.message : "Erreur lors de l'envoi";

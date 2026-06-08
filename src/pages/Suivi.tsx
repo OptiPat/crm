@@ -879,8 +879,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
         open={!!alertEmailItem}
         onOpenChange={(o) => !o && setAlertEmailItem(null)}
         onSent={() => {
-          const contactId = alertEmailItem?.contact_id;
-          notifyRelationChanged(contactId);
           void loadEmailQueueCount();
           void fetchAlertesList({ silent: true });
         }}

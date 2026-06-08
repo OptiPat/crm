@@ -4,15 +4,30 @@ export const ETIQUETTES_CHANGED_EVENT = "crm:etiquettes-changed";
 /** Rafraîchissement fiche relation (interactions, alertes, file email). */
 export const RELATION_CHANGED_EVENT = "crm:relation-changed";
 
+export type RelationChangedDetail = {
+  contactId?: number;
+  /** Évite le rechargement complet de la file Envois (mise à jour locale déjà faite). */
+  skipQueueReload?: boolean;
+  /** Évite le recalcul étiquettes global (compteurs mis à jour autrement). */
+  skipEtiquettesChanged?: boolean;
+};
+
 export function notifyEtiquettesChanged(): void {
   window.dispatchEvent(new CustomEvent(ETIQUETTES_CHANGED_EVENT));
 }
 
-export function notifyRelationChanged(contactId?: number): void {
+export function notifyRelationChanged(
+  contactId?: number,
+  options?: Pick<RelationChangedDetail, "skipQueueReload" | "skipEtiquettesChanged">
+): void {
   window.dispatchEvent(
-    new CustomEvent(RELATION_CHANGED_EVENT, { detail: { contactId } })
+    new CustomEvent<RelationChangedDetail>(RELATION_CHANGED_EVENT, {
+      detail: { contactId, ...options },
+    })
   );
-  notifyEtiquettesChanged();
+  if (!options?.skipEtiquettesChanged) {
+    notifyEtiquettesChanged();
+  }
 }
 
 export function subscribeEtiquettesChanged(handler: () => void): () => void {
@@ -21,11 +36,11 @@ export function subscribeEtiquettesChanged(handler: () => void): () => void {
 }
 
 export function subscribeRelationChanged(
-  handler: (contactId?: number) => void
+  handler: (detail: RelationChangedDetail) => void
 ): () => void {
   const listener = (event: Event) => {
-    const detail = (event as CustomEvent<{ contactId?: number }>).detail;
-    handler(detail?.contactId);
+    const detail = (event as CustomEvent<RelationChangedDetail>).detail ?? {};
+    handler(detail);
   };
   window.addEventListener(RELATION_CHANGED_EVENT, listener);
   return () => window.removeEventListener(RELATION_CHANGED_EVENT, listener);

@@ -336,8 +336,8 @@ export function ContactInteractionsPanel({
   }, [relationTabActive, contactId, contactEmail, mailConnected, runMailSync]);
 
   useEffect(() => {
-    return subscribeRelationChanged((changedContactId) => {
-      if (changedContactId != null && changedContactId !== contactId) return;
+    return subscribeRelationChanged((detail) => {
+      if (detail.contactId != null && detail.contactId !== contactId) return;
       void load();
       onContactUpdated?.();
     });

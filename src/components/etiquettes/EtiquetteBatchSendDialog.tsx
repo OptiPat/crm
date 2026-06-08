@@ -22,12 +22,14 @@ export function EtiquetteBatchSendDialog({
   open,
   onOpenChange,
   cgpConfig,
+  onItemSent,
   onDone,
 }: {
   items: EtiquetteEmailQueueItem[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   cgpConfig: CgpConfig | null;
+  onItemSent?: (item: EtiquetteEmailQueueItem, subject: string, sentAtSec: number) => void;
   onDone?: () => void;
 }) {
   const [progress, setProgress] = useState<EtiquetteBatchSendProgress | null>(null);
@@ -53,9 +55,17 @@ export function EtiquetteBatchSendDialog({
         items,
         cgp: cgpConfig,
         signal: controller.signal,
-        onProgress: setProgress,
+        onProgress: (p) => {
+          setProgress(p);
+          if (p.lastSent && onItemSent) {
+            onItemSent(p.lastSent.item, p.lastSent.subject, p.lastSent.sentAtSec);
+          }
+        },
       });
-      notifyRelationChanged();
+      notifyRelationChanged(undefined, {
+        skipQueueReload: true,
+        skipEtiquettesChanged: true,
+      });
       if (result.errors.length === 0) {
         toast.success(`${result.sent} email${result.sent > 1 ? "s" : ""} envoyé${result.sent > 1 ? "s" : ""}`);
       } else {

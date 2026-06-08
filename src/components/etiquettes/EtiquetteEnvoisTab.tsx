@@ -70,6 +70,9 @@ import {
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { consumeEnvoisContactFocus } from "@/lib/navigation/suivi-navigation";
+import {
+  buildSentQueueItem,
+} from "@/lib/etiquettes/etiquette-queue-incremental";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -217,9 +220,32 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   useEventAutoRefresh(
     () => loadQueue({ silent: true }),
-    subscribeRelationChanged,
     subscribeEtiquettesChanged,
     subscribeContactsChanged
+  );
+
+  useEffect(() => {
+    return subscribeRelationChanged((detail) => {
+      if (detail.skipQueueReload) return;
+      void loadQueue({ silent: true });
+    });
+  }, [loadQueue]);
+
+  const applyLocalEmailSent = useCallback(
+    (item: EtiquetteEmailQueueItem, subject: string, sentAtSec: number) => {
+      const sentItem = buildSentQueueItem(item, sentAtSec, subject);
+      const id = item.contact_etiquette_id;
+      setReady((prev) => prev.filter((row) => row.contact_etiquette_id !== id));
+      setScheduled((prev) => prev.filter((row) => row.contact_etiquette_id !== id));
+      setSent((prev) => [sentItem, ...prev.filter((row) => row.contact_etiquette_id !== id)]);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      onQueueChanged?.();
+    },
+    [onQueueChanged]
   );
 
   useEffect(() => {
@@ -758,9 +784,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         open={!!confirmItem}
         onOpenChange={(o) => !o && setConfirmItem(null)}
         cgpConfig={cgpConfig}
-        onSent={() => {
-          setSelectedIds(new Set());
-          void loadQueue();
+        onSent={(meta) => {
+          if (confirmItem && meta) {
+            applyLocalEmailSent(confirmItem, meta.subject, meta.sentAtSec);
+          } else if (!meta) {
+            void loadQueue({ silent: true });
+          }
         }}
       />
 
@@ -769,9 +798,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         open={batchOpen}
         onOpenChange={setBatchOpen}
         cgpConfig={cgpConfig}
+        onItemSent={applyLocalEmailSent}
         onDone={() => {
           setSelectedIds(new Set());
-          void loadQueue();
+          onQueueChanged?.();
         }}
       />
 

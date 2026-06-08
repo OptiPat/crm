@@ -13,6 +13,12 @@ export interface EtiquetteBatchSendProgress {
   currentName?: string;
   errors: string[];
   batchId: string;
+  /** Dernier envoi réussi (refresh incrémental UI). */
+  lastSent?: {
+    item: EtiquetteEmailQueueItem;
+    subject: string;
+    sentAtSec: number;
+  };
 }
 
 function sleep(ms: number): Promise<void> {
@@ -85,6 +91,11 @@ export async function sendEtiquetteBatch(input: {
         "batch"
       );
       progress.sent += 1;
+      progress.lastSent = {
+        item,
+        subject: preview.subject,
+        sentAtSec: Math.floor(Date.now() / 1000),
+      };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       progress.errors.push(`${name} : ${msg}`);
