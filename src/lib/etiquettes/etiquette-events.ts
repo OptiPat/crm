@@ -53,28 +53,41 @@ export function subscribeRelationChanged(
 
 const RELATION_DEBOUNCE_MS = 300;
 
+/**
+ * Fusionne deux évènements relation regroupés dans la fenêtre de debounce.
+ * Un drapeau `skip*` n'est conservé que si TOUS les évènements l'ont demandé :
+ * dès qu'un seul évènement a besoin du rechargement, on ne le saute pas.
+ */
+export function mergeRelationChangedDetails(
+  pending: RelationChangedDetail | null,
+  detail: RelationChangedDetail
+): RelationChangedDetail {
+  if (pending == null) return { ...detail };
+  return {
+    ...pending,
+    ...detail,
+    skipQueueReload: !!pending.skipQueueReload && !!detail.skipQueueReload,
+    skipEtiquettesChanged:
+      !!pending.skipEtiquettesChanged && !!detail.skipEtiquettesChanged,
+    skipTimelineReload: !!pending.skipTimelineReload && !!detail.skipTimelineReload,
+  };
+}
+
 /** Même bus relation, regroupé sur 300 ms pour limiter les rafales SQLite. */
 export function subscribeRelationChangedDebounced(
   handler: (detail: RelationChangedDetail) => void,
   debounceMs = RELATION_DEBOUNCE_MS
 ): () => void {
   let timeout: number | null = null;
-  let pending: RelationChangedDetail = {};
+  let pending: RelationChangedDetail | null = null;
 
   return subscribeRelationChanged((detail) => {
-    pending = {
-      ...pending,
-      ...detail,
-      skipQueueReload: pending.skipQueueReload || detail.skipQueueReload,
-      skipEtiquettesChanged:
-        pending.skipEtiquettesChanged || detail.skipEtiquettesChanged,
-      skipTimelineReload: pending.skipTimelineReload || detail.skipTimelineReload,
-    };
+    pending = mergeRelationChangedDetails(pending, detail);
     if (timeout != null) window.clearTimeout(timeout);
     timeout = window.setTimeout(() => {
       timeout = null;
-      const snapshot = pending;
-      pending = {};
+      const snapshot = pending ?? {};
+      pending = null;
       handler(snapshot);
     }, debounceMs);
   });

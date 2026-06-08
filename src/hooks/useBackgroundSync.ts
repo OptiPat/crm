@@ -8,14 +8,14 @@ import { beginBackgroundActivity } from "@/lib/background-activity";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import { toast } from "sonner";
 
-export const RELATION_INTERVAL_MS = 5 * 60_000;
+export const RELATION_INTERVAL_MS = 3 * 60_000;
 export const STELLIUM_INTERVAL_MS = 60 * 60_000;
 export const RELATION_COOLDOWN_MS = 90_000;
 export const STELLIUM_COOLDOWN_MS = 60 * 60_000;
 const WAKE_DEBOUNCE_MS = 300;
 
 /**
- * Sync Gmail/Agenda (5 min) + scan Stellium (1 h) — une tâche à la fois.
+ * Sync Gmail/Agenda (3 min) + scan Stellium (1 h) — une tâche à la fois.
  * Stellium au focus uniquement si la dernière passe date de > 1 h (cooldown).
  */
 export function useBackgroundSync(enabled = true): void {

@@ -588,7 +588,9 @@ export function ContactDetail({
         if (!id || !detailActive) return;
         try {
           if (investissementFormOpenRef.current) {
-            await loadInvestissements();
+            // Formulaire investissement ouvert : le refresh complet (fiche, étiquettes,
+            // foyer) est délégué à handleInvestissementSuccess à la fermeture, pour éviter
+            // des rechargements redondants pendant la saisie.
             return;
           }
           const fresh = await getContactById(id);
@@ -608,6 +610,7 @@ export function ContactDetail({
 
     const syncInvestissementsOnly = () => {
       if (!contact?.id || !detailActive) return;
+      if (investissementFormOpenRef.current) return;
       void loadInvestissements();
     };
 
@@ -686,8 +689,10 @@ export function ContactDetail({
     setSelectedInvestissement(null);
   };
 
-  const handleInvestissementSuccess = () => {
+  const handleInvestissementSuccess = async () => {
     handleInvestissementFormClose();
+    notifyEtiquettesChanged();
+    await refreshContactAfterMutation();
   };
 
   const titleText = formatCiviliteLabel(contact.civilite)

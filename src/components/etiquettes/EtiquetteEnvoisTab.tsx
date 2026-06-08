@@ -32,7 +32,6 @@ import {
   prepareEmailCampaignRelance,
   getContrastColor,
   type EtiquetteEmailQueueItem,
-  type EtiquetteEmailQueueStatus,
 } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
@@ -79,10 +78,8 @@ import {
   buildSentQueueItem,
 } from "@/lib/etiquettes/etiquette-queue-incremental";
 import {
-  getEnvoisQueueCache,
   getEnvoisTabInitialState,
   setEnvoisQueueCache,
-  type EnvoisQueueCache,
 } from "@/lib/etiquettes/etiquette-envois-cache";
 import {
   isEtiquetteEmailSendActive,
@@ -96,21 +93,6 @@ import { toast } from "sonner";
 interface EtiquetteEnvoisTabProps {
   onOpenContact?: (contactId: number) => void;
   onQueueChanged?: () => void;
-}
-
-type EnvoisSubTab =
-  | "ready"
-  | "scheduled"
-  | "incomplete"
-  | "cancelled"
-  | "sent"
-  | "followup"
-  | "journal";
-
-function patchEnvoisQueueCache(patch: Partial<EnvoisQueueCache>): void {
-  const prev = getEnvoisQueueCache();
-  if (!prev) return;
-  setEnvoisQueueCache({ ...prev, ...patch });
 }
 
 export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteEnvoisTabProps) {
@@ -150,10 +132,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [highlightRowKey, setHighlightRowKey] = useState<number | null>(null);
   const [batchSendRunning, setBatchSendRunning] = useState(false);
   const [, setSendUiPulse] = useState(0);
-  const subTabRef = useRef<EnvoisSubTab>(subTab);
   const queueRefreshGenRef = useRef(0);
-  const partialRefreshGenRef = useRef(0);
-  subTabRef.current = subTab;
 
   const runAutoSync = useCallback(async () => {
     if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
@@ -244,46 +223,6 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     }
   }, [onQueueChanged]);
 
-  /** Au focus fenêtre : compteur Prêts + onglet actif (pas les 6 files). */
-  const loadQueuePartial = useCallback(async () => {
-    const active = subTabRef.current;
-    if (active === "journal") return;
-    const token = beginRefreshGeneration(partialRefreshGenRef);
-    try {
-      const status = active as EtiquetteEmailQueueStatus;
-      const snap = await getEnvoisSnapshot(active === "ready" ? "ready" : status);
-      if (!isRefreshGenerationCurrent(partialRefreshGenRef, token)) return;
-      setReady(snap.ready);
-      patchEnvoisQueueCache({ ready: snap.ready });
-
-      if (snap.scheduled) {
-        setScheduled(snap.scheduled);
-        patchEnvoisQueueCache({ scheduled: snap.scheduled });
-      }
-      if (snap.incomplete) {
-        setIncomplete(snap.incomplete);
-        patchEnvoisQueueCache({ incomplete: snap.incomplete });
-      }
-      if (snap.cancelled) {
-        setCancelled(snap.cancelled);
-        patchEnvoisQueueCache({ cancelled: snap.cancelled });
-      }
-      if (snap.sent) {
-        setSent(snap.sent);
-        patchEnvoisQueueCache({ sent: snap.sent });
-      }
-      if (snap.followup) {
-        setFollowup(snap.followup);
-        patchEnvoisQueueCache({ followup: snap.followup });
-      }
-
-      onQueueChanged?.();
-    } catch (error) {
-      if (!isRefreshGenerationCurrent(partialRefreshGenRef, token)) return;
-      console.error("Error partial email queue refresh:", error);
-    }
-  }, [onQueueChanged]);
-
   useEffect(() => {
     return subscribeEtiquetteEmailSendActivity((activity) => {
       setBatchSendRunning(activity.batchRunning);
@@ -321,7 +260,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       if (timeout != null) window.clearTimeout(timeout);
       timeout = window.setTimeout(() => {
         timeout = null;
-        void loadQueuePartial();
+        void loadQueue({ silent: true });
       }, 300);
     };
     document.addEventListener("visibilitychange", onWake);
@@ -331,7 +270,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       window.removeEventListener("focus", onWake);
       if (timeout != null) window.clearTimeout(timeout);
     };
-  }, [loadQueuePartial]);
+  }, [loadQueue]);
 
   const applyLocalEmailSent = useCallback(
     (item: EtiquetteEmailQueueItem, subject: string, sentAtSec: number) => {
@@ -893,7 +832,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             <TabsContent value="followup" className="mt-4">
               <p className="text-xs text-muted-foreground mb-3">
                 Délai et horaire définis sur chaque modèle (Templates → onglet Relance). Google
-                connecté : détection mail + Agenda automatique en arrière-plan (toutes les 2 min).
+                connecté : détection mail + Agenda automatique en arrière-plan (toutes les 3 min).
               </p>
               {renderList(followup, { mode: "followup" })}
             </TabsContent>

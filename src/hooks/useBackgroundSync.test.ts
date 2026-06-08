@@ -13,8 +13,8 @@ describe("useBackgroundSync timing", () => {
     expect(STELLIUM_COOLDOWN_MS).toBe(oneHour);
   });
 
-  it("Relation : intervalle 5 min, cooldown focus 90 s", () => {
-    expect(RELATION_INTERVAL_MS).toBe(5 * 60_000);
+  it("Relation : intervalle 3 min, cooldown focus 90 s", () => {
+    expect(RELATION_INTERVAL_MS).toBe(3 * 60_000);
     expect(RELATION_COOLDOWN_MS).toBe(90_000);
   });
 });
