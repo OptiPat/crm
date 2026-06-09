@@ -1,5 +1,6 @@
 //! Détection automatique : réponses Gmail et RDV Google Agenda.
 
+use super::google_api_errors::calendar_access_error;
 use super::oauth_send::refresh_connection_if_needed;
 use super::oauth_store::EmailOAuthStore;
 use crate::database::models::PendingCampaignResponseCheck;
@@ -92,6 +93,8 @@ struct GmailHeader {
 #[derive(Debug, Deserialize)]
 struct CalendarEventList {
     items: Option<Vec<CalendarEvent>>,
+    #[serde(rename = "nextPageToken", default)]
+    next_page_token: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -100,7 +103,12 @@ struct CalendarEvent {
     start: Option<CalendarEventTime>,
     attendees: Option<Vec<CalendarAttendee>>,
     status: Option<String>,
+    summary: Option<String>,
+    description: Option<String>,
 }
+
+const CALENDAR_RDV_MAX_PAGES: u32 = 4;
+const CALENDAR_RDV_PAGE_SIZE: &str = "250";
 
 #[derive(Debug, Deserialize)]
 struct CalendarEventTime {
@@ -422,6 +430,9 @@ pub fn gmail_find_contact_reply(
 
 fn event_includes_contact(event: &CalendarEvent, contact_email: &str) -> bool {
     let contact = contact_email.trim().to_lowercase();
+    if contact.is_empty() {
+        return false;
+    }
     if let Some(ref attendees) = event.attendees {
         for a in attendees {
             if a
@@ -434,81 +445,146 @@ fn event_includes_contact(event: &CalendarEvent, contact_email: &str) -> bool {
             }
         }
     }
-    false
+    if event
+        .summary
+        .as_deref()
+        .map(|s| s.to_lowercase().contains(&contact))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    event
+        .description
+        .as_deref()
+        .map(|s| s.to_lowercase().contains(&contact))
+        .unwrap_or(false)
 }
 
-fn event_start_after(event: &CalendarEvent, sent_unix: i64) -> bool {
-    let Some(ref start) = event.start else {
-        return false;
-    };
+pub(crate) fn event_start_unix(event: &CalendarEvent) -> Option<i64> {
+    let start = event.start.as_ref()?;
     if let Some(ref dt) = start.date_time {
         if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt) {
-            return parsed.timestamp() >= sent_unix;
+            return Some(parsed.timestamp());
         }
     }
     if let Some(ref d) = start.date {
-        if let Ok(nd) = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d") {
-            let sent_date = chrono::DateTime::from_timestamp(sent_unix, 0)
-                .map(|t| t.date_naive())
-                .unwrap_or(nd);
-            return nd >= sent_date;
-        }
+        let nd = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").ok()?;
+        return nd
+            .and_hms_opt(12, 0, 0)
+            .map(|ndt| chrono::TimeZone::from_utc_datetime(&chrono::Utc, &ndt).timestamp());
     }
-    false
+    None
 }
 
-fn calendar_has_rdv(
+fn event_start_after(event: &CalendarEvent, sent_unix: i64) -> bool {
+    event_start_unix(event)
+        .map(|start| start >= sent_unix)
+        .unwrap_or(false)
+}
+
+fn calendar_event_matches_rdv(event: &CalendarEvent, contact: &str, sent_unix: i64) -> bool {
+    if event.status.as_deref() == Some("cancelled") {
+        return false;
+    }
+    event_includes_contact(event, contact) && event_start_after(event, sent_unix)
+}
+
+/// Date de début du prochain RDV Agenda client après l'envoi campagne (unix s).
+pub fn find_calendar_rdv_start(
     client: &reqwest::blocking::Client,
     token: &str,
     item: &PendingCampaignResponseCheck,
-) -> Result<bool, String> {
+) -> Result<Option<i64>, String> {
     let contact = item.contact_email.trim();
     if contact.is_empty() {
-        return Ok(false);
+        return Ok(None);
     }
     let time_min = chrono::DateTime::from_timestamp(item.email_date_envoi, 0)
         .map(|t| t.to_rfc3339())
         .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
 
-    let res = client
-        .get("https://www.googleapis.com/calendar/v3/calendars/primary/events")
-        .query(&[
+    let mut page_token: Option<String> = None;
+    for _ in 0..CALENDAR_RDV_MAX_PAGES {
+        let mut query: Vec<(&str, &str)> = vec![
             ("timeMin", time_min.as_str()),
-            ("maxResults", "100"),
+            ("maxResults", CALENDAR_RDV_PAGE_SIZE),
             ("singleEvents", "true"),
             ("orderBy", "startTime"),
-        ])
-        .bearer_auth(token)
-        .send()
-        .map_err(|e| e.to_string())?;
-    if !res.status().is_success() {
-        let err = res.text().unwrap_or_default();
-        if err.contains("403") || err.contains("insufficient") {
-            return Err(
-                "Accès Agenda refusé : reconnectez Google pour autoriser Google Calendar."
-                    .into(),
-            );
+            ("q", contact),
+        ];
+        if let Some(ref token) = page_token {
+            query.push(("pageToken", token.as_str()));
         }
-        return Ok(false);
-    }
-    let list: CalendarEventList = res.json().map_err(|e| e.to_string())?;
-    if let Some(items) = list.items {
-        for ev in &items {
-            if ev.status.as_deref() == Some("cancelled") {
-                continue;
+
+        let res = client
+            .get("https://www.googleapis.com/calendar/v3/calendars/primary/events")
+            .query(&query)
+            .bearer_auth(token)
+            .send()
+            .map_err(|e| e.to_string())?;
+        if !res.status().is_success() {
+            let status = res.status();
+            let err = res.text().unwrap_or_default();
+            if status == reqwest::StatusCode::FORBIDDEN
+                || status == reqwest::StatusCode::UNAUTHORIZED
+                || err.to_lowercase().contains("insufficient")
+                || err.to_lowercase().contains("accessnotconfigured")
+            {
+                return Err(calendar_access_error(status, &err));
             }
-            if event_includes_contact(ev, contact) && event_start_after(ev, item.email_date_envoi) {
-                return Ok(true);
+            return Ok(None);
+        }
+        let list: CalendarEventList = res.json().map_err(|e| e.to_string())?;
+        if let Some(items) = list.items {
+            for ev in &items {
+                if calendar_event_matches_rdv(ev, contact, item.email_date_envoi) {
+                    return Ok(event_start_unix(ev));
+                }
             }
         }
+        page_token = list.next_page_token;
+        if page_token.is_none() {
+            break;
+        }
     }
-    Ok(false)
+    Ok(None)
+}
+
+pub fn resolve_campaign_rdv_start(
+    app: &AppHandle,
+    contact_email: &str,
+    email_date_envoi: i64,
+) -> Result<Option<i64>, String> {
+    let store = EmailOAuthStore::load(app)?;
+    let mut conn = store
+        .connection
+        .clone()
+        .ok_or("Connectez Google dans Paramètres → Email.")?;
+    if conn.provider != "google" {
+        return Ok(None);
+    }
+    refresh_connection_if_needed(app, &mut conn)?;
+    let client = reqwest::blocking::Client::new();
+    let item = PendingCampaignResponseCheck {
+        contact_etiquette_id: 0,
+        contact_email: contact_email.to_string(),
+        email_date_envoi,
+        email_gmail_thread_id: None,
+    };
+    find_calendar_rdv_start(&client, &conn.access_token, &item)
 }
 
 pub fn sync_email_campaign_responses(
     app: &AppHandle,
     pending: Vec<PendingCampaignResponseCheck>,
-    mark_response: impl Fn(i64, &str, Option<&str>, Option<&str>, Option<&str>) -> Result<(), String>,
+    mark_response: impl Fn(
+        i64,
+        &str,
+        Option<&str>,
+        Option<&str>,
+        Option<&str>,
+        Option<i64>,
+    ) -> Result<(), String>,
 ) -> Result<EmailCampaignSyncResult, String> {
     let store = EmailOAuthStore::load(app)?;
     let mut conn = store
@@ -531,35 +607,42 @@ pub fn sync_email_campaign_responses(
     };
 
     for item in pending {
-        match gmail_find_contact_reply(&client, &conn.access_token, &item) {
-            Ok(Some(reply)) => {
+        // Agenda avant Gmail : un mail parasite (hors fil campagne) ne doit pas masquer un RDV.
+        match find_calendar_rdv_start(&client, &conn.access_token, &item) {
+            Ok(Some(rdv_at)) => {
                 match mark_response(
+                    item.contact_etiquette_id,
+                    "rdv",
+                    None,
+                    None,
+                    None,
+                    Some(rdv_at),
+                ) {
+                Ok(()) => result.rdv_detected += 1,
+                Err(e) if result.errors.len() < 5 => result.errors.push(e),
+                Err(_) => {}
+                }
+            }
+            Ok(None) => match gmail_find_contact_reply(&client, &conn.access_token, &item) {
+                Ok(Some(reply)) => match mark_response(
                     item.contact_etiquette_id,
                     "mail",
                     Some(reply.body_text.as_str()),
                     Some(reply.message_id.as_str()),
                     reply.subject.as_deref(),
+                    None,
                 ) {
                     Ok(()) => result.mail_detected += 1,
                     Err(e) if result.errors.len() < 5 => result.errors.push(e),
                     Err(_) => {}
+                },
+                Ok(None) => {}
+                Err(e) if result.errors.len() < 3 => {
+                    result.errors.push(format!("Gmail {}: {}", item.contact_email, e));
                 }
-            }
-            Ok(None) => {
-                match calendar_has_rdv(&client, &conn.access_token, &item) {
-                    Ok(true) => match mark_response(item.contact_etiquette_id, "rdv", None, None, None) {
-                        Ok(()) => result.rdv_detected += 1,
-                        Err(e) if result.errors.len() < 5 => result.errors.push(e),
-                        Err(_) => {}
-                    },
-                    Ok(false) => {}
-                    Err(e) if result.errors.len() < 5 => result.errors.push(e),
-                    Err(_) => {}
-                }
-            }
-            Err(e) if result.errors.len() < 3 => {
-                result.errors.push(format!("Gmail {}: {}", item.contact_email, e));
-            }
+                Err(_) => {}
+            },
+            Err(e) if result.errors.len() < 5 => result.errors.push(e),
             Err(_) => {}
         }
     }
@@ -592,5 +675,75 @@ mod tests {
         let json = r#"{"id":"x","internalDate":1700000000000}"#;
         let msg: GmailMessageRef = serde_json::from_str(json).expect("msg");
         assert_eq!(msg.internal_date.as_deref(), Some("1700000000000"));
+    }
+
+    #[test]
+    fn event_start_unix_parses_rfc3339() {
+        let event: CalendarEvent = serde_json::from_str(
+            r#"{"start":{"dateTime":"2026-06-11T14:00:00+02:00"},"status":"confirmed"}"#,
+        )
+        .expect("event");
+        let start = event_start_unix(&event).expect("start");
+        assert!(start > 1_700_000_000);
+    }
+
+    #[test]
+    fn calendar_event_matches_rdv_by_attendee_and_start() {
+        let sent = 1_700_000_000_i64;
+        let event: CalendarEvent = serde_json::from_str(
+            r#"{
+                "start": { "dateTime": "2026-06-11T12:00:00Z" },
+                "attendees": [ { "email": "kevinbouton34@gmail.com" } ],
+                "status": "confirmed"
+            }"#,
+        )
+        .expect("event");
+        assert!(calendar_event_matches_rdv(
+            &event,
+            "kevinbouton34@gmail.com",
+            sent
+        ));
+    }
+
+    #[test]
+    fn calendar_event_matches_rdv_by_description_email() {
+        let sent = 1_700_000_000_i64;
+        let event: CalendarEvent = serde_json::from_str(
+            r#"{
+                "start": { "dateTime": "2026-06-11T12:00:00Z" },
+                "description": "Invité : kevinbouton34@gmail.com",
+                "status": "confirmed"
+            }"#,
+        )
+        .expect("event");
+        assert!(calendar_event_matches_rdv(
+            &event,
+            "kevinbouton34@gmail.com",
+            sent
+        ));
+    }
+
+    #[test]
+    fn calendar_event_ignores_cancelled_and_before_send() {
+        let sent = 1_800_000_000_i64;
+        let cancelled: CalendarEvent = serde_json::from_str(
+            r#"{
+                "start": { "dateTime": "2026-06-12T12:00:00Z" },
+                "attendees": [ { "email": "a@b.com" } ],
+                "status": "cancelled"
+            }"#,
+        )
+        .expect("cancelled");
+        assert!(!calendar_event_matches_rdv(&cancelled, "a@b.com", sent));
+
+        let early: CalendarEvent = serde_json::from_str(
+            r#"{
+                "start": { "dateTime": "2026-06-01T12:00:00Z" },
+                "attendees": [ { "email": "a@b.com" } ],
+                "status": "confirmed"
+            }"#,
+        )
+        .expect("early");
+        assert!(!calendar_event_matches_rdv(&early, "a@b.com", sent));
     }
 }

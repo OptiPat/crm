@@ -200,7 +200,11 @@ fn fetch_user_email(provider: &str, access_token: &str) -> Result<String, String
     }
 }
 
-pub fn run_oauth_connect(app: &AppHandle, provider: &str) -> Result<EmailOAuthConnection, String> {
+pub fn run_oauth_connect(
+    app: &AppHandle,
+    provider: &str,
+    force_consent: bool,
+) -> Result<EmailOAuthConnection, String> {
     let mut store = EmailOAuthStore::load(app)?;
     let cfg = provider_config(provider)?;
 
@@ -213,11 +217,15 @@ pub fn run_oauth_connect(app: &AppHandle, provider: &str) -> Result<EmailOAuthCo
         .iter()
         .map(|s| Scope::new((*s).to_string()))
         .collect();
-    let (auth_url, csrf_token) = oauth_client
+    let mut auth = oauth_client
         .authorize_url(CsrfToken::new_random)
         .add_scopes(scopes)
         .set_pkce_challenge(pkce_challenge)
-        .url();
+        .add_extra_param("access_type", "offline");
+    if force_consent {
+        auth = auth.add_extra_param("prompt", "consent");
+    }
+    let (auth_url, csrf_token) = auth.url();
 
     let listener = TcpListener::bind(format!("127.0.0.1:{}", super::oauth_store::OAUTH_REDIRECT_PORT))
         .map_err(|e| {

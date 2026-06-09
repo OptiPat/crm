@@ -33,9 +33,13 @@ export async function saveOAuthAppSettings(settings: OAuthAppSettingsInput): Pro
 }
 
 export async function connectEmailOAuth(
-  provider: "google" | "microsoft"
+  provider: "google" | "microsoft",
+  options?: { forceConsent?: boolean }
 ): Promise<EmailConnectionStatus> {
-  return invoke<EmailConnectionStatus>("connect_email_oauth", { provider });
+  return invoke<EmailConnectionStatus>("connect_email_oauth", {
+    provider,
+    forceConsent: options?.forceConsent ?? null,
+  });
 }
 
 export async function disconnectEmailOAuth(): Promise<void> {

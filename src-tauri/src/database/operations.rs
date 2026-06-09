@@ -1735,7 +1735,7 @@ mod database_integration_tests {
         assert_eq!(db.get_alertes_for_contact(cid).unwrap().len(), 1);
 
         let date_before_mail = db.get_contact_by_id(cid).unwrap().date_dernier_contact;
-        db.mark_email_campaign_response(ce_id, "mail", None, None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None)
             .unwrap();
         assert!(
             db.get_etiquette_email_queue("sent").unwrap().is_empty(),
@@ -1757,7 +1757,7 @@ mod database_integration_tests {
             "réponse mail ne clôture pas les alertes suivi client"
         );
 
-        db.mark_email_campaign_response(ce_id, "mail", None, None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None)
             .unwrap();
         assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
 
@@ -1792,16 +1792,18 @@ mod database_integration_tests {
         })
         .unwrap();
         assert!(db.get_contact_by_id(cid_rdv).unwrap().date_dernier_contact.is_none());
-        db.mark_email_campaign_response(ce_rdv, "rdv", None, None, None)
+        let rdv_at = now + 86400 * 10;
+        db.mark_email_campaign_response(ce_rdv, "rdv", None, None, None, Some(rdv_at))
             .unwrap();
-        assert!(
-            db.get_contact_by_id(cid_rdv)
-                .unwrap()
-                .date_dernier_contact
-                .is_some(),
-            "RDV enregistré met à jour le dernier contact"
+        assert_eq!(
+            db.get_contact_by_id(cid_rdv).unwrap().date_dernier_contact,
+            Some(rdv_at),
+            "RDV pris enregistre la date du rendez-vous comme dernier contact"
         );
-        assert!(db.get_alertes_for_contact(cid_rdv).unwrap().is_empty());
+        assert!(
+            db.get_alertes_for_contact(cid_rdv).unwrap().is_empty(),
+            "alerte suivi clôturée quand la date RDV est récente"
+        );
 
         let timeline = db.get_exchange_history_timeline(None).unwrap();
         let bruno_email = timeline
@@ -2306,7 +2308,7 @@ mod database_integration_tests {
             "délai dépassé : bascule en relance"
         );
 
-        db.mark_email_campaign_response(ce_id, "mail", None, None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None)
             .unwrap();
         assert!(db.get_etiquette_email_queue("sent").unwrap().is_empty());
         assert!(db.get_etiquette_email_queue("followup").unwrap().is_empty());

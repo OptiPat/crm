@@ -1,3 +1,4 @@
+use super::google_calendar_probe::probe_google_calendar_access;
 use super::oauth_flow::{disconnect_oauth, run_oauth_connect};
 use super::oauth_send::{
     fetch_gmail_signature, send_test_to_self, send_with_oauth, ImportedGmailSignature, OAuthSendResult,
@@ -88,9 +89,11 @@ pub fn save_oauth_app_settings(
 pub async fn connect_email_oauth(
     app_handle: AppHandle,
     provider: String,
+    force_consent: Option<bool>,
 ) -> Result<EmailConnectionStatus, String> {
+    let force = force_consent.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
-        let conn = run_oauth_connect(&app_handle, &provider)?;
+        let conn = run_oauth_connect(&app_handle, &provider, force)?;
         Ok(EmailConnectionStatus {
             connected: true,
             provider: Some(conn.provider),
@@ -117,10 +120,17 @@ pub fn fetch_gmail_signature_for_cgp(
 #[tauri::command]
 pub fn test_email_connection(app_handle: AppHandle) -> Result<String, String> {
     let oauth = EmailOAuthStore::load(&app_handle)?;
-    if oauth.connection.is_some() {
-        return send_test_to_self(&app_handle);
+    let Some(ref conn) = oauth.connection else {
+        return Err(
+            "Aucune connexion email. Paramètres → Email : connectez Google ou Microsoft.".into(),
+        );
+    };
+    let mail_msg = send_test_to_self(&app_handle)?;
+    if conn.provider == "google" {
+        probe_google_calendar_access(&app_handle)?;
+        return Ok(format!("{mail_msg} Accès Google Agenda OK."));
     }
-    Err("Aucune connexion email. Paramètres → Email : connectez Google ou Microsoft.".into())
+    Ok(mail_msg)
 }
 
 pub fn send_email_unified(

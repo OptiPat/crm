@@ -585,6 +585,7 @@ impl Database {
         reponse_body: Option<&str>,
         reponse_gmail_message_id: Option<&str>,
         reponse_subject: Option<&str>,
+        rdv_event_at: Option<i64>,
     ) -> Result<()> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -620,8 +621,11 @@ impl Database {
             }
 
             if response_type == "rdv" {
-                self.touch_contact_last_contact(contact_id, now)?;
-                self.auto_close_suivi_alertes_after_contact(contact_id)?;
+                let _ = self.advance_pipeline_on_rdv(contact_id);
+                if let Some(rdv_at) = rdv_event_at {
+                    self.touch_contact_last_contact(contact_id, rdv_at)?;
+                    self.auto_close_obsolete_suivi_alertes_for_contact(contact_id)?;
+                }
             }
 
             if response_type == "mail" {
@@ -637,6 +641,9 @@ impl Database {
         match mark_result {
             Ok(()) => {
                 self.conn.execute("COMMIT", [])?;
+                if response_type == "rdv" && rdv_event_at.is_some() {
+                    let _ = self.check_auto_etiquettes_for_contact(contact_id);
+                }
                 Ok(())
             }
             Err(e) => {

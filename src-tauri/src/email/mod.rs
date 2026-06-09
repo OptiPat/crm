@@ -10,6 +10,8 @@ pub mod contact_gmail_sync;
 pub mod contact_outlook_sync;
 pub mod google_contacts;
 pub mod response_sync;
+pub mod google_api_errors;
+pub mod google_calendar_probe;
 pub mod calendar_ops;
 pub mod stellium_exceltis;
 pub mod oauth_store;

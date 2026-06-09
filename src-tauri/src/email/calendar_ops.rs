@@ -123,14 +123,9 @@ pub fn create_google_calendar_rdv(
         .map_err(|e| e.to_string())?;
 
     if !res.status().is_success() {
+        let status = res.status();
         let err = res.text().unwrap_or_default();
-        if err.contains("403") || err.contains("insufficient") {
-            return Err(
-                "Accès Agenda refusé : reconnectez Google pour autoriser la création de RDV."
-                    .into(),
-            );
-        }
-        return Err(format!("Google Calendar : {err}"));
+        return Err(super::google_api_errors::calendar_access_error(status, &err));
     }
 
     let created: GoogleEventCreated = res.json().map_err(|e| e.to_string())?;

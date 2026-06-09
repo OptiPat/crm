@@ -83,13 +83,20 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
     }
   };
 
-  const handleConnect = async (provider: "google" | "microsoft") => {
+  const handleConnect = async (
+    provider: "google" | "microsoft",
+    options?: { forceConsent?: boolean }
+  ) => {
     setConnecting(provider);
     try {
       await handleSaveIds();
-      const st = await connectEmailOAuth(provider);
+      const st = await connectEmailOAuth(provider, options);
       setStatus(st);
-      toast.success(`Connecté : ${st.email ?? "compte"}`);
+      toast.success(
+        options?.forceConsent
+          ? `Google reconnecté : ${st.email ?? "compte"}`
+          : `Connecté : ${st.email ?? "compte"}`
+      );
     } catch (e) {
       console.error(e);
       toast.error(e instanceof Error ? e.message : String(e));
@@ -139,11 +146,27 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
                 {status?.provider === "google" ? "Google" : "Microsoft"} — {status?.email}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Prêt pour Suivi → Envois (CRM ouvert pendant l&apos;envoi)
+                Prêt pour Suivi → Envois. « Tester » vérifie Gmail + Agenda. En cas d&apos;erreur
+                Agenda, cliquez Reconnecter Google.
               </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2 shrink-0">
+            {status?.provider === "google" && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!!connecting}
+                onClick={() => void handleConnect("google", { forceConsent: true })}
+              >
+                {connecting === "google" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                )}
+                Reconnecter Google
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => void handleTest()} disabled={testing}>
               {testing ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

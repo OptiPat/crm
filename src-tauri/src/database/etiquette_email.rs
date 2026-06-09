@@ -4,7 +4,7 @@ use super::template_email_relance::{
     matches_sent_followup_window, DEFAULT_RELANCE_DELAI_JOURS,
 };
 use super::Database;
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 
 impl Database {
     pub fn get_etiquette_email_queue(
@@ -579,7 +579,7 @@ impl Database {
 
     /// Réponse campagne enregistrée (fil email / relance Suivi → Envois).
     /// `mail` : pas de MAJ `date_dernier_contact` (réponse email ≠ RDV).
-    /// `rdv` : MAJ dernier contact + clôture alertes suivi.
+    /// `rdv` : MAJ dernier contact à la date du RDV Agenda (`rdv_event_at`, unix s) + alertes/étiquettes auto.
     pub fn mark_email_campaign_response(
         &self,
         row_id: i64,
@@ -587,6 +587,7 @@ impl Database {
         reponse_body: Option<&str>,
         reponse_gmail_message_id: Option<&str>,
         reponse_subject: Option<&str>,
+        rdv_event_at: Option<i64>,
     ) -> Result<()> {
         let allowed = ["mail", "rdv", "autre"];
         if !allowed.contains(&response_type) {
@@ -610,6 +611,7 @@ impl Database {
                 reponse_body,
                 reponse_gmail_message_id,
                 reponse_subject,
+                rdv_event_at,
             )
             .is_ok()
         {
@@ -622,7 +624,41 @@ impl Database {
             reponse_body,
             reponse_gmail_message_id,
             reponse_subject,
+            rdv_event_at,
         )
+    }
+
+    /// Email + date d'envoi pour recherche RDV Agenda (sync ou marquage manuel).
+    pub fn campaign_calendar_lookup(&self, row_id: i64) -> Result<Option<(String, i64)>> {
+        let from_ce: Result<(String, i64), rusqlite::Error> = self.conn.query_row(
+            "SELECT c.email, ce.email_date_envoi
+             FROM contact_etiquettes ce
+             INNER JOIN contacts c ON c.id = ce.contact_id
+             WHERE ce.id = ?1 AND ce.email_envoye = 1 AND ce.email_date_envoi IS NOT NULL
+               AND c.email IS NOT NULL AND TRIM(c.email) != ''",
+            params![row_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        );
+        if let Ok(pair) = from_ce {
+            return Ok(Some(pair));
+        }
+        self.conn
+            .query_row(
+                "SELECT c.email, cte.email_date_envoi
+                 FROM contact_template_envois cte
+                 INNER JOIN contacts c ON c.id = cte.contact_id
+                 WHERE cte.id = ?1 AND cte.email_envoye = 1 AND cte.email_date_envoi IS NOT NULL
+                   AND c.email IS NOT NULL AND TRIM(c.email) != ''",
+                params![row_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+    }
+
+    fn apply_rdv_pris_contact_updates(&self, contact_id: i64, rdv_event_at: i64) -> Result<()> {
+        self.touch_contact_last_contact(contact_id, rdv_event_at)?;
+        self.auto_close_obsolete_suivi_alertes_for_contact(contact_id)?;
+        Ok(())
     }
 
     fn mark_contact_etiquette_campaign_response(
@@ -632,6 +668,7 @@ impl Database {
         reponse_body: Option<&str>,
         reponse_gmail_message_id: Option<&str>,
         reponse_subject: Option<&str>,
+        rdv_event_at: Option<i64>,
     ) -> Result<()> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -663,9 +700,10 @@ impl Database {
             }
 
             if response_type == "rdv" {
-                self.touch_contact_last_contact(contact_id, now)?;
-                self.auto_close_suivi_alertes_after_contact(contact_id)?;
                 let _ = self.advance_pipeline_on_rdv(contact_id);
+                if let Some(rdv_at) = rdv_event_at {
+                    self.apply_rdv_pris_contact_updates(contact_id, rdv_at)?;
+                }
             }
 
             if response_type == "mail" {
@@ -681,6 +719,9 @@ impl Database {
         match mark_result {
             Ok(()) => {
                 self.conn.execute("COMMIT", [])?;
+                if response_type == "rdv" && rdv_event_at.is_some() {
+                    let _ = self.check_auto_etiquettes_for_contact(contact_id);
+                }
                 Ok(())
             }
             Err(e) => {
@@ -862,8 +903,8 @@ impl Database {
                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
              )
-             ORDER BY email_date_envoi ASC
-             LIMIT 80",
+             ORDER BY email_date_envoi DESC
+             LIMIT 200",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(super::models::PendingCampaignResponseCheck {

@@ -1657,7 +1657,7 @@ pub async fn sync_email_campaign_responses(
         crate::email::response_sync::sync_email_campaign_responses(
             &app,
             pending,
-            |contact_etiquette_id, response_type, body, gmail_msg, subject| {
+            |contact_etiquette_id, response_type, body, gmail_msg, subject, rdv_at| {
                 let db_guard = db_state.inner().lock().unwrap();
                 let database = db_guard.as_ref().ok_or("Database not initialized")?;
                 database
@@ -1667,6 +1667,7 @@ pub async fn sync_email_campaign_responses(
                         body,
                         gmail_msg,
                         subject,
+                        rdv_at,
                     )
                     .map_err(|e| e.to_string())
             },
@@ -1678,14 +1679,29 @@ pub async fn sync_email_campaign_responses(
 
 #[tauri::command]
 pub fn mark_email_campaign_response(
+    app_handle: AppHandle,
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
     response_type: String,
     reponse_body: Option<String>,
     reponse_gmail_message_id: Option<String>,
+    rdv_event_at: Option<i64>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let mut rdv_at = rdv_event_at;
+    if response_type == "rdv" && rdv_at.is_none() {
+        if let Some((email, sent_at)) = database
+            .campaign_calendar_lookup(contact_etiquette_id)
+            .map_err(|e| e.to_string())?
+        {
+            rdv_at = crate::email::response_sync::resolve_campaign_rdv_start(
+                &app_handle,
+                &email,
+                sent_at,
+            )?;
+        }
+    }
     database
         .mark_email_campaign_response(
             contact_etiquette_id,
@@ -1693,6 +1709,7 @@ pub fn mark_email_campaign_response(
             reponse_body.as_deref(),
             reponse_gmail_message_id.as_deref(),
             None,
+            rdv_at,
         )
         .map_err(|e| format!("Failed to mark response: {}", e))
 }
