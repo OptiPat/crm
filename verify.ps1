@@ -60,6 +60,13 @@ Invoke-VerifyStep 'TypeScript (tsc --noEmit)' {
     npx tsc --noEmit
 }
 
+Invoke-VerifyStep 'ESLint (regles hooks)' {
+    # --quiet : echoue seulement sur les erreurs (ex. rules-of-hooks),
+    # les avertissements exhaustive-deps restent visibles via `npm run lint`.
+    npx eslint "src/**/*.{ts,tsx}" --quiet
+    if ($LASTEXITCODE -ne 0) { throw "ESLint a detecte des erreurs (regles des hooks)." }
+}
+
 Invoke-VerifyStep 'Tests frontend (Vitest)' {
     npm run test
 }

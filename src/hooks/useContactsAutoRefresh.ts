@@ -28,10 +28,9 @@ export function useContactsAutoRefresh(
   alertsRef.current = onAlertsRefresh;
   const debounceRef = useRef<number | null>(null);
   const wakeDebounceRef = useRef<number | null>(null);
+  const pendingPatchCountRef = useRef(0);
 
   useEffect(() => {
-    const pendingPatchCountRef = useRef(0);
-
     const scheduleContactsRefresh = (detail?: ContactsChangedDetail) => {
       const isPatch =
         detail?.patchedContact != null || detail?.removedContactId != null;
