@@ -2,9 +2,10 @@ import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 
-// Config ciblée : on se concentre sur les règles des hooks React
-// (rules-of-hooks = crash runtime garanti) sans noyer le code existant
-// sous des règles de style. exhaustive-deps reste en avertissement.
+// Config ciblée sur les règles des hooks React. Les deux règles sont en
+// erreur : rules-of-hooks (crash runtime) et exhaustive-deps (fraîcheur des
+// données). Les quelques effets volontairement non exhaustifs portent un
+// commentaire eslint-disable justifié sur place.
 export default tseslint.config(
   {
     ignores: [
@@ -35,7 +36,7 @@ export default tseslint.config(
     },
     rules: {
       "react-hooks/rules-of-hooks": "error",
-      "react-hooks/exhaustive-deps": "warn",
+      "react-hooks/exhaustive-deps": "error",
     },
   }
 );

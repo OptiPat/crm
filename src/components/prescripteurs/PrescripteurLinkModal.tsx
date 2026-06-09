@@ -52,6 +52,7 @@ export function PrescripteurLinkModal({
       console.error("Erreur chargement contacts:", error);
       toast.error("Impossible de charger les contacts");
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement à l'ouverture / changement de prescripteur
   }, [open, prescripteur.id]);
 
   const filteredContacts = contacts.filter((c) =>

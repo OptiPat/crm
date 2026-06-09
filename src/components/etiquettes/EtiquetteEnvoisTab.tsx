@@ -320,7 +320,16 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       }
     }
     setHighlightContactId(null);
-  }, [highlightContactId, loading, ready, scheduled, incomplete, sent, followup]);
+  }, [
+    highlightContactId,
+    loading,
+    ready,
+    scheduled,
+    incomplete,
+    cancelled,
+    sent,
+    followup,
+  ]);
 
   const openConfirm = (item: EtiquetteEmailQueueItem) => {
     if (isEtiquetteQueueItemBatchLocked(item.contact_etiquette_id)) {

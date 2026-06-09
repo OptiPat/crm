@@ -89,6 +89,7 @@ export function FoyerDetail({
     if (foyer?.id && detailActive) {
       loadFoyerData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recharge sur changement d'id de foyer / activation
   }, [foyer?.id, detailActive]);
 
   const loadFoyerData = async () => {

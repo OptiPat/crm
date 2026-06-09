@@ -35,6 +35,7 @@ export function ExchangeEmailReplyForm({
   useEffect(() => {
     setSubject(defaultReplySubject(entry));
     setBody("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- réinitialise sur changement d'entrée, pas à chaque rendu (évite d'effacer la saisie)
   }, [entry.contact_id, entry.contact_etiquette_id]);
 
   const contactEmail = entry.contact_email?.trim();

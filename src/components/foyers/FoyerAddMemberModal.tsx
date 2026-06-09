@@ -69,6 +69,7 @@ export function FoyerAddMemberModal({
         toast.error("Impossible de charger les contacts");
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recharge à l'ouverture ; dépend du contenu (join) des membres, pas de l'identité du Set
   }, [open, currentContact.id, existingMemberIds.join(",")]);
 
   const filtered = candidates.filter((c) => contactMatchesSearch(searchQuery, c));

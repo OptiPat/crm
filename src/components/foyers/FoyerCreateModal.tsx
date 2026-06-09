@@ -61,6 +61,7 @@ export function FoyerCreateModal({
       setMemberSearch("");
       loadAvailableContacts();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialisation à l'ouverture du modal
   }, [open, currentContact]);
 
   // 🔥 Auto-update du nom du foyer quand les membres changent

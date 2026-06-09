@@ -276,6 +276,7 @@ export function ContactForm({
     } else {
       setMesFilleulsCount(0);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (ré)initialise le formulaire à l'ouverture / changement d'id, pas pendant la saisie
   }, [open, contact?.id, createContext, defaultPrescripteurId]);
 
   useEffect(() => {

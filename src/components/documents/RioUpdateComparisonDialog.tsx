@@ -337,6 +337,7 @@ export function RioUpdateComparisonDialog({
     if (open && contactId) {
       loadExistingInvestissements();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement à l'ouverture du dialog
   }, [open, contactId]);
 
   const loadExistingInvestissements = async () => {

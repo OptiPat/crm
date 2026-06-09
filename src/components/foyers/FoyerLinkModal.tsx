@@ -51,6 +51,7 @@ export function FoyerLinkModal({
       setSearchQuery("");
       setSelectedRole("DECLARANT_2");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement à l'ouverture du modal
   }, [open]);
 
   const loadData = async () => {

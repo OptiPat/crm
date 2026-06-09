@@ -127,6 +127,7 @@ function useGroupOpen(page: string, groups: NavGroup[]) {
       }
       return next;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ouvre le groupe actif uniquement au changement de page
   }, [page]);
 
   return [open, setOpen] as const;

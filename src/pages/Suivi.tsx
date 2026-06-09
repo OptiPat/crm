@@ -289,6 +289,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- volontairement non mémoïsée ; l'effet consommateur est gardé par des refs (chargement 1× par onglet)
   const loadEtiquettes = async () => {
     try {
       setLoadingEtiquettes(true);
@@ -373,8 +374,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       void handleSelectEtiquette(etiqu);
       setPendingEtiquetteId(null);
     }
-    // handleSelectEtiquette : stable enough pour une sélection ponctuelle via navigation
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pendingEtiquetteId consommé une fois
   }, [pendingEtiquetteId, loadingEtiquettes, etiquettes]);
 
   const confirmRetirerEtiquetteContact = async (

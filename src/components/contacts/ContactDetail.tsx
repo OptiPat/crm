@@ -498,6 +498,7 @@ export function ContactDetail({
       loadFoyer(c),
       loadEtiquettes(),
     ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callback volontairement stable ; les loaders lisent contactRef.current
   }, []);
 
   const refreshContactAfterMutation = useCallback(async () => {
@@ -571,12 +572,14 @@ export function ContactDetail({
   useEffect(() => {
     if (!contact?.id || !detailActive) return;
     void reloadAllSections(contact);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recharge sur changement d'id seulement, pas sur l'identité de l'objet contact
   }, [contact?.id, detailActive, reloadAllSections]);
 
   useEffect(() => {
     if (detailTab === "patrimoine" && contact?.id && detailActive) {
       void loadInvestissements();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- déclenché par l'onglet/id, loadInvestissements lit contactRef.current
   }, [detailTab, contact?.id, detailActive]);
 
   useEffect(() => {
@@ -626,6 +629,7 @@ export function ContactDetail({
     return () => {
       for (const unsub of unsubs) unsub();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (ré)abonnement uniquement au changement de contact/onglet actif
   }, [contact?.id, detailActive, onContactRefreshed, reloadAllSections]);
 
   const getPartenaireNom = (partenaireId?: number): string | null => {

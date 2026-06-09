@@ -311,6 +311,7 @@ export function TemplateEmailForm({
     void getEtiquetteIdsForTemplate(template.id)
       .then(setLinkedEtiquetteIds)
       .catch(() => setLinkedEtiquetteIds([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recharge sur ouverture / changement d'id de template
   }, [open, template?.id]);
 
   const previewContact = useMemo(() => {

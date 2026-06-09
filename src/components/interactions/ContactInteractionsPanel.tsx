@@ -64,6 +64,9 @@ interface ContactInteractionsPanelProps {
   onNavigate?: (page: string) => void;
 }
 
+/** Délai mini entre deux sync mail auto pour un même contact. */
+const AUTO_RESYNC_MS = 15 * 60 * 1000;
+
 const FILTER_LABELS: { id: RelationTimelineFilter; label: string }[] = [
   { id: "all", label: "Tout" },
   { id: "crm", label: "CRM" },
@@ -191,7 +194,6 @@ export function ContactInteractionsPanel({
   /** Dernière sync auto par contact (évite spam, permet re-sync à la réouverture de l’onglet). */
   const lastAutoSyncRef = useRef<Map<number, number>>(new Map());
   const syncLockRef = useRef(false);
-  const AUTO_RESYNC_MS = 15 * 60 * 1000;
 
   useEffect(() => {
     setSyncing(false);

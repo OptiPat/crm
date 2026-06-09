@@ -179,6 +179,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
 
   useEffect(() => {
     void loadEtiquettes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement initial unique au montage
   }, []);
 
   useEffect(() => {

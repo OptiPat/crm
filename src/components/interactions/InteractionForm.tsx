@@ -95,6 +95,7 @@ export function InteractionForm({
     } else {
       setFormData(emptyForm(defaultContactId));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- (ré)initialise sur ouverture / changement d'id, pas pendant la saisie
   }, [open, interaction?.id, defaultContactId]);
 
   useEffect(() => {
@@ -102,6 +103,7 @@ export function InteractionForm({
     if (formData.contact_id === 0 && contacts[0]?.id) {
       setFormData((prev) => ({ ...prev, contact_id: contacts[0].id! }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- dépend de contacts.length, pas de l'identité du tableau contacts
   }, [open, interaction, defaultContactId, contacts.length, formData.contact_id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
