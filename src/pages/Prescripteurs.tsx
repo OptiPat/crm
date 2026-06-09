@@ -23,6 +23,7 @@ import {
   buildFoyersInfo,
   buildPrescripteurTree,
   computePrescripteursRacines,
+  countDirectClientsForPrescripteur,
   getContactDisplayName,
   matchesContactOrFoyer,
   type PrescripteurStats,
@@ -260,10 +261,13 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
   );
 
   const handleDeletePrescripteur = async (contact: Contact) => {
-    const clientsRecommandes = contacts.filter((c) => c.prescripteur_id === contact.id);
+    const clientsOrphelins = contacts.filter((c) => c.prescripteur_id === contact.id);
+    const clientsFoyer = countDirectClientsForPrescripteur(contact, contacts, foyersInfo);
     let confirmMessage = `Supprimer ${contact.prenom} ${contact.nom} ?`;
-    if (clientsRecommandes.length > 0) {
-      confirmMessage += `\n\nAttention : ${clientsRecommandes.length} client(s) recommandé(s) perdront leur lien prescripteur.`;
+    if (clientsOrphelins.length > 0) {
+      confirmMessage += `\n\nAttention : ${clientsOrphelins.length} client(s) recommandé(s) perdront leur lien prescripteur.`;
+    } else if (clientsFoyer > 0) {
+      confirmMessage += `\n\nCe foyer compte ${clientsFoyer} client(s) recommandé(s) liés à un autre membre — non affectés par cette suppression.`;
     }
     if (!confirm(confirmMessage)) return;
 

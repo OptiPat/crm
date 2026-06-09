@@ -1,5 +1,6 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
+import { buildFoyerNomFromMembers } from "@/lib/foyers/foyer-utils";
 import { contactMatchesSearch, textMatchesSearch } from "@/lib/search-utils";
 
 export function formatFilleulCategorie(categorie: string): string {
@@ -70,7 +71,7 @@ export function buildFoyersInfo(contacts: Contact[]): Record<number, FoyerInfo> 
       if (!foyers[contact.foyer_id]) {
         foyers[contact.foyer_id] = {
           id: contact.foyer_id,
-          nom: contact.nom,
+          nom: "",
           membres: [],
           displayName: "",
         };
@@ -81,7 +82,8 @@ export function buildFoyersInfo(contacts: Contact[]): Record<number, FoyerInfo> 
 
   Object.values(foyers).forEach((foyer) => {
     const prenoms = foyer.membres.map((m) => m.prenom).join(" + ");
-    foyer.displayName = `Foyer ${foyer.nom} (${prenoms})`;
+    foyer.nom = buildFoyerNomFromMembers(foyer.membres);
+    foyer.displayName = `${foyer.nom} (${prenoms})`;
   });
 
   return foyers;
@@ -137,6 +139,66 @@ type TreeContext = {
 function getFoyerMembersIds(contacts: Contact[], foyerId: number | undefined): Set<number> {
   if (!foyerId) return new Set();
   return new Set(contacts.filter((c) => c.foyer_id === foyerId).map((c) => c.id));
+}
+
+/** IDs des membres du foyer prescripteur (ou le contact seul s'il n'est pas en foyer). */
+export function getPrescripteurMemberIds(
+  prescripteur: Contact,
+  foyersInfo: Record<number, FoyerInfo>
+): number[] {
+  if (prescripteur.foyer_id && foyersInfo[prescripteur.foyer_id]) {
+    return foyersInfo[prescripteur.foyer_id].membres.map((m) => m.id);
+  }
+  return [prescripteur.id];
+}
+
+/** Clients directs d'un prescripteur (ou foyer), dédoublonnés par foyer client. */
+export function countDirectClientsForPrescripteur(
+  prescripteur: Contact,
+  contacts: Contact[],
+  foyersInfo: Record<number, FoyerInfo>
+): number {
+  const memberIds = new Set(getPrescripteurMemberIds(prescripteur, foyersInfo));
+  const clientsDirects = contacts.filter(
+    (c) => c.prescripteur_id != null && memberIds.has(c.prescripteur_id)
+  );
+  const foyersVusDirect = new Set<number>();
+  let count = 0;
+  for (const client of clientsDirects) {
+    if (client.foyer_id) {
+      if (!foyersVusDirect.has(client.foyer_id)) {
+        foyersVusDirect.add(client.foyer_id);
+        count++;
+      }
+    } else {
+      count++;
+    }
+  }
+  return count;
+}
+
+function countRawClientLinks(contactId: number, contacts: Contact[]): number {
+  return contacts.filter((c) => c.prescripteur_id === contactId).length;
+}
+
+/** Représentant d'un foyer quand plusieurs membres sont prescripteurs racines. */
+export function pickPrescripteurRacineForFoyer(
+  candidates: Contact[],
+  contacts: Contact[]
+): Contact {
+  return candidates.reduce((best, current) => {
+    const bestLinks = countRawClientLinks(best.id, contacts);
+    const currentLinks = countRawClientLinks(current.id, contacts);
+    if (currentLinks > bestLinks) return current;
+    if (currentLinks < bestLinks) return best;
+    if (current.categorie === "PRESCRIPTEUR" && best.categorie !== "PRESCRIPTEUR") {
+      return current;
+    }
+    if (best.categorie === "PRESCRIPTEUR" && current.categorie !== "PRESCRIPTEUR") {
+      return best;
+    }
+    return current.id < best.id ? current : best;
+  });
 }
 
 function getContactPatrimoineWithInvests(
@@ -283,26 +345,27 @@ export function computePrescripteursRacines(
     contacts.filter((c) => c.prescripteur_id).map((c) => c.prescripteur_id!)
   );
 
-  const foyerHasPrescripteur = (foyerId: number): boolean => {
-    if (!foyerId || !foyersInfo[foyerId]) return false;
-    return foyersInfo[foyerId].membres.some((m) => m.prescripteur_id);
-  };
-
   const racinesAll = contacts.filter((c) => {
-    const hasPrescripteur = c.prescripteur_id || (c.foyer_id && foyerHasPrescripteur(c.foyer_id));
-    if (prescripteurIds.has(c.id) && !hasPrescripteur) return true;
-    if (c.categorie === "PRESCRIPTEUR" && !hasPrescripteur) return true;
+    // Seul le prescripteur propre du contact compte : le fait qu'un conjoint
+    // du foyer ait un prescripteur_id ne doit pas masquer un prescripteur racine.
+    if (c.prescripteur_id) return false;
+    if (prescripteurIds.has(c.id)) return true;
+    if (c.categorie === "PRESCRIPTEUR") return true;
     return false;
   });
 
-  const foyersVus = new Set<number>();
-  const racines = racinesAll.filter((c) => {
-    if (c.foyer_id) {
-      if (foyersVus.has(c.foyer_id)) return false;
-      foyersVus.add(c.foyer_id);
-    }
-    return true;
-  });
+  const racinesSansFoyer = racinesAll.filter((c) => !c.foyer_id);
+  const racinesParFoyer = new Map<number, Contact[]>();
+  for (const c of racinesAll) {
+    if (!c.foyer_id) continue;
+    const list = racinesParFoyer.get(c.foyer_id) ?? [];
+    list.push(c);
+    racinesParFoyer.set(c.foyer_id, list);
+  }
+  const racinesFoyer = [...racinesParFoyer.values()].map((candidates) =>
+    pickPrescripteurRacineForFoyer(candidates, contacts)
+  );
+  const racines = [...racinesSansFoyer, ...racinesFoyer];
 
   return racines
     .map((prescripteur) => {
@@ -323,24 +386,16 @@ export function computePrescripteursRacines(
         ctx
       );
 
-      const clientsDirects = contacts.filter((c) => c.prescripteur_id === prescripteur.id);
-      const foyersVusDirect = new Set<number>();
-      let nombreClientsDirectsSansFoyerDoublons = 0;
-      for (const client of clientsDirects) {
-        if (client.foyer_id) {
-          if (!foyersVusDirect.has(client.foyer_id)) {
-            foyersVusDirect.add(client.foyer_id);
-            nombreClientsDirectsSansFoyerDoublons++;
-          }
-        } else {
-          nombreClientsDirectsSansFoyerDoublons++;
-        }
-      }
+      const nombreClientsDirects = countDirectClientsForPrescripteur(
+        prescripteur,
+        contacts,
+        foyersInfo
+      );
 
       return {
         contact: prescripteur,
         patrimoinePersonnel,
-        nombreClientsDirects: nombreClientsDirectsSansFoyerDoublons,
+        nombreClientsDirects,
         patrimoineApporteTotal: calculateTreePatrimoine(tree) - patrimoinePersonnel,
         nombreClientsTotal: countTreeClients(tree),
       };
