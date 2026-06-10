@@ -25,9 +25,10 @@ import { formatEuroCentimes } from "@/lib/investissements/investissement-display
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
 import {
   computePatrimoineStats,
+  investissementMatchesSearch,
+  matchesInvestissementTypeFilter,
   type PatrimoineOrigineFilter,
 } from "@/lib/investissements/patrimoine-tab-utils";
-import { textMatchesSearch } from "@/lib/search-utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
@@ -147,14 +148,11 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
     }
 
     list = list.filter((inv) => {
-      const matchesSearch = textMatchesSearch(
-        searchQuery,
-        inv.nom_produit,
-        inv.contact_nom,
-        inv.contact_prenom,
-        inv.partenaire_nom
+      const matchesSearch = investissementMatchesSearch(searchQuery, inv);
+      const matchesType = matchesInvestissementTypeFilter(
+        inv.type_produit,
+        typeFilter
       );
-      const matchesType = typeFilter === "ALL" || inv.type_produit === typeFilter;
       const matchesPartenaire =
         partenaireFilter === "ALL" || inv.partenaire_nom === partenaireFilter;
       return matchesSearch && matchesType && matchesPartenaire;

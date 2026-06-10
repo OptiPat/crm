@@ -1,5 +1,5 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
-import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
+import { formatNomProduit, IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
 import { textMatchesSearch } from "@/lib/search-utils";
 
 export type InvestissementWithOwner = Investissement & {
@@ -93,6 +93,54 @@ export function filterByOwner(
   );
 }
 
+export function matchesInvestissementTypeFilter(
+  typeProduit: string | undefined,
+  typeFilter: string
+): boolean {
+  if (typeFilter === "ALL") return true;
+  if (typeFilter === "IMMOBILIER") return isImmobilierType(typeProduit);
+  return typeProduit === typeFilter;
+}
+
+export function investissementSearchValues(
+  inv: {
+    nom_produit?: string | null;
+    type_produit?: string;
+    notes?: string | null;
+    contact_nom?: string;
+    contact_prenom?: string;
+    partenaire_nom?: string | null;
+    _proprietaire?: string;
+    partenaire_id?: number;
+  },
+  getPartenaireNom?: (id?: number) => string | null
+): (string | null | undefined)[] {
+  const type = inv.type_produit;
+  return [
+    inv.nom_produit,
+    type,
+    type ? formatNomProduit(type) : undefined,
+    type?.replace(/_/g, " "),
+    inv.notes,
+    inv.contact_nom,
+    inv.contact_prenom,
+    inv.partenaire_nom,
+    inv._proprietaire,
+    getPartenaireNom?.(inv.partenaire_id),
+  ];
+}
+
+export function investissementMatchesSearch(
+  query: string,
+  inv: Parameters<typeof investissementSearchValues>[0],
+  getPartenaireNom?: (id?: number) => string | null
+): boolean {
+  return textMatchesSearch(
+    query,
+    ...investissementSearchValues(inv, getPartenaireNom)
+  );
+}
+
 export function filterPatrimoineSearch(
   investissements: InvestissementWithOwner[],
   query: string,
@@ -100,14 +148,7 @@ export function filterPatrimoineSearch(
 ): InvestissementWithOwner[] {
   if (!query.trim()) return investissements;
   return investissements.filter((inv) =>
-    textMatchesSearch(
-      query,
-      inv.nom_produit,
-      inv.type_produit,
-      inv.notes,
-      inv._proprietaire,
-      getPartenaireNom(inv.partenaire_id)
-    )
+    investissementMatchesSearch(query, inv, getPartenaireNom)
   );
 }
 

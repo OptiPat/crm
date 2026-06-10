@@ -4,7 +4,9 @@ import {
   computePatrimoineStats,
   filterByOrigine,
   groupPatrimoineByCategory,
+  investissementMatchesSearch,
   isImmobilierType,
+  matchesInvestissementTypeFilter,
   mergeContactPatrimoineRows,
 } from "@/lib/investissements/patrimoine-tab-utils";
 
@@ -58,5 +60,21 @@ describe("patrimoine-tab-utils", () => {
     expect(immobilier).toHaveLength(1);
     expect(financier).toHaveLength(1);
     expect(isImmobilierType("PINEL")).toBe(true);
+  });
+
+  it("filtre le type Immobilier (Pinel, Malraux, etc.)", () => {
+    expect(matchesInvestissementTypeFilter("PINEL", "IMMOBILIER")).toBe(true);
+    expect(matchesInvestissementTypeFilter("MALRAUX", "IMMOBILIER")).toBe(true);
+    expect(matchesInvestissementTypeFilter("SCPI", "IMMOBILIER")).toBe(false);
+    expect(matchesInvestissementTypeFilter("SCPI", "SCPI")).toBe(true);
+  });
+
+  it("recherche par libellé de type (Malraux, Pinel)", () => {
+    const inv = base({ type_produit: "MALRAUX", nom_produit: "Appartement Paris" });
+    expect(investissementMatchesSearch("malraux", inv)).toBe(true);
+    expect(investissementMatchesSearch("pinel", inv)).toBe(false);
+
+    const pinel = base({ id: 2, type_produit: "PINEL", nom_produit: "Lyon T3" });
+    expect(investissementMatchesSearch("pinel", pinel)).toBe(true);
   });
 });

@@ -31,6 +31,18 @@ const PRODUCT_TYPE_LABELS: Record<string, string> = {
   G3F: "G3F",
   PINEL: "Pinel",
   JEANBRUN: "Jeanbrun",
+  MALRAUX: "Malraux",
+  DENORMANDIE: "Denormandie",
+  MONUMENT_HISTORIQUE: "Monument Historique",
+  DEFICIT_FONCIER: "Déficit Foncier",
+  LMNP: "LMNP",
+  LMP: "LMP",
+  NUE_PROPRIETE: "Nue-Propriété",
+  RESIDENCE_PRINCIPALE: "Résidence Principale",
+  LOCATIF_CLASSIQUE: "Locatif Classique",
+  SCPI_FISCALE: "SCPI Fiscale",
+  CONTRAT_CAPITALISATION: "Contrat de Capitalisation",
+  EPARGNE_SALARIALE: "Épargne Salariale",
   AUTRE: "Autre",
 };
 
