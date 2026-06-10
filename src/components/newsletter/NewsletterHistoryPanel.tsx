@@ -2,18 +2,24 @@ import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, History, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, History, Loader2, Send } from "lucide-react";
 import {
   getNewsletterEditionDetail,
   listNewsletterEditions,
   type NewsletterEditionDetail,
   type NewsletterEditionSummary,
 } from "@/lib/api/tauri-newsletter";
+import {
+  isResumableNewsletterEdition,
+  newsletterEditionStatusLabel,
+} from "@/lib/newsletter/newsletter-edition-resume";
 
 type NewsletterHistoryPanelProps = {
   refreshKey?: number;
   initialExpandedEditionId?: number | null;
   onOpenContact?: (contactId: number) => void;
+  onResumeSend?: (edition: NewsletterEditionSummary) => void;
+  resumingEditionId?: number | null;
 };
 
 function formatUnixDate(ts: number): string {
@@ -23,12 +29,12 @@ function formatUnixDate(ts: number): string {
   }).format(new Date(ts * 1000));
 }
 
-import { newsletterEditionStatusLabel } from "@/lib/newsletter/newsletter-edition-resume";
-
 export function NewsletterHistoryPanel({
   refreshKey = 0,
   initialExpandedEditionId = null,
   onOpenContact,
+  onResumeSend,
+  resumingEditionId = null,
 }: NewsletterHistoryPanelProps) {
   const [editions, setEditions] = useState<NewsletterEditionSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -137,6 +143,32 @@ export function NewsletterHistoryPanel({
                           ` · ${edition.errorCount} erreur${edition.errorCount !== 1 ? "s" : ""}`
                         : null}
                       </p>
+                      {isResumableNewsletterEdition(edition) && onResumeSend ?
+                        <div className="mt-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={resumingEditionId === edition.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onResumeSend(edition);
+                            }}
+                          >
+                            {resumingEditionId === edition.id ?
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Préparation…
+                              </>
+                            : <>
+                                <Send className="h-4 w-4 mr-2" />
+                                Relancer l&apos;envoi (
+                                {edition.queuedCount - edition.sentCount} restant
+                                {edition.queuedCount - edition.sentCount !== 1 ? "s" : ""})
+                              </>
+                            }
+                          </Button>
+                        </div>
+                      : null}
                     </div>
                   </button>
                   {open ?

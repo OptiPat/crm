@@ -36,6 +36,7 @@ import {
   listNewsletterEditions,
   prepareNewsletterEdition,
   type NewsletterEditionDetail,
+  type NewsletterEditionSummary,
   type GeneratedNewsletterContent,
   type NewsletterAudienceFilters,
   type NewsletterAudiencePreview,
@@ -217,6 +218,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   const [loadingPreparedReview, setLoadingPreparedReview] = useState(false);
   const batchAbortRef = useRef<AbortController | null>(null);
   const [audiencePreview, setAudiencePreview] = useState<NewsletterAudiencePreview | null>(null);
+  const [resumingEditionId, setResumingEditionId] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     const [s, cgpConfig, emailSt] = await Promise.all([
@@ -231,16 +233,21 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     const etiq = await ensureNewsletterEtiquette(s.etiquetteNom);
     setEtiquetteInfo({ id: etiq.etiquetteId });
     const editions = await listNewsletterEditions(15);
-    const resumable = editions.find(isResumableNewsletterEdition);
-    const editionId = activeEditionId ?? resumable?.id ?? null;
-    if (resumable && activeEditionId == null) {
-      setActiveEditionId(resumable.id);
+    const resumableEditions = editions.filter(isResumableNewsletterEdition);
+    const resumable = resumableEditions[0] ?? null;
+    const storedStillSendable =
+      activeEditionId != null &&
+      resumableEditions.some((edition) => edition.id === activeEditionId);
+    const editionId = storedStillSendable ? activeEditionId : (resumable?.id ?? null);
+    if (editionId != null && editionId !== activeEditionId) {
+      setActiveEditionId(editionId);
     }
     const ready = await countNewsletterReady(etiq.etiquetteId, editionId);
     if (ready > 0) {
       setPreparedQueueCount(ready);
-    } else if (activeEditionId == null) {
+    } else if (!storedStillSendable && resumable == null) {
       setPreparedQueueCount(null);
+      setActiveEditionId(null);
     }
   }, [activeEditionId]);
 
@@ -664,6 +671,32 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     batchAbortRef.current?.abort();
   };
 
+  const handleResumeSend = async (edition: NewsletterEditionSummary) => {
+    if (!etiquetteInfo) {
+      toast.error("Étiquette Newsletter introuvable");
+      return;
+    }
+    setResumingEditionId(edition.id);
+    try {
+      const ready = await countNewsletterReady(etiquetteInfo.id, edition.id);
+      if (ready <= 0) {
+        toast.error("Aucun destinataire en file pour cette édition");
+        return;
+      }
+      setActiveEditionId(edition.id);
+      setPreparedQueueCount(ready);
+      setHistoryExpandEditionId(edition.id);
+      setHistoryRefreshKey((k) => k + 1);
+      toast.success(
+        `${ready} email${ready !== 1 ? "s" : ""} prêt${ready !== 1 ? "s" : ""} — utilisez « Envoyer la campagne » ci-dessus`
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossible de relancer l'envoi");
+    } finally {
+      setResumingEditionId(null);
+    }
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -985,6 +1018,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             refreshKey={historyRefreshKey}
             initialExpandedEditionId={historyExpandEditionId}
             onOpenContact={(id) => onNavigate?.(`contact-${id}`)}
+            onResumeSend={(edition) => void handleResumeSend(edition)}
+            resumingEditionId={resumingEditionId}
           />
         </TabsContent>
 

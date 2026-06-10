@@ -325,6 +325,7 @@ impl Database {
                         email_reponse_gmail_message_id = NULL,
                         email_suivi_ignore = 1,
                         email_relance_active = 0,
+                        email_annule = 0,
                         email_gmail_message_id = NULL,
                         email_gmail_thread_id = NULL,
                         email_sent_subject = NULL,
@@ -691,8 +692,36 @@ impl Database {
         })
     }
 
+    /// Réactive les lignes file après annulation précédente ou édition bloquée à 0/N.
+    fn ensure_newsletter_edition_resumable(&self, edition_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE contact_etiquettes SET email_annule = 0, email_suivi_ignore = 1
+             WHERE id IN (
+               SELECT ner.contact_etiquette_id
+               FROM newsletter_edition_recipients ner
+               INNER JOIN newsletter_editions ne ON ne.id = ner.edition_id
+               WHERE ner.edition_id = ?1
+                 AND ner.sent_at IS NULL
+                 AND (
+                   ne.status IN ('prepared', 'partial', 'sending')
+                   OR (ne.status = 'completed' AND ne.sent_count < ne.queued_count)
+                 )
+             )
+             AND email_envoye = 0",
+            params![edition_id],
+        )?;
+        self.conn.execute(
+            "UPDATE newsletter_editions
+             SET status = 'prepared', send_completed_at = NULL
+             WHERE id = ?1 AND status = 'completed' AND sent_count < queued_count",
+            params![edition_id],
+        )?;
+        Ok(())
+    }
+
     /// Destinataires encore à envoyer pour une édition (hors file Suivi standard).
     pub fn get_newsletter_send_queue(&self, edition_id: i64) -> Result<Vec<EtiquetteEmailQueueItem>> {
+        self.ensure_newsletter_edition_resumable(edition_id)?;
         let sql = "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
                         e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
                         COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
@@ -1087,5 +1116,107 @@ mod tests {
                 .unwrap(),
             1
         );
+    }
+
+    #[test]
+    fn prepare_after_cancel_restores_send_queue_via_ensure() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let now = 1_700_000_000i64;
+        let etiquette = db
+            .create_etiquette(NewEtiquette {
+                nom: "Newsletter".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: None,
+                email_delai_jours: None,
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+            })
+            .unwrap();
+
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+
+        let filters = NewsletterAudienceFilters::default();
+        let filters_json = serde_json::to_string(&filters).unwrap();
+        let template_id = db
+            .upsert_newsletter_template(
+                etiquette.id,
+                "Objet test",
+                "Corps",
+                r#"{"newsletter_html":"<p>Hi</p>"}"#,
+            )
+            .unwrap();
+        let (_q1, _s1, queued1) = db
+            .queue_newsletter_edition(etiquette.id, now, &filters)
+            .unwrap();
+        let edition1 = db
+            .create_newsletter_edition(
+                etiquette.id,
+                template_id,
+                "Juin 2026",
+                "Objet test",
+                "Corps",
+                r#"{"subject":"Objet test","intro":"Hi"}"#,
+                None,
+                None,
+                &filters_json,
+                now,
+                &queued1,
+            )
+            .unwrap();
+        db.cancel_newsletter_preparation(etiquette.id, Some(edition1))
+            .unwrap();
+
+        let (_q2, _s2, queued2) = db
+            .queue_newsletter_edition(etiquette.id, now + 60, &filters)
+            .unwrap();
+        let edition2 = db
+            .create_newsletter_edition(
+                etiquette.id,
+                template_id,
+                "Juin 2026 bis",
+                "Objet test",
+                "Corps",
+                r#"{"subject":"Objet test","intro":"Hi"}"#,
+                None,
+                None,
+                &filters_json,
+                now + 60,
+                &queued2,
+            )
+            .unwrap();
+
+        db.conn
+            .execute(
+                "UPDATE newsletter_editions SET status = 'completed', send_completed_at = ?1 WHERE id = ?2",
+                params![now + 120, edition2],
+            )
+            .unwrap();
+
+        let send_queue = db.get_newsletter_send_queue(edition2).unwrap();
+        assert_eq!(send_queue.len(), 1);
+        let status: String = db
+            .conn
+            .query_row(
+                "SELECT status FROM newsletter_editions WHERE id = ?1",
+                params![edition2],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(status, "prepared");
     }
 }
