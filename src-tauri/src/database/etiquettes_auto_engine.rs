@@ -430,11 +430,10 @@ impl Database {
                     if email_suivi_ignore != 0 {
                         return Ok(newly_assigned);
                     }
+                    // Envoi retiré manuellement (email_annule) : ne pas remettre en file au
+                    // recalcul auto — l'utilisateur choisit « Remettre en file » ou ✕ définitif.
                     if email_envoye == 0 && email_annule != 0 {
-                        let _ = self.try_restore_cancelled_pending_campaign(
-                            assignment_id,
-                            etiquette_id,
-                        );
+                        return Ok(newly_assigned);
                     } else if email_envoye != 0 {
                         let _ = self.try_reopen_sent_campaign_if_still_eligible(
                             assignment_id,

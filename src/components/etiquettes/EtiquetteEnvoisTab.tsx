@@ -829,8 +829,8 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             </TabsContent>
             <TabsContent value="cancelled" className="mt-4">
               <p className="text-xs text-muted-foreground mb-3">
-                Retirés avec ✕ depuis Prêts à envoyer. <strong>Remettre en file</strong> ou le
-                recalcul les réintègre. <strong>✕ ici</strong> = ne plus proposer cet envoi (liste
+                Retirés avec ✕ depuis Prêts à envoyer. <strong>Remettre en file</strong> pour
+                repasser en Prêts. <strong>✕ ici</strong> = ne plus proposer cet envoi (liste
                 propre, étiquette et alerte conservées).
               </p>
               {renderList(cancelled, { mode: "cancelled" })}
@@ -948,8 +948,9 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 </p>
                 <p>
                   Le contact disparaît de <strong>Retirés</strong> et ne reviendra plus dans la
-                  file d&apos;envoi (même après recalcul). L&apos;étiquette et l&apos;alerte de
-                  suivi restent — utilisez « Exclure du calcul auto » pour tout couper.
+                  file pour cet envoi. L&apos;étiquette et l&apos;alerte de suivi restent. Un
+                  nouvel envoi pourra être proposé plus tard si la règle auto se réapplique (ex.
+                  après mise à jour de la date de dernier contact).
                 </p>
               </div>
             </AlertDialogDescription>

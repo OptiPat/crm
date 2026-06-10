@@ -1337,7 +1337,7 @@ mod database_integration_tests {
     }
 
     #[test]
-    fn auto_recalc_restores_cancelled_suivi_when_rule_still_matches() {
+    fn auto_recalc_keeps_cancelled_suivi_out_of_ready_queue() {
         use crate::database::models::{NewEtiquette, NewTemplateEmail};
 
         let db = test_db();
@@ -1421,10 +1421,17 @@ mod database_integration_tests {
             db.get_etiquette_email_queue("ready")
                 .unwrap()
                 .iter()
-                .any(|q| q.contact_id == cid),
-            "recalcul auto remet en file un envoi annulé encore éligible"
+                .all(|q| q.contact_id != cid),
+            "recalcul auto ne doit pas remettre un envoi retiré manuellement (✕)"
         );
-        assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
+        assert_eq!(
+            db.get_etiquette_email_queue("cancelled")
+                .unwrap()
+                .iter()
+                .filter(|q| q.contact_id == cid)
+                .count(),
+            1
+        );
     }
 
     #[test]

@@ -814,36 +814,6 @@ impl Database {
         Ok(())
     }
 
-    pub(crate) fn try_restore_cancelled_pending_campaign(
-        &self,
-        assignment_id: i64,
-        etiquette_id: i64,
-    ) -> Result<bool> {
-        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        if !etiquette.email_actif {
-            return Ok(false);
-        }
-        let (email_envoye, email_annule, email_suivi_ignore, date_attribution): (i64, i64, i64, i64) =
-            self.conn.query_row(
-                "SELECT email_envoye, COALESCE(email_annule, 0), COALESCE(email_suivi_ignore, 0),
-                        date_attribution
-                 FROM contact_etiquettes WHERE id = ?1",
-                params![assignment_id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )?;
-        if email_envoye != 0 || email_annule == 0 || email_suivi_ignore != 0 {
-            return Ok(false);
-        }
-        let prevue = resolve_email_date_prevue_for_contact(&etiquette, date_attribution);
-        let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET email_annule = 0, email_suivi_ignore = 0, email_date_prevue = ?1
-             WHERE id = ?2 AND email_envoye = 0 AND email_annule = 1
-               AND COALESCE(email_suivi_ignore, 0) = 0",
-            params![prevue, assignment_id],
-        )?;
-        Ok(updated > 0)
-    }
-
     /// Retire un envoi planifié de la file « Prêts à envoyer » sans l'envoyer.
     pub fn cancel_pending_email_campaign(&self, row_id: i64) -> Result<()> {
         let updated = self.conn.execute(
