@@ -22,6 +22,9 @@ type RichTextEmailEditorProps = {
   minHeight?: string;
   placeholder?: string;
   onSelectionSave?: (range: Range | null) => void;
+  /** Pied de page sous l'éditeur (défaut : aide variables). */
+  showFooter?: boolean;
+  ariaLabel?: string;
 };
 
 export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEditorProps>(
@@ -33,6 +36,8 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
       minHeight = "220px",
       placeholder = "Rédigez votre message…",
       onSelectionSave,
+      showFooter = true,
+      ariaLabel = "Message du modèle",
     },
     forwardedRef
   ) {
@@ -149,12 +154,13 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         contentEditable
         role="textbox"
         aria-multiline
-        aria-label="Message du modèle"
+        aria-label={ariaLabel}
         data-placeholder={placeholder}
         className={cn(
           "px-3 py-2 text-sm outline-none overflow-y-auto",
           "min-h-[var(--editor-min-h)]",
           "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground",
+          "[&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline",
           "[&_a]:text-primary [&_a]:underline",
           "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
           "[&_div]:leading-normal [&_>div]:m-0 [&_p]:my-0 [&_p]:leading-normal"
@@ -165,10 +171,12 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           onSelectionSave?.(saveRichEditorSelection(editorRef.current));
           emitChange(true);
         }}      />
-      <p className="px-3 pb-2 text-[11px] text-muted-foreground border-t bg-muted/10">
-        Mise en forme conservée à l&apos;envoi Gmail (gras, listes, liens). Variables{" "}
-        {"{{prenom}}"} etc. : insérez-les via les badges ci-dessus.
-      </p>
+      {showFooter ?
+        <p className="px-3 pb-2 text-[11px] text-muted-foreground border-t bg-muted/10">
+          Mise en forme conservée à l&apos;envoi Gmail (gras, listes, liens). Variables{" "}
+          {"{{prenom}}"} etc. : insérez-les via les badges ci-dessus.
+        </p>
+      : null}
     </div>
   );
   }

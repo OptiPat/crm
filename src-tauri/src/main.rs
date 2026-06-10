@@ -252,6 +252,7 @@ fn main() {
             get_newsletter_audience_preview,
             get_newsletter_unsubscribed,
             prepare_newsletter_edition,
+            cancel_newsletter_preparation,
             list_newsletter_editions,
             get_newsletter_edition_detail,
             get_last_newsletter_edition_duplicate,

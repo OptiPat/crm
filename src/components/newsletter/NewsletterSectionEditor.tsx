@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import type { GeneratedNewsletterContent, NewsletterLayout } from "@/lib/api/tauri-newsletter";
 import { NEWSLETTER_LAYOUT_OPTIONS } from "@/lib/newsletter/newsletter-branding";
 import { Plus, Trash2 } from "lucide-react";
@@ -10,6 +9,7 @@ import { NEWSLETTER_VARIABLE_HINTS } from "@/lib/newsletter/newsletter-template-
 import { footerProfileHasOptions } from "@/lib/newsletter/newsletter-footer-options";
 import { NewsletterPlacedImagesEditor } from "@/components/newsletter/NewsletterPlacedImagesEditor";
 import { NewsletterRichBlocksEditor } from "@/components/newsletter/NewsletterRichBlocksEditor";
+import { NewsletterRichTextField } from "@/components/newsletter/NewsletterRichTextField";
 
 type NewsletterSectionEditorProps = {
   draft: GeneratedNewsletterContent;
@@ -51,7 +51,9 @@ export function NewsletterSectionEditor({
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2 bg-muted/20">
         <strong>Branding de ce numéro</strong> — mise en page, images, blocs enrichis et CTA
-        optionnel. Couleurs et typographie globales : Paramètres → Newsletter. Variables :{" "}
+        optionnel. Barre de mise en forme (gras, italique, souligné…) sur chaque zone de texte,
+        comme dans Templates email. Couleurs et typographie globales : Paramètres → Newsletter.
+        Variables :{" "}
         {NEWSLETTER_VARIABLE_HINTS.join(", ")}
       </p>
 
@@ -98,16 +100,13 @@ export function NewsletterSectionEditor({
 
       <NewsletterRichBlocksEditor draft={draft} onChange={onChange} />
 
-      <div className="space-y-2 rounded-lg border p-3">
-        <Label htmlFor="nl-intro">Introduction</Label>
-        <Textarea
-          id="nl-intro"
-          rows={4}
-          className="text-sm"
-          value={draft.intro}
-          onChange={(e) => update({ intro: e.target.value })}
-        />
-      </div>
+      <NewsletterRichTextField
+        id="nl-intro"
+        label="Introduction"
+        value={draft.intro}
+        onChange={(intro) => update({ intro })}
+        minHeight="120px"
+      />
 
       {draft.sections.map((section, index) => (
         <div key={index} className="space-y-2 rounded-lg border p-3 bg-muted/20">
@@ -134,11 +133,12 @@ export function NewsletterSectionEditor({
             onChange={(e) => updateSection(index, { title: e.target.value })}
             placeholder="Titre de section"
           />
-          <Textarea
-            rows={5}
-            className="text-sm"
+          <NewsletterRichTextField
+            id={`nl-section-body-${index}`}
+            label="Corps de la section"
             value={section.body}
-            onChange={(e) => updateSection(index, { body: e.target.value })}
+            onChange={(body) => updateSection(index, { body })}
+            minHeight="160px"
             placeholder="Corps de la section"
           />
           <div className="flex items-center gap-2">
@@ -177,12 +177,12 @@ export function NewsletterSectionEditor({
         </div>
         {includeCta && (
           <>
-            <Textarea
+            <NewsletterRichTextField
               id="nl-cta"
-              rows={3}
-              className="text-sm"
+              label="Texte d'appel à l'action"
               value={draft.cta}
-              onChange={(e) => update({ cta: e.target.value })}
+              onChange={(cta) => update({ cta })}
+              minHeight="100px"
               placeholder="Ex. Prenez rendez-vous pour en discuter…"
             />
             <div className="grid gap-2 sm:grid-cols-2 pt-1">

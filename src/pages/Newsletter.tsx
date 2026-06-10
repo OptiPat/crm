@@ -23,11 +23,13 @@ import {
   Save,
   Mail,
   Copy,
+  Undo2,
 } from "lucide-react";
 import {
   DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
   ensureNewsletterEtiquette,
   generateNewsletterContent,
+  cancelNewsletterPreparation,
   getLastNewsletterEditionDuplicate,
   getNewsletterEditionDetail,
   getNewsletterSettings,
@@ -60,7 +62,6 @@ import {
   buildNewsletterHtmlOptions,
   buildNewsletterPlainBody,
   defaultConseillerFields,
-  contentFromPlainEdit,
   draftFromStructuredContent,
   mergeNewsletterDraftFromPlain,
   formatNewsletterEditionLabel,
@@ -92,6 +93,7 @@ import {
   loadNewsletterComposerDraft,
   saveNewsletterComposerDraft,
 } from "@/lib/newsletter/newsletter-composer-draft";
+import { buildComposerRestoreFromEdition } from "@/lib/newsletter/newsletter-composer-restore";
 import { mergeNewsletterAudienceFilters } from "@/lib/newsletter/newsletter-audience-utils";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import { toast } from "sonner";
@@ -202,6 +204,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     null
   );
   const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
+  const [cancelPrepareConfirmOpen, setCancelPrepareConfirmOpen] = useState(false);
+  const [cancellingPreparation, setCancellingPreparation] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [historyExpandEditionId, setHistoryExpandEditionId] = useState<number | null>(null);
@@ -458,6 +462,34 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     }
   };
 
+  const applyComposerRestore = useCallback(
+    (restore: ReturnType<typeof buildComposerRestoreFromEdition>) => {
+      setTheme(restore.theme);
+      setEditionInstructions(restore.editionInstructions);
+      setContent(restore.content);
+      setSubject(restore.subject);
+      setPlainBody(restore.plainBody);
+      setEditMode(restore.editMode);
+      setAudienceFilters(restore.audienceFilters);
+      setChatHistory([]);
+      setChatSessionKey((k) => k + 1);
+      if (restore.content || restore.plainBody.trim()) {
+        const draft =
+          restore.editMode === "sections" && restore.content
+            ? draftFromStructuredContent(restore.subject, restore.content)
+            : mergeNewsletterDraftFromPlain(
+                restore.subject,
+                restore.plainBody,
+                restore.content
+              );
+        refreshPreviewHtml(draft);
+      } else {
+        setPreviewHtml("");
+      }
+    },
+    [refreshPreviewHtml]
+  );
+
   const handleDuplicateLastEdition = async () => {
     setDuplicating(true);
     try {
@@ -466,24 +498,50 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         toast.error("Aucune édition précédente à dupliquer");
         return;
       }
-      let parsedContent: GeneratedNewsletterContent | null = null;
-      try {
-        parsedContent = JSON.parse(last.contentJson) as GeneratedNewsletterContent;
-      } catch {
-        parsedContent = contentFromPlainEdit(last.subject, last.plainBody);
-      }
-      setTheme(last.theme?.trim() ?? "");
-      setEditionInstructions(last.editionInstructions?.trim() ?? "");
-      setContent(parsedContent);
-      setSubject(last.subject);
-      setPlainBody(last.plainBody);
-      setChatHistory([]);
-      setChatSessionKey((k) => k + 1);
+      applyComposerRestore(
+        buildComposerRestoreFromEdition(
+          last,
+          settings?.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
+        )
+      );
       toast.success(`Édition « ${last.editionLabel} » dupliquée — adaptez puis préparez`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Duplication impossible");
     } finally {
       setDuplicating(false);
+    }
+  };
+
+  const handleCancelPreparation = async () => {
+    if (!etiquetteInfo) {
+      toast.error("Étiquette Newsletter introuvable");
+      return;
+    }
+    setCancellingPreparation(true);
+    try {
+      const result = await cancelNewsletterPreparation({
+        etiquetteId: etiquetteInfo.id,
+        editionId: activeEditionId,
+      });
+      applyComposerRestore(
+        buildComposerRestoreFromEdition(
+          result,
+          settings?.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
+        )
+      );
+      setPreparedQueueCount(null);
+      setActiveEditionId(null);
+      setCancelPrepareConfirmOpen(false);
+      setHistoryRefreshKey((k) => k + 1);
+      toast.success(
+        `Préparation annulée — brouillon restauré (${result.cancelledQueueCount} email${
+          result.cancelledQueueCount !== 1 ? "s" : ""
+        } retiré${result.cancelledQueueCount !== 1 ? "s" : ""} de la file)`
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Annulation impossible");
+    } finally {
+      setCancellingPreparation(false);
     }
   };
 
@@ -683,6 +741,14 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                           Revoir le contenu préparé
                         </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => setCancelPrepareConfirmOpen(true)}
+                      >
+                        <Undo2 className="h-4 w-4 mr-2" />
+                        Annuler la préparation
+                      </Button>
                       <Button
                         type="button"
                         disabled={!emailConnected}
@@ -995,6 +1061,41 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction onClick={() => void runBatchSend()}>
               Envoyer maintenant
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={cancelPrepareConfirmOpen}
+        onOpenChange={(open) => {
+          if (!cancellingPreparation) setCancelPrepareConfirmOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Annuler la préparation ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Les {preparedQueueCount ?? 0} email{(preparedQueueCount ?? 0) !== 1 ? "s" : ""} seront
+              retirés de la file d&apos;envoi (Suivi → Envois → Retirés). Le contenu de cette
+              édition sera rechargé dans le composeur pour modification.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancellingPreparation}>Garder en file</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={cancellingPreparation}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleCancelPreparation();
+              }}
+            >
+              {cancellingPreparation ?
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Annulation…
+                </>
+              : "Rebasculer en brouillon"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

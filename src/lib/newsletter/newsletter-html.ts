@@ -27,12 +27,14 @@ import {
   type NewsletterTypographySettings,
   type ResolvedNewsletterTypography,
 } from "@/lib/newsletter/newsletter-typography";
-
-
+import {
+  formatNewsletterBodyHtml,
+  NEWSLETTER_RICH_TEXT_CSS,
+  newsletterBodyTextStyle,
+  newsletterFieldToPlain,
+} from "@/lib/newsletter/newsletter-rich-text";
 
 export const NEWSLETTER_TEMPLATE_META_KEY = "newsletter_html";
-
-
 
 /** Point d'insertion de la signature CGP (avant le pied de page). */
 
@@ -158,6 +160,7 @@ export function defaultConseillerFields(cgp: CgpConfig | null): {
 
 function buildMobileStyleBlock(typo: ResolvedNewsletterTypography): string {
   return `<style type="text/css">
+${NEWSLETTER_RICH_TEXT_CSS}
 body { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
 @media only screen and (max-width: 520px) {
   .nl-outer-pad { padding: 8px 4px !important; }
@@ -392,7 +395,7 @@ function buildSectionRow(
   typo: ResolvedNewsletterTypography
 ): string {
   const title = escapeHtml(section.title);
-  const body = escapeHtml(section.body).replace(/\n/g, "<br>");
+  const body = formatNewsletterBodyHtml(section.body);
   if (!title && !body && !section.imageUrl?.trim()) return "";
 
   const num = formatSectionNumber(index);
@@ -415,7 +418,7 @@ function buildSectionRow(
     : "";
 
   const bodyBlock = body
-    ? `<p style="margin:0;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};">${body}</p>`
+    ? `<div class="nl-rich-text nl-section-body-text" style="${newsletterBodyTextStyle(typo)}">${body}</div>`
     : "";
   const imageBlock = section.imageUrl?.trim()
     ? `<p style="margin:0 0 14px 0;"><img class="nl-mobile-img" src="${escapeHtml(section.imageUrl.trim())}" alt="" width="520" style="display:block;width:100%;max-width:520px;height:auto;border-radius:2px;border:0;" /></p>`
@@ -454,7 +457,7 @@ function buildCtaButtonBlock(
   introAboveButton?: string
 ): string {
   const intro = introAboveButton?.trim()
-    ? `<p style="margin:0 0 16px 0;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};">${escapeHtml(introAboveButton).replace(/\n/g, "<br>")}</p>`
+    ? `<div class="nl-rich-text" style="margin:0 0 16px 0;${newsletterBodyTextStyle(typo)}">${formatNewsletterBodyHtml(introAboveButton)}</div>`
     : "";
   return `<tr><td class="nl-cta-pad" style="padding:8px 40px 28px 40px;text-align:center;">
 ${intro}${buildCtaButtonAnchor(label, href, accent, typo)}
@@ -468,14 +471,14 @@ function buildCtaBlock(
   layout: NewsletterLayout,
   typo: ResolvedNewsletterTypography
 ): string {
-  const text = escapeHtml(cta).replace(/\n/g, "<br>");
+  const text = formatNewsletterBodyHtml(cta);
   if (!text.trim()) return "";
 
   if (layout === "alert") {
     return `<tr><td class="nl-cta-pad" style="padding:12px 40px 32px 40px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${accent};border-radius:2px;">
 <tr><td class="nl-cta-inner" style="padding:24px 28px;font-family:${typo.bodyFontFamily};font-size:18px;line-height:${typo.lineHeight};color:#ffffff;text-align:center;">
-<p style="margin:0;">${text}</p>
+<div class="nl-rich-text" style="margin:0;color:#ffffff;">${text}</div>
 </td></tr>
 </table>
 </td></tr>`;
@@ -485,7 +488,7 @@ function buildCtaBlock(
   return `<tr><td class="nl-cta-pad" style="padding:8px 40px 28px 40px;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;border-left:3px solid ${border};">
 <tr><td class="nl-cta-inner" style="padding:22px 24px;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};">
-<p style="margin:0;">${text}</p>
+<div class="nl-rich-text" style="margin:0;${newsletterBodyTextStyle(typo)}">${text}</div>
 </td></tr>
 </table>
 </td></tr>`;
@@ -640,18 +643,18 @@ export function buildNewsletterPlainBody(content: GeneratedNewsletterContent): s
 
   const lines: string[] = [];
 
-  if (content.intro.trim()) lines.push(content.intro.trim());
+  if (content.intro.trim()) lines.push(newsletterFieldToPlain(content.intro));
 
   for (const section of content.sections) {
 
     if (section.title.trim()) lines.push("", section.title.trim());
 
-    if (section.body.trim()) lines.push(section.body.trim());
+    if (section.body.trim()) lines.push(newsletterFieldToPlain(section.body));
 
   }
 
   if (shouldShowCta(content)) {
-    lines.push("", content.cta.trim());
+    lines.push("", newsletterFieldToPlain(content.cta));
   }
 
   return lines.join("\n").trim();
@@ -688,7 +691,7 @@ export function buildNewsletterHtml(
 
   const cabinet = escapeHtml(options.cabinetName?.trim() || "Newsletter patrimoine");
 
-  const intro = escapeHtml(content.intro).replace(/\n/g, "<br>");
+  const intro = formatNewsletterBodyHtml(content.intro);
 
   const preheader = resolvePreheader(content, options);
 
@@ -761,7 +764,7 @@ ${blocksHtmlAt(blocks, { type: "header" }, accent, secondary, typo)}
 
 <tr><td class="nl-body-pad" style="padding:${introPad};font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};">
 
-<p style="margin:0;">${intro}</p>
+<div class="nl-rich-text" style="${newsletterBodyTextStyle(typo)}">${intro}</div>
 
 </td></tr>
 

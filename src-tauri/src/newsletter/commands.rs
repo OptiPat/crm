@@ -1,7 +1,7 @@
 use super::db::{
-    LastNewsletterEditionDuplicate, NewsletterAudienceFilters, NewsletterAudienceMember,
-    NewsletterAudiencePreview, NewsletterEditionDetail, NewsletterEditionSummary,
-    NewsletterUnsubscribedContact, PrepareNewsletterEditionResult,
+    CancelNewsletterPreparationResult, LastNewsletterEditionDuplicate, NewsletterAudienceFilters,
+    NewsletterAudienceMember, NewsletterAudiencePreview, NewsletterEditionDetail,
+    NewsletterEditionSummary, NewsletterUnsubscribedContact, PrepareNewsletterEditionResult,
 };
 use super::mistral::{generate_newsletter_json, refine_newsletter_json};
 use super::store::{NewsletterSettingsInput, NewsletterSettingsPublic, NewsletterStore};
@@ -510,6 +510,19 @@ pub fn prepare_newsletter_edition(
         edition_id,
         template_id,
     })
+}
+
+#[tauri::command]
+pub fn cancel_newsletter_preparation(
+    db: State<'_, DbState>,
+    etiquette_id: i64,
+    edition_id: Option<i64>,
+) -> Result<CancelNewsletterPreparationResult, String> {
+    let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+    let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+    database
+        .cancel_newsletter_preparation(etiquette_id, edition_id)
+        .map_err(|e| format!("Annulation préparation newsletter: {}", e))
 }
 
 #[tauri::command]

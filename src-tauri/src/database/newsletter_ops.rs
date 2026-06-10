@@ -1,10 +1,11 @@
 use super::models::NewTemplateEmail;
 use super::Database;
 use crate::newsletter::db::{
-    is_newsletter_unsubscribe_request, ContactAudienceRow, LastNewsletterEditionDuplicate,
-    NewsletterAudienceFilters, NewsletterAudienceMember, NewsletterAudiencePreview,
-    NewsletterEditionDetail, NewsletterEditionRecipient, NewsletterEditionSummary,
-    NewsletterEligibleContact, NewsletterUnsubscribedContact, QueuedNewsletterContact,
+    is_newsletter_unsubscribe_request, CancelNewsletterPreparationResult, ContactAudienceRow,
+    LastNewsletterEditionDuplicate, NewsletterAudienceFilters, NewsletterAudienceMember,
+    NewsletterAudiencePreview, NewsletterEditionDetail, NewsletterEditionRecipient,
+    NewsletterEditionSummary, NewsletterEligibleContact, NewsletterUnsubscribedContact,
+    QueuedNewsletterContact,
 };
 use rusqlite::{params, Result};
 
@@ -627,5 +628,270 @@ impl Database {
                 })
             },
         )
+    }
+
+    fn resolve_prepared_newsletter_edition_id(
+        &self,
+        etiquette_id: i64,
+        edition_id: Option<i64>,
+    ) -> Result<i64> {
+        if let Some(id) = edition_id {
+            let (found_id, status): (i64, String) = self.conn.query_row(
+                "SELECT id, status FROM newsletter_editions
+                 WHERE id = ?1 AND etiquette_id = ?2",
+                params![id, etiquette_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            if status != "prepared" {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "Seule une édition préparée peut être annulée (statut: {})",
+                    status
+                )));
+            }
+            return Ok(found_id);
+        }
+
+        self.conn.query_row(
+            "SELECT id FROM newsletter_editions
+             WHERE etiquette_id = ?1 AND status = 'prepared'
+             ORDER BY prepared_at DESC
+             LIMIT 1",
+            params![etiquette_id],
+            |row| row.get(0),
+        )
+    }
+
+    pub fn cancel_newsletter_preparation(
+        &self,
+        etiquette_id: i64,
+        edition_id: Option<i64>,
+    ) -> Result<CancelNewsletterPreparationResult> {
+        let edition_id = self.resolve_prepared_newsletter_edition_id(etiquette_id, edition_id)?;
+
+        let (
+            edition_label,
+            subject,
+            plain_body,
+            content_json,
+            theme,
+            edition_instructions,
+            audience_filters_json,
+        ): (
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            String,
+        ) = self.conn.query_row(
+            "SELECT edition_label, subject, plain_body, content_json, theme,
+                    edition_instructions, audience_filters_json
+             FROM newsletter_editions WHERE id = ?1",
+            params![edition_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                ))
+            },
+        )?;
+
+        let audience_filters: NewsletterAudienceFilters =
+            serde_json::from_str(&audience_filters_json).unwrap_or_default();
+
+        let mut recipient_ids: Vec<i64> = self
+            .conn
+            .prepare(
+                "SELECT contact_etiquette_id FROM newsletter_edition_recipients
+                 WHERE edition_id = ?1",
+            )?
+            .query_map(params![edition_id], |row| row.get(0))?
+            .collect::<Result<Vec<_>>>()?;
+
+        if recipient_ids.is_empty() {
+            recipient_ids = self
+                .conn
+                .prepare(
+                    "SELECT ce.id FROM contact_etiquettes ce
+                     WHERE ce.etiquette_id = ?1
+                       AND ce.email_envoye = 0
+                       AND COALESCE(ce.email_annule, 0) = 0
+                       AND ce.attribue_par = 'NEWSLETTER'",
+                )?
+                .query_map(params![etiquette_id], |row| row.get(0))?
+                .collect::<Result<Vec<_>>>()?;
+        }
+
+        self.conn.execute("BEGIN IMMEDIATE", [])?;
+
+        let result = (|| -> Result<u32> {
+            let mut cancelled_queue_count = 0u32;
+            for row_id in recipient_ids {
+                let updated = self.conn.execute(
+                    "UPDATE contact_etiquettes SET email_annule = 1, email_suivi_ignore = 0
+                     WHERE id = ?1 AND etiquette_id = ?2
+                       AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
+                    params![row_id, etiquette_id],
+                )?;
+                if updated > 0 {
+                    cancelled_queue_count += 1;
+                }
+            }
+
+            let updated = self.conn.execute(
+                "UPDATE newsletter_editions SET status = 'cancelled' WHERE id = ?1 AND status = 'prepared'",
+                params![edition_id],
+            )?;
+            if updated == 0 {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "Édition introuvable ou déjà traitée: {}",
+                    edition_id
+                )));
+            }
+
+            Ok(cancelled_queue_count)
+        })();
+
+        match result {
+            Ok(cancelled_queue_count) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(CancelNewsletterPreparationResult {
+                    edition_id,
+                    cancelled_queue_count,
+                    edition_label,
+                    subject,
+                    plain_body,
+                    content_json,
+                    theme,
+                    edition_instructions,
+                    audience_filters,
+                })
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::models::{NewContact, NewEtiquette};
+    use crate::database::Database;
+
+    fn sample_contact(nom: &str, prenom: &str) -> NewContact {
+        NewContact {
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            categorie: "CLIENT".into(),
+            filleul_categorie: None,
+            parrain_id: None,
+            prescripteur_id: None,
+            civilite: None,
+            nom: nom.into(),
+            prenom: prenom.into(),
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            date_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            statut_suivi: None,
+            registre: None,
+            notes: None,
+            famille_regroupement_exclu: None,
+        }
+    }
+
+    #[test]
+    fn cancel_newsletter_preparation_clears_queue_and_restores_payload() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let now = 1_700_000_000i64;
+        let etiquette = db
+            .create_etiquette(NewEtiquette {
+                nom: "Newsletter".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: None,
+                email_delai_jours: None,
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+            })
+            .unwrap();
+
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+
+        let filters = NewsletterAudienceFilters::default();
+        let filters_json = serde_json::to_string(&filters).unwrap();
+        let template_id = db
+            .upsert_newsletter_template(
+                etiquette.id,
+                "Objet test",
+                "Corps",
+                r#"{"newsletter_html":"<p>Hi</p>"}"#,
+            )
+            .unwrap();
+        let (_queued, _skipped, queued_contacts) = db
+            .queue_newsletter_edition(etiquette.id, now, &filters)
+            .unwrap();
+        assert_eq!(queued_contacts.len(), 1);
+
+        let edition_id = db
+            .create_newsletter_edition(
+                etiquette.id,
+                template_id,
+                "Juin 2026",
+                "Objet test",
+                "Corps",
+                r#"{"subject":"Objet test","intro":"Hi"}"#,
+                Some("Thème"),
+                None,
+                &filters_json,
+                now,
+                &queued_contacts,
+            )
+            .unwrap();
+
+        let result = db
+            .cancel_newsletter_preparation(etiquette.id, Some(edition_id))
+            .unwrap();
+        assert_eq!(result.cancelled_queue_count, 1);
+        assert_eq!(result.subject, "Objet test");
+        assert!(result.content_json.contains("intro"));
+
+        let editions = db.list_newsletter_editions(5).unwrap();
+        assert_eq!(editions[0].status, "cancelled");
     }
 }

@@ -157,6 +157,20 @@ pub struct LastNewsletterEditionDuplicate {
     pub prepared_at: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CancelNewsletterPreparationResult {
+    pub edition_id: i64,
+    pub cancelled_queue_count: u32,
+    pub edition_label: String,
+    pub subject: String,
+    pub plain_body: String,
+    pub content_json: String,
+    pub theme: Option<String>,
+    pub edition_instructions: Option<String>,
+    pub audience_filters: NewsletterAudienceFilters,
+}
+
 pub struct QueuedNewsletterContact {
     pub contact_id: i64,
     pub contact_etiquette_id: i64,

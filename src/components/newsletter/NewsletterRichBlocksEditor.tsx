@@ -1,7 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import type {
   GeneratedNewsletterContent,
   NewsletterRichBlock,
@@ -18,6 +17,7 @@ import {
   placementLabel,
 } from "@/lib/newsletter/newsletter-images";
 import { Layers, Plus, Trash2 } from "lucide-react";
+import { NewsletterRichTextField } from "@/components/newsletter/NewsletterRichTextField";
 
 type NewsletterRichBlocksEditorProps = {
   draft: GeneratedNewsletterContent;
@@ -117,12 +117,13 @@ export function NewsletterRichBlocksEditor({
                 </select>
                 {block.type === "quote" && (
                   <>
-                    <Textarea
-                      rows={3}
-                      className="text-sm"
-                      placeholder="Texte de la citation"
+                    <NewsletterRichTextField
+                      id={`nl-block-quote-${block.id}`}
+                      label="Texte de la citation"
                       value={block.text ?? ""}
-                      onChange={(e) => updateBlock(index, { text: e.target.value })}
+                      onChange={(text) => updateBlock(index, { text })}
+                      minHeight="100px"
+                      placeholder="Texte de la citation"
                     />
                     <Input
                       className="text-sm"
@@ -156,12 +157,13 @@ export function NewsletterRichBlocksEditor({
                       value={block.title ?? ""}
                       onChange={(e) => updateBlock(index, { title: e.target.value })}
                     />
-                    <Textarea
-                      rows={3}
-                      className="text-sm"
-                      placeholder="Points essentiels (une ligne = un paragraphe)"
+                    <NewsletterRichTextField
+                      id={`nl-block-takeaway-${block.id}`}
+                      label="Points essentiels"
                       value={block.text ?? ""}
-                      onChange={(e) => updateBlock(index, { text: e.target.value })}
+                      onChange={(text) => updateBlock(index, { text })}
+                      minHeight="100px"
+                      placeholder="Points essentiels"
                     />
                   </>
                 )}

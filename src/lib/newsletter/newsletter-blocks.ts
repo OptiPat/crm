@@ -3,6 +3,10 @@ import type {
   NewsletterRichBlock,
   NewsletterRichBlockType,
 } from "@/lib/api/tauri-newsletter";
+import {
+  formatNewsletterBodyHtml,
+  newsletterBodyTextStyle,
+} from "@/lib/newsletter/newsletter-rich-text";
 import type { ResolvedNewsletterTypography } from "@/lib/newsletter/newsletter-typography";
 import { placementMatches } from "@/lib/newsletter/newsletter-placement";
 
@@ -76,7 +80,7 @@ function buildQuoteRow(
   typo: ResolvedNewsletterTypography,
   pad: string
 ): string {
-  const text = escapeHtml(block.text?.trim() ?? "").replace(/\n/g, "<br>");
+  const text = formatNewsletterBodyHtml(block.text?.trim() ?? "");
   if (!text) return "";
   const attribution = block.attribution?.trim()
     ? `<p class="nl-rich-quote-attr" style="margin:10px 0 0 0;font-family:${typo.titleFontFamily};font-size:12px;color:#8a8a8a;font-style:normal;">— ${escapeHtml(block.attribution.trim())}</p>`
@@ -84,7 +88,7 @@ function buildQuoteRow(
   return `<tr><td class="nl-rich-pad nl-rich-quote" style="padding:${pad};">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid ${secondary};background:#faf9f7;">
 <tr><td class="nl-rich-inner" style="padding:18px 22px;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:#2d3748;font-style:italic;">
-<p style="margin:0;">${text}</p>${attribution}
+<div class="nl-rich-text" style="margin:0;font-style:italic;${newsletterBodyTextStyle(typo)}">${text}</div>${attribution}
 </td></tr></table></td></tr>`;
 }
 
@@ -113,7 +117,7 @@ function buildTakeawayRow(
   typo: ResolvedNewsletterTypography,
   pad: string
 ): string {
-  const body = escapeHtml(block.text?.trim() ?? "").replace(/\n/g, "<br>");
+  const body = formatNewsletterBodyHtml(block.text?.trim() ?? "");
   if (!body) return "";
   const title = block.title?.trim()
     ? escapeHtml(block.title.trim())
@@ -122,7 +126,7 @@ function buildTakeawayRow(
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf6f0;border:1px solid ${accent};border-left:4px solid ${accent};">
 <tr><td class="nl-rich-inner" style="padding:20px 24px;">
 <p style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:${accent};">${title}</p>
-<p style="margin:0;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:#2d3748;">${body}</p>
+<div class="nl-rich-text" style="margin:0;${newsletterBodyTextStyle(typo)}">${body}</div>
 </td></tr></table></td></tr>`;
 }
 

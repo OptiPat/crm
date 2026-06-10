@@ -112,6 +112,18 @@ export interface LastNewsletterEditionDuplicate {
   preparedAt: number;
 }
 
+export interface CancelNewsletterPreparationResult {
+  editionId: number;
+  cancelledQueueCount: number;
+  editionLabel: string;
+  subject: string;
+  plainBody: string;
+  contentJson: string;
+  theme?: string | null;
+  editionInstructions?: string | null;
+  audienceFilters: NewsletterAudienceFilters;
+}
+
 export type NewsletterLayout = "magazine" | "minimal" | "alert" | "single";
 
 export type NewsletterImagePlacement =
@@ -300,6 +312,21 @@ export async function prepareNewsletterEdition(input: {
   filters: NewsletterAudienceFilters;
 }): Promise<PrepareNewsletterEditionResult> {
   const result = await invoke<PrepareNewsletterEditionResult>("prepare_newsletter_edition", { input });
+  notifyRelationChanged(undefined, { skipEtiquettesChanged: true });
+  return result;
+}
+
+export async function cancelNewsletterPreparation(input: {
+  etiquetteId: number;
+  editionId?: number | null;
+}): Promise<CancelNewsletterPreparationResult> {
+  const result = await invoke<CancelNewsletterPreparationResult>(
+    "cancel_newsletter_preparation",
+    {
+      etiquetteId: input.etiquetteId,
+      editionId: input.editionId ?? null,
+    }
+  );
   notifyRelationChanged(undefined, { skipEtiquettesChanged: true });
   return result;
 }

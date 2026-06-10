@@ -33,6 +33,22 @@ describe("newsletter-html", () => {
     expect(plain).toContain("Prenez rendez-vous.");
   });
 
+  it("renders rich text formatting in section body", () => {
+    const html = buildNewsletterHtml({
+      ...sampleContent,
+      sections: [
+        {
+          title: "Point clé",
+          body: "<div>Texte <b>gras</b> et <i>italique</i></div>",
+          highlight: false,
+        },
+      ],
+    });
+    expect(html).toContain("nl-rich-text");
+    expect(html).toContain("gras");
+    expect(html).toMatch(/<b[^>]*>[\s\S]*gras[\s\S]*<\/b>/i);
+  });
+
   it("buildNewsletterHtml includes premium layout markers", () => {
     const html = buildNewsletterHtml(
       {
