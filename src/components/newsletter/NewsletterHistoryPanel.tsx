@@ -23,22 +23,7 @@ function formatUnixDate(ts: number): string {
   }).format(new Date(ts * 1000));
 }
 
-function statusLabel(status: string): string {
-  switch (status) {
-    case "prepared":
-      return "Préparée";
-    case "sending":
-      return "Envoi en cours";
-    case "completed":
-      return "Terminée";
-    case "partial":
-      return "Partielle";
-    case "cancelled":
-      return "Annulée";
-    default:
-      return status;
-  }
-}
+import { newsletterEditionStatusLabel } from "@/lib/newsletter/newsletter-edition-resume";
 
 export function NewsletterHistoryPanel({
   refreshKey = 0,
@@ -139,7 +124,7 @@ export function NewsletterHistoryPanel({
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-medium">{edition.editionLabel}</span>
                         <Badge variant="outline" className="font-normal text-xs">
-                          {statusLabel(edition.status)}
+                          {newsletterEditionStatusLabel(edition)}
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground truncate">{edition.subject}</p>

@@ -513,6 +513,31 @@ pub fn prepare_newsletter_edition(
 }
 
 #[tauri::command]
+pub fn get_newsletter_send_queue(
+    db: State<'_, DbState>,
+    edition_id: i64,
+) -> Result<Vec<crate::database::models::EtiquetteEmailQueueItem>, String> {
+    let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+    let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+    database
+        .get_newsletter_send_queue(edition_id)
+        .map_err(|e| format!("File envoi newsletter: {}", e))
+}
+
+#[tauri::command]
+pub fn count_newsletter_send_ready(
+    db: State<'_, DbState>,
+    etiquette_id: i64,
+    edition_id: Option<i64>,
+) -> Result<u32, String> {
+    let db_guard = db.lock().map_err(|e| format!("Erreur accès base: {}", e))?;
+    let database = db_guard.as_ref().ok_or("Base de données non initialisée")?;
+    database
+        .count_newsletter_send_ready(etiquette_id, edition_id)
+        .map_err(|e| format!("Compteur file newsletter: {}", e))
+}
+
+#[tauri::command]
 pub fn cancel_newsletter_preparation(
     db: State<'_, DbState>,
     etiquette_id: i64,

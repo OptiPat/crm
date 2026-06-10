@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 
 export interface NewsletterAudienceFilters {
@@ -329,6 +330,22 @@ export async function cancelNewsletterPreparation(input: {
   );
   notifyRelationChanged(undefined, { skipEtiquettesChanged: true });
   return result;
+}
+
+export async function getNewsletterSendQueue(
+  editionId: number
+): Promise<EtiquetteEmailQueueItem[]> {
+  return invoke<EtiquetteEmailQueueItem[]>("get_newsletter_send_queue", { editionId });
+}
+
+export async function countNewsletterSendReady(
+  etiquetteId: number,
+  editionId?: number | null
+): Promise<number> {
+  return invoke<number>("count_newsletter_send_ready", {
+    etiquetteId,
+    editionId: editionId ?? null,
+  });
 }
 
 export async function listNewsletterEditions(

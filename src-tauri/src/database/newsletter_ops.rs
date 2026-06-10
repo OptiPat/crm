@@ -1,4 +1,4 @@
-use super::models::NewTemplateEmail;
+use super::models::{EtiquetteEmailQueueItem, NewTemplateEmail};
 use super::Database;
 use crate::newsletter::db::{
     is_newsletter_unsubscribe_request, CancelNewsletterPreparationResult, ContactAudienceRow,
@@ -7,7 +7,7 @@ use crate::newsletter::db::{
     NewsletterEditionSummary, NewsletterEligibleContact, NewsletterUnsubscribedContact,
     QueuedNewsletterContact,
 };
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 
 impl Database {
     fn load_contacts_for_newsletter_audience(&self) -> Result<Vec<ContactAudienceRow>> {
@@ -519,7 +519,11 @@ impl Database {
         let updated = self.conn.execute(
             "UPDATE newsletter_editions
              SET status = 'sending', send_started_at = ?1
-             WHERE id = ?2 AND status IN ('prepared', 'partial')",
+             WHERE id = ?2
+               AND (
+                 status IN ('prepared', 'partial')
+                 OR (status = 'completed' AND sent_count < queued_count)
+               )",
             params![started_at, edition_id],
         )?;
         if updated == 0 {
@@ -596,6 +600,9 @@ impl Database {
             } else {
                 "cancelled"
             }
+        } else if sent == 0 && errors == 0 {
+            // Envoi batch vide (ex. file introuvable) — garder relançable.
+            "prepared"
         } else if errors > 0 {
             "partial"
         } else {
@@ -628,6 +635,101 @@ impl Database {
                 })
             },
         )
+    }
+
+    fn resolve_active_newsletter_edition_id(
+        &self,
+        etiquette_id: i64,
+        edition_id: Option<i64>,
+    ) -> Result<Option<i64>> {
+        if let Some(id) = edition_id {
+            return Ok(Some(id));
+        }
+        self.conn
+            .query_row(
+                "SELECT id FROM newsletter_editions
+                 WHERE etiquette_id = ?1
+                   AND (
+                     status IN ('prepared', 'partial', 'sending')
+                     OR (status = 'completed' AND sent_count < queued_count)
+                   )
+                 ORDER BY prepared_at DESC
+                 LIMIT 1",
+                params![etiquette_id],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
+    fn map_newsletter_send_queue_row(
+        row: &rusqlite::Row<'_>,
+    ) -> rusqlite::Result<EtiquetteEmailQueueItem> {
+        Ok(EtiquetteEmailQueueItem {
+            queue_row_kind: "etiquette".to_string(),
+            contact_etiquette_id: row.get(0)?,
+            contact_id: row.get(1)?,
+            contact_nom: row.get(2)?,
+            contact_prenom: row.get(3)?,
+            contact_email: row.get(4)?,
+            contact_telephone: row.get(5)?,
+            etiquette_id: row.get(6)?,
+            etiquette_nom: row.get(7)?,
+            etiquette_couleur: row.get(8)?,
+            email_date_prevue: row.get(9)?,
+            email_date_envoi: row.get(10)?,
+            template_sujet: row.get(11)?,
+            template_corps: row.get(12)?,
+            template_agenda_link_id: row.get(13)?,
+            template_variables: row.get(14)?,
+            template_categorie: row.get(15)?,
+            queue_issue: row.get(16)?,
+            email_reponse_at: row.get(17)?,
+            email_reponse_type: row.get(18)?,
+            contact_date_dernier_contact: row.get(19)?,
+            contact_registre: row.get(20)?,
+            email_is_relance: row.get::<_, i64>(21)? != 0,
+        })
+    }
+
+    /// Destinataires encore à envoyer pour une édition (hors file Suivi standard).
+    pub fn get_newsletter_send_queue(&self, edition_id: i64) -> Result<Vec<EtiquetteEmailQueueItem>> {
+        let sql = "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        e.id, e.nom, e.couleur, ce.email_date_prevue, ce.email_date_envoi,
+                        COALESCE(t.sujet, ''), COALESCE(t.corps, ''), t.agenda_link_id,
+                        t.variables, t.categorie, NULL,
+                        ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
+                        COALESCE(ce.email_relance_active, 0)
+                 FROM newsletter_edition_recipients ner
+                 INNER JOIN contact_etiquettes ce ON ce.id = ner.contact_etiquette_id
+                 INNER JOIN contacts c ON ce.contact_id = c.id
+                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+                 LEFT JOIN templates_email t ON e.email_template_id = t.id
+                 INNER JOIN newsletter_editions ne ON ne.id = ner.edition_id
+                 WHERE ner.edition_id = ?1
+                   AND ner.sent_at IS NULL
+                   AND ce.email_envoye = 0
+                   AND COALESCE(ce.email_annule, 0) = 0
+                   AND (
+                     ne.status IN ('prepared', 'partial', 'sending')
+                     OR (ne.status = 'completed' AND ne.sent_count < ne.queued_count)
+                   )
+                 ORDER BY c.nom, c.prenom, ce.id";
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(params![edition_id], Self::map_newsletter_send_queue_row)?;
+        rows.collect()
+    }
+
+    pub fn count_newsletter_send_ready(
+        &self,
+        etiquette_id: i64,
+        edition_id: Option<i64>,
+    ) -> Result<u32> {
+        let edition_id = match self.resolve_active_newsletter_edition_id(etiquette_id, edition_id)? {
+            Some(id) => id,
+            None => return Ok(0),
+        };
+        Ok(self.get_newsletter_send_queue(edition_id)?.len() as u32)
     }
 
     fn resolve_prepared_newsletter_edition_id(
@@ -884,6 +986,17 @@ mod tests {
             )
             .unwrap();
 
+        let send_queue = db.get_newsletter_send_queue(edition_id).unwrap();
+        assert_eq!(send_queue.len(), 1);
+        assert_eq!(db.count_newsletter_send_ready(etiquette.id, Some(edition_id)).unwrap(), 1);
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|q| q.etiquette_id != etiquette.id),
+            "newsletter ne doit pas passer par la file Suivi standard"
+        );
+
         let result = db
             .cancel_newsletter_preparation(etiquette.id, Some(edition_id))
             .unwrap();
@@ -893,5 +1006,86 @@ mod tests {
 
         let editions = db.list_newsletter_editions(5).unwrap();
         assert_eq!(editions[0].status, "cancelled");
+
+        let send_queue = db.get_newsletter_send_queue(edition_id).unwrap();
+        assert!(send_queue.is_empty());
+    }
+
+    #[test]
+    fn get_newsletter_send_queue_includes_stuck_completed_edition() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let now = 1_700_000_000i64;
+        let etiquette = db
+            .create_etiquette(NewEtiquette {
+                nom: "Newsletter".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: None,
+                email_delai_jours: None,
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+            })
+            .unwrap();
+
+        db.create_contact(NewContact {
+            email: Some("alice@example.com".into()),
+            ..sample_contact("Dupont", "Alice")
+        })
+        .unwrap();
+
+        let filters = NewsletterAudienceFilters::default();
+        let filters_json = serde_json::to_string(&filters).unwrap();
+        let template_id = db
+            .upsert_newsletter_template(
+                etiquette.id,
+                "Objet test",
+                "Corps",
+                r#"{"newsletter_html":"<p>Hi</p>"}"#,
+            )
+            .unwrap();
+        let (_queued, _skipped, queued_contacts) = db
+            .queue_newsletter_edition(etiquette.id, now, &filters)
+            .unwrap();
+
+        let edition_id = db
+            .create_newsletter_edition(
+                etiquette.id,
+                template_id,
+                "Juin 2026",
+                "Objet test",
+                "Corps",
+                r#"{"subject":"Objet test","intro":"Hi"}"#,
+                Some("Thème"),
+                None,
+                &filters_json,
+                now,
+                &queued_contacts,
+            )
+            .unwrap();
+
+        db.conn
+            .execute(
+                "UPDATE newsletter_editions SET status = 'completed', send_completed_at = ?1 WHERE id = ?2",
+                params![now, edition_id],
+            )
+            .unwrap();
+
+        let send_queue = db.get_newsletter_send_queue(edition_id).unwrap();
+        assert_eq!(send_queue.len(), 1);
+        assert_eq!(
+            db.count_newsletter_send_ready(etiquette.id, Some(edition_id))
+                .unwrap(),
+            1
+        );
     }
 }

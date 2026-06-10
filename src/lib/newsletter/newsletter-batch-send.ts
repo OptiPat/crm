@@ -1,10 +1,11 @@
 import {
-  getEtiquetteEmailQueue,
   markEtiquetteEmailSent,
   type EtiquetteEmailQueueItem,
 } from "@/lib/api/tauri-etiquettes";
 import {
+  countNewsletterSendReady,
   finishNewsletterEditionSend,
+  getNewsletterSendQueue,
   recordNewsletterEditionSend,
   startNewsletterEditionSend,
 } from "@/lib/api/tauri-newsletter";
@@ -24,7 +25,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** Envoi groupé des lignes « Prêts » pour l'étiquette newsletter. */
+/** Envoi groupé des destinataires d'une édition newsletter préparée. */
 export async function sendNewsletterBatch(input: {
   etiquetteId: number;
   editionId: number;
@@ -34,8 +35,12 @@ export async function sendNewsletterBatch(input: {
   onProgress?: (progress: NewsletterBatchSendProgress) => void;
 }): Promise<NewsletterBatchSendProgress> {
   const cgp = input.cgp ?? (await getCgpConfig());
-  const ready = await getEtiquetteEmailQueue("ready");
-  const queue = ready.filter((item) => item.etiquette_id === input.etiquetteId);
+  const queue = await getNewsletterSendQueue(input.editionId);
+  if (queue.length === 0) {
+    throw new Error(
+      "Aucun destinataire en file pour cette édition — annulez la préparation puis préparez à nouveau la campagne."
+    );
+  }
 
   const progress: NewsletterBatchSendProgress = {
     sent: 0,
@@ -122,7 +127,9 @@ async function sendNewsletterQueueItem(
   return sent.gmail_message_id ?? undefined;
 }
 
-export async function countNewsletterReady(etiquetteId: number): Promise<number> {
-  const ready = await getEtiquetteEmailQueue("ready");
-  return ready.filter((item) => item.etiquette_id === etiquetteId).length;
+export async function countNewsletterReady(
+  etiquetteId: number,
+  editionId?: number | null
+): Promise<number> {
+  return countNewsletterSendReady(etiquetteId, editionId);
 }

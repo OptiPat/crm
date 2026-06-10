@@ -33,6 +33,7 @@ import {
   getLastNewsletterEditionDuplicate,
   getNewsletterEditionDetail,
   getNewsletterSettings,
+  listNewsletterEditions,
   prepareNewsletterEdition,
   type NewsletterEditionDetail,
   type GeneratedNewsletterContent,
@@ -94,6 +95,7 @@ import {
   saveNewsletterComposerDraft,
 } from "@/lib/newsletter/newsletter-composer-draft";
 import { buildComposerRestoreFromEdition } from "@/lib/newsletter/newsletter-composer-restore";
+import { isResumableNewsletterEdition } from "@/lib/newsletter/newsletter-edition-resume";
 import { mergeNewsletterAudienceFilters } from "@/lib/newsletter/newsletter-audience-utils";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import { toast } from "sonner";
@@ -228,9 +230,15 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     setEmailConnected(Boolean(emailSt?.connected && emailSt.method === "oauth"));
     const etiq = await ensureNewsletterEtiquette(s.etiquetteNom);
     setEtiquetteInfo({ id: etiq.etiquetteId });
-    const ready = await countNewsletterReady(etiq.etiquetteId);
+    const editions = await listNewsletterEditions(15);
+    const resumable = editions.find(isResumableNewsletterEdition);
+    const editionId = activeEditionId ?? resumable?.id ?? null;
+    if (resumable && activeEditionId == null) {
+      setActiveEditionId(resumable.id);
+    }
+    const ready = await countNewsletterReady(etiq.etiquetteId, editionId);
     if (ready > 0) {
-      setPreparedQueueCount((prev) => prev ?? ready);
+      setPreparedQueueCount(ready);
     } else if (activeEditionId == null) {
       setPreparedQueueCount(null);
     }
@@ -627,7 +635,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         signal: batchAbortRef.current.signal,
         onProgress: (p) => setBatchProgress({ sent: p.sent, total: p.total }),
       });
-      const remaining = await countNewsletterReady(etiquetteInfo.id);
+      const remaining = await countNewsletterReady(etiquetteInfo.id, activeEditionId);
       setPreparedQueueCount(remaining > 0 ? remaining : null);
       if (remaining === 0) {
         setActiveEditionId(null);
