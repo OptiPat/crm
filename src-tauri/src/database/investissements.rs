@@ -777,4 +777,95 @@ impl super::Database {
 
         Ok(created_alerts)
     }
+
+    pub fn get_nom_produit_suggestions(
+        &self,
+        type_produit: &str,
+        partenaire_id: Option<i64>,
+    ) -> Result<Vec<super::models::NomProduitSuggestion>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT MIN(TRIM(nom_produit)) AS nom_produit, COUNT(*) AS usage_count
+             FROM investissements
+             WHERE type_produit = ?1
+               AND TRIM(nom_produit) != ''
+               AND (?2 IS NULL OR partenaire_id = ?2)
+             GROUP BY LOWER(TRIM(nom_produit))
+             ORDER BY usage_count DESC, nom_produit COLLATE NOCASE ASC
+             LIMIT 20",
+        )?;
+
+        let rows = stmt.query_map(params![type_produit, partenaire_id], |row| {
+            Ok(super::models::NomProduitSuggestion {
+                nom_produit: row.get(0)?,
+                usage_count: row.get(1)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Database;
+    use rusqlite::params;
+
+    fn seed_partenaire(db: &Database, id: i64, raison_sociale: &str) {
+        db.get_connection()
+            .execute(
+                "INSERT INTO partenaires (id, type_partenaire, raison_sociale, created_at, updated_at)
+                 VALUES (?1, 'ASSUREUR', ?2, 1, 1)",
+                params![id, raison_sociale],
+            )
+            .unwrap();
+    }
+
+    fn insert_investissement(
+        db: &Database,
+        type_produit: &str,
+        partenaire_id: Option<i64>,
+        nom_produit: &str,
+    ) {
+        db.get_connection()
+            .execute(
+                "INSERT INTO investissements (
+                    type_produit, partenaire_id, nom_produit, versement_programme,
+                    reinvestissement_dividendes, origine, created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, 0, 0, 'MON_CONSEIL', 1, 1)",
+                params![type_produit, partenaire_id, nom_produit],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn nom_produit_suggestions_filters_by_type_and_partenaire() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        seed_partenaire(&db, 1, "Partenaire A");
+        seed_partenaire(&db, 2, "Partenaire B");
+        insert_investissement(&db, "ASSURANCE_VIE", Some(1), "Primovie");
+        insert_investissement(&db, "ASSURANCE_VIE", Some(1), "Primovie");
+        insert_investissement(&db, "ASSURANCE_VIE", Some(1), "  primovie  ");
+        insert_investissement(&db, "ASSURANCE_VIE", Some(2), "Autre contrat");
+        insert_investissement(&db, "PER", Some(1), "PER Generali");
+
+        let all_av = db
+            .get_nom_produit_suggestions("ASSURANCE_VIE", None)
+            .unwrap();
+        assert_eq!(all_av.len(), 2);
+        assert_eq!(all_av[0].nom_produit, "Primovie");
+        assert_eq!(all_av[0].usage_count, 3);
+
+        let partner1 = db
+            .get_nom_produit_suggestions("ASSURANCE_VIE", Some(1))
+            .unwrap();
+        assert_eq!(partner1.len(), 1);
+        assert_eq!(partner1[0].usage_count, 3);
+
+        let none = db.get_nom_produit_suggestions("SCPI", None).unwrap();
+        assert!(none.is_empty());
+    }
 }

@@ -6,6 +6,7 @@ use crate::database::{
         DashboardStats, Document, Etiquette, EtiquetteAction, EtiquetteWithCount, Famille,
         NewCustomFieldDef, UpdateCustomFieldDef,
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
+        NomProduitSuggestion,
         NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation,
         NewInvestissementVersement, NewPartenaire,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation,
@@ -809,6 +810,20 @@ pub fn get_all_investissements(db: State<'_, DbState>) -> Result<Vec<Investissem
     database
         .get_all_investissements()
         .map_err(|e| format!("Failed to get investissements: {}", e))
+}
+
+#[tauri::command]
+pub fn get_nom_produit_suggestions(
+    db: State<'_, DbState>,
+    type_produit: String,
+    partenaire_id: Option<i64>,
+) -> Result<Vec<NomProduitSuggestion>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_nom_produit_suggestions(&type_produit, partenaire_id)
+        .map_err(|e| format!("Failed to get nom produit suggestions: {}", e))
 }
 
 #[tauri::command]

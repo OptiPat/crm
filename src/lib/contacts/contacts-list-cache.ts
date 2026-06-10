@@ -37,6 +37,15 @@ export function patchContactInListCache(contact: Contact): void {
   };
 }
 
+export function appendContactToListCache(contact: Contact): void {
+  if (!cache || !contact.id) return;
+  if (cache.contacts.some((c) => c.id === contact.id)) {
+    patchContactInListCache(contact);
+    return;
+  }
+  cache = { ...cache, contacts: [...cache.contacts, contact] };
+}
+
 export type ContactsListInitialState = ContactsListCache & {
   loading: boolean;
   hasCache: boolean;

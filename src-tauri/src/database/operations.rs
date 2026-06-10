@@ -1533,6 +1533,136 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn cancel_incomplete_without_email_moves_to_cancelled_queue() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Bienvenue incomplete".into(),
+                sujet: "Bonjour {{prenom}}".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Campagne incomplete".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: None,
+                ..sample_contact("Pinto", "Rafael")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+
+        let incomplete = db.get_etiquette_email_queue("incomplete").unwrap();
+        assert_eq!(incomplete.len(), 1);
+        assert_eq!(incomplete[0].queue_issue.as_deref(), Some("NO_EMAIL"));
+        let row_id = incomplete[0].contact_etiquette_id;
+
+        db.cancel_pending_email_campaign(row_id).unwrap();
+        assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
+        let cancelled = db.get_etiquette_email_queue("cancelled").unwrap();
+        assert_eq!(cancelled.len(), 1);
+        assert_eq!(cancelled[0].contact_id, cid);
+
+        db.dismiss_cancelled_pending_email_campaign(row_id).unwrap();
+        assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
+        assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
+    }
+
+    #[test]
+    fn cancel_template_incomplete_without_email_moves_to_cancelled_then_dismiss() {
+        use crate::database::models::NewTemplateEmail;
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let trigger_vars = r#"{"email_trigger":{"enabled":true,"condition_type":"DELAI_SANS_CONTACT","categories":["CLIENT"],"delai_jours":0}}"#;
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Bienvenue nouveau client test".into(),
+                sujet: "Bienvenue {{prenom}}".into(),
+                corps: "Corps".into(),
+                categorie: "BIENVENUE".into(),
+                variables: Some(trigger_vars.into()),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: None,
+                registre: Some("VOUS".into()),
+                ..sample_contact("Pinto", "Rafael")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO contact_template_envois (
+                    contact_id, template_id, trigger_event_at, email_date_prevue
+                 ) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![cid, tpl.id, now - 3600, now - 120],
+            )
+            .unwrap();
+
+        let incomplete = db.get_etiquette_email_queue("incomplete").unwrap();
+        assert_eq!(incomplete.len(), 1);
+        assert!(
+            incomplete[0].etiquette_nom.contains("Modèle"),
+            "file modèle attendue"
+        );
+        assert_eq!(incomplete[0].queue_issue.as_deref(), Some("NO_EMAIL"));
+        let row_id = incomplete[0].contact_etiquette_id;
+
+        db.cancel_pending_email_campaign(row_id).unwrap();
+        assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
+        let cancelled = db.get_etiquette_email_queue("cancelled").unwrap();
+        assert_eq!(cancelled.len(), 1);
+
+        db.dismiss_cancelled_pending_email_campaign(row_id).unwrap();
+        assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
+        assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
+    }
+
+    #[test]
     fn delete_template_email_clears_relance_link_on_parent() {
         use crate::database::models::NewTemplateEmail;
 

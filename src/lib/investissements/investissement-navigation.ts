@@ -27,6 +27,13 @@ export function prepareOpenContactWithInvestissement(contactId: number): void {
   sessionStorage.setItem(CRM_OPEN_CONTACT_INVESTISSEMENT_KEY, "1");
 }
 
+/** Patrimoine + formulaire investissement sur la fiche déjà ouverte (pas de navigation inter-pages). */
+export function armContactInvestissementFormOnDetail(): void {
+  sessionStorage.setItem(CRM_OPEN_CONTACT_TAB_KEY, "patrimoine");
+  sessionStorage.setItem(CRM_OPEN_CONTACT_INVESTISSEMENT_KEY, "1");
+  sessionStorage.removeItem(CRM_OPEN_CONTACT_ID_KEY);
+}
+
 export function consumeOpenContactInvestissementFlag(): boolean {
   const raw = sessionStorage.getItem(CRM_OPEN_CONTACT_INVESTISSEMENT_KEY);
   sessionStorage.removeItem(CRM_OPEN_CONTACT_INVESTISSEMENT_KEY);

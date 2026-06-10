@@ -330,6 +330,12 @@ pub struct Investissement {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct NomProduitSuggestion {
+    pub nom_produit: String,
+    pub usage_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NewInvestissement {
     pub contact_id: Option<i64>, // Optionnel pour les investissements de foyer
     pub foyer_id: Option<i64>,

@@ -30,8 +30,10 @@ import {
   createInvestissement,
   updateInvestissement,
   getInvestissementById,
+  getNomProduitSuggestions,
   type Investissement,
   type NewInvestissement,
+  type NomProduitSuggestion,
 } from "@/lib/api/tauri-investissements";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
@@ -117,6 +119,9 @@ export function InvestissementForm({
     actuel?: number;
     date?: number;
   }>({});
+  const [nomProduitSuggestions, setNomProduitSuggestions] = useState<
+    NomProduitSuggestion[]
+  >([]);
 
   const showEncoursSection =
     !!investissement && isPlacementEncoursEligible(typeProduit);
@@ -162,6 +167,35 @@ export function InvestissementForm({
       setDetentionMode(null);
     }
   }, [typeProduit, accepteVersementProgramme, accepteReinvestissement]);
+
+  useEffect(() => {
+    if (!open || !typeProduit || !partenaireId) {
+      setNomProduitSuggestions([]);
+      return;
+    }
+
+    let cancelled = false;
+    const partenaireNumeric = Number(partenaireId);
+
+    void getNomProduitSuggestions(typeProduit, partenaireNumeric)
+      .then((suggestions) => {
+        if (cancelled) return;
+        setNomProduitSuggestions(suggestions);
+        if (suggestions.length > 0) {
+          setNomProduit((current) =>
+            current.trim() === "" ? suggestions[0].nom_produit : current
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading nom produit suggestions:", error);
+        if (!cancelled) setNomProduitSuggestions([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, typeProduit, partenaireId]);
 
   useEffect(() => {
     if (typeProduit !== "SCPI_DEMEMBREMENT" || demembrementKind !== "TEMPORAIRE") {
@@ -282,6 +316,7 @@ export function InvestissementForm({
     setTypeProduit("");
     setPartenaireId("");
     setNomProduit("");
+    setNomProduitSuggestions([]);
     setMontantInitial("");
     setDateSouscription("");
     setDateFinDemembrement("");
@@ -550,11 +585,26 @@ export function InvestissementForm({
             </Label>
             <Input
               id="nom-produit"
+              list={
+                nomProduitSuggestions.length > 0
+                  ? "nom-produit-suggestions"
+                  : undefined
+              }
               value={nomProduit}
               onChange={(e) => setNomProduit(e.target.value)}
               placeholder="Ex: SCPI Pierre Europe"
               required
             />
+            {nomProduitSuggestions.length > 0 && (
+              <datalist id="nom-produit-suggestions">
+                {nomProduitSuggestions.map((suggestion) => (
+                  <option
+                    key={suggestion.nom_produit}
+                    value={suggestion.nom_produit}
+                  />
+                ))}
+              </datalist>
+            )}
           </div>
 
           {/* Montant initial */}

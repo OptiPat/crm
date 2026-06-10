@@ -396,6 +396,7 @@ impl Database {
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
                    AND COALESCE(cte.email_annule, 0) = 0
+                   AND COALESCE(cte.email_suivi_ignore, 0) = 0
                    AND cte.email_date_prevue IS NOT NULL
                    AND cte.email_date_prevue <= ?1
                    AND c.email IS NOT NULL AND TRIM(c.email) != ''"
@@ -415,6 +416,7 @@ impl Database {
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
                    AND COALESCE(cte.email_annule, 0) = 0
+                   AND COALESCE(cte.email_suivi_ignore, 0) = 0
                    AND cte.email_date_prevue IS NOT NULL
                    AND cte.email_date_prevue > ?1
                    AND c.email IS NOT NULL AND TRIM(c.email) != ''"
@@ -438,10 +440,29 @@ impl Database {
                  WHERE {TRIGGER_FILTER}
                    AND cte.email_envoye = 0
                    AND COALESCE(cte.email_annule, 0) = 0
+                   AND COALESCE(cte.email_suivi_ignore, 0) = 0
                    AND (
                      c.email IS NULL OR TRIM(c.email) = ''
                      OR cte.email_date_prevue IS NULL
                    )
+                   AND ?1 IS NOT NULL"
+            ),
+            "cancelled" => format!(
+                "SELECT cte.id, cte.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        t.id, ('Modèle · ' || t.nom), cte.email_date_prevue, cte.email_date_envoi,
+                        {template_fields_simple},
+                        'CANCELLED',
+                        cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
+                        c.registre,
+                        0
+                 FROM contact_template_envois cte
+                 INNER JOIN templates_email t ON cte.template_id = t.id
+                 LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
+                 INNER JOIN contacts c ON cte.contact_id = c.id
+                 WHERE {TRIGGER_FILTER}
+                   AND cte.email_envoye = 0
+                   AND cte.email_annule = 1
+                   AND COALESCE(cte.email_suivi_ignore, 0) = 0
                    AND ?1 IS NOT NULL"
             ),
             "sent" | "followup" => {

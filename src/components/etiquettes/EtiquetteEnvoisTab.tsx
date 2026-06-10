@@ -452,7 +452,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             : options.mode === "incomplete"
               ? "Aucun blocage — parfait. Email manquant, modèle ou date manquante apparaîtront ici."
               : options.mode === "cancelled"
-                ? "Aucun envoi retiré de la file. Le bouton ✕ sur un contact prêt le place ici."
+                ? "Aucun envoi retiré de la file. Le bouton ✕ sur Prêts à envoyer ou À compléter place le contact ici."
                 : options.mode === "followup"
               ? `Aucune relance suggérée (délai selon chaque modèle, repli ${DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS} j).`
               : "Aucun envoi en attente de réponse client.";
@@ -622,24 +622,35 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                     </Button>
                   </>
                 )}
-                {options.mode === "incomplete" &&
-                  (item.queue_issue === "NO_EMAIL" || item.queue_issue === "OTHER") && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      if (onOpenContact) {
-                        onOpenContact(item.contact_id);
-                      } else {
-                        toast.info(
-                          `Ajoutez l'email de ${item.contact_prenom} ${item.contact_nom} depuis l'onglet Contacts.`
-                        );
-                      }
-                    }}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-1" />
-                    Compléter la fiche
-                  </Button>
+                {options.mode === "incomplete" && (
+                  <>
+                    {(item.queue_issue === "NO_EMAIL" || item.queue_issue === "OTHER") && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          if (onOpenContact) {
+                            onOpenContact(item.contact_id);
+                          } else {
+                            toast.info(
+                              `Ajoutez l'email de ${item.contact_prenom} ${item.contact_nom} depuis l'onglet Contacts.`
+                            );
+                          }
+                        }}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-1" />
+                        Compléter la fiche
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      title="Retirer de la file"
+                      onClick={() => setCancelConfirmItem(item)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
                 )}
                 {options.mode === "cancelled" && (
                   <>
@@ -829,7 +840,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             </TabsContent>
             <TabsContent value="cancelled" className="mt-4">
               <p className="text-xs text-muted-foreground mb-3">
-                Retirés avec ✕ depuis Prêts à envoyer. <strong>Remettre en file</strong> pour
+                Retirés avec ✕ depuis Prêts à envoyer ou À compléter. <strong>Remettre en file</strong> pour
                 repasser en Prêts. <strong>✕ ici</strong> = ne plus proposer cet envoi (liste
                 propre, étiquette et alerte conservées).
               </p>
@@ -899,12 +910,24 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   {" — "}
                   {cancelConfirmItem?.etiquette_nom}
                 </p>
-                {cancelConfirmItem && cgpConfig && (
-                  <p>
-                    Objet :{" "}
-                    {renderEtiquetteEmailPreview(cancelConfirmItem, cgpConfig).subject}
-                  </p>
-                )}
+                {cancelConfirmItem &&
+                  (cancelConfirmItem.queue_issue === "NO_EMAIL" ||
+                    cancelConfirmItem.queue_issue === "NO_TEMPLATE" ||
+                    cancelConfirmItem.queue_issue === "NO_DATE" ||
+                    cancelConfirmItem.queue_issue === "OTHER") && (
+                    <p>{getIncompleteQueueLabel(cancelConfirmItem.queue_issue)}</p>
+                  )}
+                {cancelConfirmItem &&
+                  cgpConfig &&
+                  cancelConfirmItem.queue_issue !== "NO_EMAIL" &&
+                  cancelConfirmItem.queue_issue !== "NO_TEMPLATE" &&
+                  cancelConfirmItem.queue_issue !== "NO_DATE" &&
+                  cancelConfirmItem.queue_issue !== "OTHER" && (
+                    <p>
+                      Objet :{" "}
+                      {renderEtiquetteEmailPreview(cancelConfirmItem, cgpConfig).subject}
+                    </p>
+                  )}
                 <p>
                   Le contact passera dans l&apos;onglet <strong>Retirés</strong>. Vous pourrez le
                   remettre en file ou le retirer définitivement de cette liste.

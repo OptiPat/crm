@@ -120,6 +120,7 @@ fn main() {
             get_pipeline_stats,
             get_alertes_with_contacts,
             get_all_investissements,
+            get_nom_produit_suggestions,
             get_investissements_by_contact,
             get_investissements_by_foyer,
             get_investissements_by_foyer_contacts,

@@ -82,9 +82,9 @@ export function EnvoisQueueHelp() {
         <p>
           <strong className="text-foreground">2. Prêts à envoyer</strong> — Le CRM prépare les
           emails ; vous confirmez un par un ou en <strong>sélection groupée</strong> (cases à
-          cocher). CRM ouvert, boîte connectée dans Paramètres → Email. ✕ sur Prêts → onglet{" "}
-          <strong>Retirés</strong> (<strong>Remettre en file</strong> pour annuler) ; ✕ sur
-          Retirés → ne plus proposer (hors file, étiquette conservée).
+          cocher). CRM ouvert, boîte connectée dans Paramètres → Email. ✕ sur Prêts ou sur
+          À compléter → onglet <strong>Retirés</strong> (<strong>Remettre en file</strong> pour
+          annuler) ; ✕ sur Retirés → ne plus proposer (hors file, étiquette conservée).
         </p>
         <p>
           <strong className="text-foreground">Journal</strong> — Chaque envoi (individuel, groupé,
@@ -96,7 +96,7 @@ export function EnvoisQueueHelp() {
         </p>
         <p>
           <strong className="text-foreground">À compléter</strong> — Vrais blocages uniquement
-          (email manquant, modèle ou date sur l&apos;étiquette).
+          (email manquant, modèle ou date sur l&apos;étiquette). ✕ pour retirer vers Retirés.
         </p>
         <p>
           <strong className="text-foreground">3. Suivi</strong> — « En attente de réponse » seulement

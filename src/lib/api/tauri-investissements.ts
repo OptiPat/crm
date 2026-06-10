@@ -72,8 +72,23 @@ export interface InvestissementWithDetails {
   updated_at: number;
 }
 
+export interface NomProduitSuggestion {
+  nom_produit: string;
+  usage_count: number;
+}
+
 export async function getAllInvestissements(): Promise<Investissement[]> {
   return await invoke<Investissement[]>("get_all_investissements");
+}
+
+export async function getNomProduitSuggestions(
+  typeProduit: string,
+  partenaireId?: number
+): Promise<NomProduitSuggestion[]> {
+  return await invoke<NomProduitSuggestion[]>("get_nom_produit_suggestions", {
+    typeProduit,
+    partenaireId: partenaireId ?? null,
+  });
 }
 
 export async function getInvestissementsByContact(contactId: number): Promise<Investissement[]> {

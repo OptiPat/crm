@@ -60,6 +60,7 @@ import {
 import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contacts-session";
 import {
   getContactsListInitialState,
+  appendContactToListCache,
   patchContactInListCache,
   patchFoyersInListCache,
   removeContactFromListCache,
@@ -73,7 +74,10 @@ import {
 } from "@/lib/refresh-generation";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
-import { consumePendingOpenContactId, prepareOpenContactWithInvestissement } from "@/lib/investissements/investissement-navigation";
+import {
+  armContactInvestissementFormOnDetail,
+  consumePendingOpenContactId,
+} from "@/lib/investissements/investissement-navigation";
 import {
   SplitDetailLayout,
   SplitDetailPane,
@@ -285,10 +289,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
     if (contact) {
       setSelectedContact(contact);
       setShowDetail(true);
-    } else {
+    } else if (selectedContact?.id !== id) {
       toast.error("Contact introuvable — il a peut-être été supprimé.");
     }
-  }, [loading, contacts]);
+  }, [loading, contacts, selectedContact?.id]);
 
   // Calcul des compteurs par catégorie
   // categorie = statut commercial (CLIENT, PROSPECT_CLIENT, SUSPECT_CLIENT)
@@ -1066,10 +1070,18 @@ export function Contacts({ onNavigate }: ContactsProps) {
         open={showForm}
         onOpenChange={setShowForm}
         onCreated={(contact, { addInvestissement }) => {
-          if (addInvestissement && contact.id) {
-            prepareOpenContactWithInvestissement(contact.id);
-            openContactDetail(contact);
-          }
+          if (!contact.id) return;
+          setContacts((prev) => {
+            if (prev.some((c) => c.id === contact.id)) return prev;
+            const next = [...prev, contact];
+            setContactsListCache({ contacts: next, foyers });
+            return next;
+          });
+          appendContactToListCache(contact);
+          pendingOpenContactIdRef.current = null;
+          if (!addInvestissement) return;
+          armContactInvestissementFormOnDetail();
+          openContactDetail(contact);
         }}
         createContext={mainTab === "filleuls" ? "filleuls" : "clients"}
         onOpenContact={openLinkedContact}

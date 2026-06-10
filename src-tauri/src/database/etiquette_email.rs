@@ -181,9 +181,6 @@ impl Database {
                    AND ce.email_envoye = 0
                    AND ce.email_annule = 1
                    AND COALESCE(ce.email_suivi_ignore, 0) = 0
-                   AND e.email_template_id IS NOT NULL
-                   AND c.email IS NOT NULL
-                   AND TRIM(c.email) != ''
                    AND ?1 IS NOT NULL
                  ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
                 )
@@ -755,26 +752,55 @@ impl Database {
 
     /// Remet en file un envoi retiré manuellement (email_annule = 1).
     pub fn restore_pending_email_campaign(&self, row_id: i64) -> Result<()> {
+        use super::template_email_trigger::{
+            etiquette_schedule_from_trigger, parse_template_email_trigger,
+        };
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
 
-        let (etiquette_id, date_attribution): (i64, i64) = self.conn.query_row(
+        if let Ok((etiquette_id, date_attribution)) = self.conn.query_row(
             "SELECT etiquette_id, date_attribution FROM contact_etiquettes WHERE id = ?1",
             params![row_id],
             |row| Ok((row.get(0)?, row.get(1)?)),
+        ) {
+            let etiquette = self.get_etiquette_by_id(etiquette_id)?;
+            if !etiquette.email_actif {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Campagne email inactive sur cette étiquette".into(),
+                ));
+            }
+            let prevue = resolve_email_date_prevue_for_contact(&etiquette, date_attribution)
+                .unwrap_or(now);
+            let updated = self.conn.execute(
+                "UPDATE contact_etiquettes SET email_annule = 0, email_suivi_ignore = 0, email_date_prevue = ?1
+                 WHERE id = ?2 AND email_envoye = 0 AND email_annule = 1",
+                params![prevue, row_id],
+            )?;
+            if updated > 0 {
+                return Ok(());
+            }
+        }
+
+        let (template_id, trigger_event_at): (i64, i64) = self.conn.query_row(
+            "SELECT template_id, COALESCE(trigger_event_at, 0) FROM contact_template_envois WHERE id = ?1",
+            params![row_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
-        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
-        if !etiquette.email_actif {
+        let tpl = self.get_template_email_by_id(template_id)?;
+        let trigger = parse_template_email_trigger(tpl.variables.as_deref());
+        if !trigger.is_active() {
             return Err(rusqlite::Error::InvalidParameterName(
-                "Campagne email inactive sur cette étiquette".into(),
+                "Déclencheur email inactif sur ce modèle".into(),
             ));
         }
-        let prevue = resolve_email_date_prevue_for_contact(&etiquette, date_attribution)
-            .unwrap_or(now);
+        let sched = etiquette_schedule_from_trigger(&trigger);
+        let prevue =
+            resolve_email_date_prevue_for_contact(&sched, trigger_event_at).unwrap_or(now);
         let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET email_annule = 0, email_suivi_ignore = 0, email_date_prevue = ?1
+            "UPDATE contact_template_envois SET email_annule = 0, email_suivi_ignore = 0, email_date_prevue = ?1
              WHERE id = ?2 AND email_envoye = 0 AND email_annule = 1",
             params![prevue, row_id],
         )?;
