@@ -88,7 +88,7 @@ export function ParametresProfileSection({
         </SettingsGroup>
       </SettingsPanel>
 
-      <SettingsPanel title="Coordonnées" description="Email et téléphone insérés dans vos communications.">
+      <SettingsPanel title="Coordonnées" description="Email, téléphone et site — utilisés dans vos communications.">
         <SettingsGroup>
           <SettingsRow label="Email professionnel" htmlFor="email">
             <Input
@@ -105,6 +105,47 @@ export function ParametresProfileSection({
               placeholder="01 23 45 67 89"
               value={cgpConfig.telephone || ""}
               onChange={(e) => onConfigChange({ telephone: e.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow label="Site web" hint="Optionnel — affichable dans le pied de page d'une newsletter (case à cocher par édition)" htmlFor="site_web">
+            <Input
+              id="site_web"
+              type="url"
+              placeholder="https://www.cabinet.fr"
+              value={cgpConfig.site_web || ""}
+              onChange={(e) => onConfigChange({ site_web: e.target.value })}
+            />
+          </SettingsRow>
+        </SettingsGroup>
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="Adresse postale"
+        description="Optionnelle — affichable en pied de page newsletter (case à cocher par édition)."
+      >
+        <SettingsGroup>
+          <SettingsRow label="Adresse" htmlFor="adresse">
+            <Input
+              id="adresse"
+              placeholder="12 rue de la Paix"
+              value={cgpConfig.adresse || ""}
+              onChange={(e) => onConfigChange({ adresse: e.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow label="Code postal" htmlFor="code_postal">
+            <Input
+              id="code_postal"
+              placeholder="75002"
+              value={cgpConfig.code_postal || ""}
+              onChange={(e) => onConfigChange({ code_postal: e.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow label="Ville" htmlFor="ville">
+            <Input
+              id="ville"
+              placeholder="Paris"
+              value={cgpConfig.ville || ""}
+              onChange={(e) => onConfigChange({ ville: e.target.value })}
             />
           </SettingsRow>
         </SettingsGroup>

@@ -25,6 +25,8 @@ pub struct GeneratedNewsletterSection {
     pub body: String,
     #[serde(default)]
     pub highlight: bool,
+    #[serde(default)]
+    pub image_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,9 +37,25 @@ pub struct GeneratedNewsletterContent {
     pub preheader: Option<String>,
     #[serde(default)]
     pub edition_title: Option<String>,
+    #[serde(default)]
+    pub header_image_url: Option<String>,
+    #[serde(default)]
+    pub layout: Option<String>,
+    #[serde(default)]
+    pub images: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub blocks: Option<Vec<serde_json::Value>>,
     pub intro: String,
     pub sections: Vec<GeneratedNewsletterSection>,
     pub cta: String,
+    #[serde(default)]
+    pub include_cta: Option<bool>,
+    #[serde(default)]
+    pub include_conseiller: Option<bool>,
+    #[serde(default)]
+    pub conseiller_name: Option<String>,
+    #[serde(default)]
+    pub conseiller_phone: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -91,6 +109,70 @@ pub fn save_newsletter_settings(
     }
     if let Some(filters) = input.default_audience_filters {
         store.default_audience_filters = filters;
+    }
+    if let Some(accent) = input.accent_color {
+        let trimmed = accent.trim();
+        store.accent_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(secondary) = input.secondary_color {
+        let trimmed = secondary.trim();
+        store.secondary_color = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(layout) = input.default_layout {
+        let trimmed = layout.trim();
+        store.default_layout = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(body_font) = input.body_font {
+        let trimmed = body_font.trim();
+        store.body_font = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(title_font) = input.title_font {
+        let trimmed = title_font.trim();
+        store.title_font = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(body_font_size) = input.body_font_size {
+        let trimmed = body_font_size.trim();
+        store.body_font_size = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(line_height) = input.line_height {
+        let trimmed = line_height.trim();
+        store.line_height = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    if let Some(section_spacing) = input.section_spacing {
+        let trimmed = section_spacing.trim();
+        store.section_spacing = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
     }
     store.save(&app)?;
     NewsletterStore::load(&app).map(|s| s.to_public())
@@ -609,6 +691,12 @@ fn parse_generated_newsletter(raw: &str) -> Result<GeneratedNewsletterContent, S
                         .get("highlight")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
+                    let image_url = item
+                        .get("imageUrl")
+                        .or_else(|| item.get("image_url"))
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty());
                     if title.is_empty() && body.is_empty() {
                         None
                     } else {
@@ -616,6 +704,7 @@ fn parse_generated_newsletter(raw: &str) -> Result<GeneratedNewsletterContent, S
                             title,
                             body,
                             highlight,
+                            image_url,
                         })
                     }
                 })
@@ -623,13 +712,28 @@ fn parse_generated_newsletter(raw: &str) -> Result<GeneratedNewsletterContent, S
         })
         .unwrap_or_default();
 
+    let header_image_url = value
+        .get("headerImageUrl")
+        .or_else(|| value.get("header_image_url"))
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+
     Ok(GeneratedNewsletterContent {
         subject,
         preheader,
         edition_title,
+        header_image_url,
+        layout: None,
+        images: None,
+        blocks: None,
         intro,
         sections,
         cta,
+        include_cta: None,
+        include_conseiller: None,
+        conseiller_name: None,
+        conseiller_phone: None,
     })
 }
 

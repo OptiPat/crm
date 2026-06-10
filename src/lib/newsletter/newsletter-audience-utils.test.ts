@@ -77,4 +77,19 @@ describe("newsletter audience utils", () => {
     expect(toggleNewsletterMemberSelection(m, [], false)).toEqual([5]);
     expect(toggleNewsletterMemberSelection(m, [5], true)).toEqual([]);
   });
+
+  it("excludes prescripteurs and archived when filters enabled", () => {
+    const members = [
+      member({ contactId: 1 }),
+      member({ contactId: 2, categorie: "PRESCRIPTEUR" }),
+      member({ contactId: 3, statutSuivi: "ARCHIVE" }),
+    ];
+    const preview = computeNewsletterAudiencePreview(members, {
+      ...emptyFilters,
+      excludePrescripteurs: true,
+      excludeArchived: true,
+    });
+    expect(preview.eligible).toBe(1);
+    expect(preview.excludedByFilters).toBe(2);
+  });
 });

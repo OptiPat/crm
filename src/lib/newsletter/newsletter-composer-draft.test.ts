@@ -6,7 +6,7 @@ import {
 } from "@/lib/newsletter/newsletter-composer-draft";
 import { DEFAULT_NEWSLETTER_AUDIENCE_FILTERS } from "@/lib/api/tauri-newsletter";
 
-function mockSessionStorage() {
+function mockLocalStorage() {
   const store = new Map<string, string>();
   const storage = {
     getItem: (key: string) => store.get(key) ?? null,
@@ -18,26 +18,29 @@ function mockSessionStorage() {
     },
     clear: () => store.clear(),
   };
-  vi.stubGlobal("sessionStorage", storage);
+  vi.stubGlobal("localStorage", storage);
   return storage;
 }
 
 describe("newsletter-composer-draft", () => {
   beforeEach(() => {
-    mockSessionStorage();
+    mockLocalStorage();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it("persists and restores composer state", () => {
+  it("persists and restores composer state in localStorage", () => {
     saveNewsletterComposerDraft({
       tab: "composer",
       theme: "Assurance emprunteur",
       editionInstructions: "Ton sobre",
+      structurePresetId: "actu-echeance",
+      editMode: "sections",
       content: {
         subject: "Objet test",
+        editionTitle: "Titre éditorial",
         intro: "Bonjour {{prenom}},",
         sections: [{ title: "Point 1", body: "Corps" }],
         cta: "RDV",
@@ -56,6 +59,8 @@ describe("newsletter-composer-draft", () => {
     });
     const loaded = loadNewsletterComposerDraft();
     expect(loaded?.theme).toBe("Assurance emprunteur");
+    expect(loaded?.structurePresetId).toBe("actu-echeance");
+    expect(loaded?.editMode).toBe("sections");
     expect(loaded?.chatHistory).toHaveLength(1);
     expect(loaded?.content?.sections[0]?.title).toBe("Point 1");
     expect(loaded?.audienceFilters.excludeContactIds).toEqual([42]);
@@ -67,6 +72,8 @@ describe("newsletter-composer-draft", () => {
       tab: "composer",
       theme: "x",
       editionInstructions: "",
+      structurePresetId: "libre",
+      editMode: "plain",
       content: null,
       subject: "",
       plainBody: "",
@@ -82,6 +89,8 @@ describe("newsletter-composer-draft", () => {
       tab: "composer",
       theme: "",
       editionInstructions: "",
+      structurePresetId: "libre",
+      editMode: "plain",
       content: null,
       subject: "",
       plainBody: "",

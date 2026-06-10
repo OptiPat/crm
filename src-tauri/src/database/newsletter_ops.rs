@@ -11,7 +11,7 @@ use rusqlite::{params, Result};
 impl Database {
     fn load_contacts_for_newsletter_audience(&self) -> Result<Vec<ContactAudienceRow>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, nom, prenom, categorie, filleul_categorie, newsletter_desinscrit_at, email
+            "SELECT id, nom, prenom, categorie, filleul_categorie, statut_suivi, newsletter_desinscrit_at, email
              FROM contacts
              ORDER BY nom, prenom",
         )?;
@@ -22,8 +22,9 @@ impl Database {
                 prenom: row.get(2)?,
                 categorie: row.get(3)?,
                 filleul_categorie: row.get(4)?,
-                newsletter_desinscrit_at: row.get(5)?,
-                email: row.get(6)?,
+                statut_suivi: row.get(5)?,
+                newsletter_desinscrit_at: row.get(6)?,
+                email: row.get(7)?,
             })
         })?;
         rows.collect()
@@ -33,11 +34,36 @@ impl Database {
         c.newsletter_desinscrit_at.is_some()
     }
 
+    fn contact_is_suspect(c: &ContactAudienceRow) -> bool {
+        c.categorie == "SUSPECT_CLIENT"
+            || c.categorie == "SUSPECT_FILLEUL"
+            || c.filleul_categorie.as_deref() == Some("SUSPECT_FILLEUL")
+    }
+
+    fn contact_is_archived(c: &ContactAudienceRow) -> bool {
+        matches!(
+            c.statut_suivi.as_deref(),
+            Some("ARCHIVE") | Some("EN_PAUSE")
+        )
+    }
+
     fn is_excluded_by_newsletter_filters(
         c: &ContactAudienceRow,
         filters: &NewsletterAudienceFilters,
     ) -> bool {
-        filters.exclude_contact_ids.contains(&c.id)
+        if filters.exclude_contact_ids.contains(&c.id) {
+            return true;
+        }
+        if filters.exclude_prescripteurs && c.categorie == "PRESCRIPTEUR" {
+            return true;
+        }
+        if filters.exclude_suspects && Self::contact_is_suspect(c) {
+            return true;
+        }
+        if filters.exclude_archived && Self::contact_is_archived(c) {
+            return true;
+        }
+        false
     }
 
     fn has_usable_newsletter_email(email: Option<&str>) -> bool {
@@ -57,6 +83,7 @@ impl Database {
                     email: c.email,
                     categorie: c.categorie,
                     filleul_categorie: c.filleul_categorie,
+                    statut_suivi: c.statut_suivi,
                     has_email,
                     unsubscribed: c.newsletter_desinscrit_at.is_some(),
                 }

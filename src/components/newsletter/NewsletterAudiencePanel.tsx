@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Loader2, Search, Users } from "lucide-react";
 import {
+  DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
   getNewsletterAudienceMembers,
   type NewsletterAudienceFilters,
   type NewsletterAudienceMember,
@@ -18,10 +19,13 @@ import {
 } from "@/lib/contacts/contact-list-labels";
 import {
   computeNewsletterAudiencePreview,
+  isNewsletterArchivedMember,
   isNewsletterMemberEditionSelectable,
   isNewsletterMemberSelected,
   isNewsletterMemberSettingsExcluded,
+  isNewsletterSuspectMember,
   mergeExcludeContactIds,
+  mergeNewsletterAudienceFilters,
   setNewsletterMembersSelection,
   toggleNewsletterMemberSelection,
 } from "@/lib/newsletter/newsletter-audience-utils";
@@ -32,6 +36,7 @@ type NewsletterAudiencePanelProps = {
   mode?: "edition" | "settings";
   filters: NewsletterAudienceFilters;
   onFiltersChange: (next: NewsletterAudienceFilters) => void;
+  settingsAudienceFilters?: NewsletterAudienceFilters;
   settingsExcludeContactIds?: number[];
   onOpenContact?: (contactId: number) => void;
   onPreviewChange?: (preview: NewsletterAudiencePreview | null) => void;
@@ -48,6 +53,7 @@ export function NewsletterAudiencePanel({
   mode = "edition",
   filters,
   onFiltersChange,
+  settingsAudienceFilters = DEFAULT_NEWSLETTER_AUDIENCE_FILTERS,
   settingsExcludeContactIds = [],
   onOpenContact,
   onPreviewChange,
@@ -74,16 +80,25 @@ export function NewsletterAudiencePanel({
     void refresh();
   }, [refresh]);
 
+  const categoryFilters = useMemo(
+    () =>
+      isSettingsMode ?
+        filters
+      : mergeNewsletterAudienceFilters(settingsAudienceFilters, filters),
+    [filters, isSettingsMode, settingsAudienceFilters]
+  );
+
   const preview = useMemo(
     () =>
       members.length > 0 ?
         computeNewsletterAudiencePreview(
           members,
           filters,
-          isSettingsMode ? [] : settingsExcludeContactIds
+          isSettingsMode ? [] : settingsExcludeContactIds,
+          isSettingsMode ? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS : settingsAudienceFilters
         )
       : null,
-    [members, filters, isSettingsMode, settingsExcludeContactIds]
+    [members, filters, isSettingsMode, settingsExcludeContactIds, settingsAudienceFilters]
   );
 
   const editionOnlyExcludedCount = useMemo(() => {
@@ -109,9 +124,9 @@ export function NewsletterAudiencePanel({
       filteredMembers.filter((m) =>
         isSettingsMode ?
           m.hasEmail && !m.unsubscribed
-        : isNewsletterMemberEditionSelectable(m, settingsExcludeContactIds)
+        :         isNewsletterMemberEditionSelectable(m, settingsExcludeContactIds, categoryFilters)
       ),
-    [filteredMembers, isSettingsMode, settingsExcludeContactIds]
+    [filteredMembers, isSettingsMode, settingsExcludeContactIds, categoryFilters]
   );
 
   const effectiveExclude = useMemo(
@@ -143,9 +158,17 @@ export function NewsletterAudiencePanel({
         filteredSelectable,
         filters.excludeContactIds,
         selected,
-        isSettingsMode ? [] : settingsExcludeContactIds
+        isSettingsMode ? [] : settingsExcludeContactIds,
+        categoryFilters
       ),
     });
+  };
+
+  const toggleCategoryFilter = (
+    key: "excludePrescripteurs" | "excludeSuspects" | "excludeArchived",
+    checked: boolean
+  ) => {
+    onFiltersChange({ ...filters, [key]: checked });
   };
 
   return (
@@ -169,6 +192,32 @@ export function NewsletterAudiencePanel({
           </p>
         : preview ?
           <>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={filters.excludePrescripteurs}
+                  onCheckedChange={(v) =>
+                    toggleCategoryFilter("excludePrescripteurs", v === true)
+                  }
+                />
+                Exclure prescripteurs
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={filters.excludeSuspects}
+                  onCheckedChange={(v) => toggleCategoryFilter("excludeSuspects", v === true)}
+                />
+                Exclure suspects
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={filters.excludeArchived}
+                  onCheckedChange={(v) => toggleCategoryFilter("excludeArchived", v === true)}
+                />
+                Exclure archivés / en pause
+              </label>
+            </div>
+
             <div className="flex flex-wrap gap-2">
               <Badge variant="default" className="font-normal">
                 {preview.eligible} sélectionné{preview.eligible !== 1 ? "s" : ""}
@@ -256,8 +305,16 @@ export function NewsletterAudiencePanel({
                     const selectable =
                       isSettingsMode ?
                         member.hasEmail && !member.unsubscribed
-                      : isNewsletterMemberEditionSelectable(member, settingsExcludeContactIds);
-                    const selected = isNewsletterMemberSelected(member, effectiveExclude);
+                      : isNewsletterMemberEditionSelectable(
+                          member,
+                          settingsExcludeContactIds,
+                          categoryFilters
+                        );
+                    const selected = isNewsletterMemberSelected(
+                      member,
+                      effectiveExclude,
+                      categoryFilters
+                    );
                     const categoryLabel = memberCategoryLabel(member);
                     const checkboxId = `nl-recipient-${mode}-${member.contactId}`;
 
@@ -303,6 +360,16 @@ export function NewsletterAudiencePanel({
                             {member.unsubscribed ?
                               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
                                 Désinscrit
+                              </Badge>
+                            : null}
+                            {isNewsletterArchivedMember(member) ?
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                                Archivé
+                              </Badge>
+                            : null}
+                            {isNewsletterSuspectMember(member) ?
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5">
+                                Suspect
                               </Badge>
                             : null}
                             {!isSettingsMode && settingsExcluded ?

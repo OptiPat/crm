@@ -32,6 +32,11 @@ export interface CgpConfig {
   email_signature_html?: string | null;
   /** Jours sans retour avant proposition de relance (défaut 5). */
   email_suivi_delai_jours?: number | null;
+  /** Site web du cabinet (footer newsletter, signature). */
+  site_web?: string | null;
+  adresse?: string | null;
+  code_postal?: string | null;
+  ville?: string | null;
 }
 
 // ========== SETTINGS GÉNÉRIQUES ==========

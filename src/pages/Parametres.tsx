@@ -48,6 +48,10 @@ const EMPTY_CGP_CONFIG: CgpConfig = {
   email_signature: "",
   email_signature_html: "",
   email_suivi_delai_jours: 5,
+  site_web: "",
+  adresse: "",
+  code_postal: "",
+  ville: "",
 };
 
 const SETTINGS_NAV: SettingsNavItem[] = [
@@ -123,6 +127,10 @@ function normalizeCgpConfig(config: CgpConfig): CgpConfig {
     email_signature: config.email_signature ?? "",
     email_signature_html: config.email_signature_html ?? "",
     email_suivi_delai_jours: config.email_suivi_delai_jours ?? 5,
+    site_web: config.site_web ?? "",
+    adresse: config.adresse ?? "",
+    code_postal: config.code_postal ?? "",
+    ville: config.ville ?? "",
   };
 }
 

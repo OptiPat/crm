@@ -905,6 +905,15 @@ pub struct CgpConfig {
     /// Délai avant proposition de relance après envoi (jours, défaut 5).
     #[serde(default)]
     pub email_suivi_delai_jours: Option<i64>,
+    /// Site web du cabinet (footer newsletter).
+    #[serde(default)]
+    pub site_web: Option<String>,
+    #[serde(default)]
+    pub adresse: Option<String>,
+    #[serde(default)]
+    pub code_postal: Option<String>,
+    #[serde(default)]
+    pub ville: Option<String>,
 }
 
 /// Message boîte mail synchronisé pour un contact (hors logique campagne / en attente de réponse).

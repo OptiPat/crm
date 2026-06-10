@@ -20,6 +20,25 @@ import {
   DEFAULT_NEWSLETTER_STYLE_PROMPT,
   NEWSLETTER_STYLE_PRESETS,
 } from "@/lib/newsletter/default-style-prompt";
+import {
+  DEFAULT_NEWSLETTER_SECONDARY,
+  NEWSLETTER_LAYOUT_OPTIONS,
+} from "@/lib/newsletter/newsletter-branding";
+import type {
+  NewsletterBodyFont,
+  NewsletterBodyFontSize,
+  NewsletterLayout,
+  NewsletterLineHeight,
+  NewsletterSectionSpacing,
+  NewsletterTitleFont,
+} from "@/lib/api/tauri-newsletter";
+import {
+  NEWSLETTER_BODY_FONT_OPTIONS,
+  NEWSLETTER_FONT_SIZE_OPTIONS,
+  NEWSLETTER_LINE_HEIGHT_OPTIONS,
+  NEWSLETTER_SECTION_SPACING_OPTIONS,
+  NEWSLETTER_TITLE_FONT_OPTIONS,
+} from "@/lib/newsletter/newsletter-typography";
 import { toast } from "sonner";
 
 export function ParametresNewsletterSection({
@@ -41,6 +60,14 @@ export function ParametresNewsletterSection({
   const [model, setModel] = useState(DEFAULT_MISTRAL_MODEL);
   const [etiquetteNom, setEtiquetteNom] = useState("Newsletter");
   const [sendDelayMs, setSendDelayMs] = useState(3000);
+  const [accentColor, setAccentColor] = useState("#0f2744");
+  const [secondaryColor, setSecondaryColor] = useState(DEFAULT_NEWSLETTER_SECONDARY);
+  const [defaultLayout, setDefaultLayout] = useState<NewsletterLayout>("magazine");
+  const [bodyFont, setBodyFont] = useState<NewsletterBodyFont>("classic");
+  const [titleFont, setTitleFont] = useState<NewsletterTitleFont>("classic");
+  const [bodyFontSize, setBodyFontSize] = useState<NewsletterBodyFontSize>("md");
+  const [lineHeight, setLineHeight] = useState<NewsletterLineHeight>("relaxed");
+  const [sectionSpacing, setSectionSpacing] = useState<NewsletterSectionSpacing>("normal");
   const [subscriberCount, setSubscriberCount] = useState<number | null>(null);
   const [audienceFilters, setAudienceFilters] = useState<NewsletterAudienceFilters>(
     DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
@@ -56,6 +83,14 @@ export function ParametresNewsletterSection({
       setModel(s.model);
       setEtiquetteNom(s.etiquetteNom);
       setSendDelayMs(s.sendDelayMs);
+      setAccentColor(s.accentColor?.trim() || "#0f2744");
+      setSecondaryColor(s.secondaryColor?.trim() || DEFAULT_NEWSLETTER_SECONDARY);
+      setDefaultLayout(s.defaultLayout ?? "magazine");
+      setBodyFont(s.bodyFont ?? "classic");
+      setTitleFont(s.titleFont ?? "classic");
+      setBodyFontSize(s.bodyFontSize ?? "md");
+      setLineHeight(s.lineHeight ?? "relaxed");
+      setSectionSpacing(s.sectionSpacing ?? "normal");
       setAudienceFilters(s.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS);
       const etiq = await ensureNewsletterEtiquette(s.etiquetteNom);
       setSubscriberCount(etiq.contactCount);
@@ -83,6 +118,14 @@ export function ParametresNewsletterSection({
         model,
         etiquetteNom,
         sendDelayMs,
+        accentColor,
+        secondaryColor,
+        defaultLayout,
+        bodyFont,
+        titleFont,
+        bodyFontSize,
+        lineHeight,
+        sectionSpacing,
         defaultAudienceFilters: audienceFilters,
       };
       if (apiKeyInput.trim()) {
@@ -218,7 +261,7 @@ export function ParametresNewsletterSection({
       <SettingsPanel title="Campagne" description="Étiquette technique pour la file d'envoi et espacement entre emails">
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="param-nl-etiquette">Nom de l&apos;étiquette (file d&apos;envoi)</Label>
+            <Label htmlFor="param-nl-etiquette">Nom de l'étiquette (file d'envoi)</Label>
             <Input
               id="param-nl-etiquette"
               value={etiquetteNom}
@@ -227,7 +270,7 @@ export function ParametresNewsletterSection({
             {subscriberCount != null && (
               <p className="text-xs text-muted-foreground">
                 {subscriberCount} contact{subscriberCount !== 1 ? "s" : ""} tagué
-                {subscriberCount !== 1 ? "s" : ""} manuellement (optionnel — l&apos;audience inclut
+                {subscriberCount !== 1 ? "s" : ""} manuellement (optionnel — l'audience inclut
                 toute la base par défaut)
               </p>
             )}
@@ -246,13 +289,157 @@ export function ParametresNewsletterSection({
               Espacer les envois réduit le risque spam (ex. 3000 = 3 secondes).
             </p>
           </div>
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="Identité visuelle"
+        description="Couleurs, typographie et mise en page — optimisées pour la lecture sur mobile"
+      >
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2 bg-muted/20">
+            La plupart des destinataires lisent sur téléphone. Privilégiez une taille de texte
+            normale ou grande, un interlignage aéré, et vérifiez l'aperçu mobile dans le
+            composer.
+          </p>
+          <div className="space-y-2">
+            <Label htmlFor="param-nl-accent">Couleur d'accent (en-tête, titres)</Label>
+            <div className="flex gap-2 items-center">
+              <Input
+                id="param-nl-accent"
+                type="color"
+                className="w-14 h-10 p-1 cursor-pointer"
+                value={accentColor}
+                onChange={(e) => setAccentColor(e.target.value)}
+              />
+              <Input
+                value={accentColor}
+                onChange={(e) => setAccentColor(e.target.value)}
+                placeholder="#0f2744"
+                className="font-mono text-sm max-w-[8rem]"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="param-nl-secondary">Couleur secondaire (traits, numéros, CTA)</Label>
+            <div className="flex gap-2 items-center">
+              <Input
+                id="param-nl-secondary"
+                type="color"
+                className="w-14 h-10 p-1 cursor-pointer"
+                value={secondaryColor}
+                onChange={(e) => setSecondaryColor(e.target.value)}
+              />
+              <Input
+                value={secondaryColor}
+                onChange={(e) => setSecondaryColor(e.target.value)}
+                placeholder={DEFAULT_NEWSLETTER_SECONDARY}
+                className="font-mono text-sm max-w-[8rem]"
+              />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="param-nl-default-layout">Mise en page par défaut</Label>
+            <select
+              id="param-nl-default-layout"
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={defaultLayout}
+              onChange={(e) => setDefaultLayout(e.target.value as NewsletterLayout)}
+            >
+              {NEWSLETTER_LAYOUT_OPTIONS.map((opt) => (
+                <option key={opt.id} value={opt.id}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              {NEWSLETTER_LAYOUT_OPTIONS.find((o) => o.id === defaultLayout)?.hint}
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="param-nl-body-font">Police du corps</Label>
+              <select
+                id="param-nl-body-font"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={bodyFont}
+                onChange={(e) => setBodyFont(e.target.value as NewsletterBodyFont)}
+              >
+                {NEWSLETTER_BODY_FONT_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="param-nl-title-font">Police des titres</Label>
+              <select
+                id="param-nl-title-font"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={titleFont}
+                onChange={(e) => setTitleFont(e.target.value as NewsletterTitleFont)}
+              >
+                {NEWSLETTER_TITLE_FONT_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="param-nl-font-size">Taille du texte</Label>
+              <select
+                id="param-nl-font-size"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={bodyFontSize}
+                onChange={(e) => setBodyFontSize(e.target.value as NewsletterBodyFontSize)}
+              >
+                {NEWSLETTER_FONT_SIZE_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="param-nl-line-height">Interlignage</Label>
+              <select
+                id="param-nl-line-height"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={lineHeight}
+                onChange={(e) => setLineHeight(e.target.value as NewsletterLineHeight)}
+              >
+                {NEWSLETTER_LINE_HEIGHT_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="param-nl-section-spacing">Espacement entre sections</Label>
+              <select
+                id="param-nl-section-spacing"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={sectionSpacing}
+                onChange={(e) => setSectionSpacing(e.target.value as NewsletterSectionSpacing)}
+              >
+                {NEWSLETTER_SECTION_SPACING_OPTIONS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <Button type="button" disabled={saving} onClick={() => void handleSave()}>
             {saving ?
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 Enregistrement…
               </>
-            : "Enregistrer les paramètres newsletter"}
+            : "Enregistrer l'identité et la campagne"}
           </Button>
         </div>
       </SettingsPanel>
@@ -274,7 +461,7 @@ export function ParametresNewsletterSection({
           <li>Destinataires = contacts avec email (sauf désinscrits et exclusions permanentes)</li>
           <li>Un seul lien principal (bouton agenda)</li>
           <li>Envoi via Gmail connecté (Paramètres → Email)</li>
-          <li>Testez avec « M&apos;envoyer un test » avant la campagne</li>
+          <li>Testez avec « M'envoyer un test » avant la campagne</li>
         </ul>
       </SettingsPanel>
     </div>

@@ -12,6 +12,7 @@ import {
 
 type NewsletterHistoryPanelProps = {
   refreshKey?: number;
+  initialExpandedEditionId?: number | null;
   onOpenContact?: (contactId: number) => void;
 };
 
@@ -41,6 +42,7 @@ function statusLabel(status: string): string {
 
 export function NewsletterHistoryPanel({
   refreshKey = 0,
+  initialExpandedEditionId = null,
   onOpenContact,
 }: NewsletterHistoryPanelProps) {
   const [editions, setEditions] = useState<NewsletterEditionSummary[]>([]);
@@ -62,17 +64,7 @@ export function NewsletterHistoryPanel({
     }
   }, []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh, refreshKey]);
-
-  const toggleExpand = async (id: number) => {
-    if (expandedId === id) {
-      setExpandedId(null);
-      setDetail(null);
-      return;
-    }
-    setExpandedId(id);
+  const loadEditionDetail = useCallback(async (id: number) => {
     setDetailLoading(true);
     try {
       const d = await getNewsletterEditionDetail(id);
@@ -83,7 +75,30 @@ export function NewsletterHistoryPanel({
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, []);
+
+  const toggleExpand = useCallback(
+    async (id: number) => {
+      if (expandedId === id) {
+        setExpandedId(null);
+        setDetail(null);
+        return;
+      }
+      setExpandedId(id);
+      await loadEditionDetail(id);
+    },
+    [expandedId, loadEditionDetail]
+  );
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh, refreshKey]);
+
+  useEffect(() => {
+    if (initialExpandedEditionId == null) return;
+    setExpandedId(initialExpandedEditionId);
+    void loadEditionDetail(initialExpandedEditionId);
+  }, [initialExpandedEditionId, loadEditionDetail]);
 
   return (
     <Card>

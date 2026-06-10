@@ -5,6 +5,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   Sparkles,
@@ -22,8 +29,10 @@ import {
   ensureNewsletterEtiquette,
   generateNewsletterContent,
   getLastNewsletterEditionDuplicate,
+  getNewsletterEditionDetail,
   getNewsletterSettings,
   prepareNewsletterEdition,
+  type NewsletterEditionDetail,
   type GeneratedNewsletterContent,
   type NewsletterAudienceFilters,
   type NewsletterAudiencePreview,
@@ -46,16 +55,28 @@ import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
 import { appendEmailSignature, buildSendEmailBodies } from "@/lib/emails/email-signature";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
-import { SAMPLE_PREVIEW_CONTACT } from "@/lib/emails/template-email-meta";
 import {
   buildNewsletterHtml,
   buildNewsletterHtmlOptions,
   buildNewsletterPlainBody,
+  defaultConseillerFields,
   contentFromPlainEdit,
+  draftFromStructuredContent,
+  mergeNewsletterDraftFromPlain,
   formatNewsletterEditionLabel,
   injectNewsletterSignatureHtml,
   serializeNewsletterTemplateMeta,
 } from "@/lib/newsletter/newsletter-html";
+import { buildNewsletterTemplateVariables } from "@/lib/newsletter/newsletter-template-variables";
+import {
+  NEWSLETTER_STRUCTURE_PRESETS,
+  structureInstructionsForPreset,
+} from "@/lib/newsletter/newsletter-structure-presets";
+import { footerProfileFromCgp } from "@/lib/newsletter/newsletter-footer-options";
+import type { NewsletterEditMode } from "@/lib/newsletter/newsletter-composer-draft";
+import { NewsletterHtmlPreviewFrame } from "@/components/newsletter/NewsletterHtmlPreviewFrame";
+import { NewsletterInboxPreview } from "@/components/newsletter/NewsletterInboxPreview";
+import { NewsletterSectionEditor } from "@/components/newsletter/NewsletterSectionEditor";
 import { loadCgpLogoDataUrl } from "@/lib/settings/cgp-logo-preview";
 import { NewsletterChatPanel } from "@/components/newsletter/NewsletterChatPanel";
 import {
@@ -78,10 +99,22 @@ import { toast } from "sonner";
 function buildHtmlOptions(
   cgp: CgpConfig | null,
   logoDataUrl: string | null,
-  content: GeneratedNewsletterContent | null
+  content: GeneratedNewsletterContent | null,
+  settings: NewsletterSettings | null
 ) {
   return {
-    ...buildNewsletterHtmlOptions(cgp),
+    ...buildNewsletterHtmlOptions(cgp, {
+      accentColor: settings?.accentColor,
+      secondaryColor: settings?.secondaryColor,
+      layout: content?.layout ?? settings?.defaultLayout ?? undefined,
+      typography: {
+        bodyFont: settings?.bodyFont,
+        titleFont: settings?.titleFont,
+        bodyFontSize: settings?.bodyFontSize,
+        lineHeight: settings?.lineHeight,
+        sectionSpacing: settings?.sectionSpacing,
+      },
+    }),
     logoDataUrl: logoDataUrl ?? undefined,
     editionLabel: formatNewsletterEditionLabel(),
     preheader: content?.preheader?.trim() || undefined,
@@ -91,6 +124,8 @@ function buildHtmlOptions(
 function resetComposerState(): {
   theme: string;
   editionInstructions: string;
+  structurePresetId: string;
+  editMode: NewsletterEditMode;
   content: GeneratedNewsletterContent | null;
   subject: string;
   plainBody: string;
@@ -101,6 +136,8 @@ function resetComposerState(): {
   return {
     theme: "",
     editionInstructions: "",
+    structurePresetId: "libre",
+    editMode: "plain",
     content: null,
     subject: "",
     plainBody: "",
@@ -124,6 +161,12 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   const [theme, setTheme] = useState(restoredDraft?.theme ?? "");
   const [editionInstructions, setEditionInstructions] = useState(
     restoredDraft?.editionInstructions ?? ""
+  );
+  const [structurePresetId, setStructurePresetId] = useState(
+    restoredDraft?.structurePresetId ?? "libre"
+  );
+  const [editMode, setEditMode] = useState<NewsletterEditMode>(
+    restoredDraft?.editMode ?? "plain"
   );
   const [generating, setGenerating] = useState(false);
   const [content, setContent] = useState<GeneratedNewsletterContent | null>(
@@ -161,6 +204,11 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   const [sendConfirmOpen, setSendConfirmOpen] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [historyExpandEditionId, setHistoryExpandEditionId] = useState<number | null>(null);
+  const [preparedReviewOpen, setPreparedReviewOpen] = useState(false);
+  const [preparedEditionDetail, setPreparedEditionDetail] =
+    useState<NewsletterEditionDetail | null>(null);
+  const [loadingPreparedReview, setLoadingPreparedReview] = useState(false);
   const batchAbortRef = useRef<AbortController | null>(null);
   const [audiencePreview, setAudiencePreview] = useState<NewsletterAudiencePreview | null>(null);
 
@@ -218,9 +266,28 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     void loadCgpLogoDataUrl(cgp?.logo_path).then(setLogoDataUrl);
   }, [cgp?.logo_path]);
 
+  const currentDraft = useMemo((): GeneratedNewsletterContent => {
+    if (editMode === "sections" && content) {
+      return draftFromStructuredContent(subject, content);
+    }
+    return mergeNewsletterDraftFromPlain(subject, plainBody, content);
+  }, [editMode, content, subject, plainBody]);
+
+  const templateVariables = useMemo(
+    () => buildNewsletterTemplateVariables(cgp),
+    [cgp]
+  );
+
+  const conseillerDefaults = useMemo(() => {
+    const fields = defaultConseillerFields(cgp);
+    return { name: fields.conseillerName, phone: fields.conseillerPhone };
+  }, [cgp]);
+
+  const footerProfile = useMemo(() => footerProfileFromCgp(cgp), [cgp]);
+
   const htmlOptions = useMemo(
-    () => buildHtmlOptions(cgp, logoDataUrl, content),
-    [cgp, logoDataUrl, content]
+    () => buildHtmlOptions(cgp, logoDataUrl, currentDraft, settings),
+    [cgp, logoDataUrl, currentDraft, settings]
   );
 
   const refreshPreviewHtml = useCallback(
@@ -236,6 +303,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       tab,
       theme,
       editionInstructions,
+      structurePresetId,
+      editMode,
       content,
       subject,
       plainBody,
@@ -250,6 +319,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     tab,
     theme,
     editionInstructions,
+    structurePresetId,
+    editMode,
     content,
     subject,
     plainBody,
@@ -262,29 +333,20 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   ]);
 
   useEffect(() => {
-    if (!content) return;
-    refreshPreviewHtml({
-      ...content,
-      subject: subject.trim() || content.subject,
-    });
-  }, [htmlOptions, content, subject, refreshPreviewHtml]);
+    if (!plainBody.trim()) return;
+    setPreviewHtml(buildNewsletterHtml(currentDraft, htmlOptions));
+  }, [currentDraft, htmlOptions, plainBody]);
 
   const applyDraft = useCallback(
     (c: GeneratedNewsletterContent) => {
       setContent(c);
       setSubject(c.subject);
       setPlainBody(buildNewsletterPlainBody(c));
+      setEditMode("sections");
       refreshPreviewHtml(c);
     },
     [refreshPreviewHtml]
   );
-
-  const currentDraft = useMemo((): GeneratedNewsletterContent => {
-    if (content) {
-      return { ...content, subject: subject.trim() || content.subject };
-    }
-    return contentFromPlainEdit(subject, plainBody);
-  }, [content, subject, plainBody]);
 
   const handleGenerate = async () => {
     if (!theme.trim()) {
@@ -293,15 +355,29 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     }
     setGenerating(true);
     try {
+      const structureHint = structureInstructionsForPreset(structurePresetId);
+      const mergedInstructions = [editionInstructions.trim(), structureHint]
+        .filter(Boolean)
+        .join("\n\n");
       const generated = await generateNewsletterContent({
         theme: theme.trim(),
-        editionInstructions: editionInstructions.trim() || null,
+        editionInstructions: mergedInstructions || null,
       });
-      setContent(generated);
-      setSubject(generated.subject);
-      const plain = buildNewsletterPlainBody(generated);
+      const conseiller = defaultConseillerFields(cgp);
+      const withDefaults = {
+        ...generated,
+        includeCta: generated.includeCta ?? Boolean(generated.cta?.trim()),
+        layout: generated.layout ?? settings?.defaultLayout ?? "magazine",
+        includeConseiller: generated.includeConseiller ?? conseiller.includeConseiller,
+        conseillerName: generated.conseillerName ?? conseiller.conseillerName,
+        conseillerPhone: generated.conseillerPhone ?? conseiller.conseillerPhone,
+      };
+      setContent(withDefaults);
+      setSubject(withDefaults.subject);
+      const plain = buildNewsletterPlainBody(withDefaults);
       setPlainBody(plain);
-      refreshPreviewHtml(generated);
+      setEditMode("sections");
+      refreshPreviewHtml(withDefaults);
       setChatHistory([]);
       setChatSessionKey((k) => k + 1);
       toast.success("Newsletter générée — discutez avec Mistral pour affiner");
@@ -314,15 +390,27 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
 
   const handlePlainBodyChange = (value: string) => {
     setPlainBody(value);
-    if (!content) return;
-    const parts = value.split(/\n\n+/);
-    const updated: GeneratedNewsletterContent = {
-      subject,
-      intro: parts[0] ?? "",
-      sections: content.sections,
-      cta: parts[parts.length - 1] ?? "",
-    };
-    refreshPreviewHtml(updated);
+    setEditMode("plain");
+  };
+
+  const handleSectionDraftChange = (next: GeneratedNewsletterContent) => {
+    setContent(next);
+    setPlainBody(buildNewsletterPlainBody(next));
+    setEditMode("sections");
+  };
+
+  const openPreparedReview = async (editionId: number) => {
+    setLoadingPreparedReview(true);
+    setPreparedReviewOpen(true);
+    try {
+      const detail = await getNewsletterEditionDetail(editionId);
+      setPreparedEditionDetail(detail);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossible de charger l'édition");
+      setPreparedReviewOpen(false);
+    } finally {
+      setLoadingPreparedReview(false);
+    }
   };
 
   const handleSendTest = async () => {
@@ -341,16 +429,18 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     }
     setSendingTest(true);
     try {
-      const vars = {
-        prenom: cgp?.prenom?.trim() || SAMPLE_PREVIEW_CONTACT.prenom,
-        nom: cgp?.nom?.trim() || SAMPLE_PREVIEW_CONTACT.nom,
-      };
+      const vars = buildNewsletterTemplateVariables(cgp, {
+        prenom: cgp?.prenom,
+        nom: cgp?.nom,
+        email: cgp?.email,
+      });
       const subj = replaceTemplateVariables(subject.trim(), vars);
       const bodyPlain = appendEmailSignature(
         replaceTemplateVariables(plainBody.trim(), vars),
         cgp?.email_signature
       );
-      let html = replaceTemplateVariables(previewHtml, vars);
+      const htmlBuilt = buildNewsletterHtml(currentDraft, htmlOptions);
+      let html = replaceTemplateVariables(htmlBuilt, vars);
       html = injectNewsletterSignatureHtml(html, cgp?.email_signature_html);
       const fallback = buildSendEmailBodies(bodyPlain, cgp);
       await sendEmail({
@@ -387,7 +477,6 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setContent(parsedContent);
       setSubject(last.subject);
       setPlainBody(last.plainBody);
-      refreshPreviewHtml(parsedContent);
       setChatHistory([]);
       setChatSessionKey((k) => k + 1);
       toast.success(`Édition « ${last.editionLabel} » dupliquée — adaptez puis préparez`);
@@ -414,8 +503,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
     setPreparing(true);
     try {
       const draftContent = currentDraft;
-      const html =
-        previewHtml || buildNewsletterHtml(draftContent, htmlOptions);
+      const html = buildNewsletterHtml(draftContent, htmlOptions);
       const result = await prepareNewsletterEdition({
         etiquetteId: etiquetteInfo.id,
         editionLabel: formatNewsletterEditionLabel(),
@@ -432,10 +520,13 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       });
       setPreparedQueueCount(result.queued);
       setActiveEditionId(result.editionId);
+      setHistoryExpandEditionId(result.editionId);
       setHistoryRefreshKey((k) => k + 1);
       const reset = resetComposerState();
       setTheme(reset.theme);
       setEditionInstructions(reset.editionInstructions);
+      setStructurePresetId(reset.structurePresetId);
+      setEditMode(reset.editMode);
       setContent(reset.content);
       setSubject(reset.subject);
       setPlainBody(reset.plainBody);
@@ -445,7 +536,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setAudienceFilters({ ...DEFAULT_NEWSLETTER_AUDIENCE_FILTERS, excludeContactIds: [] });
       toast.success(
         `${result.queued} destinataire${result.queued !== 1 ? "s" : ""} en file` +
-          (result.skippedNoEmail > 0 ? ` (${result.skippedNoEmail} sans email ignorés)` : "")
+          (result.skippedNoEmail > 0 ? ` (${result.skippedNoEmail} sans email ignorés)` : "") +
+          " — utilisez « Revoir le contenu préparé » si besoin"
       );
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Préparation campagne impossible");
@@ -544,6 +636,9 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         <TabsContent value="composer" className="mt-4 space-y-4">
           <NewsletterAudiencePanel
             filters={audienceFilters}
+            settingsAudienceFilters={
+              settings?.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
+            }
             settingsExcludeContactIds={
               settings?.defaultAudienceFilters.excludeContactIds ?? []
             }
@@ -578,6 +673,16 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                       Annuler l&apos;envoi
                     </Button>
                   : <>
+                      {activeEditionId != null && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => void openPreparedReview(activeEditionId)}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          Revoir le contenu préparé
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         disabled={!emailConnected}
@@ -609,6 +714,21 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                   value={theme}
                   onChange={(e) => setTheme(e.target.value)}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="newsletter-structure">Format du numéro</Label>
+                <select
+                  id="newsletter-structure"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  value={structurePresetId}
+                  onChange={(e) => setStructurePresetId(e.target.value)}
+                >
+                  {NEWSLETTER_STRUCTURE_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="newsletter-edition">Instructions pour cette édition (optionnel)</Label>
@@ -667,7 +787,10 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Édition</CardTitle>
-                  <CardDescription>Texte brut — variables {"{{prenom}}"} conservées</CardDescription>
+                  <CardDescription>
+                    Texte brut ou sections structurées — variables{" "}
+                    {"{{prenom}}"}, {"{{nom}}"}, {"{{cabinet}}"}, {"{{lien_agenda}}"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -678,16 +801,37 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                       onChange={(e) => setSubject(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="nl-body">Corps</Label>
-                    <Textarea
-                      id="nl-body"
-                      rows={16}
-                      className="font-mono text-sm"
-                      value={plainBody}
-                      onChange={(e) => handlePlainBodyChange(e.target.value)}
-                    />
-                  </div>
+                  <Tabs
+                    value={editMode}
+                    onValueChange={(v) => setEditMode(v as NewsletterEditMode)}
+                  >
+                    <TabsList className="grid w-full grid-cols-2">
+                      <TabsTrigger value="plain">Texte brut</TabsTrigger>
+                      <TabsTrigger value="sections">Sections</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="plain" className="mt-3 space-y-2">
+                      <Textarea
+                        id="nl-body"
+                        rows={16}
+                        className="font-mono text-sm"
+                        value={plainBody}
+                        onChange={(e) => handlePlainBodyChange(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2 bg-muted/30">
+                        Lignes vides = nouvelle section. Dernier paragraphe = CTA. Salutation +
+                        intro : évitez une ligne vide entre les deux. Pour les images, blocs enrichis
+                        et mise en page : passez en mode <strong>Sections</strong>.
+                      </p>
+                    </TabsContent>
+                    <TabsContent value="sections" className="mt-3">
+                      <NewsletterSectionEditor
+                        draft={currentDraft}
+                        onChange={handleSectionDraftChange}
+                        conseillerDefaults={conseillerDefaults}
+                        footerProfile={footerProfile}
+                      />
+                    </TabsContent>
+                  </Tabs>
                   <div className="flex flex-wrap gap-2">
                     <Button
                       type="button"
@@ -737,19 +881,17 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                     <Eye className="h-4 w-4" />
                     Aperçu HTML
                   </CardTitle>
-                  <CardDescription>Rendu newsletter (600 px, anti-spam friendly)</CardDescription>
+                  <CardDescription>
+                    Aperçu mobile par défaut — la majorité des lectures se font sur téléphone
+                  </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <div className="border rounded-lg bg-muted/30 overflow-hidden">
-                    {previewHtml ?
-                      <iframe
-                        title="Aperçu newsletter"
-                        srcDoc={previewHtml}
-                        className="w-full min-h-[520px] bg-white"
-                        sandbox=""
-                      />
-                    : <p className="p-4 text-sm text-muted-foreground">Aperçu indisponible</p>}
-                  </div>
+                <CardContent className="space-y-3">
+                  <NewsletterInboxPreview
+                    subject={subject}
+                    draft={currentDraft}
+                    variables={templateVariables}
+                  />
+                  <NewsletterHtmlPreviewFrame html={previewHtml} />
                 </CardContent>
               </Card>
             </div>
@@ -767,6 +909,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
 
           <NewsletterHistoryPanel
             refreshKey={historyRefreshKey}
+            initialExpandedEditionId={historyExpandEditionId}
             onOpenContact={(id) => onNavigate?.(`contact-${id}`)}
           />
         </TabsContent>
@@ -793,6 +936,46 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
           />
         </TabsContent>
       </Tabs>
+
+      <Dialog open={preparedReviewOpen} onOpenChange={setPreparedReviewOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Contenu de la campagne préparée</DialogTitle>
+            <DialogDescription>
+              {preparedEditionDetail ?
+                `${preparedEditionDetail.editionLabel} — ${preparedEditionDetail.queuedCount} destinataire${preparedEditionDetail.queuedCount !== 1 ? "s" : ""} en file`
+              : "Chargement…"}
+            </DialogDescription>
+          </DialogHeader>
+          {loadingPreparedReview ?
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Chargement…
+            </p>
+          : preparedEditionDetail ?
+            <div className="space-y-3 text-sm">
+              <p>
+                <span className="font-medium">Objet :</span> {preparedEditionDetail.subject}
+              </p>
+              <pre className="whitespace-pre-wrap font-mono text-xs rounded-md border bg-muted/30 p-3 max-h-96 overflow-y-auto">
+                {preparedEditionDetail.plainBody}
+              </pre>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setPreparedReviewOpen(false);
+                  setHistoryExpandEditionId(preparedEditionDetail.id);
+                  setHistoryRefreshKey((k) => k + 1);
+                }}
+              >
+                Voir dans l&apos;historique
+              </Button>
+            </div>
+          : null}
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={sendConfirmOpen} onOpenChange={setSendConfirmOpen}>
         <AlertDialogContent>

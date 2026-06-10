@@ -16,11 +16,13 @@ TA MISSION :
 
 FORMAT DE RÉPONSE (JSON strict, sans markdown autour) :
 {
-  "subject": "Ligne d'objet accrocheuse",
+  "subject": "Objet email accrocheur (inbox)",
+  "preheader": "1 phrase complémentaire à l'objet, visible sous l'objet dans la boîte mail (max 120 car.)",
+  "editionTitle": "Titre éditorial du numéro (affiché dans l'en-tête, peut être plus descriptif que l'objet)",
   "intro": "Introduction relatable (2-3 phrases)",
   "sections": [
-    { "title": "Titre section 1", "body": "Contenu..." },
-    { "title": "Titre section 2", "body": "Contenu..." }
+    { "title": "Titre section 1", "body": "Contenu...", "highlight": false },
+    { "title": "Titre section 2", "body": "Contenu...", "highlight": true }
   ],
   "cta": "Appel à l'action + invitation (1-2 phrases)"
 }
@@ -31,6 +33,7 @@ CONTRAINTES :
 - LONGUEUR totale : 300-500 mots (intro + sections + cta)
 - JARGON : traduire en métaphores accessibles
 - Utilise {{prenom}} uniquement dans l'intro si tu salues le lecteur (ex. "Bonjour {{prenom}},")
+- "highlight": true sur UNE section au plus (échéance, alerte, point urgent)
 
 INTERDITS :
 - Jargon non expliqué
@@ -49,6 +52,22 @@ pub struct NewsletterSettingsPublic {
     pub model: String,
     pub etiquette_nom: String,
     pub send_delay_ms: u64,
+    #[serde(default)]
+    pub accent_color: Option<String>,
+    #[serde(default)]
+    pub secondary_color: Option<String>,
+    #[serde(default)]
+    pub default_layout: Option<String>,
+    #[serde(default)]
+    pub body_font: Option<String>,
+    #[serde(default)]
+    pub title_font: Option<String>,
+    #[serde(default)]
+    pub body_font_size: Option<String>,
+    #[serde(default)]
+    pub line_height: Option<String>,
+    #[serde(default)]
+    pub section_spacing: Option<String>,
     pub default_audience_filters: NewsletterAudienceFilters,
 }
 
@@ -61,6 +80,14 @@ pub struct NewsletterSettingsInput {
     pub model: Option<String>,
     pub etiquette_nom: Option<String>,
     pub send_delay_ms: Option<u64>,
+    pub accent_color: Option<String>,
+    pub secondary_color: Option<String>,
+    pub default_layout: Option<String>,
+    pub body_font: Option<String>,
+    pub title_font: Option<String>,
+    pub body_font_size: Option<String>,
+    pub line_height: Option<String>,
+    pub section_spacing: Option<String>,
     pub default_audience_filters: Option<NewsletterAudienceFilters>,
 }
 
@@ -79,6 +106,22 @@ struct PersistedNewsletterStore {
     #[serde(default)]
     send_delay_ms: Option<u64>,
     #[serde(default)]
+    accent_color: Option<String>,
+    #[serde(default)]
+    secondary_color: Option<String>,
+    #[serde(default)]
+    default_layout: Option<String>,
+    #[serde(default)]
+    body_font: Option<String>,
+    #[serde(default)]
+    title_font: Option<String>,
+    #[serde(default)]
+    body_font_size: Option<String>,
+    #[serde(default)]
+    line_height: Option<String>,
+    #[serde(default)]
+    section_spacing: Option<String>,
+    #[serde(default)]
     default_audience_filters: Option<NewsletterAudienceFilters>,
 }
 
@@ -91,6 +134,14 @@ pub struct NewsletterStore {
     pub model: String,
     pub etiquette_nom: String,
     pub send_delay_ms: u64,
+    pub accent_color: Option<String>,
+    pub secondary_color: Option<String>,
+    pub default_layout: Option<String>,
+    pub body_font: Option<String>,
+    pub title_font: Option<String>,
+    pub body_font_size: Option<String>,
+    pub line_height: Option<String>,
+    pub section_spacing: Option<String>,
     pub default_audience_filters: NewsletterAudienceFilters,
 }
 
@@ -143,6 +194,14 @@ impl NewsletterStore {
             model: self.model.clone(),
             etiquette_nom: self.etiquette_nom.clone(),
             send_delay_ms: self.send_delay_ms,
+            accent_color: self.accent_color.clone(),
+            secondary_color: self.secondary_color.clone(),
+            default_layout: self.default_layout.clone(),
+            body_font: self.body_font.clone(),
+            title_font: self.title_font.clone(),
+            body_font_size: self.body_font_size.clone(),
+            line_height: self.line_height.clone(),
+            section_spacing: self.section_spacing.clone(),
             default_audience_filters: self.default_audience_filters.clone(),
         }
     }
@@ -185,6 +244,38 @@ impl NewsletterStore {
                 .filter(|s| !s.trim().is_empty())
                 .unwrap_or_else(|| "Newsletter".to_string()),
             send_delay_ms: persisted.send_delay_ms.unwrap_or(3000).max(500),
+            accent_color: persisted
+                .accent_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            secondary_color: persisted
+                .secondary_color
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            default_layout: persisted
+                .default_layout
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            body_font: persisted
+                .body_font
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            title_font: persisted
+                .title_font
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            body_font_size: persisted
+                .body_font_size
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            line_height: persisted
+                .line_height
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
+            section_spacing: persisted
+                .section_spacing
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
             default_audience_filters: persisted
                 .default_audience_filters
                 .unwrap_or_default(),
@@ -214,6 +305,14 @@ impl NewsletterStore {
             model: Some(self.model.clone()),
             etiquette_nom: Some(self.etiquette_nom.clone()),
             send_delay_ms: Some(self.send_delay_ms),
+            accent_color: self.accent_color.clone(),
+            secondary_color: self.secondary_color.clone(),
+            default_layout: self.default_layout.clone(),
+            body_font: self.body_font.clone(),
+            title_font: self.title_font.clone(),
+            body_font_size: self.body_font_size.clone(),
+            line_height: self.line_height.clone(),
+            section_spacing: self.section_spacing.clone(),
             default_audience_filters: Some(self.default_audience_filters.clone()),
         })
     }
@@ -228,6 +327,14 @@ impl Default for NewsletterStore {
             model: DEFAULT_MISTRAL_MODEL.to_string(),
             etiquette_nom: "Newsletter".to_string(),
             send_delay_ms: 3000,
+            accent_color: None,
+            secondary_color: None,
+            default_layout: None,
+            body_font: None,
+            title_font: None,
+            body_font_size: None,
+            line_height: None,
+            section_spacing: None,
             default_audience_filters: NewsletterAudienceFilters::default(),
         }
     }

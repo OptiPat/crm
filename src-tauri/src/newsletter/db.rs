@@ -51,6 +51,7 @@ pub struct NewsletterAudienceMember {
     pub email: Option<String>,
     pub categorie: String,
     pub filleul_categorie: Option<String>,
+    pub statut_suivi: Option<String>,
     pub has_email: bool,
     pub unsubscribed: bool,
 }
@@ -170,6 +171,7 @@ pub struct ContactAudienceRow {
     pub prenom: String,
     pub categorie: String,
     pub filleul_categorie: Option<String>,
+    pub statut_suivi: Option<String>,
     pub newsletter_desinscrit_at: Option<i64>,
     pub email: Option<String>,
 }

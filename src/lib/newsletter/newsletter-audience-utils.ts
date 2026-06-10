@@ -4,6 +4,7 @@ import type {
   NewsletterAudiencePreview,
   NewsletterEligibleContact,
 } from "@/lib/api/tauri-newsletter";
+import { DEFAULT_NEWSLETTER_AUDIENCE_FILTERS } from "@/lib/api/tauri-newsletter";
 
 export function mergeExcludeContactIds(
   settingsExcludeContactIds: number[],
@@ -28,6 +29,34 @@ export function mergeNewsletterAudienceFilters(
   };
 }
 
+export function isNewsletterSuspectMember(member: NewsletterAudienceMember): boolean {
+  return (
+    member.categorie === "SUSPECT_CLIENT" ||
+    member.categorie === "SUSPECT_FILLEUL" ||
+    member.filleulCategorie === "SUSPECT_FILLEUL"
+  );
+}
+
+export function isNewsletterArchivedMember(member: NewsletterAudienceMember): boolean {
+  return member.statutSuivi === "ARCHIVE" || member.statutSuivi === "EN_PAUSE";
+}
+
+export function matchesNewsletterCategoryFilters(
+  member: NewsletterAudienceMember,
+  filters: NewsletterAudienceFilters
+): boolean {
+  if (filters.excludePrescripteurs && member.categorie === "PRESCRIPTEUR") {
+    return false;
+  }
+  if (filters.excludeSuspects && isNewsletterSuspectMember(member)) {
+    return false;
+  }
+  if (filters.excludeArchived && isNewsletterArchivedMember(member)) {
+    return false;
+  }
+  return true;
+}
+
 export function isNewsletterMemberSelectable(member: NewsletterAudienceMember): boolean {
   return member.hasEmail && !member.unsubscribed;
 }
@@ -41,19 +70,26 @@ export function isNewsletterMemberSettingsExcluded(
 
 export function isNewsletterMemberEditionSelectable(
   member: NewsletterAudienceMember,
-  settingsExcludeContactIds: number[]
+  settingsExcludeContactIds: number[],
+  categoryFilters: NewsletterAudienceFilters = DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
 ): boolean {
   return (
     isNewsletterMemberSelectable(member) &&
-    !isNewsletterMemberSettingsExcluded(member, settingsExcludeContactIds)
+    !isNewsletterMemberSettingsExcluded(member, settingsExcludeContactIds) &&
+    matchesNewsletterCategoryFilters(member, categoryFilters)
   );
 }
 
 export function isNewsletterMemberSelected(
   member: NewsletterAudienceMember,
-  excludeContactIds: number[]
+  excludeContactIds: number[],
+  categoryFilters: NewsletterAudienceFilters = DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
 ): boolean {
-  return isNewsletterMemberSelectable(member) && !excludeContactIds.includes(member.contactId);
+  return (
+    isNewsletterMemberSelectable(member) &&
+    matchesNewsletterCategoryFilters(member, categoryFilters) &&
+    !excludeContactIds.includes(member.contactId)
+  );
 }
 
 export function toggleNewsletterMemberSelection(
@@ -77,11 +113,14 @@ export function setNewsletterMembersSelection(
   members: NewsletterAudienceMember[],
   excludeContactIds: number[],
   selected: boolean,
-  settingsExcludeContactIds: number[] = []
+  settingsExcludeContactIds: number[] = [],
+  categoryFilters: NewsletterAudienceFilters = DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
 ): number[] {
   const ids = new Set(excludeContactIds);
   for (const member of members) {
-    if (!isNewsletterMemberEditionSelectable(member, settingsExcludeContactIds)) continue;
+    if (!isNewsletterMemberEditionSelectable(member, settingsExcludeContactIds, categoryFilters)) {
+      continue;
+    }
     if (selected) {
       ids.delete(member.contactId);
     } else {
@@ -94,8 +133,10 @@ export function setNewsletterMembersSelection(
 export function computeNewsletterAudiencePreview(
   members: NewsletterAudienceMember[],
   editionFilters: NewsletterAudienceFilters,
-  settingsExcludeContactIds: number[] = []
+  settingsExcludeContactIds: number[] = [],
+  settingsAudienceFilters: NewsletterAudienceFilters = DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
 ): NewsletterAudiencePreview {
+  const categoryFilters = mergeNewsletterAudienceFilters(settingsAudienceFilters, editionFilters);
   const effectiveExclude = mergeExcludeContactIds(
     settingsExcludeContactIds,
     editionFilters.excludeContactIds
@@ -114,9 +155,14 @@ export function computeNewsletterAudiencePreview(
       editionSet.has(m.contactId) &&
       !settingsSet.has(m.contactId)
   ).length;
+  const categoryExcluded = members.filter(
+    (m) =>
+      isNewsletterMemberSelectable(m) &&
+      !matchesNewsletterCategoryFilters(m, categoryFilters)
+  ).length;
 
   const recipients: NewsletterEligibleContact[] = members
-    .filter((m) => isNewsletterMemberSelected(m, effectiveExclude))
+    .filter((m) => isNewsletterMemberSelected(m, effectiveExclude, categoryFilters))
     .map((m) => ({
       contactId: m.contactId,
       nom: m.nom,
@@ -131,7 +177,7 @@ export function computeNewsletterAudiencePreview(
     withEmail,
     withoutEmail: members.length - withEmail,
     permanentExcluded,
-    excludedByFilters: settingsExcluded + editionOnlyExcluded,
+    excludedByFilters: settingsExcluded + editionOnlyExcluded + categoryExcluded,
     eligible: recipients.length,
     recipients,
   };

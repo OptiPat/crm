@@ -122,6 +122,7 @@ export function buildVariablesFromContact(
     nom: contact.nom ?? "",
     email: contact.email ?? "",
     telephone: contact.telephone ?? "",
+    cabinet: cgp?.cabinet?.trim() ?? "",
     cgp_nom: cgp?.nom ?? "",
     cgp_prenom: cgp?.prenom ?? "",
     cgp_telephone: cgp?.telephone ?? "",

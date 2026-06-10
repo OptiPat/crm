@@ -22,6 +22,7 @@ export interface NewsletterAudienceMember {
   email?: string | null;
   categorie: string;
   filleulCategorie?: string | null;
+  statutSuivi?: string | null;
   hasEmail: boolean;
   unsubscribed: boolean;
 }
@@ -111,12 +112,58 @@ export interface LastNewsletterEditionDuplicate {
   preparedAt: number;
 }
 
+export type NewsletterLayout = "magazine" | "minimal" | "alert" | "single";
+
+export type NewsletterImagePlacement =
+  | { type: "header" }
+  | { type: "after_intro" }
+  | { type: "before_cta" }
+  | { type: "before_section"; index: number }
+  | { type: "after_section"; index: number };
+
+export interface NewsletterPlacedImage {
+  id: string;
+  dataUrl: string;
+  placement: NewsletterImagePlacement;
+  alt?: string;
+}
+
+export type NewsletterRichBlockType = "quote" | "stat" | "takeaway" | "divider";
+
+export interface NewsletterRichBlock {
+  id: string;
+  type: NewsletterRichBlockType;
+  placement: NewsletterImagePlacement;
+  /** Citation ou encart à retenir */
+  text?: string;
+  attribution?: string;
+  /** Chiffre clé */
+  value?: string;
+  label?: string;
+  /** Titre encart (défaut : À retenir) */
+  title?: string;
+}
+
+export type NewsletterBodyFont = "classic" | "modern" | "system";
+export type NewsletterTitleFont = "classic" | "modern";
+export type NewsletterBodyFontSize = "sm" | "md" | "lg";
+export type NewsletterLineHeight = "normal" | "relaxed";
+export type NewsletterSectionSpacing = "compact" | "normal" | "airy";
+
 export interface NewsletterSettings {
   apiKeyConfigured: boolean;
   stylePrompt: string;
   model: string;
   etiquetteNom: string;
   sendDelayMs: number;
+  accentColor?: string | null;
+  secondaryColor?: string | null;
+  defaultLayout?: NewsletterLayout | null;
+  bodyFont?: NewsletterBodyFont | null;
+  titleFont?: NewsletterTitleFont | null;
+  bodyFontSize?: NewsletterBodyFontSize | null;
+  lineHeight?: NewsletterLineHeight | null;
+  sectionSpacing?: NewsletterSectionSpacing | null;
   defaultAudienceFilters: NewsletterAudienceFilters;
 }
 
@@ -126,6 +173,14 @@ export interface NewsletterSettingsInput {
   model?: string | null;
   etiquetteNom?: string | null;
   sendDelayMs?: number | null;
+  accentColor?: string | null;
+  secondaryColor?: string | null;
+  defaultLayout?: NewsletterLayout | null;
+  bodyFont?: NewsletterBodyFont | null;
+  titleFont?: NewsletterTitleFont | null;
+  bodyFontSize?: NewsletterBodyFontSize | null;
+  lineHeight?: NewsletterLineHeight | null;
+  sectionSpacing?: NewsletterSectionSpacing | null;
   defaultAudienceFilters?: NewsletterAudienceFilters | null;
 }
 
@@ -133,15 +188,37 @@ export interface GeneratedNewsletterSection {
   title: string;
   body: string;
   highlight?: boolean;
+  imageUrl?: string;
 }
 
 export interface GeneratedNewsletterContent {
   subject: string;
   preheader?: string;
   editionTitle?: string;
+  /** @deprecated Préférer images[] */
+  headerImageUrl?: string;
+  layout?: NewsletterLayout;
+  images?: NewsletterPlacedImage[];
+  blocks?: NewsletterRichBlock[];
   intro: string;
   sections: GeneratedNewsletterSection[];
   cta: string;
+  /** Libellé du bouton CTA (optionnel) */
+  ctaLabel?: string;
+  /** URL du bouton CTA (optionnel — fusion agenda si texte RDV) */
+  ctaUrl?: string;
+  /** false = pas de bloc CTA dans le mail */
+  includeCta?: boolean;
+  /** false = pas de bloc « Votre conseiller » */
+  includeConseiller?: boolean;
+  /** true = téléphone profil CGP dans le pied de page */
+  includeFooterPhone?: boolean;
+  /** true = site web profil CGP dans le pied de page */
+  includeFooterSite?: boolean;
+  /** true = adresse postale profil CGP dans le pied de page */
+  includeFooterAddress?: boolean;
+  conseillerName?: string;
+  conseillerPhone?: string;
 }
 
 export interface EnsureNewsletterEtiquetteResult {
