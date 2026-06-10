@@ -109,6 +109,15 @@ const MUTED_COLOR = "#8a8a8a";
 
 const HIGHLIGHT_BG = "#faf6f0";
 
+function buildCtaButtonAnchor(
+  label: string,
+  href: string,
+  accent: string,
+  typo: ResolvedNewsletterTypography
+): string {
+  return `<a class="nl-cta-btn" href="${escapeHtml(href)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;padding:14px 28px;border-radius:4px;font-family:${typo.bodyFontFamily};font-size:15px;font-weight:600;letter-spacing:0.01em;box-shadow:0 2px 12px rgba(15,39,68,0.18);">${escapeHtml(label)}</a>`;
+}
+
 function shouldShowCta(content: GeneratedNewsletterContent): boolean {
   return content.includeCta !== false && Boolean(content.cta?.trim());
 }
@@ -348,9 +357,10 @@ function buildHeaderBlock(
       </td>`
     : "";
 
+  const headerMetaFont = typo.titleFontFamily;
   const cabinetLine =
     logo ? "" : (
-      `<p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:rgba(255,255,255,0.82);text-transform:uppercase;letter-spacing:0.14em;font-weight:600;">${cabinet}</p>`
+      `<p style="margin:0;font-family:${headerMetaFont};font-size:11px;color:rgba(255,255,255,0.82);text-transform:uppercase;letter-spacing:0.14em;font-weight:600;">${cabinet}</p>`
     );
 
   return `<tr><td style="background:${accent};padding:0;">
@@ -362,9 +372,9 @@ function buildHeaderBlock(
 ${logoCell}
 <td style="vertical-align:middle;">
 ${cabinetLine}
-<p style="margin:${logo ? "0" : "8px 0 0 0"};font-family:Arial,Helvetica,sans-serif;font-size:10px;color:rgba(255,255,255,0.72);text-transform:uppercase;letter-spacing:0.18em;font-weight:600;">Lettre patrimoniale</p>
+<p style="margin:${logo ? "0" : "8px 0 0 0"};font-family:${headerMetaFont};font-size:10px;color:rgba(255,255,255,0.72);text-transform:uppercase;letter-spacing:0.18em;font-weight:600;">Lettre patrimoniale</p>
 ${titleLine}
-<p style="margin:6px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:11px;color:rgba(255,255,255,0.88);letter-spacing:0.04em;font-weight:400;text-transform:capitalize;">${editionLabel}</p>
+<p style="margin:6px 0 0 0;font-family:${headerMetaFont};font-size:11px;color:rgba(255,255,255,0.88);letter-spacing:0.04em;font-weight:400;text-transform:capitalize;">${editionLabel}</p>
 </td>
 </tr>
 </table>
@@ -447,7 +457,7 @@ function buildCtaButtonBlock(
     ? `<p style="margin:0 0 16px 0;font-family:${typo.bodyFontFamily};font-size:${typo.bodyFontSize};line-height:${typo.lineHeight};color:${BODY_COLOR};">${escapeHtml(introAboveButton).replace(/\n/g, "<br>")}</p>`
     : "";
   return `<tr><td class="nl-cta-pad" style="padding:8px 40px 28px 40px;text-align:center;">
-${intro}<a class="nl-cta-btn" href="${escapeHtml(href)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:2px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;box-shadow:0 2px 12px rgba(15,39,68,0.22);">${escapeHtml(label)}</a>
+${intro}${buildCtaButtonAnchor(label, href, accent, typo)}
 </td></tr>`;
 }
 
@@ -530,7 +540,8 @@ ${phoneLine}
 function buildAgendaBlock(
   options: NewsletterHtmlOptions,
   accent: string,
-  showAgendaButton: boolean
+  showAgendaButton: boolean,
+  typo: ResolvedNewsletterTypography
 ): string {
   const agendaUrl = options.agendaUrl?.trim();
   const email = options.cgpEmail?.trim();
@@ -539,7 +550,7 @@ function buildAgendaBlock(
 
   const agendaBtn =
     showAgendaButton && agendaUrl
-      ? `<a class="nl-cta-btn" href="${escapeHtml(agendaUrl)}" style="display:inline-block;background:${accent};color:#ffffff;text-decoration:none;padding:14px 36px;border-radius:2px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;box-shadow:0 2px 12px rgba(15,39,68,0.22);">Prendre rendez-vous</a>`
+      ? buildCtaButtonAnchor("Prendre rendez-vous", agendaUrl, accent, typo)
       : "";
 
 
@@ -764,7 +775,7 @@ ${blocksHtmlAt(blocks, { type: "before_cta" }, accent, secondary, typo)}
 
 ${ctaHtml}
 
-${showAgendaBlock ? buildAgendaBlock(options, accent, showAgendaButton) : ""}
+${showAgendaBlock ? buildAgendaBlock(options, accent, showAgendaButton, typo) : ""}
 
 ${buildConseillerBlock(content, options, accent, typo)}
 

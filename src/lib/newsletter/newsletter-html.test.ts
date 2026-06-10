@@ -68,6 +68,28 @@ describe("newsletter-html", () => {
     expect(html).toContain("12 rue Test, 75002 Paris");
   });
 
+  it("uses softer CTA button styling", () => {
+    const html = buildNewsletterHtml(
+      { ...sampleContent, cta: "Prenez rendez-vous.", layout: "minimal" },
+      { agendaUrl: "https://calendly.com/test" }
+    );
+    const btn = html.match(/class="nl-cta-btn"[^>]*>/)?.[0] ?? "";
+    expect(btn).toContain("border-radius:4px");
+    expect(btn).not.toContain("text-transform:uppercase");
+    expect(html).toContain("Prendre rendez-vous");
+  });
+
+  it("uses title font in header meta labels", () => {
+    const html = buildNewsletterHtml(sampleContent, {
+      cabinetName: "Cabinet Test",
+      titleFont: "classic",
+    });
+    const metaBlock = html.match(
+      /Lettre patrimoniale[\s\S]{0,200}/
+    )?.[0] ?? "";
+    expect(metaBlock).toContain("font-family:Georgia");
+  });
+
   it("fuses RDV CTA with agenda into one button only", () => {
     const html = buildNewsletterHtml(
       { ...sampleContent, cta: "Prenez rendez-vous pour en discuter." },
