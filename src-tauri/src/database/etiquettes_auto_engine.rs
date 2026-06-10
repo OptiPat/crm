@@ -585,6 +585,12 @@ impl Database {
 
         let _ = self.sync_pending_email_dates_for_all_active_campaigns();
 
+        for contact in &contacts {
+            if let Some(cid) = contact.id {
+                total_assigned += self.sync_template_email_triggers_for_contact(cid)?;
+            }
+        }
+
         if total_assigned > 0 {
             println!(
                 "🏷️ Moteur automatique (complet): {} nouvelles attributions",

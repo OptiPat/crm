@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, ChevronDown, ChevronUp, Home, ArrowLeft, TreePine } from "lucide-react";
+import { Users, ChevronDown, ChevronUp, Home, ArrowLeft, TreePine, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
@@ -12,12 +12,19 @@ import {
 import { textMatchesSearch } from "@/lib/search-utils";
 import { indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { getAllFamilles } from "@/lib/api/tauri-familles";
 import { buildFamilleGroups } from "@/lib/familles/build-famille-groups";
 import type { FamilleGroup } from "@/lib/familles/famille-types";
+import {
+  deleteFamilleIfEmpty,
+  removeContactFromFamille,
+} from "@/lib/familles/famille-members";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { FamilleMemberTree } from "@/components/familles/FamilleMemberTree";
 import { FamilleSummaryCard } from "@/components/familles/FamilleSummaryCard";
 import { FamilleDetailHeader } from "@/components/familles/FamilleDetailHeader";
+import { FamilleCreateModal } from "@/components/familles/FamilleCreateModal";
+import { FamilleAddMemberModal } from "@/components/familles/FamilleAddMemberModal";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
@@ -53,23 +60,28 @@ export function Familles({ onNavigate }: FamillesProps) {
   >({});
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [famillesDb, setFamillesDb] = useState<Awaited<ReturnType<typeof getAllFamilles>>>([]);
   const [expandedFamilles, setExpandedFamilles] = useState<Set<string>>(new Set());
-  const [selectedFamilleNom, setSelectedFamilleNom] = useState<string | null>(null);
+  const [selectedFamilleKey, setSelectedFamilleKey] = useState<string | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showContactDetail, setShowContactDetail] = useState(false);
+  const [showCreateFamilleModal, setShowCreateFamilleModal] = useState(false);
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
 
   const isWideLayout = useMediaQuery("(min-width: 1024px)");
   const showSplit =
-    isWideLayout && (selectedFamilleNom != null || selectedContact != null);
+    isWideLayout && (selectedFamilleKey != null || selectedContact != null);
 
   const loadData = useCallback(async () => {
     try {
-      const [dataContacts, dataFoyers] = await Promise.all([
+      const [dataContacts, dataFoyers, dataFamilles] = await Promise.all([
         getAllContacts(),
         getAllFoyers(),
+        getAllFamilles(),
       ]);
       setContacts(dataContacts);
       setFoyers(dataFoyers);
+      setFamillesDb(dataFamilles);
 
       const allInv = await getAllInvestissements();
       const { byContactId, byFoyerId } = indexInvestissementsByOwner(allInv);
@@ -111,10 +123,11 @@ export function Familles({ onNavigate }: FamillesProps) {
       buildFamilleGroups(
         contacts,
         foyers,
+        famillesDb,
         investissementsByContact,
         investissementsByFoyer
       ),
-    [contacts, foyers, investissementsByContact, investissementsByFoyer]
+    [contacts, foyers, famillesDb, investissementsByContact, investissementsByFoyer]
   );
 
   const excludedHomonyms = useMemo(
@@ -140,12 +153,12 @@ export function Familles({ onNavigate }: FamillesProps) {
 
   const selectedFamille = useMemo(
     () =>
-      selectedFamilleNom
-        ? (filteredFamilles.find((f) => f.nom === selectedFamilleNom) ??
-          familleGroups.find((f) => f.nom === selectedFamilleNom) ??
+      selectedFamilleKey
+        ? (filteredFamilles.find((f) => f.key === selectedFamilleKey) ??
+          familleGroups.find((f) => f.key === selectedFamilleKey) ??
           null)
         : null,
-    [selectedFamilleNom, filteredFamilles, familleGroups]
+    [selectedFamilleKey, filteredFamilles, familleGroups]
   );
 
   const totalPatrimoineAvecMoi = useMemo(
@@ -156,23 +169,23 @@ export function Familles({ onNavigate }: FamillesProps) {
   const memberCount = (f: FamilleGroup) =>
     f.membres.filter((m) => !m.isSpouse).length;
 
-  const toggleExpand = (familleNom: string) => {
+  const toggleExpand = (familleKey: string) => {
     const next = new Set(expandedFamilles);
-    if (next.has(familleNom)) next.delete(familleNom);
-    else next.add(familleNom);
+    if (next.has(familleKey)) next.delete(familleKey);
+    else next.add(familleKey);
     setExpandedFamilles(next);
   };
 
   const openFamille = (famille: FamilleGroup) => {
-    setSelectedFamilleNom(famille.nom);
+    setSelectedFamilleKey(famille.key);
     setSelectedContact(null);
     if (!isWideLayout) {
-      setExpandedFamilles((prev) => new Set(prev).add(famille.nom));
+      setExpandedFamilles((prev) => new Set(prev).add(famille.key));
     }
   };
 
   const closeSplit = () => {
-    setSelectedFamilleNom(null);
+    setSelectedFamilleKey(null);
     setSelectedContact(null);
     setShowContactDetail(false);
   };
@@ -200,6 +213,27 @@ export function Familles({ onNavigate }: FamillesProps) {
       );
     } catch (error) {
       console.error("Erreur mise à jour rôle famille:", error);
+    }
+  };
+
+  const handleRemoveFromManualFamille = async (
+    contact: Contact,
+    famille: FamilleGroup
+  ) => {
+    const msg = `Retirer ${contact.prenom} ${contact.nom} de la famille « ${famille.nom} » ?`;
+    if (!confirm(msg)) return;
+    try {
+      await removeContactFromFamille(contact);
+      const nextContacts = contacts.map((c) =>
+        c.id === contact.id ? { ...c, famille_id: null } : c
+      );
+      await deleteFamilleIfEmpty(famille.familleId!, nextContacts);
+      await loadData();
+      setSelectedFamilleKey((prev) => (prev === famille.key ? null : prev));
+      toast.success(`${contact.prenom} ${contact.nom} retiré de la famille`);
+    } catch (error) {
+      console.error("Erreur retrait membre famille:", error);
+      toast.error("Impossible de retirer ce membre");
     }
   };
 
@@ -291,13 +325,21 @@ export function Familles({ onNavigate }: FamillesProps) {
             Familles
           </h2>
           <p className="text-muted-foreground mt-1 text-sm max-w-xl">
-            Regroupement automatique par nom de famille (2 personnes ou plus).{" "}
+            Familles créées manuellement ou regroupées automatiquement par nom (2+ homonymes).{" "}
             <span className="text-foreground/80 tabular-nums">
               {filteredFamilles.length} famille{filteredFamilles.length !== 1 ? "s" : ""}
             </span>{" "}
             affichée{filteredFamilles.length !== 1 ? "s" : ""}.
           </p>
         </div>
+        <Button
+          type="button"
+          className="gap-1.5 shrink-0"
+          onClick={() => setShowCreateFamilleModal(true)}
+        >
+          <Plus className="h-4 w-4" />
+          Créer une famille
+        </Button>
         {!showSplit && filteredFamilles.length > 0 && (
           <p className="text-sm text-muted-foreground hidden lg:block">
             <TreePine className="inline h-4 w-4 mr-1 text-primary/70" />
@@ -384,7 +426,7 @@ export function Familles({ onNavigate }: FamillesProps) {
           <CardDescription>
             {searchQuery
               ? `${filteredFamilles.length} résultat(s) pour « ${searchQuery} »`
-              : "Regroupement par nom — retirez les homonymes qui ne sont pas de la même famille"}
+              : "Automatique par nom ou créée manuellement — choisissez qui regrouper"}
           </CardDescription>
         </CardHeader>
 
@@ -407,31 +449,40 @@ export function Familles({ onNavigate }: FamillesProps) {
                       <Users className="h-12 w-12 mx-auto opacity-35" />
                       <p className="font-medium text-foreground/80">Aucune famille détectée</p>
                       <p className="text-sm max-w-sm mx-auto">
-                        Les familles apparaissent lorsque au moins deux contacts partagent le
-                        même nom.
+                        Créez une famille manuellement ou attendez deux homonymes pour un
+                        regroupement automatique.
                       </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                        onClick={() => setShowCreateFamilleModal(true)}
+                      >
+                        Créer une famille
+                      </Button>
                     </div>
                   )}
                 </div>
               ) : showSplit ? (
                 filteredFamilles.map((famille) => (
                   <FamilleSummaryCard
-                    key={famille.nom}
+                    key={famille.key}
                     famille={famille}
                     memberCount={memberCount(famille)}
                     compact
                     selected={
-                      selectedFamilleNom === famille.nom && !selectedContact
+                      selectedFamilleKey === famille.key && !selectedContact
                     }
                     onClick={() => openFamille(famille)}
                   />
                 ))
               ) : (
                 filteredFamilles.map((famille) => {
-                  const expanded = expandedFamilles.has(famille.nom);
+                  const expanded = expandedFamilles.has(famille.key);
                   return (
                     <div
-                      key={famille.nom}
+                      key={famille.key}
                       className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-sm"
                     >
                       <div className="flex items-stretch">
@@ -445,7 +496,7 @@ export function Familles({ onNavigate }: FamillesProps) {
                         <button
                           type="button"
                           className="px-4 border-l border-border/60 hover:bg-muted/50 flex items-center shrink-0"
-                          onClick={() => toggleExpand(famille.nom)}
+                          onClick={() => toggleExpand(famille.key)}
                           aria-expanded={expanded}
                           aria-label={expanded ? "Replier" : "Déplier les membres"}
                         >
@@ -461,9 +512,14 @@ export function Familles({ onNavigate }: FamillesProps) {
                           <FamilleMemberTree
                             famille={famille}
                             foyers={foyers}
+                            isManual={famille.isManual}
                             onRoleChange={handleRoleFamilleChange}
                             onMemberClick={openMember}
-                            onExcludeFromFamille={handleExcludeFromFamille}
+                            onExcludeFromFamille={(c) =>
+                              famille.isManual
+                                ? void handleRemoveFromManualFamille(c, famille)
+                                : void handleExcludeFromFamille(c)
+                            }
                             showTitle={false}
                           />
                         </div>
@@ -480,7 +536,7 @@ export function Familles({ onNavigate }: FamillesProps) {
                 {selectedContact ? (
                   <SplitDetailStack
                     back={
-                      selectedFamilleNom ? (
+                      selectedFamille ? (
                         <Button
                           type="button"
                           variant="outline"
@@ -489,7 +545,7 @@ export function Familles({ onNavigate }: FamillesProps) {
                           onClick={() => setSelectedContact(null)}
                         >
                           <ArrowLeft className="h-4 w-4" />
-                          Famille {selectedFamilleNom}
+                          Famille {selectedFamille.nom}
                         </Button>
                       ) : undefined
                     }
@@ -515,14 +571,24 @@ export function Familles({ onNavigate }: FamillesProps) {
                       famille={selectedFamille}
                       memberCount={memberCount(selectedFamille)}
                       onClose={closeSplit}
+                      onAddMember={
+                        selectedFamille.isManual
+                          ? () => setShowAddMemberModal(true)
+                          : undefined
+                      }
                     />
                     <div className="min-h-0 flex-1 overflow-y-auto p-4">
                       <FamilleMemberTree
                         famille={selectedFamille}
                         foyers={foyers}
+                        isManual={selectedFamille.isManual}
                         onRoleChange={handleRoleFamilleChange}
                         onMemberClick={openMember}
-                        onExcludeFromFamille={handleExcludeFromFamille}
+                        onExcludeFromFamille={(c) =>
+                          selectedFamille.isManual
+                            ? void handleRemoveFromManualFamille(c, selectedFamille)
+                            : void handleExcludeFromFamille(c)
+                        }
                       />
                     </div>
                   </div>
@@ -533,6 +599,23 @@ export function Familles({ onNavigate }: FamillesProps) {
           />
         </CardContent>
       </Card>
+
+      <FamilleCreateModal
+        open={showCreateFamilleModal}
+        onOpenChange={setShowCreateFamilleModal}
+        onSuccess={() => void loadData()}
+      />
+      {selectedFamille?.isManual && selectedFamille.familleId != null && (
+        <FamilleAddMemberModal
+          open={showAddMemberModal}
+          onOpenChange={setShowAddMemberModal}
+          famille={selectedFamille}
+          existingMemberIds={selectedFamille.membres
+            .filter((m) => !m.isSpouse)
+            .map((m) => m.contact.id!)}
+          onSuccess={() => void loadData()}
+        />
+      )}
 
       {!isWideLayout && selectedContact && (
         <ContactDetail

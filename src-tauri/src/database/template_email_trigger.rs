@@ -94,6 +94,11 @@ impl TemplateEmailTriggerConfig {
     }
 }
 
+/// Déclencheurs périodiques : hors période, la file modèle est effacée (comme une étiquette auto).
+pub fn template_trigger_resets_outside_period(condition_type: &str) -> bool {
+    condition_type == "PERIODE_ANNEE"
+}
+
 pub fn parse_template_email_trigger(variables: Option<&str>) -> TemplateEmailTriggerConfig {
     let Some(raw) = variables.filter(|s| !s.trim().is_empty()) else {
         return TemplateEmailTriggerConfig::default();
@@ -134,5 +139,16 @@ pub fn etiquette_schedule_from_trigger(trigger: &TemplateEmailTriggerConfig) -> 
         pipeline_actif: false,
         created_at: 0,
         updated_at: 0,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::template_trigger_resets_outside_period;
+
+    #[test]
+    fn periodic_year_trigger_resets_outside_period() {
+        assert!(template_trigger_resets_outside_period("PERIODE_ANNEE"));
+        assert!(!template_trigger_resets_outside_period("DELAI_SANS_CONTACT"));
     }
 }

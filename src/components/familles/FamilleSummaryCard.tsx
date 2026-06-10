@@ -57,6 +57,11 @@ export function FamilleSummaryCard({
             <Badge variant="secondary" className="text-xs font-normal tabular-nums">
               {memberCount} membre{memberCount > 1 ? "s" : ""}
             </Badge>
+            {famille.isManual && (
+              <Badge variant="outline" className="text-xs font-normal">
+                Manuelle
+              </Badge>
+            )}
             {famille.foyers.length > 0 && (
               <Badge variant="outline" className="text-xs gap-1 font-normal">
                 <Home className="h-3 w-3" />

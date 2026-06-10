@@ -28,6 +28,7 @@ type FamilleMemberTreeProps = {
   onExcludeFromFamille?: (contact: Contact) => void;
   selectedContactId?: number;
   showTitle?: boolean;
+  isManual?: boolean;
 };
 
 function formatDate(timestamp?: number): string {
@@ -99,6 +100,7 @@ function MemberCard({
   onRoleChange,
   onMemberClick,
   onExcludeFromFamille,
+  excludeTitle = "Retirer du regroupement (homonyme)",
 }: {
   membre: MemberWithInvestments;
   foyer?: Foyer;
@@ -106,6 +108,7 @@ function MemberCard({
   onRoleChange: (contact: Contact, newRole: string) => void;
   onMemberClick: (contact: Contact) => void;
   onExcludeFromFamille?: (contact: Contact) => void;
+  excludeTitle?: string;
 }) {
   const [investOpen, setInvestOpen] = useState(false);
   const hasInvest = membre.investissements.length > 0;
@@ -209,8 +212,8 @@ function MemberCard({
               variant="ghost"
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-destructive"
-              title="Retirer du regroupement (homonyme)"
-              aria-label={`Retirer ${membre.contact.prenom} ${membre.contact.nom} du regroupement`}
+              title={excludeTitle}
+              aria-label={`${excludeTitle} — ${membre.contact.prenom} ${membre.contact.nom}`}
               onClick={() => onExcludeFromFamille(membre.contact)}
             >
               <UserMinus className="h-4 w-4" />
@@ -256,6 +259,7 @@ export function FamilleMemberTree({
   onExcludeFromFamille,
   selectedContactId,
   showTitle = true,
+  isManual = false,
 }: FamilleMemberTreeProps) {
   const getFoyerForMember = (contact: Contact): Foyer | undefined => {
     if (!contact.foyer_id) return undefined;
@@ -266,8 +270,9 @@ export function FamilleMemberTree({
     <div className="space-y-3">
       {showTitle && (
         <p className="text-xs text-muted-foreground">
-          Cliquez sur un membre pour ouvrir sa fiche. Icône − pour retirer un homonyme du
-          regroupement.
+          {isManual
+            ? "Cliquez sur un membre pour ouvrir sa fiche. Icône − pour le retirer de cette famille."
+            : "Cliquez sur un membre pour ouvrir sa fiche. Icône − pour retirer un homonyme du regroupement."}
         </p>
       )}
       {famille.membres.map((membre) => (
@@ -279,6 +284,11 @@ export function FamilleMemberTree({
           onRoleChange={onRoleChange}
           onMemberClick={onMemberClick}
           onExcludeFromFamille={onExcludeFromFamille}
+          excludeTitle={
+            isManual
+              ? "Retirer de la famille"
+              : "Retirer du regroupement (homonyme)"
+          }
         />
       ))}
     </div>

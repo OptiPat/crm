@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Home, Users, X } from "lucide-react";
+import { Home, UserPlus, Users, X } from "lucide-react";
 import type { FamilleGroup } from "@/lib/familles/famille-types";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 
@@ -8,12 +8,14 @@ type FamilleDetailHeaderProps = {
   famille: FamilleGroup;
   memberCount: number;
   onClose: () => void;
+  onAddMember?: () => void;
 };
 
 export function FamilleDetailHeader({
   famille,
   memberCount,
   onClose,
+  onAddMember,
 }: FamilleDetailHeaderProps) {
   return (
     <div className="shrink-0 border-b border-border/60 bg-muted/30 px-4 py-3 space-y-3">
@@ -48,10 +50,21 @@ export function FamilleDetailHeader({
             {famille.foyers.map((f) => f.nom).join(", ")}
           </Badge>
         )}
+        {famille.isManual && (
+          <Badge variant="outline" className="font-normal">
+            Créée manuellement
+          </Badge>
+        )}
         <Badge className="bg-emerald-100 text-emerald-800 border-emerald-200/80 font-normal tabular-nums">
           {formatEuroCentimes(famille.patrimoineAvecMoi)} avec moi
         </Badge>
       </div>
+      {onAddMember && (
+        <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={onAddMember}>
+          <UserPlus className="h-4 w-4" />
+          Ajouter un membre
+        </Button>
+      )}
     </div>
   );
 }

@@ -3,7 +3,8 @@
 use super::email_schedule::resolve_email_date_prevue_for_contact;
 use super::models::{Contact, EtiquetteEmailQueueItem};
 use super::template_email_trigger::{
-    etiquette_schedule_from_trigger, parse_template_email_trigger, TemplateEmailTriggerConfig,
+    etiquette_schedule_from_trigger, parse_template_email_trigger,
+    template_trigger_resets_outside_period, TemplateEmailTriggerConfig,
 };
 use super::Database;
 use rusqlite::{params, Result};
@@ -81,17 +82,6 @@ impl Database {
         email_date_prevue: Option<i64>,
         a_chaque_souscription: bool,
     ) -> Result<bool> {
-        if !a_chaque_souscription {
-            let exists: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1 AND template_id = ?2",
-                params![contact_id, template_id],
-                |row| row.get(0),
-            )?;
-            if exists > 0 {
-                return Ok(false);
-            }
-        }
-
         let existing_id: Option<i64> = if a_chaque_souscription {
             self.conn
                 .query_row(
@@ -123,6 +113,7 @@ impl Database {
                  WHERE id = ?3",
                 params![eligible_at, email_date_prevue, id],
             )?;
+            Ok(false)
         } else {
             self.conn.execute(
                 "INSERT INTO contact_template_envois (
@@ -130,8 +121,22 @@ impl Database {
                  ) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![contact_id, template_id, investissement_id, eligible_at, email_date_prevue],
             )?;
+            Ok(true)
         }
-        Ok(true)
+    }
+
+    /// Hors éligibilité (hors période, mauvaise catégorie…) : efface la campagne modèle périodique pour la saison suivante.
+    fn clear_periodic_template_envoi(
+        &self,
+        contact_id: i64,
+        template_id: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM contact_template_envois
+             WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL",
+            params![contact_id, template_id],
+        )?;
+        Ok(())
     }
 
     /// Règles modèle (hors « nouvelle souscription ») : même moteur que les étiquettes auto.
@@ -158,20 +163,26 @@ impl Database {
             if condition_type == "EVENEMENT_SOUSCRIPTION" {
                 continue;
             }
-            if !Self::contact_matches_auto_categories(&contact, &trigger.categories) {
-                continue;
-            }
+            let category_ok =
+                Self::contact_matches_auto_categories(&contact, &trigger.categories);
             let config_ref = trigger.resolved_condition_config();
-            let matches = self.evaluate_auto_etiquette_condition(
-                &contact,
-                contact_id,
-                condition_type,
-                config_ref.as_ref(),
-                &trigger.categories,
-                now,
-                current_month,
-            )?;
-            if !matches {
+            let condition_ok = if category_ok {
+                self.evaluate_auto_etiquette_condition(
+                    &contact,
+                    contact_id,
+                    condition_type,
+                    config_ref.as_ref(),
+                    &trigger.categories,
+                    now,
+                    current_month,
+                )?
+            } else {
+                false
+            };
+            if !(category_ok && condition_ok) {
+                if template_trigger_resets_outside_period(condition_type) {
+                    self.clear_periodic_template_envoi(contact_id, template_id)?;
+                }
                 continue;
             }
 

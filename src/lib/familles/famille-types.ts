@@ -20,7 +20,12 @@ export interface MemberWithInvestments {
 }
 
 export interface FamilleGroup {
+  /** Identifiant stable pour la sélection UI (`auto:MARTIN` ou `manual:12`). */
+  key: string;
   nom: string;
+  /** Présent pour les familles créées manuellement. */
+  familleId?: number;
+  isManual: boolean;
   membres: MemberWithInvestments[];
   foyers: Foyer[];
   patrimoineTotal: number;

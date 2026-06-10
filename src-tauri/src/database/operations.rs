@@ -1663,6 +1663,142 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn template_periode_annee_trigger_reschedules_after_period_reset() {
+        use crate::database::models::{NewContact, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let (_, current_month) = crate::database::Database::auto_etiquette_now_and_month();
+        let out_of_period_month = if current_month == 12 {
+            1
+        } else {
+            current_month + 1
+        };
+
+        // Mois volontairement hors période courante → sync efface l'ancienne campagne.
+        let trigger_vars = format!(
+            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{out_of_period_month},\"mois_fin\":{out_of_period_month}}}","categories":["CLIENT"],"delai_jours":0}}}}"#
+        );
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Réduction impôt test période".into(),
+                sujet: "Impôts {{prenom}}".into(),
+                corps: "Corps".into(),
+                categorie: "FISCALITE".into(),
+                variables: Some(trigger_vars.into()),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("client@example.com".into()),
+                ..sample_contact("Martin", "Claire")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.connection()
+            .execute(
+                "INSERT INTO contact_template_envois (
+                    contact_id, template_id, trigger_event_at, email_date_prevue, email_envoye, email_date_envoi
+                 ) VALUES (?1, ?2, ?3, ?4, 1, ?5)",
+                rusqlite::params![cid, tpl.id, now - 86_400, now - 86_400, now - 86_400],
+            )
+            .unwrap();
+
+        db.sync_template_email_triggers_for_contact(cid).unwrap();
+
+        let count_after_reset: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1 AND template_id = ?2",
+                params![cid, tpl.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            count_after_reset, 0,
+            "hors période configurée, la campagne envoyée doit être effacée"
+        );
+
+        // Période incluant le mois courant → nouvelle proposition d'envoi.
+        let in_period_vars = format!(
+            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":0}}}}"#
+        );
+        db.conn
+            .execute(
+                "UPDATE templates_email SET variables = ?1 WHERE id = ?2",
+                params![in_period_vars, tpl.id],
+            )
+            .unwrap();
+
+        let scheduled = db.sync_template_email_triggers_for_contact(cid).unwrap();
+        assert_eq!(scheduled, 1);
+
+        let pending: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois
+                 WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 0",
+                params![cid, tpl.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending, 1, "dans la période, un nouvel envoi doit être proposé");
+    }
+
+    #[test]
+    fn full_recalc_syncs_template_periode_annee_triggers() {
+        use crate::database::models::{NewContact, NewTemplateEmail};
+
+        let db = test_db();
+        let (_, current_month) = crate::database::Database::auto_etiquette_now_and_month();
+        let trigger_vars = format!(
+            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":0}}}}"#
+        );
+        db.create_template_email(NewTemplateEmail {
+            nom: "Réduction impôt recalc bulk".into(),
+            sujet: "Impôts {{prenom}}".into(),
+            corps: "Corps".into(),
+            categorie: "FISCALITE".into(),
+            variables: Some(trigger_vars),
+            agenda_link_id: None,
+            relance_template_id: None,
+            tutoiement_template_id: None,
+        })
+        .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("bulk@example.com".into()),
+                ..sample_contact("Durand", "Paul")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+
+        let pending: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1 AND email_envoye = 0",
+                params![cid],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            pending, 1,
+            "le recalcul complet doit alimenter la file des déclencheurs modèle"
+        );
+    }
+
+    #[test]
     fn delete_template_email_clears_relance_link_on_parent() {
         use crate::database::models::NewTemplateEmail;
 

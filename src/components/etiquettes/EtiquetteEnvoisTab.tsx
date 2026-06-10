@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { EmailSendLogTab } from "@/components/etiquettes/EmailSendLogTab";
 import { EtiquetteBatchSendDialog } from "@/components/etiquettes/EtiquetteBatchSendDialog";
+import { EtiquetteEnvoisSelectionBar } from "@/components/etiquettes/EtiquetteEnvoisSelectionBar";
 import {
   DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
   isTemplateEmailRelanceEnabledForQueue,
@@ -73,6 +74,11 @@ import {
   isRefreshGenerationCurrent,
 } from "@/lib/refresh-generation";
 import { createDebouncedEnvoisReload } from "@/lib/etiquettes/etiquette-envois-reload";
+import {
+  getEnvoisBulkRemoveLabel,
+  runEnvoisBulkRemove,
+  type EnvoisBulkRemoveAction,
+} from "@/lib/etiquettes/etiquette-envois-bulk";
 import { consumeEnvoisContactFocus } from "@/lib/navigation/suivi-navigation";
 import {
   buildSentQueueItem,
@@ -122,8 +128,13 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     useState<EtiquetteEmailQueueItem | null>(null);
   const [dismissConfirmItem, setDismissConfirmItem] =
     useState<EtiquetteEmailQueueItem | null>(null);
+  const [bulkConfirm, setBulkConfirm] = useState<{
+    action: EnvoisBulkRemoveAction;
+    items: EtiquetteEmailQueueItem[];
+  } | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [dismissing, setDismissing] = useState(false);
+  const [bulkRemoving, setBulkRemoving] = useState(false);
   const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(
     initialState.emailStatus
   );
@@ -339,6 +350,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     setConfirmItem(item);
   };
 
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [subTab]);
+
   const toggleSelected = (id: number, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -349,7 +364,54 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   };
 
   const selectedReadyItems = ready.filter((i) => selectedIds.has(i.contact_etiquette_id));
-  const allReadySelected = ready.length > 0 && selectedReadyItems.length === ready.length;
+
+  const openBulkRemove = (
+    action: EnvoisBulkRemoveAction,
+    items: EtiquetteEmailQueueItem[]
+  ) => {
+    const selected = items.filter((i) => selectedIds.has(i.contact_etiquette_id));
+    if (selected.length === 0) return;
+    setBulkConfirm({ action, items: selected });
+  };
+
+  const handleBulkRemoveConfirmed = async () => {
+    if (!bulkConfirm) return;
+    try {
+      setBulkRemoving(true);
+      const { succeeded, failed } = await runEnvoisBulkRemove(
+        bulkConfirm.action,
+        bulkConfirm.items
+      );
+      setBulkConfirm(null);
+      setSelectedIds(new Set());
+      if (failed === 0) {
+        toast.success(
+          bulkConfirm.action === "cancel"
+            ? `${succeeded} envoi${succeeded > 1 ? "s" : ""} retiré${succeeded > 1 ? "s" : ""} de la file`
+            : bulkConfirm.action === "dismiss"
+              ? `${succeeded} envoi${succeeded > 1 ? "s" : ""} retiré${succeeded > 1 ? "s" : ""} définitivement`
+              : `Suivi ignoré pour ${succeeded} envoi${succeeded > 1 ? "s" : ""}`
+        );
+      } else {
+        toast.warning(`${succeeded} OK, ${failed} en erreur`);
+      }
+      await loadQueue({ silent: true });
+      onQueueChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setBulkRemoving(false);
+    }
+  };
+
+  const modeSupportsSelection = (
+    mode: "ready" | "scheduled" | "incomplete" | "cancelled" | "sent" | "followup"
+  ) =>
+    mode === "ready" ||
+    mode === "scheduled" ||
+    mode === "incomplete" ||
+    mode === "cancelled" ||
+    mode === "followup";
 
   const handleMarkResponse = async (
     item: EtiquetteEmailQueueItem,
@@ -480,10 +542,13 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 batchLocked && "opacity-60"
               )}
             >
-              {options.mode === "ready" && (
+              {modeSupportsSelection(options.mode) && (
                 <Checkbox
                   checked={selectedIds.has(item.contact_etiquette_id)}
-                  disabled={batchLocked || batchSendRunning}
+                  disabled={
+                    (options.mode === "ready" && (batchLocked || batchSendRunning)) ||
+                    bulkRemoving
+                  }
                   onCheckedChange={(v) =>
                     toggleSelected(item.contact_etiquette_id, v === true)
                   }
@@ -798,62 +863,98 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             </TabsList>
             <TabsContent value="ready" className="mt-4 space-y-3">
               {ready.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Checkbox
-                    checked={allReadySelected}
-                    disabled={batchSendRunning}
-                    onCheckedChange={(v) => {
-                      if (v === true) {
-                        setSelectedIds(new Set(ready.map((i) => i.contact_etiquette_id)));
-                      } else {
-                        setSelectedIds(new Set());
+                <EtiquetteEnvoisSelectionBar
+                  items={ready}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  selectDisabled={batchSendRunning}
+                  removeDisabled={bulkRemoving || batchSendRunning}
+                  removeLabel={getEnvoisBulkRemoveLabel("cancel")}
+                  onRemoveSelection={() => openBulkRemove("cancel", ready)}
+                  trailing={
+                    <Button
+                      size="sm"
+                      disabled={
+                        selectedReadyItems.length === 0 ||
+                        loading ||
+                        batchSendRunning ||
+                        isEtiquetteEmailSendActive()
                       }
-                    }}
-                  />
-                  <span className="text-sm text-muted-foreground">Tout sélectionner</span>
-                  <Button
-                    size="sm"
-                    className="ml-auto"
-                    disabled={
-                      selectedReadyItems.length === 0 ||
-                      loading ||
-                      batchSendRunning ||
-                      isEtiquetteEmailSendActive()
-                    }
-                    onClick={() => setBatchOpen(true)}
-                  >
-                    <Send className="h-4 w-4 mr-1" />
-                    Envoyer la sélection ({selectedReadyItems.length})
-                  </Button>
-                </div>
+                      onClick={() => setBatchOpen(true)}
+                    >
+                      <Send className="h-4 w-4 mr-1" />
+                      Envoyer la sélection ({selectedReadyItems.length})
+                    </Button>
+                  }
+                />
               )}
               {renderList(ready, { mode: "ready" })}
             </TabsContent>
-            <TabsContent value="scheduled" className="mt-4">
-              <p className="text-xs text-muted-foreground mb-3">
+            <TabsContent value="scheduled" className="mt-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
                 Dates futures des campagnes — passage automatique dans Prêts à envoyer.
               </p>
+              {scheduled.length > 0 && (
+                <EtiquetteEnvoisSelectionBar
+                  items={scheduled}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  removeDisabled={bulkRemoving}
+                  removeLabel={getEnvoisBulkRemoveLabel("cancel")}
+                  onRemoveSelection={() => openBulkRemove("cancel", scheduled)}
+                />
+              )}
               {renderList(scheduled, { mode: "scheduled" })}
             </TabsContent>
-            <TabsContent value="incomplete" className="mt-4">
+            <TabsContent value="incomplete" className="mt-4 space-y-3">
+              {incomplete.length > 0 && (
+                <EtiquetteEnvoisSelectionBar
+                  items={incomplete}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  removeDisabled={bulkRemoving}
+                  removeLabel={getEnvoisBulkRemoveLabel("cancel")}
+                  onRemoveSelection={() => openBulkRemove("cancel", incomplete)}
+                />
+              )}
               {renderList(incomplete, { mode: "incomplete" })}
             </TabsContent>
-            <TabsContent value="cancelled" className="mt-4">
-              <p className="text-xs text-muted-foreground mb-3">
+            <TabsContent value="cancelled" className="mt-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
                 Retirés avec ✕ depuis Prêts à envoyer ou À compléter. <strong>Remettre en file</strong> pour
                 repasser en Prêts. <strong>✕ ici</strong> = ne plus proposer cet envoi (liste
                 propre, étiquette et alerte conservées).
               </p>
+              {cancelled.length > 0 && (
+                <EtiquetteEnvoisSelectionBar
+                  items={cancelled}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  removeDisabled={bulkRemoving}
+                  removeLabel={getEnvoisBulkRemoveLabel("dismiss")}
+                  onRemoveSelection={() => openBulkRemove("dismiss", cancelled)}
+                />
+              )}
               {renderList(cancelled, { mode: "cancelled" })}
             </TabsContent>
             <TabsContent value="sent" className="mt-4">
               {renderList(sent, { mode: "sent" })}
             </TabsContent>
-            <TabsContent value="followup" className="mt-4">
-              <p className="text-xs text-muted-foreground mb-3">
+            <TabsContent value="followup" className="mt-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
                 Délai et horaire définis sur chaque modèle (Templates → onglet Relance). Google
                 connecté : détection mail + Agenda automatique en arrière-plan (toutes les 3 min).
               </p>
+              {followup.length > 0 && (
+                <EtiquetteEnvoisSelectionBar
+                  items={followup}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  removeDisabled={bulkRemoving}
+                  removeLabel={getEnvoisBulkRemoveLabel("dismissFollowup")}
+                  onRemoveSelection={() => openBulkRemove("dismissFollowup", followup)}
+                />
+              )}
               {renderList(followup, { mode: "followup" })}
             </TabsContent>
             <TabsContent value="journal" className="mt-4">
@@ -946,6 +1047,66 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               }}
             >
               {cancelling ? "Retrait…" : "Mettre dans Retirés"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!bulkConfirm}
+        onOpenChange={(open) => {
+          if (!open && !bulkRemoving) setBulkConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkConfirm
+                ? getEnvoisBulkRemoveLabel(bulkConfirm.action)
+                : "Confirmer"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  {bulkConfirm?.items.length ?? 0} envoi
+                  {(bulkConfirm?.items.length ?? 0) > 1 ? "s" : ""} sélectionné
+                  {(bulkConfirm?.items.length ?? 0) > 1 ? "s" : ""}.
+                </p>
+                {bulkConfirm?.action === "cancel" && (
+                  <p>
+                    Les contacts passeront dans l&apos;onglet <strong>Retirés</strong>. Vous
+                    pourrez les remettre en file un par un ou en masse plus tard.
+                  </p>
+                )}
+                {bulkConfirm?.action === "dismiss" && (
+                  <p>
+                    Ces envois ne seront plus proposés dans la file (étiquettes et alertes
+                    conservées).
+                  </p>
+                )}
+                {bulkConfirm?.action === "dismissFollowup" && (
+                  <p>Le suivi relance sera ignoré pour ces envois.</p>
+                )}
+                <ul className="max-h-40 overflow-y-auto text-xs space-y-1 border rounded-md p-2 bg-muted/30">
+                  {bulkConfirm?.items.map((item) => (
+                    <li key={item.contact_etiquette_id}>
+                      {item.contact_prenom} {item.contact_nom} — {item.etiquette_nom}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkRemoving}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={bulkRemoving}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleBulkRemoveConfirmed();
+              }}
+            >
+              {bulkRemoving ? "Traitement…" : "Confirmer"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
