@@ -13,6 +13,8 @@ import {
   type NewsletterAudienceFilters,
   type NewsletterSettings,
 } from "@/lib/api/tauri-newsletter";
+import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
+import { normalizeAgendaLinks } from "@/lib/emails/agenda-links";
 import { NewsletterAudiencePanel } from "@/components/newsletter/NewsletterAudiencePanel";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import {
@@ -73,12 +75,21 @@ export function ParametresNewsletterSection({
     DEFAULT_NEWSLETTER_AUDIENCE_FILTERS
   );
   const [savingExclusions, setSavingExclusions] = useState(false);
+  const [cgp, setCgp] = useState<CgpConfig | null>(null);
+  const [agendaLinkId, setAgendaLinkId] = useState("");
+
+  const agendaLinks = normalizeAgendaLinks(cgp);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const s = await getNewsletterSettings();
+      const [s, cgpConfig] = await Promise.all([
+        getNewsletterSettings(),
+        getCgpConfig().catch(() => null),
+      ]);
+      setCgp(cgpConfig);
       setSettings(s);
+      const links = normalizeAgendaLinks(cgpConfig);
       setStylePrompt(s.stylePrompt);
       setModel(s.model);
       setEtiquetteNom(s.etiquetteNom);
@@ -92,6 +103,7 @@ export function ParametresNewsletterSection({
       setLineHeight(s.lineHeight ?? "relaxed");
       setSectionSpacing(s.sectionSpacing ?? "normal");
       setAudienceFilters(s.defaultAudienceFilters ?? DEFAULT_NEWSLETTER_AUDIENCE_FILTERS);
+      setAgendaLinkId(s.agendaLinkId?.trim() || links[0]?.id || "");
       const etiq = await ensureNewsletterEtiquette(s.etiquetteNom);
       setSubscriberCount(etiq.contactCount);
     } catch (e) {
@@ -126,6 +138,7 @@ export function ParametresNewsletterSection({
         bodyFontSize,
         lineHeight,
         sectionSpacing,
+        agendaLinkId: agendaLinkId.trim() || null,
         defaultAudienceFilters: audienceFilters,
       };
       if (apiKeyInput.trim()) {
@@ -287,6 +300,31 @@ export function ParametresNewsletterSection({
             />
             <p className="text-xs text-muted-foreground">
               Espacer les envois réduit le risque spam (ex. 3000 = 3 secondes).
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="param-nl-agenda-link">Lien « Prendre rendez-vous »</Label>
+            {agendaLinks.length > 0 ? (
+              <select
+                id="param-nl-agenda-link"
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                value={agendaLinkId || agendaLinks[0]!.id}
+                onChange={(e) => setAgendaLinkId(e.target.value)}
+              >
+                {agendaLinks.map((link) => (
+                  <option key={link.id} value={link.id}>
+                    {link.label} — {link.url}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                Aucun lien agenda. Ajoutez-en dans Paramètres → Suivi → Liens Google Agenda.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Utilisé pour le bouton RDV en fin de newsletter (distinct des liens{" "}
+              {"{{lien_agenda}}"} des templates email).
             </p>
           </div>
         </div>

@@ -112,6 +112,7 @@ function buildHtmlOptions(
       accentColor: settings?.accentColor,
       secondaryColor: settings?.secondaryColor,
       layout: content?.layout ?? settings?.defaultLayout ?? undefined,
+      agendaLinkId: settings?.agendaLinkId,
       typography: {
         bodyFont: settings?.bodyFont,
         titleFont: settings?.titleFont,
@@ -890,7 +891,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
           </Card>
 
           {(content || plainBody) && (
-            <div className="grid gap-4 lg:grid-cols-2">
+            <div className="grid gap-4 lg:grid-cols-2 lg:items-stretch">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Édition</CardTitle>
@@ -982,8 +983,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                 </CardContent>
               </Card>
 
-              <Card>
-                <CardHeader>
+              <Card className="flex h-full min-h-0 flex-col">
+                <CardHeader className="shrink-0">
                   <CardTitle className="text-lg flex items-center gap-2">
                     <Eye className="h-4 w-4" />
                     Aperçu HTML
@@ -992,13 +993,13 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
                     Aperçu mobile par défaut — la majorité des lectures se font sur téléphone
                   </CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="flex min-h-0 flex-1 flex-col space-y-3">
                   <NewsletterInboxPreview
                     subject={subject}
                     draft={currentDraft}
                     variables={templateVariables}
                   />
-                  <NewsletterHtmlPreviewFrame html={previewHtml} />
+                  <NewsletterHtmlPreviewFrame html={previewHtml} className="min-h-0 flex-1" />
                 </CardContent>
               </Card>
             </div>

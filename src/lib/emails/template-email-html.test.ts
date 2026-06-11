@@ -73,4 +73,14 @@ describe("template-email-html", () => {
     );
     expect(out).toContain('style="line-height:1.5;margin:0;padding:0"');
   });
+
+  it("sanitize conserve font-size sur span", () => {
+    const out = sanitizeTemplateEmailHtml('<span style="font-size:22px">Grand</span>');
+    expect(out).toContain("font-size:22px");
+  });
+
+  it("sanitize retire font-size hors plage", () => {
+    const out = sanitizeTemplateEmailHtml('<span style="font-size:80px">X</span>');
+    expect(out).not.toContain("font-size");
+  });
 });

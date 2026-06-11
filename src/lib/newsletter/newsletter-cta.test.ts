@@ -58,7 +58,7 @@ describe("newsletter-cta", () => {
     expect(resolved.agendaConsumed).toBe(false);
   });
 
-  it("hides agenda button when already consumed as CTA", () => {
+  it("hides agenda block when already consumed as CTA", () => {
     const resolved = resolveNewsletterCta(
       { ...base, cta: "Prenez rendez-vous." },
       { agendaUrl: "https://calendly.com/test" }
@@ -66,10 +66,10 @@ describe("newsletter-cta", () => {
     expect(
       shouldShowNewsletterAgendaBlock(
         { ...base, cta: "Prenez rendez-vous." },
-        { agendaUrl: "https://calendly.com/test", cgpEmail: "a@b.fr" },
+        { agendaUrl: "https://calendly.com/test" },
         resolved
       )
-    ).toBe(true);
+    ).toBe(false);
     expect(resolved.agendaConsumed).toBe(true);
   });
 
@@ -82,7 +82,7 @@ describe("newsletter-cta", () => {
     expect(
       shouldShowNewsletterAgendaBlock(
         { ...base, includeCta: false },
-        { agendaUrl: "https://calendly.com/test", cgpEmail: "a@b.fr" },
+        { agendaUrl: "https://calendly.com/test" },
         resolved
       )
     ).toBe(false);

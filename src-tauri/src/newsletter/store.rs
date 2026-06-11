@@ -68,6 +68,8 @@ pub struct NewsletterSettingsPublic {
     pub line_height: Option<String>,
     #[serde(default)]
     pub section_spacing: Option<String>,
+    #[serde(default)]
+    pub agenda_link_id: Option<String>,
     pub default_audience_filters: NewsletterAudienceFilters,
 }
 
@@ -89,6 +91,7 @@ pub struct NewsletterSettingsInput {
     pub line_height: Option<String>,
     pub section_spacing: Option<String>,
     pub default_audience_filters: Option<NewsletterAudienceFilters>,
+    pub agenda_link_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -122,6 +125,8 @@ struct PersistedNewsletterStore {
     #[serde(default)]
     section_spacing: Option<String>,
     #[serde(default)]
+    agenda_link_id: Option<String>,
+    #[serde(default)]
     default_audience_filters: Option<NewsletterAudienceFilters>,
 }
 
@@ -142,6 +147,7 @@ pub struct NewsletterStore {
     pub body_font_size: Option<String>,
     pub line_height: Option<String>,
     pub section_spacing: Option<String>,
+    pub agenda_link_id: Option<String>,
     pub default_audience_filters: NewsletterAudienceFilters,
 }
 
@@ -202,6 +208,7 @@ impl NewsletterStore {
             body_font_size: self.body_font_size.clone(),
             line_height: self.line_height.clone(),
             section_spacing: self.section_spacing.clone(),
+            agenda_link_id: self.agenda_link_id.clone(),
             default_audience_filters: self.default_audience_filters.clone(),
         }
     }
@@ -276,6 +283,10 @@ impl NewsletterStore {
                 .section_spacing
                 .filter(|s| !s.trim().is_empty())
                 .map(|s| s.trim().to_string()),
+            agenda_link_id: persisted
+                .agenda_link_id
+                .filter(|s| !s.trim().is_empty())
+                .map(|s| s.trim().to_string()),
             default_audience_filters: persisted
                 .default_audience_filters
                 .unwrap_or_default(),
@@ -313,6 +324,7 @@ impl NewsletterStore {
             body_font_size: self.body_font_size.clone(),
             line_height: self.line_height.clone(),
             section_spacing: self.section_spacing.clone(),
+            agenda_link_id: self.agenda_link_id.clone(),
             default_audience_filters: Some(self.default_audience_filters.clone()),
         })
     }
@@ -335,6 +347,7 @@ impl Default for NewsletterStore {
             body_font_size: None,
             line_height: None,
             section_spacing: None,
+            agenda_link_id: None,
             default_audience_filters: NewsletterAudienceFilters::default(),
         }
     }

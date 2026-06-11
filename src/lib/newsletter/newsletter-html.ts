@@ -6,6 +6,7 @@ import type {
 } from "@/lib/api/tauri-newsletter";
 
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import { resolveAgendaUrl } from "@/lib/emails/agenda-links";
 
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import { blocksHtmlAt, normalizeNewsletterBlocks } from "@/lib/newsletter/newsletter-blocks";
@@ -29,6 +30,7 @@ import {
 } from "@/lib/newsletter/newsletter-typography";
 import {
   formatNewsletterBodyHtml,
+  formatNewsletterSectionTitleHtml,
   NEWSLETTER_RICH_TEXT_CSS,
   newsletterBodyTextStyle,
   newsletterFieldToPlain,
@@ -166,8 +168,8 @@ body { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
   .nl-outer-pad { padding: 8px 4px !important; }
   .nl-container { width: 100% !important; max-width: 100% !important; }
   .nl-header-pad { padding: 18px 16px 14px 16px !important; }
-  .nl-header-stack td { display: block !important; width: 100% !important; max-width: 100% !important; }
-  .nl-logo-cell { padding: 0 0 12px 0 !important; text-align: left !important; }
+  .nl-logo-cell { padding-right: 14px !important; width: auto !important; vertical-align: middle !important; }
+  .nl-header-text-cell { vertical-align: middle !important; width: auto !important; }
   .nl-logo-img { max-width: 72px !important; width: 72px !important; height: auto !important; }
   .nl-body-pad { padding: 20px 16px 8px 16px !important; font-size: ${typo.mobileBodyFontSize} !important; line-height: 1.65 !important; }
   .nl-section-pad { padding: 0 16px 16px 16px !important; }
@@ -373,7 +375,7 @@ function buildHeaderBlock(
 <table role="presentation" cellpadding="0" cellspacing="0" class="nl-header-stack">
 <tr>
 ${logoCell}
-<td style="vertical-align:middle;">
+<td class="nl-header-text-cell" style="vertical-align:middle;">
 ${cabinetLine}
 <p style="margin:${logo ? "0" : "8px 0 0 0"};font-family:${headerMetaFont};font-size:10px;color:rgba(255,255,255,0.72);text-transform:uppercase;letter-spacing:0.18em;font-weight:600;">Lettre patrimoniale</p>
 ${titleLine}
@@ -394,7 +396,7 @@ function buildSectionRow(
   layout: NewsletterLayout,
   typo: ResolvedNewsletterTypography
 ): string {
-  const title = escapeHtml(section.title);
+  const title = formatNewsletterSectionTitleHtml(section.title);
   const body = formatNewsletterBodyHtml(section.body);
   if (!title && !body && !section.imageUrl?.trim()) return "";
 
@@ -412,8 +414,8 @@ function buildSectionRow(
 
   const titleBlock = title
     ? minimalLayout
-      ? `<p class="nl-section-title" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${accent};">${title}</p>`
-      : `<p class="nl-section-title" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:${accent};">${title}</p>
+      ? `<div class="nl-section-title nl-rich-text" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:12px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:${accent};">${title}</div>`
+      : `<div class="nl-section-title nl-rich-text" style="margin:0 0 10px 0;font-family:${typo.titleFontFamily};font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:${accent};">${title}</div>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 14px 0;"><tr><td style="width:48px;height:2px;background:${secondary};font-size:0;line-height:0;">&nbsp;</td></tr></table>`
     : "";
 
@@ -543,39 +545,15 @@ ${phoneLine}
 function buildAgendaBlock(
   options: NewsletterHtmlOptions,
   accent: string,
-  showAgendaButton: boolean,
   typo: ResolvedNewsletterTypography
 ): string {
   const agendaUrl = options.agendaUrl?.trim();
-  const email = options.cgpEmail?.trim();
+  if (!agendaUrl) return "";
 
-  if (!showAgendaButton && !email) return "";
-
-  const agendaBtn =
-    showAgendaButton && agendaUrl
-      ? buildCtaButtonAnchor("Prendre rendez-vous", agendaUrl, accent, typo)
-      : "";
-
-
-
-  const replyLink =
-
-    email ?
-
-      `<p style="margin:16px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.5;">
-
-        <a class="nl-mailto-link" href="mailto:${escapeHtml(email)}" style="color:${accent};text-decoration:underline;">Me répondre par email</a>
-
-      </p>`
-
-    : "";
-
-
-
-  if (!agendaBtn && !replyLink) return "";
+  const agendaBtn = buildCtaButtonAnchor("Prendre rendez-vous", agendaUrl, accent, typo);
 
   return `<tr><td class="nl-agenda-pad" style="padding:8px 40px 36px 40px;text-align:center;">
-${agendaBtn}${replyLink}
+${agendaBtn}
 </td></tr>`;
 }
 
@@ -647,7 +625,8 @@ export function buildNewsletterPlainBody(content: GeneratedNewsletterContent): s
 
   for (const section of content.sections) {
 
-    if (section.title.trim()) lines.push("", section.title.trim());
+    const plainTitle = newsletterFieldToPlain(section.title).trim();
+    if (plainTitle) lines.push("", plainTitle);
 
     if (section.body.trim()) lines.push(newsletterFieldToPlain(section.body));
 
@@ -729,8 +708,6 @@ export function buildNewsletterHtml(
     );
   }
   const showAgendaBlock = shouldShowNewsletterAgendaBlock(content, options, resolvedCta);
-  const showAgendaButton =
-    showAgendaBlock && Boolean(options.agendaUrl?.trim()) && !resolvedCta.agendaConsumed;
 
   const preheaderBlock = preheader ? buildPreheaderBlock(preheader) : "";
 
@@ -778,7 +755,7 @@ ${blocksHtmlAt(blocks, { type: "before_cta" }, accent, secondary, typo)}
 
 ${ctaHtml}
 
-${showAgendaBlock ? buildAgendaBlock(options, accent, showAgendaButton, typo) : ""}
+${showAgendaBlock ? buildAgendaBlock(options, accent, typo) : ""}
 
 ${buildConseillerBlock(content, options, accent, typo)}
 
@@ -873,10 +850,10 @@ export function buildNewsletterHtmlOptions(
     secondaryColor?: string | null;
     layout?: NewsletterLayout | null;
     typography?: NewsletterTypographySettings | null;
+    agendaLinkId?: string | null;
   }
 ): NewsletterHtmlOptions {
-  const agendaUrl =
-    cgp?.agenda_links?.find((l) => l.url?.trim())?.url?.trim() ?? undefined;
+  const agendaUrl = resolveAgendaUrl(cgp, branding?.agendaLinkId)?.trim() || undefined;
 
   const resolved = resolveNewsletterBranding({
     accentColor: branding?.accentColor,

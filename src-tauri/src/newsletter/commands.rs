@@ -174,6 +174,14 @@ pub fn save_newsletter_settings(
             Some(trimmed.to_string())
         };
     }
+    if let Some(agenda_link_id) = input.agenda_link_id {
+        let trimmed = agenda_link_id.trim();
+        store.agenda_link_id = if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
     store.save(&app)?;
     NewsletterStore::load(&app).map(|s| s.to_public())
 }

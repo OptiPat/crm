@@ -128,10 +128,14 @@ export function NewsletterSectionEditor({
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
-          <Input
+          <NewsletterRichTextField
+            id={`nl-section-title-${index}`}
+            label="Titre de section"
             value={section.title}
-            onChange={(e) => updateSection(index, { title: e.target.value })}
+            onChange={(title) => updateSection(index, { title })}
+            minHeight="72px"
             placeholder="Titre de section"
+            variant="sectionTitle"
           />
           <NewsletterRichTextField
             id={`nl-section-body-${index}`}
@@ -212,7 +216,7 @@ export function NewsletterSectionEditor({
             </div>
             <p className="text-xs text-muted-foreground">
               Laissez libellé et URL vides pour le comportement automatique (bouton agenda si le
-              texte parle de rendez-vous). Paramètres → Suivi pour l&apos;agenda.
+              texte parle de rendez-vous). Lien RDV par défaut : Paramètres → Newsletter.
             </p>
           </>
         )}

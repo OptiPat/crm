@@ -90,14 +90,12 @@ export function resolveNewsletterCta(
   return none;
 }
 
-/** Afficher le bloc agenda / réponse email en fin de mail. */
+/** Afficher le bouton agenda en fin de mail (si non déjà utilisé comme CTA principal). */
 export function shouldShowNewsletterAgendaBlock(
   content: GeneratedNewsletterContent,
-  options: { agendaUrl?: string | null; cgpEmail?: string | null },
+  options: { agendaUrl?: string | null },
   resolved: ResolvedNewsletterCta
 ): boolean {
   if (content.includeCta === false) return false;
-  const hasAgenda = Boolean(options.agendaUrl?.trim()) && !resolved.agendaConsumed;
-  const hasReply = Boolean(options.cgpEmail?.trim());
-  return hasAgenda || hasReply;
+  return Boolean(options.agendaUrl?.trim()) && !resolved.agendaConsumed;
 }

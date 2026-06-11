@@ -1,5 +1,8 @@
 import { Label } from "@/components/ui/label";
-import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import {
+  RichTextEmailEditor,
+  type RichTextEmailEditorVariant,
+} from "@/components/emails/RichTextEmailEditor";
 
 type NewsletterRichTextFieldProps = {
   id: string;
@@ -8,6 +11,7 @@ type NewsletterRichTextFieldProps = {
   onChange: (html: string) => void;
   minHeight?: string;
   placeholder?: string;
+  variant?: RichTextEmailEditorVariant;
 };
 
 export function NewsletterRichTextField({
@@ -17,6 +21,7 @@ export function NewsletterRichTextField({
   onChange,
   minHeight = "140px",
   placeholder,
+  variant = "default",
 }: NewsletterRichTextFieldProps) {
   return (
     <div className="space-y-2">
@@ -28,6 +33,7 @@ export function NewsletterRichTextField({
         placeholder={placeholder}
         showFooter={false}
         ariaLabel={label}
+        variant={variant}
       />
     </div>
   );

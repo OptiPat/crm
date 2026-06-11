@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildNewsletterHtml,
+  buildNewsletterHtmlOptions,
   buildNewsletterPlainBody,
   formatNewsletterEditionLabel,
   mergeNewsletterDraftFromPlain,
@@ -76,7 +77,7 @@ describe("newsletter-html", () => {
     expect(html).toContain(">02<");
     expect(html).toContain("Prendre rendez-vous");
     expect(html).not.toContain("Prenez rendez-vous.");
-    expect(html).toContain("Me répondre par email");
+    expect(html).not.toContain("Me répondre par email");
     expect(html).toContain("Votre conseiller");
     expect(html).toContain("Jean Dupont");
     expect(html).toContain("01 23 45 67 89");
@@ -273,6 +274,21 @@ describe("newsletter-html", () => {
     expect(html).toContain("font-size:19px");
   });
 
+  it("uses newsletter agendaLinkId when building HTML options", () => {
+    const cgp = {
+      wizard_completed: true,
+      wizard_step: 4,
+      agenda_links: [
+        { id: "newsletter", label: "Newsletter", url: "https://rdv.newsletter.test" },
+        { id: "suivi", label: "Suivi", url: "https://rdv.suivi.test" },
+      ],
+    } as import("@/lib/api/tauri-settings").CgpConfig;
+    const opts = buildNewsletterHtmlOptions(cgp, { agendaLinkId: "suivi" });
+    expect(opts.agendaUrl).toBe("https://rdv.suivi.test");
+    const defaultOpts = buildNewsletterHtmlOptions(cgp, {});
+    expect(defaultOpts.agendaUrl).toBe("https://rdv.newsletter.test");
+  });
+
   it("includes mobile optimization classes", () => {
     const html = buildNewsletterHtml(sampleContent, {
       cabinetName: "Cabinet Test",
@@ -280,6 +296,8 @@ describe("newsletter-html", () => {
     });
     expect(html).toContain("nl-cta-btn");
     expect(html).toContain("nl-header-stack");
+    expect(html).toContain("nl-header-text-cell");
+    expect(html).not.toMatch(/nl-header-stack td \{ display: block/);
     expect(html).toContain("nl-container");
     expect(html).toContain("nl-mailto-link");
     expect(html).toContain("-webkit-text-size-adjust");

@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Monitor, Smartphone } from "lucide-react";
 import { useState } from "react";
 
@@ -11,9 +12,10 @@ const VIEWPORT_WIDTH: Record<PreviewViewport, number> = {
 
 type NewsletterHtmlPreviewFrameProps = {
   html: string;
+  className?: string;
 };
 
-export function NewsletterHtmlPreviewFrame({ html }: NewsletterHtmlPreviewFrameProps) {
+export function NewsletterHtmlPreviewFrame({ html, className }: NewsletterHtmlPreviewFrameProps) {
   const [viewport, setViewport] = useState<PreviewViewport>("mobile");
 
   if (!html.trim()) {
@@ -21,8 +23,8 @@ export function NewsletterHtmlPreviewFrame({ html }: NewsletterHtmlPreviewFrameP
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className={cn("flex min-h-0 flex-1 flex-col gap-3", className)}>
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
         <p className="text-xs text-muted-foreground">
           La plupart des lecteurs ouvrent le mail sur téléphone — vérifiez l&apos;aperçu mobile.
         </p>
@@ -49,17 +51,19 @@ export function NewsletterHtmlPreviewFrame({ html }: NewsletterHtmlPreviewFrameP
           </Button>
         </div>
       </div>
-      <div className="border rounded-lg bg-muted/30 overflow-hidden flex justify-center p-3 sm:p-4">
-        <div
-          className="w-full bg-white shadow-sm border rounded-sm overflow-hidden transition-[max-width] duration-200"
-          style={{ maxWidth: VIEWPORT_WIDTH[viewport] }}
-        >
-          <iframe
-            title="Aperçu newsletter"
-            srcDoc={html}
-            className="w-full min-h-[520px] bg-white block"
-            sandbox=""
-          />
+      <div className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-lg border bg-muted/30 p-3 sm:p-4">
+        <div className="flex min-h-0 flex-1 justify-center">
+          <div
+            className="flex h-full w-full flex-col overflow-hidden rounded-sm border bg-white shadow-sm transition-[max-width] duration-200"
+            style={{ maxWidth: VIEWPORT_WIDTH[viewport] }}
+          >
+            <iframe
+              title="Aperçu newsletter"
+              srcDoc={html}
+              className="block h-full min-h-0 w-full flex-1 border-0 bg-white"
+              sandbox=""
+            />
+          </div>
         </div>
       </div>
     </div>

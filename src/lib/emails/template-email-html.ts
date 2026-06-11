@@ -85,12 +85,39 @@ function styleListElement(el: Element): void {
   }
 }
 
+const GMAIL_SAFE_STYLE_VALUES: Record<string, RegExp> = {
+  "line-height": /^[\d.]+$/,
+  margin: /^0$/,
+  padding: /^0$/,
+  "padding-left": /^1\.25em$/,
+  "font-weight": /^(700|bold)$/,
+  "font-style": /^italic$/,
+  "text-decoration": /^underline$/,
+  color: /^inherit$/,
+  "font-size": /^(\d+(\.\d+)?px|\d+(\.\d+)?em)$/,
+};
+
 function isGmailSafeStyle(style: string): boolean {
   const s = style.replace(/\s/g, "").toLowerCase();
   if (s === "line-height:1.5;margin:0;padding:0") return true;
   if (s === "margin:0;padding-left:1.25em;line-height:1.5") return true;
   if (s === "margin:0;padding:0;line-height:1.5") return true;
-  return false;
+
+  const decls = style.split(";").map((d) => d.trim()).filter(Boolean);
+  if (decls.length === 0) return false;
+  return decls.every((decl) => {
+    const colon = decl.indexOf(":");
+    if (colon === -1) return false;
+    const prop = decl.slice(0, colon).trim().toLowerCase();
+    const val = decl.slice(colon + 1).trim().toLowerCase();
+    const pattern = GMAIL_SAFE_STYLE_VALUES[prop];
+    if (!pattern?.test(val)) return false;
+    if (prop === "font-size" && val.endsWith("px")) {
+      const px = parseFloat(val);
+      return px >= 10 && px <= 48;
+    }
+    return true;
+  });
 }
 
 /** Une ligne Gmail par Entrée ; ligne vide = `<div><br></div>` (comme la rédaction Gmail). */

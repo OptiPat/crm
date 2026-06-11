@@ -23,6 +23,57 @@ export function newsletterFieldToPlain(raw: string): string {
   return trimmed;
 }
 
+function flattenEditorHtmlToInline(html: string): string {
+  const stripOuterBlock = (input: string) => {
+    let out = input.trim();
+    for (let i = 0; i < 3; i++) {
+      const next = out
+        .replace(/^<div[^>]*>([\s\S]*)<\/div>$/i, "$1")
+        .replace(/^<p[^>]*>([\s\S]*)<\/p>$/i, "$1")
+        .trim();
+      if (next === out) break;
+      out = next;
+    }
+    return out;
+  };
+
+  if (typeof DOMParser === "undefined") {
+    return stripOuterBlock(html);
+  }
+  const doc = new DOMParser().parseFromString(html, "text/html");
+
+  const appendInline = (source: Node, target: Element): void => {
+    for (const child of [...source.childNodes]) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        target.appendChild(child.cloneNode());
+        continue;
+      }
+      if (child.nodeType !== Node.ELEMENT_NODE) continue;
+      const el = child as Element;
+      const tag = el.tagName.toLowerCase();
+      if (tag === "br") {
+        target.appendChild(doc.createElement("br"));
+        continue;
+      }
+      if (tag === "div" || tag === "p") {
+        appendInline(el, target);
+        continue;
+      }
+      if (["b", "strong", "i", "em", "u", "a", "span"].includes(tag)) {
+        const clone = el.cloneNode(false) as Element;
+        target.appendChild(clone);
+        appendInline(el, clone);
+        continue;
+      }
+      appendInline(el, target);
+    }
+  };
+
+  const wrap = doc.createElement("div");
+  appendInline(doc.body, wrap);
+  return wrap.innerHTML.trim();
+}
+
 function enhanceInlineFormatting(html: string): string {
   if (typeof DOMParser === "undefined") return html;
   const doc = new DOMParser().parseFromString(html, "text/html");
@@ -44,6 +95,12 @@ function enhanceInlineFormatting(html: string): string {
   for (const el of doc.querySelectorAll("li")) {
     el.setAttribute("style", "margin:0 0 0.35em 0;");
   }
+  for (const el of doc.querySelectorAll("span[style*='font-size']")) {
+    const fs = (el as HTMLElement).style.fontSize?.trim();
+    if (fs && /^\d+(\.\d+)?px$/i.test(fs)) {
+      el.setAttribute("style", `font-size:${fs};color:inherit;`);
+    }
+  }
   return doc.body.innerHTML.trim();
 }
 
@@ -55,6 +112,17 @@ export function formatNewsletterBodyHtml(raw: string): string {
     return enhanceInlineFormatting(sanitizeTemplateEmailHtml(trimmed));
   }
   return escapeHtml(trimmed).replace(/\n/g, "<br>");
+}
+
+/** HTML titre de section — inline uniquement (conserve le style titre parent en email). */
+export function formatNewsletterSectionTitleHtml(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  if (looksLikeHtml(trimmed)) {
+    const sanitized = sanitizeTemplateEmailHtml(trimmed);
+    return enhanceInlineFormatting(flattenEditorHtmlToInline(sanitized));
+  }
+  return escapeHtml(trimmed);
 }
 
 export function newsletterBodyTextStyle(typo: ResolvedNewsletterTypography): string {
@@ -69,4 +137,8 @@ export const NEWSLETTER_RICH_TEXT_CSS = `
 .nl-rich-text ol { margin: 0 0 0 1.25em; padding: 0; }
 .nl-rich-text li { margin: 0 0 0.35em 0; }
 .nl-rich-text a { color: inherit; text-decoration: underline; }
+.nl-section-title b, .nl-section-title strong { font-weight: 700; color: inherit; }
+.nl-section-title i, .nl-section-title em { font-style: italic; }
+.nl-section-title u { text-decoration: underline; }
+.nl-section-title span[style*="font-size"] { display: inline; line-height: inherit; }
 `.trim();

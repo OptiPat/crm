@@ -7,14 +7,30 @@ import {
   Link2,
   List,
   ListOrdered,
+  ListX,
   Underline,
 } from "lucide-react";
 import {
+  applyRichEditorFontSize,
+  execRichEditorCommand,
+  exitRichEditorList,
   finalizeEditorHtmlForStorage,
+  handleRichEditorListEnter,
   normalizeEditorHtml,
+  restoreRichEditorSelection,
   sanitizeEditorHtml,
   saveRichEditorSelection,
 } from "@/components/emails/rich-text-email-editor-utils";
+
+const FONT_SIZE_OPTIONS = [
+  { value: 18, label: "18" },
+  { value: 22, label: "22" },
+  { value: 26, label: "26" },
+  { value: 32, label: "32" },
+] as const;
+
+export type RichTextEmailEditorVariant = "default" | "sectionTitle";
+
 type RichTextEmailEditorProps = {
   value: string;
   onChange: (html: string) => void;
@@ -25,7 +41,14 @@ type RichTextEmailEditorProps = {
   /** Pied de page sous l'éditeur (défaut : aide variables). */
   showFooter?: boolean;
   ariaLabel?: string;
+  /** Aperçu du style titre de section dans le composeur. */
+  variant?: RichTextEmailEditorVariant;
 };
+
+/** Empêche la barre d'outils de voler le focus / la sélection de l'éditeur. */
+function preventToolbarFocusSteal(event: React.MouseEvent) {
+  event.preventDefault();
+}
 
 export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEditorProps>(
   function RichTextEmailEditor(
@@ -38,17 +61,47 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
       onSelectionSave,
       showFooter = true,
       ariaLabel = "Message du modèle",
+      variant = "default",
     },
     forwardedRef
   ) {
   const editorRef = useRef<HTMLDivElement>(null);
   useImperativeHandle(forwardedRef, () => editorRef.current as HTMLDivElement);
   const lastEmitted = useRef(value);
+  const savedSelectionRef = useRef<Range | null>(null);
+
+  const captureSelection = useCallback(() => {
+    const el = editorRef.current;
+    if (!el) return;
+    const range = saveRichEditorSelection(el);
+    if (!range) return;
+
+    const focusInEditor = el.contains(document.activeElement);
+    const selectionInEditor = el.contains(range.commonAncestorContainer);
+
+    if (!range.collapsed) {
+      savedSelectionRef.current = range;
+      onSelectionSave?.(range);
+      return;
+    }
+
+    if (focusInEditor || selectionInEditor) {
+      savedSelectionRef.current = range;
+      onSelectionSave?.(range);
+    }
+  }, [onSelectionSave]);
+
+  useEffect(() => {
+    const onSelectionChange = () => {
+      captureSelection();
+    };
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => document.removeEventListener("selectionchange", onSelectionChange);
+  }, [captureSelection]);
 
   const syncFromValue = useCallback(() => {
     const el = editorRef.current;
     if (!el) return;
-    // Ne pas écraser le DOM pendant la saisie (sinon plus de curseur / aperçu live).
     if (el.contains(document.activeElement)) return;
     const next = value || "";
     if (el.innerHTML !== next) {
@@ -73,10 +126,21 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
     lastEmitted.current = html;
     onChange(html);
   };
+
+  const runWithSavedSelection = (action: () => void) => {
+    const el = editorRef.current;
+    if (!el) return;
+    el.focus();
+    restoreRichEditorSelection(el, savedSelectionRef.current);
+    action();
+  };
+
   const exec = (command: string, valueArg?: string) => {
-    editorRef.current?.focus();
-    document.execCommand(command, false, valueArg);
-    emitChange();
+    runWithSavedSelection(() => {
+      execRichEditorCommand(editorRef.current, command, savedSelectionRef.current, valueArg);
+      captureSelection();
+      emitChange();
+    });
   };
 
   const insertLink = () => {
@@ -85,9 +149,28 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
     exec("createLink", url.trim());
   };
 
+  const applyFontSize = (sizePx: number) => {
+    const el = editorRef.current;
+    if (!el) return;
+    runWithSavedSelection(() => {
+      const applied = applyRichEditorFontSize(el, sizePx, savedSelectionRef.current);
+      if (applied) {
+        captureSelection();
+        emitChange();
+      } else {
+        window.alert("Sélectionnez du texte avant de choisir une taille.");
+      }
+    });
+  };
+
+  const isSectionTitle = variant === "sectionTitle";
+
   return (
     <div className={cn("rounded-lg border bg-background", className)}>
-      <div className="flex flex-wrap gap-0.5 border-b px-2 py-1.5 bg-muted/30">
+      <div
+        className="flex flex-wrap items-center gap-0.5 border-b px-2 py-1.5 bg-muted/30"
+        onMouseDown={preventToolbarFocusSteal}
+      >
         <Button
           type="button"
           variant="ghost"
@@ -118,6 +201,22 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         >
           <Underline className="h-4 w-4" />
         </Button>
+        <span className="mx-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+          px
+        </span>
+        {FONT_SIZE_OPTIONS.map((opt) => (
+          <Button
+            key={opt.value}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 min-w-8 px-1.5 text-xs font-normal tabular-nums"
+            title={`Taille ${opt.value} px sur la sélection`}
+            onClick={() => applyFontSize(opt.value)}
+          >
+            {opt.label}
+          </Button>
+        ))}
         <Button
           type="button"
           variant="ghost"
@@ -143,6 +242,20 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           variant="ghost"
           size="icon"
           className="h-8 w-8"
+          title="Quitter la liste"
+          onClick={() => {
+            exitRichEditorList(editorRef.current, savedSelectionRef.current);
+            captureSelection();
+            emitChange();
+          }}
+        >
+          <ListX className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
           title="Lien"
           onClick={insertLink}
         >
@@ -157,20 +270,36 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         aria-label={ariaLabel}
         data-placeholder={placeholder}
         className={cn(
-          "px-3 py-2 text-sm outline-none overflow-y-auto",
+          "px-3 py-2 outline-none overflow-y-auto",
           "min-h-[var(--editor-min-h)]",
           "empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground",
           "[&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline",
           "[&_a]:text-primary [&_a]:underline",
           "[&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5",
-          "[&_div]:leading-normal [&_>div]:m-0 [&_p]:my-0 [&_p]:leading-normal"
+          isSectionTitle
+            ? [
+                "text-[11px] font-semibold uppercase tracking-[0.12em] text-primary leading-snug",
+                "[&_div]:inline [&_p]:inline [&_>div]:inline",
+              ]
+            : ["text-sm", "[&_div]:leading-normal [&_>div]:m-0 [&_p]:my-0 [&_p]:leading-normal"],
         )}
         style={{ "--editor-min-h": minHeight } as React.CSSProperties}
         onInput={() => emitChange(false)}
+        onKeyUp={captureSelection}
+        onMouseUp={captureSelection}
+        onKeyDownCapture={(e) => {
+          const el = editorRef.current;
+          if (!el) return;
+          if (handleRichEditorListEnter(el, e.nativeEvent)) {
+            captureSelection();
+            emitChange(false);
+          }
+        }}
         onBlur={() => {
-          onSelectionSave?.(saveRichEditorSelection(editorRef.current));
+          captureSelection();
           emitChange(true);
-        }}      />
+        }}
+      />
       {showFooter ?
         <p className="px-3 pb-2 text-[11px] text-muted-foreground border-t bg-muted/10">
           Mise en forme conservée à l&apos;envoi Gmail (gras, listes, liens). Variables{" "}
