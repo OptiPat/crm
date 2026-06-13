@@ -13,6 +13,7 @@ import { Prescripteurs } from "@/pages/Prescripteurs";
 import { Partenaires } from "@/pages/Partenaires";
 import { Investissements } from "@/pages/Investissements";
 import { Documents } from "@/pages/Documents";
+import { SouscriptionCif } from "@/pages/SouscriptionCif";
 import { Interactions } from "@/pages/Interactions";
 import { Taches } from "@/pages/Taches";
 import { Parametres } from "@/pages/Parametres";
@@ -186,6 +187,14 @@ function App() {
           <Documents
             onNavigate={setCurrentPage}
             onOpenContact={(contactId) => openContact(contactId)}
+          />
+        );
+      case "souscription-cif":
+        return (
+          <SouscriptionCif
+            currentPage={currentPage}
+            onOpenContact={(contactId) => openContact(contactId, "patrimoine")}
+            onNavigate={setCurrentPage}
           />
         );
       case "parametres":

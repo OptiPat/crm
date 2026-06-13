@@ -5,8 +5,11 @@ import {
   CRM_OPEN_CONTACT_TAB_KEY,
   type ContactDetailTabHint,
 } from "@/lib/investissements/investissement-navigation";
+import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
 
 export const CRM_NAV_EVENT = "crm-app-navigation";
+export const CRM_PARAMETRES_SECTION_KEY = "crm_nav_parametres_section";
+export const CRM_PARAMETRES_SCROLL_KEY = "crm_nav_parametres_scroll";
 
 export type AppNavigationDetail =
   | { type: "open-contact"; contactId: number; tab?: ContactDetailTabHint }
@@ -18,6 +21,7 @@ export type AppNavigationDetail =
       etiquetteId?: number;
     }
   | { type: "interactions"; contactId?: number }
+  | { type: "parametres"; section: SettingsSectionId; scrollToId?: string }
   | { type: "page"; page: string };
 
 function persistNavigationDetail(detail: AppNavigationDetail): void {
@@ -52,6 +56,14 @@ function persistNavigationDetail(detail: AppNavigationDetail): void {
     case "interactions":
       if (detail.contactId != null) {
         sessionStorage.setItem("crm_nav_interactions_contact_id", String(detail.contactId));
+      }
+      break;
+    case "parametres":
+      sessionStorage.setItem(CRM_PARAMETRES_SECTION_KEY, detail.section);
+      if (detail.scrollToId) {
+        sessionStorage.setItem(CRM_PARAMETRES_SCROLL_KEY, detail.scrollToId);
+      } else {
+        sessionStorage.removeItem(CRM_PARAMETRES_SCROLL_KEY);
       }
       break;
     default:
@@ -105,6 +117,27 @@ export function requestOpenContact(
   };
   if (options?.setCurrentPage) {
     navigateAppPage(options.currentPage ?? "", options.setCurrentPage, "contacts", detail);
+  } else {
+    dispatchAppNavigation(detail);
+  }
+}
+
+/** Ouvre Paramètres sur une section (ex. profil → Documents CIF). */
+export function requestOpenParametres(
+  section: SettingsSectionId,
+  options?: {
+    scrollToId?: string;
+    currentPage?: string;
+    setCurrentPage?: (page: string) => void;
+  }
+): void {
+  const detail: AppNavigationDetail = {
+    type: "parametres",
+    section,
+    scrollToId: options?.scrollToId,
+  };
+  if (options?.setCurrentPage) {
+    navigateAppPage(options.currentPage ?? "", options.setCurrentPage, "parametres", detail);
   } else {
     dispatchAppNavigation(detail);
   }

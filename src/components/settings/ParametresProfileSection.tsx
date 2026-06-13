@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ProfileHeroCard,
   SettingsGroup,
@@ -146,6 +147,61 @@ export function ParametresProfileSection({
               placeholder="Paris"
               value={cgpConfig.ville || ""}
               onChange={(e) => onConfigChange({ ville: e.target.value })}
+            />
+          </SettingsRow>
+        </SettingsGroup>
+      </SettingsPanel>
+
+      <SettingsPanel
+        id="parametres-documents-cif"
+        title="Documents CIF"
+        description="Informations légales utilisées dans les lettres de mission, rapports d'adéquation et pieds de page."
+      >
+        <SettingsGroup>
+          <SettingsRow label="N° SIREN" htmlFor="cif_siren">
+            <Input
+              id="cif_siren"
+              placeholder="843 139 148"
+              value={cgpConfig.cif_siren || ""}
+              onChange={(e) => onConfigChange({ cif_siren: e.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow label="Ville RCS" htmlFor="cif_rcs_ville">
+            <Input
+              id="cif_rcs_ville"
+              placeholder="Montpellier"
+              value={cgpConfig.cif_rcs_ville || ""}
+              onChange={(e) => onConfigChange({ cif_rcs_ville: e.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow label="N° Anacofi CIF" htmlFor="cif_anacofi_numero">
+            <Input
+              id="cif_anacofi_numero"
+              placeholder="E011507"
+              value={cgpConfig.cif_anacofi_numero || ""}
+              onChange={(e) => onConfigChange({ cif_anacofi_numero: e.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow label="N° ORIAS" htmlFor="cif_orias">
+            <Input
+              id="cif_orias"
+              placeholder="19000736"
+              value={cgpConfig.cif_orias || ""}
+              onChange={(e) => onConfigChange({ cif_orias: e.target.value })}
+            />
+          </SettingsRow>
+          <SettingsRow
+            label="Pied de page personnalisé"
+            hint="Optionnel — remplace le modèle par défaut. Vous pouvez utiliser {{cgp_orias}}, {{cgp_siren}}, etc."
+            htmlFor="cif_pied_de_page"
+          >
+            <Textarea
+              id="cif_pied_de_page"
+              rows={6}
+              className="font-mono text-xs"
+              placeholder="Laissez vide pour utiliser le pied de page SCPI par défaut…"
+              value={cgpConfig.cif_pied_de_page || ""}
+              onChange={(e) => onConfigChange({ cif_pied_de_page: e.target.value })}
             />
           </SettingsRow>
         </SettingsGroup>

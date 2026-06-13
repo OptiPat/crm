@@ -21,6 +21,11 @@ import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-set
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { getAppInfo, listDbBackups, type DbBackupEntry } from "@/lib/api/tauri-system";
 import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
+import {
+  CRM_PARAMETRES_SCROLL_KEY,
+  CRM_PARAMETRES_SECTION_KEY,
+} from "@/lib/navigation/app-navigation";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import { toast } from "sonner";
 import {
@@ -52,6 +57,11 @@ const EMPTY_CGP_CONFIG: CgpConfig = {
   adresse: "",
   code_postal: "",
   ville: "",
+  cif_siren: "",
+  cif_rcs_ville: "",
+  cif_anacofi_numero: "",
+  cif_orias: "",
+  cif_pied_de_page: "",
 };
 
 const SETTINGS_NAV: SettingsNavItem[] = [
@@ -131,6 +141,11 @@ function normalizeCgpConfig(config: CgpConfig): CgpConfig {
     adresse: config.adresse ?? "",
     code_postal: config.code_postal ?? "",
     ville: config.ville ?? "",
+    cif_siren: config.cif_siren ?? "",
+    cif_rcs_ville: config.cif_rcs_ville ?? "",
+    cif_anacofi_numero: config.cif_anacofi_numero ?? "",
+    cif_orias: config.cif_orias ?? "",
+    cif_pied_de_page: config.cif_pied_de_page ?? "",
   };
 }
 
@@ -148,6 +163,40 @@ export function Parametres() {
   const [dbPath, setDbPath] = useState("");
   const [backups, setBackups] = useState<DbBackupEntry[]>([]);
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("accueil");
+  const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
+
+  const applyParametresNavigation = useCallback(
+    (section: SettingsSectionId, scrollToId?: string) => {
+      setActiveSection(section);
+      setScrollTargetId(scrollToId ?? null);
+    },
+    []
+  );
+
+  useEffect(() => {
+    const section = sessionStorage.getItem(CRM_PARAMETRES_SECTION_KEY) as SettingsSectionId | null;
+    const scrollToId = sessionStorage.getItem(CRM_PARAMETRES_SCROLL_KEY) ?? undefined;
+    sessionStorage.removeItem(CRM_PARAMETRES_SECTION_KEY);
+    sessionStorage.removeItem(CRM_PARAMETRES_SCROLL_KEY);
+    if (section) {
+      applyParametresNavigation(section, scrollToId);
+    }
+  }, [applyParametresNavigation]);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type === "parametres") {
+      applyParametresNavigation(detail.section, detail.scrollToId);
+    }
+  });
+
+  useEffect(() => {
+    if (!scrollTargetId || loadingConfig) return;
+    const timer = window.setTimeout(() => {
+      document.getElementById(scrollTargetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setScrollTargetId(null);
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [scrollTargetId, activeSection, loadingConfig]);
 
   const isDirty = useMemo(() => {
     if (!savedSnapshot) return false;

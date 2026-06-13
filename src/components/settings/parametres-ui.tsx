@@ -113,12 +113,14 @@ export function SettingsPageHeader({
 }
 
 export function SettingsPanel({
+  id,
   title,
   description,
   children,
   className,
   action,
 }: {
+  id?: string;
   title: string;
   description?: string;
   children: ReactNode;
@@ -127,8 +129,9 @@ export function SettingsPanel({
 }) {
   return (
     <section
+      id={id}
       className={cn(
-        "rounded-2xl border border-border/80 bg-card shadow-sm overflow-hidden",
+        "rounded-2xl border border-border/80 bg-card shadow-sm overflow-hidden scroll-mt-6",
         className
       )}
     >

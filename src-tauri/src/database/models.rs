@@ -914,6 +914,21 @@ pub struct CgpConfig {
     pub code_postal: Option<String>,
     #[serde(default)]
     pub ville: Option<String>,
+    /// N° SIREN (documents CIF).
+    #[serde(default)]
+    pub cif_siren: Option<String>,
+    /// Ville du greffe RCS.
+    #[serde(default)]
+    pub cif_rcs_ville: Option<String>,
+    /// N° adhérent Anacofi CIF.
+    #[serde(default)]
+    pub cif_anacofi_numero: Option<String>,
+    /// N° ORIAS.
+    #[serde(default)]
+    pub cif_orias: Option<String>,
+    /// Pied de page légal CIF (remplace le modèle par défaut).
+    #[serde(default)]
+    pub cif_pied_de_page: Option<String>,
 }
 
 /// Message boîte mail synchronisé pour un contact (hors logique campagne / en attente de réponse).

@@ -20,6 +20,7 @@ import {
   LucideIcon,
   Newspaper,
   ListTodo,
+  FileSignature,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,6 +90,7 @@ const patrimoineGroup: NavGroup = {
   landingLabel: "Investissements",
   children: [
     { id: "investissements", label: "Investissements", icon: Wallet },
+    { id: "souscription-cif", label: "Souscription CIF", icon: FileSignature },
     { id: "documents", label: "Documents", icon: FileText },
   ],
 };
