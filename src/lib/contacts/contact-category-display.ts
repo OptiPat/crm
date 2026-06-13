@@ -1,4 +1,4 @@
-import { isFilleulStatut } from "@/lib/contacts/contact-form-utils";
+import { isClientActif, isFilleulStatut } from "@/lib/contacts/contact-form-utils";
 
 /** Badges catégorie « affichage » (dashboard alertes, liste filtrée). */
 export const CONTACT_DISPLAY_CATEGORY_BADGE_CLASS: Record<string, string> = {
@@ -23,27 +23,8 @@ export function getDisplayCategorieBadgeClass(displayCategorie: string): string 
   );
 }
 
-/** Classe Tailwind badge selon catégorie client + filleul (fiche contact, liste contacts). */
-export function getContactCategorieBadgeClass(
-  categorie: string,
-  filleulCategorie?: string | null
-): string {
-  const fc =
-    filleulCategorie || (isFilleulStatut(categorie) ? categorie : null);
-  if (fc) {
-    switch (fc) {
-      case "FILLEUL":
-        return "bg-indigo-100 text-indigo-800";
-      case "PROSPECT_FILLEUL":
-        return "bg-purple-100 text-purple-800";
-      case "SUSPECT_FILLEUL":
-        return "bg-amber-100 text-amber-800";
-      case "FILLEUL_DESINSCRIT":
-        return "bg-red-100 text-red-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  }
+/** Badge rôle client (Client, Prospect, Suspect, Prescripteur). */
+export function getClientRoleBadgeClass(categorie: string): string {
   switch (categorie) {
     case "CLIENT":
       return "bg-green-100 text-green-800";
@@ -51,7 +32,42 @@ export function getContactCategorieBadgeClass(
       return "bg-blue-100 text-blue-800";
     case "SUSPECT_CLIENT":
       return "bg-slate-100 text-slate-800";
+    case "PRESCRIPTEUR":
+      return "bg-purple-100 text-purple-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
+}
+
+/** Badge rôle réseau filleul — désinscrit = neutre (pas alerte). */
+export function getFilleulRoleBadgeClass(filleulCategorie: string): string {
+  switch (filleulCategorie) {
+    case "FILLEUL":
+      return "bg-indigo-100 text-indigo-800";
+    case "PROSPECT_FILLEUL":
+      return "bg-purple-100 text-purple-800";
+    case "SUSPECT_FILLEUL":
+      return "bg-amber-100 text-amber-800";
+    case "FILLEUL_DESINSCRIT":
+      return "bg-slate-100 text-slate-600";
+    default:
+      return "bg-gray-100 text-gray-800";
+  }
+}
+
+/**
+ * Badge unique (legacy : filleul-only, alertes dashboard).
+ * Ne mélange plus client + filleul — préférer deux badges distincts en liste/fiche.
+ */
+export function getContactCategorieBadgeClass(
+  categorie: string,
+  filleulCategorie?: string | null
+): string {
+  if (isFilleulStatut(categorie)) {
+    return getFilleulRoleBadgeClass(categorie);
+  }
+  if (filleulCategorie && !isClientActif(categorie)) {
+    return getFilleulRoleBadgeClass(filleulCategorie);
+  }
+  return getClientRoleBadgeClass(categorie);
 }

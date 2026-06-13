@@ -2,7 +2,11 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronRight, Home } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { ContactEtiquetteDetails } from "@/lib/api/tauri-etiquettes";
-import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
+import {
+  getClientRoleBadgeClass,
+  getFilleulRoleBadgeClass,
+} from "@/lib/contacts/contact-category-display";
+import { isClientActif } from "@/lib/contacts/contact-form-utils";
 import {
   getClientCategorieLabel,
   getFilleulCategorieBadgeClass,
@@ -144,14 +148,14 @@ export function ContactListRow({
               {getFoyerRoleLabel(contact.role_foyer)}
             </Badge>
           )}
-          {!isFilleulTab && contact.categorie !== "AUCUN" && (
-            <Badge
-              className={getContactCategorieBadgeClass(
-                contact.categorie,
-                contact.filleul_categorie
-              )}
-            >
+          {!isFilleulTab && isClientActif(contact.categorie) && (
+            <Badge className={getClientRoleBadgeClass(contact.categorie)}>
               {getClientCategorieLabel(contact.categorie)}
+            </Badge>
+          )}
+          {!isFilleulTab && contact.filleul_categorie && (
+            <Badge className={getFilleulRoleBadgeClass(contact.filleul_categorie)}>
+              {getFilleulCategorieLabel(contact.filleul_categorie)}
             </Badge>
           )}
           {isFilleulTab && contact.filleul_categorie && (

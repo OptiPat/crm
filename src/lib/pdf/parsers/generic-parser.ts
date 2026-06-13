@@ -186,6 +186,13 @@ export function extractSituationFamiliale(text: string): string | undefined {
   if (normalizedText.includes("pacsé") || normalizedText.includes("pacsée")) {
     return "PACSE";
   }
+  if (
+    normalizedText.includes("union libre") ||
+    normalizedText.includes("concubin") ||
+    normalizedText.includes("concubine")
+  ) {
+    return "UNION_LIBRE";
+  }
   if (normalizedText.includes("divorcé") || normalizedText.includes("divorcée")) {
     return "DIVORCE";
   }

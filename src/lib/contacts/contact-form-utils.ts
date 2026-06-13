@@ -16,6 +16,7 @@ export type SituationFamiliale =
   | "CELIBATAIRE"
   | "MARIE"
   | "PACSE"
+  | "UNION_LIBRE"
   | "DIVORCE"
   | "VEUF"
   | "AUTRE";
@@ -102,8 +103,91 @@ export function defaultProchainSuiviForClientStatut(
 }
 
 export function formatPhoneFR(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 10);
+  const digits = normalizePhoneDigits(value).slice(0, 10);
   return digits.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
+}
+
+export function normalizePhoneDigits(value: string): string {
+  return value.replace(/\D/g, "");
+}
+
+/** Saisie libre : + en tête, chiffres et espaces. */
+export function sanitizePhoneInput(value: string): string {
+  const trimmed = value.trimStart();
+  let out = "";
+  for (const ch of trimmed) {
+    if (ch === "+" && out === "") out += ch;
+    else if (/\d/.test(ch)) out += ch;
+    else if (ch === " " && out.length > 0) out += ch;
+  }
+  return out;
+}
+
+/** Format FR (10 chiffres) ou international (+33 …). */
+export function formatPhoneInput(value: string): string {
+  const sanitized = sanitizePhoneInput(value.trim());
+  if (!sanitized) return "";
+
+  if (sanitized.startsWith("+") || sanitized.replace(/\s/g, "").startsWith("00")) {
+    const intlDigits = sanitized.startsWith("+")
+      ? normalizePhoneDigits(sanitized.slice(1))
+      : normalizePhoneDigits(sanitized).slice(2);
+    if (!intlDigits) return "+";
+    if (intlDigits.startsWith("33")) {
+      const national = intlDigits.slice(2, 11);
+      if (!national) return "+33";
+      const head = national.slice(0, 1);
+      const tailSpaced = national.slice(1).replace(/(\d{2})(?=\d)/g, "$1 ").trim();
+      return tailSpaced ? `+33 ${head} ${tailSpaced}` : `+33 ${head}`;
+    }
+    const spaced = intlDigits.replace(/(\d{2})(?=\d)/g, "$1 ").trim();
+    return `+${spaced}`;
+  }
+
+  return formatPhoneFR(sanitized);
+}
+
+export type ContactAddressFields = Pick<NewContact, "adresse" | "code_postal" | "ville">;
+
+export function isContactAddressEmpty(fields: ContactAddressFields): boolean {
+  return !(fields.adresse?.trim() || fields.code_postal?.trim() || fields.ville?.trim());
+}
+
+export function pickFoyerMemberAddress(
+  contacts: Contact[],
+  foyerId: number,
+  excludeContactId?: number
+): ContactAddressFields | null {
+  const targetFoyerId = Number(foyerId);
+  const donor = contacts.find(
+    (c) =>
+      c.foyer_id != null &&
+      Number(c.foyer_id) === targetFoyerId &&
+      c.id !== excludeContactId &&
+      !isContactAddressEmpty(c)
+  );
+  if (!donor) return null;
+  return {
+    adresse: donor.adresse || "",
+    code_postal: donor.code_postal || "",
+    ville: donor.ville || "",
+  };
+}
+
+export function applyFoyerAddressIfEmpty(
+  formData: NewContact,
+  contacts: Contact[],
+  contactId?: number
+): { formData: NewContact; fromFoyer: boolean } {
+  if (!formData.foyer_id || !isContactAddressEmpty(formData)) {
+    return { formData, fromFoyer: false };
+  }
+  const picked = pickFoyerMemberAddress(contacts, formData.foyer_id, contactId);
+  if (!picked) return { formData, fromFoyer: false };
+  return {
+    formData: { ...formData, ...picked },
+    fromFoyer: true,
+  };
 }
 
 const BASE_EMPTY: NewContact = {
@@ -355,6 +439,7 @@ export function formatSituationLabel(situation?: string | null): string | null {
     CELIBATAIRE: "Célibataire",
     MARIE: "Marié(e)",
     PACSE: "Pacsé(e)",
+    UNION_LIBRE: "Union libre",
     DIVORCE: "Divorcé(e)",
     VEUF: "Veuf(ve)",
     AUTRE: "Autre",

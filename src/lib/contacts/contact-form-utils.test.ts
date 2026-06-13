@@ -5,6 +5,8 @@ import {
   defaultProchainSuiviClient,
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
+  formatPhoneInput,
+  applyFoyerAddressIfEmpty,
   getEmptyForm,
   isAlerteSuiviFilleul,
   resolveImportContactCategories,
@@ -116,5 +118,99 @@ describe("contactToFormData", () => {
     });
     expect(payload.categorie).toBe("CLIENT");
     expect(payload.date_prochain_suivi).toBeTruthy();
+  });
+});
+
+describe("formatPhoneInput", () => {
+  it("formate un numéro français classique", () => {
+    expect(formatPhoneInput("0612345678")).toBe("06 12 34 56 78");
+  });
+
+  it("formate un numéro international +33", () => {
+    expect(formatPhoneInput("+33612345678")).toBe("+33 6 12 34 56 78");
+  });
+
+  it("accepte le préfixe 00", () => {
+    expect(formatPhoneInput("0033612345678")).toBe("+33 6 12 34 56 78");
+  });
+});
+
+describe("applyFoyerAddressIfEmpty", () => {
+  const contacts: Contact[] = [
+    {
+      id: 1,
+      nom: "Dupont",
+      prenom: "Jean",
+      categorie: "CLIENT",
+      statut_suivi: "ACTIF",
+      foyer_id: 10,
+      adresse: "12 rue de Paris",
+      code_postal: "75001",
+      ville: "Paris",
+      created_at: 0,
+      updated_at: 0,
+    },
+    {
+      id: 2,
+      nom: "Dupont",
+      prenom: "Marie",
+      categorie: "CLIENT",
+      statut_suivi: "ACTIF",
+      foyer_id: 10,
+      created_at: 0,
+      updated_at: 0,
+    },
+  ];
+
+  it("reprend l'adresse d'un conjoint de foyer si vide", () => {
+    const result = applyFoyerAddressIfEmpty(
+      { nom: "Dupont", prenom: "Marie", categorie: "CLIENT", foyer_id: 10 },
+      contacts,
+      2
+    );
+    expect(result.fromFoyer).toBe(true);
+    expect(result.formData.adresse).toBe("12 rue de Paris");
+    expect(result.formData.ville).toBe("Paris");
+  });
+
+  it("ne remplace pas une adresse déjà renseignée", () => {
+    const result = applyFoyerAddressIfEmpty(
+      {
+        nom: "Dupont",
+        prenom: "Marie",
+        categorie: "CLIENT",
+        foyer_id: 10,
+        ville: "Lyon",
+      },
+      contacts,
+      2
+    );
+    expect(result.fromFoyer).toBe(false);
+    expect(result.formData.ville).toBe("Lyon");
+  });
+
+  it("accepte foyer_id en chaîne côté contact", () => {
+    const contactsWithStringFoyerId: Contact[] = [
+      {
+        id: 1,
+        nom: "Dupont",
+        prenom: "Jean",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        foyer_id: "10" as unknown as number,
+        adresse: "12 rue de Paris",
+        code_postal: "75001",
+        ville: "Paris",
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    const result = applyFoyerAddressIfEmpty(
+      { nom: "Dupont", prenom: "Marie", categorie: "CLIENT", foyer_id: 10 },
+      contactsWithStringFoyerId,
+      2
+    );
+    expect(result.fromFoyer).toBe(true);
+    expect(result.formData.adresse).toBe("12 rue de Paris");
   });
 });

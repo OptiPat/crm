@@ -266,6 +266,7 @@ export function ExtractedDataPreview({
                   <SelectItem value="CELIBATAIRE">Célibataire</SelectItem>
                   <SelectItem value="MARIE">Marié(e)</SelectItem>
                   <SelectItem value="PACSE">Pacsé(e)</SelectItem>
+                  <SelectItem value="UNION_LIBRE">Union libre</SelectItem>
                   <SelectItem value="DIVORCE">Divorcé(e)</SelectItem>
                   <SelectItem value="VEUF">Veuf(ve)</SelectItem>
                   <SelectItem value="AUTRE">Autre</SelectItem>

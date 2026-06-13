@@ -192,7 +192,10 @@ export function DocumentUpload({
 
     // Situation familiale (conversion)
     if (data.situationFamiliale) {
-      const situationMap: Record<string, "CELIBATAIRE" | "MARIE" | "PACSE" | "DIVORCE" | "VEUF" | "AUTRE"> = {
+      const situationMap: Record<
+        string,
+        "CELIBATAIRE" | "MARIE" | "PACSE" | "UNION_LIBRE" | "DIVORCE" | "VEUF" | "AUTRE"
+      > = {
         "CELIBATAIRE": "CELIBATAIRE",
         "MARIE": "MARIE",
         "MARIÉ": "MARIE",
@@ -202,6 +205,9 @@ export function DocumentUpload({
         "PACS": "PACSE",
         "PACSÉ": "PACSE",
         "PACSEE": "PACSE",
+        "UNION_LIBRE": "UNION_LIBRE",
+        "UNION LIBRE": "UNION_LIBRE",
+        "CONCUBINAGE": "UNION_LIBRE",
         "DIVORCE": "DIVORCE",
         "DIVORCÉ": "DIVORCE",
         "DIVORCEE": "DIVORCE",

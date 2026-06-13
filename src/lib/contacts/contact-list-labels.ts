@@ -1,4 +1,4 @@
-import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
+import { getFilleulRoleBadgeClass } from "@/lib/contacts/contact-category-display";
 
 export function getClientCategorieLabel(categorie: string): string | null {
   switch (categorie) {
@@ -31,7 +31,7 @@ export function getFilleulCategorieLabel(filleulCategorie: string): string {
 }
 
 export function getFilleulCategorieBadgeClass(filleulCategorie: string): string {
-  return getContactCategorieBadgeClass("AUCUN", filleulCategorie);
+  return getFilleulRoleBadgeClass(filleulCategorie);
 }
 
 export function getFoyerRoleLabel(role: string): string {

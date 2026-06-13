@@ -35,6 +35,7 @@ import {
   formatSituationLabel,
   getClientLabel,
   getFilleulLabel,
+  isClientActif,
 } from "@/lib/contacts/contact-form-utils";
 import { ContactForm } from "./ContactForm";
 import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer, getInvestissementsByFoyerContacts } from "@/lib/api/tauri-investissements";
@@ -72,7 +73,10 @@ import { ContactInteractionsPanel } from "@/components/interactions/ContactInter
 import { ContactTachesPanel } from "@/components/taches/ContactTachesPanel";
 import { ContactCustomFieldsPanel } from "@/components/contacts/ContactCustomFieldsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
-import { getContactCategorieBadgeClass } from "@/lib/contacts/contact-category-display";
+import {
+  getClientRoleBadgeClass,
+  getFilleulRoleBadgeClass,
+} from "@/lib/contacts/contact-category-display";
 import {
   mergeContactPatrimoineRows,
   type InvestissementWithOwner,
@@ -640,12 +644,8 @@ export function ContactDetail({
 
   if (!contact) return null;
 
-  const getContactStatusLabel = (c: Contact) => {
-    const filleulLabel = getFilleulLabel(c.filleul_categorie);
-    const clientLabel = getClientLabel(c.categorie);
-    if (filleulLabel && clientLabel) return `${clientLabel} · ${filleulLabel}`;
-    return filleulLabel || clientLabel || c.categorie;
-  };
+  const clientRoleLabel = getClientLabel(contact.categorie);
+  const filleulRoleLabel = getFilleulLabel(contact.filleul_categorie);
 
   const getStatutColor = (statut: string) => {
     switch (statut) {
@@ -725,14 +725,21 @@ export function ContactDetail({
           </DialogDescription>
         )}
         <div className="flex flex-wrap gap-2 mt-2">
-          <Badge
-            className={getContactCategorieBadgeClass(
-              contact.categorie,
-              contact.filleul_categorie
-            )}
-          >
-            {getContactStatusLabel(contact)}
-          </Badge>
+          {isClientActif(contact.categorie) && clientRoleLabel && (
+            <Badge className={getClientRoleBadgeClass(contact.categorie)}>
+              {clientRoleLabel}
+            </Badge>
+          )}
+          {filleulRoleLabel && contact.filleul_categorie && (
+            <Badge className={getFilleulRoleBadgeClass(contact.filleul_categorie)}>
+              {filleulRoleLabel}
+            </Badge>
+          )}
+          {!clientRoleLabel && !filleulRoleLabel && contact.categorie !== "AUCUN" && (
+            <Badge className={getClientRoleBadgeClass(contact.categorie)}>
+              {contact.categorie}
+            </Badge>
+          )}
           <Badge className={getStatutColor(contact.statut_suivi)}>{contact.statut_suivi}</Badge>
         </div>
         <div className="flex flex-wrap items-center gap-2 mt-3">

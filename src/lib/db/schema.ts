@@ -69,7 +69,7 @@ export const contacts = sqliteTable("contacts", {
   dateNaissance: integer("date_naissance", { mode: "timestamp" }),
   profession: text("profession"),
   situationFamiliale: text("situation_familiale", {
-    enum: ["CELIBATAIRE", "MARIE", "PACSE", "DIVORCE", "VEUF", "AUTRE"],
+    enum: ["CELIBATAIRE", "MARIE", "PACSE", "UNION_LIBRE", "DIVORCE", "VEUF", "AUTRE"],
   }),
   
   // Informations commerciales

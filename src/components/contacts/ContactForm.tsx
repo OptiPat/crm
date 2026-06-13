@@ -67,7 +67,10 @@ import {
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
   serializeFormSnapshot,
-  formatPhoneFR,
+  formatPhoneInput,
+  applyFoyerAddressIfEmpty,
+  isContactAddressEmpty,
+  sanitizePhoneInput,
   getClientLabel,
   getEmptyForm,
   getFilleulLabel,
@@ -245,6 +248,8 @@ export function ContactForm({
   const [dirty, setDirty] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [showAddress, setShowAddress] = useState(false);
+  const [addressFromFoyer, setAddressFromFoyer] = useState(false);
+  const foyerAddressAppliedRef = useRef(false);
   const [investissementChoice, setInvestissementChoice] =
     useState<InvestissementFormChoice>({ addAfterCreate: false });
   const initialSnapshot = useRef("");
@@ -265,7 +270,11 @@ export function ContactForm({
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      foyerAddressAppliedRef.current = false;
+      setAddressFromFoyer(false);
+      return;
+    }
 
     let data = contact ? contactToFormData(contact) : getEmptyForm(createContext);
     if (!contact && defaultPrescripteurId) {
@@ -276,7 +285,9 @@ export function ContactForm({
     setDirty(false);
     setFieldErrors({});
     setShowAddress(!!(data.adresse || data.code_postal || data.ville));
+    setAddressFromFoyer(false);
     setInvestissementChoice({ addAfterCreate: false });
+    foyerAddressAppliedRef.current = false;
 
     if (contact) {
       getFilleulsByParrain(contact.id)
@@ -287,6 +298,29 @@ export function ContactForm({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- (ré)initialise le formulaire à l'ouverture / changement d'id, pas pendant la saisie
   }, [open, contact?.id, createContext, defaultPrescripteurId]);
+
+  useEffect(() => {
+    if (!open || foyerAddressAppliedRef.current) return;
+    if (!formData.foyer_id || !isContactAddressEmpty(formData)) return;
+
+    const result = applyFoyerAddressIfEmpty(formData, allContacts, contact?.id);
+    if (!result.fromFoyer) return;
+
+    foyerAddressAppliedRef.current = true;
+    setFormData(result.formData);
+    initialSnapshot.current = serializeFormSnapshot(result.formData);
+    setShowAddress(true);
+    setAddressFromFoyer(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- remplissage ponctuel si adresse vide + foyer connu
+  }, [
+    open,
+    allContacts,
+    contact?.id,
+    formData.foyer_id,
+    formData.adresse,
+    formData.code_postal,
+    formData.ville,
+  ]);
 
   useEffect(() => {
     if (!open) return;
@@ -510,6 +544,7 @@ export function ContactForm({
                 <SelectItem value="CELIBATAIRE">Célibataire</SelectItem>
                 <SelectItem value="MARIE">Marié(e)</SelectItem>
                 <SelectItem value="PACSE">Pacsé(e)</SelectItem>
+                <SelectItem value="UNION_LIBRE">Union libre</SelectItem>
                 <SelectItem value="DIVORCE">Divorcé(e)</SelectItem>
                 <SelectItem value="VEUF">Veuf(ve)</SelectItem>
                 <SelectItem value="AUTRE">Autre</SelectItem>
@@ -747,14 +782,19 @@ export function ContactForm({
             <Input
               id="telephone"
               value={formData.telephone || ""}
-              onChange={(e) => setFormData((prev) => ({ ...prev, telephone: e.target.value }))}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  telephone: sanitizePhoneInput(e.target.value),
+                }))
+              }
               onBlur={(e) =>
                 setFormData((prev) => ({
                   ...prev,
-                  telephone: formatPhoneFR(e.target.value),
+                  telephone: formatPhoneInput(e.target.value),
                 }))
               }
-              placeholder="06 12 34 56 78"
+              placeholder="06 12 34 56 78 ou +33 6 12 34 56 78"
             />
           </div>
         </div>
@@ -769,6 +809,11 @@ export function ContactForm({
         </button>
         {showAddress && (
           <div className="space-y-4 pl-1">
+            {addressFromFoyer && (
+              <p className="text-xs text-muted-foreground rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2">
+                Adresse reprise d&apos;un autre membre du même foyer.
+              </p>
+            )}
             <div className="space-y-2">
               <Label htmlFor="adresse">Adresse</Label>
               <Input

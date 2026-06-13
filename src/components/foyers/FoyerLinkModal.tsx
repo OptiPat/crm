@@ -105,10 +105,8 @@ export function FoyerLinkModal({
         notes: `Créé depuis ${currentContact.prenom} ${currentContact.nom} et ${contact.prenom} ${contact.nom}`,
       });
 
-      await Promise.all([
-        linkContactToFoyer(currentContact, newFoyer.id, "DECLARANT_1"),
-        linkContactToFoyer(contact, newFoyer.id, selectedRole),
-      ]);
+      await linkContactToFoyer(currentContact, newFoyer.id, "DECLARANT_1");
+      await linkContactToFoyer(contact, newFoyer.id, selectedRole);
 
       onSuccess();
       onOpenChange(false);

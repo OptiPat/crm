@@ -1,6 +1,10 @@
-import { updateContact, type Contact } from "@/lib/api/tauri-contacts";
+import { updateContact, getContactsByFoyer, type Contact } from "@/lib/api/tauri-contacts";
 import type { Foyer } from "@/lib/api/tauri-foyers";
-import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import {
+  contactToUpdatePayload,
+  isContactAddressEmpty,
+  pickFoyerMemberAddress,
+} from "@/lib/contacts/contact-form-utils";
 import {
   getInvestissementsByContact,
   getInvestissementsByFoyer,
@@ -26,12 +30,25 @@ export async function linkContactToFoyer(
   if (!contact.id) {
     throw new Error("Contact invalide");
   }
+
+  const payloadOverrides: Parameters<typeof contactToUpdatePayload>[1] = {
+    foyer_id: foyerId,
+    role_foyer: roleFoyer,
+  };
+
+  if (isContactAddressEmpty(contact)) {
+    const members = await getContactsByFoyer(foyerId);
+    const picked = pickFoyerMemberAddress(members, foyerId, contact.id);
+    if (picked) {
+      payloadOverrides.adresse = picked.adresse;
+      payloadOverrides.code_postal = picked.code_postal;
+      payloadOverrides.ville = picked.ville;
+    }
+  }
+
   return updateContact(
     contact.id,
-    contactToUpdatePayload(contact, {
-      foyer_id: foyerId,
-      role_foyer: roleFoyer,
-    }),
+    contactToUpdatePayload(contact, payloadOverrides),
     options
   );
 }
