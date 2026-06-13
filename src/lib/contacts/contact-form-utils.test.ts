@@ -107,4 +107,14 @@ describe("contactToFormData", () => {
     expect(payload.categorie).toBe("PRESCRIPTEUR");
     expect(payload.telephone).toBe("0612345678");
   });
+
+  it("permet de convertir un prescripteur en client", () => {
+    const payload = buildSubmitPayload({
+      ...contactToFormData(prescripteur),
+      categorie: "CLIENT",
+      date_prochain_suivi: "2027-01-01",
+    });
+    expect(payload.categorie).toBe("CLIENT");
+    expect(payload.date_prochain_suivi).toBeTruthy();
+  });
 });

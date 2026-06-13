@@ -74,6 +74,7 @@ import {
   getFieldErrors,
   isClientActif,
   isFilleulStatut,
+  isPrescripteurCategorie,
   todayLocal,
 } from "@/lib/contacts/contact-form-utils";
 
@@ -170,6 +171,7 @@ function ContactFormSummary({
   parrainContact: Contact | null;
 }) {
   const clientLabel = getClientLabel(formData.categorie || "AUCUN");
+  const prescripteurRole = isPrescripteurCategorie(formData.categorie);
   const filleulLabel = getFilleulLabel(formData.filleul_categorie);
   const displayName =
     contact?.prenom && contact?.nom
@@ -183,7 +185,14 @@ function ContactFormSummary({
       <p className="font-medium text-sm">{displayName}</p>
       <div className="flex flex-wrap gap-1.5">
         {clientLabel && (
-          <Badge variant="outline" className="bg-green-50 text-green-800 border-green-200">
+          <Badge
+            variant="outline"
+            className={
+              prescripteurRole
+                ? "bg-purple-50 text-purple-800 border-purple-200"
+                : "bg-green-50 text-green-800 border-green-200"
+            }
+          >
             {clientLabel}
           </Badge>
         )}
@@ -375,8 +384,7 @@ export function ContactForm({
   const filleulActif = isFilleulStatut(formData.filleul_categorie);
   const clientActif = isClientActif(formData.categorie);
   const isClientStatut = formData.categorie === "CLIENT";
-  const isPrescripteurForm =
-    createContext === "prescripteurs" || formData.categorie === "PRESCRIPTEUR";
+  const isPrescripteurForm = createContext === "prescripteurs" && !isEdit;
 
   const setFilleulStatut = (value: string) => {
     if (value === "AUCUN") {
@@ -397,8 +405,16 @@ export function ContactForm({
     }
   };
 
-  const setClientStatut = (value: ClientStatut) => {
-    if (value === "AUCUN") {
+  const setClientStatut = (value: ClientStatut | "PRESCRIPTEUR") => {
+    if (value === "PRESCRIPTEUR") {
+      setFormData((prev) => ({
+        ...prev,
+        categorie: "PRESCRIPTEUR",
+        prescripteur_id: undefined,
+        date_dernier_contact: "",
+        date_prochain_suivi: "",
+      }));
+    } else if (value === "AUCUN") {
       setFormData((prev) => ({
         ...prev,
         categorie: "AUCUN",
@@ -565,7 +581,9 @@ export function ContactForm({
                 <Label>Statut client</Label>
                 <Select
                   value={formData.categorie || "AUCUN"}
-                  onValueChange={(value) => setClientStatut(value as ClientStatut)}
+                  onValueChange={(value) =>
+                    setClientStatut(value as ClientStatut | "PRESCRIPTEUR")
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -575,6 +593,9 @@ export function ContactForm({
                     <SelectItem value="CLIENT">Client</SelectItem>
                     <SelectItem value="PROSPECT_CLIENT">Prospect client</SelectItem>
                     <SelectItem value="SUSPECT_CLIENT">Suspect client</SelectItem>
+                    {isEdit && (
+                      <SelectItem value="PRESCRIPTEUR">Prescripteur</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -872,7 +893,7 @@ export function ContactForm({
   );
 
   const title = isEdit
-    ? isPrescripteurForm
+    ? isPrescripteurCategorie(formData.categorie)
       ? "Modifier le prescripteur"
       : "Modifier le contact"
     : createContext === "prescripteurs"
