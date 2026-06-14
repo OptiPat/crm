@@ -36,43 +36,41 @@ export function SouscriptionCifDossierForm({
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="cif-date-doc">Date du document</Label>
-                <Input
-                  id="cif-date-doc"
-                  type="date"
-                  value={value.dateDoc}
-                  onChange={(e) => onChange({ dateDoc: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cif-date-der">Date du premier entretien (DER)</Label>
-                <Input
-                  id="cif-date-der"
-                  type="date"
-                  value={value.dateDer}
-                  onChange={(e) => onChange({ dateDer: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cif-date-rio">Date de signature du RIO</Label>
-                <Input
-                  id="cif-date-rio"
-                  type="date"
-                  value={value.dateRio}
-                  onChange={(e) => onChange({ dateRio: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cif-date-qpi">Date de signature du QPI</Label>
-                <Input
-                  id="cif-date-qpi"
-                  type="date"
-                  value={value.dateQpi}
-                  onChange={(e) => onChange({ dateQpi: e.target.value })}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="cif-date-doc">Date du document</Label>
+              <Input
+                id="cif-date-doc"
+                type="date"
+                value={value.dateDoc}
+                onChange={(e) => onChange({ dateDoc: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cif-date-der">Date du premier entretien (DER)</Label>
+              <Input
+                id="cif-date-der"
+                type="date"
+                value={value.dateDer}
+                onChange={(e) => onChange({ dateDer: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cif-date-rio">Date de signature du RIO</Label>
+              <Input
+                id="cif-date-rio"
+                type="date"
+                value={value.dateRio}
+                onChange={(e) => onChange({ dateRio: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cif-date-qpi">Date de signature du QPI</Label>
+              <Input
+                id="cif-date-qpi"
+                type="date"
+                value={value.dateQpi}
+                onChange={(e) => onChange({ dateQpi: e.target.value })}
+              />
             </div>
             <div className="space-y-2">
               <Label htmlFor="cif-lieu-naissance">Lieu de naissance du client</Label>

@@ -514,7 +514,19 @@ impl Database {
         self.migrate_contacts_google_sync()?;
         self.migrate_google_contact_name_proposal_dismissals()?;
         self.migrate_add_lieu_naissance()?;
+        self.migrate_drop_contacts_date_expiration_identite()?;
 
+        Ok(())
+    }
+
+    fn migrate_drop_contacts_date_expiration_identite(&self) -> Result<()> {
+        if self.table_has_column("contacts", "date_expiration_identite")? {
+            self.conn.execute(
+                "ALTER TABLE contacts DROP COLUMN date_expiration_identite",
+                [],
+            )?;
+            println!("✅ Migration: colonne orpheline date_expiration_identite supprimée");
+        }
         Ok(())
     }
 

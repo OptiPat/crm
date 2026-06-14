@@ -379,6 +379,7 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
         open={showUpload}
         onOpenChange={setShowUpload}
         onSuccess={loadDocuments}
+        defaultContactId={contactFilterId ?? undefined}
       />
     </div>
   );

@@ -44,6 +44,7 @@ import {
   createContact,
   updateContact,
   getContactById,
+  getAllContacts,
   type Contact,
   type NewContact,
 } from "@/lib/api/tauri-contacts";
@@ -55,12 +56,15 @@ import {
 } from "@/lib/contacts/duplicate-identity";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
+import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 
 interface DocumentUploadProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
   contactId?: number;
+  /** Pré-sélection client (page Documents filtrée) — modifiable. */
+  defaultContactId?: number;
   foyerId?: number;
   /** Affichage dialogue identité (fiche contact). */
   contactNom?: string;
@@ -70,7 +74,7 @@ interface DocumentUploadProps {
 }
 
 const IDENTITY_REQUIRED_MSG =
-  "Pour une pièce d'identité, ouvrez d'abord la fiche client → onglet Patrimoine → « Importer un document ».";
+  "Sélectionnez un client pour importer une pièce d'identité.";
 
 type PickedFile = { path: string; name: string; size: number };
 type IdentityImportMode = "single" | "two_files";
@@ -80,6 +84,7 @@ export function DocumentUpload({
   onOpenChange,
   onSuccess,
   contactId,
+  defaultContactId,
   foyerId,
   contactNom,
   contactPrenom,
@@ -111,8 +116,15 @@ export function DocumentUpload({
     name: string;
     size: number;
   } | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<number | undefined>(
+    contactId ?? defaultContactId
+  );
+  const [importContacts, setImportContacts] = useState<Contact[]>([]);
+  const [linkedContact, setLinkedContact] = useState<Contact | null>(null);
+  const contactLocked = contactId != null;
+  const effectiveContactId = contactId ?? selectedContactId;
   const [formData, setFormData] = useState<Partial<NewDocument>>({
-    contact_id: contactId,
+    contact_id: contactId ?? defaultContactId,
     foyer_id: foyerId,
     type_document: "AUTRE",
     date_document: "",
@@ -121,12 +133,38 @@ export function DocumentUpload({
 
   useEffect(() => {
     if (!open) return;
+    setSelectedContactId(contactId ?? defaultContactId);
     setFormData((prev) => ({
       ...prev,
-      contact_id: contactId,
+      contact_id: contactId ?? defaultContactId,
       foyer_id: foyerId,
     }));
-  }, [open, contactId, foyerId]);
+  }, [open, contactId, defaultContactId, foyerId]);
+
+  useEffect(() => {
+    if (!open || contactLocked) return;
+    void getAllContacts()
+      .then(setImportContacts)
+      .catch((error) => console.error("Error loading contacts:", error));
+  }, [open, contactLocked]);
+
+  useEffect(() => {
+    if (!effectiveContactId) {
+      setLinkedContact(null);
+      return;
+    }
+    if (contactLocked) return;
+    void getContactById(effectiveContactId)
+      .then(setLinkedContact)
+      .catch((error) => {
+        console.error("Error loading contact:", error);
+        setLinkedContact(null);
+      });
+  }, [effectiveContactId, contactLocked]);
+
+  useEffect(() => {
+    setFormData((prev) => ({ ...prev, contact_id: effectiveContactId }));
+  }, [effectiveContactId]);
 
   const isIdentityMode = formData.type_document === "IDENTITE";
 
@@ -149,7 +187,7 @@ export function DocumentUpload({
   };
 
   const requireContactForIdentity = (): boolean => {
-    if (contactId) return true;
+    if (effectiveContactId) return true;
     toast.error(IDENTITY_REQUIRED_MSG);
     return false;
   };
@@ -185,7 +223,7 @@ export function DocumentUpload({
   };
 
   const canRunIdentityExtract =
-    Boolean(contactId) &&
+    Boolean(effectiveContactId) &&
     isIdentityMode &&
     uploadedFile &&
     isIdentityFilePath(uploadedFile.path) &&
@@ -430,9 +468,9 @@ export function DocumentUpload({
   };
 
   const resolveExistingContact = async (data: ExtractedData): Promise<Contact | null> => {
-    if (contactId) {
+    if (effectiveContactId) {
       try {
-        return await getContactById(contactId);
+        return await getContactById(effectiveContactId);
       } catch {
         // Fiche introuvable : retomber sur email / nom comme pour un import libre
       }
@@ -456,7 +494,7 @@ export function DocumentUpload({
     setLoading(true);
 
     try {
-      let finalContactId = contactId;
+      let finalContactId = effectiveContactId;
       let successMessage = "";
       let isExistingContactWithInvestments = false;
       let existingContactNom = "";
@@ -591,7 +629,7 @@ export function DocumentUpload({
         setUploadedFile(null);
         setExtractedText("");
         setFormData({
-          contact_id: contactId,
+          contact_id: contactId ?? defaultContactId,
           foyer_id: foyerId,
           type_document: "AUTRE",
           date_document: "",
@@ -667,7 +705,7 @@ export function DocumentUpload({
       setUploadedFile(null);
       setExtractedText("");
       setFormData({
-        contact_id: contactId,
+        contact_id: contactId ?? defaultContactId,
         foyer_id: foyerId,
         type_document: "AUTRE",
         date_document: "",
@@ -712,7 +750,7 @@ export function DocumentUpload({
     setUploadedFile(null);
     setExtractedText("");
     setFormData({
-      contact_id: contactId,
+      contact_id: contactId ?? defaultContactId,
       foyer_id: foyerId,
       type_document: "AUTRE",
       date_document: "",
@@ -739,7 +777,7 @@ export function DocumentUpload({
   };
 
   const handleApplyIdentity = async (values: IdentityPreviewValues) => {
-    if (!contactId || !uploadedFile) {
+    if (!effectiveContactId || !uploadedFile) {
       toast.error("Contact ou fichier manquant.");
       return;
     }
@@ -750,7 +788,7 @@ export function DocumentUpload({
 
     setLoading(true);
     try {
-      const contact = await getContactById(contactId);
+      const contact = await getContactById(effectiveContactId);
       const extracted: IdentityExtractResult = {
         source: identityExtracted?.source ?? "visual",
         confidence: identityExtracted?.confidence ?? 0,
@@ -783,7 +821,7 @@ export function DocumentUpload({
       if (Object.keys(patch).length === 0) {
         toast.info("Aucun champ vide à compléter sur cette fiche.");
       } else {
-        await updateContact(contactId, contactToUpdatePayload(contact, patch));
+        await updateContact(effectiveContactId, contactToUpdatePayload(contact, patch));
         toast.success(`Fiche complétée : ${filledFields.join(", ")}`);
       }
       if (skippedFields.length > 0) {
@@ -796,7 +834,7 @@ export function DocumentUpload({
         undefined;
 
       await createDocument({
-        contact_id: contactId,
+        contact_id: effectiveContactId,
         foyer_id: foyerId,
         type_document: "IDENTITE",
         nom_fichier: uploadedFile.name,
@@ -813,14 +851,14 @@ export function DocumentUpload({
 
       if (uploadedVersoFile) {
         await createDocument({
-          contact_id: contactId,
+          contact_id: effectiveContactId,
           foyer_id: foyerId,
           type_document: "IDENTITE",
           nom_fichier: uploadedVersoFile.name,
           chemin_fichier: uploadedVersoFile.path,
           taille_fichier: uploadedVersoFile.size,
           mime_type: getMimeType(uploadedVersoFile.name),
-          date_document: formData.date_document || undefined,
+          date_document: documentExpiryDate,
           notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
         });
       }
@@ -843,6 +881,10 @@ export function DocumentUpload({
     
     if (!uploadedFile) {
       alert("Veuillez sélectionner un fichier");
+      return;
+    }
+    if (isIdentityMode && !effectiveContactId) {
+      toast.error(IDENTITY_REQUIRED_MSG);
       return;
     }
     if (identityImportMode === "two_files" && isIdentityMode && !uploadedVersoFile) {
@@ -889,7 +931,7 @@ export function DocumentUpload({
       setExtractedText("");
       setExtractedData(null);
       setFormData({
-        contact_id: contactId,
+        contact_id: contactId ?? defaultContactId,
         foyer_id: foyerId,
         type_document: "AUTRE",
         date_document: "",
@@ -926,6 +968,15 @@ export function DocumentUpload({
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(2) + " KB";
     return (bytes / (1024 * 1024)).toFixed(2) + " MB";
   };
+
+  const previewContactNom = contactLocked ? contactNom : linkedContact?.nom;
+  const previewContactPrenom = contactLocked ? contactPrenom : linkedContact?.prenom;
+  const previewContactDateNaissance = contactLocked
+    ? contactDateNaissance
+    : linkedContact?.date_naissance;
+  const previewContactLieuNaissance = contactLocked
+    ? contactLieuNaissance
+    : linkedContact?.lieu_naissance;
 
   return (
     <>
@@ -974,10 +1025,10 @@ export function DocumentUpload({
         extracted={identityExtracted}
         onConfirm={handleApplyIdentity}
         loading={loading}
-        contactNom={contactNom}
-        contactPrenom={contactPrenom}
-        contactDateNaissance={contactDateNaissance}
-        contactLieuNaissance={contactLieuNaissance}
+        contactNom={previewContactNom}
+        contactPrenom={previewContactPrenom}
+        contactDateNaissance={previewContactDateNaissance}
+        contactLieuNaissance={previewContactLieuNaissance}
         rectoPreviewPath={uploadedFile?.path}
         versoPreviewPath={
           identityImportMode === "two_files" ? uploadedVersoFile?.path : undefined
@@ -989,20 +1040,32 @@ export function DocumentUpload({
         <DialogHeader>
           <DialogTitle>Importer un document</DialogTitle>
           <DialogDescription>
-            {contactId ? (
+            {effectiveContactId ? (
               <>
                 RIO, relevé patrimonial ou pièce d&apos;identité — détection automatique selon
                 le fichier. La CNI complète uniquement les champs vides de la fiche.
               </>
             ) : (
               <>
-                RIO et relevés patrimoniaux. {IDENTITY_REQUIRED_MSG}
+                RIO et relevés patrimoniaux. Pour une pièce d&apos;identité, sélectionnez d&apos;abord
+                un client.
               </>
             )}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!contactLocked && (
+            <ContactPersonSearch
+              label="Client"
+              hint="Document lié à ce contact en base"
+              placeholder="Rechercher un client…"
+              contacts={importContacts}
+              value={selectedContactId}
+              onChange={(id) => setSelectedContactId(id)}
+            />
+          )}
+
           {/* Type de document */}
           <div className="space-y-2">
             <Label htmlFor="type_document">Type de document *</Label>
@@ -1202,20 +1265,26 @@ export function DocumentUpload({
             </div>
           </div>
 
-          {/* Date du document / fin de validité */}
-          <div className="space-y-2">
-            <Label htmlFor="date_document">
-              {isIdentityMode ? "Fin de validité (pièce importée)" : "Date du document"}
-            </Label>
-            <Input
-              id="date_document"
-              type="date"
-              value={formData.date_document || ""}
-              onChange={(e) =>
-                setFormData({ ...formData, date_document: e.target.value })
-              }
-            />
-          </div>
+          {/* Date du document (hors identité : validité saisie dans la preview OCR) */}
+          {!isIdentityMode && (
+            <div className="space-y-2">
+              <Label htmlFor="date_document">Date du document</Label>
+              <Input
+                id="date_document"
+                type="date"
+                value={formData.date_document || ""}
+                onChange={(e) =>
+                  setFormData({ ...formData, date_document: e.target.value })
+                }
+              />
+            </div>
+          )}
+
+          {isIdentityMode && (
+            <p className="text-xs text-muted-foreground">
+              Fin de validité : renseignée dans la preview après analyse de la pièce.
+            </p>
+          )}
 
           {/* Notes */}
           <div className="space-y-2">

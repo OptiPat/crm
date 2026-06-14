@@ -133,6 +133,22 @@ describe("visual-identity-parser", () => {
     `);
     expect(fields.lieuNaissance).toBeUndefined();
   });
+
+  it("lit le lieu depuis un OCR passeport (département + ville)", () => {
+    const fields = extractVisualIdentityFields(`
+      run. des Hautes pynétiñen TARBES
+      Date d'expiration : 11/09/2027
+    `);
+    expect(fields.lieuNaissance).toBe("Tarbes");
+  });
+
+  it("lit Place of birth sur passeport bilingue", () => {
+    const fields = extractVisualIdentityFields(`
+      Lieu de naissance / Place of birth
+      MONTPELLIER (34172)
+    `);
+    expect(fields.lieuNaissance).toBe("Montpellier");
+  });
 });
 
 describe("identity-pdf-layout", () => {

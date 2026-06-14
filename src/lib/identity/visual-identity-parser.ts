@@ -69,27 +69,48 @@ function extractLikelyBirthDate(text: string): string | undefined {
   return fallback?.date;
 }
 
+function birthDateSearchPatterns(dateFr: string): RegExp[] {
+  const normalized = normalizeIdentityDate(dateFr);
+  if (!normalized) return [];
+  const [dd, mm, yyyy] = normalized.split("/");
+  const variants = [
+    normalized,
+    `${dd} ${mm} ${yyyy}`,
+    `${dd}.${mm}.${yyyy}`,
+    `${dd}-${mm}-${yyyy}`,
+  ];
+  return variants.map((variant) => {
+    const escaped = variant.replace(/\//g, "[\\s./-]+");
+    return new RegExp(
+      `${escaped}[\\s\\S]{0,120}?[AÀa@]\\s*:?\\s*([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'()0-9 -]{2,})`,
+      "i"
+    );
+  });
+}
+
 function extractLikelyBirthPlace(text: string, birthDate?: string): string | undefined {
   const normalized = normalizeOcrText(text);
 
   if (birthDate) {
-    const escaped = birthDate.replace(/\//g, "[\\s./-]+");
-    const nearDate = new RegExp(
-      `${escaped}[\\s\\S]{0,100}?[AÀa@]\\s*:?\\s*([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'()0-9 -]{2,})`,
-      "i"
-    );
-    const nearMatch = normalized.match(nearDate);
-    if (nearMatch) {
-      const place = sanitizeBirthPlace(cleanPlaceToken(nearMatch[1]!));
-      if (place) return titleCasePlace(place);
+    for (const pattern of birthDateSearchPatterns(birthDate)) {
+      const nearMatch = normalized.match(pattern);
+      if (nearMatch) {
+        const place = sanitizeBirthPlace(cleanPlaceToken(nearMatch[1]!));
+        if (place) return titleCasePlace(place);
+      }
     }
   }
 
-  const placePatterns = [
+  const placePatterns: RegExp[] = [
     new RegExp(
       `N[eé6]\\(?e?\\)?\\s*le\\s*:?\\s*${DATE_TOKEN}[\\s\\S]{0,80}?[AÀa@]\\s*:?\\s*([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'()0-9 -]{2,})`,
       "i"
     ),
+    /Lieu\s+de\s+naissance\s*(?:\/\s*Place\s+of\s+birth\s*)?:?\s*([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'()0-9 -]{2,})/i,
+    /Place\s+of\s+birth\s*:?\s*([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'()0-9 -]{2,})/i,
+    /\b([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'-]{4,})\s*\(\d{5}\)/,
+    /pyr[eéè]n[eéè]es[\s\\|./-]{0,40}\b([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'-]{4,})\b/,
+    /pyn[eéè][a-zà-ü\s\\|./-]{0,24}\b([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'-]{4,})\b/,
     /Lieu\s+de\s+naissance\s*:?\s*([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'()0-9 -]{2,})/i,
   ];
 
@@ -101,6 +122,9 @@ function extractLikelyBirthPlace(text: string, birthDate?: string): string | und
     }
   }
 
+  const hautesPlace = extractCityAfterHautes(normalized);
+  if (hautesPlace) return hautesPlace;
+
   return undefined;
 }
 
@@ -108,8 +132,23 @@ function cleanPlaceToken(raw: string): string {
   return raw
     .split("\n")[0]!
     .replace(/\s+/g, " ")
+    .replace(/\s*\(\d{5}\)\s*$/, "")
     .replace(/\s+(Taille|Sexe|SEX|M|F|Nationalit[eé].*)$/i, "")
     .trim();
+}
+
+function lastAllCapsToken(chunk: string): string | undefined {
+  const tokens = [...chunk.matchAll(/\b([A-ZÀ-ÜÉÈÊÎÏÔÙÇ'-]{4,})\b/g)].map((m) => m[1]!);
+  return tokens.length > 0 ? tokens[tokens.length - 1] : undefined;
+}
+
+function extractCityAfterHautes(normalized: string): string | undefined {
+  const match = normalized.match(/des\s+Hautes[\s\S]{0,60}/i);
+  if (!match) return undefined;
+  const city = lastAllCapsToken(match[0]);
+  if (!city) return undefined;
+  const place = sanitizeBirthPlace(cleanPlaceToken(city));
+  return place ? titleCasePlace(place) : undefined;
 }
 
 export function extractVisualIdentityFields(text: string): VisualIdentityFields {
@@ -147,7 +186,8 @@ export function extractVisualIdentityFields(text: string): VisualIdentityFields 
 
   const birthPatterns = [
     new RegExp(`N[eé6]\\(?e?\\)?\\s*le\\s*:?\\s*(${DATE_TOKEN})`, "i"),
-    new RegExp(`Date\\s+de\\s+naissance\\s*:?\\s*(${DATE_TOKEN})`, "i"),
+    new RegExp(`Date\\s+de\\s+naissance\\s*(?:\\/\\s*Date\\s+of\\s+birth\\s*)?:?\\s*(${DATE_TOKEN})`, "i"),
+    new RegExp(`Date\\s+of\\s+birth\\s*:?\\s*(${DATE_TOKEN})`, "i"),
     new RegExp(`Birth\\s*:?\\s*(${DATE_TOKEN})`, "i"),
   ];
 

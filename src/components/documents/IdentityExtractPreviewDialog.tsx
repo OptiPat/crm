@@ -62,10 +62,12 @@ function IdentityDocumentPreviewPanel({
   open,
   rectoPath,
   versoPath,
+  showLieuNaissanceField,
 }: {
   open: boolean;
   rectoPath?: string;
   versoPath?: string;
+  showLieuNaissanceField: boolean;
 }) {
   const [pages, setPages] = useState<IdentityPreviewPage[]>([]);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -101,7 +103,9 @@ function IdentityDocumentPreviewPanel({
   return (
     <div className="flex min-h-0 flex-col gap-2 lg:max-h-[calc(90vh-11rem)]">
       <p className="text-xs text-muted-foreground">
-        Faites défiler pour voir toutes les pages et recopier le lieu de naissance.
+        {showLieuNaissanceField
+          ? "Faites défiler pour voir toutes les pages et recopier le lieu de naissance si besoin."
+          : "Faites défiler pour voir toutes les pages du document."}
       </p>
 
       {previewLoading && (
@@ -207,6 +211,7 @@ export function IdentityExtractPreviewDialog({
               open={open}
               rectoPath={rectoPreviewPath}
               versoPath={versoPreviewPath}
+              showLieuNaissanceField={showLieuNaissanceField}
             />
           )}
 
