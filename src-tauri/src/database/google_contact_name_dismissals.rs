@@ -49,6 +49,7 @@ mod tests {
             code_postal: None,
             ville: None,
             date_naissance: None,
+            lieu_naissance: None,
             profession: None,
             situation_familiale: None,
             source_lead: None,

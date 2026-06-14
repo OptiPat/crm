@@ -25,6 +25,8 @@ import {
   type ContactRelationTimelineItem,
 } from "@/lib/interactions/contact-relation-timeline";
 import { getSentSubjectLabel } from "@/lib/interactions/exchange-history-display";
+import { getDocumentMetaLines } from "@/lib/documents/document-display";
+import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { INTERACTION_TYPES } from "@/lib/api/tauri-interactions";
 import type { ContactGmailMessage } from "@/lib/api/tauri-contact-gmail";
 import {
@@ -457,6 +459,7 @@ export function ContactRelationTimelineRow({
 
   if (item.kind === "document") {
     const doc = item.document;
+    const validityLine = getDocumentMetaLines(doc).find((line) => line.label === "Validité");
     return (
       <li className="relative flex items-start gap-3 p-3 pl-1 border border-border/80 rounded-lg bg-card text-sm">
         <span className="p-2 rounded-lg bg-slate-100 shrink-0 h-fit">
@@ -472,7 +475,14 @@ export function ContactRelationTimelineRow({
             </span>
           </div>
           <p className="font-medium leading-snug break-all">{doc.nom_fichier}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{doc.type_document}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {getDocumentTypeLabel(doc.type_document)}
+          </p>
+          {validityLine && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Validité : {validityLine.value}
+            </p>
+          )}
         </div>
       </li>
     );

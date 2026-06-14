@@ -513,7 +513,19 @@ impl Database {
         self.migrate_calendar_events()?;
         self.migrate_contacts_google_sync()?;
         self.migrate_google_contact_name_proposal_dismissals()?;
+        self.migrate_add_lieu_naissance()?;
 
+        Ok(())
+    }
+
+    fn migrate_add_lieu_naissance(&self) -> Result<()> {
+        if self.table_has_column("contacts", "lieu_naissance")? {
+            return Ok(());
+        }
+        println!("🔄 Migration : Ajout de lieu_naissance aux contacts...");
+        self.conn
+            .execute("ALTER TABLE contacts ADD COLUMN lieu_naissance TEXT", [])?;
+        println!("✅ Migration lieu_naissance appliquée");
         Ok(())
     }
 

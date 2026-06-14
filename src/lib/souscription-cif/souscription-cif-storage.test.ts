@@ -24,6 +24,7 @@ describe("souscription-cif-storage", () => {
   it("persists client and dossier fields", () => {
     saveSouscriptionCifDraft({
       productType: "scpi",
+      activeDocument: "lettre-mission",
       selectedContactId: 42,
       dossiersByContactId: {
         "42": {
@@ -33,6 +34,11 @@ describe("souscription-cif-storage", () => {
           dateQpi: "2026-02-15",
           lieuNaissance: "Montpellier",
           objectifsClient: "Revenus complémentaires",
+          rappelDemande: "",
+          rappelSituationClient: "",
+          conseil: "",
+          mesPreconisations: "",
+          scpiAnnexeProductKeys: [],
         },
       },
     });

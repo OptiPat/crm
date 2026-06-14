@@ -54,6 +54,7 @@ import {
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
+import { formatSriWithDefinition } from "@/lib/contacts/investisseur-sri";
 import {
   type ClientStatut,
   type Civilite,
@@ -591,6 +592,17 @@ export function ContactForm({
             />
           </div>
           <div className="space-y-2">
+            <Label htmlFor="lieu_naissance">Lieu de naissance</Label>
+            <Input
+              id="lieu_naissance"
+              value={formData.lieu_naissance || ""}
+              onChange={(e) => setFormData((prev) => ({ ...prev, lieu_naissance: e.target.value }))}
+              placeholder="Ex. Montpellier"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
             <Label htmlFor="profession">Profession</Label>
             <Input
               id="profession"
@@ -753,6 +765,11 @@ export function ContactForm({
                   className={fieldErrors.profil_risque_sri ? "border-destructive" : ""}
                 />
                 <FieldHint error={fieldErrors.profil_risque_sri} />
+                {formData.profil_risque_sri != null && formatSriWithDefinition(formData.profil_risque_sri) && (
+                  <p className="text-xs text-muted-foreground">
+                    {formatSriWithDefinition(formData.profil_risque_sri)}
+                  </p>
+                )}
               </div>
             </div>
           </FormSection>

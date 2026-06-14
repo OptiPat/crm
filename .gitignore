@@ -27,6 +27,8 @@ dist-ssr
 /src-tauri/target
 
 # --- Données sensibles (ne jamais committer) ---
+_fixtures/identity/*
+!_fixtures/identity/.gitkeep
 .cursor/mcp.json
 scripts/invoke-n8n-mcp*.ps1
 scripts/n8n-*.json

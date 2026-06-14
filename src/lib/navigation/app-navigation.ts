@@ -21,6 +21,7 @@ export type AppNavigationDetail =
       etiquetteId?: number;
     }
   | { type: "interactions"; contactId?: number }
+  | { type: "documents"; contactId?: number }
   | { type: "parametres"; section: SettingsSectionId; scrollToId?: string }
   | { type: "page"; page: string };
 
@@ -56,6 +57,11 @@ function persistNavigationDetail(detail: AppNavigationDetail): void {
     case "interactions":
       if (detail.contactId != null) {
         sessionStorage.setItem("crm_nav_interactions_contact_id", String(detail.contactId));
+      }
+      break;
+    case "documents":
+      if (detail.contactId != null) {
+        sessionStorage.setItem("crm_nav_documents_contact_id", String(detail.contactId));
       }
       break;
     case "parametres":

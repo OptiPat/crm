@@ -6,6 +6,16 @@ export type SouscriptionDossierFields = {
   dateQpi: string;
   lieuNaissance: string;
   objectifsClient: string;
+  /** Rapport de mission — rappel de la demande. */
+  rappelDemande: string;
+  /** Rapport de mission — puces situation client (Recueil / QPI). */
+  rappelSituationClient: string;
+  /** Annexes — paragraphe de conseil (préconisation SCPI). */
+  conseil: string;
+  /** Annexes — préconisations détaillées (montants, parts, VP…). */
+  mesPreconisations: string;
+  /** Annexes — fiches SCPI sélectionnées (catalogue → `descriptions_scpi`). */
+  scpiAnnexeProductKeys: string[];
 };
 
 export function todayDateInputValue(): string {
@@ -22,5 +32,10 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     dateQpi: "",
     lieuNaissance: "",
     objectifsClient: "",
+    rappelDemande: "",
+    rappelSituationClient: "",
+    conseil: "",
+    mesPreconisations: "",
+    scpiAnnexeProductKeys: [],
   };
 }

@@ -7,6 +7,7 @@ import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
 import type { Document } from "@/lib/api/tauri-documents";
 import { getDocumentsByContact } from "@/lib/api/tauri-documents";
+import { documentTimelineSortDate } from "@/lib/documents/document-display";
 import type { Tache } from "@/lib/api/tauri-taches";
 import { getTachesByContact } from "@/lib/api/tauri-taches";
 import {
@@ -42,15 +43,6 @@ const CRM_KINDS = new Set([
   "document",
   "tache",
 ]);
-
-/** Date d'un document (`date_document` texte) → timestamp Unix, sinon `created_at`. */
-function documentSortDate(doc: Document): number {
-  if (doc.date_document) {
-    const ms = Date.parse(doc.date_document);
-    if (!isNaN(ms)) return Math.floor(ms / 1000);
-  }
-  return doc.created_at;
-}
 
 /** Trace `interactions` liée à une campagne — affichée via le fil email unifié. */
 export function isLegacyCampaignInteraction(item: Interaction): boolean {
@@ -111,7 +103,7 @@ export function buildContactRelationTimeline(
       kind: "document" as const,
       document,
       key: `document-${document.id}`,
-      sort_date: documentSortDate(document),
+      sort_date: documentTimelineSortDate(document),
     })),
     ...(extras.taches ?? []).map((tache) => ({
       kind: "tache" as const,

@@ -1,4 +1,4 @@
-/** Page 4 — Lettre de mission SCPI (article 5 + tableau instruments). */
+/** Page 4 — Lettre de mission CIF (article 5 + tableau instruments). */
 
 export const SCPI_LM_PAGE4_BODY = `[u]5. Information sur les stratégies d'investissement et instruments financiers envisagés[/u]
 

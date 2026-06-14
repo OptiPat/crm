@@ -7,6 +7,7 @@ import {
   cifDocumentBodyTextClass,
   cifDocumentFooterClass,
   cifDocumentPageClass,
+  cifDocumentSectionTitleClass,
   cifDocumentTitleClass,
 } from "@/lib/souscription-cif/document-page-layout";
 import { cn } from "@/lib/utils";
@@ -16,7 +17,11 @@ import type {
   SouscriptionPreviewSegment,
 } from "@/lib/souscription-cif/render-template";
 import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AnnexesScpiProsConsTable } from "@/components/souscription-cif/AnnexesScpiProsConsTable";
+import { ScpiAmfRiskScaleTable } from "@/components/souscription-cif/ScpiAmfRiskScaleTable";
 import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInstrumentsTable";
+import { RmRecapTable } from "@/components/souscription-cif/RmRecapTable";
+import { ScpiLmSignatureBlock } from "@/components/souscription-cif/ScpiLmSignatureBlock";
 
 function RenderSegments({ segments }: { segments: SouscriptionPreviewSegment[] }) {
   return (
@@ -62,16 +67,72 @@ function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
 
       {page.title && <h2 className={cifDocumentTitleClass}>{page.title}</h2>}
 
-      <div className={cifDocumentBodyProseClass}>
-        <RenderSegments segments={page.bodySegments} />
-      </div>
+      {page.bodySegments.length > 0 && (
+        <div className={cifDocumentBodyProseClass}>
+          <RenderSegments segments={page.bodySegments} />
+        </div>
+      )}
+
+      {page.centeredSectionTitle && (
+        <h3 className={cifDocumentSectionTitleClass}>{page.centeredSectionTitle}</h3>
+      )}
+
+      {page.bodySegmentsContinuation && page.bodySegmentsContinuation.length > 0 && (
+        <div className={cifDocumentBodyProseClass}>
+          <RenderSegments segments={page.bodySegmentsContinuation} />
+        </div>
+      )}
+
+      {page.rapportRecapRows && page.rapportRecapRows.length > 0 && (
+        <RmRecapTable
+          rows={page.rapportRecapRows}
+          className={
+            page.bodySegments.length === 0 && !page.title ? "mt-0" : undefined
+          }
+        />
+      )}
 
       {page.showInstrumentsTable && <ScpiLmInstrumentsTable />}
 
-      {page.bodySegmentsAfterTable && page.bodySegmentsAfterTable.length > 0 && (
-        <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
-          <RenderSegments segments={page.bodySegmentsAfterTable} />
-        </div>
+      {page.bodySegmentsAfterTable &&
+        page.bodySegmentsAfterTable.length > 0 &&
+        page.showAnnexesProsConsTable && (
+          <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+            <RenderSegments segments={page.bodySegmentsAfterTable} />
+          </div>
+        )}
+
+      {page.showAnnexesProsConsTable && (
+        <AnnexesScpiProsConsTable rows={page.annexesProsConsRows} />
+      )}
+
+      {page.bodySegmentsAfterProsConsTable &&
+        page.bodySegmentsAfterProsConsTable.length > 0 && (
+          <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+            <RenderSegments segments={page.bodySegmentsAfterProsConsTable} />
+          </div>
+        )}
+
+      {page.showAmfRiskScale && (
+        <ScpiAmfRiskScaleTable
+          highlightedLevel={page.amfRiskHighlightLevel}
+          investmentHorizon={page.amfRiskInvestmentHorizon}
+        />
+      )}
+
+      {page.bodySegmentsAfterTable &&
+        page.bodySegmentsAfterTable.length > 0 &&
+        !page.showAnnexesProsConsTable && (
+          <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+            <RenderSegments segments={page.bodySegmentsAfterTable} />
+          </div>
+        )}
+
+      {page.signatureColumns && (
+        <ScpiLmSignatureBlock
+          left={page.signatureColumns.left}
+          right={page.signatureColumns.right}
+        />
       )}
     </>
   );
@@ -223,13 +284,16 @@ function PageNavControls({
 type ScpiLettreMissionPreviewProps = {
   preview: ScpiLettreMissionPreview;
   className?: string;
-  /** Réinitialise à la page 1 (ex. changement de client). */
+  /** Libellé du document dans la barre d'aperçu. */
+  documentLabel?: string;
+  /** Réinitialise à la page 1 (ex. changement de client ou de document). */
   resetKey?: string | number;
 };
 
 export function ScpiLettreMissionPreview({
   preview,
   className,
+  documentLabel = "Lettre de mission",
   resetKey,
 }: ScpiLettreMissionPreviewProps) {
   const [pageIndex, setPageIndex] = useState(0);
@@ -272,7 +336,7 @@ export function ScpiLettreMissionPreview({
       <div className="overflow-hidden rounded-lg border bg-muted/40 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b bg-muted/30 px-4 py-2">
           <p className="text-xs font-medium text-muted-foreground">
-            Aperçu — Lettre de mission SCPI — page {page.pageNumber}
+            Aperçu — {documentLabel} — page {page.pageNumber}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {pageOverflows && (

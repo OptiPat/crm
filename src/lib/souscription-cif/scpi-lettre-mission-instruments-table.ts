@@ -1,4 +1,4 @@
-/** Tableau instruments — Lettre de mission SCPI (article 5). */
+/** Tableau instruments — article 5 (SCPI rendement, SCPI fiscales, capital invest., G3F…). */
 
 export type ScpiLmInstrumentsTableRow = {
   product: string;
@@ -66,6 +66,17 @@ Risque lié à l'estimation de la valeur des titres en portefeuille`,
 Frais de gestion entre 2,5 % et 4 %`,
     paymentMode:
       "Rétrocession de commissions sur une quote-part des droits d'entrée compris entre 3 et 4%",
+    sustainability: "Aucun critère",
+  },
+  {
+    product: "GIRARDIN INDUSTRIEL",
+    riskScale: "6 ou 7",
+    warnings: `Risque en capital
+Risque de liquidité
+Risque fiscal
+Risque locatif`,
+    fees: "Frais d'enregistrement : environ 150€",
+    paymentMode: "Commission d'apporteur d'affaires : 0,27%",
     sustainability: "Aucun critère",
   },
 ];

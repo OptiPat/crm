@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -22,8 +22,22 @@ import { Upload, File, X, FileText } from "lucide-react";
 import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
+import { IdentityExtractPreviewDialog, type IdentityPreviewValues } from "./IdentityExtractPreviewDialog";
 import { PatrimoineTriDialog } from "./PatrimoineTriDialog";
 import { RioUpdateComparisonDialog } from "./RioUpdateComparisonDialog";
+import {
+  extractIdentityFromFilePath,
+  extractIdentityFromRectoVersoFiles,
+  isIdentityFilePath,
+  isLikelyIdentityFileName,
+  looksLikeIdentityDocument,
+  parseIdentityFromText,
+  resolveIdentityToastMessage,
+  terminateOcrWorker,
+  type IdentityExtractResult,
+} from "@/lib/identity";
+import { buildIdentityMergePatch, identityExpirationToDocumentDate } from "@/lib/identity/merge-identity-fields";
+import { identityDateFrToIso } from "@/lib/identity/parse-identity-document";
 import {
   findContactByEmail,
   findContactByName,
@@ -40,6 +54,7 @@ import {
   getPairIdentityConflictMessages,
 } from "@/lib/contacts/duplicate-identity";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -47,7 +62,18 @@ interface DocumentUploadProps {
   onSuccess: () => void;
   contactId?: number;
   foyerId?: number;
+  /** Affichage dialogue identité (fiche contact). */
+  contactNom?: string;
+  contactPrenom?: string;
+  contactDateNaissance?: number;
+  contactLieuNaissance?: string;
 }
+
+const IDENTITY_REQUIRED_MSG =
+  "Pour une pièce d'identité, ouvrez d'abord la fiche client → onglet Patrimoine → « Importer un document ».";
+
+type PickedFile = { path: string; name: string; size: number };
+type IdentityImportMode = "single" | "two_files";
 
 export function DocumentUpload({
   open,
@@ -55,6 +81,10 @@ export function DocumentUpload({
   onSuccess,
   contactId,
   foyerId,
+  contactNom,
+  contactPrenom,
+  contactDateNaissance,
+  contactLieuNaissance,
 }: DocumentUploadProps) {
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -62,6 +92,10 @@ export function DocumentUpload({
   const [extractedText, setExtractedText] = useState<string>("");
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [showIdentityPreview, setShowIdentityPreview] = useState(false);
+  const [identityExtracted, setIdentityExtracted] = useState<IdentityExtractResult | null>(null);
+  const [identityImportMode, setIdentityImportMode] = useState<IdentityImportMode>("single");
+  const [uploadedVersoFile, setUploadedVersoFile] = useState<PickedFile | null>(null);
   
   // États pour le dialogue de tri du patrimoine
   const [showPatrimoineTri, setShowPatrimoineTri] = useState(false);
@@ -85,24 +119,181 @@ export function DocumentUpload({
     notes: "",
   });
 
+  useEffect(() => {
+    if (!open) return;
+    setFormData((prev) => ({
+      ...prev,
+      contact_id: contactId,
+      foyer_id: foyerId,
+    }));
+  }, [open, contactId, foyerId]);
+
+  const isIdentityMode = formData.type_document === "IDENTITE";
+
+  const shouldUseIdentityPipeline = (fileName: string, typeDoc?: string) =>
+    isImageFile(fileName) ||
+    typeDoc === "IDENTITE" ||
+    isLikelyIdentityFileName(fileName);
+
+  const openIdentityPreviewFromText = (text: string) => {
+    const parsed = parseIdentityFromText(text);
+    setIdentityExtracted(parsed);
+    setExtractedText(text);
+    setExtractedData(null);
+    setShowPreview(false);
+    setShowIdentityPreview(true);
+    if (parsed.confidence < 50) {
+      const toastMsg = resolveIdentityToastMessage(parsed);
+      if (toastMsg) toast.warning(toastMsg);
+    }
+  };
+
+  const requireContactForIdentity = (): boolean => {
+    if (contactId) return true;
+    toast.error(IDENTITY_REQUIRED_MSG);
+    return false;
+  };
+
+  const isImageFile = (name: string) => /\.(jpe?g|png|webp)$/i.test(name);
+
+  const resetIdentityFiles = () => {
+    setUploadedFile(null);
+    setUploadedVersoFile(null);
+    setExtractedText("");
+    setIdentityExtracted(null);
+  };
+
+  const runIdentityExtractForCurrentFiles = async () => {
+    if (!uploadedFile || !requireContactForIdentity()) return;
+    if (!isIdentityFilePath(uploadedFile.path)) {
+      toast.error("Format non supporté pour la pièce d'identité (PDF, JPG, PNG).");
+      return;
+    }
+    if (identityImportMode === "two_files") {
+      if (!uploadedVersoFile) {
+        toast.error("Sélectionnez aussi le fichier verso.");
+        return;
+      }
+      if (!isIdentityFilePath(uploadedVersoFile.path)) {
+        toast.error("Format verso non supporté (PDF, JPG, PNG).");
+        return;
+      }
+      await runDualIdentityExtract(uploadedFile, uploadedVersoFile);
+      return;
+    }
+    await handleExtractIdentity(uploadedFile.path);
+  };
+
+  const canRunIdentityExtract =
+    Boolean(contactId) &&
+    isIdentityMode &&
+    uploadedFile &&
+    isIdentityFilePath(uploadedFile.path) &&
+    (identityImportMode === "single" || Boolean(uploadedVersoFile));
+
+  const runDualIdentityExtract = async (recto: PickedFile, verso: PickedFile) => {
+    if (!requireContactForIdentity()) return;
+
+    setExtracting(true);
+    setIdentityExtracted(null);
+    setExtractedData(null);
+    setExtractedText("");
+
+    try {
+      const result = await extractIdentityFromRectoVersoFiles(recto.path, verso.path);
+      setIdentityExtracted(result);
+      setExtractedText(result.rawText);
+      setShowIdentityPreview(true);
+      toast.info("Extraction terminée — vérifiez les champs avant d'appliquer.");
+      const toastMsg = resolveIdentityToastMessage(result);
+      if (toastMsg) toast.warning(toastMsg);
+    } catch (error) {
+      console.error("Erreur extraction identité (2 fichiers):", error);
+      toast.error("Erreur lors de la lecture recto/verso: " + String(error));
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  const handleVersoFileSelect = async () => {
+    try {
+      const file = await uploadDocument();
+      if (!file) return;
+
+      setUploadedVersoFile(file);
+      setFormData((prev) => ({
+        ...prev,
+        type_document: prev.type_document === "AUTRE" ? "IDENTITE" : prev.type_document,
+      }));
+
+      if (!autoExtract || !uploadedFile || !isIdentityFilePath(file.path)) return;
+      if (!isIdentityFilePath(uploadedFile.path)) return;
+
+      await runDualIdentityExtract(uploadedFile, file);
+    } catch (error) {
+      console.error("Error selecting verso file:", error);
+      alert("Erreur lors de la sélection du verso: " + String(error));
+    }
+  };
+
   const handleFileSelect = async () => {
     try {
       const file = await uploadDocument();
       if (file) {
+        const nextType =
+          isImageFile(file.name) && (formData.type_document ?? "AUTRE") === "AUTRE"
+            ? "IDENTITE"
+            : formData.type_document ?? "AUTRE";
+
         setUploadedFile(file);
         setFormData((prev) => ({
           ...prev,
           nom_fichier: file.name,
+          type_document: nextType,
         }));
 
-        // Si c'est un PDF et que l'extraction auto est activée
-        if (autoExtract && file.name.toLowerCase().endsWith(".pdf")) {
+        if (identityImportMode === "two_files") {
+          if (autoExtract && uploadedVersoFile && isIdentityFilePath(file.path)) {
+            await runDualIdentityExtract(file, uploadedVersoFile);
+          }
+          return;
+        }
+
+        if (!autoExtract || !isIdentityFilePath(file.path)) return;
+
+        if (shouldUseIdentityPipeline(file.name, nextType)) {
+          await handleExtractIdentity(file.path);
+        } else if (file.name.toLowerCase().endsWith(".pdf")) {
           await handleExtractText(file.path);
         }
       }
     } catch (error) {
       console.error("Error selecting file:", error);
       alert("Erreur lors de la sélection du fichier: " + String(error));
+    }
+  };
+
+  const handleExtractIdentity = async (filePath: string) => {
+    if (!requireContactForIdentity()) return;
+
+    setExtracting(true);
+    setIdentityExtracted(null);
+    setExtractedData(null);
+    setExtractedText("");
+
+    try {
+      const result = await extractIdentityFromFilePath(filePath);
+      setIdentityExtracted(result);
+      setExtractedText(result.rawText);
+      setShowIdentityPreview(true);
+      toast.info("Extraction terminée — vérifiez les champs avant d'appliquer.");
+      const toastMsg = resolveIdentityToastMessage(result);
+      if (toastMsg) toast.warning(toastMsg);
+    } catch (error) {
+      console.error("Erreur extraction identité:", error);
+      toast.error("Erreur lors de la lecture de la pièce d'identité: " + String(error));
+    } finally {
+      setExtracting(false);
     }
   };
 
@@ -114,6 +305,23 @@ export function DocumentUpload({
     try {
       const result = await extractTextFromPDFPath(filePath);
       setExtractedText(result.text);
+
+      if (
+        isIdentityMode ||
+        looksLikeIdentityDocument(result.text) ||
+        isLikelyIdentityFileName(filePath)
+      ) {
+        if (!requireContactForIdentity()) {
+          setExtracting(false);
+          return;
+        }
+        if (!isNativeTextPDF(result.text)) {
+          await handleExtractIdentity(filePath);
+          return;
+        }
+        openIdentityPreviewFromText(result.text);
+        return;
+      }
 
       if (!isNativeTextPDF(result.text)) {
         toast.warning(
@@ -311,6 +519,12 @@ export function DocumentUpload({
         }
       } else {
         const contactData = mapExtractedDataToContact(data);
+        if (!contactData.nom?.trim() || !contactData.prenom?.trim()) {
+          toast.error(
+            "Impossible de créer le contact : nom et prénom manquants. Pour une CNI/passeport, importez depuis la fiche client (Patrimoine → Importer un document)."
+          );
+          return;
+        }
         const newContact = await createContact(contactData);
         finalContactId = newContact.id;
         const sansEmail = !data.email?.trim();
@@ -524,11 +738,115 @@ export function DocumentUpload({
     onOpenChange(false);
   };
 
+  const handleApplyIdentity = async (values: IdentityPreviewValues) => {
+    if (!contactId || !uploadedFile) {
+      toast.error("Contact ou fichier manquant.");
+      return;
+    }
+    if (identityImportMode === "two_files" && !uploadedVersoFile) {
+      toast.error("Sélectionnez aussi le fichier verso.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const contact = await getContactById(contactId);
+      const extracted: IdentityExtractResult = {
+        source: identityExtracted?.source ?? "visual",
+        confidence: identityExtracted?.confidence ?? 0,
+        rawText: identityExtracted?.rawText ?? "",
+        mrzVerified: identityExtracted?.mrzVerified ?? false,
+        provenance: identityExtracted?.provenance ?? {
+          dateNaissance: values.dateNaissanceFr ? "visual_suggestion" : "none",
+          dateExpiration: values.dateExpirationFr ? "visual_suggestion" : "none",
+          lieuNaissance: values.lieuNaissance ? "visual_suggestion" : "none",
+          nom: values.nom ? "visual_suggestion" : "none",
+          prenom: values.prenom ? "visual_suggestion" : "none",
+        },
+        nom: values.nom || undefined,
+        prenom: values.prenom || undefined,
+        lieuNaissance: values.lieuNaissance || undefined,
+        dateNaissanceFr: values.dateNaissanceFr || undefined,
+        dateNaissance: values.dateNaissanceFr
+          ? identityDateFrToIso(values.dateNaissanceFr)
+          : undefined,
+        dateExpirationFr: values.dateExpirationFr || undefined,
+        dateExpiration: values.dateExpirationFr
+          ? identityDateFrToIso(values.dateExpirationFr)
+          : undefined,
+        sex: identityExtracted?.sex,
+        layout: identityExtracted?.layout,
+        documentKind: identityExtracted?.documentKind,
+      };
+
+      const { patch, filledFields, skippedFields } = buildIdentityMergePatch(contact, extracted);
+      if (Object.keys(patch).length === 0) {
+        toast.info("Aucun champ vide à compléter sur cette fiche.");
+      } else {
+        await updateContact(contactId, contactToUpdatePayload(contact, patch));
+        toast.success(`Fiche complétée : ${filledFields.join(", ")}`);
+      }
+      if (skippedFields.length > 0) {
+        toast.message(`Conservé (déjà renseigné) : ${skippedFields.join(", ")}`);
+      }
+
+      const documentExpiryDate =
+        identityExpirationToDocumentDate(values.dateExpirationFr) ||
+        formData.date_document ||
+        undefined;
+
+      await createDocument({
+        contact_id: contactId,
+        foyer_id: foyerId,
+        type_document: "IDENTITE",
+        nom_fichier: uploadedFile.name,
+        chemin_fichier: uploadedFile.path,
+        taille_fichier: uploadedFile.size,
+        mime_type: getMimeType(uploadedFile.name),
+        date_document: documentExpiryDate,
+        notes: formData.notes
+          ? `${formData.notes}${identityImportMode === "two_files" ? " (recto)" : ""}`
+          : identityImportMode === "two_files"
+            ? "Recto"
+            : formData.notes,
+      });
+
+      if (uploadedVersoFile) {
+        await createDocument({
+          contact_id: contactId,
+          foyer_id: foyerId,
+          type_document: "IDENTITE",
+          nom_fichier: uploadedVersoFile.name,
+          chemin_fichier: uploadedVersoFile.path,
+          taille_fichier: uploadedVersoFile.size,
+          mime_type: getMimeType(uploadedVersoFile.name),
+          date_document: formData.date_document || undefined,
+          notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
+        });
+      }
+
+      setShowIdentityPreview(false);
+      setIdentityExtracted(null);
+      resetIdentityFiles();
+      onSuccess();
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Erreur application identité:", error);
+      alert("Erreur lors de la mise à jour: " + String(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!uploadedFile) {
       alert("Veuillez sélectionner un fichier");
+      return;
+    }
+    if (identityImportMode === "two_files" && isIdentityMode && !uploadedVersoFile) {
+      alert("Sélectionnez le recto et le verso (2 fichiers).");
       return;
     }
 
@@ -548,11 +866,26 @@ export function DocumentUpload({
       };
 
       await createDocument(newDoc);
+
+      if (uploadedVersoFile && identityImportMode === "two_files") {
+        await createDocument({
+          contact_id: formData.contact_id,
+          foyer_id: formData.foyer_id,
+          type_document: formData.type_document || "IDENTITE",
+          nom_fichier: uploadedVersoFile.name,
+          chemin_fichier: uploadedVersoFile.path,
+          taille_fichier: uploadedVersoFile.size,
+          mime_type: getMimeType(uploadedVersoFile.name),
+          date_document: formData.date_document || undefined,
+          notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
+        });
+      }
       onSuccess();
       onOpenChange(false);
       
       // Réinitialiser
       setUploadedFile(null);
+      setUploadedVersoFile(null);
       setExtractedText("");
       setExtractedData(null);
       setFormData({
@@ -562,6 +895,7 @@ export function DocumentUpload({
         date_document: "",
         notes: "",
       });
+      setIdentityImportMode("single");
     } catch (error) {
       console.error("Error saving document:", error);
       alert("Erreur lors de l'enregistrement: " + String(error));
@@ -582,6 +916,7 @@ export function DocumentUpload({
       jpg: "image/jpeg",
       jpeg: "image/jpeg",
       png: "image/png",
+      webp: "image/webp",
     };
     return mimeTypes[ext || ""] || "application/octet-stream";
   };
@@ -630,20 +965,161 @@ export function DocumentUpload({
         />
       )}
 
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <IdentityExtractPreviewDialog
+        open={showIdentityPreview}
+        onOpenChange={(nextOpen) => {
+          setShowIdentityPreview(nextOpen);
+          if (!nextOpen) void terminateOcrWorker();
+        }}
+        extracted={identityExtracted}
+        onConfirm={handleApplyIdentity}
+        loading={loading}
+        contactNom={contactNom}
+        contactPrenom={contactPrenom}
+        contactDateNaissance={contactDateNaissance}
+        contactLieuNaissance={contactLieuNaissance}
+        rectoPreviewPath={uploadedFile?.path}
+        versoPreviewPath={
+          identityImportMode === "two_files" ? uploadedVersoFile?.path : undefined
+        }
+      />
+
+      <Dialog open={open && !showIdentityPreview} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importer un document</DialogTitle>
           <DialogDescription>
-            Sélectionnez un fichier et renseignez les informations
+            {contactId ? (
+              <>
+                RIO, relevé patrimonial ou pièce d&apos;identité — détection automatique selon
+                le fichier. La CNI complète uniquement les champs vides de la fiche.
+              </>
+            ) : (
+              <>
+                RIO et relevés patrimoniaux. {IDENTITY_REQUIRED_MSG}
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Type de document */}
+          <div className="space-y-2">
+            <Label htmlFor="type_document">Type de document *</Label>
+            <Select
+              value={formData.type_document}
+              onValueChange={(value) => {
+                setFormData({ ...formData, type_document: value });
+                if (value !== "IDENTITE") {
+                  setIdentityImportMode("single");
+                  setUploadedVersoFile(null);
+                }
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="IDENTITE">{getDocumentTypeLabel("IDENTITE")}</SelectItem>
+                <SelectItem value="FISCAL">{getDocumentTypeLabel("FISCAL")}</SelectItem>
+                <SelectItem value="PATRIMOINE">{getDocumentTypeLabel("PATRIMOINE")}</SelectItem>
+                <SelectItem value="CONTRAT">{getDocumentTypeLabel("CONTRAT")}</SelectItem>
+                <SelectItem value="RELEVE">{getDocumentTypeLabel("RELEVE")}</SelectItem>
+                <SelectItem value="AUTRE">{getDocumentTypeLabel("AUTRE")}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {isIdentityMode && (
+            <div className="space-y-2">
+              <Label htmlFor="identity-import-mode">Format pièce d&apos;identité</Label>
+              <Select
+                value={identityImportMode}
+                onValueChange={(value: IdentityImportMode) => {
+                  setIdentityImportMode(value);
+                  resetIdentityFiles();
+                }}
+              >
+                <SelectTrigger id="identity-import-mode">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">
+                    Un fichier (1 page recto+verso, ou PDF 2 pages)
+                  </SelectItem>
+                  <SelectItem value="two_files">Deux fichiers (recto + verso)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           {/* Sélection du fichier */}
           <div className="space-y-2">
-            <Label>Fichier *</Label>
-            {uploadedFile ? (
+            <Label>{identityImportMode === "two_files" && isIdentityMode ? "Fichiers *" : "Fichier *"}</Label>
+
+            {identityImportMode === "two_files" && isIdentityMode ? (
+              <div className="space-y-3">
+                {uploadedFile ? (
+                  <div className="flex items-center gap-2 p-3 border border-border rounded-lg">
+                    <File className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-muted-foreground">Recto</div>
+                      <div className="font-medium truncate">{uploadedFile.name}</div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setUploadedFile(null);
+                        setExtractedText("");
+                        setIdentityExtracted(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button type="button" variant="outline" className="w-full" onClick={handleFileSelect}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    Sélectionner le recto
+                  </Button>
+                )}
+
+                {uploadedVersoFile ? (
+                  <div className="flex items-center gap-2 p-3 border border-border rounded-lg">
+                    <File className="h-5 w-5 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-muted-foreground">Verso (MRZ)</div>
+                      <div className="font-medium truncate">{uploadedVersoFile.name}</div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setUploadedVersoFile(null);
+                        setExtractedText("");
+                        setIdentityExtracted(null);
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleVersoFileSelect}
+                    disabled={!uploadedFile}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Sélectionner le verso
+                  </Button>
+                )}
+              </div>
+            ) : uploadedFile ? (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 p-3 border border-border rounded-lg">
                   <File className="h-5 w-5 text-primary" />
@@ -658,48 +1134,60 @@ export function DocumentUpload({
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                      setUploadedFile(null);
-                      setExtractedText("");
+                      resetIdentityFiles();
                     }}
                   >
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
-
-                {/* Indicateur d'extraction */}
-                {extracting && (
-                  <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
-                    <FileText className="h-4 w-4 animate-pulse" />
-                    Extraction du texte en cours...
-                  </div>
-                )}
-
-                {/* Texte extrait (succès) - cliquable pour voir le contenu */}
-                {!extracting && extractedText && (
-                  <details className="p-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
-                    <summary className="flex items-center gap-2 cursor-pointer">
-                      <FileText className="h-4 w-4" />
-                      Texte extrait ({extractedText.length} caractères) - cliquer pour voir
-                    </summary>
-                    <div className="mt-2 p-2 bg-white border rounded text-xs text-gray-700 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
-                      {extractedText}
-                    </div>
-                  </details>
-                )}
               </div>
             ) : (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={handleFileSelect}
-              >
+              <Button type="button" variant="outline" className="w-full" onClick={handleFileSelect}>
                 <Upload className="h-4 w-4 mr-2" />
                 Sélectionner un fichier
               </Button>
             )}
 
-            {/* Option d'extraction automatique */}
+            {extracting && (
+              <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+                <FileText className="h-4 w-4 animate-pulse" />
+                Lecture OCR en cours (30 s à 2 min selon la qualité du scan)…
+              </div>
+            )}
+
+            {!extracting && canRunIdentityExtract && !showIdentityPreview && (
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                onClick={() => void runIdentityExtractForCurrentFiles()}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                {identityImportMode === "two_files"
+                  ? "Analyser recto + verso"
+                  : "Analyser la pièce d'identité"}
+              </Button>
+            )}
+
+            {identityImportMode === "two_files" && isIdentityMode && uploadedFile && !uploadedVersoFile && (
+              <p className="text-sm text-muted-foreground">
+                Mode 2 fichiers : sélectionnez le verso pour lancer l&apos;analyse
+                {autoExtract ? " automatiquement" : ""}.
+              </p>
+            )}
+
+            {!extracting && extractedText && (
+              <details className="p-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
+                <summary className="flex items-center gap-2 cursor-pointer">
+                  <FileText className="h-4 w-4" />
+                  Texte extrait ({extractedText.length} caractères) - cliquer pour voir
+                </summary>
+                <div className="mt-2 p-2 bg-white border rounded text-xs text-gray-700 max-h-48 overflow-y-auto whitespace-pre-wrap font-mono">
+                  {extractedText}
+                </div>
+              </details>
+            )}
+
             <div className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -708,41 +1196,17 @@ export function DocumentUpload({
                 onChange={(e) => setAutoExtract(e.target.checked)}
                 className="h-4 w-4 rounded border-gray-300"
               />
-              <Label
-                htmlFor="auto-extract"
-                className="text-sm font-normal cursor-pointer"
-              >
-                Extraire automatiquement les données des PDF
+              <Label htmlFor="auto-extract" className="text-sm font-normal cursor-pointer">
+                Extraire automatiquement les données (PDF patrimoine, pièce d&apos;identité)
               </Label>
             </div>
           </div>
 
-          {/* Type de document */}
+          {/* Date du document / fin de validité */}
           <div className="space-y-2">
-            <Label htmlFor="type_document">Type de document *</Label>
-            <Select
-              value={formData.type_document}
-              onValueChange={(value) =>
-                setFormData({ ...formData, type_document: value })
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="IDENTITE">Pièce d'identité</SelectItem>
-                <SelectItem value="FISCAL">Document fiscal</SelectItem>
-                <SelectItem value="PATRIMOINE">Document patrimonial</SelectItem>
-                <SelectItem value="CONTRAT">Contrat</SelectItem>
-                <SelectItem value="RELEVE">Relevé</SelectItem>
-                <SelectItem value="AUTRE">Autre</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Date du document */}
-          <div className="space-y-2">
-            <Label htmlFor="date_document">Date du document</Label>
+            <Label htmlFor="date_document">
+              {isIdentityMode ? "Fin de validité (pièce importée)" : "Date du document"}
+            </Label>
             <Input
               id="date_document"
               type="date"

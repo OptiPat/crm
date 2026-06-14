@@ -17,6 +17,7 @@ import {
   CommandItem,
 } from "@/components/ui/command";
 import { textMatchesSearch } from "@/lib/search-utils";
+import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import {
   navigateAppPage,
   requestOpenContact,
@@ -253,7 +254,13 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
       .filter((d) => {
         const client = d.contact_id ? contactsById.get(d.contact_id) : undefined;
         const clientLabel = client ? `${client.prenom} ${client.nom}` : "";
-        return textMatchesSearch(q, d.nom_fichier, d.type_document, clientLabel);
+        return textMatchesSearch(
+          q,
+          d.nom_fichier,
+          d.type_document,
+          getDocumentTypeLabel(d.type_document),
+          clientLabel
+        );
       })
       .slice(0, MAX_PER_GROUP)
       .map((d) => {
@@ -264,7 +271,7 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
         return {
           key: `document-${d.id}`,
           label: d.nom_fichier,
-          sublabel: [d.type_document, clientLabel].filter(Boolean).join(" · "),
+          sublabel: [getDocumentTypeLabel(d.type_document), clientLabel].filter(Boolean).join(" · "),
           icon: FileText,
           onSelect: () => {
             if (d.contact_id != null) {

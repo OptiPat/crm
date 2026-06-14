@@ -203,6 +203,7 @@ fn main() {
             update_wizard_step,
             // Auth
             is_first_launch,
+            is_database_unlocked,
             create_master_password,
             verify_master_password,
             unlock,

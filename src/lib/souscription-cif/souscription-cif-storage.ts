@@ -4,11 +4,17 @@ import {
 } from "@/lib/souscription-cif/dossier-fields";
 export type SouscriptionCifProductType = "scpi";
 
+export type SouscriptionCifDocumentId =
+  | "lettre-mission"
+  | "rapport-mission"
+  | "annexes-rapport";
+
 const STORAGE_KEY = "crm_souscription_cif_draft";
 
 export type SouscriptionCifDraft = {
   version: 1;
   productType: SouscriptionCifProductType;
+  activeDocument: SouscriptionCifDocumentId;
   selectedContactId?: number;
   dossiersByContactId: Record<string, SouscriptionDossierFields>;
   savedAt: number;
@@ -34,6 +40,14 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     dateQpi: typeof o.dateQpi === "string" ? o.dateQpi : "",
     lieuNaissance: typeof o.lieuNaissance === "string" ? o.lieuNaissance : "",
     objectifsClient: typeof o.objectifsClient === "string" ? o.objectifsClient : "",
+    rappelDemande: typeof o.rappelDemande === "string" ? o.rappelDemande : "",
+    rappelSituationClient:
+      typeof o.rappelSituationClient === "string" ? o.rappelSituationClient : "",
+    conseil: typeof o.conseil === "string" ? o.conseil : "",
+    mesPreconisations: typeof o.mesPreconisations === "string" ? o.mesPreconisations : "",
+    scpiAnnexeProductKeys: Array.isArray(o.scpiAnnexeProductKeys)
+      ? o.scpiAnnexeProductKeys.filter((k): k is string => typeof k === "string")
+      : [],
   };
 }
 
@@ -55,6 +69,12 @@ export function loadSouscriptionCifDraft(): SouscriptionCifDraft | null {
     return {
       version: 1,
       productType: parsed.productType === "scpi" ? "scpi" : "scpi",
+      activeDocument:
+        parsed.activeDocument === "rapport-mission"
+          ? "rapport-mission"
+          : parsed.activeDocument === "annexes-rapport"
+            ? "annexes-rapport"
+            : "lettre-mission",
       selectedContactId:
         typeof parsed.selectedContactId === "number" ? parsed.selectedContactId : undefined,
       dossiersByContactId,

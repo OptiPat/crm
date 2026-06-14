@@ -24,7 +24,7 @@ describe("buildScpiLettreMissionPreview", () => {
       cgp_anacofi_numero: "E011507",
     });
 
-    expect(preview.pages).toHaveLength(5);
+    expect(preview.pages).toHaveLength(7);
 
     const page1Text = [
       ...(preview.pages[0].headerLeft ?? []).flat(),
@@ -67,6 +67,31 @@ describe("buildScpiLettreMissionPreview", () => {
     expect(page5Text).toContain("8. Rémunération du Conseiller");
     expect(page5Text).toContain("9. Obligations à la charge des Parties");
     expect(page5Text).toContain("0 € HT");
+
+    const page6Text = preview.pages[5].bodySegments.map(segText).join("");
+    expect(page6Text).toContain("10. Responsabilité");
+    expect(page6Text).toContain("11. Lutte contre le blanchiment de capitaux");
+    expect(page6Text).toContain("12. Gestion des conflits d'intérêts");
+    expect(page6Text).toContain("13. Traitement des données à caractère personnel");
+
+    const page7Text = preview.pages[6].bodySegments.map(segText).join("");
+    expect(page7Text).toContain("14. Droit de rétractation");
+    expect(page7Text).toContain("15. Réclamations Client – Médiation");
+    expect(page7Text).toContain("16. Durée du Contrat");
+    expect(page7Text).toContain("17. Droit applicable et tribunaux compétents");
+
+    const sigLeft = (preview.pages[6].signatureColumns?.left ?? []).map((line) =>
+      line.map(segText).join("")
+    );
+    const sigRight = (preview.pages[6].signatureColumns?.right ?? []).map((line) =>
+      line.map(segText).join("")
+    );
+    expect(sigLeft.join("\n")).toContain("Fait le 13/06/2026");
+    expect(sigLeft.join("\n")).toContain("Un exemplaire original pour le Conseiller");
+    expect(sigLeft.join("\n")).toContain("Le CIF : Nicolas PLAZA");
+    expect(sigRight.join("\n")).toContain("Un exemplaire original pour le Client");
+    expect(sigRight.join("\n")).toContain("Par Jean Dupont");
+    expect(sigRight.join("\n")).toContain("Signature(s)");
 
     expect(preview.missingKeys).toContain("date_der");
     expect(preview.missingKeys).toContain("date_qpi");

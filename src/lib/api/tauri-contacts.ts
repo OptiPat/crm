@@ -21,6 +21,7 @@ export interface Contact {
   code_postal?: string;
   ville?: string;
   date_naissance?: number;
+  lieu_naissance?: string;
   profession?: string;
   situation_familiale?: string;
   source_lead?: string;
@@ -59,6 +60,7 @@ export interface NewContact {
   code_postal?: string;
   ville?: string;
   date_naissance?: string;
+  lieu_naissance?: string;
   profession?: string;
   situation_familiale?: string;
   source_lead?: string;

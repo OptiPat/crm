@@ -2,6 +2,8 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatDateInputFr } from "@/lib/souscription-cif/format-date-input-fr";
+import { normalizeRappelSituationClient } from "@/lib/souscription-cif/build-rappel-situation-default";
+import { buildDescriptionsScpiFromKeys } from "@/lib/souscription-cif/scpi-annexe-catalog";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 
 function joinCpVille(cp?: string | null, ville?: string | null): string | null {
@@ -33,12 +35,19 @@ export function buildSouscriptionVariables(
     client_telephone: contact?.telephone?.trim() || null,
     client_date_naissance:
       contact?.date_naissance != null ? formatCalendarDateFr(contact.date_naissance) : null,
-    client_lieu_naissance: dossier.lieuNaissance.trim() || null,
+    client_lieu_naissance:
+      dossier.lieuNaissance.trim() || contact?.lieu_naissance?.trim() || null,
     date_document: formatDateInputFr(dossier.dateDoc),
     date_der: formatDateInputFr(dossier.dateDer),
     date_rio: formatDateInputFr(dossier.dateRio),
     date_qpi: formatDateInputFr(dossier.dateQpi),
     objectifs_client: dossier.objectifsClient.trim() || null,
+    rappel_demande: dossier.rappelDemande.trim() || null,
+    rappel_situation_client:
+      normalizeRappelSituationClient(dossier.rappelSituationClient.trim()) || null,
+    conseil: dossier.conseil.trim() || null,
+    mes_preconisations: dossier.mesPreconisations.trim() || null,
+    descriptions_scpi: buildDescriptionsScpiFromKeys(dossier.scpiAnnexeProductKeys) || null,
     cgp_nom_complet: cgpNomComplet(cgp),
     cgp_rcs_ville: cgp?.cif_rcs_ville?.trim() || null,
     cgp_siren: sirenRaw,

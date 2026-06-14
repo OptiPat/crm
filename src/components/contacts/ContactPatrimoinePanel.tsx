@@ -196,6 +196,8 @@ export function ContactPatrimoinePanel({
   contactId,
   contactPrenom,
   contactNom,
+  contactDateNaissance,
+  contactLieuNaissance,
   hasFoyer,
   investissements,
   loading,
@@ -205,10 +207,13 @@ export function ContactPatrimoinePanel({
   onDelete,
   onRefresh,
   onOpenOwnerContact,
+  onNavigateDocuments,
 }: {
   contactId: number;
   contactPrenom: string;
   contactNom: string;
+  contactDateNaissance?: number;
+  contactLieuNaissance?: string;
   hasFoyer: boolean;
   investissements: InvestissementWithOwner[];
   loading: boolean;
@@ -218,11 +223,12 @@ export function ContactPatrimoinePanel({
   onDelete: (inv: Investissement) => void;
   onRefresh: () => void;
   onOpenOwnerContact?: (contactId: number) => void;
+  onNavigateDocuments?: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
   const [ownerFilter, setOwnerFilter] = useState<PatrimoineOwnerFilter>("all");
-  const [showRioUpload, setShowRioUpload] = useState(false);
+  const [showDocUpload, setShowDocUpload] = useState(false);
   const [encoursInvestissement, setEncoursInvestissement] =
     useState<Investissement | null>(null);
 
@@ -363,23 +369,34 @@ export function ContactPatrimoinePanel({
 
       <Card className="border-primary/15 shadow-sm">
         <CardHeader className="pb-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
+          <div className="space-y-2 min-w-0">
+            <div className="min-w-0">
               <CardTitle className="text-lg flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-primary" />
-                Patrimoine de {contactPrenom} {contactNom}
+                <Wallet className="h-5 w-5 shrink-0 text-primary" />
+                <span className="truncate">
+                  Patrimoine de {contactPrenom} {contactNom}
+                </span>
               </CardTitle>
+              {onNavigateDocuments && (
+                <button
+                  type="button"
+                  className="mt-1 text-sm text-primary hover:underline"
+                  onClick={onNavigateDocuments}
+                >
+                  Voir les documents
+                </button>
+              )}
             </div>
-            <div className="flex flex-wrap gap-2 shrink-0">
+            <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="gap-1.5"
-                onClick={() => setShowRioUpload(true)}
+                onClick={() => setShowDocUpload(true)}
               >
                 <FileUp className="h-4 w-4" />
-                Importer un RIO
+                Importer un document
               </Button>
               <Button type="button" size="sm" className="gap-1.5" onClick={onAdd}>
                 <Plus className="h-4 w-4" />
@@ -485,8 +502,8 @@ export function ContactPatrimoinePanel({
               <Building2 className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
               <p className="text-sm font-medium">Aucun investissement enregistré</p>
               <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-md mx-auto">
-                Importez un RIO (relevé d&apos;information opérationnelle) pour préremplir
-                le patrimoine, ou saisissez un placement manuellement.
+                Importez un document (RIO, CNI…) pour préremplir la fiche et le patrimoine,
+                ou saisissez un placement manuellement.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
                 <Button
@@ -494,10 +511,10 @@ export function ContactPatrimoinePanel({
                   variant="outline"
                   size="sm"
                   className="gap-1"
-                  onClick={() => setShowRioUpload(true)}
+                  onClick={() => setShowDocUpload(true)}
                 >
                   <FileUp className="h-4 w-4" />
-                  Importer RIO
+                  Importer un document
                 </Button>
                 <Button type="button" size="sm" className="gap-1" onClick={onAdd}>
                   <Plus className="h-4 w-4" />
@@ -670,11 +687,15 @@ export function ContactPatrimoinePanel({
       />
 
       <DocumentUpload
-        open={showRioUpload}
-        onOpenChange={setShowRioUpload}
+        open={showDocUpload}
+        onOpenChange={setShowDocUpload}
         contactId={contactId}
+        contactNom={contactNom}
+        contactPrenom={contactPrenom}
+        contactDateNaissance={contactDateNaissance}
+        contactLieuNaissance={contactLieuNaissance}
         onSuccess={() => {
-          setShowRioUpload(false);
+          setShowDocUpload(false);
           onRefresh();
         }}
       />

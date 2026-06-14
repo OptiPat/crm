@@ -87,6 +87,7 @@ import {
   buildFoyerNomFromMembers,
 } from "@/lib/foyers/foyer-utils";
 import { consumeOpenContactInvestissementFlag } from "@/lib/investissements/investissement-navigation";
+import { navigateToDocuments } from "@/lib/documents/documents-navigation";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -902,6 +903,8 @@ export function ContactDetail({
                 contactId={contact.id}
                 contactPrenom={contact.prenom}
                 contactNom={contact.nom}
+                contactDateNaissance={contact.date_naissance}
+                contactLieuNaissance={contact.lieu_naissance}
                 hasFoyer={Boolean(contact.foyer_id)}
                 investissements={investissements}
                 loading={loadingInvestissements}
@@ -915,6 +918,14 @@ export function ContactDetail({
                 onRefresh={loadInvestissements}
                 onOpenOwnerContact={
                   onOpenContact ? handleOpenOwnerContact : undefined
+                }
+                onNavigateDocuments={
+                  onNavigate && contact.id
+                    ? () => {
+                        onOpenChange(false);
+                        navigateToDocuments(onNavigate, contact.id, "contacts");
+                      }
+                    : undefined
                 }
               />
             </TabsContent>

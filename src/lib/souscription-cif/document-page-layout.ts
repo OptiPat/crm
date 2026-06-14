@@ -28,6 +28,10 @@ export const cifDocumentBodyProseClass = "whitespace-pre-wrap";
 export const cifDocumentFooterClass =
   "shrink-0 border-t border-neutral-200 px-[15mm] py-[6mm] text-[7pt] leading-snug text-neutral-600 text-justify [text-align-last:left] hyphens-auto";
 
-/** Titre centré page 1 (14 pt — proportionnel au corps 10 pt). */
+/** Titre centré (18 pt). */
 export const cifDocumentTitleClass =
-  "mb-[10mm] text-center text-[14pt] font-bold tracking-tight";
+  "mb-[10mm] w-full text-center text-[18pt] font-bold tracking-tight [text-align-last:center]";
+
+/** Sous-titre section produit centré (14 pt — entre corps 10 pt et titre 18 pt). */
+export const cifDocumentSectionTitleClass =
+  "my-[5mm] w-full text-center text-[14pt] font-semibold tracking-tight [text-align-last:center]";

@@ -82,7 +82,7 @@ describe("contact-relation-timeline", () => {
       documents: [
         {
           id: 5,
-          type_document: "CNI",
+          type_document: "IDENTITE",
           nom_fichier: "cni.pdf",
           chemin_fichier: "/x/cni.pdf",
           taille_fichier: 1,
@@ -106,8 +106,8 @@ describe("contact-relation-timeline", () => {
     });
     expect(items.map((i) => i.kind)).toEqual([
       "tache",
-      "document",
       "investissement",
+      "document",
     ]);
   });
 });

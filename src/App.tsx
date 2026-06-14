@@ -35,6 +35,10 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const ETIQUETTES_RECALC_SESSION_KEY = "crm_etiquettes_recalc_done";
+  const etiquettesRecalcDone = useRef(
+    sessionStorage.getItem("crm_etiquettes_recalc_done") === "1"
+  );
 
   useEffect(() => {
     // Vérifier si c'est le premier lancement
@@ -48,9 +52,26 @@ function App() {
         console.error("Error checking first launch:", error);
       }
     };
-    
+
     checkFirstLaunch();
   }, []);
+
+  // HMR / rechargement Vite : le state React repart à zéro mais la base Rust reste ouverte.
+  useEffect(() => {
+    if (isFirstLaunch !== false) return;
+
+    void (async () => {
+      try {
+        const unlocked = await invoke<boolean>("is_database_unlocked");
+        if (!unlocked) return;
+        setIsAuthenticated(true);
+        const wizardDone = await isWizardCompleted();
+        setShowWizard(!wizardDone);
+      } catch (error) {
+        console.error("Error syncing unlock state:", error);
+      }
+    })();
+  }, [isFirstLaunch]);
 
   const handlePasswordCreated = async () => {
     setIsFirstLaunch(false);
@@ -80,16 +101,18 @@ function App() {
     } catch (error) {
       console.error("Erreur verrouillage:", error);
     }
+    sessionStorage.removeItem(ETIQUETTES_RECALC_SESSION_KEY);
+    etiquettesRecalcDone.current = false;
     setIsAuthenticated(false);
     setCurrentPage("dashboard");
   };
 
   // Étiquettes par défaut + recalcul complet une fois par session (après wizard si besoin)
-  const etiquettesRecalcDone = useRef(false);
   useEffect(() => {
     if (!isAuthenticated || showWizard) return;
     if (etiquettesRecalcDone.current) return;
     etiquettesRecalcDone.current = true;
+    sessionStorage.setItem(ETIQUETTES_RECALC_SESSION_KEY, "1");
 
     void (async () => {
       try {

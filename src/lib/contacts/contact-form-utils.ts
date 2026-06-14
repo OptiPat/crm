@@ -61,7 +61,12 @@ export function toDateInput(dateValue: string | number | undefined | null): stri
 
 export function dateFieldToIso(field?: string): string | undefined {
   if (!field?.trim()) return undefined;
-  const [year, month, day] = field.split("-").map(Number);
+  const trimmed = field.trim();
+  if (trimmed.includes("T")) {
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+  const [year, month, day] = trimmed.split("-").map(Number);
   if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
     return undefined;
   }
@@ -199,6 +204,7 @@ const BASE_EMPTY: NewContact = {
   code_postal: "",
   ville: "",
   date_naissance: "",
+  lieu_naissance: "",
   profession: "",
   source_lead: "",
   profil_risque_sri: undefined,
@@ -273,6 +279,7 @@ export function contactToFormData(contact: Contact): NewContact {
     code_postal: contact.code_postal || "",
     ville: contact.ville || "",
     date_naissance: toDateInput(contact.date_naissance),
+    lieu_naissance: contact.lieu_naissance || "",
     profession: contact.profession || "",
     source_lead: contact.source_lead || "",
     profil_risque_sri: contact.profil_risque_sri || undefined,
@@ -327,6 +334,7 @@ export function buildSubmitPayload(formData: NewContact): NewContact {
       ? dateFieldToIso(formData.date_prochain_suivi_filleul)
       : undefined,
     date_naissance: dateFieldToIso(formData.date_naissance),
+    lieu_naissance: formData.lieu_naissance?.trim() || undefined,
     registre: formData.registre?.trim().toUpperCase() === "TU" ? "TU" : "VOUS",
   };
 }

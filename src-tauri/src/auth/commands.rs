@@ -67,8 +67,19 @@ pub fn verify_master_password(
     manager.verify_master_password(&password)
 }
 
+/// Indique si la base est déjà ouverte côté backend (session Tauri active).
+/// `try_lock` : si une commande longue (recalcul étiquettes) tient le mutex, on considère déverrouillé.
+#[tauri::command]
+pub fn is_database_unlocked(db: State<'_, DbState>) -> Result<bool, String> {
+    match db.try_lock() {
+        Ok(guard) => Ok(guard.is_some()),
+        Err(_) => Ok(true),
+    }
+}
+
 /// Déverrouille : vérifie le mot de passe d'accès puis ouvre la base.
 /// Renvoie une erreur si le mot de passe est incorrect.
+/// Idempotent : si la base est déjà ouverte (ex. rechargement HMR du frontend), ne la ferme pas.
 #[tauri::command]
 pub fn unlock(
     app: AppHandle,
@@ -84,7 +95,18 @@ pub fn unlock(
         }
     }
 
-    open_database(&app, &db)?;
+    match db.try_lock() {
+        Ok(guard) => {
+            if guard.is_some() {
+                return Ok(true);
+            }
+            drop(guard);
+            open_database(&app, &db)?;
+        }
+        Err(_) => {
+            // Commande longue en cours (recalcul étiquettes…) : la base est déjà ouverte.
+        }
+    }
     Ok(true)
 }
 

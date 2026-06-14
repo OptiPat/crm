@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
@@ -10,6 +9,13 @@ import { getAllContacts, getContactById, type Contact } from "@/lib/api/tauri-co
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
+import {
+  buildDefaultConseil,
+  buildDefaultMesPreconisations,
+} from "@/lib/souscription-cif/build-default-annexes-fields";
+import { buildDefaultObjectifsClient } from "@/lib/souscription-cif/build-default-objectifs-client";
+import { buildDefaultRappelDemande } from "@/lib/souscription-cif/build-default-rappel-demande";
+import { buildDefaultRappelSituation } from "@/lib/souscription-cif/build-rappel-situation-default";
 import { buildSouscriptionVariables } from "@/lib/souscription-cif/build-variables";
 import {
   defaultSouscriptionDossierFields,
@@ -17,20 +23,31 @@ import {
 } from "@/lib/souscription-cif/dossier-fields";
 import { getFoyerById } from "@/lib/api/tauri-foyers";
 import { buildScpiLettreMissionPreview } from "@/lib/souscription-cif/render-template";
+import { buildAnnexesRapportPreview } from "@/lib/souscription-cif/render-annexes-rapport";
+import { buildRapportMissionPreview } from "@/lib/souscription-cif/render-rapport-mission";
+import {
+  ANNEXES_RAPPORT_DOCUMENT_TITLE,
+  CIF_DOCUMENT_LIFECYCLE,
+} from "@/lib/souscription-cif/cif-documents";
+import { RM_DOCUMENT_TITLE } from "@/lib/souscription-cif/rapport-mission-page1";
 import { SOUSCRIPTION_VARIABLE_LABELS } from "@/lib/souscription-cif/scpi-lettre-mission-page1";
 import {
   getDossierForContact,
   loadSouscriptionCifDraft,
   saveSouscriptionCifDraft,
+  type SouscriptionCifDocumentId,
   type SouscriptionCifProductType,
 } from "@/lib/souscription-cif/souscription-cif-storage";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AlertCircle, ExternalLink, FileSignature, User } from "lucide-react";
 
-export type { SouscriptionCifProductType };
+export type { SouscriptionCifDocumentId, SouscriptionCifProductType };
 
-const PRODUCT_LABELS: Record<SouscriptionCifProductType, string> = {
-  scpi: "SCPI",
+const DOCUMENT_LABELS: Record<SouscriptionCifDocumentId, string> = {
+  "lettre-mission": "Lettre de mission",
+  "rapport-mission": RM_DOCUMENT_TITLE,
+  "annexes-rapport": ANNEXES_RAPPORT_DOCUMENT_TITLE,
 };
 
 const CGP_PROFILE_KEYS = new Set([
@@ -67,6 +84,9 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   const [dossiersByContactId, setDossiersByContactId] = useState<
     Record<string, SouscriptionDossierFields>
   >(() => initialDraft?.dossiersByContactId ?? {});
+  const [activeDocument, setActiveDocument] = useState<SouscriptionCifDocumentId>(
+    () => initialDraft?.activeDocument ?? "lettre-mission"
+  );
 
   const productType: SouscriptionCifProductType = "scpi";
 
@@ -93,10 +113,11 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   useEffect(() => {
     saveSouscriptionCifDraft({
       productType,
+      activeDocument,
       selectedContactId,
       dossiersByContactId,
     });
-  }, [productType, selectedContactId, dossiersByContactId]);
+  }, [productType, activeDocument, selectedContactId, dossiersByContactId]);
 
   const loadContacts = useCallback(async () => {
     try {
@@ -139,32 +160,82 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   }, [selectedContactId, contacts]);
 
   useEffect(() => {
-    if (selectedContactId == null || !selectedContact?.foyer_id) return;
+    if (selectedContactId == null || !selectedContact) return;
 
     const key = String(selectedContactId);
-    if (dossiersByContactId[key]?.objectifsClient?.trim()) return;
+    const current = getDossierForContact(dossiersByContactId, selectedContactId);
+    const needsObjectifs = !current.objectifsClient?.trim();
+    const needsRappelDemande = !current.rappelDemande?.trim();
+    const needsRappelSituation = !current.rappelSituationClient?.trim();
+    const needsLieuNaissance = !current.lieuNaissance?.trim();
+    const needsConseil = !current.conseil?.trim();
+    const needsMesPreconisations = !current.mesPreconisations?.trim();
+    if (
+      !needsObjectifs &&
+      !needsRappelDemande &&
+      !needsRappelSituation &&
+      !needsLieuNaissance &&
+      !needsConseil &&
+      !needsMesPreconisations
+    ) {
+      return;
+    }
+
+    const applyPatch = (foyer: Awaited<ReturnType<typeof getFoyerById>> | null) => {
+      setDossiersByContactId((prev) => {
+        const existing = getDossierForContact(prev, selectedContactId);
+        const patch: Partial<SouscriptionDossierFields> = {};
+        const objectifs = buildDefaultObjectifsClient(foyer);
+        if (needsObjectifs) {
+          patch.objectifsClient = objectifs;
+        }
+        if (needsRappelDemande) {
+          patch.rappelDemande = buildDefaultRappelDemande();
+        }
+        if (needsRappelSituation) {
+          patch.rappelSituationClient = buildDefaultRappelSituation(selectedContact, foyer);
+        }
+        if (needsLieuNaissance && selectedContact.lieu_naissance?.trim()) {
+          patch.lieuNaissance = selectedContact.lieu_naissance.trim();
+        }
+        if (needsConseil) {
+          patch.conseil = buildDefaultConseil();
+        }
+        if (needsMesPreconisations) {
+          patch.mesPreconisations = buildDefaultMesPreconisations();
+        }
+        if (Object.keys(patch).length === 0) return prev;
+        return {
+          ...prev,
+          [key]: { ...existing, ...patch },
+        };
+      });
+    };
+
+    if (!selectedContact.foyer_id) {
+      if (
+        needsObjectifs ||
+        needsRappelDemande ||
+        needsRappelSituation ||
+        needsLieuNaissance ||
+        needsConseil ||
+        needsMesPreconisations
+      ) {
+        applyPatch(null);
+      }
+      return;
+    }
 
     let cancelled = false;
     void getFoyerById(selectedContact.foyer_id).then((foyer) => {
       if (cancelled) return;
-      const objectifs = foyer.objectifs_patrimoniaux?.trim();
-      if (!objectifs) return;
-      setDossiersByContactId((prev) => {
-        if (prev[key]?.objectifsClient?.trim()) return prev;
-        return {
-          ...prev,
-          [key]: {
-            ...getDossierForContact(prev, selectedContactId),
-            objectifsClient: objectifs,
-          },
-        };
-      });
+      applyPatch(foyer);
     });
 
     return () => {
       cancelled = true;
     };
-  }, [selectedContactId, selectedContact?.foyer_id, dossiersByContactId]);
+  }, [selectedContactId, selectedContact, dossiersByContactId]);
 
   const clientContacts = useMemo(
     () =>
@@ -179,10 +250,27 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     [selectedContact, cgp, dossier]
   );
 
-  const preview = useMemo(
+  const lettreMissionPreview = useMemo(
     () => buildScpiLettreMissionPreview(variables, cgp?.cif_pied_de_page),
     [variables, cgp?.cif_pied_de_page]
   );
+
+  const rapportMissionPreview = useMemo(
+    () => buildRapportMissionPreview(variables, cgp?.cif_pied_de_page),
+    [variables, cgp?.cif_pied_de_page]
+  );
+
+  const annexesRapportPreview = useMemo(
+    () => buildAnnexesRapportPreview(productType, variables, cgp?.cif_pied_de_page),
+    [productType, variables, cgp?.cif_pied_de_page]
+  );
+
+  const preview =
+    activeDocument === "rapport-mission"
+      ? rapportMissionPreview
+      : activeDocument === "annexes-rapport"
+        ? annexesRapportPreview
+        : lettreMissionPreview;
 
   const missingProfileLabels = useMemo(
     () =>
@@ -195,12 +283,11 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-2xl font-serif font-bold text-primary">Souscription CIF</h2>
-          <Badge variant="secondary">{PRODUCT_LABELS[productType]}</Badge>
-        </div>
+        <h2 className="text-2xl font-serif font-bold text-primary">Souscription CIF</h2>
         <p className="text-sm text-muted-foreground">
-          Lettre de mission SCPI — navigation page par page. Brouillon enregistré localement.
+          Lettre de mission (une fois pour toutes les solutions), rapport et annexes par
+          souscription — contenu des annexes selon le produit (SCPI, etc.). Aperçu page par page,
+          brouillon enregistré localement.
         </p>
       </div>
 
@@ -211,7 +298,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
             Client
           </CardTitle>
           <CardDescription>
-            Choisissez le client pour lequel vous préparez le dossier SCPI.
+            Choisissez le client pour lequel vous préparez la souscription.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -286,11 +373,69 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
           </div>
 
           <div className="space-y-3 min-w-0">
-            <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-              <FileSignature className="h-4 w-4" aria-hidden />
-              Lettre de mission
-            </div>
-            <ScpiLettreMissionPreview preview={preview} resetKey={selectedContactId} />
+            <Tabs
+              value={activeDocument}
+              onValueChange={(v) => setActiveDocument(v as SouscriptionCifDocumentId)}
+            >
+              <TabsList className="h-auto w-full flex-wrap justify-start gap-1">
+                <TabsTrigger value="lettre-mission" className="text-xs sm:text-sm">
+                  Lettre de mission
+                </TabsTrigger>
+                <TabsTrigger value="rapport-mission" className="text-xs sm:text-sm">
+                  Rapport de mission
+                </TabsTrigger>
+                <TabsTrigger value="annexes-rapport" className="text-xs sm:text-sm">
+                  Annexes
+                </TabsTrigger>
+              </TabsList>
+
+              {CIF_DOCUMENT_LIFECYCLE[activeDocument] === "once" && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Document signé une fois — valable pour toutes les solutions.
+                </p>
+              )}
+              {CIF_DOCUMENT_LIFECYCLE[activeDocument] === "per-subscription" && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Document propre à cette souscription — contenu adapté au produit choisi.
+                </p>
+              )}
+
+              <TabsContent value="lettre-mission" className="mt-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <FileSignature className="h-4 w-4" aria-hidden />
+                  {DOCUMENT_LABELS["lettre-mission"]}
+                </div>
+                <ScpiLettreMissionPreview
+                  preview={lettreMissionPreview}
+                  documentLabel={DOCUMENT_LABELS["lettre-mission"]}
+                  resetKey={`${selectedContactId}-lettre-mission`}
+                />
+              </TabsContent>
+
+              <TabsContent value="rapport-mission" className="mt-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <FileSignature className="h-4 w-4" aria-hidden />
+                  {DOCUMENT_LABELS["rapport-mission"]}
+                </div>
+                <ScpiLettreMissionPreview
+                  preview={rapportMissionPreview}
+                  documentLabel={DOCUMENT_LABELS["rapport-mission"]}
+                  resetKey={`${selectedContactId}-rapport-mission`}
+                />
+              </TabsContent>
+
+              <TabsContent value="annexes-rapport" className="mt-3 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                  <FileSignature className="h-4 w-4" aria-hidden />
+                  {DOCUMENT_LABELS["annexes-rapport"]}
+                </div>
+                <ScpiLettreMissionPreview
+                  preview={annexesRapportPreview}
+                  documentLabel={DOCUMENT_LABELS["annexes-rapport"]}
+                  resetKey={`${selectedContactId}-annexes-rapport`}
+                />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
       )}

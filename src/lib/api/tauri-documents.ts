@@ -69,7 +69,7 @@ export async function uploadDocument(): Promise<{ path: string; name: string; si
       filters: [
         {
           name: "Documents",
-          extensions: ["pdf", "doc", "docx", "xls", "xlsx", "txt", "jpg", "jpeg", "png"],
+          extensions: ["pdf", "doc", "docx", "xls", "xlsx", "txt", "jpg", "jpeg", "png", "webp"],
         },
       ],
     });

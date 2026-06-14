@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Upload, Search, Trash2, Filter, ExternalLink, FileText, FileSpreadsheet, Image, Paperclip } from "lucide-react";
+import { Upload, Search, Trash2, Filter, ExternalLink, FileText, FileSpreadsheet, Image, Paperclip, X } from "lucide-react";
 import {
   getAllDocuments,
   deleteDocument,
@@ -25,6 +25,13 @@ import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { getDocumentMetaLines } from "@/lib/documents/document-display";
+import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
+import {
+  consumeDocumentsContactFocus,
+  setDocumentsContactFocus,
+} from "@/lib/documents/documents-navigation";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 
 type DocumentsProps = {
   onNavigate?: (page: string) => void;
@@ -38,6 +45,8 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [showUpload, setShowUpload] = useState(false);
+  const [contactFilterId, setContactFilterId] = useState<number | null>(null);
+  const focusConsumedRef = useRef(false);
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -62,10 +71,30 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
     void loadDocuments();
   }, [loadDocuments]);
 
+  useEffect(() => {
+    if (focusConsumedRef.current) return;
+    focusConsumedRef.current = true;
+    const focusId = consumeDocumentsContactFocus();
+    if (focusId != null) {
+      setContactFilterId(focusId);
+    }
+  }, []);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type !== "documents") return;
+    if (detail.contactId != null) {
+      setDocumentsContactFocus(detail.contactId);
+      setContactFilterId(detail.contactId);
+    }
+  }, []);
+
   useEventAutoRefresh(loadDocuments, subscribeDocumentsChanged, subscribeContactsChanged);
 
   const filteredDocuments = useMemo(() => {
     return documents.filter((doc) => {
+      if (contactFilterId != null && doc.contact_id !== contactFilterId) {
+        return false;
+      }
       const client = doc.contact_id ? contactsById[doc.contact_id] : undefined;
       const clientLabel = client
         ? `${client.prenom} ${client.nom}`
@@ -78,7 +107,14 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
       const matchesType = typeFilter === "ALL" || doc.type_document === typeFilter;
       return matchesSearch && matchesType;
     });
-  }, [documents, searchQuery, typeFilter, contactsById]);
+  }, [documents, searchQuery, typeFilter, contactsById, contactFilterId]);
+
+  const contactFilterLabel = useMemo(() => {
+    if (contactFilterId == null) return null;
+    const client = contactsById[contactFilterId];
+    if (client) return `${client.prenom} ${client.nom}`;
+    return `Contact #${contactFilterId}`;
+  }, [contactFilterId, contactsById]);
 
   const handleDeleteDocument = async (id: number) => {
     if (window.confirm("Êtes-vous sûr de vouloir supprimer ce document ?")) {
@@ -147,10 +183,6 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
     return (bytes / (1024 * 1024)).toFixed(2) + " MB";
   };
 
-  const formatDate = (timestamp: number): string => {
-    return new Date(timestamp * 1000).toLocaleDateString("fr-FR");
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -198,18 +230,48 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">Tous les types</SelectItem>
-                  <SelectItem value="IDENTITE">Pièce d'identité</SelectItem>
-                  <SelectItem value="FISCAL">Document fiscal</SelectItem>
-                  <SelectItem value="PATRIMOINE">Document patrimonial</SelectItem>
-                  <SelectItem value="CONTRAT">Contrat</SelectItem>
-                  <SelectItem value="RELEVE">Relevé</SelectItem>
-                  <SelectItem value="AUTRE">Autre</SelectItem>
+                  <SelectItem value="IDENTITE">{getDocumentTypeLabel("IDENTITE")}</SelectItem>
+                  <SelectItem value="FISCAL">{getDocumentTypeLabel("FISCAL")}</SelectItem>
+                  <SelectItem value="PATRIMOINE">{getDocumentTypeLabel("PATRIMOINE")}</SelectItem>
+                  <SelectItem value="CONTRAT">{getDocumentTypeLabel("CONTRAT")}</SelectItem>
+                  <SelectItem value="RELEVE">{getDocumentTypeLabel("RELEVE")}</SelectItem>
+                  <SelectItem value="AUTRE">{getDocumentTypeLabel("AUTRE")}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </CardHeader>
         <CardContent>
+          {contactFilterId != null && (
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+              <span>
+                Documents de <strong>{contactFilterLabel}</strong>
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {onNavigate && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto px-0"
+                    onClick={() => openClient(contactFilterId)}
+                  >
+                    Voir la fiche
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 gap-1"
+                  onClick={() => setContactFilterId(null)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                  Tous les documents
+                </Button>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="text-center py-8 text-muted-foreground">
               Chargement...
@@ -220,16 +282,16 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
                 <Upload className="h-8 w-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-semibold mb-2">
-                {searchQuery || typeFilter !== "ALL"
+                {searchQuery || typeFilter !== "ALL" || contactFilterId != null
                   ? "Aucun document trouvé"
                   : "Aucun document"}
               </h3>
               <p className="text-muted-foreground mb-4">
-                {searchQuery || typeFilter !== "ALL"
+                {searchQuery || typeFilter !== "ALL" || contactFilterId != null
                   ? "Essayez de modifier vos critères de recherche"
                   : "Importez vos premiers documents"}
               </p>
-              {!searchQuery && typeFilter === "ALL" && (
+              {!searchQuery && typeFilter === "ALL" && contactFilterId == null && (
                 <Button onClick={() => setShowUpload(true)}>
                   <Upload className="h-4 w-4 mr-2" />
                   Importer
@@ -255,7 +317,7 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
                           <div className="flex flex-wrap items-center gap-2 mb-1">
                             <h3 className="font-semibold truncate">{doc.nom_fichier}</h3>
                             <Badge className={getTypeColor(doc.type_document)}>
-                              {doc.type_document}
+                              {getDocumentTypeLabel(doc.type_document)}
                             </Badge>
                           </div>
                           {client && doc.contact_id != null && (
@@ -272,9 +334,13 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
                               Sans client lié
                             </p>
                           )}
-                          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                             <span>{formatFileSize(doc.taille_fichier)}</span>
-                            <span>Ajouté le {formatDate(doc.created_at)}</span>
+                            {getDocumentMetaLines(doc).map((line) => (
+                              <span key={line.label}>
+                                {line.label} : {line.value}
+                              </span>
+                            ))}
                           </div>
                           {doc.notes && (
                             <p className="text-sm text-muted-foreground mt-2">{doc.notes}</p>
