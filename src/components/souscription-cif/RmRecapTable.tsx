@@ -1,3 +1,4 @@
+import { CifPreviewSegments } from "@/components/souscription-cif/CifPreviewSegments";
 import type { SouscriptionPreviewSegment } from "@/lib/souscription-cif/render-template";
 import { cn } from "@/lib/utils";
 
@@ -9,33 +10,10 @@ export type RmRecapTableRow = {
 type RmRecapTableProps = {
   rows: RmRecapTableRow[];
   className?: string;
+  onMissingVariableClick?: (key: string) => void;
 };
 
-function RenderSegments({ segments }: { segments: SouscriptionPreviewSegment[] }) {
-  return (
-    <>
-      {segments.map((seg, i) =>
-        seg.kind === "text" ? (
-          <span key={i}>{seg.value}</span>
-        ) : seg.kind === "underline" ? (
-          <span key={i} className="underline">
-            {seg.value}
-          </span>
-        ) : (
-          <mark
-            key={i}
-            className="rounded bg-amber-200/90 px-0.5 text-amber-950 not-italic"
-            title={`Variable : ${seg.key}`}
-          >
-            [{seg.label}]
-          </mark>
-        )
-      )}
-    </>
-  );
-}
-
-export function RmRecapTable({ rows, className }: RmRecapTableProps) {
+export function RmRecapTable({ rows, className, onMissingVariableClick }: RmRecapTableProps) {
   return (
     <table
       className={cn(
@@ -54,7 +32,10 @@ export function RmRecapTable({ rows, className }: RmRecapTableProps) {
               {row.title}
             </th>
             <td className="border border-neutral-400 px-1.5 py-1.5 align-top whitespace-pre-wrap [text-align-last:auto]">
-              <RenderSegments segments={row.contentSegments} />
+              <CifPreviewSegments
+                segments={row.contentSegments}
+                onMissingVariableClick={onMissingVariableClick}
+              />
             </td>
           </tr>
         ))}

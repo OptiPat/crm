@@ -14,7 +14,6 @@ import { cn } from "@/lib/utils";
 import type {
   ScpiLmPagePreview,
   ScpiLettreMissionPreview,
-  SouscriptionPreviewSegment,
 } from "@/lib/souscription-cif/render-template";
 import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { AnnexesScpiProsConsTable } from "@/components/souscription-cif/AnnexesScpiProsConsTable";
@@ -22,32 +21,14 @@ import { ScpiAmfRiskScaleTable } from "@/components/souscription-cif/ScpiAmfRisk
 import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInstrumentsTable";
 import { RmRecapTable } from "@/components/souscription-cif/RmRecapTable";
 import { ScpiLmSignatureBlock } from "@/components/souscription-cif/ScpiLmSignatureBlock";
-
-function RenderSegments({ segments }: { segments: SouscriptionPreviewSegment[] }) {
-  return (
-    <>
-      {segments.map((seg, i) =>
-        seg.kind === "text" ? (
-          <span key={i}>{seg.value}</span>
-        ) : seg.kind === "underline" ? (
-          <span key={i} className="underline">
-            {seg.value}
-          </span>
-        ) : (
-          <mark
-            key={i}
-            className="rounded bg-amber-200/90 px-0.5 text-amber-950 not-italic"
-            title={`Variable : ${seg.key}`}
-          >
-            [{seg.label}]
-          </mark>
-        )
-      )}
-    </>
-  );
-}
-
-function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
+import { CifPreviewSegments } from "@/components/souscription-cif/CifPreviewSegments";
+function ScpiLmBodyContent({
+  page,
+  onMissingVariableClick,
+}: {
+  page: ScpiLmPagePreview;
+  onMissingVariableClick?: (key: string) => void;
+}) {
   return (
     <>
       {page.pageNumber === 1 && page.headerLeft && page.headerRight && (
@@ -55,12 +36,15 @@ function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
           <div className="min-w-0 text-left leading-snug">
             {page.headerLeft.map((line, i) => (
               <p key={i} className={i > 0 ? "mt-0.5" : undefined}>
-                <RenderSegments segments={line} />
+                <CifPreviewSegments segments={line} onMissingVariableClick={onMissingVariableClick} />
               </p>
             ))}
           </div>
           <p className="shrink-0 text-right leading-snug whitespace-nowrap">
-            <RenderSegments segments={page.headerRight} />
+            <CifPreviewSegments
+              segments={page.headerRight}
+              onMissingVariableClick={onMissingVariableClick}
+            />
           </p>
         </div>
       )}
@@ -69,7 +53,10 @@ function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
 
       {page.bodySegments.length > 0 && (
         <div className={cifDocumentBodyProseClass}>
-          <RenderSegments segments={page.bodySegments} />
+          <CifPreviewSegments
+            segments={page.bodySegments}
+            onMissingVariableClick={onMissingVariableClick}
+          />
         </div>
       )}
 
@@ -79,13 +66,17 @@ function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
 
       {page.bodySegmentsContinuation && page.bodySegmentsContinuation.length > 0 && (
         <div className={cifDocumentBodyProseClass}>
-          <RenderSegments segments={page.bodySegmentsContinuation} />
+          <CifPreviewSegments
+            segments={page.bodySegmentsContinuation}
+            onMissingVariableClick={onMissingVariableClick}
+          />
         </div>
       )}
 
       {page.rapportRecapRows && page.rapportRecapRows.length > 0 && (
         <RmRecapTable
           rows={page.rapportRecapRows}
+          onMissingVariableClick={onMissingVariableClick}
           className={
             page.bodySegments.length === 0 && !page.title ? "mt-0" : undefined
           }
@@ -98,7 +89,10 @@ function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
         page.bodySegmentsAfterTable.length > 0 &&
         page.showAnnexesProsConsTable && (
           <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
-            <RenderSegments segments={page.bodySegmentsAfterTable} />
+            <CifPreviewSegments
+              segments={page.bodySegmentsAfterTable}
+              onMissingVariableClick={onMissingVariableClick}
+            />
           </div>
         )}
 
@@ -109,7 +103,10 @@ function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
       {page.bodySegmentsAfterProsConsTable &&
         page.bodySegmentsAfterProsConsTable.length > 0 && (
           <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
-            <RenderSegments segments={page.bodySegmentsAfterProsConsTable} />
+            <CifPreviewSegments
+              segments={page.bodySegmentsAfterProsConsTable}
+              onMissingVariableClick={onMissingVariableClick}
+            />
           </div>
         )}
 
@@ -124,7 +121,10 @@ function ScpiLmBodyContent({ page }: { page: ScpiLmPagePreview }) {
         page.bodySegmentsAfterTable.length > 0 &&
         !page.showAnnexesProsConsTable && (
           <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
-            <RenderSegments segments={page.bodySegmentsAfterTable} />
+            <CifPreviewSegments
+              segments={page.bodySegmentsAfterTable}
+              onMissingVariableClick={onMissingVariableClick}
+            />
           </div>
         )}
 
@@ -143,9 +143,11 @@ const OVERFLOW_PEEK_MAX_PX = 200;
 function ScpiLmPageContent({
   page,
   onOverflowChange,
+  onMissingVariableClick,
 }: {
   page: ScpiLmPagePreview;
   onOverflowChange?: (overflows: boolean, overflowPx: number) => void;
+  onMissingVariableClick?: (key: string) => void;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const onOverflowChangeRef = useRef(onOverflowChange);
@@ -180,7 +182,7 @@ function ScpiLmPageContent({
           lang="fr"
           className={cn(cifDocumentBodyClass, cifDocumentBodyTextClass, "relative")}
         >
-          <ScpiLmBodyContent page={page} />
+          <ScpiLmBodyContent page={page} onMissingVariableClick={onMissingVariableClick} />
 
           {overflows && (
             <>
@@ -205,7 +207,10 @@ function ScpiLmPageContent({
         </div>
 
         <div className={cifDocumentFooterClass}>
-          <RenderSegments segments={page.footerSegments} />
+          <CifPreviewSegments
+            segments={page.footerSegments}
+            onMissingVariableClick={onMissingVariableClick}
+          />
         </div>
       </div>
 
@@ -234,7 +239,7 @@ function ScpiLmPageContent({
             )}
             style={{ marginTop: -overflowPx }}
           >
-            <ScpiLmBodyContent page={page} />
+            <ScpiLmBodyContent page={page} onMissingVariableClick={onMissingVariableClick} />
           </div>
         </div>
       )}
@@ -288,6 +293,8 @@ type ScpiLettreMissionPreviewProps = {
   documentLabel?: string;
   /** Réinitialise à la page 1 (ex. changement de client ou de document). */
   resetKey?: string | number;
+  /** Clic sur une variable manquante → focus champ dossier. */
+  onMissingVariableClick?: (key: string) => void;
 };
 
 export function ScpiLettreMissionPreview({
@@ -295,6 +302,7 @@ export function ScpiLettreMissionPreview({
   className,
   documentLabel = "Lettre de mission",
   resetKey,
+  onMissingVariableClick,
 }: ScpiLettreMissionPreviewProps) {
   const [pageIndex, setPageIndex] = useState(0);
   const [pageOverflows, setPageOverflows] = useState(false);
@@ -362,6 +370,7 @@ export function ScpiLettreMissionPreview({
           <ScpiLmPageContent
             page={page}
             onOverflowChange={(overflows) => setPageOverflows(overflows)}
+            onMissingVariableClick={onMissingVariableClick}
           />
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
@@ -29,6 +29,11 @@ import {
   ANNEXES_RAPPORT_DOCUMENT_TITLE,
   CIF_DOCUMENT_LIFECYCLE,
 } from "@/lib/souscription-cif/cif-documents";
+import {
+  classifyCifVariableFocus,
+  focusCifDossierFieldElement,
+  getCifDossierFieldFocus,
+} from "@/lib/souscription-cif/cif-dossier-field-focus";
 import { RM_DOCUMENT_TITLE } from "@/lib/souscription-cif/rapport-mission-page1";
 import { SOUSCRIPTION_VARIABLE_LABELS } from "@/lib/souscription-cif/scpi-lettre-mission-page1";
 import {
@@ -87,6 +92,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   const [activeDocument, setActiveDocument] = useState<SouscriptionCifDocumentId>(
     () => initialDraft?.activeDocument ?? "lettre-mission"
   );
+  const pendingFocusFieldIdRef = useRef<string | null>(null);
 
   const productType: SouscriptionCifProductType = "scpi";
 
@@ -280,6 +286,47 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     [preview.missingKeys]
   );
 
+  const handleMissingVariableClick = useCallback(
+    (key: string) => {
+      const kind = classifyCifVariableFocus(key);
+      if (kind === "cgp-profile") {
+        if (onNavigate) {
+          requestOpenParametres("profil", {
+            scrollToId: "parametres-documents-cif",
+            currentPage,
+            setCurrentPage: onNavigate,
+          });
+        }
+        return;
+      }
+      if (kind === "client-profile") {
+        document.getElementById("cif-client-card")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+        if (selectedContactId != null && onOpenContact) {
+          onOpenContact(selectedContactId);
+        }
+        return;
+      }
+      const focus = getCifDossierFieldFocus(key);
+      if (!focus) return;
+      pendingFocusFieldIdRef.current = focus.fieldId;
+      setActiveDocument(focus.document);
+    },
+    [currentPage, onNavigate, onOpenContact, selectedContactId]
+  );
+
+  useEffect(() => {
+    const fieldId = pendingFocusFieldIdRef.current;
+    if (!fieldId) return;
+    pendingFocusFieldIdRef.current = null;
+    const timer = window.setTimeout(() => {
+      focusCifDossierFieldElement(fieldId);
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [activeDocument, dossier]);
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="space-y-1">
@@ -291,7 +338,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         </p>
       </div>
 
-      <Card>
+      <Card id="cif-client-card" className="scroll-mt-4">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <User className="h-5 w-5 text-primary" aria-hidden />
@@ -326,9 +373,13 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
       </Card>
 
       {selectedContact && (
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_1fr] lg:items-start">
-          <div className="space-y-4">
-            <SouscriptionCifDossierForm value={dossier} onChange={patchDossier} />
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:items-start">
+          <div className="space-y-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
+            <SouscriptionCifDossierForm
+              activeDocument={activeDocument}
+              value={dossier}
+              onChange={patchDossier}
+            />
 
             {missingProfileLabels.length > 0 && (
               <Card className="border-amber-200 bg-amber-50/50">
@@ -367,12 +418,12 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
 
             {preview.missingKeys.length > 0 && (
               <p className="text-xs text-muted-foreground">
-                Les zones surlignées en jaune dans l&apos;aperçu restent à compléter.
+                Cliquez sur une zone surlignée dans l&apos;aperçu pour ouvrir le champ à compléter.
               </p>
             )}
           </div>
 
-          <div className="space-y-3 min-w-0">
+          <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overscroll-contain lg:self-start">
             <Tabs
               value={activeDocument}
               onValueChange={(v) => setActiveDocument(v as SouscriptionCifDocumentId)}
@@ -409,6 +460,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
                   preview={lettreMissionPreview}
                   documentLabel={DOCUMENT_LABELS["lettre-mission"]}
                   resetKey={`${selectedContactId}-lettre-mission`}
+                  onMissingVariableClick={handleMissingVariableClick}
                 />
               </TabsContent>
 
@@ -421,6 +473,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
                   preview={rapportMissionPreview}
                   documentLabel={DOCUMENT_LABELS["rapport-mission"]}
                   resetKey={`${selectedContactId}-rapport-mission`}
+                  onMissingVariableClick={handleMissingVariableClick}
                 />
               </TabsContent>
 
@@ -433,6 +486,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
                   preview={annexesRapportPreview}
                   documentLabel={DOCUMENT_LABELS["annexes-rapport"]}
                   resetKey={`${selectedContactId}-annexes-rapport`}
+                  onMissingVariableClick={handleMissingVariableClick}
                 />
               </TabsContent>
             </Tabs>
