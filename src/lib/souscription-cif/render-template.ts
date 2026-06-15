@@ -7,6 +7,10 @@
  */
 import type { AnnexesScpiProsConsRow } from "@/lib/souscription-cif/annexes-scpi-pros-cons-table";
 import type { AnnexesScpiCostsRow } from "@/lib/souscription-cif/annexes-scpi-costs-table";
+import type { AnnexesScpiObjectifsPatrimoniauxRow } from "@/lib/souscription-cif/annexes-scpi-objectifs-patrimoniaux-table";
+import type { AnnexesScpiCaracteristiquesSection } from "@/lib/souscription-cif/annexes-scpi-caracteristiques-operation-table";
+import type { AnnexesScpiHorizonProfilRowView } from "@/lib/souscription-cif/annexes-scpi-horizon-profil-table";
+import type { AnnexesScpiOrigineFondsView } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
 import {
   SCPI_LM_PAGE1_BODY_AFTER_TITLE,
   SCPI_LM_PAGE1_FOOTER_DEFAULT,
@@ -27,12 +31,14 @@ import {
 export type SouscriptionPreviewSegment =
   | { kind: "text"; value: string }
   | { kind: "underline"; value: string }
+  | { kind: "bold"; value: string }
   | { kind: "missing"; key: string; label: string };
 
 export type ScpiLmPagePreview = {
   pageNumber: number;
   headerLeft?: SouscriptionPreviewSegment[][];
-  headerRight?: SouscriptionPreviewSegment[];
+  /** Lignes alignées à droite (une entrée = une ligne). */
+  headerRight?: SouscriptionPreviewSegment[][];
   title?: string;
   /** Sous-titre section produit centré (annexes). */
   centeredSectionTitle?: string;
@@ -76,6 +82,28 @@ export type ScpiLmPagePreview = {
   annexesCostsRows?: ReadonlyArray<AnnexesScpiCostsRow>;
   /** Texte après le tableau coûts et frais (annexes SCPI page 5). */
   bodySegmentsAfterCostsTable?: SouscriptionPreviewSegment[];
+  /** Tableau objectifs patrimoniaux (annexes SCPI page 6). */
+  showAnnexesObjectifsPatrimoniauxTable?: boolean;
+  annexesObjectifsPatrimoniauxRows?: ReadonlyArray<AnnexesScpiObjectifsPatrimoniauxRow>;
+  /** Titre § 3 après le tableau objectifs (annexes SCPI page 6). */
+  bodySegmentsAfterObjectifsPatrimoniauxTable?: SouscriptionPreviewSegment[];
+  /** Tableau caractéristiques de l'opération (annexes SCPI page 6 § 3). */
+  showAnnexesCaracteristiquesOperationTable?: boolean;
+  annexesCaracteristiquesOperationSections?: ReadonlyArray<AnnexesScpiCaracteristiquesSection>;
+  /** Titre § 4 après le tableau caractéristiques (annexes SCPI page 6). */
+  bodySegmentsAfterCaracteristiquesOperationTable?: SouscriptionPreviewSegment[];
+  /** Tableau horizon / profil (annexes SCPI page 6 § 4). */
+  showAnnexesHorizonProfilTable?: boolean;
+  annexesHorizonProfilRows?: ReadonlyArray<AnnexesScpiHorizonProfilRowView>;
+  /** Bloc provenance / origine des fonds (annexes SCPI page 7 § 5). */
+  showAnnexesOrigineFondsSection?: boolean;
+  annexesOrigineFondsView?: AnnexesScpiOrigineFondsView;
+  /** Certification après le bloc origine des fonds (page 7). */
+  bodySegmentsAfterOrigineFonds?: SouscriptionPreviewSegment[];
+  /** § 6 Informations — intro + Oui/Non (page 7). */
+  bodySegmentsSection6Intro?: SouscriptionPreviewSegment[];
+  /** § 7 Notes importantes (page 7). */
+  bodySegmentsSection7?: SouscriptionPreviewSegment[];
 };
 
 export type ScpiLettreMissionPreview = {
@@ -87,11 +115,12 @@ function labelForKey(key: string): string {
   return SOUSCRIPTION_VARIABLE_LABELS[key] ?? key;
 }
 
-function expandUnderlineSegments(
-  segments: SouscriptionPreviewSegment[]
+function expandTagInSegments(
+  segments: SouscriptionPreviewSegment[],
+  re: RegExp,
+  kind: "underline" | "bold"
 ): SouscriptionPreviewSegment[] {
   const result: SouscriptionPreviewSegment[] = [];
-  const re = /\[u\]([\s\S]*?)\[\/u\]/g;
 
   for (const seg of segments) {
     if (seg.kind !== "text") {
@@ -107,7 +136,7 @@ function expandUnderlineSegments(
       if (match.index > lastIndex) {
         result.push({ kind: "text", value: seg.value.slice(lastIndex, match.index) });
       }
-      result.push({ kind: "underline", value: match[1] });
+      result.push({ kind, value: match[1] });
       lastIndex = match.index + match[0].length;
     }
 
@@ -117,6 +146,13 @@ function expandUnderlineSegments(
   }
 
   return result;
+}
+
+function expandStyledSegments(
+  segments: SouscriptionPreviewSegment[]
+): SouscriptionPreviewSegment[] {
+  const afterUnderline = expandTagInSegments(segments, /\[u\]([\s\S]*?)\[\/u\]/g, "underline");
+  return expandTagInSegments(afterUnderline, /\[b\]([\s\S]*?)\[\/b\]/g, "bold");
 }
 
 export function renderTemplateSegments(
@@ -146,7 +182,7 @@ export function renderTemplateSegments(
     segments.push({ kind: "text", value: template.slice(lastIndex) });
   }
 
-  return expandUnderlineSegments(segments);
+  return expandStyledSegments(segments);
 }
 
 /** Découpe un modèle ligne par ligne (blocs signatures, en-têtes). */
@@ -186,10 +222,36 @@ export function buildCifDocumentClientHeader(
       [segmentForVariable("client_cp_ville", variables)],
     ],
     headerRight: [
-      { kind: "text", value: "À " },
-      segmentForVariable("client_ville", variables),
-      { kind: "text", value: ", le " },
-      segmentForVariable("date_document", variables),
+      [
+        { kind: "text", value: "À " },
+        segmentForVariable("client_ville", variables),
+        { kind: "text", value: ", le " },
+        segmentForVariable("date_document", variables),
+      ],
+    ],
+  };
+}
+
+/** Page 8 annexes — client à gauche, coordonnées conseiller + date à droite. */
+export function buildAnnexesRenonciationHeader(
+  variables: Record<string, string | null>
+): Pick<ScpiLmPagePreview, "headerLeft" | "headerRight"> {
+  return {
+    headerLeft: [
+      [segmentForVariable("client_nom_prenom", variables)],
+      [segmentForVariable("client_adresse", variables)],
+      [segmentForVariable("client_cp_ville", variables)],
+    ],
+    headerRight: [
+      [segmentForVariable("cgp_nom_complet", variables)],
+      [segmentForVariable("cgp_adresse_ligne", variables)],
+      [segmentForVariable("cgp_cp_ville", variables)],
+      [
+        { kind: "text", value: "À " },
+        segmentForVariable("client_ville", variables),
+        { kind: "text", value: ", le " },
+        segmentForVariable("date_document", variables),
+      ],
     ],
   };
 }
@@ -210,7 +272,9 @@ export function collectMissingFromPage(page: ScpiLmPagePreview): string[] {
     }
   }
   if (page.headerRight) {
-    collectMissing(page.headerRight).forEach((k) => keys.add(k));
+    for (const line of page.headerRight) {
+      collectMissing(line).forEach((k) => keys.add(k));
+    }
   }
   collectMissing(page.bodySegments).forEach((k) => keys.add(k));
   if (page.bodySegmentsContinuation) {
@@ -240,6 +304,21 @@ export function collectMissingFromPage(page: ScpiLmPagePreview): string[] {
   }
   if (page.bodySegmentsAfterCostsTable) {
     collectMissing(page.bodySegmentsAfterCostsTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterObjectifsPatrimoniauxTable) {
+    collectMissing(page.bodySegmentsAfterObjectifsPatrimoniauxTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterCaracteristiquesOperationTable) {
+    collectMissing(page.bodySegmentsAfterCaracteristiquesOperationTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterOrigineFonds) {
+    collectMissing(page.bodySegmentsAfterOrigineFonds).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsSection6Intro) {
+    collectMissing(page.bodySegmentsSection6Intro).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsSection7) {
+    collectMissing(page.bodySegmentsSection7).forEach((k) => keys.add(k));
   }
   collectMissing(page.footerSegments).forEach((k) => keys.add(k));
   return [...keys];

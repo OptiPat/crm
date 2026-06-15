@@ -2,6 +2,11 @@ import {
   defaultSouscriptionDossierFields,
   type SouscriptionDossierFields,
 } from "@/lib/souscription-cif/dossier-fields";
+import { normalizeScpiAnnexeSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
+import {
+  normalizeOrigineFondsSelected,
+  normalizeProvenanceFonds,
+} from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
 export type SouscriptionCifProductType = "scpi";
 
 export type SouscriptionCifDocumentId =
@@ -32,9 +37,10 @@ function writeStorage(value: string): void {
 
 function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as Partial<SouscriptionDossierFields>;
+  const o = raw as Record<string, unknown>;
+  const defaults = defaultSouscriptionDossierFields();
   return {
-    dateDoc: typeof o.dateDoc === "string" ? o.dateDoc : defaultSouscriptionDossierFields().dateDoc,
+    dateDoc: typeof o.dateDoc === "string" ? o.dateDoc : defaults.dateDoc,
     dateDer: typeof o.dateDer === "string" ? o.dateDer : "",
     dateRio: typeof o.dateRio === "string" ? o.dateRio : "",
     dateQpi: typeof o.dateQpi === "string" ? o.dateQpi : "",
@@ -45,13 +51,19 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
       typeof o.rappelSituationClient === "string" ? o.rappelSituationClient : "",
     conseil: typeof o.conseil === "string" ? o.conseil : "",
     mesPreconisations: typeof o.mesPreconisations === "string" ? o.mesPreconisations : "",
-    scpiAnnexeProductKeys: Array.isArray(o.scpiAnnexeProductKeys)
-      ? o.scpiAnnexeProductKeys.filter((k): k is string => typeof k === "string")
-      : [],
+    scpiAnnexeSouscriptions: normalizeScpiAnnexeSouscriptions(
+      o.scpiAnnexeSouscriptions,
+      o.scpiAnnexeProductKeys,
+      o.mesPreconisations
+    ),
     quotePartPercueConsultantCifEur:
       typeof o.quotePartPercueConsultantCifEur === "string"
         ? o.quotePartPercueConsultantCifEur
         : "",
+    provenanceFonds: normalizeProvenanceFonds(o.provenanceFonds),
+    origineFondsSelected: normalizeOrigineFondsSelected(o.origineFondsSelected),
+    origineFondsAutrePrecision:
+      typeof o.origineFondsAutrePrecision === "string" ? o.origineFondsAutrePrecision : "",
   };
 }
 

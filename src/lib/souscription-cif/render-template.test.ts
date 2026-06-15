@@ -7,7 +7,9 @@ import {
 } from "@/lib/souscription-cif/render-template";
 
 function segText(s: SouscriptionPreviewSegment): string {
-  return s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`;
+  return s.kind === "text" || s.kind === "underline" || s.kind === "bold"
+    ? s.value
+    : `[${s.label}]`;
 }
 
 describe("buildScpiLettreMissionPreview", () => {
@@ -28,7 +30,7 @@ describe("buildScpiLettreMissionPreview", () => {
 
     const page1Text = [
       ...(preview.pages[0].headerLeft ?? []).flat(),
-      ...(preview.pages[0].headerRight ?? []),
+      ...(preview.pages[0].headerRight ?? []).flat(),
       ...preview.pages[0].bodySegments,
     ]
       .map(segText)

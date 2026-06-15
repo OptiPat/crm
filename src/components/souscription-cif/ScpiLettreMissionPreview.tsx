@@ -17,6 +17,10 @@ import type {
 } from "@/lib/souscription-cif/render-template";
 import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { AnnexesScpiCostsTable } from "@/components/souscription-cif/AnnexesScpiCostsTable";
+import { AnnexesScpiObjectifsPatrimoniauxTable } from "@/components/souscription-cif/AnnexesScpiObjectifsPatrimoniauxTable";
+import { AnnexesScpiCaracteristiquesOperationTable } from "@/components/souscription-cif/AnnexesScpiCaracteristiquesOperationTable";
+import { AnnexesScpiHorizonProfilTable } from "@/components/souscription-cif/AnnexesScpiHorizonProfilTable";
+import { AnnexesScpiOrigineFondsSection } from "@/components/souscription-cif/AnnexesScpiOrigineFondsSection";
 import { AnnexesScpiProsConsTable } from "@/components/souscription-cif/AnnexesScpiProsConsTable";
 import { ScpiAmfRiskScaleTable } from "@/components/souscription-cif/ScpiAmfRiskScaleTable";
 import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInstrumentsTable";
@@ -32,7 +36,7 @@ function ScpiLmBodyContent({
 }) {
   return (
     <>
-      {page.pageNumber === 1 && page.headerLeft && page.headerRight && (
+      {page.headerLeft && page.headerRight && (
         <div className="mb-[10mm] flex items-start justify-between gap-[8mm]">
           <div className="min-w-0 text-left leading-snug">
             {page.headerLeft.map((line, i) => (
@@ -41,12 +45,13 @@ function ScpiLmBodyContent({
               </p>
             ))}
           </div>
-          <p className="shrink-0 text-right leading-snug whitespace-nowrap">
-            <CifPreviewSegments
-              segments={page.headerRight}
-              onMissingVariableClick={onMissingVariableClick}
-            />
-          </p>
+          <div className="min-w-0 shrink-0 text-right leading-snug">
+            {page.headerRight.map((line, i) => (
+              <p key={i} className={i > 0 ? "mt-0.5" : undefined}>
+                <CifPreviewSegments segments={line} onMissingVariableClick={onMissingVariableClick} />
+              </p>
+            ))}
+          </div>
         </div>
       )}
 
@@ -119,6 +124,85 @@ function ScpiLmBodyContent({
           </div>
         )}
 
+      {page.showAnnexesObjectifsPatrimoniauxTable && (
+        <>
+          {page.bodySegmentsAfterTable && page.bodySegmentsAfterTable.length > 0 && (
+            <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+              <CifPreviewSegments
+                segments={page.bodySegmentsAfterTable}
+                onMissingVariableClick={onMissingVariableClick}
+              />
+            </div>
+          )}
+          <AnnexesScpiObjectifsPatrimoniauxTable rows={page.annexesObjectifsPatrimoniauxRows} />
+        </>
+      )}
+
+      {page.showAnnexesCaracteristiquesOperationTable && (
+        <>
+          {page.bodySegmentsAfterObjectifsPatrimoniauxTable &&
+            page.bodySegmentsAfterObjectifsPatrimoniauxTable.length > 0 && (
+              <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+                <CifPreviewSegments
+                  segments={page.bodySegmentsAfterObjectifsPatrimoniauxTable}
+                  onMissingVariableClick={onMissingVariableClick}
+                />
+              </div>
+            )}
+          <AnnexesScpiCaracteristiquesOperationTable
+            sections={page.annexesCaracteristiquesOperationSections}
+          />
+        </>
+      )}
+
+      {page.showAnnexesHorizonProfilTable && (
+        <>
+          {page.bodySegmentsAfterCaracteristiquesOperationTable &&
+            page.bodySegmentsAfterCaracteristiquesOperationTable.length > 0 && (
+              <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+                <CifPreviewSegments
+                  segments={page.bodySegmentsAfterCaracteristiquesOperationTable}
+                  onMissingVariableClick={onMissingVariableClick}
+                />
+              </div>
+            )}
+          <AnnexesScpiHorizonProfilTable rows={page.annexesHorizonProfilRows} />
+        </>
+      )}
+
+      {page.showAnnexesOrigineFondsSection && page.annexesOrigineFondsView && (
+        <>
+          <AnnexesScpiOrigineFondsSection
+            view={page.annexesOrigineFondsView}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+          {page.bodySegmentsAfterOrigineFonds && page.bodySegmentsAfterOrigineFonds.length > 0 && (
+            <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+              <CifPreviewSegments
+                segments={page.bodySegmentsAfterOrigineFonds}
+                onMissingVariableClick={onMissingVariableClick}
+              />
+            </div>
+          )}
+          {page.bodySegmentsSection6Intro && page.bodySegmentsSection6Intro.length > 0 && (
+            <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+              <CifPreviewSegments
+                segments={page.bodySegmentsSection6Intro}
+                onMissingVariableClick={onMissingVariableClick}
+              />
+            </div>
+          )}
+          {page.bodySegmentsSection7 && page.bodySegmentsSection7.length > 0 && (
+            <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+              <CifPreviewSegments
+                segments={page.bodySegmentsSection7}
+                onMissingVariableClick={onMissingVariableClick}
+              />
+            </div>
+          )}
+        </>
+      )}
+
       {page.showAnnexesProsConsTable && (
         <AnnexesScpiProsConsTable rows={page.annexesProsConsRows} />
       )}
@@ -142,7 +226,11 @@ function ScpiLmBodyContent({
 
       {page.bodySegmentsAfterTable &&
         page.bodySegmentsAfterTable.length > 0 &&
-        !page.showAnnexesProsConsTable && (
+        !page.showAnnexesProsConsTable &&
+        !page.showAnnexesObjectifsPatrimoniauxTable &&
+        !page.showAnnexesCaracteristiquesOperationTable &&
+        !page.showAnnexesHorizonProfilTable &&
+        !page.showAnnexesOrigineFondsSection && (
           <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
             <CifPreviewSegments
               segments={page.bodySegmentsAfterTable}

@@ -17,7 +17,9 @@ export const CIF_DOSSIER_VARIABLE_FIELD: Readonly<Record<string, CifDossierField
   rappel_situation_client: { fieldId: "cif-rappel-situation", document: "rapport-mission" },
   conseil: { fieldId: "cif-conseil", document: "annexes-rapport" },
   mes_preconisations: { fieldId: "cif-mes-preconisations", document: "annexes-rapport" },
-  descriptions_scpi: { fieldId: "cif-scpi-fiches", document: "annexes-rapport" },
+  descriptions_scpi: { fieldId: "cif-scpi-souscriptions", document: "annexes-rapport" },
+  provenance_fonds: { fieldId: "cif-provenance-fonds", document: "annexes-rapport" },
+  origine_fonds: { fieldId: "cif-origine-fonds", document: "annexes-rapport" },
 };
 
 const CGP_VARIABLE_PREFIX = "cgp_";

@@ -1,6 +1,6 @@
 /**
  * Catalogue des fiches « Descriptions_SCPI » pour les annexes CIF.
- * Sélection `scpiAnnexeProductKeys` → concaténation des blocs ci-dessous.
+ * Sélection via `scpiAnnexeSouscriptions` → concaténation des blocs ci-dessous.
  */
 export type ScpiAnnexeProductFiche = {
   key: string;
@@ -8,6 +8,8 @@ export type ScpiAnnexeProductFiche = {
   label: string;
   /** Texte annexe complet pour ce produit. */
   description: string;
+  /** Prix de souscription d'une part (€) — alimente « soit X € la part x N parts ». */
+  partPriceEur?: number;
 };
 
 /** Fiches SCPI de rendement — textes annexes CIF (format compact). */
@@ -15,6 +17,7 @@ export const SCPI_ANNEXE_PRODUCT_FICHES: ReadonlyArray<ScpiAnnexeProductFiche> =
   {
     key: "comete",
     label: "Comète",
+    partPriceEur: 250,
     description: `— COMÈTE —
 
 La SCPI Comète vise à se constituer un patrimoine diversifié dans l'immobilier tertiaire (bureaux commerces, hôtellerie, santé, éducation, logistique et locaux d'activité). La stratégie géographique est d'investir au sein de l'Union Européenne (seule la logistique sera exclue de l'UE) et pourra également se positionner en Amérique du Nord, en Australie et en Nouvelle Zélande en cas d'opportunités.
@@ -33,6 +36,7 @@ Principaux frais :
   {
     key: "transitions_europe",
     label: "Transitions Europe",
+    partPriceEur: 202,
     description: `— TRANSITIONS EUROPE —
 
 Arkea Transition Europe accompagne les transitions du marché de l'immobilier en investissant dans un portefeuille d'actifs diversifiés. Elle investit en Europe ( Espagne, Pays-Bas, République d'Irlande…) pour bénéficier des opportunités des différents cycles immobilier, très majoritairement dans des actifs d'immobilier d'entreprise (bureaux, santé, éducation, logistique, activités, hébergement géré…).
@@ -51,6 +55,7 @@ Principaux frais :
   {
     key: "epargne_pierre_europe",
     label: "Épargne Pierre Europe",
+    partPriceEur: 200,
     description: `— ÉPARGNE PIERRE EUROPE —
 
 Epargne Pierre Europe accompagne les projets d'avenir de la 3ème puissance mondiale. Elle vous permet d'accéder à un patrimoine immobilier diversifié tant sur le plan sectoriel (bureaux, commerces, ou locaux d'activité) que géographique, en bénéficiant des différences de cycles économique entre les pays de la zone euro.
@@ -69,6 +74,7 @@ Principaux frais :
   {
     key: "alta_convictions",
     label: "Alta Convictions",
+    partPriceEur: 308,
     description: `— ALTA CONVICTIONS —
 
 Alta Convictions est une SCPI agile et conçue pour s'adapter au nouveau cycle immobilier, tant d'un point de vue sectoriel, privilégiant au lancement des commerces, des écoles et de la logistique principalement ; que géographique, avec des investissements dans les métropoles françaises et jusqu'à 20% du portefeuille immobilier en Europe.
@@ -87,6 +93,7 @@ Principaux frais :
   {
     key: "osmo_energie",
     label: "Osmo Energie",
+    partPriceEur: 300,
     description: `— OSMO ENERGIE —
 
 La SCPI Osmo Energie a pour objectif d'acheter des biens immobiliers en France et en Europe afin d'améliorer leur performance énergétique et financière. Grâce à des outils de mesure et une meilleure maîtrise des consommations, elle souhaite positionner le patrimoine immobilier sur une trajectoire de sobriété énergétique et de décarbonation.
@@ -105,6 +112,7 @@ Principaux frais :
   {
     key: "ncap_regions",
     label: "NCAP Régions",
+    partPriceEur: 682,
     description: `— NCAP RÉGIONS —
 
 Une SCPI diversifiée déployant une stratégie dynamique et opportuniste privilégiant la recherche de rendement en contrepartie d'un risque plus élevé. La politique d'investissement vise principalement l'acquisition d'actifs de petites tailles en régions afin de sortir des zones de marché les plus tendues et privilégier les zones moins concurrentielles. La SCPI bénéficie d'un patrimoine diversifié sur les bureaux, commerces et locaux d'activités afin de tirer profit des opportunités sur tous les segments. La capitalisation de la SCPI offre une mutualisation plus limitée avec un portefeuille d'actifs plus concentré.
@@ -123,6 +131,7 @@ Principaux frais :
   {
     key: "corum_origin",
     label: "Corum Origin",
+    partPriceEur: 1135,
     description: `— CORUM ORIGIN —
 
 La SCPI Corum Origin construit un patrimoine diversifié (bureaux, commerces, hôtels) en saisissant des opportunités selon les cycles économiques. Elle investit exclusivement en zone euro, répartissant ses actifs dans de nombreux pays européens pour optimiser le rendement et la fiscalité.
@@ -139,6 +148,17 @@ Principaux frais :
 - Réalisation et suivi de travaux : 0%;`,
   },
 ];
+
+/** Prix de part catalogue (€) — valeur par défaut, surchargeable par dossier. */
+export function getScpiAnnexeCatalogPartPriceEur(productKey: string): number | null {
+  const price = SCPI_ANNEXE_PRODUCT_FICHES.find((p) => p.key === productKey)?.partPriceEur;
+  return price != null && price > 0 ? price : null;
+}
+
+export function getScpiAnnexeDefaultPartPriceEurString(productKey: string): string {
+  const price = getScpiAnnexeCatalogPartPriceEur(productKey);
+  return price != null ? String(price) : "";
+}
 
 export function buildDescriptionsScpiFromKeys(keys: readonly string[]): string {
   const blocks: string[] = [];

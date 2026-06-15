@@ -16,6 +16,10 @@ export function CifPreviewSegments({ segments, onMissingVariableClick }: CifPrev
           <span key={i} className="underline">
             {seg.value}
           </span>
+        ) : seg.kind === "bold" ? (
+          <span key={i} className="font-bold">
+            {seg.value}
+          </span>
         ) : (
           <mark
             key={i}

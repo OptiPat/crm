@@ -37,9 +37,21 @@ describe("souscription-cif-storage", () => {
           rappelDemande: "",
           rappelSituationClient: "",
           conseil: "",
-          mesPreconisations: "",
-          scpiAnnexeProductKeys: [],
+          mesPreconisations: "Mes préconisations portent sur un investissement global de 30 000 €",
+          scpiAnnexeSouscriptions: [
+            {
+              productKey: "comete",
+              montantSouscritEur: "30000",
+              partPriceEur: "250",
+              reinvestissementDividendesPct: "100",
+              vpMontantEur: "50",
+              vpFrequence: "mois",
+            },
+          ],
           quotePartPercueConsultantCifEur: "",
+          provenanceFonds: "dom_tom",
+          origineFondsSelected: ["reemploi"],
+          origineFondsAutrePrecision: "",
         },
       },
     });
@@ -49,5 +61,9 @@ describe("souscription-cif-storage", () => {
     expect(getDossierForContact(loaded!.dossiersByContactId, 42).lieuNaissance).toBe(
       "Montpellier"
     );
+    expect(getDossierForContact(loaded!.dossiersByContactId, 42).provenanceFonds).toBe("dom_tom");
+    expect(getDossierForContact(loaded!.dossiersByContactId, 42).origineFondsSelected).toEqual([
+      "reemploi",
+    ]);
   });
 });

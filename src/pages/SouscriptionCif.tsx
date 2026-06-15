@@ -9,10 +9,9 @@ import { getAllContacts, getContactById, type Contact } from "@/lib/api/tauri-co
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
-import {
-  buildDefaultConseil,
-  buildDefaultMesPreconisations,
-} from "@/lib/souscription-cif/build-default-annexes-fields";
+import { buildDefaultConseil } from "@/lib/souscription-cif/build-default-annexes-fields";
+import { defaultAnnexesSouscriptionDossierPatch } from "@/lib/souscription-cif/dossier-fields";
+import { buildMesPreconisationsFromSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import { buildDefaultObjectifsClient } from "@/lib/souscription-cif/build-default-objectifs-client";
 import { buildDefaultRappelDemande } from "@/lib/souscription-cif/build-default-rappel-demande";
 import { buildDefaultRappelSituation } from "@/lib/souscription-cif/build-rappel-situation-default";
@@ -175,6 +174,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     const needsRappelSituation = !current.rappelSituationClient?.trim();
     const needsLieuNaissance = !current.lieuNaissance?.trim();
     const needsConseil = !current.conseil?.trim();
+    const needsAnnexesSouscriptions = current.scpiAnnexeSouscriptions.length === 0;
     const needsMesPreconisations = !current.mesPreconisations?.trim();
     if (
       !needsObjectifs &&
@@ -182,6 +182,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
       !needsRappelSituation &&
       !needsLieuNaissance &&
       !needsConseil &&
+      !needsAnnexesSouscriptions &&
       !needsMesPreconisations
     ) {
       return;
@@ -207,8 +208,12 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         if (needsConseil) {
           patch.conseil = buildDefaultConseil();
         }
-        if (needsMesPreconisations) {
-          patch.mesPreconisations = buildDefaultMesPreconisations();
+        if (needsAnnexesSouscriptions) {
+          Object.assign(patch, defaultAnnexesSouscriptionDossierPatch());
+        } else if (needsMesPreconisations) {
+          patch.mesPreconisations = buildMesPreconisationsFromSouscriptions(
+            existing.scpiAnnexeSouscriptions
+          );
         }
         if (Object.keys(patch).length === 0) return prev;
         return {
@@ -225,6 +230,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         needsRappelSituation ||
         needsLieuNaissance ||
         needsConseil ||
+        needsAnnexesSouscriptions ||
         needsMesPreconisations
       ) {
         applyPatch(null);
@@ -267,8 +273,15 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   );
 
   const annexesRapportPreview = useMemo(
-    () => buildAnnexesRapportPreview(productType, variables, dossier, cgp?.cif_pied_de_page),
-    [productType, variables, dossier, cgp?.cif_pied_de_page]
+    () =>
+      buildAnnexesRapportPreview(
+        productType,
+        variables,
+        dossier,
+        cgp?.cif_pied_de_page,
+        selectedContact?.profil_risque_sri
+      ),
+    [productType, variables, dossier, cgp?.cif_pied_de_page, selectedContact?.profil_risque_sri]
   );
 
   const preview =
@@ -377,6 +390,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
           <div className="space-y-4">
             <SouscriptionCifDossierForm
               activeDocument={activeDocument}
+              dossierKey={selectedContactId}
               value={dossier}
               onChange={patchDossier}
             />

@@ -4,6 +4,9 @@ import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatDateInputFr } from "@/lib/souscription-cif/format-date-input-fr";
 import { normalizeRappelSituationClient } from "@/lib/souscription-cif/build-rappel-situation-default";
 import { buildDescriptionsScpiFromKeys } from "@/lib/souscription-cif/scpi-annexe-catalog";
+import {
+  getScpiAnnexeProductKeysFromSouscriptions,
+} from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 
 function joinCpVille(cp?: string | null, ville?: string | null): string | null {
@@ -15,6 +18,12 @@ function cgpNomComplet(cgp: CgpConfig | null): string | null {
   if (!cgp) return null;
   const s = [cgp.prenom?.trim(), cgp.nom?.trim()].filter(Boolean).join(" ");
   return s || null;
+}
+
+/** Ex. « Nicolas PLAZA, » — formule d'appel au conseiller (page 8). */
+function cgpFormulePolitesse(cgp: CgpConfig | null): string | null {
+  const nomPrenom = cgpNomComplet(cgp);
+  return nomPrenom ? `${nomPrenom},` : null;
 }
 
 export function buildSouscriptionVariables(
@@ -47,8 +56,12 @@ export function buildSouscriptionVariables(
       normalizeRappelSituationClient(dossier.rappelSituationClient.trim()) || null,
     conseil: dossier.conseil.trim() || null,
     mes_preconisations: dossier.mesPreconisations.trim() || null,
-    descriptions_scpi: buildDescriptionsScpiFromKeys(dossier.scpiAnnexeProductKeys) || null,
+    descriptions_scpi:
+      buildDescriptionsScpiFromKeys(
+        getScpiAnnexeProductKeysFromSouscriptions(dossier.scpiAnnexeSouscriptions)
+      ) || null,
     cgp_nom_complet: cgpNomComplet(cgp),
+    cgp_formule_politesse: cgpFormulePolitesse(cgp),
     cgp_rcs_ville: cgp?.cif_rcs_ville?.trim() || null,
     cgp_siren: sirenRaw,
     cgp_siren_compact: sirenCompact,

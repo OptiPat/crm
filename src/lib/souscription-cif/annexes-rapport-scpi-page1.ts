@@ -9,6 +9,7 @@ export const ANNEXES_SCPI_PRODUCT_SECTION_TITLE = "— LES SCPI DE RENDEMENT —
 export const ANNEXES_SCPI_PAGE1_BODY_BEFORE_SECTION = `{{conseil}}`;
 
 export const ANNEXES_SCPI_PAGE1_BODY_AFTER_SECTION = `[u]1. Principe[/u]
+
 Les SCPI (Société Civile de Placement Immobilier) sont des sociétés d'investissement collectif qui ont pour objet l'acquisition et la gestion d'un patrimoine immobilier locatif à usage d'habitation ou d'entreprise.
 
 Elles collectent des fonds auprès d'investisseurs particuliers en vue d'acquérir un patrimoine immobilier locatif qui sera géré par une société de gestion.

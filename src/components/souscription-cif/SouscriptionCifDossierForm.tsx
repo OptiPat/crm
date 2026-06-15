@@ -1,29 +1,121 @@
+import { useEffect, useMemo, useRef } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 import { SCPI_ANNEXE_PRODUCT_FICHES } from "@/lib/souscription-cif/scpi-annexe-catalog";
+import {
+  buildMesPreconisationsFromSouscriptions,
+  patchScpiAnnexeSouscription,
+  SCPI_VP_FREQUENCE_OPTIONS,
+  shouldAutoSyncMesPreconisationsText,
+  type ScpiAnnexeSouscription,
+  type ScpiVpFrequence,
+  upsertScpiAnnexeSouscription,
+} from "@/lib/souscription-cif/scpi-annexe-souscriptions";
+import {
+  ORIGINE_FONDS_OPTIONS,
+  PROVENANCE_FONDS_OPTIONS,
+} from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
 import type { SouscriptionCifDocumentId } from "@/lib/souscription-cif/souscription-cif-storage";
 
 type SouscriptionCifDossierFormProps = {
   activeDocument: SouscriptionCifDocumentId;
+  /** Identifie le dossier (ex. contactId) pour réinitialiser la synchro auto au changement. */
+  dossierKey?: string | number;
   value: SouscriptionDossierFields;
   onChange: (patch: Partial<SouscriptionDossierFields>) => void;
 };
 
 export function SouscriptionCifDossierForm({
   activeDocument,
+  dossierKey,
   value,
   onChange,
 }: SouscriptionCifDossierFormProps) {
-  const toggleScpiProductKey = (key: string, checked: boolean) => {
-    const next = checked
-      ? [...value.scpiAnnexeProductKeys, key]
-      : value.scpiAnnexeProductKeys.filter((k) => k !== key);
-    onChange({ scpiAnnexeProductKeys: next });
+  const lastAutoMesPreconisationsRef = useRef(
+    buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions)
+  );
+
+  useEffect(() => {
+    const auto = buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions);
+    const canSync = shouldAutoSyncMesPreconisationsText(
+      value.mesPreconisations,
+      lastAutoMesPreconisationsRef.current
+    );
+    const matchesAuto = value.mesPreconisations === auto;
+    if (canSync || matchesAuto) {
+      lastAutoMesPreconisationsRef.current = auto;
+    }
+  }, [dossierKey, value.scpiAnnexeSouscriptions, value.mesPreconisations]);
+
+  const applySouscriptionUpdate = (nextSouscriptions: ScpiAnnexeSouscription[]) => {
+    const auto = buildMesPreconisationsFromSouscriptions(nextSouscriptions);
+    const patch: Partial<SouscriptionDossierFields> = {
+      scpiAnnexeSouscriptions: nextSouscriptions,
+    };
+    if (
+      shouldAutoSyncMesPreconisationsText(
+        value.mesPreconisations,
+        lastAutoMesPreconisationsRef.current
+      )
+    ) {
+      patch.mesPreconisations = auto;
+      lastAutoMesPreconisationsRef.current = auto;
+    }
+    onChange(patch);
   };
+
+  const toggleScpiSouscription = (productKey: string, checked: boolean) => {
+    applySouscriptionUpdate(
+      upsertScpiAnnexeSouscription(value.scpiAnnexeSouscriptions, productKey, checked)
+    );
+  };
+
+  const patchScpiField = <K extends keyof ScpiAnnexeSouscription>(
+    productKey: string,
+    field: K,
+    fieldValue: ScpiAnnexeSouscription[K]
+  ) => {
+    applySouscriptionUpdate(
+      patchScpiAnnexeSouscription(value.scpiAnnexeSouscriptions, productKey, field, fieldValue)
+    );
+  };
+
+  const reprendreTexteAuto = () => {
+    const auto = buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions);
+    lastAutoMesPreconisationsRef.current = auto;
+    onChange({ mesPreconisations: auto });
+  };
+
+  const autoMesPreconisationsNow = useMemo(
+    () => buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions),
+    [value.scpiAnnexeSouscriptions]
+  );
+
+  const mesPreconisationsIsCustom =
+    value.mesPreconisations.trim() !== "" &&
+    value.mesPreconisations !== autoMesPreconisationsNow &&
+    !shouldAutoSyncMesPreconisationsText(
+      value.mesPreconisations,
+      lastAutoMesPreconisationsRef.current
+    );
+
+  const isScpiSelected = (productKey: string) =>
+    value.scpiAnnexeSouscriptions.some((s) => s.productKey === productKey);
+
+  const souscriptionForScpi = (productKey: string) =>
+    value.scpiAnnexeSouscriptions.find((s) => s.productKey === productKey);
 
   return (
     <div className="space-y-4">
@@ -154,6 +246,142 @@ export function SouscriptionCifDossierForm({
                 Prérempli avec un texte type — à ajuster pour les annexes SCPI.
               </p>
             </div>
+
+            <div id="cif-scpi-souscriptions" className="space-y-2 scroll-mt-4">
+              <Label>Souscriptions SCPI</Label>
+              <p className="text-xs text-muted-foreground">
+                Cochez une SCPI pour saisir montant, prix de part, réinvestissement et VP. Les
+                montants alimentent les fiches annexe et le % coûts/frais.
+              </p>
+              {SCPI_ANNEXE_PRODUCT_FICHES.length > 0 && (
+                <div className="divide-y rounded-md border">
+                  {SCPI_ANNEXE_PRODUCT_FICHES.map((product) => {
+                    const selected = isScpiSelected(product.key);
+                    const row = souscriptionForScpi(product.key);
+                    return (
+                      <div key={product.key} className="px-3 py-2">
+                        <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={(v) =>
+                              toggleScpiSouscription(product.key, v === true)
+                            }
+                          />
+                          {product.label}
+                        </label>
+                        {selected && row && (
+                          <div className="mt-2 space-y-2 pl-6">
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex items-center gap-1.5">
+                                <Label
+                                  htmlFor={`cif-scpi-montant-${product.key}`}
+                                  className="text-xs text-muted-foreground whitespace-nowrap"
+                                >
+                                  Montant
+                                </Label>
+                                <Input
+                                  id={`cif-scpi-montant-${product.key}`}
+                                  className="w-28"
+                                  inputMode="decimal"
+                                  placeholder="€"
+                                  value={row.montantSouscritEur}
+                                  onChange={(e) =>
+                                    patchScpiField(product.key, "montantSouscritEur", e.target.value)
+                                  }
+                                />
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Label
+                                  htmlFor={`cif-scpi-part-${product.key}`}
+                                  className="text-xs text-muted-foreground whitespace-nowrap"
+                                >
+                                  Prix part
+                                </Label>
+                                <Input
+                                  id={`cif-scpi-part-${product.key}`}
+                                  className="w-20"
+                                  inputMode="decimal"
+                                  placeholder="€"
+                                  value={row.partPriceEur}
+                                  onChange={(e) =>
+                                    patchScpiField(product.key, "partPriceEur", e.target.value)
+                                  }
+                                />
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-3">
+                              <div className="flex items-center gap-1.5">
+                                <Label
+                                  htmlFor={`cif-scpi-reinv-${product.key}`}
+                                  className="text-xs text-muted-foreground whitespace-nowrap"
+                                >
+                                  Réinvest. dividendes
+                                </Label>
+                                <Input
+                                  id={`cif-scpi-reinv-${product.key}`}
+                                  className="w-16"
+                                  inputMode="decimal"
+                                  placeholder="%"
+                                  value={row.reinvestissementDividendesPct}
+                                  onChange={(e) =>
+                                    patchScpiField(
+                                      product.key,
+                                      "reinvestissementDividendesPct",
+                                      e.target.value
+                                    )
+                                  }
+                                />
+                                <span className="text-xs text-muted-foreground">%</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <Label
+                                  htmlFor={`cif-scpi-vp-${product.key}`}
+                                  className="text-xs text-muted-foreground whitespace-nowrap"
+                                >
+                                  VP
+                                </Label>
+                                <Input
+                                  id={`cif-scpi-vp-${product.key}`}
+                                  className="w-16"
+                                  inputMode="decimal"
+                                  placeholder="€"
+                                  value={row.vpMontantEur}
+                                  onChange={(e) =>
+                                    patchScpiField(product.key, "vpMontantEur", e.target.value)
+                                  }
+                                />
+                                <Select
+                                  value={row.vpFrequence}
+                                  onValueChange={(v) =>
+                                    patchScpiField(product.key, "vpFrequence", v as ScpiVpFrequence)
+                                  }
+                                >
+                                  <SelectTrigger
+                                    id={`cif-scpi-vp-freq-${product.key}`}
+                                    className="h-9 w-[6.5rem]"
+                                    aria-label={`Périodicité VP ${product.label}`}
+                                  >
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {SCPI_VP_FREQUENCE_OPTIONS.map((opt) => (
+                                      <SelectItem key={opt.value} value={opt.value}>
+                                        {opt.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="cif-mes-preconisations">Mes préconisations</Label>
               <Textarea
@@ -163,35 +391,22 @@ export function SouscriptionCifDossierForm({
                 onChange={(e) => onChange({ mesPreconisations: e.target.value })}
               />
               <p className="text-xs text-muted-foreground">
-                Prérempli avec un texte type (montants, parts, VP…) — à ajuster pour cette
-                souscription.
+                Mis à jour automatiquement quand vous modifiez le tableau — éditable librement pour
+                ajouter ou reformuler. Les retouches manuelles ne sont pas écrasées tant que vous
+                ne reprenez pas le texte auto.
               </p>
+              {mesPreconisationsIsCustom && (
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={reprendreTexteAuto}
+                >
+                  Reprendre le texte depuis le tableau
+                </Button>
+              )}
             </div>
-
-            {SCPI_ANNEXE_PRODUCT_FICHES.length > 0 && (
-              <div id="cif-scpi-fiches" className="space-y-2 scroll-mt-4">
-                <Label>SCPI — fiches annexe</Label>
-                <div className="flex flex-wrap gap-3">
-                  {SCPI_ANNEXE_PRODUCT_FICHES.map((product) => (
-                    <label
-                      key={product.key}
-                      className="flex cursor-pointer items-center gap-2 text-sm"
-                    >
-                      <Checkbox
-                        checked={value.scpiAnnexeProductKeys.includes(product.key)}
-                        onCheckedChange={(v) => toggleScpiProductKey(product.key, v === true)}
-                      />
-                      {product.label}
-                    </label>
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {value.scpiAnnexeProductKeys.length > 0
-                    ? `${value.scpiAnnexeProductKeys.length} fiche(s) — textes officiels insérés dans l'aperçu.`
-                    : "Cochez les SCPI souscrites pour insérer leurs fiches dans le document."}
-                </p>
-              </div>
-            )}
 
             <div className="space-y-3 rounded-md border bg-muted/20 p-3">
               <p className="text-sm font-medium">Coûts et frais — attestation CIF</p>
@@ -210,9 +425,58 @@ export function SouscriptionCifDossierForm({
                 />
                 <p className="text-xs text-muted-foreground">
                   Montant issu de l&apos;attestation CIF. Le % du tableau est calculé : quote-part
-                  ÷ montant souscrit (lu dans « Mes préconisations »).
+                  ÷ somme des montants souscrits ci-dessus.
                 </p>
               </div>
+            </div>
+
+            <div id="cif-provenance-fonds" className="space-y-2 scroll-mt-4">
+              <Label>Provenance des fonds</Label>
+              <div className="flex flex-wrap gap-4">
+                {PROVENANCE_FONDS_OPTIONS.map((option) => (
+                  <label key={option.key} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <Checkbox
+                      checked={value.provenanceFonds === option.key}
+                      onCheckedChange={(checked) => {
+                        if (checked === true) {
+                          onChange({ provenanceFonds: option.key });
+                        } else if (value.provenanceFonds === option.key) {
+                          onChange({ provenanceFonds: "" });
+                        }
+                      }}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div id="cif-origine-fonds" className="space-y-2 scroll-mt-4">
+              <Label>Origine des fonds</Label>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {ORIGINE_FONDS_OPTIONS.map((option) => (
+                  <label key={option.key} className="flex cursor-pointer items-start gap-2 text-sm">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={value.origineFondsSelected.includes(option.key)}
+                      onCheckedChange={(checked) => {
+                        const selected = new Set(value.origineFondsSelected);
+                        if (checked === true) selected.add(option.key);
+                        else selected.delete(option.key);
+                        onChange({ origineFondsSelected: [...selected] });
+                      }}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                ))}
+              </div>
+              {value.origineFondsSelected.includes("autre") && (
+                <Input
+                  value={value.origineFondsAutrePrecision}
+                  onChange={(e) => onChange({ origineFondsAutrePrecision: e.target.value })}
+                  placeholder="Préciser l'origine « Autre »"
+                />
+              )}
             </div>
           </CardContent>
         </Card>

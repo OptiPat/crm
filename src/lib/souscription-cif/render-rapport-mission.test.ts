@@ -31,12 +31,12 @@ describe("buildRapportMissionPreview", () => {
     expect(page.pageNumber).toBe(1);
 
     const headerLeft = (page.headerLeft ?? []).flat().map((s) =>
-      s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`
+      s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`
     );
     expect(headerLeft.join("")).toContain("Luc ALAMEDA");
 
     const body = page.bodySegments
-      .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(body).toContain("Identification des intervenants");
     expect(body).toContain("Nicolas PLAZA");
@@ -45,13 +45,13 @@ describe("buildRapportMissionPreview", () => {
     expect(preview.pages[0].rapportRecapRows).toHaveLength(2);
     const demandeRow = preview.pages[0].rapportRecapRows?.[0].contentSegments ?? [];
     const demandeText = demandeRow
-      .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(demandeText).toContain("Diversification patrimoniale");
 
     const situationRow = preview.pages[0].rapportRecapRows?.[1].contentSegments ?? [];
     const situationText = situationRow
-      .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(situationText).toContain("Recueil d'information");
     expect(situationText).toContain("Marié(e)");
@@ -75,19 +75,19 @@ describe("buildRapportMissionPreview", () => {
       (r) => r.title === "RAPPEL DES MISSIONS CONFIÉES"
     );
     const missionsText = (missionsRow?.contentSegments ?? [])
-      .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(missionsText).toContain("Stellium Invest");
 
     const objectifsRow = page2.rapportRecapRows?.find((r) => r.title === "RAPPEL DES OBJECTIFS");
     const objectifsText = (objectifsRow?.contentSegments ?? [])
-      .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(objectifsText).toContain("Constituer un patrimoine diversifié");
 
     const analyseRow = page2.rapportRecapRows?.find((r) => r.title === "ANALYSE DE LA SITUATION");
     const analyseText = (analyseRow?.contentSegments ?? [])
-      .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(analyseText).toContain("01/03/2026");
 
@@ -98,25 +98,25 @@ describe("buildRapportMissionPreview", () => {
     ]) {
       const row = page2.rapportRecapRows?.find((r) => r.title === title);
       const text = (row?.contentSegments ?? [])
-        .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+        .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
         .join("");
       expect(text).toContain(noQuestions);
     }
 
     const faitA = (page2.bodySegmentsAfterTable ?? [])
-      .map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`))
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(faitA).toContain("Montpellier");
     expect(faitA).toContain("14/06/2026");
 
     const sigLeft = (page2.signatureColumns?.left ?? [])
       .map((line) =>
-        line.map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`)).join("")
+        line.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`)).join("")
       )
       .join("\n");
     const sigRight = (page2.signatureColumns?.right ?? [])
       .map((line) =>
-        line.map((s) => (s.kind === "text" || s.kind === "underline" ? s.value : `[${s.label}]`)).join("")
+        line.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`)).join("")
       )
       .join("\n");
     expect(sigLeft).toContain("Signature du conseiller");
