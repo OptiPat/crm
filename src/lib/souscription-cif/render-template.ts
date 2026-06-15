@@ -6,6 +6,7 @@
  * fiscales, capital investissement, G3F, etc.).
  */
 import type { AnnexesScpiProsConsRow } from "@/lib/souscription-cif/annexes-scpi-pros-cons-table";
+import type { AnnexesScpiCostsRow } from "@/lib/souscription-cif/annexes-scpi-costs-table";
 import {
   SCPI_LM_PAGE1_BODY_AFTER_TITLE,
   SCPI_LM_PAGE1_FOOTER_DEFAULT,
@@ -53,6 +54,8 @@ export type ScpiLmPagePreview = {
     title: string;
     contentSegments: SouscriptionPreviewSegment[];
   }[];
+  /** En-tête du tableau récap (colspan, ex. annexes SCPI page 5). */
+  rapportRecapTableHeader?: string;
   /** Échelle AMF 1–7 (annexes SCPI). */
   showAmfRiskScale?: boolean;
   /** Case surlignée sur l'échelle AMF (ex. 3 pour SCPI de rendement). */
@@ -65,6 +68,14 @@ export type ScpiLmPagePreview = {
   annexesProsConsRows?: ReadonlyArray<AnnexesScpiProsConsRow>;
   /** Texte après le tableau avantages / inconvénients (annexes § 4.2). */
   bodySegmentsAfterProsConsTable?: SouscriptionPreviewSegment[];
+  /** Texte après le tableau récap (annexes SCPI page 5 — coûts et frais). */
+  bodySegmentsAfterRecapTable?: SouscriptionPreviewSegment[];
+  /** Tableau coûts et frais (annexes SCPI page 5). */
+  showAnnexesCostsTable?: boolean;
+  /** Lignes du tableau coûts et frais (défaut : modèle SCPI). */
+  annexesCostsRows?: ReadonlyArray<AnnexesScpiCostsRow>;
+  /** Texte après le tableau coûts et frais (annexes SCPI page 5). */
+  bodySegmentsAfterCostsTable?: SouscriptionPreviewSegment[];
 };
 
 export type ScpiLettreMissionPreview = {
@@ -223,6 +234,12 @@ export function collectMissingFromPage(page: ScpiLmPagePreview): string[] {
     for (const row of page.rapportRecapRows) {
       collectMissing(row.contentSegments).forEach((k) => keys.add(k));
     }
+  }
+  if (page.bodySegmentsAfterRecapTable) {
+    collectMissing(page.bodySegmentsAfterRecapTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterCostsTable) {
+    collectMissing(page.bodySegmentsAfterCostsTable).forEach((k) => keys.add(k));
   }
   collectMissing(page.footerSegments).forEach((k) => keys.add(k));
   return [...keys];

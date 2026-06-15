@@ -15,7 +15,15 @@ import {
   ANNEXES_SCPI_PAGE3_SECTION42_TITLE,
 } from "@/lib/souscription-cif/annexes-rapport-scpi-page3";
 import { ANNEXES_SCPI_PAGE4_INTRO } from "@/lib/souscription-cif/annexes-rapport-scpi-page4";
+import {
+  ANNEXES_SCPI_COSTS_FOOTER,
+  ANNEXES_SCPI_COSTS_INTRO,
+} from "@/lib/souscription-cif/annexes-scpi-costs-table";
+import { ANNEXES_SCPI_PAGE5_TABLE_HEADER } from "@/lib/souscription-cif/annexes-rapport-scpi-page5";
+import { ANNEXES_SCPI_RECAP_ROW_TEMPLATES } from "@/lib/souscription-cif/annexes-scpi-recap-table";
+import { buildAnnexesScpiCostsRows } from "@/lib/souscription-cif/build-annexes-scpi-costs";
 import { ANNEXES_RAPPORT_DOCUMENT_TITLE } from "@/lib/souscription-cif/cif-documents";
+import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 import { SCPI_LM_PAGE1_FOOTER_DEFAULT } from "@/lib/souscription-cif/scpi-lettre-mission-page1";
 import {
   buildCifDocumentFooterSegments,
@@ -29,6 +37,7 @@ import type { SouscriptionCifProductType } from "@/lib/souscription-cif/souscrip
 export function buildAnnexesRapportPreview(
   productType: SouscriptionCifProductType,
   variables: Record<string, string | null>,
+  dossier: SouscriptionDossierFields,
   footerOverride?: string | null
 ): ScpiLettreMissionPreview {
   if (productType !== "scpi") {
@@ -80,8 +89,24 @@ export function buildAnnexesRapportPreview(
   };
   collectMissingFromPage(page4).forEach((k) => missing.add(k));
 
+  const page5: ScpiLmPagePreview = {
+    pageNumber: 5,
+    bodySegments: [],
+    rapportRecapTableHeader: ANNEXES_SCPI_PAGE5_TABLE_HEADER,
+    rapportRecapRows: ANNEXES_SCPI_RECAP_ROW_TEMPLATES.map((row) => ({
+      title: row.title,
+      contentSegments: renderTemplateSegments(row.contentTemplate, variables),
+    })),
+    bodySegmentsAfterRecapTable: renderTemplateSegments(ANNEXES_SCPI_COSTS_INTRO, variables),
+    showAnnexesCostsTable: true,
+    annexesCostsRows: buildAnnexesScpiCostsRows(dossier),
+    bodySegmentsAfterCostsTable: renderTemplateSegments(ANNEXES_SCPI_COSTS_FOOTER, variables),
+    footerSegments,
+  };
+  collectMissingFromPage(page5).forEach((k) => missing.add(k));
+
   return {
-    pages: [page1, page2, page3, page4],
+    pages: [page1, page2, page3, page4, page5],
     missingKeys: [...missing],
   };
 }

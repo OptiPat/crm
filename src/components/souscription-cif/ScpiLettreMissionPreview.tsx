@@ -16,6 +16,7 @@ import type {
   ScpiLettreMissionPreview,
 } from "@/lib/souscription-cif/render-template";
 import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { AnnexesScpiCostsTable } from "@/components/souscription-cif/AnnexesScpiCostsTable";
 import { AnnexesScpiProsConsTable } from "@/components/souscription-cif/AnnexesScpiProsConsTable";
 import { ScpiAmfRiskScaleTable } from "@/components/souscription-cif/ScpiAmfRiskScaleTable";
 import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInstrumentsTable";
@@ -74,13 +75,35 @@ function ScpiLmBodyContent({
       )}
 
       {page.rapportRecapRows && page.rapportRecapRows.length > 0 && (
-        <RmRecapTable
-          rows={page.rapportRecapRows}
-          onMissingVariableClick={onMissingVariableClick}
-          className={
-            page.bodySegments.length === 0 && !page.title ? "mt-0" : undefined
-          }
-        />
+        <>
+          <RmRecapTable
+            rows={page.rapportRecapRows}
+            header={page.rapportRecapTableHeader}
+            onMissingVariableClick={onMissingVariableClick}
+            className={
+              page.bodySegments.length === 0 && !page.title ? "mt-0" : undefined
+            }
+          />
+          {page.bodySegmentsAfterRecapTable &&
+            page.bodySegmentsAfterRecapTable.length > 0 && (
+              <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+                <CifPreviewSegments
+                  segments={page.bodySegmentsAfterRecapTable}
+                  onMissingVariableClick={onMissingVariableClick}
+                />
+              </div>
+            )}
+          {page.showAnnexesCostsTable && <AnnexesScpiCostsTable rows={page.annexesCostsRows} />}
+          {page.bodySegmentsAfterCostsTable &&
+            page.bodySegmentsAfterCostsTable.length > 0 && (
+              <div className={cn("mt-[3mm]", cifDocumentBodyProseClass)}>
+                <CifPreviewSegments
+                  segments={page.bodySegmentsAfterCostsTable}
+                  onMissingVariableClick={onMissingVariableClick}
+                />
+              </div>
+            )}
+        </>
       )}
 
       {page.showInstrumentsTable && <ScpiLmInstrumentsTable />}

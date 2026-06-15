@@ -48,6 +48,10 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     scpiAnnexeProductKeys: Array.isArray(o.scpiAnnexeProductKeys)
       ? o.scpiAnnexeProductKeys.filter((k): k is string => typeof k === "string")
       : [],
+    quotePartPercueConsultantCifEur:
+      typeof o.quotePartPercueConsultantCifEur === "string"
+        ? o.quotePartPercueConsultantCifEur
+        : "",
   };
 }
 

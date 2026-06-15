@@ -192,6 +192,28 @@ export function SouscriptionCifDossierForm({
                 </p>
               </div>
             )}
+
+            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+              <p className="text-sm font-medium">Coûts et frais — attestation CIF</p>
+              <div className="space-y-2">
+                <Label htmlFor="cif-quote-part-consultant">
+                  Quote-part perçue consultant (CIF)
+                </Label>
+                <Input
+                  id="cif-quote-part-consultant"
+                  inputMode="decimal"
+                  value={value.quotePartPercueConsultantCifEur}
+                  onChange={(e) =>
+                    onChange({ quotePartPercueConsultantCifEur: e.target.value })
+                  }
+                  placeholder="Ex. 900"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Montant issu de l&apos;attestation CIF. Le % du tableau est calculé : quote-part
+                  ÷ montant souscrit (lu dans « Mes préconisations »).
+                </p>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

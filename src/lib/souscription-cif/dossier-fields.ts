@@ -16,6 +16,8 @@ export type SouscriptionDossierFields = {
   mesPreconisations: string;
   /** Annexes — fiches SCPI sélectionnées (catalogue → `descriptions_scpi`). */
   scpiAnnexeProductKeys: string[];
+  /** Annexes — attestation CIF : quote-part perçue consultant (€). */
+  quotePartPercueConsultantCifEur: string;
 };
 
 export function todayDateInputValue(): string {
@@ -37,5 +39,6 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     conseil: "",
     mesPreconisations: "",
     scpiAnnexeProductKeys: [],
+    quotePartPercueConsultantCifEur: "",
   };
 }

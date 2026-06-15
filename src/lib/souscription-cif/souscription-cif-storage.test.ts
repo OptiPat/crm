@@ -39,6 +39,7 @@ describe("souscription-cif-storage", () => {
           conseil: "",
           mesPreconisations: "",
           scpiAnnexeProductKeys: [],
+          quotePartPercueConsultantCifEur: "",
         },
       },
     });

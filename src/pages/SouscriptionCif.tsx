@@ -267,8 +267,8 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   );
 
   const annexesRapportPreview = useMemo(
-    () => buildAnnexesRapportPreview(productType, variables, cgp?.cif_pied_de_page),
-    [productType, variables, cgp?.cif_pied_de_page]
+    () => buildAnnexesRapportPreview(productType, variables, dossier, cgp?.cif_pied_de_page),
+    [productType, variables, dossier, cgp?.cif_pied_de_page]
   );
 
   const preview =
@@ -374,7 +374,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
 
       {selectedContact && (
         <div className="grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] lg:items-start">
-          <div className="space-y-4 lg:max-h-[calc(100vh-8rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
+          <div className="space-y-4">
             <SouscriptionCifDossierForm
               activeDocument={activeDocument}
               value={dossier}
@@ -423,7 +423,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
             )}
           </div>
 
-          <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overscroll-contain lg:self-start">
+          <div className="min-w-0 lg:sticky lg:top-4 lg:self-start">
             <Tabs
               value={activeDocument}
               onValueChange={(v) => setActiveDocument(v as SouscriptionCifDocumentId)}

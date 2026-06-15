@@ -9,11 +9,18 @@ export type RmRecapTableRow = {
 
 type RmRecapTableProps = {
   rows: RmRecapTableRow[];
+  /** En-tête sur toute la largeur du tableau (ex. « TABLEAU RÉCAPITULATIF »). */
+  header?: string;
   className?: string;
   onMissingVariableClick?: (key: string) => void;
 };
 
-export function RmRecapTable({ rows, className, onMissingVariableClick }: RmRecapTableProps) {
+export function RmRecapTable({
+  rows,
+  header,
+  className,
+  onMissingVariableClick,
+}: RmRecapTableProps) {
   return (
     <table
       className={cn(
@@ -25,6 +32,18 @@ export function RmRecapTable({ rows, className, onMissingVariableClick }: RmReca
         <col className="w-[28%]" />
         <col className="w-[72%]" />
       </colgroup>
+      {header && (
+        <thead>
+          <tr>
+            <th
+              colSpan={2}
+              className="border border-neutral-400 bg-neutral-100 px-1.5 py-1.5 w-full text-center font-semibold [text-align-last:center]"
+            >
+              {header}
+            </th>
+          </tr>
+        </thead>
+      )}
       <tbody>
         {rows.map((row) => (
           <tr key={row.title}>
