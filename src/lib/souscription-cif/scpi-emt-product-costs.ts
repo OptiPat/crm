@@ -10,7 +10,7 @@ export type ScpiEmtCostCoefficients = {
 
 /**
  * Taux EMT par SCPI (07110 + 07130 + 07140 si présente).
- * NCAP Régions : pas de données EMT — absent du catalogue.
+ * NCAP Régions : coefficients EMT document DIC.
  */
 export const SCPI_EMT_PRODUCT_COST_COEFFICIENTS: Readonly<
   Record<string, ScpiEmtCostCoefficients>
@@ -19,6 +19,7 @@ export const SCPI_EMT_PRODUCT_COST_COEFFICIENTS: Readonly<
   comete: { line07110: 0.0066, line07130: 0.0267, line07140: 0 },
   corum_origin: { line07110: 0.0089, line07130: 0.0073, line07140: 0 },
   epargne_pierre_europe: { line07110: 0, line07130: 0.0145, line07140: 0 },
+  ncap_regions: { line07110: 0.005901398, line07130: 0.0145, line07140: 0 },
   osmo_energie: { line07110: 0.0059, line07130: 0.0273, line07140: 0 },
   transitions_europe: { line07110: 0, line07130: 0.0147, line07140: 0 },
 };

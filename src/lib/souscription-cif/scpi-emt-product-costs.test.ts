@@ -10,8 +10,8 @@ describe("getScpiEmtProductCostRate", () => {
     expect(getScpiEmtProductCostRate("comete")).toBeCloseTo(0.0333);
   });
 
-  it("retourne null pour NCAP Régions (données absentes)", () => {
-    expect(getScpiEmtProductCostRate("ncap_regions")).toBeNull();
+  it("additionne les lignes EMT pour NCAP Régions", () => {
+    expect(getScpiEmtProductCostRate("ncap_regions")).toBeCloseTo(0.020401398);
   });
 });
 
@@ -31,7 +31,7 @@ describe("computeProductCostsPercentRatio", () => {
     ).toBeCloseTo(0.0333);
   });
 
-  it("exclut NCAP du dénominateur (pas de taux EMT)", () => {
+  it("pondère Comète et NCAP dans le % coûts produits", () => {
     expect(
       computeProductCostsPercentRatio([
         {
@@ -51,7 +51,7 @@ describe("computeProductCostsPercentRatio", () => {
           vpFrequence: "mois",
         },
       ])
-    ).toBeCloseTo(0.0333);
+    ).toBeCloseTo((999 + 10_000 * 0.020401398) / 40_000);
   });
 });
 
@@ -86,7 +86,7 @@ describe("sumProductCostsFromSouscriptions", () => {
     ).toBeCloseTo(999);
   });
 
-  it("ignore NCAP sans coefficients EMT", () => {
+  it("10 000 € NCAP × (0,005901398 + 0,0145) ≈ 204 €", () => {
     expect(
       sumProductCostsFromSouscriptions([
         {
@@ -98,7 +98,7 @@ describe("sumProductCostsFromSouscriptions", () => {
           vpFrequence: "mois",
         },
       ])
-    ).toBeNull();
+    ).toBeCloseTo(204.01398);
   });
 
   it("additionne plusieurs SCPI connues", () => {

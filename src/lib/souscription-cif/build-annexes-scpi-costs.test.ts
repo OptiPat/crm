@@ -68,9 +68,13 @@ describe("buildAnnexesScpiCostsRows", () => {
       quotePartPercueConsultantCifEur: "900",
     });
 
+    const productsRow = rows.find((r) => r.label === "Coûts liés aux produits");
+    const ncapProductCosts = 10_000 * 0.020401398;
+    expect(productsRow?.amount).toBe(formatEuroAmountCif(999 + ncapProductCosts));
+
     const totalRow = rows.find((r) => r.label === "TOTAL COÛTS ET FRAIS");
-    expect(totalRow?.amount).toBe(formatEuroAmountCif(999 + 900));
-    expect(totalRow?.percent).toBe(formatPercentCif((999 + 900) / 40_000));
+    expect(totalRow?.amount).toBe(formatEuroAmountCif(999 + ncapProductCosts + 900));
+    expect(totalRow?.percent).toBe(formatPercentCif((999 + ncapProductCosts + 900) / 40_000));
   });
 
   it("laisse produits et total vides si quote-part ou montant souscrit absent", () => {
