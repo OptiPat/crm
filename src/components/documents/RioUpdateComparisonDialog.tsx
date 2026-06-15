@@ -23,10 +23,15 @@ import {
   StickyNote,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
-import type { Investissement, NewInvestissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
+import type { Investissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
 import { getInvestissementsByContact, updateInvestissement, createInvestissement } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
-import { getContactById, updateContact } from "@/lib/api/tauri-contacts";
+import { getContactById, getContactsByFoyer, updateContact } from "@/lib/api/tauri-contacts";
+import { loadFoyerInvestissements } from "@/lib/foyers/foyer-utils";
+import {
+  attachRioPatrimoineOwner,
+  buildRioPatrimoineOwner,
+} from "@/lib/documents/rio-patrimoine-target";
 
 interface RioUpdateComparisonDialogProps {
   open: boolean;
@@ -34,6 +39,9 @@ interface RioUpdateComparisonDialogProps {
   extractedData: ExtractedData;
   contactId: number;
   contactNom: string;
+  /** Patrimoine commun du foyer (RIO couple). */
+  foyerId?: number;
+  coupleMemberIds?: number[];
   onComplete: () => void;
   onCancel: () => void;
 }
@@ -323,9 +331,17 @@ export function RioUpdateComparisonDialog({
   extractedData,
   contactId,
   contactNom,
+  foyerId,
+  coupleMemberIds,
   onComplete,
   onCancel,
 }: RioUpdateComparisonDialogProps) {
+  const useFoyerPatrimoine = Boolean(foyerId);
+  const defaultOwner = buildRioPatrimoineOwner({
+    contactId,
+    foyerId,
+    useFoyer: useFoyerPatrimoine,
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [existingInvestissements, setExistingInvestissements] = useState<Investissement[]>([]);
@@ -338,17 +354,29 @@ export function RioUpdateComparisonDialog({
       loadExistingInvestissements();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement à l'ouverture du dialog
-  }, [open, contactId]);
+  }, [open, contactId, foyerId, coupleMemberIds]);
 
   const loadExistingInvestissements = async () => {
     setLoading(true);
     try {
-      const [invs, parts] = await Promise.all([
-        getInvestissementsByContact(contactId),
-        getAllPartenaires(),
-      ]);
-      setExistingInvestissements(invs);
+      const [parts] = await Promise.all([getAllPartenaires()]);
       setPartenaires(parts);
+
+      let invs: Investissement[];
+      if (foyerId) {
+        const members = coupleMemberIds?.length
+          ? (
+              await Promise.all(
+                coupleMemberIds.map((id) => getContactById(id).catch(() => null))
+              )
+            ).filter((contact): contact is NonNullable<typeof contact> => contact != null)
+          : await getContactsByFoyer(foyerId);
+        const foyerInvs = await loadFoyerInvestissements(foyerId, members);
+        invs = foyerInvs.map(({ proprietaireLabel: _ignored, ...inv }) => inv);
+      } else {
+        invs = await getInvestissementsByContact(contactId);
+      }
+      setExistingInvestissements(invs);
       
       const extracted = extractInvestissementsFromRIO(extractedData);
       const usedExistingIds = new Set<number>();
@@ -617,43 +645,57 @@ export function RioUpdateComparisonDialog({
         if (!comp.selectedForUpdate) continue;
 
         if (comp.linkedToExistingId === null) {
-          const newInv: NewInvestissement = {
-            contact_id: contactId,
-            type_produit: comp.editedType,
-            nom_produit: comp.editedLabel,
-            montant_initial: Math.round(comp.editedMontant * 100),
-            origine: comp.selectedOrigine,
-            partenaire_id: comp.selectedPartenaireId || undefined,
-            versement_programme: comp.versementProgramme,
-            montant_versement_programme: comp.montantVersement ? Math.round(comp.montantVersement * 100) : undefined,
-            frequence_versement: comp.versementProgramme ? comp.frequenceVersement : undefined,
-            reinvestissement_dividendes: comp.reinvestissementDividendes,
-            // Format RFC3339 requis par le backend Rust
-            date_souscription: comp.dateSouscription ? `${comp.dateSouscription}T00:00:00Z` : undefined,
-          };
+          const newInv = attachRioPatrimoineOwner(
+            {
+              type_produit: comp.editedType,
+              nom_produit: comp.editedLabel,
+              montant_initial: Math.round(comp.editedMontant * 100),
+              origine: comp.selectedOrigine,
+              partenaire_id: comp.selectedPartenaireId || undefined,
+              versement_programme: comp.versementProgramme,
+              montant_versement_programme: comp.montantVersement
+                ? Math.round(comp.montantVersement * 100)
+                : undefined,
+              frequence_versement: comp.versementProgramme ? comp.frequenceVersement : undefined,
+              reinvestissement_dividendes: comp.reinvestissementDividendes,
+              date_souscription: comp.dateSouscription
+                ? `${comp.dateSouscription}T00:00:00Z`
+                : undefined,
+            },
+            defaultOwner
+          );
           await createInvestissement(newInv);
           added++;
         } else {
-          const existing = existingInvestissements.find(inv => inv.id === comp.linkedToExistingId);
+          const existing = existingInvestissements.find((inv) => inv.id === comp.linkedToExistingId);
           if (!existing) continue;
-          
-          const updatedInv: NewInvestissement = {
-            contact_id: contactId,
-            type_produit: existing.type_produit,
-            nom_produit: existing.nom_produit,
-            montant_initial: Math.round(comp.editedMontant * 100),
-            origine: comp.selectedOrigine,
-            partenaire_id: comp.selectedPartenaireId ?? existing.partenaire_id,
-            notes: existing.notes,
-            versement_programme: comp.versementProgramme,
-            montant_versement_programme: comp.montantVersement ? Math.round(comp.montantVersement * 100) : existing.montant_versement_programme,
-            frequence_versement: comp.frequenceVersement || existing.frequence_versement,
-            reinvestissement_dividendes: comp.reinvestissementDividendes,
-            // Format RFC3339 : utiliser la date éditée ou préserver l'existante
-            date_souscription: comp.dateSouscription 
-              ? `${comp.dateSouscription}T00:00:00Z` 
-              : (existing.date_souscription ? new Date(existing.date_souscription * 1000).toISOString() : undefined),
-          };
+
+          const owner = existing.foyer_id
+            ? { foyer_id: existing.foyer_id }
+            : { contact_id: existing.contact_id ?? contactId };
+
+          const updatedInv = attachRioPatrimoineOwner(
+            {
+              type_produit: existing.type_produit,
+              nom_produit: existing.nom_produit,
+              montant_initial: Math.round(comp.editedMontant * 100),
+              origine: comp.selectedOrigine,
+              partenaire_id: comp.selectedPartenaireId ?? existing.partenaire_id,
+              notes: existing.notes,
+              versement_programme: comp.versementProgramme,
+              montant_versement_programme: comp.montantVersement
+                ? Math.round(comp.montantVersement * 100)
+                : existing.montant_versement_programme,
+              frequence_versement: comp.frequenceVersement || existing.frequence_versement,
+              reinvestissement_dividendes: comp.reinvestissementDividendes,
+              date_souscription: comp.dateSouscription
+                ? `${comp.dateSouscription}T00:00:00Z`
+                : existing.date_souscription
+                  ? new Date(existing.date_souscription * 1000).toISOString()
+                  : undefined,
+            },
+            owner
+          );
           await updateInvestissement(existing.id, updatedInv);
           updated++;
         }
@@ -1284,8 +1326,9 @@ export function RioUpdateComparisonDialog({
             Mise à jour du RIO : {contactNom}
           </DialogTitle>
           <DialogDescription>
-            Comparez les données du nouveau RIO avec les investissements existants.
-            Sélectionnez les éléments à mettre à jour.
+            {useFoyerPatrimoine
+              ? "Comparez le patrimoine du foyer avec le nouveau RIO. Les investissements seront enregistrés au niveau du foyer."
+              : "Comparez les données du nouveau RIO avec les investissements existants. Sélectionnez les éléments à mettre à jour."}
           </DialogDescription>
         </DialogHeader>
 

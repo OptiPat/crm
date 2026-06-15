@@ -502,7 +502,7 @@ export function ContactPatrimoinePanel({
               <Building2 className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
               <p className="text-sm font-medium">Aucun investissement enregistré</p>
               <p className="text-xs text-muted-foreground mt-1 mb-4 max-w-md mx-auto">
-                Importez un document (RIO, CNI…) pour préremplir la fiche et le patrimoine,
+                Importez un RIO ou relevé patrimonial pour préremplir la fiche et le patrimoine,
                 ou saisissez un placement manuellement.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
@@ -690,6 +690,7 @@ export function ContactPatrimoinePanel({
         open={showDocUpload}
         onOpenChange={setShowDocUpload}
         contactId={contactId}
+        defaultTypeDocument="PATRIMOINE"
         contactNom={contactNom}
         contactPrenom={contactPrenom}
         contactDateNaissance={contactDateNaissance}

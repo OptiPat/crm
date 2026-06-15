@@ -23,6 +23,11 @@ import {
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import type { OrigineInvestissement, NewInvestissement } from "@/lib/api/tauri-investissements";
+import {
+  attachRioPatrimoineOwner,
+  buildRioPatrimoineOwner,
+  patrimoineOwnerLabel,
+} from "@/lib/documents/rio-patrimoine-target";
 
 // Types de patrimoine détectés dans un RIO
 interface PatrimoineItem {
@@ -39,6 +44,9 @@ interface PatrimoineTriDialogProps {
   onOpenChange: (open: boolean) => void;
   extractedData: ExtractedData;
   contactId: number;
+  /** Patrimoine commun du foyer (RIO couple). */
+  foyerId?: number;
+  ownerLabel?: string;
   onComplete: (investissements: NewInvestissement[]) => void;
   onCancel: () => void;
 }
@@ -224,9 +232,23 @@ export function PatrimoineTriDialog({
   onOpenChange,
   extractedData,
   contactId,
+  foyerId,
+  ownerLabel,
   onComplete,
   onCancel,
 }: PatrimoineTriDialogProps) {
+  const useFoyerPatrimoine = Boolean(foyerId);
+  const owner = buildRioPatrimoineOwner({
+    contactId,
+    foyerId,
+    useFoyer: useFoyerPatrimoine,
+  });
+  const scopeLabel =
+    ownerLabel ??
+    patrimoineOwnerLabel({
+      useFoyer: useFoyerPatrimoine,
+      contactNom: "ce contact",
+    });
   const [items, setItems] = useState<PatrimoineItem[]>(() => 
     extractPatrimoineItems(extractedData)
   );
@@ -257,16 +279,26 @@ export function PatrimoineTriDialog({
         // (on la stocke juste pour info dans les notes du contact)
         return item.type !== "EPARGNE_BANCAIRE";
       })
-      .map(item => ({
-        contact_id: contactId,
-        type_produit: item.type === "IMMOBILIER" ? "IMMOBILIER" : 
-                      item.type === "ASSURANCE_VIE" ? "ASSURANCE_VIE" :
-                      item.type === "PER" ? "PER" :
-                      item.type === "SCPI" ? "SCPI" : "AUTRE",
-        nom_produit: item.label,
-        montant_initial: Math.round(item.montant * 100), // En centimes
-        origine: item.origine || item.autoOrigine || "EXISTANT_CLIENT",
-      }));
+      .map((item) =>
+        attachRioPatrimoineOwner(
+          {
+            type_produit:
+              item.type === "IMMOBILIER"
+                ? "IMMOBILIER"
+                : item.type === "ASSURANCE_VIE"
+                  ? "ASSURANCE_VIE"
+                  : item.type === "PER"
+                    ? "PER"
+                    : item.type === "SCPI"
+                      ? "SCPI"
+                      : "AUTRE",
+            nom_produit: item.label,
+            montant_initial: Math.round(item.montant * 100),
+            origine: item.origine || item.autoOrigine || "EXISTANT_CLIENT",
+          },
+          owner
+        )
+      );
 
     onComplete(investissements);
     onOpenChange(false);
@@ -294,7 +326,8 @@ export function PatrimoineTriDialog({
             Tri du patrimoine
           </DialogTitle>
           <DialogDescription>
-            Pour chaque investissement détecté, indiquez s'il a été placé <strong>avec vous</strong> ou s'il existait <strong>à côté</strong>.
+            Patrimoine de <strong>{scopeLabel}</strong> — pour chaque investissement, indiquez s&apos;il a été placé{" "}
+            <strong>avec vous</strong> ou s&apos;il existait <strong>à côté</strong>.
           </DialogDescription>
         </DialogHeader>
 

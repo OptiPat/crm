@@ -161,6 +161,9 @@ export interface ExtractedData {
   typeDocument?: string;
   dateEntreeRelation?: string;
   
+  // === COUPLE (RIO Stellium 2 investisseurs) ===
+  isCouple?: boolean;
+
   // === CONJOINT ===
   conjoint?: {
     civilite?: string;
@@ -172,6 +175,11 @@ export interface ExtractedData {
     nationalite?: string;
     profession?: string;
     employeur?: string;
+    email?: string;
+    telephone?: string;
+    revenusTotal?: number;
+    chargesTotal?: number;
+    patrimoineTotal?: number;
   };
   
   // === MÉTADONNÉES ===

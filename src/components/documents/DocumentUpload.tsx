@@ -22,39 +22,19 @@ import { Upload, File, X, FileText } from "lucide-react";
 import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/tauri-documents";
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
-import { IdentityExtractPreviewDialog, type IdentityPreviewValues } from "./IdentityExtractPreviewDialog";
+import { IdentityExtractPreviewDialog } from "./IdentityExtractPreviewDialog";
 import { PatrimoineTriDialog } from "./PatrimoineTriDialog";
 import { RioUpdateComparisonDialog } from "./RioUpdateComparisonDialog";
-import {
-  extractIdentityFromFilePath,
-  extractIdentityFromRectoVersoFiles,
-  isIdentityFilePath,
-  isLikelyIdentityFileName,
-  looksLikeIdentityDocument,
-  parseIdentityFromText,
-  resolveIdentityToastMessage,
-  terminateOcrWorker,
-  type IdentityExtractResult,
-} from "@/lib/identity";
-import { buildIdentityMergePatch, identityExpirationToDocumentDate } from "@/lib/identity/merge-identity-fields";
-import { identityDateFrToIso } from "@/lib/identity/parse-identity-document";
-import {
-  findContactByEmail,
-  findContactByName,
-  createContact,
-  updateContact,
-  getContactById,
-  getAllContacts,
-  type Contact,
-  type NewContact,
-} from "@/lib/api/tauri-contacts";
-import { createInvestissement, getInvestissementsByContact, type NewInvestissement } from "@/lib/api/tauri-investissements";
+import { terminateOcrWorker, isLikelyIdentityFileName, looksLikeIdentityDocument, isIdentityFilePath } from "@/lib/identity";
+import { getContactById, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import type { NewInvestissement } from "@/lib/api/tauri-investissements";
 import { toast } from "sonner";
-import {
-  formatIdentityLine,
-  getPairIdentityConflictMessages,
-} from "@/lib/contacts/duplicate-identity";
-import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import { useRioCoupleImport } from "@/hooks/useRioCoupleImport";
+import { useRioSoloImport } from "@/hooks/useRioSoloImport";
+import { useRioPatrimoineFlow } from "@/hooks/useRioPatrimoineFlow";
+import { isImageFile, useIdentityDocumentImport } from "@/hooks/useIdentityDocumentImport";
+import { getMimeType } from "@/lib/documents/file-mime";
+import type { IdentityImportMode } from "@/lib/documents/identity-document-apply";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 
@@ -65,6 +45,8 @@ interface DocumentUploadProps {
   contactId?: number;
   /** Pré-sélection client (page Documents filtrée) — modifiable. */
   defaultContactId?: number;
+  /** Type de document présélectionné (ex. PATRIMOINE depuis l’onglet Patrimoine). */
+  defaultTypeDocument?: string;
   foyerId?: number;
   /** Affichage dialogue identité (fiche contact). */
   contactNom?: string;
@@ -77,7 +59,6 @@ const IDENTITY_REQUIRED_MSG =
   "Sélectionnez un client pour importer une pièce d'identité.";
 
 type PickedFile = { path: string; name: string; size: number };
-type IdentityImportMode = "single" | "two_files";
 
 export function DocumentUpload({
   open,
@@ -85,6 +66,7 @@ export function DocumentUpload({
   onSuccess,
   contactId,
   defaultContactId,
+  defaultTypeDocument,
   foyerId,
   contactNom,
   contactPrenom,
@@ -97,25 +79,7 @@ export function DocumentUpload({
   const [extractedText, setExtractedText] = useState<string>("");
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [showIdentityPreview, setShowIdentityPreview] = useState(false);
-  const [identityExtracted, setIdentityExtracted] = useState<IdentityExtractResult | null>(null);
-  const [identityImportMode, setIdentityImportMode] = useState<IdentityImportMode>("single");
-  const [uploadedVersoFile, setUploadedVersoFile] = useState<PickedFile | null>(null);
-  
-  // États pour le dialogue de tri du patrimoine
-  const [showPatrimoineTri, setShowPatrimoineTri] = useState(false);
-  const [triContactId, setTriContactId] = useState<number | null>(null);
-  const [triExtractedData, setTriExtractedData] = useState<ExtractedData | null>(null);
-  
-  // États pour le dialogue de mise à jour (comparaison)
-  const [showRioUpdate, setShowRioUpdate] = useState(false);
-  const [updateContactNom, setUpdateContactNom] = useState<string>("");
-  
-  const [uploadedFile, setUploadedFile] = useState<{
-    path: string;
-    name: string;
-    size: number;
-  } | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<PickedFile | null>(null);
   const [selectedContactId, setSelectedContactId] = useState<number | undefined>(
     contactId ?? defaultContactId
   );
@@ -123,13 +87,55 @@ export function DocumentUpload({
   const [linkedContact, setLinkedContact] = useState<Contact | null>(null);
   const contactLocked = contactId != null;
   const effectiveContactId = contactId ?? selectedContactId;
+  const initialTypeDocument = defaultTypeDocument ?? "AUTRE";
   const [formData, setFormData] = useState<Partial<NewDocument>>({
     contact_id: contactId ?? defaultContactId,
     foyer_id: foyerId,
-    type_document: "AUTRE",
+    type_document: initialTypeDocument,
     date_document: "",
     notes: "",
   });
+
+  const { applyCoupleRioData } = useRioCoupleImport({
+    effectiveContactId,
+    foyerId,
+    formFoyerId: formData.foyer_id,
+    importContacts,
+  });
+
+  const { applySoloRioData } = useRioSoloImport({
+    effectiveContactId,
+    foyerId: foyerId ?? formData.foyer_id,
+  });
+
+  const patrimoineFlow = useRioPatrimoineFlow({
+    contactId,
+    defaultContactId,
+    foyerId,
+    defaultTypeDocument: initialTypeDocument,
+    onSuccess,
+    onOpenChange,
+  });
+
+  const identityImport = useIdentityDocumentImport({
+    effectiveContactId,
+    foyerId,
+    formNotes: formData.notes,
+    formDateDocument: formData.date_document,
+    onSuccess,
+    onOpenChange,
+  });
+
+  const resetUploadState = () => {
+    setUploadedFile(null);
+    setExtractedText("");
+    setFormData(patrimoineFlow.resetFormData());
+  };
+
+  const identityTextCallbacks = {
+    setExtractedText,
+    clearExtractedData: () => setExtractedData(null),
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -138,8 +144,9 @@ export function DocumentUpload({
       ...prev,
       contact_id: contactId ?? defaultContactId,
       foyer_id: foyerId,
+      type_document: defaultTypeDocument ?? prev.type_document ?? "AUTRE",
     }));
-  }, [open, contactId, defaultContactId, foyerId]);
+  }, [open, contactId, defaultContactId, foyerId, defaultTypeDocument]);
 
   useEffect(() => {
     if (!open || contactLocked) return;
@@ -167,107 +174,22 @@ export function DocumentUpload({
   }, [effectiveContactId]);
 
   const isIdentityMode = formData.type_document === "IDENTITE";
-
-  const shouldUseIdentityPipeline = (fileName: string, typeDoc?: string) =>
-    isImageFile(fileName) ||
-    typeDoc === "IDENTITE" ||
-    isLikelyIdentityFileName(fileName);
-
-  const openIdentityPreviewFromText = (text: string) => {
-    const parsed = parseIdentityFromText(text);
-    setIdentityExtracted(parsed);
-    setExtractedText(text);
-    setExtractedData(null);
-    setShowPreview(false);
-    setShowIdentityPreview(true);
-    if (parsed.confidence < 50) {
-      const toastMsg = resolveIdentityToastMessage(parsed);
-      if (toastMsg) toast.warning(toastMsg);
-    }
-  };
-
-  const requireContactForIdentity = (): boolean => {
-    if (effectiveContactId) return true;
-    toast.error(IDENTITY_REQUIRED_MSG);
-    return false;
-  };
-
-  const isImageFile = (name: string) => /\.(jpe?g|png|webp)$/i.test(name);
-
-  const resetIdentityFiles = () => {
-    setUploadedFile(null);
-    setUploadedVersoFile(null);
-    setExtractedText("");
-    setIdentityExtracted(null);
-  };
-
-  const runIdentityExtractForCurrentFiles = async () => {
-    if (!uploadedFile || !requireContactForIdentity()) return;
-    if (!isIdentityFilePath(uploadedFile.path)) {
-      toast.error("Format non supporté pour la pièce d'identité (PDF, JPG, PNG).");
-      return;
-    }
-    if (identityImportMode === "two_files") {
-      if (!uploadedVersoFile) {
-        toast.error("Sélectionnez aussi le fichier verso.");
-        return;
-      }
-      if (!isIdentityFilePath(uploadedVersoFile.path)) {
-        toast.error("Format verso non supporté (PDF, JPG, PNG).");
-        return;
-      }
-      await runDualIdentityExtract(uploadedFile, uploadedVersoFile);
-      return;
-    }
-    await handleExtractIdentity(uploadedFile.path);
-  };
-
-  const canRunIdentityExtract =
-    Boolean(effectiveContactId) &&
-    isIdentityMode &&
-    uploadedFile &&
-    isIdentityFilePath(uploadedFile.path) &&
-    (identityImportMode === "single" || Boolean(uploadedVersoFile));
-
-  const runDualIdentityExtract = async (recto: PickedFile, verso: PickedFile) => {
-    if (!requireContactForIdentity()) return;
-
-    setExtracting(true);
-    setIdentityExtracted(null);
-    setExtractedData(null);
-    setExtractedText("");
-
-    try {
-      const result = await extractIdentityFromRectoVersoFiles(recto.path, verso.path);
-      setIdentityExtracted(result);
-      setExtractedText(result.rawText);
-      setShowIdentityPreview(true);
-      toast.info("Extraction terminée — vérifiez les champs avant d'appliquer.");
-      const toastMsg = resolveIdentityToastMessage(result);
-      if (toastMsg) toast.warning(toastMsg);
-    } catch (error) {
-      console.error("Erreur extraction identité (2 fichiers):", error);
-      toast.error("Erreur lors de la lecture recto/verso: " + String(error));
-    } finally {
-      setExtracting(false);
-    }
-  };
+  const isPatrimoineMode = formData.type_document === "PATRIMOINE";
 
   const handleVersoFileSelect = async () => {
     try {
       const file = await uploadDocument();
       if (!file) return;
 
-      setUploadedVersoFile(file);
+      identityImport.setUploadedVersoFile(file);
       setFormData((prev) => ({
         ...prev,
         type_document: prev.type_document === "AUTRE" ? "IDENTITE" : prev.type_document,
       }));
 
-      if (!autoExtract || !uploadedFile || !isIdentityFilePath(file.path)) return;
-      if (!isIdentityFilePath(uploadedFile.path)) return;
-
-      await runDualIdentityExtract(uploadedFile, file);
+      if (!autoExtract || !uploadedFile) return;
+      if (!isIdentityFilePath(uploadedFile.path) || !isIdentityFilePath(file.path)) return;
+      await identityImport.runDualIdentityExtract(uploadedFile, file, identityTextCallbacks);
     } catch (error) {
       console.error("Error selecting verso file:", error);
       alert("Erreur lors de la sélection du verso: " + String(error));
@@ -277,6 +199,21 @@ export function DocumentUpload({
   const handleFileSelect = async () => {
     try {
       const file = await uploadDocument();
+      if (!file) return;
+
+      if (isPatrimoineMode) {
+        if (!file.name.toLowerCase().endsWith(".pdf")) {
+          toast.error("RIO / relevé patrimonial : sélectionnez un fichier PDF.");
+          return;
+        }
+        setUploadedFile(file);
+        setFormData((prev) => ({ ...prev, nom_fichier: file.name }));
+        if (autoExtract) {
+          await handleExtractText(file.path);
+        }
+        return;
+      }
+
       if (file) {
         const nextType =
           isImageFile(file.name) && (formData.type_document ?? "AUTRE") === "AUTRE"
@@ -290,17 +227,27 @@ export function DocumentUpload({
           type_document: nextType,
         }));
 
-        if (identityImportMode === "two_files") {
-          if (autoExtract && uploadedVersoFile && isIdentityFilePath(file.path)) {
-            await runDualIdentityExtract(file, uploadedVersoFile);
+        if (identityImport.identityImportMode === "two_files") {
+          if (
+            autoExtract &&
+            identityImport.uploadedVersoFile &&
+            isIdentityFilePath(file.path) &&
+            isIdentityFilePath(identityImport.uploadedVersoFile.path)
+          ) {
+            await identityImport.runDualIdentityExtract(
+              file,
+              identityImport.uploadedVersoFile,
+              identityTextCallbacks
+            );
           }
           return;
         }
 
-        if (!autoExtract || !isIdentityFilePath(file.path)) return;
+        if (!autoExtract) return;
 
-        if (shouldUseIdentityPipeline(file.name, nextType)) {
-          await handleExtractIdentity(file.path);
+        if (identityImport.shouldUseIdentityPipeline(file.name, nextType)) {
+          if (!isIdentityFilePath(file.path)) return;
+          await identityImport.extractIdentity(file.path, identityTextCallbacks);
         } else if (file.name.toLowerCase().endsWith(".pdf")) {
           await handleExtractText(file.path);
         }
@@ -308,30 +255,6 @@ export function DocumentUpload({
     } catch (error) {
       console.error("Error selecting file:", error);
       alert("Erreur lors de la sélection du fichier: " + String(error));
-    }
-  };
-
-  const handleExtractIdentity = async (filePath: string) => {
-    if (!requireContactForIdentity()) return;
-
-    setExtracting(true);
-    setIdentityExtracted(null);
-    setExtractedData(null);
-    setExtractedText("");
-
-    try {
-      const result = await extractIdentityFromFilePath(filePath);
-      setIdentityExtracted(result);
-      setExtractedText(result.rawText);
-      setShowIdentityPreview(true);
-      toast.info("Extraction terminée — vérifiez les champs avant d'appliquer.");
-      const toastMsg = resolveIdentityToastMessage(result);
-      if (toastMsg) toast.warning(toastMsg);
-    } catch (error) {
-      console.error("Erreur extraction identité:", error);
-      toast.error("Erreur lors de la lecture de la pièce d'identité: " + String(error));
-    } finally {
-      setExtracting(false);
     }
   };
 
@@ -344,20 +267,23 @@ export function DocumentUpload({
       const result = await extractTextFromPDFPath(filePath);
       setExtractedText(result.text);
 
-      if (
-        isIdentityMode ||
-        looksLikeIdentityDocument(result.text) ||
-        isLikelyIdentityFileName(filePath)
-      ) {
-        if (!requireContactForIdentity()) {
-          setExtracting(false);
-          return;
-        }
+      const isIdentityCandidate =
+        !isPatrimoineMode &&
+        (isIdentityMode ||
+          looksLikeIdentityDocument(result.text) ||
+          isLikelyIdentityFileName(filePath));
+
+      if (isIdentityCandidate) {
+        if (!identityImport.requireContactForIdentity()) return;
         if (!isNativeTextPDF(result.text)) {
-          await handleExtractIdentity(filePath);
+          await identityImport.extractIdentity(filePath, identityTextCallbacks);
           return;
         }
-        openIdentityPreviewFromText(result.text);
+        identityImport.openIdentityPreviewFromText(result.text, {
+          setExtractedText,
+          clearExtractedData: () => setExtractedData(null),
+          closeRioPreview: () => setShowPreview(false),
+        });
         return;
       }
 
@@ -367,11 +293,8 @@ export function DocumentUpload({
         );
       }
 
-      // Parser les données
       const parsedData = parseAuto(result.text);
       setExtractedData(parsedData);
-
-      // Afficher l'interface de prévisualisation
       setShowPreview(true);
     } catch (error) {
       console.error("❌ Erreur lors de l'extraction:", error);
@@ -381,262 +304,39 @@ export function DocumentUpload({
     }
   };
 
-  /**
-   * Convertit une date française (jj/mm/aaaa) en Date
-   * Utilise Date.UTC pour éviter les problèmes de timezone
-   */
-  const parseFrenchDate = (dateStr?: string): Date | undefined => {
-    if (!dateStr) return undefined;
-    
-    // Format: 19/07/1995 ou 08/04/2025
-    const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (!match) return undefined;
-    
-    const [, day, month, year] = match;
-    // Utiliser Date.UTC avec heure à midi pour éviter le décalage de timezone
-    return new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), 12, 0, 0));
+  const finishRioImport = async (
+    data: ExtractedData,
+    result: NonNullable<Awaited<ReturnType<typeof applySoloRioData>>>,
+    coupleMemberIds?: [number, number]
+  ) => {
+    await patrimoineFlow.finishImportFlow({
+      data,
+      result,
+      uploadedFile,
+      formData,
+      coupleMemberIds,
+      onClosePreview: () => setShowPreview(false),
+      onClearExtractedData: () => setExtractedData(null),
+      onResetUpload: resetUploadState,
+    });
   };
 
-  /**
-   * Mappe ExtractedData vers NewContact
-   */
-  const mapExtractedDataToContact = (data: ExtractedData): NewContact => {
-    const contact: NewContact = {
-      nom: data.nom || "",
-      prenom: data.prenom || "",
-      categorie: "SUSPECT_CLIENT", // Par défaut
-      statut_suivi: "ACTIF", // Par défaut
-    };
-
-    // Civilité (conversion MME/M vers MME/M du schema)
-    if (data.civilite) {
-      const civiliteMap: Record<string, "M" | "MME" | "AUTRE"> = {
-        "M": "M",
-        "M.": "M",
-        "MONSIEUR": "M",
-        "MME": "MME",
-        "MADAME": "MME",
-      };
-      contact.civilite = civiliteMap[data.civilite.toUpperCase()] || "AUTRE";
-    }
-
-    // Coordonnées
-    if (data.email) contact.email = data.email;
-    if (data.telephone) contact.telephone = data.telephone;
-    if (data.adresse) contact.adresse = data.adresse;
-    if (data.codePostal) contact.code_postal = data.codePostal;
-    if (data.ville) contact.ville = data.ville;
-
-    // Informations personnelles
-    if (data.dateNaissance) {
-      const parsedDate = parseFrenchDate(data.dateNaissance);
-      if (parsedDate) {
-        contact.date_naissance = parsedDate.toISOString();
-      }
-    }
-    if (data.profession) contact.profession = data.profession;
-
-    // Situation familiale (conversion)
-    if (data.situationFamiliale) {
-      const situationMap: Record<
-        string,
-        "CELIBATAIRE" | "MARIE" | "PACSE" | "UNION_LIBRE" | "DIVORCE" | "VEUF" | "AUTRE"
-      > = {
-        "CELIBATAIRE": "CELIBATAIRE",
-        "MARIE": "MARIE",
-        "MARIÉ": "MARIE",
-        "MARIEE": "MARIE",
-        "MARIÉE": "MARIE",
-        "PACSE": "PACSE",
-        "PACS": "PACSE",
-        "PACSÉ": "PACSE",
-        "PACSEE": "PACSE",
-        "UNION_LIBRE": "UNION_LIBRE",
-        "UNION LIBRE": "UNION_LIBRE",
-        "CONCUBINAGE": "UNION_LIBRE",
-        "DIVORCE": "DIVORCE",
-        "DIVORCÉ": "DIVORCE",
-        "DIVORCEE": "DIVORCE",
-        "DIVORCÉE": "DIVORCE",
-        "VEUF": "VEUF",
-        "VEUVE": "VEUF",
-      };
-      contact.situation_familiale = situationMap[data.situationFamiliale.toUpperCase()] || "AUTRE";
-    }
-
-    return contact;
-  };
-
-  const resolveExistingContact = async (data: ExtractedData): Promise<Contact | null> => {
-    if (effectiveContactId) {
-      try {
-        return await getContactById(effectiveContactId);
-      } catch {
-        // Fiche introuvable : retomber sur email / nom comme pour un import libre
-      }
-    }
-    if (data.email?.trim()) {
-      const byEmail = await findContactByEmail(data.email.trim());
-      if (byEmail) return byEmail;
-    }
-    const nom = data.nom?.trim();
-    const prenom = data.prenom?.trim();
-    if (nom && prenom) {
-      return await findContactByName(nom, prenom);
-    }
-    return null;
-  };
-
-  /**
-   * Applique les données extraites : crée ou met à jour le contact
-   */
   const handleApplyData = async (data: ExtractedData) => {
     setLoading(true);
 
     try {
-      let finalContactId = effectiveContactId;
-      let successMessage = "";
-      let isExistingContactWithInvestments = false;
-      let existingContactNom = "";
-
-      let existingContact = await resolveExistingContact(data);
-
-      const identityConflicts =
-        existingContact &&
-        getPairIdentityConflictMessages(
-          { email: data.email, telephone: data.telephone },
-          existingContact
-        );
-
-      if (existingContact && identityConflicts && identityConflicts.length > 0) {
-        const confirmMerge = window.confirm(
-          [
-            "Même nom/prénom mais coordonnées différentes :",
-            identityConflicts.join(", "),
-            "",
-            "Fiche en base :",
-            formatIdentityLine(existingContact),
-            "Document :",
-            formatIdentityLine({ email: data.email, telephone: data.telephone }),
-            "",
-            "Fusionner sur la fiche existante ?",
-            "(Annuler = créer une nouvelle fiche)",
-          ].join("\n")
-        );
-        if (!confirmMerge) {
-          existingContact = null;
+      if (data.isCouple && data.conjoint) {
+        const result = await applyCoupleRioData(data);
+        if (result) {
+          await finishRioImport(data, result, result.memberContactIds);
         }
+        return;
       }
 
-      if (existingContact) {
-        const newData = mapExtractedDataToContact(data);
-        await updateContact(
-          existingContact.id,
-          contactToUpdatePayload(existingContact, {
-            nom: newData.nom || existingContact.nom,
-            prenom: newData.prenom || existingContact.prenom,
-            email: newData.email || existingContact.email,
-            telephone: newData.telephone || existingContact.telephone,
-            adresse: newData.adresse || existingContact.adresse,
-            code_postal: newData.code_postal || existingContact.code_postal,
-            ville: newData.ville || existingContact.ville,
-            date_naissance: newData.date_naissance || undefined,
-            profession: newData.profession || existingContact.profession,
-            notes: newData.notes || existingContact.notes,
-          })
-        );
-        finalContactId = existingContact.id;
-        successMessage = `✅ Contact mis à jour: ${data.prenom} ${data.nom}`;
-        existingContactNom = `${existingContact.prenom} ${existingContact.nom}`;
-
-        try {
-          const existingInvestissements = await getInvestissementsByContact(existingContact.id);
-          isExistingContactWithInvestments = existingInvestissements.length > 0;
-        } catch {
-          isExistingContactWithInvestments = false;
-        }
-      } else {
-        const contactData = mapExtractedDataToContact(data);
-        if (!contactData.nom?.trim() || !contactData.prenom?.trim()) {
-          toast.error(
-            "Impossible de créer le contact : nom et prénom manquants. Pour une CNI/passeport, importez depuis la fiche client (Patrimoine → Importer un document)."
-          );
-          return;
-        }
-        const newContact = await createContact(contactData);
-        finalContactId = newContact.id;
-        const sansEmail = !data.email?.trim();
-        successMessage = sansEmail
-          ? `✅ Nouveau contact créé: ${data.prenom} ${data.nom} (sans email)`
-          : `✅ Nouveau contact créé: ${data.prenom} ${data.nom}`;
+      const result = await applySoloRioData(data);
+      if (result) {
+        await finishRioImport(data, result);
       }
-
-      // 2. Enregistrer le document lié au contact
-      if (uploadedFile && finalContactId) {
-        const newDoc: NewDocument = {
-          contact_id: finalContactId,
-          foyer_id: foyerId,
-          type_document: data.typeDocument === "RIO" ? "PATRIMOINE" : formData.type_document || "AUTRE",
-          nom_fichier: uploadedFile.name,
-          chemin_fichier: uploadedFile.path,
-          taille_fichier: uploadedFile.size,
-          mime_type: getMimeType(uploadedFile.name),
-          date_document: data.dateDocument ? convertDateToISO(data.dateDocument) : formData.date_document || undefined,
-          notes: formData.notes,
-        };
-
-        await createDocument(newDoc);
-      }
-
-      // 3. Vérifier s'il y a du patrimoine à trier (RIO avec AV, PER, SCPI, immobilier...)
-      const hasPatrimoineToTri = Boolean(
-        data.assuranceVie || 
-        data.per || 
-        data.scpi || 
-        data.residencePrincipale?.valeur ||
-        data.residenceSecondaire?.valeur ||
-        data.immobilierLocatif?.valeur ||
-        (data.biensImmobiliers && data.biensImmobiliers.length > 0) ||
-        data.livretA ||
-        data.ldd ||
-        data.compteCourant
-      );
-
-      if (hasPatrimoineToTri && finalContactId) {
-        setShowPreview(false);
-        setTriContactId(finalContactId);
-        setTriExtractedData(data);
-        
-        if (isExistingContactWithInvestments) {
-          // Contact existant avec investissements → Afficher le dialogue de COMPARAISON
-          setUpdateContactNom(existingContactNom || `${data.prenom} ${data.nom}`);
-          setShowRioUpdate(true);
-        } else {
-          // Nouveau contact ou contact sans investissements → Afficher le dialogue de TRI classique
-          setShowPatrimoineTri(true);
-        }
-      } else {
-        // Pas de patrimoine → terminer normalement
-        alert(successMessage + "\n\n📄 Document enregistré avec succès!");
-        
-        // 4. Fermer et rafraîchir
-        setShowPreview(false);
-        setExtractedData(null);
-        onSuccess();
-        onOpenChange(false);
-
-        // Réinitialiser
-        setUploadedFile(null);
-        setExtractedText("");
-        setFormData({
-          contact_id: contactId ?? defaultContactId,
-          foyer_id: foyerId,
-          type_document: "AUTRE",
-          date_document: "",
-          notes: "",
-        });
-      }
-
     } catch (error) {
       console.error("❌ Erreur lors de l'application des données:", error);
       alert("❌ Erreur lors de l'enregistrement:\n\n" + String(error));
@@ -645,234 +345,29 @@ export function DocumentUpload({
     }
   };
 
-  /**
-   * Convertit une date française en format ISO (YYYY-MM-DD)
-   */
-  const convertDateToISO = (dateStr: string): string => {
-    const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-    if (!match) return dateStr;
-    const [, day, month, year] = match;
-    return `${year}-${month}-${day}`;
-  };
-
   const handleIgnoreData = () => {
     setExtractedData(null);
   };
 
-  /**
-   * Gère la validation du tri du patrimoine
-   */
   const handlePatrimoineTriComplete = async (investissements: NewInvestissement[]) => {
-    setLoading(true);
-    
-    try {
-      // Créer chaque investissement
-      for (const inv of investissements) {
-        await createInvestissement(inv);
-      }
-      
-      // Compter les investissements par origine
-      const avecMoi = investissements.filter(i => i.origine === "MON_CONSEIL").length;
-      const aCote = investissements.filter(i => i.origine === "EXISTANT_CLIENT").length;
-      
-      // Mise à jour de la catégorie du contact
-      // Si au moins 1 "avec moi" → CLIENT
-      // Sinon (RIO sans investissement "avec moi") → PROSPECT (car RIO = contact établi)
-      if (triContactId) {
-        try {
-          const existingContact = await getContactById(triContactId);
-          const newCategorie = avecMoi > 0 ? "CLIENT" : "PROSPECT_CLIENT";
-          
-          // Mettre à jour la catégorie si différente
-          if (existingContact.categorie !== newCategorie) {
-            await updateContact(
-              triContactId,
-              contactToUpdatePayload(existingContact, { categorie: newCategorie })
-            );
-          }
-        } catch {
-          // Impossible de mettre à jour la catégorie, ignorer
-        }
-      }
-      
-      alert(`✅ Import terminé!\n\n🎯 Avec moi: ${avecMoi} investissement(s)\n📋 À côté: ${aCote} investissement(s)`);
-      
-      // Réinitialiser et fermer
-      setShowPatrimoineTri(false);
-      setTriContactId(null);
-      setTriExtractedData(null);
-      setExtractedData(null);
-      setUploadedFile(null);
-      setExtractedText("");
-      setFormData({
-        contact_id: contactId ?? defaultContactId,
-        foyer_id: foyerId,
-        type_document: "AUTRE",
-        date_document: "",
-        notes: "",
-      });
-      
-      onSuccess();
-      onOpenChange(false);
-      
-    } catch (error) {
-      console.error("❌ Erreur lors de la création des investissements:", error);
-      alert("❌ Erreur lors de la création des investissements:\n\n" + String(error));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Annule le tri du patrimoine
-   */
-  const handlePatrimoineTriCancel = () => {
-    setShowPatrimoineTri(false);
-    setTriExtractedData(null);
-    if (triContactId) {
-      toast.info("Patrimoine non importé. Le contact créé reste dans la base.");
-    }
-    setTriContactId(null);
-    onSuccess();
-    onOpenChange(false);
-  };
-
-  /**
-   * Gère la validation de la mise à jour RIO (comparaison)
-   */
-  const handleRioUpdateComplete = () => {
-    setShowRioUpdate(false);
-    setTriContactId(null);
-    setTriExtractedData(null);
-    setUpdateContactNom("");
-    
-    // Réinitialiser
-    setUploadedFile(null);
-    setExtractedText("");
-    setFormData({
-      contact_id: contactId ?? defaultContactId,
-      foyer_id: foyerId,
-      type_document: "AUTRE",
-      date_document: "",
-      notes: "",
+    await patrimoineFlow.handlePatrimoineTriComplete(investissements, {
+      setLoading,
+      onClearExtractedData: () => setExtractedData(null),
+      onResetUpload: resetUploadState,
+      onResetForm: () => setFormData(patrimoineFlow.resetFormData()),
     });
-    
-    onSuccess();
-    onOpenChange(false);
   };
 
-  /**
-   * Annule la mise à jour RIO
-   */
-  const handleRioUpdateCancel = () => {
-    setShowRioUpdate(false);
-    setTriExtractedData(null);
-    if (triContactId) {
-      toast.info("Mise à jour RIO annulée. Le contact reste enregistré.");
-    }
-    setTriContactId(null);
-    setUpdateContactNom("");
-    onSuccess();
-    onOpenChange(false);
-  };
-
-  const handleApplyIdentity = async (values: IdentityPreviewValues) => {
-    if (!effectiveContactId || !uploadedFile) {
-      toast.error("Contact ou fichier manquant.");
-      return;
-    }
-    if (identityImportMode === "two_files" && !uploadedVersoFile) {
-      toast.error("Sélectionnez aussi le fichier verso.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const contact = await getContactById(effectiveContactId);
-      const extracted: IdentityExtractResult = {
-        source: identityExtracted?.source ?? "visual",
-        confidence: identityExtracted?.confidence ?? 0,
-        rawText: identityExtracted?.rawText ?? "",
-        mrzVerified: identityExtracted?.mrzVerified ?? false,
-        provenance: identityExtracted?.provenance ?? {
-          dateNaissance: values.dateNaissanceFr ? "visual_suggestion" : "none",
-          dateExpiration: values.dateExpirationFr ? "visual_suggestion" : "none",
-          lieuNaissance: values.lieuNaissance ? "visual_suggestion" : "none",
-          nom: values.nom ? "visual_suggestion" : "none",
-          prenom: values.prenom ? "visual_suggestion" : "none",
-        },
-        nom: values.nom || undefined,
-        prenom: values.prenom || undefined,
-        lieuNaissance: values.lieuNaissance || undefined,
-        dateNaissanceFr: values.dateNaissanceFr || undefined,
-        dateNaissance: values.dateNaissanceFr
-          ? identityDateFrToIso(values.dateNaissanceFr)
-          : undefined,
-        dateExpirationFr: values.dateExpirationFr || undefined,
-        dateExpiration: values.dateExpirationFr
-          ? identityDateFrToIso(values.dateExpirationFr)
-          : undefined,
-        sex: identityExtracted?.sex,
-        layout: identityExtracted?.layout,
-        documentKind: identityExtracted?.documentKind,
-      };
-
-      const { patch, filledFields, skippedFields } = buildIdentityMergePatch(contact, extracted);
-      if (Object.keys(patch).length === 0) {
-        toast.info("Aucun champ vide à compléter sur cette fiche.");
-      } else {
-        await updateContact(effectiveContactId, contactToUpdatePayload(contact, patch));
-        toast.success(`Fiche complétée : ${filledFields.join(", ")}`);
-      }
-      if (skippedFields.length > 0) {
-        toast.message(`Conservé (déjà renseigné) : ${skippedFields.join(", ")}`);
-      }
-
-      const documentExpiryDate =
-        identityExpirationToDocumentDate(values.dateExpirationFr) ||
-        formData.date_document ||
-        undefined;
-
-      await createDocument({
-        contact_id: effectiveContactId,
-        foyer_id: foyerId,
-        type_document: "IDENTITE",
-        nom_fichier: uploadedFile.name,
-        chemin_fichier: uploadedFile.path,
-        taille_fichier: uploadedFile.size,
-        mime_type: getMimeType(uploadedFile.name),
-        date_document: documentExpiryDate,
-        notes: formData.notes
-          ? `${formData.notes}${identityImportMode === "two_files" ? " (recto)" : ""}`
-          : identityImportMode === "two_files"
-            ? "Recto"
-            : formData.notes,
+  const handleApplyIdentity = async (
+    values: Parameters<typeof identityImport.handleApplyIdentity>[0]
+  ) => {
+    const applied = await identityImport.handleApplyIdentity(values, uploadedFile, setLoading);
+    if (applied) {
+      identityImport.resetIdentityFiles({
+        clearUploadedFile: () => setUploadedFile(null),
+        clearExtractedText: () => setExtractedText(""),
       });
-
-      if (uploadedVersoFile) {
-        await createDocument({
-          contact_id: effectiveContactId,
-          foyer_id: foyerId,
-          type_document: "IDENTITE",
-          nom_fichier: uploadedVersoFile.name,
-          chemin_fichier: uploadedVersoFile.path,
-          taille_fichier: uploadedVersoFile.size,
-          mime_type: getMimeType(uploadedVersoFile.name),
-          date_document: documentExpiryDate,
-          notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
-        });
-      }
-
-      setShowIdentityPreview(false);
-      setIdentityExtracted(null);
-      resetIdentityFiles();
-      onSuccess();
-      onOpenChange(false);
-    } catch (error) {
-      console.error("Erreur application identité:", error);
-      alert("Erreur lors de la mise à jour: " + String(error));
-    } finally {
-      setLoading(false);
+      identityImport.setIdentityImportMode("single");
     }
   };
 
@@ -887,7 +382,7 @@ export function DocumentUpload({
       toast.error(IDENTITY_REQUIRED_MSG);
       return;
     }
-    if (identityImportMode === "two_files" && isIdentityMode && !uploadedVersoFile) {
+    if (identityImport.identityImportMode === "two_files" && isIdentityMode && !identityImport.uploadedVersoFile) {
       alert("Sélectionnez le recto et le verso (2 fichiers).");
       return;
     }
@@ -909,58 +404,34 @@ export function DocumentUpload({
 
       await createDocument(newDoc);
 
-      if (uploadedVersoFile && identityImportMode === "two_files") {
+      if (identityImport.uploadedVersoFile && identityImport.identityImportMode === "two_files") {
         await createDocument({
           contact_id: formData.contact_id,
           foyer_id: formData.foyer_id,
           type_document: formData.type_document || "IDENTITE",
-          nom_fichier: uploadedVersoFile.name,
-          chemin_fichier: uploadedVersoFile.path,
-          taille_fichier: uploadedVersoFile.size,
-          mime_type: getMimeType(uploadedVersoFile.name),
+          nom_fichier: identityImport.uploadedVersoFile.name,
+          chemin_fichier: identityImport.uploadedVersoFile.path,
+          taille_fichier: identityImport.uploadedVersoFile.size,
+          mime_type: getMimeType(identityImport.uploadedVersoFile.name),
           date_document: formData.date_document || undefined,
           notes: formData.notes ? `${formData.notes} (verso)` : "Verso",
         });
       }
       onSuccess();
       onOpenChange(false);
-      
-      // Réinitialiser
+
       setUploadedFile(null);
-      setUploadedVersoFile(null);
+      identityImport.setUploadedVersoFile(null);
       setExtractedText("");
       setExtractedData(null);
-      setFormData({
-        contact_id: contactId ?? defaultContactId,
-        foyer_id: foyerId,
-        type_document: "AUTRE",
-        date_document: "",
-        notes: "",
-      });
-      setIdentityImportMode("single");
+      setFormData(patrimoineFlow.resetFormData());
+      identityImport.setIdentityImportMode("single");
     } catch (error) {
       console.error("Error saving document:", error);
       alert("Erreur lors de l'enregistrement: " + String(error));
     } finally {
       setLoading(false);
     }
-  };
-
-  const getMimeType = (filename: string): string => {
-    const ext = filename.split(".").pop()?.toLowerCase();
-    const mimeTypes: Record<string, string> = {
-      pdf: "application/pdf",
-      doc: "application/msword",
-      docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      xls: "application/vnd.ms-excel",
-      xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      txt: "text/plain",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      webp: "image/webp",
-    };
-    return mimeTypes[ext || ""] || "application/octet-stream";
   };
 
   const formatFileSize = (bytes: number): string => {
@@ -978,6 +449,11 @@ export function DocumentUpload({
     ? contactLieuNaissance
     : linkedContact?.lieu_naissance;
 
+  const isExtracting = extracting || identityImport.extracting;
+  const canRunIdentityExtract = identityImport.canRunIdentityExtract(uploadedFile, isIdentityMode);
+  const patrimoineFlowActive =
+    patrimoineFlow.showPatrimoineTri || patrimoineFlow.showRioUpdate;
+
   return (
     <>
       {/* Dialog de prévisualisation des données */}
@@ -992,37 +468,49 @@ export function DocumentUpload({
       )}
 
       {/* Dialog de tri du patrimoine (nouveau contact) */}
-      {triExtractedData && triContactId && (
+      {patrimoineFlow.triExtractedData && patrimoineFlow.triContactId && (
         <PatrimoineTriDialog
-          open={showPatrimoineTri}
-          onOpenChange={setShowPatrimoineTri}
-          extractedData={triExtractedData}
-          contactId={triContactId}
+          open={patrimoineFlow.showPatrimoineTri}
+          onOpenChange={patrimoineFlow.setShowPatrimoineTri}
+          extractedData={patrimoineFlow.triExtractedData}
+          contactId={patrimoineFlow.triContactId}
+          foyerId={patrimoineFlow.triFoyerId ?? undefined}
+          ownerLabel={patrimoineFlow.triPatrimoineLabel}
           onComplete={handlePatrimoineTriComplete}
-          onCancel={handlePatrimoineTriCancel}
+          onCancel={patrimoineFlow.handlePatrimoineTriCancel}
         />
       )}
       
-      {/* Dialog de comparaison RIO (mise à jour contact existant) */}
-      {triExtractedData && triContactId && (
+      {patrimoineFlow.triExtractedData && patrimoineFlow.triContactId && (
         <RioUpdateComparisonDialog
-          open={showRioUpdate}
-          onOpenChange={setShowRioUpdate}
-          extractedData={triExtractedData}
-          contactId={triContactId}
-          contactNom={updateContactNom}
-          onComplete={handleRioUpdateComplete}
-          onCancel={handleRioUpdateCancel}
+          open={patrimoineFlow.showRioUpdate}
+          onOpenChange={patrimoineFlow.setShowRioUpdate}
+          extractedData={patrimoineFlow.triExtractedData}
+          contactId={patrimoineFlow.triContactId}
+          contactNom={patrimoineFlow.updateContactNom || patrimoineFlow.triPatrimoineLabel}
+          foyerId={patrimoineFlow.triFoyerId ?? undefined}
+          coupleMemberIds={
+            patrimoineFlow.triCoupleMemberIds.length
+              ? patrimoineFlow.triCoupleMemberIds
+              : undefined
+          }
+          onComplete={() =>
+            patrimoineFlow.handleRioUpdateComplete({
+              onResetUpload: resetUploadState,
+              onResetForm: () => setFormData(patrimoineFlow.resetFormData()),
+            })
+          }
+          onCancel={patrimoineFlow.handleRioUpdateCancel}
         />
       )}
 
       <IdentityExtractPreviewDialog
-        open={showIdentityPreview}
+        open={identityImport.showIdentityPreview}
         onOpenChange={(nextOpen) => {
-          setShowIdentityPreview(nextOpen);
+          identityImport.setShowIdentityPreview(nextOpen);
           if (!nextOpen) void terminateOcrWorker();
         }}
-        extracted={identityExtracted}
+        extracted={identityImport.identityExtracted}
         onConfirm={handleApplyIdentity}
         loading={loading}
         contactNom={previewContactNom}
@@ -1031,25 +519,48 @@ export function DocumentUpload({
         contactLieuNaissance={previewContactLieuNaissance}
         rectoPreviewPath={uploadedFile?.path}
         versoPreviewPath={
-          identityImportMode === "two_files" ? uploadedVersoFile?.path : undefined
+          identityImport.identityImportMode === "two_files"
+            ? identityImport.uploadedVersoFile?.path
+            : undefined
         }
       />
 
-      <Dialog open={open && !showIdentityPreview} onOpenChange={onOpenChange}>
+      <Dialog
+        open={open && !identityImport.showIdentityPreview && !patrimoineFlowActive}
+        onOpenChange={onOpenChange}
+      >
         <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importer un document</DialogTitle>
           <DialogDescription>
-            {effectiveContactId ? (
+            {isPatrimoineMode ? (
+              effectiveContactId ? (
+                <>
+                  Importez un <strong>RIO</strong> ou relevé patrimonial (PDF Stellium). Après
+                  extraction, validez la prévisualisation puis le tri du patrimoine.
+                </>
+              ) : (
+                <>
+                  Sélectionnez un client, choisissez ce type, puis un PDF RIO ou relevé
+                  patrimonial.
+                </>
+              )
+            ) : isIdentityMode ? (
+              effectiveContactId ? (
+                <>
+                  Pièce d&apos;identité ou passeport — l&apos;OCR complète uniquement les champs
+                  vides de la fiche.
+                </>
+              ) : (
+                <>Sélectionnez d&apos;abord un client pour importer une pièce d&apos;identité.</>
+              )
+            ) : effectiveContactId ? (
               <>
-                RIO, relevé patrimonial ou pièce d&apos;identité — détection automatique selon
-                le fichier. La CNI complète uniquement les champs vides de la fiche.
+                Document lié à ce client. Pour un RIO, choisissez le type{" "}
+                <strong>RIO / relevé patrimonial</strong>.
               </>
             ) : (
-              <>
-                RIO et relevés patrimoniaux. Pour une pièce d&apos;identité, sélectionnez d&apos;abord
-                un client.
-              </>
+              <>Choisissez le type de document et le client concerné.</>
             )}
           </DialogDescription>
         </DialogHeader>
@@ -1073,9 +584,12 @@ export function DocumentUpload({
               value={formData.type_document}
               onValueChange={(value) => {
                 setFormData({ ...formData, type_document: value });
+                setExtractedData(null);
+                setShowPreview(false);
+                setExtractedText("");
                 if (value !== "IDENTITE") {
-                  setIdentityImportMode("single");
-                  setUploadedVersoFile(null);
+                  identityImport.setIdentityImportMode("single");
+                  identityImport.setUploadedVersoFile(null);
                 }
               }}
             >
@@ -1091,16 +605,25 @@ export function DocumentUpload({
                 <SelectItem value="AUTRE">{getDocumentTypeLabel("AUTRE")}</SelectItem>
               </SelectContent>
             </Select>
+            {isPatrimoineMode && (
+              <p className="text-xs text-muted-foreground">
+                PDF uniquement. Après analyse : prévisualisation → Appliquer → tri « avec moi » /
+                « à côté ».
+              </p>
+            )}
           </div>
 
           {isIdentityMode && (
             <div className="space-y-2">
               <Label htmlFor="identity-import-mode">Format pièce d&apos;identité</Label>
               <Select
-                value={identityImportMode}
+                value={identityImport.identityImportMode}
                 onValueChange={(value: IdentityImportMode) => {
-                  setIdentityImportMode(value);
-                  resetIdentityFiles();
+                  identityImport.setIdentityImportMode(value);
+                  identityImport.resetIdentityFiles({
+                    clearUploadedFile: () => setUploadedFile(null),
+                    clearExtractedText: () => setExtractedText(""),
+                  });
                 }}
               >
                 <SelectTrigger id="identity-import-mode">
@@ -1118,9 +641,9 @@ export function DocumentUpload({
 
           {/* Sélection du fichier */}
           <div className="space-y-2">
-            <Label>{identityImportMode === "two_files" && isIdentityMode ? "Fichiers *" : "Fichier *"}</Label>
+            <Label>{identityImport.identityImportMode === "two_files" && isIdentityMode ? "Fichiers *" : "Fichier *"}</Label>
 
-            {identityImportMode === "two_files" && isIdentityMode ? (
+            {identityImport.identityImportMode === "two_files" && isIdentityMode ? (
               <div className="space-y-3">
                 {uploadedFile ? (
                   <div className="flex items-center gap-2 p-3 border border-border rounded-lg">
@@ -1136,7 +659,7 @@ export function DocumentUpload({
                       onClick={() => {
                         setUploadedFile(null);
                         setExtractedText("");
-                        setIdentityExtracted(null);
+                        identityImport.setShowIdentityPreview(false);
                       }}
                     >
                       <X className="h-4 w-4" />
@@ -1149,21 +672,21 @@ export function DocumentUpload({
                   </Button>
                 )}
 
-                {uploadedVersoFile ? (
+                {identityImport.uploadedVersoFile ? (
                   <div className="flex items-center gap-2 p-3 border border-border rounded-lg">
                     <File className="h-5 w-5 text-primary shrink-0" />
                     <div className="flex-1 min-w-0">
                       <div className="text-xs text-muted-foreground">Verso (MRZ)</div>
-                      <div className="font-medium truncate">{uploadedVersoFile.name}</div>
+                      <div className="font-medium truncate">{identityImport.uploadedVersoFile.name}</div>
                     </div>
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        setUploadedVersoFile(null);
+                        identityImport.setUploadedVersoFile(null);
                         setExtractedText("");
-                        setIdentityExtracted(null);
+                        identityImport.setShowIdentityPreview(false);
                       }}
                     >
                       <X className="h-4 w-4" />
@@ -1197,7 +720,10 @@ export function DocumentUpload({
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                      resetIdentityFiles();
+                      identityImport.resetIdentityFiles({
+                        clearUploadedFile: () => setUploadedFile(null),
+                        clearExtractedText: () => setExtractedText(""),
+                      });
                     }}
                   >
                     <X className="h-4 w-4" />
@@ -1211,35 +737,43 @@ export function DocumentUpload({
               </Button>
             )}
 
-            {extracting && (
+            {isExtracting && (
               <div className="flex items-center gap-2 p-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
                 <FileText className="h-4 w-4 animate-pulse" />
                 Lecture OCR en cours (30 s à 2 min selon la qualité du scan)…
               </div>
             )}
 
-            {!extracting && canRunIdentityExtract && !showIdentityPreview && (
+            {!isExtracting && canRunIdentityExtract && !identityImport.showIdentityPreview && (
               <Button
                 type="button"
                 variant="secondary"
                 className="w-full"
-                onClick={() => void runIdentityExtractForCurrentFiles()}
+                onClick={() =>
+                  void identityImport.runIdentityExtractForCurrentFiles(
+                    uploadedFile,
+                    identityTextCallbacks
+                  )
+                }
               >
                 <FileText className="h-4 w-4 mr-2" />
-                {identityImportMode === "two_files"
+                {identityImport.identityImportMode === "two_files"
                   ? "Analyser recto + verso"
                   : "Analyser la pièce d'identité"}
               </Button>
             )}
 
-            {identityImportMode === "two_files" && isIdentityMode && uploadedFile && !uploadedVersoFile && (
+            {identityImport.identityImportMode === "two_files" &&
+              isIdentityMode &&
+              uploadedFile &&
+              !identityImport.uploadedVersoFile && (
               <p className="text-sm text-muted-foreground">
                 Mode 2 fichiers : sélectionnez le verso pour lancer l&apos;analyse
                 {autoExtract ? " automatiquement" : ""}.
               </p>
             )}
 
-            {!extracting && extractedText && (
+            {!isExtracting && extractedText && (
               <details className="p-2 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700">
                 <summary className="flex items-center gap-2 cursor-pointer">
                   <FileText className="h-4 w-4" />
@@ -1260,7 +794,11 @@ export function DocumentUpload({
                 className="h-4 w-4 rounded border-gray-300"
               />
               <Label htmlFor="auto-extract" className="text-sm font-normal cursor-pointer">
-                Extraire automatiquement les données (PDF patrimoine, pièce d&apos;identité)
+                {isPatrimoineMode
+                  ? "Extraire automatiquement les données du RIO (PDF texte)"
+                  : isIdentityMode
+                    ? "Extraire automatiquement la pièce d'identité"
+                    : "Extraire automatiquement les données (PDF patrimoine, pièce d'identité)"}
               </Label>
             </div>
           </div>
@@ -1308,8 +846,19 @@ export function DocumentUpload({
             >
               Annuler
             </Button>
-            <Button type="submit" disabled={loading || !uploadedFile}>
-              {loading ? "Enregistrement..." : "Importer"}
+            <Button
+              type="submit"
+              disabled={
+                loading ||
+                !uploadedFile ||
+                (isPatrimoineMode && extractedData != null)
+              }
+            >
+              {loading
+                ? "Enregistrement..."
+                : isPatrimoineMode && extractedData
+                  ? "Validez la prévisualisation"
+                  : "Importer"}
             </Button>
           </DialogFooter>
         </form>

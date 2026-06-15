@@ -2,7 +2,7 @@
 export const DOCUMENT_TYPE_LABELS: Record<string, string> = {
   IDENTITE: "Pièce d'identité / Passeport",
   FISCAL: "Document fiscal",
-  PATRIMOINE: "Document patrimonial",
+  PATRIMOINE: "RIO / relevé patrimonial",
   CONTRAT: "Contrat",
   RELEVE: "Relevé",
   AUTRE: "Autre",

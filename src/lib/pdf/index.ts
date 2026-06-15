@@ -6,6 +6,14 @@ export {
   isNativeTextPDF,
 } from "./extractor";
 export { parseAuto, parseGeneric, parseRIO, isRIO } from "./parsers";
+export {
+  parseStelliumAuto,
+  parseStelliumRio,
+  parseStelliumQpi,
+  detectStelliumDocument,
+  isStelliumQpi,
+  isStelliumRio,
+} from "./stellium";
 export type {
   ExtractedText,
   ExtractedData,

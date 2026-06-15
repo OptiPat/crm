@@ -8,11 +8,11 @@ import { parsePatrimoineRIO } from "./rio-parser-patrimoine";
  * Détecte si un texte est un RIO
  */
 export function isRIO(text: string): boolean {
-  const normalizedText = text.toLowerCase();
+  const head = text.slice(0, 600).toLowerCase();
+  if (head.includes("profil investisseur")) return false;
   return (
-    normalizedText.includes("recueil") &&
-    (normalizedText.includes("information") ||
-      normalizedText.includes("patrimonial"))
+    head.includes("recueil") &&
+    (head.includes("information") || head.includes("patrimonial"))
   );
 }
 
