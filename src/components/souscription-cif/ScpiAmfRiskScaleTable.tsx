@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { cifTextUnderlineClass } from "@/lib/souscription-cif/document-page-layout";
 
 const RISK_LEVELS = [1, 2, 3, 4, 5, 6, 7] as const;
 
@@ -18,8 +19,8 @@ export function ScpiAmfRiskScaleTable({
 }: ScpiAmfRiskScaleTableProps) {
   return (
     <div className={cn("mt-[3mm]", className)}>
-      <p className="mb-[1.15em] font-semibold underline text-left [text-align-last:left]">
-        Indicateur de risque :
+      <p className="mb-[1.15em] font-semibold text-left [text-align-last:left]">
+        <span className={cifTextUnderlineClass}>Indicateur de risque :</span>
       </p>
 
       <div className="flex justify-center">
@@ -31,7 +32,7 @@ export function ScpiAmfRiskScaleTable({
                   key={level}
                   className={cn(
                     "border border-neutral-400 px-2 py-1.5 text-center align-middle font-medium tabular-nums [text-align-last:center]",
-                    highlightedLevel === level && "bg-amber-300 font-semibold"
+                    highlightedLevel === level && "cif-amf-risk-highlight font-semibold"
                   )}
                 >
                   {level}

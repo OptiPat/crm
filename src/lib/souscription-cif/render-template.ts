@@ -42,6 +42,8 @@ export type ScpiLmPagePreview = {
   title?: string;
   /** Sous-titre section produit centré (annexes). */
   centeredSectionTitle?: string;
+  /** Bandeau PRÉAMBULE centré (convention RTO). */
+  centeredPreambleTitle?: string;
   bodySegments: SouscriptionPreviewSegment[];
   /** Suite du corps après centeredSectionTitle. */
   bodySegmentsContinuation?: SouscriptionPreviewSegment[];

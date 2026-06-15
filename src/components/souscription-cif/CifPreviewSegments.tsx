@@ -1,4 +1,5 @@
 import type { SouscriptionPreviewSegment } from "@/lib/souscription-cif/render-template";
+import { cifTextUnderlineClass } from "@/lib/souscription-cif/document-page-layout";
 import { cn } from "@/lib/utils";
 
 type CifPreviewSegmentsProps = {
@@ -13,7 +14,7 @@ export function CifPreviewSegments({ segments, onMissingVariableClick }: CifPrev
         seg.kind === "text" ? (
           <span key={i}>{seg.value}</span>
         ) : seg.kind === "underline" ? (
-          <span key={i} className="underline">
+          <span key={i} className={cifTextUnderlineClass}>
             {seg.value}
           </span>
         ) : seg.kind === "bold" ? (

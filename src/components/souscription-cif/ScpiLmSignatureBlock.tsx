@@ -1,4 +1,5 @@
 import type { SouscriptionPreviewSegment } from "@/lib/souscription-cif/render-template";
+import { cifTextUnderlineClass } from "@/lib/souscription-cif/document-page-layout";
 import { cn } from "@/lib/utils";
 
 type ScpiLmSignatureBlockProps = {
@@ -14,7 +15,7 @@ function RenderSegments({ segments }: { segments: SouscriptionPreviewSegment[] }
         seg.kind === "text" ? (
           <span key={i}>{seg.value}</span>
         ) : seg.kind === "underline" ? (
-          <span key={i} className="underline">
+          <span key={i} className={cifTextUnderlineClass}>
             {seg.value}
           </span>
         ) : seg.kind === "bold" ? (
@@ -64,7 +65,7 @@ export function ScpiLmSignatureBlock({ left, right, className }: ScpiLmSignature
     <div className={cn("mt-[6mm] flex justify-center", className)}>
       <div className="grid w-full max-w-[160mm] grid-cols-[1fr_auto_1fr] items-stretch">
         <SignatureColumn lines={left} className="px-[3mm]" />
-        <div className="mx-[4mm] w-px shrink-0 self-stretch bg-neutral-400" aria-hidden />
+        <div className="cif-signature-divider" aria-hidden />
         <SignatureColumn lines={right} className="px-[3mm]" />
       </div>
     </div>

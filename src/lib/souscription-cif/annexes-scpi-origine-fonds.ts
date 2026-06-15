@@ -39,7 +39,7 @@ export const ORIGINE_FONDS_OPTIONS: ReadonlyArray<{
   { key: "donation", label: "Donation / Héritage (acte notarié)" },
   { key: "immo", label: "Vente d'un bien immobilier (acte notarié)" },
   { key: "indemnites", label: "Prestations / Indemnités (courrier entreprise)" },
-  { key: "actifs_mobiliers", label: "Vente d'actifs mobiliers (relevé titre)" },
+  { key: "actifs_mobiliers", label: "Vente d'actifs mobiliers (relevé de titres)" },
   { key: "reemploi", label: "Réemploi des fonds (relevé d'opération)" },
   { key: "vente_societe", label: "Vente de société (acte de vente)" },
   { key: "autre", label: "Autre (préciser et justifier)" },

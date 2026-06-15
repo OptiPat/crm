@@ -7,6 +7,7 @@ import {
   type AnnexesScpiOrigineFondsView,
   type OrigineFondsKey,
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
+import { cifTextUnderlineClass } from "@/lib/souscription-cif/document-page-layout";
 import { cn } from "@/lib/utils";
 import type { ReactNode } from "react";
 
@@ -72,7 +73,7 @@ export function AnnexesScpiOrigineFondsSection({
   return (
     <div className={cn("mt-[3mm]", className)}>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="font-medium underline">Provenance des fonds :</span>
+        <span className={cn("font-medium", cifTextUnderlineClass)}>Provenance des fonds :</span>
         {provenanceMissing ? (
           <MissingFieldButton
             fieldKey="provenance_fonds"
@@ -90,17 +91,17 @@ export function AnnexesScpiOrigineFondsSection({
         )}
       </div>
 
-      <p className="mt-[3mm] font-medium underline">
+      <p className="mt-[3mm] font-medium">
         {origineMissing ? (
           <MissingFieldButton
             fieldKey="origine_fonds"
             label="Origine des fonds"
             onMissingVariableClick={onMissingVariableClick}
           >
-            <span className="underline">Origine des fonds :</span>
+            <span className={cifTextUnderlineClass}>Origine des fonds :</span>
           </MissingFieldButton>
         ) : (
-          "Origine des fonds :"
+          <span className={cifTextUnderlineClass}>Origine des fonds :</span>
         )}
       </p>
 

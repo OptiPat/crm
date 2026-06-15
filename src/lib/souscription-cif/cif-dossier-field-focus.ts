@@ -15,6 +15,7 @@ export const CIF_DOSSIER_VARIABLE_FIELD: Readonly<Record<string, CifDossierField
   objectifs_client: { fieldId: "cif-objectifs", document: "lettre-mission" },
   rappel_demande: { fieldId: "cif-rappel-demande", document: "rapport-mission" },
   rappel_situation_client: { fieldId: "cif-rappel-situation", document: "rapport-mission" },
+  analyse_situation_client: { fieldId: "cif-analyse-situation", document: "rapport-mission" },
   conseil: { fieldId: "cif-conseil", document: "annexes-rapport" },
   mes_preconisations: { fieldId: "cif-mes-preconisations", document: "annexes-rapport" },
   descriptions_scpi: { fieldId: "cif-scpi-souscriptions", document: "annexes-rapport" },

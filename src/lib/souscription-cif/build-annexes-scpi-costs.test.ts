@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { defaultScpiAnnexeSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import {
   buildAnnexesScpiCostsRows,
   computeQuotePartCifPercent,
@@ -8,6 +7,15 @@ import {
   parseEuroInput,
 } from "@/lib/souscription-cif/build-annexes-scpi-costs";
 import { defaultSouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
+
+const cometeRow = {
+  productKey: "comete",
+  montantSouscritEur: "30000",
+  partPriceEur: "250",
+  reinvestissementDividendesPct: "100",
+  vpMontantEur: "50",
+  vpFrequence: "mois" as const,
+};
 
 describe("computeQuotePartCifPercent", () => {
   it("calcule quote-part / montant souscrit", () => {
@@ -19,7 +27,7 @@ describe("buildAnnexesScpiCostsRows", () => {
   it("remplit coûts produits EMT et le total pour Comète 30 000 €", () => {
     const rows = buildAnnexesScpiCostsRows({
       ...defaultSouscriptionDossierFields(),
-      scpiAnnexeSouscriptions: defaultScpiAnnexeSouscriptions(),
+      scpiAnnexeSouscriptions: [cometeRow],
       quotePartPercueConsultantCifEur: "900",
     });
 

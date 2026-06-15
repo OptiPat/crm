@@ -4,7 +4,7 @@ export const ANNEXES_SCPI_PAGE7_SECTION5_INTRO = `[u]5. Déclaration sur l'honne
 
 La déclaration d'origine des fonds fait partie intégrante des mesures de contrôle interne (article R.561-38 du code monétaire et financier) permettant de vérifier que la réglementation sur la lutte contre le blanchiment des capitaux et le financement du terrorisme a été respectée.`;
 
-export const ANNEXES_SCPI_PAGE7_CERTIFICATION = `Certifie sur l'honneur que les sommes qui sont ou seront versées au titre du contrat souscrit n'ont pas d'origine délictueuse au sens des articles L.561-10-2, L.561-2, L.561-5, L.561-6, L.561-12, L.561-1 du code Monétaire et Financier. Certifie sur l'honneur que les éléments figurant sur la présente « Déclaration sur l'Honneur de l'Origine des Fonds » sont exacts et conformes à la réalité.`;
+export const ANNEXES_SCPI_PAGE7_CERTIFICATION = `Certifie sur l'honneur que les sommes qui sont ou seront versées au titre du contrat souscrit n'ont pas d'origine délictueuse au sens des articles L.561-10-2, L.561-2, L.561-5, L.561-6, L.561-12, L.561-1 du code monétaire et financier. Certifie sur l'honneur que les éléments figurant sur la présente « Déclaration sur l'honneur de l'origine des fonds » sont exacts et conformes à la réalité.`;
 
 export const ANNEXES_SCPI_PAGE7_SECTION6_INTRO = `[u]6. Informations[/u]
 

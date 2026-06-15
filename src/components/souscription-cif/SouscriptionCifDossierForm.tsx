@@ -16,6 +16,7 @@ import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-f
 import { SCPI_ANNEXE_PRODUCT_FICHES } from "@/lib/souscription-cif/scpi-annexe-catalog";
 import {
   buildMesPreconisationsFromSouscriptions,
+  getScpiSouscriptionPartsWarning,
   patchScpiAnnexeSouscription,
   SCPI_VP_FREQUENCE_OPTIONS,
   shouldAutoSyncMesPreconisationsText,
@@ -28,6 +29,7 @@ import {
   PROVENANCE_FONDS_OPTIONS,
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
 import type { SouscriptionCifDocumentId } from "@/lib/souscription-cif/souscription-cif-storage";
+import { AlertTriangle } from "lucide-react";
 
 type SouscriptionCifDossierFormProps = {
   activeDocument: SouscriptionCifDocumentId;
@@ -119,6 +121,12 @@ export function SouscriptionCifDossierForm({
 
   return (
     <div className="space-y-4">
+      {activeDocument === "convention-rto" && (
+        <p className="text-sm text-muted-foreground">
+          Dates et lieu de naissance : renseignés dans l&apos;onglet Lettre de mission.
+        </p>
+      )}
+
       {activeDocument === "lettre-mission" && (
         <Card>
           <CardHeader className="pb-3">
@@ -194,7 +202,7 @@ export function SouscriptionCifDossierForm({
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Rapport de mission — rappels</CardTitle>
             <CardDescription>
-              Tableau page 1 : synthèse de la demande et de la situation (Recueil / QPI).
+              Tableau pages 1–3 : synthèse de la demande, de la situation et analyse personnalisée.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -220,6 +228,32 @@ export function SouscriptionCifDossierForm({
                 onChange={(e) => onChange({ rappelSituationClient: e.target.value })}
                 placeholder="Puces Recueil / QPI (âge, revenus, immobilier, SRI, ESG…)"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cif-analyse-situation">Analyse de la situation</Label>
+              <Textarea
+                id="cif-analyse-situation"
+                rows={8}
+                value={value.analyseSituationClient}
+                onChange={(e) => onChange({ analyseSituationClient: e.target.value })}
+                placeholder="Rédigez ici l'analyse personnalisée (voir exemples ci-dessous)."
+              />
+              <p className="text-xs text-muted-foreground">
+                Tableau page 3 — après la phrase sur le RIO. Retranscrire la démarche intellectuelle
+                : ce que le client vous a dit au premier entretien (R1) et en quoi la préconisation
+                répond à son projet.
+              </p>
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                <li>
+                  Exemple : le client souhaite se reconvertir professionnellement d&apos;ici X
+                  années — expliquer pourquoi les SCPI l&apos;aideraient dans son projet.
+                </li>
+                <li>Exemple : héritage, donation, préparation de la retraite, etc.</li>
+                <li>
+                  Autre exemple : couplage Malraux, SCPI, assurance-vie, retraite dans 15 ans,
+                  études des enfants, etc.
+                </li>
+              </ul>
             </div>
           </CardContent>
         </Card>
@@ -309,6 +343,12 @@ export function SouscriptionCifDossierForm({
                                 />
                               </div>
                             </div>
+                            {getScpiSouscriptionPartsWarning(row) && (
+                              <p className="flex items-start gap-1.5 text-xs text-amber-800">
+                                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                                {getScpiSouscriptionPartsWarning(row)}
+                              </p>
+                            )}
                             <div className="flex flex-wrap items-center gap-3">
                               <div className="flex items-center gap-1.5">
                                 <Label

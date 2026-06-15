@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildDefaultRappelSituation, normalizeRappelSituationClient } from "@/lib/souscription-cif/build-rappel-situation-default";
+import { buildDefaultRappelSituation, normalizeRappelSituationClient, syncRappelSituationFromContact } from "@/lib/souscription-cif/build-rappel-situation-default";
 import {
   RM_PANEL_IMMOBILIER_BULLET_LABEL,
   RM_PANEL_REVENUS_BULLET_LABEL,
@@ -59,7 +59,9 @@ describe("buildDefaultRappelSituation", () => {
 
     expect(rapport).toContain("➞ Revenus :");
     expect(rapport).toContain("➞ Immobilier :");
-    expect(rapport).toContain("➞ Valeurs mobilières :");
+    expect(rapport).toContain(
+      "➞ Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme) :"
+    );
     expect(rapport).toContain("➞ Épargne de précaution :");
     expect(rapport).toContain("➞ Endettement :");
     expect(rapport).toContain("➞ Montant de l'investissement envisagé :");
@@ -67,5 +69,19 @@ describe("buildDefaultRappelSituation", () => {
     expect(rapport).toContain("➞ Profil de risque : SRI 4 — Dynamique");
     expect(rapport).not.toContain("Imposition ; Nombre de parts");
     expect(rapport).not.toContain("SRI + définition");
+  });
+
+  it("syncRappelSituationFromContact met à jour l'âge sans effacer le reste", () => {
+    const manual = [
+      "➞ Classification : Client non professionnel",
+      "➞ Âge : 40 ans",
+      "➞ Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme) : PEA",
+    ].join("\n");
+
+    const synced = syncRappelSituationFromContact(manual, baseContact, null);
+    expect(synced).toContain("➞ Âge :");
+    expect(synced).not.toContain("➞ Âge : 40 ans");
+    expect(synced).toContain("PEA");
+    expect(synced).toContain("Marié(e)");
   });
 });

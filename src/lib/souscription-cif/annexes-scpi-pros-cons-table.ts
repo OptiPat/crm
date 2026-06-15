@@ -36,9 +36,9 @@ export const ANNEXES_SCPI_PROS_CONS_ROWS: ReadonlyArray<AnnexesScpiProsConsRow> 
   },
 ];
 
-export const ANNEXES_SCPI_PAGE2_SECTION4_INTRO = `[u]4. Avantages et inconvénients[/u]
+export const ANNEXES_SCPI_PAGE2_SECTION4_INTRO = `[u]3. Avantages et inconvénients[/u]
 
-[u]4.1. D'un point de vue économique et juridique[/u]`;
+[u]3.1. D'un point de vue économique et juridique[/u]`;
 
 /** Tableau avantages / inconvénients — § 4.2 fiscal. */
 export const ANNEXES_SCPI_PROS_CONS_FISCAL_ROWS: ReadonlyArray<AnnexesScpiProsConsRow> = [

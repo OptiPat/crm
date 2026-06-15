@@ -26,11 +26,11 @@ export const SCPI_LM_INSTRUMENTS_TABLE_ROWS: ScpiLmInstrumentsTableRow[] = [
 Risque de liquidité
 Risque de variation des revenus
 Risque immobilier`,
-    fees: `Frais d'entrée entre 8,5% et 12 %
+    fees: `Frais d'entrée entre 8,5 % et 12 %
 
-Frais de gestion entre 10% et 12% des produits locatifs HT et des produits financiers nets encaissés.`,
+Frais de gestion entre 10 % et 12 % des produits locatifs HT et des produits financiers nets encaissés.`,
     paymentMode:
-      "Rétrocession de commissions sur une quote-part des droits d'entrée compris entre 3 et 4%",
+      "Rétrocession de commissions sur une quote-part des droits d'entrée comprises entre 3 et 4 %",
     sustainability: `- Règlement Taxonomie
 - Règlement SFDR
 - PAI`,
@@ -43,11 +43,11 @@ Risque de liquidité
 Risque immobilier
 Risque de variation des revenus
 Risque fiscal`,
-    fees: `Frais d'entrée entre 8,5% et 12 %
+    fees: `Frais d'entrée entre 8,5 % et 12 %
 
-Frais de gestion entre 10% et 12% des produits locatifs HT et des produits financiers nets encaissés.`,
+Frais de gestion entre 10 % et 12 % des produits locatifs HT et des produits financiers nets encaissés.`,
     paymentMode:
-      "Rétrocession de commissions sur une quote-part des droits d'entrée compris entre 3 et 4%",
+      "Rétrocession de commissions sur une quote-part des droits d'entrée comprises entre 3 et 4 %",
     sustainability: `- Règlement Taxonomie
 - Règlement SFDR
 - PAI`,
@@ -61,11 +61,11 @@ Risque lié à l'investissement dans des petites capitalisations sur des marché
 Risque lié aux obligations convertibles
 Risque fiscal
 Risque lié à l'estimation de la valeur des titres en portefeuille`,
-    fees: `Frais d'entrée entre 4 et 5%
+    fees: `Frais d'entrée entre 4 et 5 %
 
 Frais de gestion entre 2,5 % et 4 %`,
     paymentMode:
-      "Rétrocession de commissions sur une quote-part des droits d'entrée compris entre 3 et 4%",
+      "Rétrocession de commissions sur une quote-part des droits d'entrée comprises entre 3 et 4 %",
     sustainability: "Aucun critère",
   },
   {
@@ -76,7 +76,7 @@ Risque de liquidité
 Risque fiscal
 Risque locatif`,
     fees: "Frais d'enregistrement : environ 150€",
-    paymentMode: "Commission d'apporteur d'affaires : 0,27%",
+    paymentMode: "Commission d'apporteur d'affaires : 0,27 %",
     sustainability: "Aucun critère",
   },
 ];

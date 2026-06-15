@@ -23,6 +23,8 @@ export type SouscriptionDossierFields = {
   rappelDemande: string;
   /** Rapport de mission — puces situation client (Recueil / QPI). */
   rappelSituationClient: string;
+  /** Rapport de mission — analyse personnalisée (R1, projet, lien avec la préconisation). */
+  analyseSituationClient: string;
   /** Annexes — paragraphe de conseil (préconisation SCPI). */
   conseil: string;
   /** Annexes — préconisations détaillées (montants, parts, VP…) — texte libre dans l'aperçu. */
@@ -55,6 +57,7 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     objectifsClient: "",
     rappelDemande: "",
     rappelSituationClient: "",
+    analyseSituationClient: "",
     conseil: "",
     mesPreconisations: "",
     scpiAnnexeSouscriptions: [],

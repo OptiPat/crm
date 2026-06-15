@@ -67,3 +67,117 @@
     @apply font-serif;
   }
 }
+
+/** Export PDF CIF — impression navigateur (haute fidélité). */
+#cif-print-portal {
+  display: none;
+}
+
+/** Rendu hors écran — inutilisé en mode impression. */
+.cif-pdf-render-root {
+  display: none;
+}
+
+/** Case surlignée — échelle AMF (identique écran et PDF). */
+.cif-amf-risk-highlight {
+  background-color: #fcd34d;
+}
+
+/** Police document CIF — hex / @font-face (aperçu + capture PDF). */
+.cif-document-comfortaa {
+  font-family: "Comfortaa", sans-serif;
+}
+
+/** Séparateur vertical bloc signatures (Rapport de mission, etc.). */
+.cif-signature-divider {
+  box-sizing: border-box;
+  width: 1px;
+  min-width: 1px;
+  margin-left: 4mm;
+  margin-right: 4mm;
+  align-self: stretch;
+  flex-shrink: 0;
+  background-color: #a3a3a3;
+}
+
+/** Soulignement document CIF — trait fin (pseudo-élément ; text-decoration/border trop gras à l'impression). */
+.cif-text-underline {
+  display: inline;
+  position: relative;
+  text-decoration: none !important;
+  border-bottom: none !important;
+  background: none !important;
+  box-shadow: none !important;
+  padding-bottom: 0.05em;
+}
+
+.cif-text-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0.04em;
+  height: 1px;
+  transform: scaleY(0.2);
+  transform-origin: bottom center;
+  background-color: currentColor;
+  pointer-events: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html.cif-printing #root {
+    display: none !important;
+  }
+
+  html.cif-printing #cif-print-portal {
+    display: block !important;
+  }
+
+  html.cif-printing #cif-print-portal,
+  html.cif-printing #cif-print-portal * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  html.cif-printing .cif-print-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    break-after: page;
+    page-break-after: always;
+  }
+
+  html.cif-printing .cif-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  html.cif-printing .cif-print-doc-start {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  html.cif-printing .cif-print-page mark {
+    background: transparent !important;
+    padding: 0;
+  }
+
+  html.cif-printing .cif-amf-risk-highlight {
+    background-color: #fcd34d !important;
+  }
+
+  html.cif-printing .cif-text-underline {
+    text-decoration: none !important;
+    border-bottom: none !important;
+  }
+
+  html.cif-printing .cif-text-underline::after {
+    height: 1px;
+    transform: scaleY(0.15);
+    opacity: 0.85;
+  }
+}

@@ -2,10 +2,19 @@ import { describe, expect, it } from "vitest";
 import { formatEuroAmountCif, formatPercentCif } from "@/lib/souscription-cif/build-annexes-scpi-costs";
 import { ANNEXES_RAPPORT_DOCUMENT_TITLE } from "@/lib/souscription-cif/cif-documents";
 import {
-  defaultAnnexesSouscriptionDossierPatch,
   defaultSouscriptionDossierFields,
 } from "@/lib/souscription-cif/dossier-fields";
+import { buildMesPreconisationsFromSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import { buildAnnexesRapportPreview } from "@/lib/souscription-cif/render-annexes-rapport";
+
+const cometeAnnexeRow = {
+  productKey: "comete",
+  montantSouscritEur: "30000",
+  partPriceEur: "250",
+  reinvestissementDividendesPct: "100",
+  vpMontantEur: "50",
+  vpFrequence: "mois" as const,
+};
 
 describe("buildAnnexesRapportPreview", () => {
   it("construit la page 1 SCPI avec titre, conseil et sections numérotées", () => {
@@ -36,9 +45,10 @@ describe("buildAnnexesRapportPreview", () => {
     const body = (page.bodySegmentsContinuation ?? [])
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(body).toContain("1. Principe");
-    expect(body).toMatch(/1\. Principe\n\nLes SCPI \(Société Civile/);
-    expect(body).toContain("2. Caractéristiques des SCPI de rendement");
+    expect(body).toContain("1. Principe et caractéristiques des SCPI de rendement");
+    expect(body).toMatch(
+      /1\. Principe et caractéristiques des SCPI de rendement\n\nLes SCPI \(Société Civile/
+    );
     expect(body).toContain("SCPI de rendement");
     expect(body).toContain("immeubles à usage commercial");
   });
@@ -54,22 +64,22 @@ describe("buildAnnexesRapportPreview", () => {
     const body = page2.bodySegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(body).toContain("3. Fiscalité");
-    expect(body).toContain("3.1. Imposition des revenus");
+    expect(body).toContain("2. Fiscalité");
+    expect(body).toContain("2.1. Imposition des revenus");
     expect(body).toContain("17,2 %");
     expect(body).toContain("Remarque : si vous avez contracté un emprunt");
-    expect(body).toContain("3.2. Imposition des plus-values");
-    expect(body).toContain("3.3. Imposition sur la fortune immobilière (IFI)");
+    expect(body).toContain("2.2. Imposition des plus-values");
+    expect(body).toContain("2.3. Imposition sur la fortune immobilière (IFI)");
 
     const section4 = (page2.bodySegmentsAfterTable ?? [])
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(section4).toContain("4. Avantages et inconvénients");
-    expect(section4).toContain("4.1. D'un point de vue économique et juridique");
+    expect(section4).toContain("3. Avantages et inconvénients");
+    expect(section4).toContain("3.1. D'un point de vue économique et juridique");
     expect(page2.showAnnexesProsConsTable).toBe(true);
   });
 
-  it("construit la page 3 avec fiscalité § 4.2, tableau et risques", () => {
+  it("construit la page 3 avec fiscalité § 3.2, tableau et risques", () => {
     const preview = buildAnnexesRapportPreview("scpi", {}, defaultSouscriptionDossierFields());
 
     const page3 = preview.pages[2];
@@ -78,7 +88,7 @@ describe("buildAnnexesRapportPreview", () => {
     const title = page3.bodySegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(title).toBe("4.2. D'un point de vue fiscal");
+    expect(title).toBe("3.2. D'un point de vue fiscal");
     expect(page3.bodySegments.every((s) => s.kind !== "underline")).toBe(true);
 
     expect(page3.annexesProsConsRows).toHaveLength(2);
@@ -122,7 +132,8 @@ describe("buildAnnexesRapportPreview", () => {
       },
       {
         ...defaultSouscriptionDossierFields(),
-        ...defaultAnnexesSouscriptionDossierPatch(),
+        scpiAnnexeSouscriptions: [cometeAnnexeRow],
+        mesPreconisations: buildMesPreconisationsFromSouscriptions([cometeAnnexeRow]),
         quotePartPercueConsultantCifEur: "900",
       }
     );
@@ -223,7 +234,7 @@ describe("buildAnnexesRapportPreview", () => {
       rowSpan: 3,
     });
     expect(inconv?.rows[1].immobilier).toEqual({ kind: "span-continue" });
-    expect(inconv?.rows[3].label).toBe("Fiscalité et plus-value");
+    expect(inconv?.rows[3].label).toBe("Fiscalité et plus-values");
 
     expect(page6.showAnnexesHorizonProfilTable).toBe(true);
     const section4 = page6.bodySegmentsAfterCaracteristiquesOperationTable

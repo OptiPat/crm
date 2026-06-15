@@ -5,16 +5,24 @@ import {
 } from "@/lib/souscription-cif/build-default-annexes-fields";
 import {
   buildMesPreconisationsFromSouscriptions,
-  defaultScpiAnnexeSouscriptions,
 } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
+
+const cometeRow = {
+  productKey: "comete",
+  montantSouscritEur: "30000",
+  partPriceEur: "250",
+  reinvestissementDividendesPct: "100",
+  vpMontantEur: "50",
+  vpFrequence: "mois" as const,
+};
 
 describe("buildDefaultAnnexesFields", () => {
   it("retourne le texte type Conseil", () => {
     expect(buildDefaultConseil()).toBe(DEFAULT_CONSEIL_TEXT);
   });
 
-  it("génère Mes préconisations depuis souscriptions type (réinvest. + VP)", () => {
-    const text = buildMesPreconisationsFromSouscriptions(defaultScpiAnnexeSouscriptions());
+  it("génère Mes préconisations depuis une souscription Comète type (réinvest. + VP)", () => {
+    const text = buildMesPreconisationsFromSouscriptions([cometeRow]);
     expect(text).toMatch(/30[\s\u202f]?000/);
     expect(text).toContain("Comète");
     expect(text).toContain("250 € la part x 120 parts");

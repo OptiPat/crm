@@ -74,13 +74,36 @@ describe("shouldAutoSyncMesPreconisationsText", () => {
 });
 
 describe("buildMesPreconisationsFromSouscriptions", () => {
-  it("génère le format type (intro + paragraphe unique avec parts et options)", () => {
+  it("génère intro + un paragraphe par SCPI avec options sur la même ligne", () => {
     const text = buildMesPreconisationsFromSouscriptions([cometeRow]);
     expect(text).toMatch(/investissement global de 30[\s\u202f]?000/);
     expect(text).toContain("SCPI de rendement Comète");
     expect(text).toContain("250 € la part x 120 parts");
-    expect(text).toContain(" ; Avec réinvestissement automatique de 100%");
+    expect(text).toContain(". Avec réinvestissement automatique de 100%");
+    expect(text).not.toContain(" ; Avec ");
     expect(text.split("\n\n")).toHaveLength(2);
+  });
+
+  it("sépare chaque SCPI par un saut de ligne (options rattachées au produit concerné)", () => {
+    const text = buildMesPreconisationsFromSouscriptions([
+      { ...cometeRow, montantSouscritEur: "20000", reinvestissementDividendesPct: "50", vpMontantEur: "100", vpFrequence: "trimestre" },
+      {
+        productKey: "transitions_europe",
+        montantSouscritEur: "20000",
+        partPriceEur: "202",
+        reinvestissementDividendesPct: "",
+        vpMontantEur: "",
+        vpFrequence: "mois",
+      },
+    ]);
+    expect(text).toMatch(/investissement global de 40[\s\u202f]?000/);
+    const blocks = text.split("\n\n");
+    expect(blocks).toHaveLength(3);
+    expect(blocks[1]).toContain("Comète");
+    expect(blocks[1]).toContain("50% des dividendes");
+    expect(blocks[1]).toContain("100 €/trimestre");
+    expect(blocks[2]).toContain("Transitions Europe");
+    expect(blocks[2]).not.toContain("Avec ");
   });
 
   it("calcule le nombre de parts pour un montant élevé (Comète 250 €)", () => {
@@ -92,7 +115,7 @@ describe("buildMesPreconisationsFromSouscriptions", () => {
 });
 
 describe("normalizeScpiAnnexeSouscriptions", () => {
-  const legacyMes = buildMesPreconisationsFromSouscriptions(defaultScpiAnnexeSouscriptions());
+  const legacyMes = buildMesPreconisationsFromSouscriptions([cometeRow]);
 
   it("migre les anciennes clés produit", () => {
     expect(normalizeScpiAnnexeSouscriptions(undefined, ["comete"])).toEqual([
@@ -136,7 +159,7 @@ describe("upsertScpiAnnexeSouscription", () => {
 });
 
 describe("defaultScpiAnnexeSouscriptions", () => {
-  it("préremplit Comète avec réinvest. 100 % et VP 50 €/mois", () => {
-    expect(defaultScpiAnnexeSouscriptions()).toEqual([cometeRow]);
+  it("retourne une liste vide (pas de SCPI cochée par défaut)", () => {
+    expect(defaultScpiAnnexeSouscriptions()).toEqual([]);
   });
 });

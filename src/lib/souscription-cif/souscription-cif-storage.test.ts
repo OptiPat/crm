@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
+  buildDossierStorageKey,
   getDossierForContact,
   loadSouscriptionCifDraft,
   saveSouscriptionCifDraft,
@@ -27,7 +28,7 @@ describe("souscription-cif-storage", () => {
       activeDocument: "lettre-mission",
       selectedContactId: 42,
       dossiersByContactId: {
-        "42": {
+        [buildDossierStorageKey(42, "scpi")]: {
           dateDoc: "2026-06-13",
           dateDer: "2026-01-10",
           dateRio: "2026-02-01",
@@ -36,6 +37,7 @@ describe("souscription-cif-storage", () => {
           objectifsClient: "Revenus complémentaires",
           rappelDemande: "",
           rappelSituationClient: "",
+          analyseSituationClient: "",
           conseil: "",
           mesPreconisations: "Mes préconisations portent sur un investissement global de 30 000 €",
           scpiAnnexeSouscriptions: [
@@ -58,12 +60,69 @@ describe("souscription-cif-storage", () => {
 
     const loaded = loadSouscriptionCifDraft();
     expect(loaded?.selectedContactId).toBe(42);
-    expect(getDossierForContact(loaded!.dossiersByContactId, 42).lieuNaissance).toBe(
+    expect(getDossierForContact(loaded!.dossiersByContactId, 42, "scpi").lieuNaissance).toBe(
       "Montpellier"
     );
-    expect(getDossierForContact(loaded!.dossiersByContactId, 42).provenanceFonds).toBe("dom_tom");
-    expect(getDossierForContact(loaded!.dossiersByContactId, 42).origineFondsSelected).toEqual([
-      "reemploi",
-    ]);
+    expect(getDossierForContact(loaded!.dossiersByContactId, 42, "scpi").provenanceFonds).toBe(
+      "dom_tom"
+    );
+    expect(
+      getDossierForContact(loaded!.dossiersByContactId, 42, "scpi").origineFondsSelected
+    ).toEqual(["reemploi"]);
+  });
+
+  it("migre les brouillons anciens (clé contact seul → contact:scpi)", () => {
+    storage.set(
+      "crm_souscription_cif_draft",
+      JSON.stringify({
+        version: 1,
+        productType: "scpi",
+        activeDocument: "lettre-mission",
+        selectedContactId: 7,
+        dossiersByContactId: {
+          "7": {
+            dateDoc: "2026-06-13",
+            dateDer: "",
+            dateRio: "",
+            dateQpi: "",
+            lieuNaissance: "Paris",
+            objectifsClient: "",
+            rappelDemande: "",
+            rappelSituationClient: "",
+            analyseSituationClient: "",
+            conseil: "",
+            mesPreconisations: "",
+            scpiAnnexeSouscriptions: [],
+            quotePartPercueConsultantCifEur: "",
+            provenanceFonds: "",
+            origineFondsSelected: [],
+            origineFondsAutrePrecision: "",
+          },
+        },
+        savedAt: Date.now(),
+      })
+    );
+
+    const loaded = loadSouscriptionCifDraft();
+    expect(getDossierForContact(loaded!.dossiersByContactId, 7, "scpi").lieuNaissance).toBe(
+      "Paris"
+    );
+    expect(loaded?.dossiersByContactId["7"]).toBeUndefined();
+  });
+
+  it("isole les dossiers par client", () => {
+    const dossiers = {
+      [buildDossierStorageKey(1, "scpi")]: {
+        ...getDossierForContact({}, 1, "scpi"),
+        lieuNaissance: "Lyon",
+      },
+      [buildDossierStorageKey(2, "scpi")]: {
+        ...getDossierForContact({}, 2, "scpi"),
+        lieuNaissance: "Nice",
+      },
+    };
+
+    expect(getDossierForContact(dossiers, 1, "scpi").lieuNaissance).toBe("Lyon");
+    expect(getDossierForContact(dossiers, 2, "scpi").lieuNaissance).toBe("Nice");
   });
 });

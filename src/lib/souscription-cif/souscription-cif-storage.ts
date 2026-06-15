@@ -4,17 +4,34 @@ import {
 } from "@/lib/souscription-cif/dossier-fields";
 import { normalizeScpiAnnexeSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import {
+  isCifProductTypeAvailable,
+  parseSouscriptionCifProductType,
+} from "@/lib/souscription-cif/cif-product-types";
+import {
   normalizeOrigineFondsSelected,
   normalizeProvenanceFonds,
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
-export type SouscriptionCifProductType = "scpi";
+export type SouscriptionCifProductType = "scpi" | "capital-investissement" | "g3f";
 
 export type SouscriptionCifDocumentId =
   | "lettre-mission"
+  | "convention-rto"
   | "rapport-mission"
   | "annexes-rapport";
 
 const STORAGE_KEY = "crm_souscription_cif_draft";
+
+/** Clé brouillon = client + type de souscription (annexes distinctes par produit). */
+export function buildDossierStorageKey(
+  contactId: number,
+  productType: SouscriptionCifProductType
+): string {
+  return `${contactId}:${productType}`;
+}
+
+function migrateLegacyDossierKey(key: string): string {
+  return key.includes(":") ? key : `${key}:scpi`;
+}
 
 export type SouscriptionCifDraft = {
   version: 1;
@@ -49,6 +66,8 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     rappelDemande: typeof o.rappelDemande === "string" ? o.rappelDemande : "",
     rappelSituationClient:
       typeof o.rappelSituationClient === "string" ? o.rappelSituationClient : "",
+    analyseSituationClient:
+      typeof o.analyseSituationClient === "string" ? o.analyseSituationClient : "",
     conseil: typeof o.conseil === "string" ? o.conseil : "",
     mesPreconisations: typeof o.mesPreconisations === "string" ? o.mesPreconisations : "",
     scpiAnnexeSouscriptions: normalizeScpiAnnexeSouscriptions(
@@ -78,19 +97,26 @@ export function loadSouscriptionCifDraft(): SouscriptionCifDraft | null {
     if (parsed.dossiersByContactId && typeof parsed.dossiersByContactId === "object") {
       for (const [key, value] of Object.entries(parsed.dossiersByContactId)) {
         const fields = parseDossierFields(value);
-        if (fields) dossiersByContactId[key] = fields;
+        if (fields) dossiersByContactId[migrateLegacyDossierKey(key)] = fields;
       }
+    }
+
+    let productType = parseSouscriptionCifProductType(parsed.productType);
+    if (!isCifProductTypeAvailable(productType)) {
+      productType = "scpi";
     }
 
     return {
       version: 1,
-      productType: parsed.productType === "scpi" ? "scpi" : "scpi",
+      productType,
       activeDocument:
-        parsed.activeDocument === "rapport-mission"
-          ? "rapport-mission"
-          : parsed.activeDocument === "annexes-rapport"
-            ? "annexes-rapport"
-            : "lettre-mission",
+        parsed.activeDocument === "convention-rto"
+          ? "convention-rto"
+          : parsed.activeDocument === "rapport-mission"
+            ? "rapport-mission"
+            : parsed.activeDocument === "annexes-rapport"
+              ? "annexes-rapport"
+              : "lettre-mission",
       selectedContactId:
         typeof parsed.selectedContactId === "number" ? parsed.selectedContactId : undefined,
       dossiersByContactId,
@@ -114,7 +140,11 @@ export function saveSouscriptionCifDraft(
 
 export function getDossierForContact(
   dossiersByContactId: Record<string, SouscriptionDossierFields>,
-  contactId: number
+  contactId: number,
+  productType: SouscriptionCifProductType = "scpi"
 ): SouscriptionDossierFields {
-  return dossiersByContactId[String(contactId)] ?? defaultSouscriptionDossierFields();
+  return (
+    dossiersByContactId[buildDossierStorageKey(contactId, productType)] ??
+    defaultSouscriptionDossierFields()
+  );
 }

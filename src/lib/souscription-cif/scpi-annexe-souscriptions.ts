@@ -143,6 +143,26 @@ export function buildOptionsComplementFromSouscriptions(
   return fragments.map((f) => (f.endsWith(".") ? f : `${f}.`)).join(" ; ");
 }
 
+const PARTS_COUNT_TOLERANCE = 1e-6;
+
+/** Alerte si montant ÷ prix de part ne donne pas un nombre entier de parts (affichage formulaire uniquement). */
+export function getScpiSouscriptionPartsWarning(
+  row: ScpiAnnexeSouscription
+): string | null {
+  const montant = parseEuroInput(row.montantSouscritEur);
+  if (montant == null || montant <= 0) return null;
+  const partPrice = resolveScpiPartPriceEur(row);
+  if (partPrice == null || partPrice <= 0) return null;
+
+  const exactParts = montant / partPrice;
+  const roundedParts = Math.round(exactParts);
+  if (roundedParts <= 0) return null;
+  if (Math.abs(exactParts - roundedParts) < PARTS_COUNT_TOLERANCE) return null;
+
+  const nearestMontant = roundedParts * partPrice;
+  return `Le montant ne correspond pas à un nombre entier de parts (${roundedParts} parts × ${formatEuroAmountCif(partPrice)} = ${formatEuroAmountCif(nearestMontant)}).`;
+}
+
 function buildScpiSouscriptionLine(
   label: string,
   montant: number,
@@ -168,24 +188,28 @@ export function shouldAutoSyncMesPreconisationsText(
   return !trimmed || currentMesPreconisations === lastAutoMesPreconisations;
 }
 
-/** Format type CIF : intro + paragraphe unique (lignes SCPI séparées par « ; », options en fin). */
+/** Format type CIF : intro + un paragraphe par SCPI (options rattachées à chaque ligne). */
 export function buildMesPreconisationsFromSouscriptions(
   souscriptions: readonly ScpiAnnexeSouscription[]
 ): string {
-  const detailLines: string[] = [];
+  const paragraphs: string[] = [];
   for (const row of souscriptions) {
     const label = getScpiAnnexeProductLabel(row.productKey);
     const montant = parseEuroInput(row.montantSouscritEur);
     if (!label || montant == null) continue;
-    detailLines.push(
-      buildScpiSouscriptionLine(label, montant, resolveScpiPartPriceEur(row))
-    );
+
+    let paragraph = buildScpiSouscriptionLine(label, montant, resolveScpiPartPriceEur(row));
+    const optionsFragment = buildScpiSouscriptionOptionsFragment(row, label, false);
+    if (optionsFragment) {
+      paragraph += `. Avec ${optionsFragment}.`;
+    } else {
+      paragraph += ".";
+    }
+    paragraphs.push(paragraph);
   }
 
-  const optionsComplement = buildOptionsComplementFromSouscriptions(souscriptions);
-
-  if (detailLines.length === 0) {
-    return optionsComplement;
+  if (paragraphs.length === 0) {
+    return buildOptionsComplementFromSouscriptions(souscriptions);
   }
 
   const total = sumMontantSouscritFromSouscriptions(souscriptions);
@@ -194,11 +218,7 @@ export function buildMesPreconisationsFromSouscriptions(
       ? `Mes préconisations portent sur un investissement global de ${formatEuroAmountCif(total)}, répartis ainsi :`
       : "Mes préconisations portent sur un investissement global, répartis ainsi :";
 
-  let body = detailLines.join(" ; ");
-  if (optionsComplement) {
-    body += ` ; ${optionsComplement}`;
-  }
-  return `${intro}\n\n${body}`;
+  return `${intro}\n\n${paragraphs.join("\n\n")}`;
 }
 
 export const DEFAULT_SCPI_REINVESTISSEMENT_PCT = "100";
@@ -219,9 +239,9 @@ function newScpiAnnexeSouscription(
   };
 }
 
-/** Souscription type par défaut — Comète 30 000 €, réinvest. 100 %, VP 50 €/mois. */
+/** Souscriptions annexes vides — l'utilisateur coche les SCPI une par une. */
 export function defaultScpiAnnexeSouscriptions(): ScpiAnnexeSouscription[] {
-  return [newScpiAnnexeSouscription("comete", "30000", true)];
+  return [];
 }
 
 function normalizeScpiAnnexeSouscriptionRow(

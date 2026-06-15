@@ -7,6 +7,7 @@ import {
   cifDocumentBodyTextClass,
   cifDocumentFooterClass,
   cifDocumentPageClass,
+  cifDocumentPreambleTitleClass,
   cifDocumentSectionTitleClass,
   cifDocumentTitleClass,
 } from "@/lib/souscription-cif/document-page-layout";
@@ -27,7 +28,7 @@ import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInst
 import { RmRecapTable } from "@/components/souscription-cif/RmRecapTable";
 import { ScpiLmSignatureBlock } from "@/components/souscription-cif/ScpiLmSignatureBlock";
 import { CifPreviewSegments } from "@/components/souscription-cif/CifPreviewSegments";
-function ScpiLmBodyContent({
+export function ScpiLmBodyContent({
   page,
   onMissingVariableClick,
 }: {
@@ -67,7 +68,18 @@ function ScpiLmBodyContent({
       )}
 
       {page.centeredSectionTitle && (
-        <h3 className={cifDocumentSectionTitleClass}>{page.centeredSectionTitle}</h3>
+        <h3
+          className={cn(
+            cifDocumentSectionTitleClass,
+            page.bodySegments.length > 0 && "mt-[9mm]"
+          )}
+        >
+          {page.centeredSectionTitle}
+        </h3>
+      )}
+
+      {page.centeredPreambleTitle && (
+        <h3 className={cifDocumentPreambleTitleClass}>{page.centeredPreambleTitle}</h3>
       )}
 
       {page.bodySegmentsContinuation && page.bodySegmentsContinuation.length > 0 && (
@@ -221,6 +233,7 @@ function ScpiLmBodyContent({
         <ScpiAmfRiskScaleTable
           highlightedLevel={page.amfRiskHighlightLevel}
           investmentHorizon={page.amfRiskInvestmentHorizon}
+          className="mt-[6mm]"
         />
       )}
 

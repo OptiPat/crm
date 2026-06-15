@@ -26,11 +26,11 @@ est titulaire du statut de Conseiller en Investissements Financiers
 enregistré sous le n°{{cgp_anacofi_numero}} auprès de l'Anacofi CIF
 Association agréée par l'Autorité des Marchés Financiers
 
-Ci-après désigné « Le Conseiller ».`;
+Ci-après désigné « le Conseiller ».`;
 
 /** @deprecated Corps complet — préférer SCPI_LM_PAGE1_BODY_AFTER_TITLE + en-tête structuré. */
 export const SCPI_LM_PAGE1_BODY = SCPI_LM_PAGE1_BODY_AFTER_TITLE;
-export const SCPI_LM_PAGE1_FOOTER_DEFAULT = `Conseiller en Investissements Financiers, membre n° {{cgp_anacofi_numero}} de l'ANACOFI – CIF - Association agréée par l'Autorité des Marchés Financiers-Mandataire d'intermédiaire en Assurance de Stellium Courtage - ORIAS n°{{cgp_orias}} www.orias.fr, sous le contrôle de l'Autorité de Contrôle Prudentiel et de Résolution (ACPR) 04 Place de Budapest – 75436 PARIS cedex 09
+export const SCPI_LM_PAGE1_FOOTER_DEFAULT = `Conseiller en Investissements Financiers, membre n° {{cgp_anacofi_numero}} de l'ANACOFI – CIF - Association agréée par l'Autorité des Marchés Financiers-Mandataire d'intermédiaire en Assurance de Stellium Courtage - ORIAS n°{{cgp_orias}} www.orias.fr, sous le contrôle de l'Autorité de Contrôle Prudentiel et de Résolution (ACPR) 04 Place de Budapest – 75436 Paris Cedex 09
 Mandataire d'intermédiaire en Opérations de Banque et en Services de Paiement de Stellium Financement sous le contrôle de l'ACPR (Autorité de Contrôle Prudentiel et de Résolution), 4 Place de Budapest, CS 92459, 75436 Paris Cedex 09
 Attestation de collaborateur de Stellium Immobilier n° CPI 3101 2015 000 001 813 délivrée par la CCI de Toulouse
 Assurance Responsabilité Civile Professionnelle conforme au code des Assurances auprès de ZURICH INSURANCE PLC, 112 Avenue de Wagram, 75017 Paris-N° SIREN {{cgp_siren_compact}} RSAC {{cgp_rcs_ville}}- Siège social : {{cgp_adresse_ligne}}, {{cgp_cp_ville}}`;
@@ -51,12 +51,15 @@ export const SOUSCRIPTION_VARIABLE_LABELS: Record<string, string> = {
   objectifs_client: "Objectifs client (contexte prestation)",
   rappel_demande: "Rappel de la demande",
   rappel_situation_client: "Rappel situation client (Recueil / QPI)",
+  analyse_situation_client: "Analyse de la situation (personnalisation R1)",
   conseil: "Conseil (résumé préconisation)",
   mes_preconisations: "Mes préconisations",
   provenance_fonds: "Provenance des fonds",
   origine_fonds: "Origine des fonds",
   descriptions_scpi: "Descriptions SCPI",
   cgp_nom_complet: "Nom du conseiller",
+  cgp_cabinet: "Raison sociale du cabinet (ex. PLAZAVENIR)",
+  cgp_representant_legal: "Représentant légal (gérant)",
   cgp_formule_politesse: "Formule conseiller (appel page 8)",
   cgp_rcs_ville: "Ville RCS",
   cgp_siren: "N° SIREN",

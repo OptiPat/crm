@@ -71,7 +71,7 @@ export const ANNEXES_SCPI_CARACTERISTIQUES_OPERATION_SECTIONS: ReadonlyArray<Ann
           immobilier: { kind: "text", value: "Voir détail en annexe", rowSpan: 3 },
           placementsFinanciers: {
             kind: "text",
-            value: "Voir documents compagnies\n+ brochure AMF",
+            value: "Voir documents des sociétés de gestion\n+ brochure AMF",
             rowSpan: 3,
           },
         },
@@ -86,7 +86,7 @@ export const ANNEXES_SCPI_CARACTERISTIQUES_OPERATION_SECTIONS: ReadonlyArray<Ann
           placementsFinanciers: { kind: "span-continue" },
         },
         {
-          label: "Fiscalité et plus-value",
+          label: "Fiscalité et plus-values",
           immobilier: { kind: "check", checked: true },
           placementsFinanciers: { kind: "check", checked: true },
         },

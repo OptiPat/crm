@@ -1,4 +1,4 @@
-/** Format A4 — dimensions communes à l'aperçu écran et à l'export PDF futur. */
+/** Format A4 — dimensions communes à l'aperçu écran et à l'export PDF (impression). */
 export const CIF_DOCUMENT_PAGE_MM = {
   width: 210,
   height: 297,
@@ -19,14 +19,17 @@ export const cifDocumentBodyClass =
 
 /** Corps document — 10 pt, interligne proche Word, paragraphes justifiés. */
 export const cifDocumentBodyTextClass =
-  "font-comfortaa text-[10pt] leading-[1.15] text-neutral-900 text-justify [text-align-last:left] hyphens-auto";
+  "cif-document-comfortaa font-comfortaa text-[10pt] leading-[1.15] text-neutral-900 text-justify [text-align-last:left] hyphens-auto";
 
 /** Bloc de texte corps (paragraphes préformatés). */
 export const cifDocumentBodyProseClass = "whitespace-pre-wrap";
 
 /** Pied de page document (bas de page A4). */
 export const cifDocumentFooterClass =
-  "shrink-0 border-t border-neutral-200 px-[15mm] py-[6mm] text-[7pt] leading-snug text-neutral-600 text-justify [text-align-last:left] hyphens-auto";
+  "cif-document-comfortaa shrink-0 border-t border-neutral-200 px-[15mm] py-[6mm] text-[7pt] leading-snug text-neutral-600 text-justify [text-align-last:left] hyphens-auto";
+
+/** Soulignement corps document — trait fin inline (border-bottom, pas text-decoration). */
+export const cifTextUnderlineClass = "cif-text-underline";
 
 /** Titre centré (18 pt). */
 export const cifDocumentTitleClass =
@@ -35,3 +38,7 @@ export const cifDocumentTitleClass =
 /** Sous-titre section produit centré (14 pt — entre corps 10 pt et titre 18 pt). */
 export const cifDocumentSectionTitleClass =
   "my-[5mm] w-full text-center text-[14pt] font-semibold tracking-tight [text-align-last:center]";
+
+/** Bandeau PRÉAMBULE centré (14 pt). */
+export const cifDocumentPreambleTitleClass =
+  "my-[8mm] w-full text-center text-[14pt] font-semibold tracking-wide [text-align-last:center]";

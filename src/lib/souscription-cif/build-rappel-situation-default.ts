@@ -71,6 +71,74 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/** Puces recalculées depuis le contact / le foyer (pas les saisies libres type épargne). */
+const CONTACT_SYNC_RAPPEL_LABELS = [
+  "Classification",
+  "Âge",
+  "Résidence fiscale",
+  "Situation matrimoniale",
+  RM_PANEL_REVENUS_BULLET_LABEL,
+  RM_PANEL_IMMOBILIER_BULLET_LABEL,
+  RM_RECAP_SITUATION_SRI_BULLET_LABEL,
+] as const;
+
+function bulletLinePattern(label: string): string {
+  if (label === "Âge") return "(?:Âge|Age)";
+  return escapeRegExp(label);
+}
+
+function replaceOrInsertBulletLine(text: string, label: string, line: string): string {
+  const pattern = new RegExp(`^➞ ${bulletLinePattern(label)}(?= :|$).*$`, "m");
+  if (pattern.test(text)) {
+    return text.replace(pattern, line);
+  }
+
+  const labelIndex = RM_RECAP_SITUATION_BULLET_LABELS.indexOf(
+    label as (typeof RM_RECAP_SITUATION_BULLET_LABELS)[number]
+  );
+  if (labelIndex <= 0) {
+    return text.trim() ? `${line}\n${text}` : line;
+  }
+
+  for (let i = labelIndex - 1; i >= 0; i--) {
+    const prev = RM_RECAP_SITUATION_BULLET_LABELS[i]!;
+    const prevPattern = new RegExp(`^➞ ${bulletLinePattern(prev)}.*$`, "m");
+    const match = text.match(prevPattern);
+    if (match?.index != null) {
+      const insertAt = match.index + match[0].length;
+      return `${text.slice(0, insertAt)}\n${line}${text.slice(insertAt)}`;
+    }
+  }
+
+  return text.trim() ? `${text}\n${line}` : line;
+}
+
+/**
+ * Met à jour les puces dérivées du contact (âge, situation, SRI, foyer…) sans effacer le reste.
+ * Si le bloc est vide, retourne le brouillon complet.
+ */
+export function syncRappelSituationFromContact(
+  existing: string,
+  contact: Contact | null,
+  foyer: Foyer | null
+): string {
+  const fresh = buildDefaultRappelSituation(contact, foyer);
+  if (!existing.trim()) return fresh;
+
+  const freshByLabel = new Map<string, string>();
+  for (const line of fresh.split("\n")) {
+    const match = line.match(/^➞ (.+?)(?: :|$)/);
+    if (match?.[1]) freshByLabel.set(match[1], line);
+  }
+
+  let result = existing;
+  for (const label of CONTACT_SYNC_RAPPEL_LABELS) {
+    const line = freshByLabel.get(label);
+    if (line) result = replaceOrInsertBulletLine(result, label, line);
+  }
+  return result;
+}
+
 /** Rappel de situation — brouillon depuis contact + foyer (Recueil / QPI à compléter). */
 export function buildDefaultRappelSituation(
   contact: Contact | null,

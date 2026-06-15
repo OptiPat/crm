@@ -4,7 +4,7 @@ export const RM_RECAP_ROW_DEMANDE_TITLE = "RAPPEL DE LA DEMANDE";
 
 export const RM_RECAP_ROW_SITUATION_TITLE = "RAPPEL DE LA SITUATION DU CLIENT";
 
-export const RM_RECAP_SITUATION_INTRO = `La situation du Client est reprise dans le Recueil d'information. Le profil financier ainsi que les préférences en matière de durabilité sont repris dans le Questionnaire Profil Investisseur.`;
+export const RM_RECAP_SITUATION_INTRO = `La situation du Client est reprise dans le Recueil d'Information. Le profil financier ainsi que les préférences en matière de durabilité sont repris dans le Questionnaire Profil Investisseur.`;
 
 /** Libellés panneau dossier (longs) — préremplissage et édition. */
 export const RM_PANEL_REVENUS_BULLET_LABEL =
@@ -14,7 +14,7 @@ export const RM_PANEL_IMMOBILIER_BULLET_LABEL =
   "Immobilier (à détailler si besoin : résidence principale, secondaire, locative avec revenus associés, appétence, objectif : diversification, rééquilibrage)";
 
 export const RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL =
-  "Valeurs mobilières (à détailler si besoin, détention court moyen long terme)";
+  "Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme)";
 
 export const RM_PANEL_EPARGNE_BULLET_LABEL = "Épargne de précaution";
 
@@ -30,7 +30,8 @@ export const RM_RAPPORT_REVENUS_BULLET_LABEL = "Revenus";
 
 export const RM_RAPPORT_IMMOBILIER_BULLET_LABEL = "Immobilier";
 
-export const RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL = "Valeurs mobilières";
+export const RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL =
+  "Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme)";
 
 export const RM_RAPPORT_EPARGNE_BULLET_LABEL = "Épargne de précaution";
 
@@ -58,7 +59,7 @@ export const RM_LEGACY_PANEL_TO_RAPPORT_BULLET_LABELS: ReadonlyArray<readonly [s
     "Immobilier (à détailler si besoin, résidence principale, secondaire, locative avec revenus associés)",
     RM_RAPPORT_IMMOBILIER_BULLET_LABEL,
   ],
-  ["Epargne de précaution", RM_RAPPORT_EPARGNE_BULLET_LABEL],
+  ["Épargne de précaution", RM_RAPPORT_EPARGNE_BULLET_LABEL],
 ];
 
 export const RM_RECAP_SITUATION_BULLET_LABELS = [

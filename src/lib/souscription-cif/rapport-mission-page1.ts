@@ -18,6 +18,6 @@ est titulaire du statut de Conseiller en Investissements Financiers
 enregistré sous le n°{{cgp_anacofi_numero}} auprès de l'Anacofi CIF
 Association agréée par l'Autorité des Marchés Financiers
 
-Ci-après désigné « Le Conseiller ».`;
+Ci-après désigné « le Conseiller ».`;
 
 export const RM_DOCUMENT_TITLE = "Rapport de mission et déclaration d'adéquation";

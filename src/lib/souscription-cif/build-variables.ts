@@ -20,7 +20,16 @@ function cgpNomComplet(cgp: CgpConfig | null): string | null {
   return s || null;
 }
 
-/** Ex. « Nicolas PLAZA, » — formule d'appel au conseiller (page 8). */
+function cgpCabinet(cgp: CgpConfig | null): string | null {
+  return cgp?.cabinet?.trim() || null;
+}
+
+function cgpRepresentantLegal(cgp: CgpConfig | null): string | null {
+  const nom = cgpNomComplet(cgp);
+  return nom ? `${nom} en qualité de gérant` : null;
+}
+
+/** Ex. « Nicolas PLAZA, » — formule d'appel au conseiller (page 8 annexes). */
 function cgpFormulePolitesse(cgp: CgpConfig | null): string | null {
   const nomPrenom = cgpNomComplet(cgp);
   return nomPrenom ? `${nomPrenom},` : null;
@@ -54,6 +63,7 @@ export function buildSouscriptionVariables(
     rappel_demande: dossier.rappelDemande.trim() || null,
     rappel_situation_client:
       normalizeRappelSituationClient(dossier.rappelSituationClient.trim()) || null,
+    analyse_situation_client: dossier.analyseSituationClient.trim() || null,
     conseil: dossier.conseil.trim() || null,
     mes_preconisations: dossier.mesPreconisations.trim() || null,
     descriptions_scpi:
@@ -61,6 +71,8 @@ export function buildSouscriptionVariables(
         getScpiAnnexeProductKeysFromSouscriptions(dossier.scpiAnnexeSouscriptions)
       ) || null,
     cgp_nom_complet: cgpNomComplet(cgp),
+    cgp_cabinet: cgpCabinet(cgp),
+    cgp_representant_legal: cgpRepresentantLegal(cgp),
     cgp_formule_politesse: cgpFormulePolitesse(cgp),
     cgp_rcs_ville: cgp?.cif_rcs_ville?.trim() || null,
     cgp_siren: sirenRaw,
