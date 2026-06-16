@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -28,19 +28,20 @@ import {
   Euro,
   Home,
   Target,
-  Building2,
   PiggyBank,
+  Trash2,
+  X,
+  type LucideIcon,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
+import type { BienImmobilier, ContratFinancier } from "@/lib/pdf/types";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import {
   buildRioPreviewSummary,
-  hasStructuredRioPatrimoine,
   isGuidedStelliumPreview,
 } from "@/lib/documents/rio-import-preview";
 import { RioImportStepper } from "./RioImportStepper";
 import { RioPreviewSummaryBar } from "./RioPreviewSummaryBar";
-import { RioPatrimoineOverview } from "./RioPatrimoineOverview";
 
 interface ExtractedDataPreviewAdvancedProps {
   open: boolean;
@@ -52,6 +53,79 @@ interface ExtractedDataPreviewAdvancedProps {
   variant?: "dialog" | "panel";
   /** Masque le stepper interne (déjà dans la barre contexte). */
   hideStepper?: boolean;
+}
+
+interface PreviewSectionProps {
+  id: string;
+  icon: LucideIcon;
+  title: string;
+  children: ReactNode;
+  hidden?: boolean;
+  forceExpanded?: boolean;
+  expandedSections: Set<string>;
+  onToggle: (sectionId: string) => void;
+}
+
+/** Composant stable (module) — évite la perte de focus à chaque frappe. */
+function PreviewSection({
+  id,
+  icon: Icon,
+  title,
+  children,
+  hidden,
+  forceExpanded,
+  expandedSections,
+  onToggle,
+}: PreviewSectionProps) {
+  if (hidden) return null;
+  const isExpanded = forceExpanded ?? expandedSections.has(id);
+  return (
+    <div className="border rounded-lg">
+      <button
+        type="button"
+        onClick={() => !forceExpanded && onToggle(id)}
+        className="w-full flex items-center gap-2 p-4 hover:bg-gray-50 transition-colors"
+        disabled={forceExpanded}
+      >
+        <Icon className="h-5 w-5 text-primary" />
+        <span className="font-medium flex-1 text-left">{title}</span>
+        {!forceExpanded &&
+          (isExpanded ? (
+            <ChevronDown className="h-5 w-5" />
+          ) : (
+            <ChevronRight className="h-5 w-5" />
+          ))}
+      </button>
+      {isExpanded && <div className="p-4 pt-0 space-y-4">{children}</div>}
+    </div>
+  );
+}
+
+function FieldLabelWithRemove({
+  label,
+  onRemove,
+  className,
+}: {
+  label: string;
+  onRemove: () => void;
+  className?: string;
+}) {
+  return (
+    <div className={`flex items-center justify-between gap-2 ${className ?? ""}`}>
+      <Label>{label}</Label>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+        onClick={onRemove}
+        aria-label={`Retirer ${label}`}
+        title="Retirer de l'import"
+      >
+        <X className="h-4 w-4" />
+      </Button>
+    </div>
+  );
 }
 
 export function ExtractedDataPreviewAdvanced({
@@ -71,13 +145,14 @@ export function ExtractedDataPreviewAdvanced({
 
   const guidedMode = isGuidedStelliumPreview(formData.typeDocument);
   const isQpiPreview = formData.typeDocument === "QPI";
-  const structuredPatrimoine = hasStructuredRioPatrimoine(formData);
   const previewSummary = buildRioPreviewSummary(formData);
 
   useEffect(() => {
+    // En panel (wizard étape 2), l'état local vit jusqu'à « Appliquer » — pas de resync à chaque render parent.
+    if (variant === "panel") return;
     setFormData(extractedData);
     setGuidedTab("contact");
-  }, [extractedData]);
+  }, [extractedData, variant]);
 
   const isSectionVisible = (sectionId: string): boolean => {
     if (!guidedMode) return true;
@@ -93,11 +168,8 @@ export function ExtractedDataPreviewAdvanced({
       patrimoine: "patrimoine",
       objectifs: "objectifs",
     };
-    if (sectionId === "patrimoine" && structuredPatrimoine) return false;
     return tabBySection[sectionId] === guidedTab;
   };
-
-  const previewReadonlyClass = "bg-muted cursor-not-allowed";
 
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
@@ -111,12 +183,81 @@ export function ExtractedDataPreviewAdvanced({
 
   const handleApply = () => {
     onApply(formData);
-    onOpenChange(false);
+    if (variant !== "panel") {
+      onOpenChange(false);
+    }
   };
 
   const handleIgnore = () => {
     onIgnore();
-    onOpenChange(false);
+    if (variant !== "panel") {
+      onOpenChange(false);
+    }
+  };
+
+  const updateBienImmobilier = (id: string, patch: Partial<BienImmobilier>) => {
+    setFormData((prev) => ({
+      ...prev,
+      biensImmobiliers: prev.biensImmobiliers?.map((b) =>
+        b.id === id ? { ...b, ...patch } : b
+      ),
+    }));
+  };
+
+  const updateContratFinancier = (id: string, patch: Partial<ContratFinancier>) => {
+    setFormData((prev) => ({
+      ...prev,
+      contratsFinanciers: prev.contratsFinanciers?.map((c) =>
+        c.id === id ? { ...c, ...patch } : c
+      ),
+    }));
+  };
+
+  const clearExtractedField = (fieldKey: keyof ExtractedData) => {
+    setFormData((prev) => ({ ...prev, [fieldKey]: undefined }));
+  };
+
+  const removeBienImmobilier = (id: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      biensImmobiliers: prev.biensImmobiliers?.filter((b) => b.id !== id),
+    }));
+  };
+
+  const removeContratFinancier = (id: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      contratsFinanciers: prev.contratsFinanciers?.filter((c) => c.id !== id),
+    }));
+  };
+
+  const renderRemovableEpargneField = (
+    fieldKey: keyof ExtractedData,
+    label: string,
+    options?: { className?: string; inputClassName?: string }
+  ) => {
+    const value = formData[fieldKey];
+    if (value === undefined || typeof value !== "number") return null;
+    return (
+      <div className={options?.className ?? "space-y-2"}>
+        <FieldLabelWithRemove
+          label={label}
+          onRemove={() => clearExtractedField(fieldKey)}
+          className={options?.inputClassName?.includes("font-bold") ? "font-bold text-lg" : undefined}
+        />
+        <Input
+          type="number"
+          value={value || ""}
+          onChange={(e) =>
+            setFormData((prev) => ({
+              ...prev,
+              [fieldKey]: parseInt(e.target.value, 10) || undefined,
+            }))
+          }
+          className={options?.inputClassName}
+        />
+      </div>
+    );
   };
 
   const getConfidenceColor = (confidence?: number) => {
@@ -133,43 +274,9 @@ export function ExtractedDataPreviewAdvanced({
     return <AlertCircle className="h-5 w-5 text-orange-500" />;
   };
 
-  const Section = ({
-    id,
-    icon: Icon,
-    title,
-    children,
-    hidden,
-    forceExpanded,
-  }: {
-    id: string;
-    icon: any;
-    title: string;
-    children: React.ReactNode;
-    hidden?: boolean;
-    forceExpanded?: boolean;
-  }) => {
-    if (hidden) return null;
-    const isExpanded = forceExpanded ?? expandedSections.has(id);
-    return (
-      <div className="border rounded-lg">
-        <button
-          type="button"
-          onClick={() => !forceExpanded && toggleSection(id)}
-          className="w-full flex items-center gap-2 p-4 hover:bg-gray-50 transition-colors"
-          disabled={forceExpanded}
-        >
-          <Icon className="h-5 w-5 text-primary" />
-          <span className="font-medium flex-1 text-left">{title}</span>
-          {!forceExpanded &&
-            (isExpanded ? (
-              <ChevronDown className="h-5 w-5" />
-            ) : (
-              <ChevronRight className="h-5 w-5" />
-            ))}
-        </button>
-        {isExpanded && <div className="p-4 pt-0 space-y-4">{children}</div>}
-      </div>
-    );
+  const sectionProps = {
+    expandedSections,
+    onToggle: toggleSection,
   };
 
   const hasData = (fields: any[]) => fields.some((f) => f !== undefined && f !== null && f !== "");
@@ -183,12 +290,6 @@ export function ExtractedDataPreviewAdvanced({
       default:
         return "Vérifiez et complétez les informations avant de les appliquer";
     }
-  };
-
-  const formatContratOrigine = (origine?: string): string | null => {
-    if (origine === "MON_CONSEIL") return "Avec moi (RIO)";
-    if (origine === "EXISTANT_CLIENT") return "À côté (RIO)";
-    return null;
   };
 
   const previewBody = (
@@ -246,9 +347,6 @@ export function ExtractedDataPreviewAdvanced({
         )}
 
         <div className="space-y-3 mt-4">
-          {guidedMode && structuredPatrimoine && guidedTab === "patrimoine" && (
-            <RioPatrimoineOverview data={formData} />
-          )}
           {/* Section Identité & Coordonnées */}
           {hasData([
             formData.civilite,
@@ -257,7 +355,7 @@ export function ExtractedDataPreviewAdvanced({
             formData.email,
             formData.telephone,
           ]) && (
-            <Section
+            <PreviewSection {...sectionProps}
               id="identite"
               icon={User}
               title="Identité & Coordonnées"
@@ -346,17 +444,6 @@ export function ExtractedDataPreviewAdvanced({
                   </div>
                 )}
 
-                {formData.nationalite !== undefined && (
-                  <div className="space-y-2">
-                    <Label>Nationalité (lecture seule)</Label>
-                    <Input
-                      readOnly
-                      className={previewReadonlyClass}
-                      value={formData.nationalite || ""}
-                    />
-                  </div>
-                )}
-
                 {formData.email !== undefined && (
                   <div className="space-y-2 md:col-span-2">
                     <Label>Email</Label>
@@ -418,16 +505,17 @@ export function ExtractedDataPreviewAdvanced({
                   </div>
                 )}
               </div>
-            </Section>
+            </PreviewSection>
           )}
 
           {/* Section Situation Familiale & Professionnelle */}
           {hasData([
             formData.situationFamiliale,
             formData.profession,
-            formData.statutProfessionnel,
+            formData.regimeMatrimonial,
+            formData.employeur,
           ]) && (
-            <Section
+            <PreviewSection {...sectionProps}
               id="situation"
               icon={Briefcase}
               title="Situation Familiale & Professionnelle"
@@ -480,21 +568,6 @@ export function ExtractedDataPreviewAdvanced({
                     }
                   />
                 </div>
-                
-                {/* TODO: Ajouter formulaire pour les enfants (nom, prénom, date de naissance) */}
-                {formData.enfants && formData.enfants.length > 0 && (
-                  <div className="md:col-span-2 space-y-2">
-                    <Label>Enfants</Label>
-                    {formData.enfants.map((enfant, index) => (
-                      <div key={index} className="p-3 border rounded-lg">
-                        <div className="text-sm font-medium">
-                          Enfant {index + 1}: {enfant.prenom} {enfant.nom}
-                          {enfant.dateNaissance && ` - Né(e) le ${enfant.dateNaissance}`}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
                 {formData.profession !== undefined && (
                   <div className="space-y-2">
@@ -504,17 +577,6 @@ export function ExtractedDataPreviewAdvanced({
                       onChange={(e) =>
                         setFormData({ ...formData, profession: e.target.value })
                       }
-                    />
-                  </div>
-                )}
-
-                {formData.statutProfessionnel !== undefined && (
-                  <div className="space-y-2">
-                    <Label>Statut professionnel (lecture seule)</Label>
-                    <Input
-                      readOnly
-                      className={previewReadonlyClass}
-                      value={formData.statutProfessionnel || ""}
                     />
                   </div>
                 )}
@@ -530,19 +592,8 @@ export function ExtractedDataPreviewAdvanced({
                     />
                   </div>
                 )}
-
-                {formData.secteurActivite !== undefined && (
-                  <div className="space-y-2">
-                    <Label>Secteur d&apos;activité (lecture seule)</Label>
-                    <Input
-                      readOnly
-                      className={previewReadonlyClass}
-                      value={formData.secteurActivite || ""}
-                    />
-                  </div>
-                )}
               </div>
-            </Section>
+            </PreviewSection>
           )}
 
           {/* Section Revenus & Charges */}
@@ -551,7 +602,7 @@ export function ExtractedDataPreviewAdvanced({
             formData.revenusTotal,
             formData.chargesTotal,
           ]) && (
-            <Section
+            <PreviewSection {...sectionProps}
               id="revenus"
               icon={Euro}
               title="Revenus & Charges"
@@ -679,7 +730,7 @@ export function ExtractedDataPreviewAdvanced({
                   </>
                 )}
               </div>
-            </Section>
+            </PreviewSection>
           )}
 
           {/* Section Patrimoine */}
@@ -692,7 +743,7 @@ export function ExtractedDataPreviewAdvanced({
             formData.residencePrincipale,
             formData.contratsFinanciers?.length,
           ]) && (
-            <Section
+            <PreviewSection {...sectionProps}
               id="patrimoine"
               icon={Home}
               title="Patrimoine"
@@ -704,22 +755,32 @@ export function ExtractedDataPreviewAdvanced({
                 {formData.patrimoineTotal !== undefined && (
                   <>
                     <div className="space-y-2">
-                      <Label className="font-semibold text-lg">Patrimoine brut (lecture seule)</Label>
+                      <Label className="font-semibold text-lg">Patrimoine brut</Label>
                       <Input
-                        readOnly
                         type="number"
-                        className={`font-semibold text-lg ${previewReadonlyClass}`}
+                        className="font-semibold text-lg"
                         value={formData.patrimoineTotal || ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            patrimoineTotal: parseInt(e.target.value, 10) || undefined,
+                          })
+                        }
                       />
                     </div>
                     {formData.patrimoineNet !== undefined && (
                       <div className="space-y-2">
-                        <Label className="font-semibold text-lg">Patrimoine net (lecture seule)</Label>
+                        <Label className="font-semibold text-lg">Patrimoine net</Label>
                         <Input
-                          readOnly
                           type="number"
-                          className={`font-semibold text-lg ${previewReadonlyClass}`}
+                          className="font-semibold text-lg"
                           value={formData.patrimoineNet || ""}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              patrimoineNet: parseInt(e.target.value, 10) || undefined,
+                            })
+                          }
                         />
                       </div>
                     )}
@@ -735,73 +796,113 @@ export function ExtractedDataPreviewAdvanced({
                         Immobilier ({formData.biensImmobiliers.length} bien{formData.biensImmobiliers.length > 1 ? "s" : ""})
                       </h4>
                     </div>
-                    {formData.biensImmobiliers.map((bien, _index) => (
-                      <div key={bien.id} className="md:col-span-2 p-3 border rounded-lg space-y-2">
-                        <div className="flex items-center gap-2">
-                          {bien.type === "RESIDENCE_PRINCIPALE" ? (
-                            <Home className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-                          ) : bien.type === "RESIDENCE_SECONDAIRE" ? (
-                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-                          ) : (
-                            <Building2 className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-                          )}
-                          <span className="font-medium">{bien.nom}</span>
-                          <span className="text-muted-foreground text-sm">
-                            ({bien.type === "RESIDENCE_PRINCIPALE" || bien.type === "RP" ? "RP" : 
-                              bien.type === "RESIDENCE_SECONDAIRE" || bien.type === "RS" ? "RS" : 
-                              bien.type === "SCPI" ? "SCPI" :
-                              bien.type === "PINEL" ? "Pinel" :
-                              bien.type === "DENORMANDIE" ? "Denormandie" :
-                              bien.type === "MALRAUX" ? "Malraux" :
-                              bien.type === "MH" ? "Monuments Hist." :
-                              bien.type === "DF" ? "Déficit Foncier" :
-                              bien.type === "LMNP" ? "LMNP" :
-                              bien.type === "LMP" ? "LMP" :
-                              "Locatif"})
-                          </span>
+                    {formData.biensImmobiliers.map((bien) => (
+                      <div key={bien.id} className="md:col-span-2 p-3 border rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium truncate">
+                            {bien.nom || "Bien immobilier"}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeBienImmobilier(bien.id)}
+                            aria-label="Retirer ce bien"
+                            title="Retirer de l'import"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-                          {bien.valeur != null && bien.valeur > 0 && (
-                            <div>
-                              <span className="text-muted-foreground">Valeur:</span>{" "}
-                              <span className="font-medium">{bien.valeur.toLocaleString("fr-FR")} €</span>
-                            </div>
-                          )}
-                          {bien.creditCRD != null && bien.creditCRD > 0 && (
-                            <div>
-                              <span className="text-muted-foreground">Crédit CRD:</span>{" "}
-                              <span className="font-medium">{bien.creditCRD.toLocaleString("fr-FR")} €</span>
-                            </div>
-                          )}
-                          {bien.mensualiteCredit != null && bien.mensualiteCredit > 0 && (
-                            <div>
-                              <span className="text-muted-foreground">Mensualité:</span>{" "}
-                              <span className="font-medium">{bien.mensualiteCredit.toLocaleString("fr-FR")} €</span>
-                            </div>
-                          )}
-                          {bien.loyersAnnuels != null && bien.loyersAnnuels > 0 && (
-                            <div>
-                              <span className="text-muted-foreground">Loyers/an:</span>{" "}
-                              <span className="font-medium">{bien.loyersAnnuels.toLocaleString("fr-FR")} €</span>
-                            </div>
-                          )}
-                          {bien.dateFinCredit && (
-                            <div>
-                              <span className="text-muted-foreground">Fin crédit:</span>{" "}
-                              <span className="font-medium">{bien.dateFinCredit}</span>
-                            </div>
-                          )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="space-y-2 md:col-span-2">
+                            <Label>Nom du bien</Label>
+                            <Input
+                              value={bien.nom}
+                              onChange={(e) =>
+                                updateBienImmobilier(bien.id, { nom: e.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Valeur (€)</Label>
+                            <Input
+                              type="number"
+                              value={bien.valeur ?? ""}
+                              onChange={(e) =>
+                                updateBienImmobilier(bien.id, {
+                                  valeur: parseInt(e.target.value, 10) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Crédit CRD (€)</Label>
+                            <Input
+                              type="number"
+                              value={bien.creditCRD ?? ""}
+                              onChange={(e) =>
+                                updateBienImmobilier(bien.id, {
+                                  creditCRD: parseInt(e.target.value, 10) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Mensualité crédit (€)</Label>
+                            <Input
+                              type="number"
+                              value={bien.mensualiteCredit ?? ""}
+                              onChange={(e) =>
+                                updateBienImmobilier(bien.id, {
+                                  mensualiteCredit: parseInt(e.target.value, 10) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Loyers annuels (€)</Label>
+                            <Input
+                              type="number"
+                              value={bien.loyersAnnuels ?? ""}
+                              onChange={(e) =>
+                                updateBienImmobilier(bien.id, {
+                                  loyersAnnuels: parseInt(e.target.value, 10) || undefined,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Fin crédit</Label>
+                            <Input
+                              value={bien.dateFinCredit ?? ""}
+                              placeholder="MM/AAAA"
+                              onChange={(e) =>
+                                updateBienImmobilier(bien.id, { dateFinCredit: e.target.value })
+                              }
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
                   </>
-                ) : formData.residencePrincipale && (
+                ) : formData.residencePrincipale ? (
                   <>
-                    <div className="md:col-span-2 mt-4">
-                      <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                    <div className="md:col-span-2 mt-4 flex items-center justify-between gap-2">
+                      <h4 className="font-medium text-sm flex items-center gap-2">
                         <Home className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
                         Immobilier
                       </h4>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        onClick={() => clearExtractedField("residencePrincipale")}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Retirer
+                      </Button>
                     </div>
                     {formData.residencePrincipale.valeur !== undefined && (
                       <div className="space-y-2">
@@ -858,9 +959,9 @@ export function ExtractedDataPreviewAdvanced({
                       </div>
                     )}
                   </>
-                )}
+                ) : null}
 
-                {/* Contrats financiers détaillés (lecture seule) */}
+                {/* Contrats financiers détaillés */}
                 {formData.contratsFinanciers && formData.contratsFinanciers.length > 0 && (
                   <>
                     <div className="md:col-span-2 mt-4">
@@ -870,19 +971,45 @@ export function ExtractedDataPreviewAdvanced({
                       </h4>
                     </div>
                     {formData.contratsFinanciers.map((contrat) => (
-                      <div key={contrat.id} className="md:col-span-2 p-3 border rounded-lg space-y-1 text-sm">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{contrat.nom}</span>
-                          <span className="text-muted-foreground">({contrat.type})</span>
-                          {formatContratOrigine(contrat.autoOrigine) && (
-                            <span className="text-xs bg-muted px-2 py-0.5 rounded">
-                              {formatContratOrigine(contrat.autoOrigine)}
-                            </span>
-                          )}
+                      <div key={contrat.id} className="md:col-span-2 p-3 border rounded-lg space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium truncate">
+                            {contrat.nom || "Contrat financier"}
+                          </p>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeContratFinancier(contrat.id)}
+                            aria-label="Retirer ce contrat"
+                            title="Retirer de l'import"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                        <div>
-                          <span className="text-muted-foreground">Encours :</span>{" "}
-                          <span className="font-medium">{contrat.montant.toLocaleString("fr-FR")} €</span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          <div className="space-y-2 md:col-span-2">
+                            <Label>Nom du contrat</Label>
+                            <Input
+                              value={contrat.nom}
+                              onChange={(e) =>
+                                updateContratFinancier(contrat.id, { nom: e.target.value })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Encours (€)</Label>
+                            <Input
+                              type="number"
+                              value={contrat.montant ?? ""}
+                              onChange={(e) =>
+                                updateContratFinancier(contrat.id, {
+                                  montant: parseInt(e.target.value, 10) || 0,
+                                })
+                              }
+                            />
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -922,25 +1049,11 @@ export function ExtractedDataPreviewAdvanced({
                       </h4>
                     </div>
 
-                    {/* Total épargne */}
-                    {formData.epargneTotal !== undefined && (
-                      <div className="space-y-2 md:col-span-2">
-                        <Label className="font-bold text-lg">Total épargne</Label>
-                        <Input
-                          type="number"
-                          value={formData.epargneTotal || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              epargneTotal: parseInt(e.target.value) || undefined,
-                            })
-                          }
-                          className="font-bold text-lg"
-                        />
-                      </div>
-                    )}
+                    {renderRemovableEpargneField("epargneTotal", "Total épargne", {
+                      className: "space-y-2 md:col-span-2",
+                      inputClassName: "font-bold text-lg",
+                    })}
 
-                    {/* Court terme */}
                     {hasData([
                       formData.livretA,
                       formData.compteCourant,
@@ -953,154 +1066,18 @@ export function ExtractedDataPreviewAdvanced({
                       formData.partsSociales,
                     ]) && (
                       <>
-
-                        {formData.livretA !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Livret A</Label>
-                            <Input
-                              type="number"
-                              value={formData.livretA || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  livretA: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.compteCourant !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Compte courant</Label>
-                            <Input
-                              type="number"
-                              value={formData.compteCourant || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  compteCourant: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.ldd !== undefined && (
-                          <div className="space-y-2">
-                            <Label>LDD/LDDS</Label>
-                            <Input
-                              type="number"
-                              value={formData.ldd || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  ldd: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.lep !== undefined && (
-                          <div className="space-y-2">
-                            <Label>LEP</Label>
-                            <Input
-                              type="number"
-                              value={formData.lep || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  lep: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.pel !== undefined && (
-                          <div className="space-y-2">
-                            <Label>PEL</Label>
-                            <Input
-                              type="number"
-                              value={formData.pel || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  pel: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.cel !== undefined && (
-                          <div className="space-y-2">
-                            <Label>CEL</Label>
-                            <Input
-                              type="number"
-                              value={formData.cel || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  cel: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.csl !== undefined && (
-                          <div className="space-y-2">
-                            <Label>CSL</Label>
-                            <Input
-                              type="number"
-                              value={formData.csl || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  csl: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.livretJeune !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Livret Jeune</Label>
-                            <Input
-                              type="number"
-                              value={formData.livretJeune || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  livretJeune: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.partsSociales !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Parts sociales</Label>
-                            <Input
-                              type="number"
-                              value={formData.partsSociales || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  partsSociales: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
+                        {renderRemovableEpargneField("livretA", "Livret A")}
+                        {renderRemovableEpargneField("compteCourant", "Compte courant")}
+                        {renderRemovableEpargneField("ldd", "LDD/LDDS")}
+                        {renderRemovableEpargneField("lep", "LEP")}
+                        {renderRemovableEpargneField("pel", "PEL")}
+                        {renderRemovableEpargneField("cel", "CEL")}
+                        {renderRemovableEpargneField("csl", "CSL")}
+                        {renderRemovableEpargneField("livretJeune", "Livret Jeune")}
+                        {renderRemovableEpargneField("partsSociales", "Parts sociales")}
                       </>
                     )}
 
-                    {/* Long terme */}
                     {hasData([
                       formData.assuranceVie,
                       formData.per,
@@ -1116,212 +1093,29 @@ export function ExtractedDataPreviewAdvanced({
                       formData.scpi,
                     ]) && (
                       <>
-                        {formData.assuranceVie !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Assurance-vie</Label>
-                            <Input
-                              type="number"
-                              value={formData.assuranceVie || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  assuranceVie: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.per !== undefined && (
-                          <div className="space-y-2">
-                            <Label>PER</Label>
-                            <Input
-                              type="number"
-                              value={formData.per || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  per: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.perp !== undefined && (
-                          <div className="space-y-2">
-                            <Label>PERP</Label>
-                            <Input
-                              type="number"
-                              value={formData.perp || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  perp: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.madelin !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Madelin</Label>
-                            <Input
-                              type="number"
-                              value={formData.madelin || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  madelin: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.article83 !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Article 83</Label>
-                            <Input
-                              type="number"
-                              value={formData.article83 || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  article83: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.pea !== undefined && (
-                          <div className="space-y-2">
-                            <Label>PEA</Label>
-                            <Input
-                              type="number"
-                              value={formData.pea || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  pea: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.compteTitres !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Compte-titres</Label>
-                            <Input
-                              type="number"
-                              value={formData.compteTitres || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  compteTitres: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.pee !== undefined && (
-                          <div className="space-y-2">
-                            <Label>PEE</Label>
-                            <Input
-                              type="number"
-                              value={formData.pee || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  pee: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.perco !== undefined && (
-                          <div className="space-y-2">
-                            <Label>PERCO</Label>
-                            <Input
-                              type="number"
-                              value={formData.perco || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  perco: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.contratCapi !== undefined && (
-                          <div className="space-y-2">
-                            <Label>Contrat de capitalisation</Label>
-                            <Input
-                              type="number"
-                              value={formData.contratCapi || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  contratCapi: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.fcpiFip !== undefined && (
-                          <div className="space-y-2">
-                            <Label>FCPI/FIP</Label>
-                            <Input
-                              type="number"
-                              value={formData.fcpiFip || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  fcpiFip: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
-
-                        {formData.scpi !== undefined && (
-                          <div className="space-y-2">
-                            <Label>SCPI</Label>
-                            <Input
-                              type="number"
-                              value={formData.scpi || ""}
-                              onChange={(e) =>
-                                setFormData({
-                                  ...formData,
-                                  scpi: parseInt(e.target.value) || undefined,
-                                })
-                              }
-                            />
-                          </div>
-                        )}
+                        {renderRemovableEpargneField("assuranceVie", "Assurance-vie")}
+                        {renderRemovableEpargneField("per", "PER")}
+                        {renderRemovableEpargneField("perp", "PERP")}
+                        {renderRemovableEpargneField("madelin", "Madelin")}
+                        {renderRemovableEpargneField("article83", "Article 83")}
+                        {renderRemovableEpargneField("pea", "PEA")}
+                        {renderRemovableEpargneField("compteTitres", "Compte-titres")}
+                        {renderRemovableEpargneField("pee", "PEE")}
+                        {renderRemovableEpargneField("perco", "PERCO")}
+                        {renderRemovableEpargneField("contratCapi", "Contrat de capitalisation")}
+                        {renderRemovableEpargneField("fcpiFip", "FCPI/FIP")}
+                        {renderRemovableEpargneField("scpi", "SCPI")}
                       </>
                     )}
                   </>
                 )}
               </div>
-            </Section>
+            </PreviewSection>
           )}
 
           {/* Section Objectifs */}
-          {hasData([
-            formData.objectifsPrincipaux,
-            formData.profilRisque,
-            formData.capaciteEpargneMensuelle,
-          ]) && (
-            <Section
+          {formData.profilRisque !== undefined && (
+            <PreviewSection {...sectionProps}
               id="objectifs"
               icon={Target}
               title="Objectifs & Profil"
@@ -1329,23 +1123,6 @@ export function ExtractedDataPreviewAdvanced({
               forceExpanded={guidedMode}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {formData.objectifsPrincipaux &&
-                  formData.objectifsPrincipaux.length > 0 && (
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Objectifs principaux</Label>
-                      <div className="flex flex-wrap gap-2">
-                        {formData.objectifsPrincipaux.map((obj, i) => (
-                          <span
-                            key={i}
-                            className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                          >
-                            {obj}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                 {formData.profilRisque !== undefined && (
                   <div className="space-y-2">
                     <Label>Profil de risque (SRI)</Label>
@@ -1363,20 +1140,8 @@ export function ExtractedDataPreviewAdvanced({
                     />
                   </div>
                 )}
-
-                {formData.capaciteEpargneMensuelle !== undefined && (
-                  <div className="space-y-2">
-                    <Label>Capacité d&apos;épargne mensuelle (lecture seule, €)</Label>
-                    <Input
-                      readOnly
-                      type="number"
-                      className={previewReadonlyClass}
-                      value={formData.capaciteEpargneMensuelle || ""}
-                    />
-                  </div>
-                )}
               </div>
-            </Section>
+            </PreviewSection>
           )}
         </div>
 
@@ -1422,6 +1187,15 @@ export function ExtractedDataPreviewAdvanced({
   if (variant === "panel") {
     return (
       <div className="flex flex-col min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="mb-3 shrink-0">
+          <h3 className="font-semibold flex items-center gap-2">
+            <FileCheck className="h-4 w-4 text-primary" aria-hidden />
+            Données extraites — corrigez si besoin
+          </h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Comparez avec le PDF à gauche, modifiez les champs puis validez.
+          </p>
+        </div>
         {previewBody}
       </div>
     );

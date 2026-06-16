@@ -390,6 +390,108 @@ mod database_integration_tests {
 
         let stats = db.get_dashboard_stats().unwrap();
         assert!((stats.encours_placements - 10_000.0).abs() < 0.01);
+        assert_eq!(stats.nombre_biens_immobiliers, 0);
+        assert!((stats.versements_programmes_annuels - 0.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn dashboard_versements_and_immo_excludes_existant_client() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Martin", "Paul")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "AV VP avec moi".into(),
+            montant_initial: Some(1_000_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: Some(true),
+            montant_versement_programme: Some(10_000),
+            frequence_versement: Some("MENSUEL".into()),
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "AV VP à côté".into(),
+            montant_initial: Some(1_000_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: Some(true),
+            montant_versement_programme: Some(50_000),
+            frequence_versement: Some("MENSUEL".into()),
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("EXISTANT_CLIENT".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "IMMOBILIER".into(),
+            partenaire_id: None,
+            nom_produit: "Immo avec moi".into(),
+            montant_initial: Some(200_000_00),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "IMMOBILIER".into(),
+            partenaire_id: None,
+            nom_produit: "Immo à côté".into(),
+            montant_initial: Some(300_000_00),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("EXISTANT_CLIENT".into()),
+        })
+        .unwrap();
+
+        let stats = db.get_dashboard_stats().unwrap();
+        // 100 €/mois × 12 = 1 200 €/an (seul « avec moi »)
+        assert!((stats.versements_programmes_annuels - 1_200.0).abs() < 0.01);
+        assert_eq!(stats.nombre_biens_immobiliers, 1);
     }
 
     #[test]
@@ -585,6 +687,95 @@ mod database_integration_tests {
 
         let updated = db.get_contact_by_id(contact_id).unwrap();
         assert_eq!(updated.categorie, "PROSPECT_CLIENT");
+    }
+
+    #[test]
+    fn souscription_event_eligible_only_mon_conseil_with_contact() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Martin", "Paul")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        let avec_moi = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV 1".into(),
+                montant_initial: Some(10_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+        assert!(
+            db.investissement_eligible_souscription_event(avec_moi.id)
+                .unwrap()
+        );
+
+        let second_avec_moi = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "PER".into(),
+                partenaire_id: None,
+                nom_produit: "PER 2".into(),
+                montant_initial: Some(5_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+        assert!(
+            db.investissement_eligible_souscription_event(second_avec_moi.id)
+                .unwrap(),
+            "chaque nouveau « avec moi » reste éligible (mode « à chaque souscription » du modèle)"
+        );
+
+        let a_cote = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "LIVRET_A".into(),
+                partenaire_id: None,
+                nom_produit: "Livret A".into(),
+                montant_initial: Some(3_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("EXISTANT_CLIENT".into()),
+            })
+            .unwrap();
+        assert!(
+            !db.investissement_eligible_souscription_event(a_cote.id)
+                .unwrap()
+        );
     }
 
     fn investissement_with_souscription(

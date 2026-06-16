@@ -32,6 +32,7 @@ import { getMimeType } from "@/lib/documents/file-mime";
 import type { IdentityImportMode } from "@/lib/documents/identity-document-apply";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
+import { cn } from "@/lib/utils";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -394,28 +395,9 @@ export function DocumentUpload({
         }
       : {};
 
-  if (open && isStelliumWizardMode) {
-    return (
-      <RioImportWizard
-        open={open}
-        onOpenChange={onOpenChange}
-        onSuccess={onSuccess}
-        contactId={contactId}
-        defaultContactId={defaultContactId}
-        defaultTypeDocument={formData.type_document}
-        foyerId={foyerId}
-        contactNom={contactNom}
-        contactPrenom={contactPrenom}
-        initialFormDate={formData.date_document}
-        initialFormNotes={formData.notes}
-        {...stelliumBootstrap}
-      />
-    );
-  }
-
   return (
     <>
-      {extractedData && (
+      {extractedData && !isStelliumWizardMode && (
         <ExtractedDataPreviewAdvanced
           open={showPreview}
           onOpenChange={setShowPreview}
@@ -450,7 +432,35 @@ export function DocumentUpload({
       />
 
       <Dialog open={open && !identityImport.showIdentityPreview} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent
+          className={cn(
+            "max-h-[90vh] transition-[max-width] duration-200 ease-out",
+            isStelliumWizardMode
+              ? "flex h-[90vh] max-w-6xl flex-col overflow-hidden p-6"
+              : "max-w-2xl overflow-y-auto"
+          )}
+        >
+        {isStelliumWizardMode ? (
+          <RioImportWizard
+            embedded
+            open={open}
+            onOpenChange={onOpenChange}
+            onSuccess={onSuccess}
+            contactId={contactId}
+            defaultContactId={effectiveContactId}
+            defaultTypeDocument={formData.type_document}
+            foyerId={foyerId}
+            contactNom={contactLocked ? contactNom : linkedContact?.nom}
+            contactPrenom={contactLocked ? contactPrenom : linkedContact?.prenom}
+            initialFormDate={formData.date_document}
+            initialFormNotes={formData.notes}
+            onRequestGenericImport={() =>
+              setFormData((prev) => ({ ...prev, type_document: "AUTRE" }))
+            }
+            {...stelliumBootstrap}
+          />
+        ) : (
+          <>
         <DialogHeader>
           <DialogTitle>Importer un document</DialogTitle>
           <DialogDescription>
@@ -756,6 +766,8 @@ export function DocumentUpload({
             </Button>
           </DialogFooter>
         </form>
+          </>
+        )}
       </DialogContent>
     </Dialog>
     </>

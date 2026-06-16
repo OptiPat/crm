@@ -20,7 +20,6 @@ import {
   AlertCircle,
   CheckCircle2,
   Wallet,
-  StickyNote,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import type { Investissement, NewInvestissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
@@ -30,7 +29,7 @@ import {
   getEffectiveEncoursCentimes,
 } from "@/lib/investissements/investissement-encours";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
-import { getContactById, getContactsByFoyer, updateContact } from "@/lib/api/tauri-contacts";
+import { getContactById, getContactsByFoyer } from "@/lib/api/tauri-contacts";
 import { loadFoyerInvestissements } from "@/lib/foyers/foyer-utils";
 import {
   attachRioPatrimoineOwner,
@@ -307,7 +306,6 @@ export function RioUpdateComparisonDialog({
   const [existingInvestissements, setExistingInvestissements] = useState<Investissement[]>([]);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [comparisons, setComparisons] = useState<InvestissementComparison[]>([]);
-  const [notesRio, setNotesRio] = useState<string>("");
   const completingRef = useRef(false);
 
   const handleDialogOpenChange = (next: boolean) => {
@@ -722,64 +720,8 @@ export function RioUpdateComparisonDialog({
         }
       }
 
-      // Ajouter les notes au contact si renseignées
-      if (notesRio.trim()) {
-        try {
-          const contact = await getContactById(contactId);
-          const dateNow = new Date().toLocaleDateString("fr-FR");
-          const newNote = `[Mise à jour RIO - ${dateNow}]\n${notesRio.trim()}`;
-          const existingNotes = contact.notes || "";
-          const updatedNotes = existingNotes 
-            ? `${newNote}\n\n---\n\n${existingNotes}`
-            : newNote;
-          
-          // Construire un objet NewContact propre avec TOUS les champs (sans id, created_at, updated_at)
-          await updateContact(contactId, {
-            // Relations
-            famille_id: contact.famille_id,
-            foyer_id: contact.foyer_id,
-            role_foyer: contact.role_foyer,
-            role_famille: contact.role_famille,
-            filleul_categorie: contact.filleul_categorie,
-            parrain_id: contact.parrain_id,
-            prescripteur_id: contact.prescripteur_id,
-            // Identité
-            categorie: contact.categorie,
-            civilite: contact.civilite,
-            nom: contact.nom,
-            prenom: contact.prenom,
-            email: contact.email,
-            telephone: contact.telephone,
-            adresse: contact.adresse,
-            code_postal: contact.code_postal,
-            ville: contact.ville,
-            date_naissance: contact.date_naissance ? new Date(contact.date_naissance * 1000).toISOString() : undefined,
-            lieu_naissance: contact.lieu_naissance,
-            profession: contact.profession,
-            situation_familiale: contact.situation_familiale,
-            regime_matrimonial: contact.regime_matrimonial,
-            revenus_annuels: contact.revenus_annuels,
-            charges_emprunts: contact.charges_emprunts,
-            objectifs_patrimoniaux: contact.objectifs_patrimoniaux,
-            source_lead: contact.source_lead,
-            profil_risque_sri: contact.profil_risque_sri,
-            // Dates de suivi CLIENT
-            date_dernier_contact: contact.date_dernier_contact ? new Date(contact.date_dernier_contact * 1000).toISOString() : undefined,
-            date_prochain_suivi: contact.date_prochain_suivi ? new Date(contact.date_prochain_suivi * 1000).toISOString() : undefined,
-            // Dates de suivi FILLEUL
-            date_dernier_contact_filleul: contact.date_dernier_contact_filleul ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() : undefined,
-            date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() : undefined,
-            statut_suivi: contact.statut_suivi,
-            // Notes mises à jour
-            notes: updatedNotes,
-          });
-        } catch (noteError) {
-          console.error("Erreur ajout notes:", noteError);
-        }
-      }
-
       toast.success(
-        `Mise à jour terminée : ${updated} investissement(s) mis à jour, ${added} ajouté(s)${notesRio.trim() ? ", notes enregistrées sur le contact" : ""}.`
+        `Mise à jour terminée : ${updated} investissement(s) mis à jour, ${added} ajouté(s).`
       );
       completingRef.current = true;
       onComplete();
@@ -1558,19 +1500,6 @@ export function RioUpdateComparisonDialog({
               )}
             </>
           )}
-        </div>
-
-      <div className={`${embedded ? "pt-4 border-t mt-4" : "mt-4"} p-4 bg-slate-50 border border-slate-200 rounded-lg`}>
-          <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1.5">
-            <StickyNote className="h-4 w-4 shrink-0" aria-hidden />
-            Notes / Commentaires (mise à jour RIO)
-          </label>
-          <textarea
-            value={notesRio}
-            onChange={(e) => setNotesRio(e.target.value)}
-            placeholder="Ajoutez des notes sur cette mise à jour annuelle..."
-            className="w-full h-20 p-2 text-sm border border-slate-300 rounded-md resize-none focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
         </div>
 
       <div className={`flex items-center justify-between gap-2 ${embedded ? "pt-4 border-t mt-4" : "border-t pt-4"}`}>

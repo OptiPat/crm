@@ -689,6 +689,20 @@ impl Database {
         Ok(ids)
     }
 
+    /// Investissement éligible aux campagnes « nouvelle souscription » :
+    /// uniquement `MON_CONSEIL` avec contact (jamais « à côté »).
+    /// Le mode une fois / à chaque souscription est géré par étiquette ou modèle.
+    pub fn investissement_eligible_souscription_event(
+        &self,
+        investissement_id: i64,
+    ) -> Result<bool> {
+        let inv = self.get_investissement_by_id(investissement_id)?;
+        if inv.origine != "MON_CONSEIL" {
+            return Ok(false);
+        }
+        Ok(inv.contact_id.is_some())
+    }
+
     /// Après création/mise à jour d'un investissement (contact + membres du foyer).
     /// Pose les étiquettes « événement : nouvelle souscription » et calcule la date d'envoi.
     pub fn apply_souscription_event_etiquettes(
@@ -696,6 +710,9 @@ impl Database {
         contact_id: i64,
         investissement_id: i64,
     ) -> Result<usize> {
+        if !self.investissement_eligible_souscription_event(investissement_id)? {
+            return Ok(0);
+        }
         let inv = self.get_investissement_by_id(investissement_id)?;
         let Some(inv_contact_id) = inv.contact_id else {
             return Ok(0);
@@ -786,15 +803,17 @@ impl Database {
     ) -> Result<usize> {
         let mut total = 0;
         if let Some(iid) = trigger_investissement_id {
-            if let Ok(inv) = self.get_investissement_by_id(iid) {
-                if let Some(cid) = inv.contact_id {
-                    total += self.apply_souscription_event_etiquettes(cid, iid)?;
-                    total += self.schedule_template_souscription_events(
-                        cid,
-                        iid,
-                        &inv.type_produit,
-                        inv.date_souscription,
-                    )?;
+            if self.investissement_eligible_souscription_event(iid)? {
+                if let Ok(inv) = self.get_investissement_by_id(iid) {
+                    if let Some(cid) = inv.contact_id {
+                        total += self.apply_souscription_event_etiquettes(cid, iid)?;
+                        total += self.schedule_template_souscription_events(
+                            cid,
+                            iid,
+                            &inv.type_produit,
+                            inv.date_souscription,
+                        )?;
+                    }
                 }
             }
         }

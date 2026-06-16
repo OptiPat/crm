@@ -926,7 +926,7 @@ pub fn update_investissement(
         let _ = database.sync_auto_etiquettes_after_investissement(
             inv.contact_id,
             inv.foyer_id,
-            Some(inv.id),
+            None,
         );
     }
     Ok(inv)

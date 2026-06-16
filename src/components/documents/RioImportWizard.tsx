@@ -64,6 +64,10 @@ export interface RioImportWizardProps {
   initialStep?: RioImportStep;
   initialFormDate?: string;
   initialFormNotes?: string;
+  /** Sans Dialog externe (intégré dans DocumentUpload). */
+  embedded?: boolean;
+  /** Retour vers les autres types de document (mode embedded). */
+  onRequestGenericImport?: () => void;
 }
 
 export function RioImportWizard({
@@ -81,6 +85,8 @@ export function RioImportWizard({
   initialStep,
   initialFormDate,
   initialFormNotes,
+  embedded = false,
+  onRequestGenericImport,
 }: RioImportWizardProps) {
   const [step, setStep] = useState<RioImportStep>(1);
   const [loading, setLoading] = useState(false);
@@ -390,27 +396,26 @@ export function RioImportWizard({
     return (bytes / (1024 * 1024)).toFixed(2) + " MB";
   };
 
-  return (
-    <Dialog open={open} onOpenChange={handleWizardClose}>
-      <DialogContent className="max-w-6xl max-h-[95vh] flex flex-col overflow-hidden p-6">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>Import Stellium — RIO / QPI</DialogTitle>
-          <DialogDescription className="sr-only">
-            Assistant d&apos;import de documents patrimoniaux Stellium
-          </DialogDescription>
-        </DialogHeader>
+  const wizardBody = (
+    <>
+      <DialogHeader className="shrink-0">
+        <DialogTitle>Import Stellium — RIO / QPI</DialogTitle>
+        <DialogDescription className="sr-only">
+          Assistant d&apos;import de documents patrimoniaux Stellium
+        </DialogDescription>
+      </DialogHeader>
 
-        <RioWizardContextBar
-          step={step}
-          clientLabel={clientLabel}
-          fileName={uploadedFile?.name}
-          detectedType={extractedData?.typeDocument}
-          showPatrimoineStep={showPatrimoineStep}
-        />
+      <RioWizardContextBar
+        step={step}
+        clientLabel={clientLabel}
+        fileName={uploadedFile?.name}
+        detectedType={extractedData?.typeDocument}
+        showPatrimoineStep={showPatrimoineStep}
+      />
 
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col mt-2">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden mt-2">
           {step === 1 && (
-            <div className="space-y-4 overflow-y-auto pr-1">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
               {!contactLocked && (
                 <ContactPersonSearch
                   label="Client"
@@ -507,29 +512,43 @@ export function RioImportWizard({
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
-                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                  Annuler
-                </Button>
-                {uploadedFile && !extractedData && (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                {embedded && onRequestGenericImport ? (
                   <Button
                     type="button"
-                    onClick={() => handleExtractText(uploadedFile.path)}
-                    disabled={extracting}
+                    variant="link"
+                    className="h-auto p-0 text-muted-foreground"
+                    onClick={onRequestGenericImport}
                   >
-                    {extracting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Extraction…
-                      </>
-                    ) : (
-                      <>
-                        <FileText className="h-4 w-4 mr-2" />
-                        Analyser le PDF
-                      </>
-                    )}
+                    ← Autre type de document
                   </Button>
+                ) : (
+                  <span />
                 )}
+                <div className="flex gap-2 ml-auto">
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    Annuler
+                  </Button>
+                  {uploadedFile && !extractedData && (
+                    <Button
+                      type="button"
+                      onClick={() => handleExtractText(uploadedFile.path)}
+                      disabled={extracting}
+                    >
+                      {extracting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Extraction…
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="h-4 w-4 mr-2" />
+                          Analyser le PDF
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -543,7 +562,10 @@ export function RioImportWizard({
                 open
                 onOpenChange={() => setStep(1)}
                 extractedData={extractedData}
-                onApply={handleApplyData}
+                onApply={(data) => {
+                  setExtractedData(data);
+                  void handleApplyData(data);
+                }}
                 onIgnore={() => setStep(1)}
               />
             </div>
@@ -565,13 +587,26 @@ export function RioImportWizard({
               onCancel={() => setStep(2)}
             />
           )}
-        </div>
 
         {loading && step === 2 && (
           <div className="absolute inset-0 bg-background/60 flex items-center justify-center z-50 rounded-lg">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         )}
+        </div>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{wizardBody}</div>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleWizardClose}>
+      <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-6xl flex-col overflow-hidden p-6">
+        {wizardBody}
       </DialogContent>
     </Dialog>
   );

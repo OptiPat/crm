@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { Plus, Search, Filter, Trash2, Pencil, PiggyBank, TrendingUp, Wallet, Download } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Pencil, TrendingUp, CalendarClock, Download } from "lucide-react";
 import { rowsToCsv, downloadCsvFile } from "@/lib/export/csv-export";
 import {
   getInvestissementsWithDetails,
@@ -22,7 +22,11 @@ import { InvestissementEncoursDialog } from "@/components/investissements/Invest
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
-import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import {
+  computeEncoursPlacementsStats,
+  isPlacementEncoursEligible,
+} from "@/lib/investissements/investissement-encours";
+import { computeVersementsProgrammesAnnuelStats } from "@/lib/investissements/investissement-versements";
 import {
   computePatrimoineStats,
   investissementMatchesSearch,
@@ -127,6 +131,16 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
 
   const stats = useMemo(
     () => computePatrimoineStats(investissements),
+    [investissements]
+  );
+
+  const encoursStats = useMemo(
+    () => computeEncoursPlacementsStats(investissements),
+    [investissements]
+  );
+
+  const versementsStats = useMemo(
+    () => computeVersementsProgrammesAnnuelStats(investissements),
     [investissements]
   );
 
@@ -268,28 +282,22 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
             }
           />
           <StatCard
-            title="À côté"
-            value={formatEuroCentimes(stats.aCoteCentimes)}
-            description={`${stats.countACote} support${stats.countACote > 1 ? "s" : ""} — hors conseil`}
-            icon={PiggyBank}
-            accentColor="#6b7280"
-            iconColor="text-gray-600"
-            iconBgColor="bg-gray-50"
-            highlight={origineFilter === "a_cote"}
-            onClick={() =>
-              setOrigineFilter((f) => (f === "a_cote" ? "all" : "a_cote"))
-            }
+            title="Encours placements"
+            value={formatEuroCentimes(encoursStats.encoursCentimes)}
+            description="AV, PER, FIP/FCPI… — avec moi"
+            icon={TrendingUp}
+            accentColor="#C9A227"
+            iconColor="text-amber-600"
+            iconBgColor="bg-amber-50"
           />
           <StatCard
-            title="Total portefeuille"
-            value={formatEuroCentimes(stats.totalCentimes)}
-            description={`${stats.count} ligne${stats.count > 1 ? "s" : ""} en base`}
-            icon={Wallet}
-            accentColor="#047857"
-            iconColor="text-emerald-700"
-            iconBgColor="bg-emerald-50"
-            onClick={resetFilters}
-            highlight={!hasActiveFilters && origineFilter === "all"}
+            title="Versements programmés"
+            value={formatEuroCentimes(versementsStats.annuelCentimes)}
+            description="Montant annuel — avec moi"
+            icon={CalendarClock}
+            accentColor="#3B82F6"
+            iconColor="text-blue-600"
+            iconBgColor="bg-blue-50"
           />
         </div>
       </section>

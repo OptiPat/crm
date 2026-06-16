@@ -141,7 +141,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
               <StatCard
                 title="Encours placements"
                 value={formatDashboardCurrency(stats.encours_placements)}
-                description="AV, PER, FIP/FCPI…"
+                description="AV, PER, FIP/FCPI… — avec moi"
                 icon={TrendingUp}
                 accentColor="#C9A227"
                 iconColor="text-amber-600"
@@ -151,7 +151,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
               <StatCard
                 title="Versements programmés"
                 value={formatDashboardCurrency(stats.versements_programmes_annuels)}
-                description="Montant annuel"
+                description="Montant annuel — avec moi"
                 icon={CalendarClock}
                 accentColor="#3B82F6"
                 iconColor="text-blue-600"
@@ -160,7 +160,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
               <StatCard
                 title="Biens immobiliers"
                 value={stats.nombre_biens_immobiliers}
-                description="Nombre de biens"
+                description="Nombre de biens — avec moi"
                 icon={Home}
                 accentColor="#059669"
                 iconColor="text-emerald-600"

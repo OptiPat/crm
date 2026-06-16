@@ -50,6 +50,7 @@ impl super::Database {
              WHERE versement_programme = 1
                AND montant_versement_programme IS NOT NULL
                AND montant_versement_programme > 0
+               AND origine = 'MON_CONSEIL'
                AND ((contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = contact_id))
                     OR (foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = foyer_id)))",
             [],
@@ -63,6 +64,7 @@ impl super::Database {
         let nombre_biens_immobiliers: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM investissements i
              WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'JEANBRUN', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE')
+               AND i.origine = 'MON_CONSEIL'
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
                     OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
             [],

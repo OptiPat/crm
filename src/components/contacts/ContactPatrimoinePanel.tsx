@@ -9,6 +9,7 @@ import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { computeEncoursPlacementsStats, isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { computeVersementsProgrammesAnnuelStats } from "@/lib/investissements/investissement-versements";
 import { InvestissementEncoursDialog } from "@/components/investissements/InvestissementEncoursDialog";
 import {
   type InvestissementWithOwner,
@@ -26,11 +27,11 @@ import {
   Edit,
   FileUp,
   Home,
-  PiggyBank,
   Plus,
   Search,
   Trash2,
   TrendingUp,
+  CalendarClock,
   Wallet,
   X,
 } from "lucide-react";
@@ -259,6 +260,11 @@ export function ContactPatrimoinePanel({
     [investissements]
   );
 
+  const versementsStats = useMemo(
+    () => computeVersementsProgrammesAnnuelStats(investissements),
+    [investissements]
+  );
+
   const showOwnerFilters = hasFoyer && investissements.length > 0;
 
   const filtered = useMemo(() => {
@@ -309,12 +315,7 @@ export function ContactPatrimoinePanel({
 
   return (
     <div className="space-y-4">
-      <div
-        className={cn(
-          "grid gap-2",
-          hasACote ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"
-        )}
-      >
+      <div className="grid gap-2 grid-cols-1 sm:grid-cols-3">
         <StatCard
           title="Avec moi"
           value={formatEuroCentimes(stats.avecMoiCentimes)}
@@ -331,39 +332,20 @@ export function ContactPatrimoinePanel({
         <StatCard
           title="Encours placements"
           value={formatEuroCentimes(encoursStats.encoursCentimes)}
-          description={
-            encoursStats.count > 0
-              ? `${encoursStats.count} contrat${encoursStats.count > 1 ? "s" : ""} — avec moi, AV/PER/capi…`
-              : "Avec moi — AV, PER, contrat capi…"
-          }
-          icon={Wallet}
+          description="AV, PER, FIP/FCPI… — avec moi"
+          icon={TrendingUp}
           accentColor="#C9A227"
-          iconColor="text-amber-700"
+          iconColor="text-amber-600"
           iconBgColor="bg-amber-50"
         />
-        {hasACote && (
-          <StatCard
-            title="À côté"
-            value={formatEuroCentimes(stats.aCoteCentimes)}
-            description={`${stats.countACote} support${stats.countACote > 1 ? "s" : ""} — hors conseil`}
-            icon={PiggyBank}
-            accentColor="#6b7280"
-            iconColor="text-gray-600"
-            iconBgColor="bg-gray-50"
-            highlight={origineFilter === "a_cote"}
-            onClick={() =>
-              setOrigineFilter((f) => (f === "a_cote" ? "all" : "a_cote"))
-            }
-          />
-        )}
         <StatCard
-          title="Total affiché"
-          value={formatEuroCentimes(stats.totalCentimes)}
-          description={`${stats.count} ligne${stats.count > 1 ? "s" : ""} sur cette fiche`}
-          icon={Wallet}
-          accentColor="#047857"
-          iconColor="text-emerald-700"
-          iconBgColor="bg-emerald-50"
+          title="Versements programmés"
+          value={formatEuroCentimes(versementsStats.annuelCentimes)}
+          description="Montant annuel — avec moi"
+          icon={CalendarClock}
+          accentColor="#3B82F6"
+          iconColor="text-blue-600"
+          iconBgColor="bg-blue-50"
         />
       </div>
 

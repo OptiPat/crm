@@ -220,6 +220,9 @@ impl Database {
         type_produit: &str,
         date_souscription: Option<i64>,
     ) -> Result<usize> {
+        if !self.investissement_eligible_souscription_event(investissement_id)? {
+            return Ok(0);
+        }
         let contact = self.get_contact_by_id(contact_id)?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -244,6 +247,17 @@ impl Database {
             let sched = etiquette_schedule_from_trigger(&trigger);
             let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, eligible_at);
             let a_chaque = trigger.a_chaque_souscription_resolved();
+            if !a_chaque {
+                let exists: i64 = self.conn.query_row(
+                    "SELECT COUNT(*) FROM contact_template_envois
+                     WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL",
+                    params![contact_id, template_id],
+                    |row| row.get(0),
+                )?;
+                if exists > 0 {
+                    continue;
+                }
+            }
             let inv_key = if a_chaque {
                 Some(investissement_id)
             } else {
