@@ -123,7 +123,7 @@ export function ProductPieChart() {
   return (
     <DashboardPanel
       title="Par produit"
-      description="Encours par type de produit"
+      description="Encours par type de produit — avec moi"
       className="h-full"
     >
         {loading ? (

@@ -135,6 +135,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [cancelling, setCancelling] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [bulkRemoving, setBulkRemoving] = useState(false);
+  const [relancing, setRelancing] = useState(false);
   const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(
     initialState.emailStatus
   );
@@ -364,6 +365,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   };
 
   const selectedReadyItems = ready.filter((i) => selectedIds.has(i.contact_etiquette_id));
+  const selectedFollowupRelanceItems = followup.filter(
+    (i) =>
+      selectedIds.has(i.contact_etiquette_id) &&
+      isTemplateEmailRelanceEnabledForQueue(i.template_variables)
+  );
 
   const openBulkRemove = (
     action: EnvoisBulkRemoveAction,
@@ -483,14 +489,44 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     }
   };
 
-  const handlePrepareRelance = async (item: EtiquetteEmailQueueItem) => {
+  const handlePrepareRelance = async (items: EtiquetteEmailQueueItem[]) => {
+    if (items.length === 0) return;
     try {
-      await prepareEmailCampaignRelance(item.contact_etiquette_id);
-      toast.success("Contact remis dans « Prêts à envoyer » avec le template de relance");
-      setSubTab("ready");
+      setRelancing(true);
+      let ok = 0;
+      let failed = 0;
+      const succeededIds: number[] = [];
+      for (const item of items) {
+        try {
+          await prepareEmailCampaignRelance(item.contact_etiquette_id);
+          ok += 1;
+          succeededIds.push(item.contact_etiquette_id);
+        } catch {
+          failed += 1;
+        }
+      }
+      if (failed === 0) {
+        toast.success(
+          ok === 1
+            ? "Relance préparée — visible dans Prêts à envoyer"
+            : `${ok} relances préparées — visibles dans Prêts à envoyer`
+        );
+      } else {
+        toast.warning(`${ok} relance${ok > 1 ? "s" : ""} OK, ${failed} en erreur`);
+      }
+      if (succeededIds.length > 0) {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          for (const id of succeededIds) next.delete(id);
+          return next;
+        });
+      }
       await loadQueue();
+      onQueueChanged?.();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setRelancing(false);
     }
   };
 
@@ -651,7 +687,8 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                     {isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
                     <Button
                       size="sm"
-                      onClick={() => void handlePrepareRelance(item)}
+                      disabled={relancing}
+                      onClick={() => void handlePrepareRelance([item])}
                     >
                       <RotateCcw className="h-4 w-4 mr-1" />
                       Relancer
@@ -950,9 +987,21 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   items={followup}
                   selectedIds={selectedIds}
                   onSelectedIdsChange={setSelectedIds}
-                  removeDisabled={bulkRemoving}
+                  removeDisabled={bulkRemoving || relancing}
                   removeLabel={getEnvoisBulkRemoveLabel("dismissFollowup")}
                   onRemoveSelection={() => openBulkRemove("dismissFollowup", followup)}
+                  trailing={
+                    <Button
+                      size="sm"
+                      disabled={
+                        selectedFollowupRelanceItems.length === 0 || loading || relancing
+                      }
+                      onClick={() => void handlePrepareRelance(selectedFollowupRelanceItems)}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-1" />
+                      Relancer la sélection ({selectedFollowupRelanceItems.length})
+                    </Button>
+                  }
                 />
               )}
               {renderList(followup, { mode: "followup" })}

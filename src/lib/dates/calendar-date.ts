@@ -28,6 +28,16 @@ export function formatCalendarDateFr(ts: number): string {
   return `${pad2(date.getUTCDate())}/${pad2(date.getUTCMonth() + 1)}/${date.getUTCFullYear()}`;
 }
 
+/** `DD/MM/YYYY` → ISO RFC3339 (minuit UTC, sans décalage fuseau). */
+export function frenchDateToIso(dateStr: string): string | undefined {
+  const match = dateStr.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!match) return undefined;
+  const [, day, month, year] = match;
+  const d = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
 /** Nombre de jours entre un timestamp passé et maintenant. */
 export function daysSinceUnix(ts: number, nowMs: number = Date.now()): number {
   return Math.floor((nowMs - ts * 1000) / (1000 * 60 * 60 * 24));

@@ -7,7 +7,7 @@ import {
   parseStelliumQpi,
   parseStelliumRio,
 } from "./index";
-import { parseAuto, isRIO } from "../parsers";
+import { parseAuto } from "../parse-auto";
 import rioFixture from "./fixtures/rio-martinez-2026.txt?raw";
 import debbaghiFixture from "./fixtures/rio-debbaghi-couple-2026.txt?raw";
 import noyezFixture from "./fixtures/rio-noyez-gentil-couple-2026.txt?raw";
@@ -23,7 +23,7 @@ describe("Stellium — détection document", () => {
   it("détecte le QPI Plaza sans faux positif RIO", () => {
     expect(isStelliumQpi(qpiFixture)).toBe(true);
     expect(isStelliumRio(qpiFixture)).toBe(false);
-    expect(isRIO(qpiFixture)).toBe(false);
+    expect(isStelliumRio(qpiFixture)).toBe(false);
     expect(detectStelliumDocument(qpiFixture)).toBe("QPI");
   });
 });

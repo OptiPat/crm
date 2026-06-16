@@ -54,10 +54,7 @@ import { ContactImportFilleuls } from "@/components/contacts/ContactImportFilleu
 import { ContactDeduplicate } from "@/components/contacts/ContactDeduplicate";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { contactMatchesSearch } from "@/lib/search-utils";
-import {
-  getPrioriteContact,
-  getPrioriteFilleul,
-} from "@/lib/contacts/contact-priority";
+import { compareContactsAlphabetically } from "@/lib/contacts/contact-sort";
 import { loadContactsUiState, saveContactsUiState } from "@/lib/contacts/contacts-session";
 import {
   getContactsListInitialState,
@@ -384,13 +381,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
         matchesFollowup
       );
     })
-    .sort((a, b) => {
-      // Tri par priorité : rouge (1) > orange (2) > vert (3)
-      // 🔥 Utiliser la bonne fonction selon l'onglet
-      const prioriteA = isFilleulTab ? getPrioriteFilleul(a).priorite : getPrioriteContact(a).priorite;
-      const prioriteB = isFilleulTab ? getPrioriteFilleul(b).priorite : getPrioriteContact(b).priorite;
-      return prioriteA - prioriteB;
-    });
+    .sort(compareContactsAlphabetically);
 
   // Groupement par foyer
   const contactsGroupedByFoyer = useMemo(() => {
@@ -415,15 +406,22 @@ export function Contacts({ onNavigate }: ContactsProps) {
       grouped[key].contacts.push(contact);
     });
 
+    for (const group of Object.values(grouped)) {
+      group.contacts.sort(compareContactsAlphabetically);
+    }
+
     // Calculer le patrimoine de chaque groupe (on va le faire en asynchrone après)
     return Object.values(grouped).sort((a, b) => {
       // Les foyers en premier, puis les contacts sans foyer
       if (a.foyer && !b.foyer) return -1;
       if (!a.foyer && b.foyer) return 1;
-      // Tri par nom de foyer
+      // Tri par nom de foyer ou contact isolé
       if (a.foyer && b.foyer) {
-        return a.foyer.nom.localeCompare(b.foyer.nom);
+        return a.foyer.nom.localeCompare(b.foyer.nom, "fr", { sensitivity: "base" });
       }
+      const ca = a.contacts[0];
+      const cb = b.contacts[0];
+      if (ca && cb) return compareContactsAlphabetically(ca, cb);
       return 0;
     });
   }, [filteredContacts, foyers, groupByFoyer]);

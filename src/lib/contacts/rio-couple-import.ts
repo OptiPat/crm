@@ -1,4 +1,5 @@
 import type { Contact, NewContact } from "@/lib/api/tauri-contacts";
+import { frenchDateToIso } from "@/lib/dates/calendar-date";
 import type { ExtractedData } from "@/lib/pdf";
 import { normalizeEmail } from "@/lib/contacts/duplicate-identity";
 import {
@@ -152,12 +153,7 @@ const SITUATION_MAP: Record<
 };
 
 export function parseFrenchDateToIso(dateStr: string): string | undefined {
-  const match = dateStr.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!match) return undefined;
-  const [, day, month, year] = match;
-  const date = new Date(Number(year), Number(month) - 1, Number(day));
-  if (Number.isNaN(date.getTime())) return undefined;
-  return date.toISOString();
+  return frenchDateToIso(dateStr);
 }
 
 export function mapCoupleMemberToNewContact(

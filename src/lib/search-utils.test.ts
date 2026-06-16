@@ -10,6 +10,11 @@ describe("textMatchesSearch", () => {
   it("chaîne vide = tout correspond", () => {
     expect(textMatchesSearch("", "anything")).toBe(true);
   });
+
+  it("accepte plusieurs mots sur des champs distincts", () => {
+    expect(textMatchesSearch("nicolas plaza", "PLAZA", "Nicolas")).toBe(true);
+    expect(textMatchesSearch("plaza nicolas", "PLAZA", "Nicolas")).toBe(true);
+  });
 });
 
 describe("contactMatchesSearch", () => {
@@ -26,6 +31,21 @@ describe("contactMatchesSearch", () => {
         nom: "X",
         prenom: "Y",
         email: "j@x.fr",
+      })
+    ).toBe(true);
+  });
+
+  it("trouve prénom + nom (ordre libre)", () => {
+    expect(
+      contactMatchesSearch("nicolas plaza", {
+        nom: "PLAZA",
+        prenom: "Nicolas",
+      })
+    ).toBe(true);
+    expect(
+      contactMatchesSearch("plaza nicolas", {
+        nom: "PLAZA",
+        prenom: "Nicolas",
       })
     ).toBe(true);
   });

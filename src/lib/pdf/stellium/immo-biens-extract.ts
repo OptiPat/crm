@@ -1,6 +1,32 @@
-// Parser spécialisé pour extraire le patrimoine détaillé des RIO
-import type { ExtractedData, BienImmobilier } from "../types";
-import { KNOWN_SCPI_NAMES } from "./product-synonyms";
+/**
+ * Associe crédits / loyers (section Passifs) aux biens immo lus par le parser Stellium.
+ * Heuristiques conservées depuis l'ancien extracteur patrimoine — voir immo-credits.ts.
+ */
+import type { BienImmobilier } from "../types";
+
+const KNOWN_SCPI_NAMES = [
+  "corum origin", "corum xl", "corum eurion",
+  "primovie", "primopierre", "patrimmo commerce", "patrimmo croissance",
+  "immorente", "efimmo", "sofidy europe invest",
+  "novapierre", "interpierre", "atlantique pierre",
+  "pfo2", "pf grand paris", "pf hospitalite europe",
+  "opcimmo", "rivoli avenir patrimoine",
+  "epargne fonciere", "lf europimmo", "lf grand paris patrimoine",
+  "transitions europe", "transitions europeennes",
+  "activimmo",
+  "comete", "coeur de regions", "coeur de ville",
+  "epargne pierre", "epargne pierre europe",
+  "fonciere des praticiens",
+  "laffitte pierre", "fructipierre", "fructiregions",
+  "accimmo pierre",
+  "eurovalys",
+  "fiducial gerance",
+  "iroko zen",
+  "remake live",
+  "alta convictions", "altaconvictions",
+  "pierval sante", "kyaneos pierre", "vendome regions",
+  "cap foncieres", "cristal rente",
+];
 
 /**
  * Vérifie si un nom correspond à une SCPI connue
@@ -28,409 +54,6 @@ function isKnownSCPI(nom: string): boolean {
   });
 }
 
-/**
- * Extrait un montant en euros du texte
- * Gère les formats : "23 406 €", "23406", "23 406,00 €", "268 043,00 €"
- */
-function extractMontant(pattern: RegExp, text: string): number | undefined {
-  const match = text.match(pattern);
-  if (match) {
-    // Nettoyer : 
-    // 1. Enlever les espaces et €
-    let cleaned = match[1].replace(/[\s€]/g, "");
-    
-    // 2. Remplacer la virgule décimale par un point
-    cleaned = cleaned.replace(",", ".");
-    
-    // 3. Parser comme float puis arrondir
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? undefined : Math.round(num);
-  }
-  return undefined;
-}
-
-/**
- * Extrait l'adresse complète du RIO
- */
-export function extractAdresseComplete(text: string): {
-  adresse?: string;
-  codePostal?: string;
-  ville?: string;
-  pays?: string;
-} {
-  // Pattern pour "Adresse postale : * 39 rue de la figairasse 34070 MONTPELLIER"
-  const pattern = /Adresse\s+postale\s*:\s*\*?\s*([^\n]+?)\s+(\d{5})\s+([A-ZÀ-Ü\s-]+?)(?:\s+France|\n|$)/i;
-  const match = text.match(pattern);
-
-  if (match) {
-    return {
-      adresse: match[1].trim(),
-      codePostal: match[2],
-      ville: match[3].trim(),
-      pays: "France",
-    };
-  }
-
-  return {};
-}
-
-/**
- * Extrait la résidence principale (valeur + prêt)
- */
-export function extractResidencePrincipale(text: string): {
-  valeur?: number;
-  pret?: number;
-  mensualite?: number;
-} {
-  // Pattern : capturer uniquement le PREMIER montant après "Résidence principale - RP"
-  const rpValeur = extractMontant(
-    /Résidence\s+principale\s*-\s*RP\s+([\d\s,]+)\s*€/i,
-    text
-  );
-
-  // Pattern pour crédit : chercher après "Crédit immobilier - RP"
-  // Format attendu : "Crédit immobilier - RP Mathilde D. 10 395 € 169 923 €"
-  const creditPattern = /Crédit\s+immobilier\s*-\s*RP[^\n]+?([\d\s,]+)\s*€[^\n]+?([\d\s,]+)\s*€/i;
-  const creditMatch = text.match(creditPattern);
-  
-  let rpPret: number | undefined;
-  let echeanceAnnuelle: number | undefined;
-  
-  if (creditMatch) {
-    // Le premier montant est l'échéance annuelle, le second est le CRD
-    const montant1 = creditMatch[1].replace(/[\s,]/g, "").replace(",", ".");
-    const montant2 = creditMatch[2].replace(/[\s,]/g, "").replace(",", ".");
-    
-    echeanceAnnuelle = parseInt(montant1, 10);
-    rpPret = parseInt(montant2, 10);
-  }
-
-  const mensualite = echeanceAnnuelle ? Math.round(echeanceAnnuelle / 12) : undefined;
-
-  return {
-    valeur: rpValeur,
-    pret: rpPret,
-    mensualite,
-  };
-}
-
-/**
- * Interface pour les résultats d'extraction des liquidités
- */
-export interface LiquiditesResult {
-  livretA?: number;
-  compteCourant?: number;
-  ldd?: number;
-  lep?: number;
-  pel?: number;
-  cel?: number;
-  csl?: number;
-  livretJeune?: number;
-  partsSociales?: number;
-  total?: number;
-}
-
-/**
- * Extrait les liquidités (Livrets + comptes) avec support de toutes les variantes
- */
-export function extractLiquidites(text: string): LiquiditesResult {
-  // ==========================================================================
-  // LIVRET A (inclut Livret Bleu)
-  // ==========================================================================
-  const livretA = extractMontant(/Livret\s+A\s*(?:[-–—]\s*LA)?\s+([\d\s,]+)\s*€/i, text) ||
-                  extractMontant(/Livret\s+Bleu[^€]*?([\d\s,]+)\s*€/i, text) ||
-                  extractMontant(/\bLA\s+([\d\s,]+)\s*€/i, text);
-  
-  // ==========================================================================
-  // COMPTE COURANT (CC, compte chèque, compte joint, DAV, etc.)
-  // ==========================================================================
-  const compteCourant = extractMontant(/Compte\s+courant\s*(?:[-–—]\s*CC)?\s+([\d\s,]+)\s*€/i, text) ||
-                        extractMontant(/Compte\s+ch[eè]que[^€]*?([\d\s,]+)\s*€/i, text) ||
-                        extractMontant(/Compte\s+(?:joint|commun)[^€]*?([\d\s,]+)\s*€/i, text) ||
-                        extractMontant(/Compte\s+[àa]\s+vue[^€]*?([\d\s,]+)\s*€/i, text) ||
-                        extractMontant(/\b(?:DAV|CC)\s+([\d\s,]+)\s*€/i, text);
-  
-  // ==========================================================================
-  // LDD / LDDS (Livret de Développement Durable et Solidaire)
-  // ==========================================================================
-  const ldd = extractMontant(/Livret\s+de\s+D[ée]veloppement\s+Durable[^€]*?([\d\s,]+)\s*€/i, text) ||
-              extractMontant(/LDD[sS]?\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
-  
-  // ==========================================================================
-  // LEP (Livret d'Épargne Populaire)
-  // ==========================================================================
-  const lep = extractMontant(/Livret\s+d['']?[EÉeé]pargne\s+Populaire[^€]*?([\d\s,]+)\s*€/i, text) ||
-              extractMontant(/\bLEP\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
-
-  // ==========================================================================
-  // PEL (Plan Épargne Logement)
-  // ==========================================================================
-  const pel = extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Logement[^€]*?([\d\s,]+)\s*€/i, text) ||
-              extractMontant(/\bPEL\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
-
-  // ==========================================================================
-  // CEL (Compte Épargne Logement)
-  // ==========================================================================
-  const cel = extractMontant(/Compte\s+(?:d[''])?[EÉeé]pargne\s+Logement[^€]*?([\d\s,]+)\s*€/i, text) ||
-              extractMontant(/\bCEL\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
-
-  // ==========================================================================
-  // CSL (Compte Sur Livret / Super Livret)
-  // ==========================================================================
-  const csl = extractMontant(/Compte\s+sur\s+Livret[^€]*?([\d\s,]+)\s*€/i, text) ||
-              extractMontant(/Super\s+Livret[^€]*?([\d\s,]+)\s*€/i, text) ||
-              extractMontant(/Livret\s+bancaire[^€]*?([\d\s,]+)\s*€/i, text) ||
-              extractMontant(/\bCSL\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
-
-  // ==========================================================================
-  // LIVRET JEUNE
-  // ==========================================================================
-  const livretJeune = extractMontant(/Livret\s+Jeune[^€]*?([\d\s,]+)\s*€/i, text) ||
-                      extractMontant(/\bLJ\s*(?:[-–—][^€]*)?\s*([\d\s,]+)\s*€/i, text);
-
-  // ==========================================================================
-  // PARTS SOCIALES
-  // ==========================================================================
-  const partsSociales = extractMontant(/Parts?\s+Sociales?[^€]*?([\d\s,]+)\s*€/i, text) ||
-                        extractMontant(/Soci[ée]tariat[^€]*?([\d\s,]+)\s*€/i, text) ||
-                        extractMontant(/\bPS\s+([\d\s,]+)\s*€/i, text);
-
-  // ==========================================================================
-  // TOTAL COURT TERME
-  // ==========================================================================
-  const courtTerme = extractMontant(/Court\s+terme\s+([\d\s,]+)\s*€/i, text);
-
-  return {
-    livretA,
-    compteCourant,
-    ldd,
-    lep,
-    pel,
-    cel,
-    csl,
-    livretJeune,
-    partsSociales,
-    total: courtTerme,
-  };
-}
-
-/**
- * Interface pour l'épargne long terme
- */
-export interface EpargneLongTermeResult {
-  assuranceVie?: number;
-  per?: number;
-  perp?: number;
-  madelin?: number;
-  article83?: number;
-  pea?: number;
-  compteTitres?: number;
-  pee?: number;
-  perco?: number;
-  contratCapi?: number;
-  fcpiFip?: number;
-  scpiEpargne?: number;
-  opci?: number;
-}
-
-/**
- * Extrait l'assurance vie avec toutes les variantes
- */
-export function extractAssuranceVie(text: string): number | undefined {
-  // Patterns multiples pour assurance-vie
-  return extractMontant(/Assurance[-\s]vie\s*[-–—]\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/\b(?:AV|A-V)\s*[-–—]\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Ass(?:urance)?[-\s]vie[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Contrat\s+(?:AV|vie)[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Multisupport[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Fonds\s+euros?[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Long\s+terme\s+([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait le PER avec toutes les variantes
- */
-export function extractPER(text: string): number | undefined {
-  // Exclure PERP (traité séparément)
-  return extractMontant(/\bPER(?:IN)?\s*[-–—]\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/\bPER\s+(?:individuel\s+)?[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Retraite(?!\s+Populaire)[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Retraite\s+et\s+Salariale\s+([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait le PERP (ancien produit)
- */
-export function extractPERP(text: string): number | undefined {
-  return extractMontant(/\bPERP\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Retraite\s+Populaire[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait les contrats Madelin
- */
-export function extractMadelin(text: string): number | undefined {
-  return extractMontant(/Madelin[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Contrat\s+Madelin[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Retraite\s+Madelin[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait les Article 83
- */
-export function extractArticle83(text: string): number | undefined {
-  return extractMontant(/Article\s*83[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Art\.?\s*83[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait le PEA
- */
-export function extractPEA(text: string): number | undefined {
-  return extractMontant(/\bPEA(?:[-\s]PME)?\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+(?:en\s+)?Actions[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait le compte-titres
- * Note: "CT" seul est trop ambigu (peut matcher "Court terme"), on utilise "CTO" uniquement
- */
-export function extractCompteTitres(text: string): number | undefined {
-  return extractMontant(/Compte[-\s]titres?\s*(?:ordinaire)?\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/\bCTO\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Portefeuille\s+titres[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait le PEE (épargne salariale)
- */
-export function extractPEE(text: string): number | undefined {
-  return extractMontant(/\bPEE\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Entreprise[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/[EÉeé]pargne\s+salariale[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait le PERCO/PERCOL
- */
-export function extractPERCO(text: string): number | undefined {
-  return extractMontant(/\bPERC?OL?\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Plan\s+(?:d[''])?[EÉeé]pargne\s+Retraite\s+Collectif[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/PER\s+collectif[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait les contrats de capitalisation
- */
-export function extractContratCapi(text: string): number | undefined {
-  return extractMontant(/Contrat\s+(?:de\s+)?capi(?:talisation)?[^€]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Capitalisation[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait les FCPI/FIP
- */
-export function extractFCPIFIP(text: string): number | undefined {
-  return extractMontant(/\b(?:FCPI|FIP)\s*[-–—]?\s*[^\d]*([\d\s,]+)\s*€/i, text) ||
-         extractMontant(/Fonds\s+(?:d[''])?innovation[^€]*([\d\s,]+)\s*€/i, text);
-}
-
-/**
- * Extrait les SCPI (épargne, pas les charges/dépenses)
- */
-export function extractSCPI(text: string): number | undefined {
-  const scpiPattern = /\bSCPI\s+([\d\s,]+)\s*€/gi;
-  let match;
-  
-  while ((match = scpiPattern.exec(text)) !== null) {
-    const contextBefore = text.substring(Math.max(0, match.index - 50), match.index).toLowerCase();
-    
-    // Exclure si c'est une dépense ou une charge
-    if (contextBefore.includes("dépense") || 
-        contextBefore.includes("depense") ||
-        contextBefore.includes("charge") ||
-        contextBefore.includes("crédit") ||
-        contextBefore.includes("credit")) {
-      continue;
-    }
-    
-    const montant = match[1].replace(/[\s,]/g, "");
-    return parseInt(montant, 10);
-  }
-  
-  return undefined;
-}
-
-/**
- * Extrait toute l'épargne long terme
- */
-export function extractEpargneLongTerme(text: string): EpargneLongTermeResult {
-  return {
-    assuranceVie: extractAssuranceVie(text),
-    per: extractPER(text),
-    perp: extractPERP(text),
-    madelin: extractMadelin(text),
-    article83: extractArticle83(text),
-    pea: extractPEA(text),
-    compteTitres: extractCompteTitres(text),
-    pee: extractPEE(text),
-    perco: extractPERCO(text),
-    contratCapi: extractContratCapi(text),
-    fcpiFip: extractFCPIFIP(text),
-    scpiEpargne: extractSCPI(text),
-  };
-}
-
-/**
- * Extrait le patrimoine total
- */
-export function extractPatrimoineTotal(text: string): {
-  patrimoineTotal?: number;
-  patrimoineNet?: number;
-} {
-  const actifsBruts = extractMontant(
-    /TOTAL\s+DES\s+ACTIFS\s+BRUTS\s*:\s*([\d\s€,]+)/i,
-    text
-  );
-  const passifs = extractMontant(/TOTAL\s+DES\s+PASSIFS\s*:\s*([\d\s€,]+)/i, text);
-
-  const patrimoineNet =
-    actifsBruts && passifs ? actifsBruts - passifs : undefined;
-
-  return {
-    patrimoineTotal: actifsBruts,
-    patrimoineNet,
-  };
-}
-
-/**
- * Extrait les charges totales
- */
-export function extractChargesTotal(text: string): number | undefined {
-  return extractMontant(/TOTAL\s+DES\s+CHARGES\s*:\s*([\d\s€,]+)/i, text);
-}
-
-/**
- * Extrait la profession exacte
- */
-export function extractProfessionExacte(text: string): string | undefined {
-  const pattern = /Profession\s*:\s*\*?\s*([^\n]+?)(?:\s+Nom\s+de\s+la\s+société|$|\n)/i;
-  const match = text.match(pattern);
-  return match ? match[1].trim() : undefined;
-}
-
-/**
- * Extrait la date de mariage
- */
-export function extractDateMariage(text: string): string | undefined {
-  const pattern = /Date\s+de\s+mariage\s*:\s*(\d{1,2}\/\d{1,2}\/\d{4})/i;
-  const match = text.match(pattern);
-  return match ? match[1] : undefined;
-}
-
-/**
- * Normalise un nom pour la comparaison (enlève accents, minuscules, espaces)
- */
 function normalizeNom(nom: string): string {
   return nom
     .toLowerCase()
@@ -457,6 +80,7 @@ function formatNom(nom: string): string {
  * Extrait tous les biens immobiliers du RIO avec leurs crédits et loyers associés
  */
 export function extractBiensImmobiliers(text: string): BienImmobilier[] {
+  text = text.replace(/\t+/g, "  ");
   const biens: BienImmobilier[] = [];
   
   // === 1. RÉSIDENCE PRINCIPALE ===
@@ -686,19 +310,16 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
       }
       
       // Chercher les loyers associés
+      const nomBienOriginal = match[1].trim();
       // Pattern 1: "Revenus fonciers - Sete AIRBNB  10 500 €"
-      // Pattern 2: "Revenus fonciers  Sète  6 180 €"  
-      // Pattern 3: Section avec nom du bien et montant
-      const nomBienOriginal = match[1].trim(); // Nom non formaté pour matching plus précis
+      // Pattern 2: "Revenu foncier ou BIC - Sete AIRBNB 10 500 €"
       const loyerPatterns = [
-        // Pattern avec le nom original (non formaté)
         new RegExp(
-          `Revenus?\\s+fonciers?\\s*[-–—]?\\s*${nomBienOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(\\d[\\d\\s,]*)\\s*€`,
+          `Revenus?\\s+fonciers?(?:\\s+ou\\s+BIC)?\\s*[-–—]?\\s*${nomBienOriginal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(\\d[\\d\\s,]*)\\s*€`,
           "i"
         ),
-        // Pattern avec le nom formaté
         new RegExp(
-          `Revenus?\\s+fonciers?\\s*[-–—]?\\s*${nomBien.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s+(\\d[\\d\\s,]*)\\s*€`,
+          `Revenus?\\s+fonciers?(?:\\s+ou\\s+BIC)?\\s*[-–—]?\\s*${nomBien.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+(\\d[\\d\\s,]*)\\s*€`,
           "i"
         ),
         // Pattern avec les 4 premières lettres normalisées
@@ -915,94 +536,4 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
   }
   
   return biens;
-}
-
-/**
- * Parse tout le patrimoine du RIO
- */
-export function parsePatrimoineRIO(text: string): Partial<ExtractedData> {
-  const adresse = extractAdresseComplete(text);
-  const rp = extractResidencePrincipale(text);
-  const liquidites = extractLiquidites(text);
-  const epargneLongTerme = extractEpargneLongTerme(text);
-  const { patrimoineTotal, patrimoineNet } = extractPatrimoineTotal(text);
-  const chargesTotal = extractChargesTotal(text);
-  const profession = extractProfessionExacte(text);
-  const dateRegime = extractDateMariage(text);
-  
-  // Nouvelle extraction : liste des biens immobiliers
-  const biensImmobiliers = extractBiensImmobiliers(text);
-
-  // Calculer la somme totale de l'épargne (court terme + long terme)
-  const epargneTotal = 
-    (liquidites.total || 0) + 
-    (epargneLongTerme.assuranceVie || 0) + 
-    (epargneLongTerme.per || 0) + 
-    (epargneLongTerme.perp || 0) +
-    (epargneLongTerme.madelin || 0) +
-    (epargneLongTerme.article83 || 0) +
-    (epargneLongTerme.pea || 0) +
-    (epargneLongTerme.compteTitres || 0) +
-    (epargneLongTerme.pee || 0) +
-    (epargneLongTerme.perco || 0) +
-    (epargneLongTerme.contratCapi || 0) +
-    (epargneLongTerme.fcpiFip || 0) +
-    (epargneLongTerme.scpiEpargne || 0);
-
-  return {
-    // Adresse
-    ...adresse,
-
-    // Profession
-    profession,
-
-    // Patrimoine immobilier (ancienne structure pour compatibilité)
-    residencePrincipale: {
-      valeur: rp.valeur,
-      pret: rp.pret,
-      mensualite: rp.mensualite,
-    },
-    
-    // Nouvelle structure : liste des biens
-    biensImmobiliers,
-
-    // Patrimoine financier - Total épargne
-    epargneTotal,
-    
-    // Court terme
-    liquidites: liquidites.total,
-    livretA: liquidites.livretA,
-    compteCourant: liquidites.compteCourant,
-    ldd: liquidites.ldd,
-    lep: liquidites.lep,
-    pel: liquidites.pel,
-    cel: liquidites.cel,
-    csl: liquidites.csl,
-    livretJeune: liquidites.livretJeune,
-    partsSociales: liquidites.partsSociales,
-    
-    // Long terme
-    assuranceVie: epargneLongTerme.assuranceVie,
-    per: epargneLongTerme.per,
-    perp: epargneLongTerme.perp,
-    madelin: epargneLongTerme.madelin,
-    article83: epargneLongTerme.article83,
-    pea: epargneLongTerme.pea,
-    compteTitres: epargneLongTerme.compteTitres,
-    pee: epargneLongTerme.pee,
-    perco: epargneLongTerme.perco,
-    contratCapi: epargneLongTerme.contratCapi,
-    fcpiFip: epargneLongTerme.fcpiFip,
-    scpi: epargneLongTerme.scpiEpargne,
-
-    // Totaux
-    patrimoineTotal,
-    patrimoineNet,
-
-    // Charges
-    chargesTotal,
-
-    // Date de mariage
-    dateRegime,
-  };
 }

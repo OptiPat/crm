@@ -274,11 +274,16 @@ impl super::Database {
         }
 
         let mut stmt = self.conn.prepare(
-            "SELECT type_produit, SUM(montant_initial) as total 
-             FROM investissements 
-             GROUP BY type_produit 
+            &format!(
+                "SELECT i.type_produit, COALESCE(SUM({EFFECTIVE_ENCOURS_SQL_I}), 0) as total
+             FROM investissements i
+             WHERE i.origine = 'MON_CONSEIL'
+               AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
+                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))
+             GROUP BY i.type_produit
              HAVING total > 0
-             ORDER BY total DESC",
+             ORDER BY total DESC"
+            ),
         )?;
 
         let stats = stmt.query_map([], |row| {

@@ -495,6 +495,62 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn product_stats_excludes_existant_client() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Leroy", "Anne")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "PINEL".into(),
+            partenaire_id: None,
+            nom_produit: "Pinel avec moi".into(),
+            montant_initial: Some(100_000_00),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_id),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "SCPI à côté".into(),
+            montant_initial: Some(500_000_00),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("EXISTANT_CLIENT".into()),
+        })
+        .unwrap();
+
+        let stats = db.get_product_stats().unwrap();
+        assert_eq!(stats.len(), 1);
+        assert_eq!(stats[0].type_produit, "PINEL");
+        assert!((stats[0].montant - 100_000.0).abs() < 0.01);
+    }
+
+    #[test]
     fn panier_moyen_uses_montant_initial_not_encours() {
         let db = test_db();
         let contact = db.create_contact(sample_contact("Petit", "Jean")).unwrap();

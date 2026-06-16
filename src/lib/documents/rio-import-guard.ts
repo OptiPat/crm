@@ -65,20 +65,17 @@ export function assessRioImport(
 ): RioImportAssessment {
   const detectedType = data.typeDocument ?? "INCONNU";
   const stellium = isStelliumExtract(data);
-  const legacyRio = data.typeDocument === "RIO" && !stellium;
   const issues: string[] = [];
   const warnings: string[] = [];
 
-  let formatLabel = "Document générique — pas un RIO/QPI Stellium";
+  let formatLabel = "Document non reconnu — RIO ou QPI Stellium attendu";
   if (data.typeDocument === "QPI") {
     formatLabel = "Profil investisseur Stellium (QPI)";
   } else if (stellium) {
     formatLabel = "Recueil Stellium (RIO)";
-  } else if (legacyRio) {
-    formatLabel = "RIO (format legacy)";
   }
 
-  if (!stellium && data.typeDocument !== "RIO") {
+  if (!stellium) {
     issues.push(
       "Ce PDF ne correspond pas à un RIO ou QPI Stellium reconnu. Vérifiez le fichier ou choisissez un autre type de document."
     );
@@ -104,23 +101,11 @@ export function assessRioImport(
     );
   }
 
-  if (legacyRio) {
-    warnings.push(
-      "Format RIO ancien (non Stellium 2026) — vérifiez soigneusement les données extraites."
-    );
-  }
-
   const requested = options?.requestedType;
   if (requested === "QPI" && data.typeDocument === "RIO") {
     warnings.push("Type sélectionné QPI, document détecté RIO — le flux RIO sera utilisé.");
   } else if (requested === "PATRIMOINE" && data.typeDocument === "QPI") {
     warnings.push("Type sélectionné RIO, document détecté QPI — le flux QPI sera utilisé.");
-  }
-
-  if (data.typeDocument === "RIO" && data.profilRisque == null) {
-    warnings.push(
-      "Le profil investisseur (SRI) n'est pas dans le RIO — importez le QPI séparément pour le SRI."
-    );
   }
 
   if (data.isCouple && stellium && data.raw?.includes("\t")) {

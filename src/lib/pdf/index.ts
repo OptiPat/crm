@@ -5,7 +5,7 @@ export {
   isPDF,
   isNativeTextPDF,
 } from "./extractor";
-export { parseAuto, parseGeneric, parseRIO, isRIO } from "./parsers";
+export { parseAuto } from "./parse-auto";
 export {
   parseStelliumAuto,
   parseStelliumRio,

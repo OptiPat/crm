@@ -273,12 +273,17 @@ export function DocumentUpload({
       const stelliumAssessment = assessRioImport(parsedData, {
         requestedType: formData.type_document,
       });
+      const isStelliumDoc =
+        parsedData.typeDocument === "QPI" || parsedData.typeDocument === "RIO";
+      const inStelliumFlow =
+        formData.type_document === "PATRIMOINE" || formData.type_document === "QPI";
 
-      if (parsedData.typeDocument === "QPI" || parsedData.typeDocument === "RIO") {
-        setFormData((prev) => ({
-          ...prev,
-          type_document: parsedData.typeDocument === "QPI" ? "QPI" : "PATRIMOINE",
-        }));
+      if (inStelliumFlow || isStelliumDoc) {
+        if (parsedData.typeDocument === "QPI") {
+          setFormData((prev) => ({ ...prev, type_document: "QPI" }));
+        } else if (parsedData.typeDocument === "RIO") {
+          setFormData((prev) => ({ ...prev, type_document: "PATRIMOINE" }));
+        }
         setExtractedData(parsedData);
         if (!stelliumAssessment.canProceed) {
           toast.error(
@@ -287,6 +292,7 @@ export function DocumentUpload({
         }
         return;
       }
+
       setExtractedData(parsedData);
       setShowPreview(true);
     } catch (error) {
@@ -397,12 +403,9 @@ export function DocumentUpload({
   const canRunIdentityExtract = identityImport.canRunIdentityExtract(uploadedFile, isIdentityMode);
 
   const stelliumImportAssessment = useMemo(() => {
-    if (!extractedData) return null;
-    if (extractedData.typeDocument !== "RIO" && extractedData.typeDocument !== "QPI") {
-      return null;
-    }
+    if (!extractedData || !isStelliumWizardMode) return null;
     return assessRioImport(extractedData, { requestedType: formData.type_document });
-  }, [extractedData, formData.type_document]);
+  }, [extractedData, formData.type_document, isStelliumWizardMode]);
 
   const stelliumBootstrap =
     uploadedFile || extractedData
