@@ -55,3 +55,7 @@ release-artifacts/
 
 # Excel (exports / modèles — regénérer avec generate-template-filleuls.ps1)
 *.xlsx
+
+# Artefacts locaux d'analyse / OCR (hors stack)
+_tmp_docx_analysis/
+*.traineddata
