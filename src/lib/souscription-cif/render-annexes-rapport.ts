@@ -6,9 +6,10 @@ import {
   ANNEXES_SCPI_RENDEMENT_HORIZON_PLACEMENT,
 } from "@/lib/souscription-cif/annexes-rapport-scpi-page1";
 import { ANNEXES_SCPI_PAGE2_BODY } from "@/lib/souscription-cif/annexes-rapport-scpi-page2";
+import { ANNEXES_SCPI_SECTION3_MODALITES_BODY } from "@/lib/souscription-cif/annexes-rapport-scpi-modalites-acquisition";
 import {
-  ANNEXES_SCPI_PAGE2_SECTION4_INTRO,
   ANNEXES_SCPI_PROS_CONS_FISCAL_ROWS,
+  ANNEXES_SCPI_SECTION4_INTRO,
 } from "@/lib/souscription-cif/annexes-scpi-pros-cons-table";
 import {
   ANNEXES_SCPI_PAGE3_RISKS_BODY,
@@ -88,31 +89,43 @@ export function buildAnnexesRapportPreview(
   const page2: ScpiLmPagePreview = {
     pageNumber: 2,
     bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE2_BODY, variables),
-    bodySegmentsAfterTable: renderTemplateSegments(ANNEXES_SCPI_PAGE2_SECTION4_INTRO, variables),
-    showAnnexesProsConsTable: true,
     footerSegments,
   };
   collectMissingFromPage(page2).forEach((k) => missing.add(k));
 
   const page3: ScpiLmPagePreview = {
     pageNumber: 3,
-    bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE3_SECTION42_TITLE, variables),
-    showAnnexesProsConsTable: true,
-    annexesProsConsRows: ANNEXES_SCPI_PROS_CONS_FISCAL_ROWS,
-    bodySegmentsAfterProsConsTable: renderTemplateSegments(ANNEXES_SCPI_PAGE3_RISKS_BODY, variables),
+    bodySegments: renderTemplateSegments(ANNEXES_SCPI_SECTION3_MODALITES_BODY, variables),
     footerSegments,
   };
   collectMissingFromPage(page3).forEach((k) => missing.add(k));
 
   const page4: ScpiLmPagePreview = {
     pageNumber: 4,
-    bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE4_INTRO, variables),
+    bodySegments: renderTemplateSegments(ANNEXES_SCPI_SECTION4_INTRO, variables),
+    showAnnexesProsConsTable: true,
+    bodySegmentsAfterProsConsTable: renderTemplateSegments(
+      ANNEXES_SCPI_PAGE3_SECTION42_TITLE,
+      variables
+    ),
+    annexesProsConsFiscalRows: ANNEXES_SCPI_PROS_CONS_FISCAL_ROWS,
+    bodySegmentsAfterFiscalProsConsTable: renderTemplateSegments(
+      ANNEXES_SCPI_PAGE3_RISKS_BODY,
+      variables
+    ),
     footerSegments,
   };
   collectMissingFromPage(page4).forEach((k) => missing.add(k));
 
   const page5: ScpiLmPagePreview = {
     pageNumber: 5,
+    bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE4_INTRO, variables),
+    footerSegments,
+  };
+  collectMissingFromPage(page5).forEach((k) => missing.add(k));
+
+  const page6: ScpiLmPagePreview = {
+    pageNumber: 6,
     bodySegments: [],
     rapportRecapTableHeader: ANNEXES_SCPI_PAGE5_TABLE_HEADER,
     rapportRecapRows: ANNEXES_SCPI_RECAP_ROW_TEMPLATES.map((row) => ({
@@ -125,10 +138,10 @@ export function buildAnnexesRapportPreview(
     bodySegmentsAfterCostsTable: renderTemplateSegments(ANNEXES_SCPI_COSTS_FOOTER, variables),
     footerSegments,
   };
-  collectMissingFromPage(page5).forEach((k) => missing.add(k));
+  collectMissingFromPage(page6).forEach((k) => missing.add(k));
 
-  const page6: ScpiLmPagePreview = {
-    pageNumber: 6,
+  const page7: ScpiLmPagePreview = {
+    pageNumber: 7,
     bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE6_SECTION1, variables),
     bodySegmentsAfterTable: renderTemplateSegments(ANNEXES_SCPI_PAGE6_SECTION2_TITLE, variables),
     showAnnexesObjectifsPatrimoniauxTable: true,
@@ -147,10 +160,10 @@ export function buildAnnexesRapportPreview(
     annexesHorizonProfilRows: buildAnnexesScpiHorizonProfilRowViews(profilRisqueSri),
     footerSegments,
   };
-  collectMissingFromPage(page6).forEach((k) => missing.add(k));
+  collectMissingFromPage(page7).forEach((k) => missing.add(k));
 
-  const page7: ScpiLmPagePreview = {
-    pageNumber: 7,
+  const page8: ScpiLmPagePreview = {
+    pageNumber: 8,
     bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION5_INTRO, variables),
     showAnnexesOrigineFondsSection: true,
     annexesOrigineFondsView: buildAnnexesScpiOrigineFondsView(dossier),
@@ -159,19 +172,19 @@ export function buildAnnexesRapportPreview(
     bodySegmentsSection7: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION7, variables),
     footerSegments,
   };
-  collectMissingFromPage(page7).forEach((k) => missing.add(k));
+  collectMissingFromPage(page8).forEach((k) => missing.add(k));
   collectAnnexesOrigineFondsMissingKeys(dossier).forEach((k) => missing.add(k));
 
-  const page8: ScpiLmPagePreview = {
-    pageNumber: 8,
+  const page9: ScpiLmPagePreview = {
+    pageNumber: 9,
     ...buildAnnexesRenonciationHeader(variables),
     bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE8_BODY, variables),
     footerSegments,
   };
-  collectMissingFromPage(page8).forEach((k) => missing.add(k));
+  collectMissingFromPage(page9).forEach((k) => missing.add(k));
 
   return {
-    pages: [page1, page2, page3, page4, page5, page6, page7, page8],
+    pages: [page1, page2, page3, page4, page5, page6, page7, page8, page9],
     missingKeys: [...missing],
   };
 }

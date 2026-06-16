@@ -1,6 +1,6 @@
-/** Annexes SCPI — page 3 (§ 3.2 fiscal + risques). */
+/** Annexes SCPI — page 5 (§ 4.2 fiscal + risques). */
 
-export const ANNEXES_SCPI_PAGE3_SECTION42_TITLE = `3.2. D'un point de vue fiscal`;
+export const ANNEXES_SCPI_PAGE3_SECTION42_TITLE = `4.2. D'un point de vue fiscal`;
 
 export const ANNEXES_SCPI_PAGE3_RISKS_BODY = `Risque de liquidité :
 La SCPI n'étant pas un produit coté, elle présente une liquidité moindre comparée aux actifs financiers. Les conditions de cession (délais, prix) peuvent ainsi varier en fonction de l'évolution à la hausse comme à la baisse du marché de l'immobilier et du marché des parts de SCPI.

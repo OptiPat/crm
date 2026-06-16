@@ -229,6 +229,20 @@ export function ScpiLmBodyContent({
           </div>
         )}
 
+      {page.annexesProsConsFiscalRows && page.annexesProsConsFiscalRows.length > 0 && (
+        <AnnexesScpiProsConsTable rows={page.annexesProsConsFiscalRows} />
+      )}
+
+      {page.bodySegmentsAfterFiscalProsConsTable &&
+        page.bodySegmentsAfterFiscalProsConsTable.length > 0 && (
+          <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+            <CifPreviewSegments
+              segments={page.bodySegmentsAfterFiscalProsConsTable}
+              onMissingVariableClick={onMissingVariableClick}
+            />
+          </div>
+        )}
+
       {page.showAmfRiskScale && (
         <ScpiAmfRiskScaleTable
           highlightedLevel={page.amfRiskHighlightLevel}

@@ -74,8 +74,12 @@ export type ScpiLmPagePreview = {
   showAnnexesProsConsTable?: boolean;
   /** Lignes du tableau avantages / inconvénients (défaut : § 4.1). */
   annexesProsConsRows?: ReadonlyArray<AnnexesScpiProsConsRow>;
-  /** Texte après le tableau avantages / inconvénients (annexes § 4.2). */
+  /** Texte entre le tableau § 4.1 et le tableau § 4.2 (annexes page 4). */
   bodySegmentsAfterProsConsTable?: SouscriptionPreviewSegment[];
+  /** Tableau avantages / inconvénients § 4.2 fiscal (annexes page 4). */
+  annexesProsConsFiscalRows?: ReadonlyArray<AnnexesScpiProsConsRow>;
+  /** Texte après le tableau § 4.2 (risques, annexes page 4). */
+  bodySegmentsAfterFiscalProsConsTable?: SouscriptionPreviewSegment[];
   /** Texte après le tableau récap (annexes SCPI page 5 — coûts et frais). */
   bodySegmentsAfterRecapTable?: SouscriptionPreviewSegment[];
   /** Tableau coûts et frais (annexes SCPI page 5). */
@@ -284,6 +288,9 @@ export function collectMissingFromPage(page: ScpiLmPagePreview): string[] {
   }
   if (page.bodySegmentsAfterProsConsTable) {
     collectMissing(page.bodySegmentsAfterProsConsTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterFiscalProsConsTable) {
+    collectMissing(page.bodySegmentsAfterFiscalProsConsTable).forEach((k) => keys.add(k));
   }
   if (page.bodySegmentsAfterTable) {
     collectMissing(page.bodySegmentsAfterTable).forEach((k) => keys.add(k));

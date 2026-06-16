@@ -27,7 +27,7 @@ describe("buildAnnexesRapportPreview", () => {
       defaultSouscriptionDossierFields()
     );
 
-    expect(preview.pages).toHaveLength(8);
+    expect(preview.pages).toHaveLength(9);
     const page = preview.pages[0];
     expect(page.title).toBe(ANNEXES_RAPPORT_DOCUMENT_TITLE);
     expect(page.headerLeft).toBeUndefined();
@@ -56,7 +56,7 @@ describe("buildAnnexesRapportPreview", () => {
   it("construit la page 2 avec la section fiscalité", () => {
     const preview = buildAnnexesRapportPreview("scpi", {}, defaultSouscriptionDossierFields());
 
-    expect(preview.pages).toHaveLength(8);
+    expect(preview.pages).toHaveLength(9);
     const page2 = preview.pages[1];
     expect(page2.pageNumber).toBe(2);
     expect(page2.title).toBeUndefined();
@@ -66,44 +66,65 @@ describe("buildAnnexesRapportPreview", () => {
       .join("");
     expect(body).toContain("2. Fiscalité");
     expect(body).toContain("2.1. Imposition des revenus");
+    expect(body).toContain("revenus fonciers");
     expect(body).toContain("17,2 %");
     expect(body).toContain("Remarque : si vous avez contracté un emprunt");
     expect(body).toContain("2.2. Imposition des plus-values");
     expect(body).toContain("2.3. Imposition sur la fortune immobilière (IFI)");
-
-    const section4 = (page2.bodySegmentsAfterTable ?? [])
-      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
-      .join("");
-    expect(section4).toContain("3. Avantages et inconvénients");
-    expect(section4).toContain("3.1. D'un point de vue économique et juridique");
-    expect(page2.showAnnexesProsConsTable).toBe(true);
+    expect(page2.showAnnexesProsConsTable).toBeUndefined();
   });
 
-  it("construit la page 3 avec fiscalité § 3.2, tableau et risques", () => {
+  it("construit la page 3 avec modalités d'acquisition uniquement", () => {
     const preview = buildAnnexesRapportPreview("scpi", {}, defaultSouscriptionDossierFields());
 
     const page3 = preview.pages[2];
     expect(page3.pageNumber).toBe(3);
 
-    const title = page3.bodySegments
+    const body = page3.bodySegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(title).toBe("3.2. D'un point de vue fiscal");
-    expect(page3.bodySegments.every((s) => s.kind !== "underline")).toBe(true);
+    expect(body).toContain("3. Modalités d'acquisition");
+    expect(body).toContain("Acquisition en démembrement de propriété");
+    expect(body).toContain("nu-propriétaire");
+    expect(body).toContain("usufruitier");
+    expect(body).toContain("ne pas être assujetti à l'IFI");
+    expect(page3.bodySegmentsAfterTable).toBeUndefined();
+    expect(page3.showAnnexesProsConsTable).toBeUndefined();
+  });
 
-    expect(page3.annexesProsConsRows).toHaveLength(2);
-    expect(page3.showAnnexesProsConsTable).toBe(true);
+  it("construit la page 4 avec § 4.1, § 4.2 fiscal, tableaux et risques", () => {
+    const preview = buildAnnexesRapportPreview("scpi", {}, defaultSouscriptionDossierFields());
 
-    const risks = (page3.bodySegmentsAfterProsConsTable ?? [])
+    const page4 = preview.pages[3];
+    expect(page4.pageNumber).toBe(4);
+
+    const intro = page4.bodySegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(intro).toContain("4. Avantages et inconvénients");
+    expect(intro).toContain("4.1. D'un point de vue économique et juridique");
+    expect(page4.bodySegments.some((s) => s.kind === "underline" && s.value.includes("4.1."))).toBe(
+      false
+    );
+    expect(page4.showAnnexesProsConsTable).toBe(true);
+
+    const section42 = (page4.bodySegmentsAfterProsConsTable ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(section42).toBe("4.2. D'un point de vue fiscal");
+
+    expect(page4.annexesProsConsFiscalRows).toHaveLength(2);
+    expect(page4.annexesProsConsFiscalRows?.[0].disadvantages).toContain("17,2 %");
+
+    const risks = (page4.bodySegmentsAfterFiscalProsConsTable ?? [])
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(risks).toContain("Risque de liquidité");
     expect(risks).toContain("Risque de perte en capital");
     expect(risks).toContain("Risque de variation des revenus distribués");
-    expect(page3.annexesProsConsRows?.[0].disadvantages).toContain("17,2 %");
   });
 
-  it("construit la page 4 avec préconisations et descriptions SCPI", () => {
+  it("construit la page 5 avec préconisations et descriptions SCPI", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
       {
@@ -114,16 +135,16 @@ describe("buildAnnexesRapportPreview", () => {
       defaultSouscriptionDossierFields()
     );
 
-    const page4 = preview.pages[3];
-    expect(page4.pageNumber).toBe(4);
-    const body = page4.bodySegments
+    const page5 = preview.pages[4];
+    expect(page5.pageNumber).toBe(5);
+    const body = page5.bodySegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(body).toContain("30 000 €");
     expect(body).toContain("Fiche Comète");
   });
 
-  it("construit la page 5 avec le tableau récapitulatif d'adéquation", () => {
+  it("construit la page 6 avec le tableau récapitulatif d'adéquation", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
       {
@@ -138,96 +159,96 @@ describe("buildAnnexesRapportPreview", () => {
       }
     );
 
-    const page5 = preview.pages[4];
-    expect(page5.pageNumber).toBe(5);
-    expect(page5.title).toBeUndefined();
-    expect(page5.bodySegments).toHaveLength(0);
-    expect(page5.rapportRecapTableHeader).toBe("TABLEAU RÉCAPITULATIF");
-    expect(page5.rapportRecapRows).toHaveLength(6);
+    const page6 = preview.pages[5];
+    expect(page6.pageNumber).toBe(6);
+    expect(page6.title).toBeUndefined();
+    expect(page6.bodySegments).toHaveLength(0);
+    expect(page6.rapportRecapTableHeader).toBe("TABLEAU RÉCAPITULATIF");
+    expect(page6.rapportRecapRows).toHaveLength(6);
 
-    const titles = page5.rapportRecapRows?.map((r) => r.title) ?? [];
+    const titles = page6.rapportRecapRows?.map((r) => r.title) ?? [];
     expect(titles[0]).toContain("adaptée au client");
     expect(titles[1]).toContain("conforme aux objectifs");
     expect(titles[5]).toContain("réexamen périodique");
 
-    const objectifsCell = page5.rapportRecapRows?.[1].contentSegments
+    const objectifsCell = page6.rapportRecapRows?.[1].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
     expect(objectifsCell).toContain("revenus complémentaires");
     expect(preview.missingKeys).not.toContain("rappel_demande");
 
-    const connaissancesCell = page5.rapportRecapRows?.[3].contentSegments
+    const connaissancesCell = page6.rapportRecapRows?.[3].contentSegments
       .map((s) => (s.kind === "text" ? s.value : ""))
       .join("");
     expect(connaissancesCell).toContain("Novice");
     expect(connaissancesCell).toContain("DIC, Statuts");
 
-    expect(page5.showAnnexesCostsTable).toBe(true);
-    const costsIntro = page5.bodySegmentsAfterRecapTable
+    expect(page6.showAnnexesCostsTable).toBe(true);
+    const costsIntro = page6.bodySegmentsAfterRecapTable
       ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(costsIntro).toContain("Informations sur les coûts et les frais");
-    expect(page5.bodySegmentsAfterRecapTable?.some((s) => s.kind === "underline")).toBe(true);
+    expect(page6.bodySegmentsAfterRecapTable?.some((s) => s.kind === "underline")).toBe(true);
 
-    const tiersRow = page5.annexesCostsRows?.find((r) =>
+    const tiersRow = page6.annexesCostsRows?.find((r) =>
       r.label.includes("Paiement reçu de tiers")
     );
     expect(tiersRow?.amount).toBe(formatEuroAmountCif(900));
     expect(tiersRow?.percent).toBe(formatPercentCif(900 / 30_000));
 
-    const productsRow = page5.annexesCostsRows?.find((r) => r.label === "Coûts liés aux produits");
+    const productsRow = page6.annexesCostsRows?.find((r) => r.label === "Coûts liés aux produits");
     expect(productsRow?.amount).toBe(formatEuroAmountCif(999));
     expect(productsRow?.percent).toBe(formatPercentCif(999 / 30_000));
 
-    const totalRow = page5.annexesCostsRows?.find((r) => r.label === "TOTAL COÛTS ET FRAIS");
+    const totalRow = page6.annexesCostsRows?.find((r) => r.label === "TOTAL COÛTS ET FRAIS");
     expect(totalRow?.amount).toBe(formatEuroAmountCif(1899));
 
-    const costsFooter = page5.bodySegmentsAfterCostsTable
+    const costsFooter = page6.bodySegmentsAfterCostsTable
       ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(costsFooter).toContain("ventilation plus précise");
   });
 
-  it("construit la page 6 avec préconisations conseiller et tableau objectifs", () => {
+  it("construit la page 7 avec préconisations conseiller et tableau objectifs", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
       {},
       defaultSouscriptionDossierFields()
     );
 
-    const page6 = preview.pages[5];
-    expect(page6.pageNumber).toBe(6);
-    expect(page6.showAnnexesObjectifsPatrimoniauxTable).toBe(true);
+    const page7 = preview.pages[6];
+    expect(page7.pageNumber).toBe(7);
+    expect(page7.showAnnexesObjectifsPatrimoniauxTable).toBe(true);
 
-    const section1 = page6.bodySegments
+    const section1 = page7.bodySegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(section1).toContain("1. Préconisations du conseiller");
     expect(section1).toContain("perspective long terme");
 
-    const section2 = page6.bodySegmentsAfterTable
+    const section2 = page7.bodySegmentsAfterTable
       ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(section2).toContain("2. Objectifs patrimoniaux");
 
-    const rows = page6.annexesObjectifsPatrimoniauxRows ?? [];
+    const rows = page7.annexesObjectifsPatrimoniauxRows ?? [];
     expect(rows).toHaveLength(4);
     expect(rows[0].label).toContain("Investir à moyen ou long terme");
     expect(rows.every((r) => r.immobilier && r.placementsFinanciers)).toBe(true);
 
-    expect(page6.showAnnexesCaracteristiquesOperationTable).toBe(true);
-    const section3 = page6.bodySegmentsAfterObjectifsPatrimoniauxTable
+    expect(page7.showAnnexesCaracteristiquesOperationTable).toBe(true);
+    const section3 = page7.bodySegmentsAfterObjectifsPatrimoniauxTable
       ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(section3).toContain("3. Caractéristiques de l'opération");
 
-    const avantages = page6.annexesCaracteristiquesOperationSections?.[0];
+    const avantages = page7.annexesCaracteristiquesOperationSections?.[0];
     expect(avantages?.title).toBe("Avantages");
     expect(avantages?.rows).toHaveLength(7);
     expect(avantages?.rows[3].label).toBe("Économies fiscales");
     expect(avantages?.rows[3].immobilier).toEqual({ kind: "check", checked: false });
 
-    const inconv = page6.annexesCaracteristiquesOperationSections?.[1];
+    const inconv = page7.annexesCaracteristiquesOperationSections?.[1];
     expect(inconv?.rows[0].immobilier).toEqual({
       kind: "text",
       value: "Voir détail en annexe",
@@ -236,18 +257,18 @@ describe("buildAnnexesRapportPreview", () => {
     expect(inconv?.rows[1].immobilier).toEqual({ kind: "span-continue" });
     expect(inconv?.rows[3].label).toBe("Fiscalité et plus-values");
 
-    expect(page6.showAnnexesHorizonProfilTable).toBe(true);
-    const section4 = page6.bodySegmentsAfterCaracteristiquesOperationTable
+    expect(page7.showAnnexesHorizonProfilTable).toBe(true);
+    const section4 = page7.bodySegmentsAfterCaracteristiquesOperationTable
       ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(section4).toContain("4. Horizon et profil d'investissement");
-    expect(page6.annexesHorizonProfilRows?.[2].horizon).toMatchObject({
+    expect(page7.annexesHorizonProfilRows?.[2].horizon).toMatchObject({
       label: "+ de 10 ans",
       checked: true,
     });
   });
 
-  it("construit la page 7 avec déclaration origine des fonds", () => {
+  it("construit la page 8 avec déclaration origine des fonds", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
       {},
@@ -258,28 +279,28 @@ describe("buildAnnexesRapportPreview", () => {
       }
     );
 
-    const page7 = preview.pages[6];
-    expect(page7.pageNumber).toBe(7);
-    expect(page7.showAnnexesOrigineFondsSection).toBe(true);
+    const page8 = preview.pages[7];
+    expect(page8.pageNumber).toBe(8);
+    expect(page8.showAnnexesOrigineFondsSection).toBe(true);
 
-    const intro = page7.bodySegments
+    const intro = page8.bodySegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(intro).toContain("5. Déclaration sur l'honneur");
     expect(intro).toContain("R.561-38");
 
-    expect(page7.annexesOrigineFondsView?.provenanceFonds).toBe("metropole");
-    expect(page7.annexesOrigineFondsView?.origineFondsSelected).toEqual([
+    expect(page8.annexesOrigineFondsView?.provenanceFonds).toBe("metropole");
+    expect(page8.annexesOrigineFondsView?.origineFondsSelected).toEqual([
       "epargne_courante",
       "epargne_constituee",
     ]);
 
-    const certification = page7.bodySegmentsAfterOrigineFonds
+    const certification = page8.bodySegmentsAfterOrigineFonds
       ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(certification).toContain("Certifie sur l'honneur");
 
-    const section6 = page7.bodySegmentsSection6Intro
+    const section6 = page8.bodySegmentsSection6Intro
       ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(section6).toContain("6. Informations");
@@ -288,11 +309,11 @@ describe("buildAnnexesRapportPreview", () => {
     expect(section6).toContain("⬜ Non");
 
     expect(
-      page7.bodySegmentsSection7?.some(
+      page8.bodySegmentsSection7?.some(
         (s) => s.kind === "bold" && s.value.includes("Le CIF déclare")
       )
     ).toBe(true);
-    const section7 = page7.bodySegmentsSection7
+    const section7 = page8.bodySegmentsSection7
       ?.map((s) =>
         s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""
       )
@@ -310,7 +331,7 @@ describe("buildAnnexesRapportPreview", () => {
     expect(preview.missingKeys).toContain("origine_fonds");
   });
 
-  it("construit la page 8 avec en-tête client / conseiller et renonciation", () => {
+  it("construit la page 9 avec en-tête client / conseiller et renonciation", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
       {
@@ -327,22 +348,22 @@ describe("buildAnnexesRapportPreview", () => {
       defaultSouscriptionDossierFields()
     );
 
-    const page8 = preview.pages[7];
-    expect(page8.pageNumber).toBe(8);
+    const page9 = preview.pages[8];
+    expect(page9.pageNumber).toBe(9);
 
     const seg = (s: { kind: string; value?: string; label?: string }) =>
       s.kind === "text" || s.kind === "underline" || s.kind === "bold"
         ? s.value
         : `[${s.label}]`;
 
-    const headerLeft = page8.headerLeft!
+    const headerLeft = page9.headerLeft!
       .map((line) => line.map(seg).join(""))
       .join("\n");
     expect(headerLeft).toContain("Luc ALAMEDA");
     expect(headerLeft).toContain("12 rue des Oliviers");
     expect(headerLeft).toContain("34000 Montpellier");
 
-    const headerRight = page8.headerRight!
+    const headerRight = page9.headerRight!
       .map((line) => line.map(seg).join(""))
       .join("\n");
     expect(headerRight).toContain("Nicolas PLAZA");
@@ -350,9 +371,9 @@ describe("buildAnnexesRapportPreview", () => {
     expect(headerRight).toContain("34660 Cournonsec");
     expect(headerRight).toContain("À Montpellier, le 13/06/2026");
 
-    const body = page8.bodySegments.map(seg).join("");
+    const body = page9.bodySegments.map(seg).join("");
     expect(body).toContain("Objet : Renonciation au délai de rétractation.");
-    expect(page8.bodySegments.some((s) => s.kind === "underline" && s.value.startsWith("Objet :"))).toBe(
+    expect(page9.bodySegments.some((s) => s.kind === "underline" && s.value.startsWith("Objet :"))).toBe(
       true
     );
     expect(body).toContain("Nicolas PLAZA,");
