@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -37,6 +37,11 @@ import {
   usesRioEncoursMontant,
 } from "@/lib/documents/rio-investissement-extras";
 import { isImmobilierFinancingType } from "@/lib/investissements/investissement-immo-financing";
+import {
+  categorizePatrimoineType,
+  type RioPatrimoineCategory,
+} from "@/lib/documents/rio-import-preview";
+import { RioImportStepper } from "./RioImportStepper";
 
 interface PatrimoineItem {
   id: string;
@@ -61,6 +66,8 @@ interface PatrimoineTriDialogProps {
   ownerLabel?: string;
   onComplete: (investissements: NewInvestissement[]) => void;
   onCancel: () => void;
+  /** Intégré dans le wizard (sans Dialog). */
+  embedded?: boolean;
 }
 
 function extractPatrimoineItems(data: ExtractedData): PatrimoineItem[] {
@@ -115,6 +122,16 @@ function getTypeColor(type: PatrimoineItem["type"]) {
   }
 }
 
+const CATEGORY_LABELS: Record<RioPatrimoineCategory, string> = {
+  immobilier: "Immobilier",
+  placements: "Placements financiers",
+  epargne: "Épargne",
+};
+
+function isResidencePrincipaleType(type: string): boolean {
+  return type === "RP" || type === "RESIDENCE_PRINCIPALE";
+}
+
 export function PatrimoineTriDialog({
   open,
   onOpenChange,
@@ -124,6 +141,7 @@ export function PatrimoineTriDialog({
   ownerLabel,
   onComplete,
   onCancel,
+  embedded = false,
 }: PatrimoineTriDialogProps) {
   const useFoyerPatrimoine = Boolean(foyerId);
   const owner = buildRioPatrimoineOwner({
@@ -178,6 +196,24 @@ export function PatrimoineTriDialog({
       item.id === itemId ? { ...item, origine } : item
     ));
   };
+
+  const setAllOrigine = (origine: OrigineInvestissement) => {
+    setItems((prev) =>
+      prev.map((item) => (!item.autoOrigine ? { ...item, origine } : item))
+    );
+  };
+
+  const groupedToTriItems = useMemo(() => {
+    const groups: Record<RioPatrimoineCategory, PatrimoineItem[]> = {
+      immobilier: [],
+      placements: [],
+      epargne: [],
+    };
+    for (const item of toTriItems) {
+      groups[categorizePatrimoineType(item.type)].push(item);
+    }
+    return groups;
+  }, [toTriItems]);
 
   const updateItemField = (
     itemId: string,
@@ -238,21 +274,161 @@ export function PatrimoineTriDialog({
     .filter(i => i.origine === "EXISTANT_CLIENT" || i.autoOrigine === "EXISTANT_CLIENT")
     .reduce((sum, i) => sum + i.montant, 0);
 
-  return (
-    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <HelpCircle className="h-5 w-5 text-blue-600" />
-            Tri du patrimoine
-          </DialogTitle>
-          <DialogDescription>
-            Patrimoine de <strong>{scopeLabel}</strong> — pour chaque investissement, indiquez s&apos;il a été placé{" "}
-            <strong>avec vous</strong> ou s&apos;il existait <strong>à côté</strong>.
-          </DialogDescription>
-        </DialogHeader>
+  const renderTriItem = (item: PatrimoineItem) => (
+    <div
+      key={item.id}
+      className={`p-4 rounded-lg border-2 transition-all ${
+        item.origine === "MON_CONSEIL"
+          ? "border-green-500 bg-green-50"
+          : item.origine === "EXISTANT_CLIENT"
+            ? "border-gray-400 bg-gray-50"
+            : "border-blue-300 bg-blue-50"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-3">
+          <div className={`p-2 rounded-lg ${getTypeColor(item.type)}`}>
+            {getTypeIcon(item.type)}
+          </div>
+          <div>
+            <p className="font-semibold">{item.label}</p>
+            <p className="text-lg font-bold text-primary">{formatEuro(item.montant)}</p>
+          </div>
+        </div>
+      </div>
 
-        <div className="space-y-6 py-4">
+      <div className="flex gap-2">
+        <Button
+          variant={item.origine === "MON_CONSEIL" ? "default" : "outline"}
+          size="sm"
+          className={`flex-1 ${item.origine === "MON_CONSEIL" ? "bg-green-600 hover:bg-green-700" : ""}`}
+          onClick={() => setOrigine(item.id, "MON_CONSEIL")}
+        >
+          <CheckCircle2 className="h-4 w-4 mr-2" />
+          Avec moi
+        </Button>
+        <Button
+          variant={item.origine === "EXISTANT_CLIENT" ? "default" : "outline"}
+          size="sm"
+          className={`flex-1 ${item.origine === "EXISTANT_CLIENT" ? "bg-gray-600 hover:bg-gray-700" : ""}`}
+          onClick={() => setOrigine(item.id, "EXISTANT_CLIENT")}
+        >
+          <XCircle className="h-4 w-4 mr-2" />
+          À côté
+        </Button>
+      </div>
+
+      {isImmobilierFinancingType(item.type) && (
+        <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3">
+          <div className="space-y-1">
+            <Label className="text-xs">Mensualité crédit (€/mois)</Label>
+            <Input
+              type="number"
+              className="h-8"
+              value={item.mensualiteCredit ?? ""}
+              onChange={(e) =>
+                updateItemField(
+                  item.id,
+                  "mensualiteCredit",
+                  e.target.value ? parseFloat(e.target.value) : undefined
+                )
+              }
+            />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">CRD (€)</Label>
+            <Input
+              type="number"
+              className="h-8"
+              value={item.creditCRD ?? ""}
+              onChange={(e) =>
+                updateItemField(
+                  item.id,
+                  "creditCRD",
+                  e.target.value ? parseFloat(e.target.value) : undefined
+                )
+              }
+            />
+          </div>
+          {!isResidencePrincipaleType(item.type) && (
+            <div className="space-y-1">
+              <Label className="text-xs">Loyer mensuel (€)</Label>
+              <Input
+                type="number"
+                className="h-8"
+                value={item.loyerMensuel ?? ""}
+                onChange={(e) =>
+                  updateItemField(
+                    item.id,
+                    "loyerMensuel",
+                    e.target.value ? parseFloat(e.target.value) : undefined
+                  )
+                }
+              />
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label className="text-xs">Fin de prêt (JJ/MM/AAAA)</Label>
+            <Input
+              className="h-8"
+              placeholder="15/06/2045"
+              value={item.dateFinCredit ?? ""}
+              onChange={(e) =>
+                updateItemField(item.id, "dateFinCredit", e.target.value || undefined)
+              }
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const triContent = (
+    <>
+      {!embedded && (
+        <>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HelpCircle className="h-5 w-5 text-blue-600" />
+              Tri du patrimoine
+            </DialogTitle>
+            <DialogDescription>
+              Patrimoine de <strong>{scopeLabel}</strong> — pour chaque investissement, indiquez s&apos;il a été placé{" "}
+              <strong>avec vous</strong> ou s&apos;il existait <strong>à côté</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <RioImportStepper currentStep={3} className="py-2" />
+        </>
+      )}
+
+      {embedded && (
+        <p className="text-sm text-muted-foreground">
+          Patrimoine de <strong>{scopeLabel}</strong> — classez chaque investissement « avec moi » ou « à côté ».
+        </p>
+      )}
+
+      {items.length > 0 && (
+          <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur border-b">
+            <div className="grid grid-cols-3 gap-2 text-center text-sm">
+              <div className="rounded-lg bg-green-50 border border-green-200 p-2">
+                <div className="text-xs text-green-700">Avec moi</div>
+                <div className="font-bold text-green-800">{formatEuro(totalAvecMoi)}</div>
+              </div>
+              <div className="rounded-lg bg-gray-50 border border-gray-200 p-2">
+                <div className="text-xs text-gray-600">À côté</div>
+                <div className="font-bold text-gray-800">{formatEuro(totalACote)}</div>
+              </div>
+              <div className="rounded-lg bg-blue-50 border border-blue-200 p-2">
+                <div className="text-xs text-blue-700">Progression</div>
+                <div className="font-bold text-blue-800">
+                  {toTriItems.filter((i) => i.origine).length}/{toTriItems.length}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="space-y-6 py-2">
           {/* Épargne bancaire (automatique) */}
           {autoItems.length > 0 && (
             <div className="space-y-2">
@@ -285,121 +461,35 @@ export function PatrimoineTriDialog({
             </div>
           )}
 
-          {/* Investissements à trier */}
           {toTriItems.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                <HelpCircle className="h-4 w-4 text-blue-500" />
-                Investissements à trier ({toTriItems.filter(i => i.origine).length}/{toTriItems.length})
-              </h3>
-              <div className="space-y-3">
-                {toTriItems.map(item => (
-                  <div
-                    key={item.id}
-                    className={`p-4 rounded-lg border-2 transition-all ${
-                      item.origine === "MON_CONSEIL" 
-                        ? "border-green-500 bg-green-50" 
-                        : item.origine === "EXISTANT_CLIENT"
-                        ? "border-gray-400 bg-gray-50"
-                        : "border-blue-300 bg-blue-50"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <div className={`p-2 rounded-lg ${getTypeColor(item.type)}`}>
-                          {getTypeIcon(item.type)}
-                        </div>
-                        <div>
-                          <p className="font-semibold">{item.label}</p>
-                          <p className="text-lg font-bold text-primary">{formatEuro(item.montant)}</p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="flex gap-2">
-                      <Button
-                        variant={item.origine === "MON_CONSEIL" ? "default" : "outline"}
-                        size="sm"
-                        className={`flex-1 ${item.origine === "MON_CONSEIL" ? "bg-green-600 hover:bg-green-700" : ""}`}
-                        onClick={() => setOrigine(item.id, "MON_CONSEIL")}
-                      >
-                        <CheckCircle2 className="h-4 w-4 mr-2" />
-                        Avec moi
-                      </Button>
-                      <Button
-                        variant={item.origine === "EXISTANT_CLIENT" ? "default" : "outline"}
-                        size="sm"
-                        className={`flex-1 ${item.origine === "EXISTANT_CLIENT" ? "bg-gray-600 hover:bg-gray-700" : ""}`}
-                        onClick={() => setOrigine(item.id, "EXISTANT_CLIENT")}
-                      >
-                        <XCircle className="h-4 w-4 mr-2" />
-                        À côté
-                      </Button>
-                    </div>
-
-                    {isImmobilierFinancingType(item.type) && (
-                      <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3">
-                        <div className="space-y-1">
-                          <Label className="text-xs">Mensualité crédit (€/mois)</Label>
-                          <Input
-                            type="number"
-                            className="h-8"
-                            value={item.mensualiteCredit ?? ""}
-                            onChange={(e) =>
-                              updateItemField(
-                                item.id,
-                                "mensualiteCredit",
-                                e.target.value ? parseFloat(e.target.value) : undefined
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">CRD (€)</Label>
-                          <Input
-                            type="number"
-                            className="h-8"
-                            value={item.creditCRD ?? ""}
-                            onChange={(e) =>
-                              updateItemField(
-                                item.id,
-                                "creditCRD",
-                                e.target.value ? parseFloat(e.target.value) : undefined
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Loyer mensuel (€)</Label>
-                          <Input
-                            type="number"
-                            className="h-8"
-                            value={item.loyerMensuel ?? ""}
-                            onChange={(e) =>
-                              updateItemField(
-                                item.id,
-                                "loyerMensuel",
-                                e.target.value ? parseFloat(e.target.value) : undefined
-                              )
-                            }
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label className="text-xs">Fin de prêt (JJ/MM/AAAA)</Label>
-                          <Input
-                            className="h-8"
-                            placeholder="15/06/2045"
-                            value={item.dateFinCredit ?? ""}
-                            onChange={(e) =>
-                              updateItemField(item.id, "dateFinCredit", e.target.value || undefined)
-                            }
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+            <div className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                  <HelpCircle className="h-4 w-4 text-blue-500" />
+                  Investissements à trier ({toTriItems.filter((i) => i.origine).length}/{toTriItems.length})
+                </h3>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAllOrigine("MON_CONSEIL")}>
+                    Tout « avec moi »
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAllOrigine("EXISTANT_CLIENT")}>
+                    Tout « à côté »
+                  </Button>
+                </div>
               </div>
+
+              {(Object.keys(CATEGORY_LABELS) as RioPatrimoineCategory[]).map((category) => {
+                const categoryItems = groupedToTriItems[category];
+                if (categoryItems.length === 0) return null;
+                return (
+                  <div key={category} className="space-y-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      {CATEGORY_LABELS[category]} ({categoryItems.length})
+                    </h4>
+                    <div className="space-y-3">{categoryItems.map(renderTriItem)}</div>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -437,20 +527,31 @@ export function PatrimoineTriDialog({
           )}
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={handleCancel}>
-            Annuler
-          </Button>
-          <Button 
-            onClick={handleValidate}
-            disabled={!allTriCompleted && toTriItems.length > 0}
-          >
-            {allTriCompleted || toTriItems.length === 0
-              ? "Valider l'import"
-              : `Trier les ${toTriItems.length - toTriItems.filter(i => i.origine).length} restant(s)`
-            }
-          </Button>
-        </DialogFooter>
+      <div className={`flex justify-end gap-2 ${embedded ? "pt-4 border-t mt-4" : ""}`}>
+        <Button variant="outline" onClick={handleCancel}>
+          {embedded ? "Retour" : "Annuler"}
+        </Button>
+        <Button
+          onClick={handleValidate}
+          disabled={!allTriCompleted && toTriItems.length > 0}
+        >
+          {allTriCompleted || toTriItems.length === 0
+            ? "Valider l'import"
+            : `Trier les ${toTriItems.length - toTriItems.filter((i) => i.origine).length} restant(s)`}
+        </Button>
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="flex flex-col min-h-0 flex-1 overflow-y-auto">{triContent}</div>;
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        {triContent}
+        <DialogFooter className="hidden" />
       </DialogContent>
     </Dialog>
   );

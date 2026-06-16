@@ -23,17 +23,10 @@ import { uploadDocument, createDocument, type NewDocument } from "@/lib/api/taur
 import { extractTextFromPDFPath, parseAuto, isNativeTextPDF, type ExtractedData } from "@/lib/pdf";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { IdentityExtractPreviewDialog } from "./IdentityExtractPreviewDialog";
-import { PatrimoineTriDialog } from "./PatrimoineTriDialog";
-import { RioUpdateComparisonDialog } from "./RioUpdateComparisonDialog";
+import { RioImportWizard } from "./RioImportWizard";
 import { terminateOcrWorker, isLikelyIdentityFileName, looksLikeIdentityDocument, isIdentityFilePath } from "@/lib/identity";
 import { getContactById, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
-import type { NewInvestissement } from "@/lib/api/tauri-investissements";
 import { toast } from "sonner";
-import { useRioCoupleImport } from "@/hooks/useRioCoupleImport";
-import { useRioSoloImport } from "@/hooks/useRioSoloImport";
-import { useRioPatrimoineFlow } from "@/hooks/useRioPatrimoineFlow";
-import { hasPatrimoineToTri } from "@/lib/documents/rio-patrimoine-flow";
-import { applyQpiImport } from "@/lib/contacts/apply-qpi-import";
 import { isImageFile, useIdentityDocumentImport } from "@/hooks/useIdentityDocumentImport";
 import { getMimeType } from "@/lib/documents/file-mime";
 import type { IdentityImportMode } from "@/lib/documents/identity-document-apply";
@@ -98,25 +91,12 @@ export function DocumentUpload({
     notes: "",
   });
 
-  const { applyCoupleRioData } = useRioCoupleImport({
-    effectiveContactId,
-    foyerId,
-    formFoyerId: formData.foyer_id,
-    importContacts,
-  });
-
-  const { applySoloRioData } = useRioSoloImport({
-    effectiveContactId,
-    foyerId: foyerId ?? formData.foyer_id,
-  });
-
-  const patrimoineFlow = useRioPatrimoineFlow({
-    contactId,
-    defaultContactId,
-    foyerId,
-    defaultTypeDocument: initialTypeDocument,
-    onSuccess,
-    onOpenChange,
+  const resetFormData = (): Partial<NewDocument> => ({
+    contact_id: contactId ?? defaultContactId,
+    foyer_id: foyerId,
+    type_document: defaultTypeDocument ?? "AUTRE",
+    date_document: "",
+    notes: "",
   });
 
   const identityImport = useIdentityDocumentImport({
@@ -128,16 +108,21 @@ export function DocumentUpload({
     onOpenChange,
   });
 
-  const resetUploadState = () => {
-    setUploadedFile(null);
-    setExtractedText("");
-    setFormData(patrimoineFlow.resetFormData());
-  };
-
   const identityTextCallbacks = {
     setExtractedText,
     clearExtractedData: () => setExtractedData(null),
   };
+
+  useEffect(() => {
+    if (open) return;
+    setUploadedFile(null);
+    setExtractedData(null);
+    setShowPreview(false);
+    setExtractedText("");
+    setFormData(resetFormData());
+    identityImport.setIdentityImportMode("single");
+    identityImport.setUploadedVersoFile(null);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps -- reset à la fermeture uniquement
 
   useEffect(() => {
     if (!open) return;
@@ -176,7 +161,8 @@ export function DocumentUpload({
   }, [effectiveContactId]);
 
   const isIdentityMode = formData.type_document === "IDENTITE";
-  const isPatrimoineMode = formData.type_document === "PATRIMOINE";
+  const isStelliumWizardMode =
+    formData.type_document === "PATRIMOINE" || formData.type_document === "QPI";
 
   const handleVersoFileSelect = async () => {
     try {
@@ -202,19 +188,6 @@ export function DocumentUpload({
     try {
       const file = await uploadDocument();
       if (!file) return;
-
-      if (isPatrimoineMode) {
-        if (!file.name.toLowerCase().endsWith(".pdf")) {
-          toast.error("RIO / relevé patrimonial : sélectionnez un fichier PDF.");
-          return;
-        }
-        setUploadedFile(file);
-        setFormData((prev) => ({ ...prev, nom_fichier: file.name }));
-        if (autoExtract) {
-          await handleExtractText(file.path);
-        }
-        return;
-      }
 
       if (file) {
         const nextType =
@@ -270,10 +243,9 @@ export function DocumentUpload({
       setExtractedText(result.text);
 
       const isIdentityCandidate =
-        !isPatrimoineMode &&
-        (isIdentityMode ||
-          looksLikeIdentityDocument(result.text) ||
-          isLikelyIdentityFileName(filePath));
+        isIdentityMode ||
+        looksLikeIdentityDocument(result.text) ||
+        isLikelyIdentityFileName(filePath);
 
       if (isIdentityCandidate) {
         if (!identityImport.requireContactForIdentity()) return;
@@ -296,6 +268,14 @@ export function DocumentUpload({
       }
 
       const parsedData = parseAuto(result.text);
+      if (parsedData.typeDocument === "QPI" || parsedData.typeDocument === "RIO") {
+        setFormData((prev) => ({
+          ...prev,
+          type_document: parsedData.typeDocument === "QPI" ? "QPI" : "PATRIMOINE",
+        }));
+        setExtractedData(parsedData);
+        return;
+      }
       setExtractedData(parsedData);
       setShowPreview(true);
     } catch (error) {
@@ -306,83 +286,9 @@ export function DocumentUpload({
     }
   };
 
-  const finishRioImport = async (
-    data: ExtractedData,
-    result: NonNullable<Awaited<ReturnType<typeof applySoloRioData>>>,
-    coupleMemberIds?: [number, number]
-  ) => {
-    await patrimoineFlow.finishImportFlow({
-      data,
-      result,
-      uploadedFile,
-      formData,
-      coupleMemberIds,
-      onClosePreview: () => setShowPreview(false),
-      onClearExtractedData: () => setExtractedData(null),
-      onResetUpload: resetUploadState,
-    });
-  };
-
-  const handleApplyData = async (data: ExtractedData) => {
-    setLoading(true);
-
-    try {
-      if (data.typeDocument === "QPI") {
-        const qpiResult = await applyQpiImport(data, {
-          effectiveContactId: effectiveContactId,
-          uploadedFile: uploadedFile ?? undefined,
-          formNotes: formData.notes,
-        });
-        if (qpiResult) {
-          toast.success(qpiResult.successMessage);
-          setShowPreview(false);
-          setExtractedData(null);
-          resetUploadState();
-          setFormData(patrimoineFlow.resetFormData());
-          onSuccess();
-          onOpenChange(false);
-        } else {
-          toast.error(
-            "Impossible d'enregistrer le profil investisseur : SRI manquant (1–7) ou identité insuffisante (nom + prénom)."
-          );
-        }
-        return;
-      }
-
-      const deferFinancial = hasPatrimoineToTri(data);
-      const importOpts = { deferFinancialFields: deferFinancial };
-
-      if (data.isCouple && data.conjoint) {
-        const result = await applyCoupleRioData(data, importOpts);
-        if (result) {
-          await finishRioImport(data, result, result.memberContactIds);
-        }
-        return;
-      }
-
-      const result = await applySoloRioData(data, importOpts);
-      if (result) {
-        await finishRioImport(data, result);
-      }
-    } catch (error) {
-      console.error("❌ Erreur lors de l'application des données:", error);
-      alert("❌ Erreur lors de l'enregistrement:\n\n" + String(error));
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleIgnoreData = () => {
     setExtractedData(null);
-  };
-
-  const handlePatrimoineTriComplete = async (investissements: NewInvestissement[]) => {
-    await patrimoineFlow.handlePatrimoineTriComplete(investissements, {
-      setLoading,
-      onClearExtractedData: () => setExtractedData(null),
-      onResetUpload: resetUploadState,
-      onResetForm: () => setFormData(patrimoineFlow.resetFormData()),
-    });
+    setShowPreview(false);
   };
 
   const handleApplyIdentity = async (
@@ -451,7 +357,7 @@ export function DocumentUpload({
       identityImport.setUploadedVersoFile(null);
       setExtractedText("");
       setExtractedData(null);
-      setFormData(patrimoineFlow.resetFormData());
+      setFormData(resetFormData());
       identityImport.setIdentityImportMode("single");
     } catch (error) {
       console.error("Error saving document:", error);
@@ -478,56 +384,47 @@ export function DocumentUpload({
 
   const isExtracting = extracting || identityImport.extracting;
   const canRunIdentityExtract = identityImport.canRunIdentityExtract(uploadedFile, isIdentityMode);
-  const patrimoineFlowActive =
-    patrimoineFlow.showPatrimoineTri || patrimoineFlow.showRioUpdate;
+
+  const stelliumBootstrap =
+    uploadedFile || extractedData
+      ? {
+          initialUploadedFile: uploadedFile ?? undefined,
+          initialExtractedData: extractedData ?? undefined,
+          initialStep: (extractedData ? 2 : 1) as 1 | 2 | 3,
+        }
+      : {};
+
+  if (open && isStelliumWizardMode) {
+    return (
+      <RioImportWizard
+        open={open}
+        onOpenChange={onOpenChange}
+        onSuccess={onSuccess}
+        contactId={contactId}
+        defaultContactId={defaultContactId}
+        defaultTypeDocument={formData.type_document}
+        foyerId={foyerId}
+        contactNom={contactNom}
+        contactPrenom={contactPrenom}
+        initialFormDate={formData.date_document}
+        initialFormNotes={formData.notes}
+        {...stelliumBootstrap}
+      />
+    );
+  }
 
   return (
     <>
-      {/* Dialog de prévisualisation des données */}
       {extractedData && (
         <ExtractedDataPreviewAdvanced
           open={showPreview}
           onOpenChange={setShowPreview}
           extractedData={extractedData}
-          onApply={handleApplyData}
+          onApply={(data) => {
+            setExtractedData(data);
+            setShowPreview(false);
+          }}
           onIgnore={handleIgnoreData}
-        />
-      )}
-
-      {/* Dialog de tri du patrimoine (nouveau contact) */}
-      {patrimoineFlow.triExtractedData && patrimoineFlow.triContactId && (
-        <PatrimoineTriDialog
-          open={patrimoineFlow.showPatrimoineTri}
-          onOpenChange={patrimoineFlow.setShowPatrimoineTri}
-          extractedData={patrimoineFlow.triExtractedData}
-          contactId={patrimoineFlow.triContactId}
-          foyerId={patrimoineFlow.triFoyerId ?? undefined}
-          ownerLabel={patrimoineFlow.triPatrimoineLabel}
-          onComplete={handlePatrimoineTriComplete}
-          onCancel={patrimoineFlow.handlePatrimoineTriCancel}
-        />
-      )}
-      
-      {patrimoineFlow.triExtractedData && patrimoineFlow.triContactId && (
-        <RioUpdateComparisonDialog
-          open={patrimoineFlow.showRioUpdate}
-          onOpenChange={patrimoineFlow.setShowRioUpdate}
-          extractedData={patrimoineFlow.triExtractedData}
-          contactId={patrimoineFlow.triContactId}
-          contactNom={patrimoineFlow.updateContactNom || patrimoineFlow.triPatrimoineLabel}
-          foyerId={patrimoineFlow.triFoyerId ?? undefined}
-          coupleMemberIds={
-            patrimoineFlow.triCoupleMemberIds.length
-              ? patrimoineFlow.triCoupleMemberIds
-              : undefined
-          }
-          onComplete={() =>
-            patrimoineFlow.handleRioUpdateComplete({
-              onResetUpload: resetUploadState,
-              onResetForm: () => setFormData(patrimoineFlow.resetFormData()),
-            })
-          }
-          onCancel={patrimoineFlow.handleRioUpdateCancel}
         />
       )}
 
@@ -552,27 +449,12 @@ export function DocumentUpload({
         }
       />
 
-      <Dialog
-        open={open && !identityImport.showIdentityPreview && !patrimoineFlowActive}
-        onOpenChange={onOpenChange}
-      >
+      <Dialog open={open && !identityImport.showIdentityPreview} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Importer un document</DialogTitle>
           <DialogDescription>
-            {isPatrimoineMode ? (
-              effectiveContactId ? (
-                <>
-                  Importez un <strong>RIO</strong> ou relevé patrimonial (PDF Stellium). Après
-                  extraction, validez la prévisualisation puis le tri du patrimoine.
-                </>
-              ) : (
-                <>
-                  Sélectionnez un client, choisissez ce type, puis un PDF RIO ou relevé
-                  patrimonial.
-                </>
-              )
-            ) : isIdentityMode ? (
+            {isIdentityMode ? (
               effectiveContactId ? (
                 <>
                   Pièce d&apos;identité ou passeport — l&apos;OCR complète uniquement les champs
@@ -610,10 +492,13 @@ export function DocumentUpload({
             <Select
               value={formData.type_document}
               onValueChange={(value) => {
+                const switchingToStellium = value === "PATRIMOINE" || value === "QPI";
                 setFormData({ ...formData, type_document: value });
-                setExtractedData(null);
-                setShowPreview(false);
-                setExtractedText("");
+                if (!switchingToStellium) {
+                  setExtractedData(null);
+                  setShowPreview(false);
+                  setExtractedText("");
+                }
                 if (value !== "IDENTITE") {
                   identityImport.setIdentityImportMode("single");
                   identityImport.setUploadedVersoFile(null);
@@ -633,12 +518,6 @@ export function DocumentUpload({
                 <SelectItem value="AUTRE">{getDocumentTypeLabel("AUTRE")}</SelectItem>
               </SelectContent>
             </Select>
-            {isPatrimoineMode && (
-              <p className="text-xs text-muted-foreground">
-                PDF Stellium (RIO ou QPI détecté automatiquement). Après analyse : prévisualisation →
-                Appliquer → tri « avec moi » / « à côté » pour le RIO.
-              </p>
-            )}
           </div>
 
           {isIdentityMode && (
@@ -822,11 +701,9 @@ export function DocumentUpload({
                 className="h-4 w-4 rounded border-gray-300"
               />
               <Label htmlFor="auto-extract" className="text-sm font-normal cursor-pointer">
-                {isPatrimoineMode
-                  ? "Extraire automatiquement les données du RIO (PDF texte)"
-                  : isIdentityMode
-                    ? "Extraire automatiquement la pièce d'identité"
-                    : "Extraire automatiquement les données (PDF patrimoine, pièce d'identité)"}
+                {isIdentityMode
+                  ? "Extraire automatiquement la pièce d'identité"
+                  : "Extraire automatiquement les données (PDF patrimoine, pièce d'identité)"}
               </Label>
             </div>
           </div>
@@ -874,19 +751,8 @@ export function DocumentUpload({
             >
               Annuler
             </Button>
-            <Button
-              type="submit"
-              disabled={
-                loading ||
-                !uploadedFile ||
-                (isPatrimoineMode && extractedData != null)
-              }
-            >
-              {loading
-                ? "Enregistrement..."
-                : isPatrimoineMode && extractedData
-                  ? "Validez la prévisualisation"
-                  : "Importer"}
+            <Button type="submit" disabled={loading || !uploadedFile}>
+              {loading ? "Enregistrement..." : "Importer"}
             </Button>
           </DialogFooter>
         </form>

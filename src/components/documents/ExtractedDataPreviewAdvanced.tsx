@@ -1,10 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -17,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   FileCheck,
   AlertCircle,
@@ -33,6 +33,14 @@ import {
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
+import {
+  buildRioPreviewSummary,
+  hasStructuredRioPatrimoine,
+  isGuidedStelliumPreview,
+} from "@/lib/documents/rio-import-preview";
+import { RioImportStepper } from "./RioImportStepper";
+import { RioPreviewSummaryBar } from "./RioPreviewSummaryBar";
+import { RioPatrimoineOverview } from "./RioPatrimoineOverview";
 
 interface ExtractedDataPreviewAdvancedProps {
   open: boolean;
@@ -40,6 +48,10 @@ interface ExtractedDataPreviewAdvancedProps {
   extractedData: ExtractedData;
   onApply: (data: ExtractedData) => void;
   onIgnore: () => void;
+  /** Panel sans Dialog (wizard étape 2). */
+  variant?: "dialog" | "panel";
+  /** Masque le stepper interne (déjà dans la barre contexte). */
+  hideStepper?: boolean;
 }
 
 export function ExtractedDataPreviewAdvanced({
@@ -48,11 +60,42 @@ export function ExtractedDataPreviewAdvanced({
   extractedData,
   onApply,
   onIgnore,
+  variant = "dialog",
+  hideStepper = false,
 }: ExtractedDataPreviewAdvancedProps) {
   const [formData, setFormData] = useState<ExtractedData>(extractedData);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(["identite", "revenus", "patrimoine"])
   );
+  const [guidedTab, setGuidedTab] = useState("contact");
+
+  const guidedMode = isGuidedStelliumPreview(formData.typeDocument);
+  const isQpiPreview = formData.typeDocument === "QPI";
+  const structuredPatrimoine = hasStructuredRioPatrimoine(formData);
+  const previewSummary = buildRioPreviewSummary(formData);
+
+  useEffect(() => {
+    setFormData(extractedData);
+    setGuidedTab("contact");
+  }, [extractedData]);
+
+  const isSectionVisible = (sectionId: string): boolean => {
+    if (!guidedMode) return true;
+    if (isQpiPreview) {
+      if (sectionId === "objectifs") return guidedTab === "profil";
+      if (["identite", "situation"].includes(sectionId)) return guidedTab === "contact";
+      return false;
+    }
+    const tabBySection: Record<string, string> = {
+      identite: "contact",
+      situation: "contact",
+      revenus: "revenus",
+      patrimoine: "patrimoine",
+      objectifs: "objectifs",
+    };
+    if (sectionId === "patrimoine" && structuredPatrimoine) return false;
+    return tabBySection[sectionId] === guidedTab;
+  };
 
   const previewReadonlyClass = "bg-muted cursor-not-allowed";
 
@@ -95,27 +138,34 @@ export function ExtractedDataPreviewAdvanced({
     icon: Icon,
     title,
     children,
+    hidden,
+    forceExpanded,
   }: {
     id: string;
     icon: any;
     title: string;
     children: React.ReactNode;
+    hidden?: boolean;
+    forceExpanded?: boolean;
   }) => {
-    const isExpanded = expandedSections.has(id);
+    if (hidden) return null;
+    const isExpanded = forceExpanded ?? expandedSections.has(id);
     return (
       <div className="border rounded-lg">
         <button
           type="button"
-          onClick={() => toggleSection(id)}
+          onClick={() => !forceExpanded && toggleSection(id)}
           className="w-full flex items-center gap-2 p-4 hover:bg-gray-50 transition-colors"
+          disabled={forceExpanded}
         >
           <Icon className="h-5 w-5 text-primary" />
           <span className="font-medium flex-1 text-left">{title}</span>
-          {isExpanded ? (
-            <ChevronDown className="h-5 w-5" />
-          ) : (
-            <ChevronRight className="h-5 w-5" />
-          )}
+          {!forceExpanded &&
+            (isExpanded ? (
+              <ChevronDown className="h-5 w-5" />
+            ) : (
+              <ChevronRight className="h-5 w-5" />
+            ))}
         </button>
         {isExpanded && <div className="p-4 pt-0 space-y-4">{children}</div>}
       </div>
@@ -141,19 +191,8 @@ export function ExtractedDataPreviewAdvanced({
     return null;
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <FileCheck className="h-5 w-5 text-primary" />
-            Données extraites — {getDocumentTypeLabel(formData.typeDocument || "AUTRE")}
-          </DialogTitle>
-          <DialogDescription>
-            {getPreviewDescription(formData.typeDocument)}
-          </DialogDescription>
-        </DialogHeader>
-
+  const previewBody = (
+    <>
         {/* Score de confiance */}
         <div
           className={`flex items-center gap-2 p-3 rounded-lg border ${
@@ -178,7 +217,38 @@ export function ExtractedDataPreviewAdvanced({
           </div>
         </div>
 
+        {guidedMode && (
+          <>
+            {!hideStepper && (
+              <RioImportStepper
+                currentStep={2}
+                showPatrimoineStep={previewSummary.hasPatrimoineStep}
+                className="mt-4"
+              />
+            )}
+            <RioPreviewSummaryBar data={formData} />
+            <Tabs value={guidedTab} onValueChange={setGuidedTab} className="mt-4">
+              <TabsList
+                className={`grid w-full ${isQpiPreview ? "grid-cols-2" : "grid-cols-4"}`}
+              >
+                <TabsTrigger value="contact">Contact</TabsTrigger>
+                {!isQpiPreview && (
+                  <>
+                    <TabsTrigger value="revenus">Revenus</TabsTrigger>
+                    <TabsTrigger value="patrimoine">Patrimoine</TabsTrigger>
+                    <TabsTrigger value="objectifs">Objectifs</TabsTrigger>
+                  </>
+                )}
+                {isQpiPreview && <TabsTrigger value="profil">Profil investisseur</TabsTrigger>}
+              </TabsList>
+            </Tabs>
+          </>
+        )}
+
         <div className="space-y-3 mt-4">
+          {guidedMode && structuredPatrimoine && guidedTab === "patrimoine" && (
+            <RioPatrimoineOverview data={formData} />
+          )}
           {/* Section Identité & Coordonnées */}
           {hasData([
             formData.civilite,
@@ -187,7 +257,13 @@ export function ExtractedDataPreviewAdvanced({
             formData.email,
             formData.telephone,
           ]) && (
-            <Section id="identite" icon={User} title="Identité & Coordonnées">
+            <Section
+              id="identite"
+              icon={User}
+              title="Identité & Coordonnées"
+              hidden={!isSectionVisible("identite")}
+              forceExpanded={guidedMode}
+            >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {formData.civilite !== undefined && (
                   <div className="space-y-2">
@@ -355,6 +431,8 @@ export function ExtractedDataPreviewAdvanced({
               id="situation"
               icon={Briefcase}
               title="Situation Familiale & Professionnelle"
+              hidden={!isSectionVisible("situation")}
+              forceExpanded={guidedMode}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {formData.situationFamiliale !== undefined && (
@@ -473,7 +551,13 @@ export function ExtractedDataPreviewAdvanced({
             formData.revenusTotal,
             formData.chargesTotal,
           ]) && (
-            <Section id="revenus" icon={Euro} title="Revenus & Charges">
+            <Section
+              id="revenus"
+              icon={Euro}
+              title="Revenus & Charges"
+              hidden={!isSectionVisible("revenus")}
+              forceExpanded={guidedMode}
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Revenus */}
                 {hasData([formData.revenusSalaires, formData.revenusTotal]) && (
@@ -608,7 +692,13 @@ export function ExtractedDataPreviewAdvanced({
             formData.residencePrincipale,
             formData.contratsFinanciers?.length,
           ]) && (
-            <Section id="patrimoine" icon={Home} title="Patrimoine">
+            <Section
+              id="patrimoine"
+              icon={Home}
+              title="Patrimoine"
+              hidden={!isSectionVisible("patrimoine")}
+              forceExpanded={guidedMode}
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Patrimoine total */}
                 {formData.patrimoineTotal !== undefined && (
@@ -1231,7 +1321,13 @@ export function ExtractedDataPreviewAdvanced({
             formData.profilRisque,
             formData.capaciteEpargneMensuelle,
           ]) && (
-            <Section id="objectifs" icon={Target} title="Objectifs & Profil">
+            <Section
+              id="objectifs"
+              icon={Target}
+              title="Objectifs & Profil"
+              hidden={!isSectionVisible("objectifs")}
+              forceExpanded={guidedMode}
+            >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {formData.objectifsPrincipaux &&
                   formData.objectifsPrincipaux.length > 0 && (
@@ -1308,14 +1404,42 @@ export function ExtractedDataPreviewAdvanced({
           </div>
         )}
 
-        <DialogFooter className="mt-6">
+        <div className={`flex justify-end gap-2 ${variant === "panel" ? "pt-4 border-t mt-4" : "mt-6"}`}>
           <Button type="button" variant="outline" onClick={handleIgnore}>
-            Ignorer
+            {variant === "panel" ? "Retour" : "Ignorer"}
           </Button>
           <Button type="button" onClick={handleApply}>
-            Appliquer les données
+            {isQpiPreview
+              ? "Enregistrer le profil"
+              : guidedMode && previewSummary.hasPatrimoineStep
+                ? "Valider et continuer →"
+                : "Appliquer les données"}
           </Button>
-        </DialogFooter>
+        </div>
+    </>
+  );
+
+  if (variant === "panel") {
+    return (
+      <div className="flex flex-col min-h-0 flex-1 overflow-y-auto pr-1">
+        {previewBody}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <FileCheck className="h-5 w-5 text-primary" />
+            Données extraites — {getDocumentTypeLabel(formData.typeDocument || "AUTRE")}
+          </DialogTitle>
+          <DialogDescription>
+            {getPreviewDescription(formData.typeDocument)}
+          </DialogDescription>
+        </DialogHeader>
+        {previewBody}
       </DialogContent>
     </Dialog>
   );

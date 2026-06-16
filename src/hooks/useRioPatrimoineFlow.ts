@@ -82,8 +82,17 @@ export function useRioPatrimoineFlow(options: {
       onClosePreview: () => void;
       onClearExtractedData: () => void;
       onResetUpload: () => void;
+      /** Wizard unique : avance à l'étape patrimoine au lieu d'ouvrir un 2e dialog. */
+      onWizardPatrimoineStep?: (state: {
+        contactId: number;
+        foyerId: number | null;
+        coupleMemberIds: number[];
+        ownerLabel: string;
+        hasExistingInvestments: boolean;
+        data: ExtractedData;
+      }) => void;
     }) => {
-      const { data, result, uploadedFile, formData, coupleMemberIds, onClosePreview, onClearExtractedData, onResetUpload } =
+      const { data, result, uploadedFile, formData, coupleMemberIds, onClosePreview, onClearExtractedData, onResetUpload, onWizardPatrimoineStep } =
         params;
 
       if (uploadedFile && result.finalContactId) {
@@ -102,12 +111,32 @@ export function useRioPatrimoineFlow(options: {
 
       if (hasPatrimoineToTri(data) && result.finalContactId) {
         onClosePreview();
+        const patrimoineState = {
+          contactId: result.finalContactId,
+          foyerId: coupleMemberIds?.length ? (resolveFoyerIdFromResult(result) ?? null) : null,
+          coupleMemberIds: coupleMemberIds ?? [],
+          ownerLabel: result.displayNom,
+          hasExistingInvestments: result.hasExistingInvestments,
+          data,
+        };
+
+        if (onWizardPatrimoineStep) {
+          setTriContactId(result.finalContactId);
+          setTriExtractedData(data);
+          setTriFoyerId(patrimoineState.foyerId);
+          setTriCoupleMemberIds(patrimoineState.coupleMemberIds);
+          setTriOwnerLabel(result.displayNom);
+          if (result.hasExistingInvestments) {
+            setUpdateContactNom(result.displayNom);
+          }
+          onWizardPatrimoineStep(patrimoineState);
+          return;
+        }
+
         setTriContactId(result.finalContactId);
         setTriExtractedData(data);
-        setTriFoyerId(
-          coupleMemberIds?.length ? (resolveFoyerIdFromResult(result) ?? null) : null
-        );
-        setTriCoupleMemberIds(coupleMemberIds ?? []);
+        setTriFoyerId(patrimoineState.foyerId);
+        setTriCoupleMemberIds(patrimoineState.coupleMemberIds);
         setTriOwnerLabel(result.displayNom);
 
         if (result.hasExistingInvestments) {

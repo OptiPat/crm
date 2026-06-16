@@ -44,6 +44,7 @@ import {
 } from "@/lib/documents/rio-investissement-extras";
 import { isImmobilierFinancingType } from "@/lib/investissements/investissement-immo-financing";
 import { toast } from "sonner";
+import { RioImportStepper } from "./RioImportStepper";
 
 function isResidencePrincipaleType(type: string): boolean {
   return type === "RP" || type === "RESIDENCE_PRINCIPALE";
@@ -60,6 +61,10 @@ interface RioUpdateComparisonDialogProps {
   coupleMemberIds?: number[];
   onComplete: () => void;
   onCancel: () => void;
+  /** Intégré dans le wizard (sans Dialog). */
+  embedded?: boolean;
+  /** Boutons « avec moi / à côté » pour les nouveaux investissements. */
+  unifiedTriUx?: boolean;
 }
 
 // Représente un investissement extrait du RIO
@@ -288,6 +293,8 @@ export function RioUpdateComparisonDialog({
   coupleMemberIds,
   onComplete,
   onCancel,
+  embedded = false,
+  unifiedTriUx = false,
 }: RioUpdateComparisonDialogProps) {
   const useFoyerPatrimoine = Boolean(foyerId);
   const defaultOwner = buildRioPatrimoineOwner({
@@ -942,14 +949,37 @@ export function RioUpdateComparisonDialog({
                   </div>
                   <div>
                     <label className="text-xs text-muted-foreground">Origine</label>
-                    <select
-                      value={comp.selectedOrigine}
-                      onChange={(e) => handleChangeOrigine(comp.id, e.target.value as OrigineInvestissement)}
-                      className="w-full h-8 text-sm border rounded px-2"
-                    >
-                      <option value="EXISTANT_CLIENT">À côté</option>
-                      <option value="MON_CONSEIL">Avec moi</option>
-                    </select>
+                    {unifiedTriUx && comp.linkedToExistingId === null ? (
+                      <div className="flex gap-1 mt-1">
+                        <Button
+                          type="button"
+                          variant={comp.selectedOrigine === "MON_CONSEIL" ? "default" : "outline"}
+                          size="sm"
+                          className={`flex-1 h-8 text-xs ${comp.selectedOrigine === "MON_CONSEIL" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                          onClick={() => handleChangeOrigine(comp.id, "MON_CONSEIL")}
+                        >
+                          Avec moi
+                        </Button>
+                        <Button
+                          type="button"
+                          variant={comp.selectedOrigine === "EXISTANT_CLIENT" ? "default" : "outline"}
+                          size="sm"
+                          className={`flex-1 h-8 text-xs ${comp.selectedOrigine === "EXISTANT_CLIENT" ? "bg-gray-600 hover:bg-gray-700" : ""}`}
+                          onClick={() => handleChangeOrigine(comp.id, "EXISTANT_CLIENT")}
+                        >
+                          À côté
+                        </Button>
+                      </div>
+                    ) : (
+                      <select
+                        value={comp.selectedOrigine}
+                        onChange={(e) => handleChangeOrigine(comp.id, e.target.value as OrigineInvestissement)}
+                        className="w-full h-8 text-sm border rounded px-2"
+                      >
+                        <option value="EXISTANT_CLIENT">À côté</option>
+                        <option value="MON_CONSEIL">Avec moi</option>
+                      </select>
+                    )}
                   </div>
                 </div>
                 
@@ -1360,22 +1390,34 @@ export function RioUpdateComparisonDialog({
     </div>
   );
 
-  return (
-    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <RefreshCw className="h-5 w-5" />
-            Mise à jour du RIO : {contactNom}
-          </DialogTitle>
-          <DialogDescription>
-            {useFoyerPatrimoine
-              ? "Comparez le patrimoine du foyer avec le nouveau RIO. Les investissements seront enregistrés au niveau du foyer."
-              : "Comparez les données du nouveau RIO avec les investissements existants. Sélectionnez les éléments à mettre à jour."}
-          </DialogDescription>
-        </DialogHeader>
+  const reviewContent = (
+    <>
+      {!embedded && (
+        <>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              Mise à jour du RIO : {contactNom}
+            </DialogTitle>
+            <DialogDescription>
+              {useFoyerPatrimoine
+                ? "Comparez le patrimoine du foyer avec le nouveau RIO. Les investissements seront enregistrés au niveau du foyer."
+                : "Comparez les données du nouveau RIO avec les investissements existants. Sélectionnez les éléments à mettre à jour."}
+            </DialogDescription>
+          </DialogHeader>
+          <RioImportStepper currentStep={3} className="pb-2" />
+        </>
+      )}
 
-        <div className="flex-1 overflow-y-auto space-y-4 py-4">
+      {embedded && (
+        <p className="text-sm text-muted-foreground mb-2">
+          {useFoyerPatrimoine
+            ? `Patrimoine du foyer — comparez avec le RIO de ${contactNom}.`
+            : `Comparez le RIO avec les investissements existants de ${contactNom}.`}
+        </p>
+      )}
+
+      <div className={`${embedded ? "overflow-y-auto space-y-4 py-2 flex-1 min-h-0" : "flex-1 overflow-y-auto space-y-4 py-2"}`}>
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="h-6 w-6 animate-spin mr-2" />
@@ -1518,8 +1560,7 @@ export function RioUpdateComparisonDialog({
           )}
         </div>
 
-        {/* Section Notes / Commentaires */}
-        <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+      <div className={`${embedded ? "pt-4 border-t mt-4" : "mt-4"} p-4 bg-slate-50 border border-slate-200 rounded-lg`}>
           <label className="text-sm font-medium text-slate-700 mb-2 flex items-center gap-1.5">
             <StickyNote className="h-4 w-4 shrink-0" aria-hidden />
             Notes / Commentaires (mise à jour RIO)
@@ -1532,36 +1573,50 @@ export function RioUpdateComparisonDialog({
           />
         </div>
 
-        <DialogFooter className="border-t pt-4">
-          <div className="flex items-center justify-between w-full">
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={handleSelectAll} disabled={loading}>
-                Tout sélectionner
-              </Button>
-              <Button variant="ghost" size="sm" onClick={handleDeselectAll} disabled={loading}>
-                Tout désélectionner
-              </Button>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={onCancel} disabled={saving}>
-                Annuler
-              </Button>
-              <Button onClick={handleApply} disabled={loading || saving}>
-                {saving ? (
-                  <>
-                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                    Mise à jour...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    Appliquer les modifications
-                  </>
-                )}
-              </Button>
-            </div>
-          </div>
-        </DialogFooter>
+      <div className={`flex items-center justify-between gap-2 ${embedded ? "pt-4 border-t mt-4" : "border-t pt-4"}`}>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleSelectAll} disabled={loading}>
+            Tout sélectionner
+          </Button>
+          <Button variant="ghost" size="sm" onClick={handleDeselectAll} disabled={loading}>
+            Tout désélectionner
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={onCancel} disabled={saving}>
+            {embedded ? "Retour" : "Annuler"}
+          </Button>
+          <Button onClick={handleApply} disabled={loading || saving}>
+            {saving ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Mise à jour...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Appliquer les modifications
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+        {reviewContent}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        {reviewContent}
+        <DialogFooter className="hidden" />
       </DialogContent>
     </Dialog>
   );
