@@ -32,6 +32,7 @@ function pushFinancialFallbacks(data: ExtractedData, items: PatrimoineExtractIte
     { key: "pel", type: "PEL", label: "PEL" },
     { key: "perp", type: "PERP", label: "PERP" },
     { key: "compteTitres", type: "COMPTE_TITRE", label: "Compte-titres" },
+    { key: "actionsObligations", type: "AUTRE", label: "Actions / Obligations" },
     { key: "livretA", type: "LIVRET_A", label: "Livret A", auto: "EXISTANT_CLIENT" },
     { key: "ldd", type: "LDDS", label: "LDD", auto: "EXISTANT_CLIENT" },
     { key: "compteCourant", type: "EPARGNE_BANCAIRE", label: "Compte courant", auto: "EXISTANT_CLIENT" },
@@ -91,6 +92,14 @@ export function extractPatrimoineItemsFromRio(data: ExtractedData): PatrimoineEx
         type: "RP",
         label: "Résidence principale",
         montant: data.residencePrincipale.valeur,
+      });
+    }
+    if (data.residenceSecondaire?.valeur && data.residenceSecondaire.valeur > 0) {
+      items.push({
+        id: "residence-secondaire",
+        type: "RS",
+        label: "Résidence secondaire",
+        montant: data.residenceSecondaire.valeur,
       });
     }
     if (data.immobilierLocatif?.valeur && data.immobilierLocatif.valeur > 0) {

@@ -42,6 +42,12 @@ import {
   buildRioValorisationDateIso,
   usesRioEncoursMontant,
 } from "@/lib/documents/rio-investissement-extras";
+import { isImmobilierFinancingType } from "@/lib/investissements/investissement-immo-financing";
+import { toast } from "sonner";
+
+function isResidencePrincipaleType(type: string): boolean {
+  return type === "RP" || type === "RESIDENCE_PRINCIPALE";
+}
 
 interface RioUpdateComparisonDialogProps {
   open: boolean;
@@ -414,6 +420,7 @@ export function RioUpdateComparisonDialog({
       setComparisons(newComparisons);
     } catch (error) {
       console.error("Erreur chargement investissements:", error);
+      toast.error("Impossible de charger les investissements pour la comparaison RIO.");
     } finally {
       setLoading(false);
     }
@@ -433,7 +440,7 @@ export function RioUpdateComparisonDialog({
     
     // Catégorisation par type
     const byCategory = {
-      immobilier: comparisons.filter(c => ["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(c.editedType)),
+      immobilier: comparisons.filter(c => isImmobilierFinancingType(c.editedType)),
       scpi: comparisons.filter(c => ["SCPI", "SCPI_DEMEMBREMENT"].includes(c.editedType)),
       assuranceViePer: comparisons.filter(c => ["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(c.editedType)),
       epargne: comparisons.filter(c => ["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(c.editedType)),
@@ -524,6 +531,12 @@ export function RioUpdateComparisonDialog({
   const handleChangeCreditCRD = (id: string, crd: number | undefined) => {
     setComparisons(prev => prev.map(c => 
       c.id === id ? { ...c, creditCRD: crd } : c
+    ));
+  };
+
+  const handleChangeDateFinCredit = (id: string, dateFin?: string) => {
+    setComparisons(prev => prev.map(c =>
+      c.id === id ? { ...c, dateFinCredit: dateFin } : c
     ));
   };
 
@@ -758,12 +771,14 @@ export function RioUpdateComparisonDialog({
         }
       }
 
-      alert(`✅ Mise à jour terminée !\n\n• ${updated} investissement(s) mis à jour\n• ${added} investissement(s) ajouté(s)${notesRio.trim() ? "\n• Notes ajoutées au contact" : ""}`);
+      toast.success(
+        `Mise à jour terminée : ${updated} investissement(s) mis à jour, ${added} ajouté(s)${notesRio.trim() ? ", notes enregistrées sur le contact" : ""}.`
+      );
       completingRef.current = true;
       onComplete();
     } catch (error) {
       console.error("Erreur lors de la mise à jour:", error);
-      alert("❌ Erreur lors de la mise à jour:\n\n" + String(error));
+      toast.error("Erreur lors de la mise à jour du patrimoine : " + String(error));
     } finally {
       setSaving(false);
     }
@@ -944,8 +959,8 @@ export function RioUpdateComparisonDialog({
                   <div className="text-xs font-medium text-green-700 mb-2">Options avancées</div>
                   
                   {/* === OPTIONS IMMOBILIER === */}
-                  {["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(comp.editedType) && (
-                    <div className="grid grid-cols-4 gap-2">
+                  {isImmobilierFinancingType(comp.editedType) && (
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                       <div>
                         <label className="text-xs text-muted-foreground">Date d'achat</label>
                         <Input
@@ -975,7 +990,16 @@ export function RioUpdateComparisonDialog({
                           className="h-7 text-xs"
                         />
                       </div>
-                      {comp.editedType !== "RP" && (
+                      <div>
+                        <label className="text-xs text-muted-foreground">Fin de prêt (JJ/MM/AAAA)</label>
+                        <Input
+                          placeholder="15/06/2045"
+                          value={comp.dateFinCredit || ""}
+                          onChange={(e) => handleChangeDateFinCredit(comp.id, e.target.value || undefined)}
+                          className="h-7 text-xs"
+                        />
+                      </div>
+                      {!isResidencePrincipaleType(comp.editedType) && (
                         <div>
                           <label className="text-xs text-muted-foreground">Loyer mensuel</label>
                           <Input
@@ -1147,8 +1171,8 @@ export function RioUpdateComparisonDialog({
                 <div className="text-xs font-medium text-blue-700">Options (valeurs actuelles pré-remplies)</div>
                 
                 {/* === OPTIONS IMMOBILIER === */}
-                {["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"].includes(comp.editedType) && (
-                  <div className="grid grid-cols-4 gap-2">
+                {isImmobilierFinancingType(comp.editedType) && (
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     <div>
                       <label className="text-xs text-muted-foreground">Date d'achat</label>
                       <Input
@@ -1178,7 +1202,16 @@ export function RioUpdateComparisonDialog({
                         className="h-7 text-xs"
                       />
                     </div>
-                    {comp.editedType !== "RP" && (
+                    <div>
+                      <label className="text-xs text-muted-foreground">Fin de prêt (JJ/MM/AAAA)</label>
+                      <Input
+                        placeholder="15/06/2045"
+                        value={comp.dateFinCredit || ""}
+                        onChange={(e) => handleChangeDateFinCredit(comp.id, e.target.value || undefined)}
+                        className="h-7 text-xs"
+                      />
+                    </div>
+                    {!isResidencePrincipaleType(comp.editedType) && (
                       <div>
                         <label className="text-xs text-muted-foreground">Loyer mensuel</label>
                         <Input

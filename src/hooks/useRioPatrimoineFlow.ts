@@ -119,7 +119,7 @@ export function useRioPatrimoineFlow(options: {
         return;
       }
 
-      alert(result.successMessage + "\n\n📄 Document enregistré avec succès!");
+      toast.success(result.successMessage + " Document enregistré avec succès.");
       onClosePreview();
       onClearExtractedData();
       options.onSuccess();
@@ -199,7 +199,9 @@ export function useRioPatrimoineFlow(options: {
           }
         }
 
-        alert(`✅ Import terminé!\n\n🎯 Avec moi: ${avecMoi} investissement(s)\n📋 À côté: ${aCote} investissement(s)`);
+        toast.success(
+          `Import terminé : ${avecMoi} investissement(s) « avec moi », ${aCote} « à côté ».`
+        );
 
         setShowPatrimoineTri(false);
         resetTriState();
@@ -210,7 +212,7 @@ export function useRioPatrimoineFlow(options: {
         options.onOpenChange(false);
       } catch (error) {
         console.error("❌ Erreur lors de la création des investissements:", error);
-        alert("❌ Erreur lors de la création des investissements:\n\n" + String(error));
+        toast.error("Erreur lors de la création des investissements : " + String(error));
       } finally {
         callbacks.setLoading(false);
       }
@@ -232,7 +234,9 @@ export function useRioPatrimoineFlow(options: {
     }
     setShowPatrimoineTri(false);
     if (triContactId || triCoupleMemberIds.length > 0) {
-      toast.info("Patrimoine non importé. Revenus et objectifs du RIO ont été enregistrés sur le contact.");
+      toast.info(
+        "Patrimoine non importé. Revenus, objectifs et profil SRI du RIO ont été enregistrés sur le contact."
+      );
     }
     resetTriState();
     options.onSuccess();
@@ -253,7 +257,9 @@ export function useRioPatrimoineFlow(options: {
     }
     setShowRioUpdate(false);
     if (triContactId || triCoupleMemberIds.length > 0) {
-      toast.info("Mise à jour patrimoine annulée. Revenus et objectifs du RIO ont été enregistrés sur le contact.");
+      toast.info(
+        "Mise à jour patrimoine annulée. Revenus, objectifs et profil SRI du RIO ont été enregistrés sur le contact."
+      );
     }
     resetTriState();
     options.onSuccess();

@@ -334,7 +334,7 @@ export function DocumentUpload({
           formNotes: formData.notes,
         });
         if (qpiResult) {
-          alert(qpiResult.successMessage);
+          toast.success(qpiResult.successMessage);
           setShowPreview(false);
           setExtractedData(null);
           resetUploadState();
@@ -342,8 +342,8 @@ export function DocumentUpload({
           onSuccess();
           onOpenChange(false);
         } else {
-          alert(
-            "❌ Impossible d'enregistrer le profil investisseur : SRI manquant (1–7) ou identité insuffisante (nom + prénom)."
+          toast.error(
+            "Impossible d'enregistrer le profil investisseur : SRI manquant (1–7) ou identité insuffisante (nom + prénom)."
           );
         }
         return;
@@ -627,6 +627,7 @@ export function DocumentUpload({
                 <SelectItem value="IDENTITE">{getDocumentTypeLabel("IDENTITE")}</SelectItem>
                 <SelectItem value="FISCAL">{getDocumentTypeLabel("FISCAL")}</SelectItem>
                 <SelectItem value="PATRIMOINE">{getDocumentTypeLabel("PATRIMOINE")}</SelectItem>
+                <SelectItem value="QPI">{getDocumentTypeLabel("QPI")}</SelectItem>
                 <SelectItem value="CONTRAT">{getDocumentTypeLabel("CONTRAT")}</SelectItem>
                 <SelectItem value="RELEVE">{getDocumentTypeLabel("RELEVE")}</SelectItem>
                 <SelectItem value="AUTRE">{getDocumentTypeLabel("AUTRE")}</SelectItem>
@@ -634,8 +635,8 @@ export function DocumentUpload({
             </Select>
             {isPatrimoineMode && (
               <p className="text-xs text-muted-foreground">
-                PDF uniquement. Après analyse : prévisualisation → Appliquer → tri « avec moi » /
-                « à côté ».
+                PDF Stellium (RIO ou QPI détecté automatiquement). Après analyse : prévisualisation →
+                Appliquer → tri « avec moi » / « à côté » pour le RIO.
               </p>
             )}
           </div>

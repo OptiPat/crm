@@ -117,6 +117,13 @@ describe("rio-contact-fields", () => {
     expect(fields.profil_risque_sri).toBe(4);
   });
 
+  it("mergeRioFieldsOntoContact propage profil_risque_sri", () => {
+    const merged = mergeRioFieldsOntoContact(baseContact, {
+      profil_risque_sri: 5,
+    });
+    expect(merged.profil_risque_sri).toBe(5);
+  });
+
   it("includeFinancial false exclut revenus/charges/objectifs/SRI", () => {
     const fields = buildSoloRioContactFields(
       {

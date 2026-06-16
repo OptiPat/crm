@@ -269,6 +269,7 @@ export function mergeRioFieldsOntoContact(
     revenus_annuels: rio.revenus_annuels ?? existing.revenus_annuels,
     charges_emprunts: rio.charges_emprunts ?? existing.charges_emprunts,
     objectifs_patrimoniaux: rio.objectifs_patrimoniaux ?? existing.objectifs_patrimoniaux,
+    profil_risque_sri: rio.profil_risque_sri ?? existing.profil_risque_sri,
   };
 
   if (rio.date_naissance) {

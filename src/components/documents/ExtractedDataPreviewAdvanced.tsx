@@ -32,6 +32,7 @@ import {
   PiggyBank,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
+import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 
 interface ExtractedDataPreviewAdvancedProps {
   open: boolean;
@@ -123,16 +124,33 @@ export function ExtractedDataPreviewAdvanced({
 
   const hasData = (fields: any[]) => fields.some((f) => f !== undefined && f !== null && f !== "");
 
+  const getPreviewDescription = (typeDocument?: string): string => {
+    switch (typeDocument) {
+      case "RIO":
+        return "Vérifiez les données extraites du RIO. Après « Appliquer », le contact sera mis à jour et le patrimoine pourra être trié (« avec moi » / « à côté »).";
+      case "QPI":
+        return "Vérifiez le profil investisseur (SRI, objectifs). Les données seront enregistrées sur le contact sélectionné.";
+      default:
+        return "Vérifiez et complétez les informations avant de les appliquer";
+    }
+  };
+
+  const formatContratOrigine = (origine?: string): string | null => {
+    if (origine === "MON_CONSEIL") return "Avec moi (RIO)";
+    if (origine === "EXISTANT_CLIENT") return "À côté (RIO)";
+    return null;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileCheck className="h-5 w-5 text-primary" />
-            Données extraites du {formData.typeDocument || "PDF"}
+            Données extraites — {getDocumentTypeLabel(formData.typeDocument || "AUTRE")}
           </DialogTitle>
           <DialogDescription>
-            Vérifiez et complétez les informations avant de les appliquer
+            {getPreviewDescription(formData.typeDocument)}
           </DialogDescription>
         </DialogHeader>
 
@@ -588,6 +606,7 @@ export function ExtractedDataPreviewAdvanced({
             formData.per,
             formData.scpi,
             formData.residencePrincipale,
+            formData.contratsFinanciers?.length,
           ]) && (
             <Section id="patrimoine" icon={Home} title="Patrimoine">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -748,6 +767,35 @@ export function ExtractedDataPreviewAdvanced({
                         />
                       </div>
                     )}
+                  </>
+                )}
+
+                {/* Contrats financiers détaillés (lecture seule) */}
+                {formData.contratsFinanciers && formData.contratsFinanciers.length > 0 && (
+                  <>
+                    <div className="md:col-span-2 mt-4">
+                      <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
+                        <PiggyBank className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
+                        Contrats financiers ({formData.contratsFinanciers.length})
+                      </h4>
+                    </div>
+                    {formData.contratsFinanciers.map((contrat) => (
+                      <div key={contrat.id} className="md:col-span-2 p-3 border rounded-lg space-y-1 text-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium">{contrat.nom}</span>
+                          <span className="text-muted-foreground">({contrat.type})</span>
+                          {formatContratOrigine(contrat.autoOrigine) && (
+                            <span className="text-xs bg-muted px-2 py-0.5 rounded">
+                              {formatContratOrigine(contrat.autoOrigine)}
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Encours :</span>{" "}
+                          <span className="font-medium">{contrat.montant.toLocaleString("fr-FR")} €</span>
+                        </div>
+                      </div>
+                    ))}
                   </>
                 )}
 
@@ -1253,7 +1301,9 @@ export function ExtractedDataPreviewAdvanced({
                 : "Informations partielles du conjoint détectées"}
             </div>
             <div className="text-xs text-blue-700 mt-1">
-              Gestion multi-contacts à venir prochainement
+              {formData.isCouple
+                ? "Import couple : après « Appliquer », le conjoint sera créé ou relié au foyer, puis le patrimoine pourra être trié."
+                : "Conjoint mentionné dans le document — vérifiez les identités avant d'appliquer."}
             </div>
           </div>
         )}

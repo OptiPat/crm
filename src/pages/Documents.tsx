@@ -156,6 +156,8 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
         return "bg-green-100 text-green-800";
       case "PATRIMOINE":
         return "bg-purple-100 text-purple-800";
+      case "QPI":
+        return "bg-indigo-100 text-indigo-800";
       case "CONTRAT":
         return "bg-orange-100 text-orange-800";
       case "RELEVE":
@@ -233,6 +235,7 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
                   <SelectItem value="IDENTITE">{getDocumentTypeLabel("IDENTITE")}</SelectItem>
                   <SelectItem value="FISCAL">{getDocumentTypeLabel("FISCAL")}</SelectItem>
                   <SelectItem value="PATRIMOINE">{getDocumentTypeLabel("PATRIMOINE")}</SelectItem>
+                  <SelectItem value="QPI">{getDocumentTypeLabel("QPI")}</SelectItem>
                   <SelectItem value="CONTRAT">{getDocumentTypeLabel("CONTRAT")}</SelectItem>
                   <SelectItem value="RELEVE">{getDocumentTypeLabel("RELEVE")}</SelectItem>
                   <SelectItem value="AUTRE">{getDocumentTypeLabel("AUTRE")}</SelectItem>

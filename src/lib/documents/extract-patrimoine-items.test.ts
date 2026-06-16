@@ -34,4 +34,13 @@ describe("extractPatrimoineItemsFromRio", () => {
     expect(types.has("PEA")).toBe(true);
     expect(items.filter((i) => i.type === "ASSURANCE_VIE").length).toBeGreaterThan(1);
   });
+
+  it("fallback résidence secondaire et actions/obligations sans biens détaillés", () => {
+    const items = extractPatrimoineItemsFromRio({
+      residenceSecondaire: { valeur: 200_000 },
+      actionsObligations: 50_000,
+    });
+    expect(items.find((i) => i.type === "RS")?.montant).toBe(200_000);
+    expect(items.find((i) => i.label === "Actions / Obligations")?.montant).toBe(50_000);
+  });
 });
