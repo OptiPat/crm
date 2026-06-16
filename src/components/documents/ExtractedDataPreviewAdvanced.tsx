@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -40,6 +40,8 @@ import {
   buildRioPreviewSummary,
   isGuidedStelliumPreview,
 } from "@/lib/documents/rio-import-preview";
+import { formatSriLabel } from "@/lib/contacts/investisseur-sri";
+import { assessRioImport } from "@/lib/documents/rio-import-guard";
 import { RioImportStepper } from "./RioImportStepper";
 import { RioPreviewSummaryBar } from "./RioPreviewSummaryBar";
 
@@ -146,6 +148,11 @@ export function ExtractedDataPreviewAdvanced({
   const guidedMode = isGuidedStelliumPreview(formData.typeDocument);
   const isQpiPreview = formData.typeDocument === "QPI";
   const previewSummary = buildRioPreviewSummary(formData);
+  const stelliumApplyAssessment = useMemo(() => {
+    if (!guidedMode) return null;
+    return assessRioImport(formData);
+  }, [formData, guidedMode]);
+  const applyBlocked = stelliumApplyAssessment?.canProceed === false;
 
   useEffect(() => {
     // En panel (wizard étape 2), l'état local vit jusqu'à « Appliquer » — pas de resync à chaque render parent.
@@ -182,6 +189,7 @@ export function ExtractedDataPreviewAdvanced({
   };
 
   const handleApply = () => {
+    if (applyBlocked) return;
     onApply(formData);
     if (variant !== "panel") {
       onOpenChange(false);
@@ -286,7 +294,7 @@ export function ExtractedDataPreviewAdvanced({
       case "RIO":
         return "Vérifiez les données extraites du RIO. Après « Appliquer », le contact sera mis à jour et le patrimoine pourra être trié (« avec moi » / « à côté »).";
       case "QPI":
-        return "Vérifiez le profil investisseur (SRI, objectifs). Les données seront enregistrées sur le contact sélectionné.";
+        return "Vérifiez le profil SRI et l'identité. Seuls le SRI, le nom/prénom et le PDF seront enregistrés sur le contact.";
       default:
         return "Vérifiez et complétez les informations avant de les appliquer";
     }
@@ -317,6 +325,18 @@ export function ExtractedDataPreviewAdvanced({
             </div>
           </div>
         </div>
+
+        {isQpiPreview && (
+          <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" aria-hidden />
+            <p>
+              L&apos;import enregistre l&apos;identité, les coordonnées, le profil{" "}
+              <strong>SRI</strong> et le PDF QPI sur la fiche contact. Les niveaux de
+              connaissances, d&apos;expérience et le libellé d&apos;aversion au risque (ex. «
+              Dynamique ») sont affichés à titre indicatif — ils ne sont pas persistés en base.
+            </p>
+          </div>
+        )}
 
         {guidedMode && (
           <>
@@ -1126,6 +1146,14 @@ export function ExtractedDataPreviewAdvanced({
                 {formData.profilRisque !== undefined && (
                   <div className="space-y-2">
                     <Label>Profil de risque (SRI)</Label>
+                    {formData.aversionRisque && (
+                      <p className="text-xs text-muted-foreground">
+                        Profil Stellium : {formData.aversionRisque}
+                        {formatSriLabel(formData.profilRisque)
+                          ? ` → ${formatSriLabel(formData.profilRisque)}`
+                          : null}
+                      </p>
+                    )}
                     <Input
                       type="number"
                       min="1"
@@ -1170,10 +1198,15 @@ export function ExtractedDataPreviewAdvanced({
         )}
 
         <div className={`flex justify-end gap-2 ${variant === "panel" ? "pt-4 border-t mt-4" : "mt-6"}`}>
+          {applyBlocked && stelliumApplyAssessment?.issues[0] && (
+            <p className="mr-auto text-sm text-destructive self-center">
+              {stelliumApplyAssessment.issues[0]}
+            </p>
+          )}
           <Button type="button" variant="outline" onClick={handleIgnore}>
             {variant === "panel" ? "Retour" : "Ignorer"}
           </Button>
-          <Button type="button" onClick={handleApply}>
+          <Button type="button" onClick={handleApply} disabled={applyBlocked}>
             {isQpiPreview
               ? "Enregistrer le profil"
               : guidedMode && previewSummary.hasPatrimoineStep

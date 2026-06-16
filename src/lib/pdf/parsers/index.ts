@@ -20,7 +20,7 @@ import { parseRIO, isRIO } from "./rio-parser";
 
 /**
  * Parse automatiquement un texte en détectant le type de document.
- * Priorité : formats Stellium 2026+ → RIO legacy → générique.
+ * Priorité : formats Stellium 2026+ → RIO legacy (deprecated) → générique.
  */
 export function parseAuto(text: string): ExtractedData {
   const stellium = parseStelliumAuto(text);

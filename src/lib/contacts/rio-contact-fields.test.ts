@@ -124,6 +124,25 @@ describe("rio-contact-fields", () => {
     expect(merged.profil_risque_sri).toBe(5);
   });
 
+  it("mergeRioFieldsOntoContact identityFillEmptyOnly préserve email existant", () => {
+    const merged = mergeRioFieldsOntoContact(
+      { ...baseContact, email: "existant@mail.fr" },
+      { email: "parse@mail.fr", profession: "Directeur" },
+      { identityFillEmptyOnly: true }
+    );
+    expect(merged.email).toBe("existant@mail.fr");
+    expect(merged.profession).toBe("Directeur");
+  });
+
+  it("mergeRioFieldsOntoContact identityFillEmptyOnly remplit email vide", () => {
+    const merged = mergeRioFieldsOntoContact(
+      { ...baseContact, email: undefined },
+      { email: "nouveau@mail.fr" },
+      { identityFillEmptyOnly: true }
+    );
+    expect(merged.email).toBe("nouveau@mail.fr");
+  });
+
   it("includeFinancial false exclut revenus/charges/objectifs/SRI", () => {
     const fields = buildSoloRioContactFields(
       {

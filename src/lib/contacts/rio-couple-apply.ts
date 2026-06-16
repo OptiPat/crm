@@ -32,6 +32,7 @@ import {
   mergeRioFieldsOntoContact,
 } from "@/lib/contacts/rio-contact-fields";
 import { syncRioEnfants } from "@/lib/contacts/rio-enfants-apply";
+import { applyRioFiscaliteToFoyer } from "@/lib/contacts/rio-foyer-fiscal-apply";
 import {
   buildFoyerNomFromMembers,
   linkContactToFoyer,
@@ -51,7 +52,7 @@ export interface RioCoupleApplyContext {
   explicitFoyerId?: number;
   importContacts: Contact[];
   onMissingIdentity: (message: string) => void;
-  confirmIdentityMerge: (message: string) => boolean;
+  confirmIdentityMerge: (message: string) => boolean | Promise<boolean>;
 }
 
 async function resolveCoupleMember(
@@ -116,7 +117,8 @@ async function upsertCoupleMember(
     );
 
   if (existing && identityConflicts && identityConflicts.length > 0) {
-    const confirmMerge = ctx.confirmIdentityMerge(
+    const confirmMerge = await Promise.resolve(
+      ctx.confirmIdentityMerge(
       [
         "Même nom/prénom mais coordonnées différentes :",
         identityConflicts.join(", "),
@@ -129,6 +131,7 @@ async function upsertCoupleMember(
         "Fusionner sur la fiche existante ?",
         "(Annuler = créer une nouvelle fiche)",
       ].join("\n")
+      )
     );
     if (!confirmMerge) {
       existing = null;
@@ -144,7 +147,9 @@ async function upsertCoupleMember(
       existing.id,
       contactToUpdatePayload(
         existing,
-        mergeRioFieldsOntoContact(existing, rioFields)
+        mergeRioFieldsOntoContact(existing, rioFields, {
+          identityFillEmptyOnly: true,
+        })
       )
     );
     const refreshed = await getContactById(existing.id);
@@ -267,6 +272,8 @@ export async function applyCoupleRioImport(
   if (data.enfants?.length) {
     await syncRioEnfants({ enfants: data.enfants, foyerId: foyerLink.foyerId });
   }
+
+  await applyRioFiscaliteToFoyer(foyerLink.foyerId, data).catch(() => undefined);
 
   const finalContactId = person2Preferred
     ? foyerLink.contact2.id

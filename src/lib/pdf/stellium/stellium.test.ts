@@ -90,8 +90,14 @@ describe("Stellium — RIO Martinez 2026", () => {
     expect(data.chargesAutres).toBe(15720);
   });
 
+  it("extrait la fiscalité foyer (revenu brut global)", () => {
+    expect(data.revenuBrutGlobal).toBe(72_026);
+    expect(data.trancheImposition).toBeUndefined();
+  });
+
   it("extrait les objectifs et métadonnées", () => {
     expect(data.dateEntreeRelation).toBe("27/02/2026");
+    expect(data.dateDocument).toBe("15/06/2026");
     expect(data.objectifsPrincipaux).toEqual([
       "Accompagner vos enfants",
       "Préparer votre retraite",
@@ -171,6 +177,8 @@ describe("Stellium — RIO couple DEBBAGHI 2026", () => {
   it("extrait métadonnées et objectifs", () => {
     expect(data.dateEntreeRelation).toBe("16/09/2021");
     expect(data.dateDocument).toBe("15/06/2026");
+    expect(data.trancheImposition).toBe("11%");
+    expect(data.revenuBrutGlobal).toBe(126528);
     expect(data.objectifsPrincipaux?.length).toBeGreaterThanOrEqual(4);
     expect(data.confidence).toBeGreaterThanOrEqual(75);
   });
@@ -224,6 +232,7 @@ describe("Stellium — RIO couple NOYEZ/GENTIL 2026", () => {
   it("extrait métadonnées", () => {
     expect(data.dateEntreeRelation).toBe("29/07/2025");
     expect(data.dateDocument).toBe("15/06/2026");
+    expect(data.revenuBrutGlobal).toBe(37_289 + 34_958);
     expect(data.confidence).toBeGreaterThanOrEqual(75);
   });
 });

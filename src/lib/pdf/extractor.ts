@@ -3,9 +3,24 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { ExtractedText } from "./types";
 import { readPdfFile } from "@/lib/api/tauri-pdf";
+import {
+  reconstructPageTextFromItems,
+  type PdfTextItemLike,
+} from "./pdf-layout";
 
 // Worker bundlé via Vite (aligné sur la version pdfjs-dist installée)
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
+function extractPageText(textContent: { items: unknown[] }): string {
+  const items = textContent.items.filter(
+    (item): item is PdfTextItemLike =>
+      typeof item === "object" &&
+      item != null &&
+      "str" in item &&
+      typeof (item as PdfTextItemLike).str === "string"
+  );
+  return reconstructPageTextFromItems(items);
+}
 
 /**
  * Extrait le texte d'un fichier PDF natif depuis un chemin de fichier (Tauri)
@@ -31,19 +46,7 @@ export async function extractTextFromPDFPath(
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
-
-      // Combiner tous les items de texte
-      const pageText = textContent.items
-        .map((item: any) => {
-          // Certains items peuvent ne pas avoir de propriété 'str'
-          if ("str" in item) {
-            return item.str;
-          }
-          return "";
-        })
-        .join(" ");
-
-      fullText += pageText + "\n\n"; // Séparer les pages
+      fullText += extractPageText(textContent) + "\n\n";
     }
 
     // Extraire les métadonnées
@@ -99,19 +102,7 @@ export async function extractTextFromPDF(
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       const page = await pdf.getPage(pageNum);
       const textContent = await page.getTextContent();
-
-      // Combiner tous les items de texte
-      const pageText = textContent.items
-        .map((item: any) => {
-          // Certains items peuvent ne pas avoir de propriété 'str'
-          if ("str" in item) {
-            return item.str;
-          }
-          return "";
-        })
-        .join(" ");
-
-      fullText += pageText + "\n\n"; // Séparer les pages
+      fullText += extractPageText(textContent) + "\n\n";
     }
 
     // Extraire les métadonnées

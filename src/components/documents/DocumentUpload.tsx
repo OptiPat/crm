@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -33,6 +33,7 @@ import type { IdentityImportMode } from "@/lib/documents/identity-document-apply
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { cn } from "@/lib/utils";
+import { assessRioImport } from "@/lib/documents/rio-import-guard";
 
 interface DocumentUploadProps {
   open: boolean;
@@ -269,12 +270,21 @@ export function DocumentUpload({
       }
 
       const parsedData = parseAuto(result.text);
+      const stelliumAssessment = assessRioImport(parsedData, {
+        requestedType: formData.type_document,
+      });
+
       if (parsedData.typeDocument === "QPI" || parsedData.typeDocument === "RIO") {
         setFormData((prev) => ({
           ...prev,
           type_document: parsedData.typeDocument === "QPI" ? "QPI" : "PATRIMOINE",
         }));
         setExtractedData(parsedData);
+        if (!stelliumAssessment.canProceed) {
+          toast.error(
+            stelliumAssessment.issues[0] ?? "Import impossible — vérifiez le PDF."
+          );
+        }
         return;
       }
       setExtractedData(parsedData);
@@ -386,12 +396,20 @@ export function DocumentUpload({
   const isExtracting = extracting || identityImport.extracting;
   const canRunIdentityExtract = identityImport.canRunIdentityExtract(uploadedFile, isIdentityMode);
 
+  const stelliumImportAssessment = useMemo(() => {
+    if (!extractedData) return null;
+    if (extractedData.typeDocument !== "RIO" && extractedData.typeDocument !== "QPI") {
+      return null;
+    }
+    return assessRioImport(extractedData, { requestedType: formData.type_document });
+  }, [extractedData, formData.type_document]);
+
   const stelliumBootstrap =
     uploadedFile || extractedData
       ? {
           initialUploadedFile: uploadedFile ?? undefined,
           initialExtractedData: extractedData ?? undefined,
-          initialStep: (extractedData ? 2 : 1) as 1 | 2 | 3,
+          initialStep: (stelliumImportAssessment?.canProceed ? 2 : 1) as 1 | 2 | 3,
         }
       : {};
 

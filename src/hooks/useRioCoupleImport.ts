@@ -11,6 +11,7 @@ export function useRioCoupleImport(options: {
   foyerId?: number;
   formFoyerId?: number;
   importContacts: Contact[];
+  confirmIdentityMerge?: (message: string) => boolean | Promise<boolean>;
 }) {
   const applyCoupleRioData = useCallback(
     async (data: ExtractedData, importOptions?: { deferFinancialFields?: boolean }) => {
@@ -21,7 +22,8 @@ export function useRioCoupleImport(options: {
           explicitFoyerId: options.foyerId ?? options.formFoyerId,
           importContacts: options.importContacts,
           onMissingIdentity: (message) => toast.error(message),
-          confirmIdentityMerge: (message) => window.confirm(message),
+          confirmIdentityMerge:
+            options.confirmIdentityMerge ?? ((message) => window.confirm(message)),
         },
         importOptions
       );
@@ -31,6 +33,7 @@ export function useRioCoupleImport(options: {
       options.foyerId,
       options.formFoyerId,
       options.importContacts,
+      options.confirmIdentityMerge,
     ]
   );
 

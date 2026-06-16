@@ -6,6 +6,7 @@ import type { ExtractedData } from "@/lib/pdf";
 export function useRioSoloImport(options: {
   effectiveContactId?: number;
   foyerId?: number;
+  confirmIdentityMerge?: (message: string) => boolean | Promise<boolean>;
 }) {
   const applySoloRioData = useCallback(
     async (data: ExtractedData, importOptions?: { deferFinancialFields?: boolean }) => {
@@ -15,12 +16,13 @@ export function useRioSoloImport(options: {
           effectiveContactId: options.effectiveContactId,
           foyerId: options.foyerId,
           onMissingIdentity: (message) => toast.error(message),
-          confirmIdentityMerge: (message) => window.confirm(message),
+          confirmIdentityMerge:
+            options.confirmIdentityMerge ?? ((message) => window.confirm(message)),
         },
         importOptions
       );
     },
-    [options.effectiveContactId, options.foyerId]
+    [options.effectiveContactId, options.foyerId, options.confirmIdentityMerge]
   );
 
   return { applySoloRioData };

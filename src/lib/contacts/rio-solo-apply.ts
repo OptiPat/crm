@@ -22,6 +22,7 @@ import {
 } from "@/lib/contacts/rio-contact-fields";
 import { syncRioEnfants } from "@/lib/contacts/rio-enfants-apply";
 import { ensureDeclarantFoyer } from "@/lib/contacts/rio-foyer-ensure";
+import { applyRioFiscaliteToFoyer } from "@/lib/contacts/rio-foyer-fiscal-apply";
 
 export interface RioSoloApplyResult {
   finalContactId: number;
@@ -35,7 +36,7 @@ export interface RioSoloApplyContext {
   effectiveContactId?: number;
   foyerId?: number;
   onMissingIdentity: (message: string) => void;
-  confirmIdentityMerge: (message: string) => boolean;
+  confirmIdentityMerge: (message: string) => boolean | Promise<boolean>;
 }
 
 export async function resolveExistingContactForRio(
@@ -68,14 +69,20 @@ async function finalizeSoloContact(
   created: boolean
 ): Promise<RioSoloApplyResult> {
   const hasEnfants = (data.enfants?.length ?? 0) > 0;
+  const hasFiscalData = Boolean(
+    data.trancheImposition?.trim() ||
+      data.nombrePartsFiscales != null ||
+      data.revenuBrutGlobal != null
+  );
   let resolvedContact = contact;
   let resolvedFoyerId = ctx.foyerId ?? contact.foyer_id;
 
-  if (hasEnfants || ctx.foyerId) {
+  if (hasEnfants || ctx.foyerId || hasFiscalData) {
     try {
       const foyerLink = await ensureDeclarantFoyer(resolvedContact, {
         explicitFoyerId: ctx.foyerId,
         hasEnfants,
+        hasFiscalData,
       });
       resolvedContact = foyerLink.contact;
       resolvedFoyerId = foyerLink.foyerId;
@@ -86,6 +93,10 @@ async function finalizeSoloContact(
 
   if (hasEnfants && resolvedFoyerId) {
     await syncRioEnfants({ enfants: data.enfants, foyerId: resolvedFoyerId });
+  }
+
+  if (resolvedFoyerId) {
+    await applyRioFiscaliteToFoyer(resolvedFoyerId, data).catch(() => undefined);
   }
 
   let hasExistingInvestments = false;
@@ -129,7 +140,8 @@ export async function applySoloRioImport(
     );
 
   if (existingContact && identityConflicts && identityConflicts.length > 0) {
-    const confirmMerge = ctx.confirmIdentityMerge(
+    const confirmMerge = await Promise.resolve(
+      ctx.confirmIdentityMerge(
       [
         "Même nom/prénom mais coordonnées différentes :",
         identityConflicts.join(", "),
@@ -142,6 +154,7 @@ export async function applySoloRioImport(
         "Fusionner sur la fiche existante ?",
         "(Annuler = créer une nouvelle fiche)",
       ].join("\n")
+      )
     );
     if (!confirmMerge) {
       existingContact = null;
@@ -157,7 +170,9 @@ export async function applySoloRioImport(
       existingContact.id,
       contactToUpdatePayload(
         existingContact,
-        mergeRioFieldsOntoContact(existingContact, rioFields)
+        mergeRioFieldsOntoContact(existingContact, rioFields, {
+          identityFillEmptyOnly: true,
+        })
       )
     );
     const refreshed = await getContactById(existingContact.id);

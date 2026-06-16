@@ -173,6 +173,11 @@ export interface ExtractedData {
   dateDocument?: string;
   typeDocument?: string;
   dateEntreeRelation?: string;
+
+  /** Fiscalité RIO (section Fiscalité Stellium). */
+  trancheImposition?: string;
+  nombrePartsFiscales?: number;
+  revenuBrutGlobal?: number;
   
   // === COUPLE (RIO Stellium 2 investisseurs) ===
   isCouple?: boolean;

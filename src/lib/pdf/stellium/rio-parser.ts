@@ -16,6 +16,7 @@ import {
   registerFinancialActifLine,
 } from "./financial-contracts";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
+import { applyFiscaliteToExtractedData, parseStelliumFiscalite } from "./fiscalite";
 import { extractFieldValue, getSection, splitStelliumSections } from "./sections";
 
 function splitNomPrenom(value: string): { nom?: string; prenom?: string } {
@@ -42,6 +43,14 @@ function slugify(value: string): string {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+/** Date du PDF (pied de page « Recueil d'informations - … - JJ/MM/AAAA »). */
+function extractRioDocumentDateFromFooter(text: string): string | undefined {
+  const match = text.match(
+    /Recueil d'informations\s+-\s+.+?\s+-\s+(\d{2}\/\d{2}\/\d{4})/i
+  );
+  return match?.[1];
 }
 
 function mapImmoType(label: string): BienImmobilier["type"] {
@@ -269,6 +278,7 @@ function parseStelliumRioSolo(
   const patrimoine = getSection(sections, "patrimoine");
   const revenusCharges = getSection(sections, "revenusCharges");
   const objectifs = getSection(sections, "objectifs");
+  const fiscalite = getSection(sections, "fiscalite");
 
   const data: ExtractedData = {
     typeDocument: "RIO",
@@ -389,12 +399,20 @@ function parseStelliumRioSolo(
     }
   }
 
+  if (fiscalite) {
+    applyFiscaliteToExtractedData(data, parseStelliumFiscalite(fiscalite));
+  }
+
   const dateEntree = header.match(
     /Date d'entrée en relation\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i
   );
   if (dateEntree) {
     data.dateEntreeRelation = dateEntree[1];
-    data.dateDocument = dateEntree[1];
+  }
+
+  const dateDocument = extractRioDocumentDateFromFooter(text);
+  if (dateDocument) {
+    data.dateDocument = dateDocument;
   }
 
   data.confidence = computeStelliumConfidence(data, "RIO");
@@ -413,6 +431,7 @@ function parseStelliumRioCouple(
   const patrimoine = getSection(sections, "patrimoine");
   const revenusCharges = getSection(sections, "revenusCharges");
   const objectifs = getSection(sections, "objectifs");
+  const fiscalite = getSection(sections, "fiscalite");
 
   const { person1, person2 } = parseCoupleIdentite(identite, coordonnees, professionnel);
 
@@ -469,16 +488,18 @@ function parseStelliumRioCouple(
     }
   }
 
+  if (fiscalite) {
+    applyFiscaliteToExtractedData(data, parseStelliumFiscalite(fiscalite));
+  }
+
   const dateEntree = header.match(/Date d'entrée en relation\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);
   if (dateEntree) {
     data.dateEntreeRelation = dateEntree[1];
   }
 
-  const dateDoc = text.match(
-    /Recueil d'informations\s+-\s+.+?\s+-\s+(\d{2}\/\d{2}\/\d{4})/i
-  );
-  if (dateDoc) {
-    data.dateDocument = dateDoc[1];
+  const dateDocument = extractRioDocumentDateFromFooter(text);
+  if (dateDocument) {
+    data.dateDocument = dateDocument;
   }
 
   data.confidence = computeStelliumConfidence(data, "RIO");

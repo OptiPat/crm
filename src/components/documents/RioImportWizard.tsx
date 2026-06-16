@@ -32,7 +32,10 @@ import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { buildRioPreviewSummary } from "@/lib/documents/rio-import-preview";
 import type { RioImportStep } from "@/lib/documents/rio-import-preview";
+import { assessRioImport, type RioImportAssessment } from "@/lib/documents/rio-import-guard";
 import { RioWizardContextBar } from "./RioWizardContextBar";
+import { RioImportGuardBanner } from "./RioImportGuardBanner";
+import { RioIdentityMergeDialog } from "./RioIdentityMergeDialog";
 import { RioPdfPreviewPanel } from "./RioPdfPreviewPanel";
 import { ExtractedDataPreviewAdvanced } from "./ExtractedDataPreviewAdvanced";
 import { RioPatrimoineReviewStep } from "./RioPatrimoineReviewStep";
@@ -100,7 +103,23 @@ export function RioImportWizard({
   const [importContacts, setImportContacts] = useState<Contact[]>([]);
   const [linkedContact, setLinkedContact] = useState<Contact | null>(null);
   const [patrimoineState, setPatrimoineState] = useState<PatrimoineWizardState | null>(null);
+  const [importAssessment, setImportAssessment] = useState<RioImportAssessment | null>(null);
+  const [mergePrompt, setMergePrompt] = useState<string | null>(null);
+  const mergeResolverRef = useRef<((value: boolean) => void) | null>(null);
   const bootstrapAppliedRef = useRef(false);
+
+  const confirmIdentityMerge = useCallback((message: string) => {
+    return new Promise<boolean>((resolve) => {
+      mergeResolverRef.current = resolve;
+      setMergePrompt(message);
+    });
+  }, []);
+
+  const resolveIdentityMerge = useCallback((accepted: boolean) => {
+    mergeResolverRef.current?.(accepted);
+    mergeResolverRef.current = null;
+    setMergePrompt(null);
+  }, []);
 
   const contactLocked = contactId != null;
   const effectiveContactId = contactId ?? selectedContactId;
@@ -135,11 +154,13 @@ export function RioImportWizard({
     foyerId,
     formFoyerId: formData.foyer_id,
     importContacts,
+    confirmIdentityMerge,
   });
 
   const { applySoloRioData } = useRioSoloImport({
     effectiveContactId,
     foyerId: foyerId ?? formData.foyer_id,
+    confirmIdentityMerge,
   });
 
   const resetWizard = useCallback(() => {
@@ -147,6 +168,7 @@ export function RioImportWizard({
     setExtractedData(null);
     setUploadedFile(null);
     setPatrimoineState(null);
+    setImportAssessment(null);
     setFormData(resetPatrimoineFormData());
   }, [resetPatrimoineFormData]);
 
@@ -174,8 +196,12 @@ export function RioImportWizard({
       setUploadedFile(initialUploadedFile);
     }
     if (initialExtractedData) {
+      const assessment = assessRioImport(initialExtractedData, {
+        requestedType: defaultTypeDocument ?? "PATRIMOINE",
+      });
       setExtractedData(initialExtractedData);
-      setStep(initialStep ?? 2);
+      setImportAssessment(assessment);
+      setStep(assessment.canProceed ? (initialStep ?? 2) : 1);
     }
   }, [
     open,
@@ -240,6 +266,23 @@ export function RioImportWizard({
         );
       }
       const parsedData = parseAuto(result.text);
+      const assessment = assessRioImport(parsedData, {
+        requestedType: formData.type_document,
+      });
+      setImportAssessment(assessment);
+
+      if (parsedData.typeDocument === "QPI") {
+        setFormData((prev) => ({ ...prev, type_document: "QPI" }));
+      } else if (parsedData.typeDocument === "RIO") {
+        setFormData((prev) => ({ ...prev, type_document: "PATRIMOINE" }));
+      }
+
+      if (!assessment.canProceed) {
+        setExtractedData(parsedData);
+        toast.error(assessment.issues[0] ?? "Import impossible — vérifiez le PDF.");
+        return;
+      }
+
       setExtractedData(parsedData);
       setStep(2);
     } catch (error) {
@@ -293,6 +336,15 @@ export function RioImportWizard({
   const handleApplyData = async (data: ExtractedData) => {
     if (!effectiveContactId) {
       toast.error("Sélectionnez un client avant d'appliquer.");
+      return;
+    }
+
+    const assessment = assessRioImport(data, { requestedType: formData.type_document });
+    setImportAssessment(assessment);
+    if (!assessment.canProceed) {
+      toast.error(
+        assessment.issues[0] ?? "Import impossible — corrigez les données ou le PDF."
+      );
       return;
     }
 
@@ -413,6 +465,10 @@ export function RioImportWizard({
         showPatrimoineStep={showPatrimoineStep}
       />
 
+      {importAssessment && (step === 1 || step === 2) && (
+        <RioImportGuardBanner assessment={importAssessment} className="mt-3 shrink-0" />
+      )}
+
       <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden mt-2">
           {step === 1 && (
             <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
@@ -434,6 +490,7 @@ export function RioImportWizard({
                   onValueChange={(value) => {
                     setFormData({ ...formData, type_document: value });
                     setExtractedData(null);
+                    setImportAssessment(null);
                     setStep(1);
                   }}
                 >
@@ -597,17 +654,23 @@ export function RioImportWizard({
     </>
   );
 
-  if (embedded) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{wizardBody}</div>
-    );
-  }
-
   return (
-    <Dialog open={open} onOpenChange={handleWizardClose}>
-      <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-6xl flex-col overflow-hidden p-6">
-        {wizardBody}
-      </DialogContent>
-    </Dialog>
+    <>
+      <RioIdentityMergeDialog
+        open={mergePrompt != null}
+        message={mergePrompt}
+        onConfirm={() => resolveIdentityMerge(true)}
+        onCancel={() => resolveIdentityMerge(false)}
+      />
+      {embedded ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{wizardBody}</div>
+      ) : (
+        <Dialog open={open} onOpenChange={handleWizardClose}>
+          <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-6xl flex-col overflow-hidden p-6">
+            {wizardBody}
+          </DialogContent>
+        </Dialog>
+      )}
+    </>
   );
 }

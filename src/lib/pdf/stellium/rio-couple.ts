@@ -73,7 +73,7 @@ function extractPair(
   if (!match?.[1]) return [undefined, undefined];
 
   const raw = match[1].trim();
-  const parts = raw.split(/\s{2,}/).map((p) => p.trim()).filter(Boolean);
+  const parts = raw.split(/\s{2,}|\t+/).map((p) => p.trim()).filter(Boolean);
   if (parts.length >= 2) {
     return [parts[0], parts[1]];
   }

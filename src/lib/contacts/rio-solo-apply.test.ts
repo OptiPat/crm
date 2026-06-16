@@ -22,6 +22,10 @@ vi.mock("@/lib/contacts/rio-foyer-ensure", () => ({
   ensureDeclarantFoyer: vi.fn(),
 }));
 
+vi.mock("@/lib/contacts/rio-foyer-fiscal-apply", () => ({
+  applyRioFiscaliteToFoyer: vi.fn(),
+}));
+
 import {
   createContact,
   findContactByEmail,
@@ -31,6 +35,7 @@ import {
 } from "@/lib/api/tauri-contacts";
 import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
 import { ensureDeclarantFoyer } from "@/lib/contacts/rio-foyer-ensure";
+import { applyRioFiscaliteToFoyer } from "@/lib/contacts/rio-foyer-fiscal-apply";
 import { applySoloRioImport } from "./rio-solo-apply";
 
 const baseContact: Contact = {
@@ -52,6 +57,8 @@ describe("applySoloRioImport", () => {
     vi.mocked(updateContact).mockReset();
     vi.mocked(getInvestissementsByContact).mockReset();
     vi.mocked(ensureDeclarantFoyer).mockReset();
+    vi.mocked(applyRioFiscaliteToFoyer).mockReset();
+    vi.mocked(applyRioFiscaliteToFoyer).mockResolvedValue(undefined);
     vi.mocked(getInvestissementsByContact).mockResolvedValue([]);
     vi.mocked(ensureDeclarantFoyer).mockResolvedValue({
       contact: baseContact,
@@ -131,5 +138,35 @@ describe("applySoloRioImport", () => {
     const payload = vi.mocked(createContact).mock.calls[0]?.[0];
     expect(payload?.revenus_annuels).toBe(80_000);
     expect(payload?.charges_emprunts).toBe(2_400);
+  });
+
+  it("crée un foyer pour appliquer la fiscalité solo sans enfants", async () => {
+    vi.mocked(getContactById).mockResolvedValue({ ...baseContact, foyer_id: undefined });
+    vi.mocked(ensureDeclarantFoyer).mockResolvedValue({
+      contact: { ...baseContact, foyer_id: 7 },
+      foyerId: 7,
+    });
+
+    await applySoloRioImport(
+      {
+        typeDocument: "RIO",
+        nom: "PLAZA",
+        prenom: "Nicolas",
+        revenuBrutGlobal: 55_000,
+      },
+      {
+        effectiveContactId: 42,
+        confirmIdentityMerge: () => true,
+        onMissingIdentity: vi.fn(),
+      }
+    );
+
+    expect(ensureDeclarantFoyer).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42 }),
+      expect.objectContaining({ hasEnfants: false, hasFiscalData: true })
+    );
+    expect(applyRioFiscaliteToFoyer).toHaveBeenCalledWith(7, expect.objectContaining({
+      revenuBrutGlobal: 55_000,
+    }));
   });
 });

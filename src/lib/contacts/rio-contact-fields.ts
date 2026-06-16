@@ -245,34 +245,61 @@ export function buildCoupleMemberRioFields(
   return partial;
 }
 
+export interface MergeRioFieldsOptions {
+  /** Ré-import : ne pas écraser identité/coordonnées déjà renseignées. */
+  identityFillEmptyOnly?: boolean;
+}
+
 /** Fusionne les champs RIO sur une fiche existante (RIO prioritaire si valeur présente). */
 export function mergeRioFieldsOntoContact(
   existing: Contact,
-  rio: Partial<NewContact>
+  rio: Partial<NewContact>,
+  options?: MergeRioFieldsOptions
 ): Partial<NewContact> {
-  const pickStr = (next?: string, prev?: string) =>
-    next?.trim() ? next.trim() : prev || undefined;
+  const identityOnly = options?.identityFillEmptyOnly ?? false;
+
+  const pickStr = (next?: string, prev?: string, identityField = false) => {
+    if (identityOnly && identityField) {
+      return prev?.trim() ? prev.trim() : next?.trim() || undefined;
+    }
+    return next?.trim() ? next.trim() : prev || undefined;
+  };
+
+  const pickOptional = <T>(next: T | undefined, prev: T | undefined, identityField = false) => {
+    if (identityOnly && identityField && prev != null && prev !== "") {
+      return prev;
+    }
+    return next ?? prev;
+  };
 
   const merged: Partial<NewContact> = {
-    nom: pickStr(rio.nom, existing.nom) || existing.nom,
-    prenom: pickStr(rio.prenom, existing.prenom) || existing.prenom,
-    civilite: rio.civilite ?? existing.civilite,
-    email: pickStr(rio.email, existing.email),
-    telephone: pickStr(rio.telephone, existing.telephone),
-    adresse: pickStr(rio.adresse, existing.adresse),
-    code_postal: pickStr(rio.code_postal, existing.code_postal),
-    ville: pickStr(rio.ville, existing.ville),
-    lieu_naissance: pickStr(rio.lieu_naissance, existing.lieu_naissance),
-    profession: pickStr(rio.profession, existing.profession),
-    situation_familiale: rio.situation_familiale ?? existing.situation_familiale,
-    regime_matrimonial: rio.regime_matrimonial ?? existing.regime_matrimonial,
+    nom: pickStr(rio.nom, existing.nom, true) || existing.nom,
+    prenom: pickStr(rio.prenom, existing.prenom, true) || existing.prenom,
+    civilite: pickOptional(rio.civilite, existing.civilite, true),
+    email: pickStr(rio.email, existing.email, true),
+    telephone: pickStr(rio.telephone, existing.telephone, true),
+    adresse: pickStr(rio.adresse, existing.adresse, true),
+    code_postal: pickStr(rio.code_postal, existing.code_postal, true),
+    ville: pickStr(rio.ville, existing.ville, true),
+    lieu_naissance: pickStr(rio.lieu_naissance, existing.lieu_naissance, true),
+    profession: pickStr(rio.profession, existing.profession, true),
+    situation_familiale: pickOptional(
+      rio.situation_familiale,
+      existing.situation_familiale,
+      true
+    ),
+    regime_matrimonial: pickOptional(
+      rio.regime_matrimonial,
+      existing.regime_matrimonial,
+      true
+    ),
     revenus_annuels: rio.revenus_annuels ?? existing.revenus_annuels,
     charges_emprunts: rio.charges_emprunts ?? existing.charges_emprunts,
     objectifs_patrimoniaux: rio.objectifs_patrimoniaux ?? existing.objectifs_patrimoniaux,
     profil_risque_sri: rio.profil_risque_sri ?? existing.profil_risque_sri,
   };
 
-  if (rio.date_naissance) {
+  if (rio.date_naissance && (!identityOnly || !existing.date_naissance)) {
     merged.date_naissance = rio.date_naissance;
   }
 

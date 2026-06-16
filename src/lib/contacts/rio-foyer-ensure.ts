@@ -8,6 +8,8 @@ export async function ensureDeclarantFoyer(
     explicitFoyerId?: number;
     hasEnfants: boolean;
     isCouple?: boolean;
+    /** Crée un foyer célibataire si fiscalité RIO à appliquer sans foyer existant. */
+    hasFiscalData?: boolean;
   }
 ): Promise<{ contact: Contact; foyerId: number }> {
   if (options.explicitFoyerId) {
@@ -23,7 +25,7 @@ export async function ensureDeclarantFoyer(
     return { contact, foyerId: contact.foyer_id };
   }
 
-  if (!options.hasEnfants && !options.isCouple) {
+  if (!options.hasEnfants && !options.isCouple && !options.hasFiscalData) {
     throw new Error("FOYER_NOT_REQUIRED");
   }
 
