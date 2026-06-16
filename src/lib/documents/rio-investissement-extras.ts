@@ -1,7 +1,6 @@
 import type { NewInvestissement } from "@/lib/api/tauri-investissements";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
-
-const IMMO_TYPES = new Set(["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP", "RS"]);
+import { isImmobilierFinancingType } from "@/lib/investissements/investissement-immo-financing";
 
 export interface RioImmoInvestissementInput {
   editedType: string;
@@ -22,7 +21,7 @@ function parseFrDateToIso(date?: string): string | undefined {
 export function buildImmoInvestissementExtras(
   input: RioImmoInvestissementInput
 ): Partial<NewInvestissement> {
-  if (!IMMO_TYPES.has(input.editedType)) {
+  if (!isImmobilierFinancingType(input.editedType)) {
     return input.notes ? { notes: input.notes } : {};
   }
 

@@ -36,12 +36,7 @@ import {
   buildPatrimoineMontantInitial,
   usesRioEncoursMontant,
 } from "@/lib/documents/rio-investissement-extras";
-
-const IMMO_PRODUCT_TYPES = new Set(["RP", "RS", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"]);
-
-function isImmoItem(item: PatrimoineItem): boolean {
-  return IMMO_PRODUCT_TYPES.has(item.type);
-}
+import { isImmobilierFinancingType } from "@/lib/investissements/investissement-immo-financing";
 
 interface PatrimoineItem {
   id: string;
@@ -342,7 +337,7 @@ export function PatrimoineTriDialog({
                       </Button>
                     </div>
 
-                    {isImmoItem(item) && (
+                    {isImmobilierFinancingType(item.type) && (
                       <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3">
                         <div className="space-y-1">
                           <Label className="text-xs">Mensualité crédit (€/mois)</Label>

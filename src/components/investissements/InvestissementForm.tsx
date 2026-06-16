@@ -63,6 +63,11 @@ import {
   type DetentionDemembrement,
 } from "@/lib/investissements/investissement-demembrement";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import {
+  isImmobilierFinancingType,
+  euroToFinancingCentimes,
+  financingCentimesToEuro,
+} from "@/lib/investissements/investissement-immo-financing";
 import { toast } from "sonner";
 
 interface InvestissementFormProps {
@@ -106,6 +111,9 @@ export function InvestissementForm({
     null
   );
   const [dateFinPret, setDateFinPret] = useState("");
+  const [mensualiteCredit, setMensualiteCredit] = useState("");
+  const [creditCrd, setCreditCrd] = useState("");
+  const [loyerMensuel, setLoyerMensuel] = useState("");
   const [versementProgramme, setVersementProgramme] = useState(false);
   const [montantVersementProgramme, setMontantVersementProgramme] = useState("");
   const [frequenceVersement, setFrequenceVersement] = useState<string>("");
@@ -268,6 +276,9 @@ export function InvestissementForm({
         setDateFinPret(
           investissement.date_fin_pret ? unixToDateInput(investissement.date_fin_pret) : ""
         );
+        setMensualiteCredit(financingCentimesToEuro(investissement.mensualite_credit));
+        setCreditCrd(financingCentimesToEuro(investissement.credit_crd));
+        setLoyerMensuel(financingCentimesToEuro(investissement.loyer_mensuel));
         setVersementProgramme(investissement.versement_programme);
         setMontantVersementProgramme(investissement.montant_versement_programme ? (investissement.montant_versement_programme / 100).toString() : "");
         setFrequenceVersement(investissement.frequence_versement || "");
@@ -324,6 +335,9 @@ export function InvestissementForm({
     setDureeDemembrementAns("");
     setDetentionMode(null);
     setDateFinPret("");
+    setMensualiteCredit("");
+    setCreditCrd("");
+    setLoyerMensuel("");
     setVersementProgramme(false);
     setMontantVersementProgramme("");
     setFrequenceVersement("");
@@ -392,6 +406,8 @@ export function InvestissementForm({
             : dateFieldToIso(dateFinDemembrement)
           : undefined;
 
+      const immoFinancing = isImmobilierFinancingType(typeProduit);
+
       const newInvestissement: NewInvestissement = {
         contact_id: contactId ? parseInt(contactId) : undefined,
         foyer_id: investissementCommun && foyerId ? parseInt(foyerId) : undefined,
@@ -401,7 +417,12 @@ export function InvestissementForm({
         montant_initial: montantInitial ? Math.round(parseFloat(montantInitial) * 100) : undefined,
         date_souscription: dateFieldToIso(dateSouscription),
         date_fin_demembrement: dateFinDemembrementIso,
-        date_fin_pret: dateFieldToIso(dateFinPret),
+        date_fin_pret: immoFinancing || ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT"].includes(typeProduit)
+          ? dateFieldToIso(dateFinPret)
+          : undefined,
+        mensualite_credit: immoFinancing ? euroToFinancingCentimes(mensualiteCredit) : undefined,
+        credit_crd: immoFinancing ? euroToFinancingCentimes(creditCrd) : undefined,
+        loyer_mensuel: immoFinancing ? euroToFinancingCentimes(loyerMensuel) : undefined,
         versement_programme: accepteVersementProgramme ? versementProgramme : false,
         montant_versement_programme: montantVersementProgramme ? Math.round(parseFloat(montantVersementProgramme) * 100) : undefined,
         frequence_versement: frequenceVersement || undefined,
@@ -724,16 +745,73 @@ export function InvestissementForm({
             </div>
           )}
 
-          {/* Date fin de prêt (si SCPI ou IMMOBILIER) */}
-          {["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "JEANBRUN", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"].includes(typeProduit) && (
+          {/* Date fin de prêt SCPI (hors patrimoine immobilier) */}
+          {["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT"].includes(typeProduit) &&
+            !isImmobilierFinancingType(typeProduit) && (
             <div className="space-y-2">
-              <Label htmlFor="date-fin-pret">Date de fin de prêt (si financement par crédit)</Label>
+              <Label htmlFor="date-fin-pret-scpi">Date de fin de prêt</Label>
               <Input
-                id="date-fin-pret"
+                id="date-fin-pret-scpi"
                 type="date"
                 value={dateFinPret}
                 onChange={(e) => setDateFinPret(e.target.value)}
               />
+            </div>
+          )}
+
+          {/* Financement patrimoine immobilier (crédit / loyer liés au bien) */}
+          {isImmobilierFinancingType(typeProduit) && (
+            <div className="space-y-4 border-t pt-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                Financement immobilier (lié à ce bien)
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mensualite-credit">Mensualité crédit (€/mois)</Label>
+                  <Input
+                    id="mensualite-credit"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={mensualiteCredit}
+                    onChange={(e) => setMensualiteCredit(e.target.value)}
+                    placeholder="Ex. 1500"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="credit-crd">Capital restant dû (€)</Label>
+                  <Input
+                    id="credit-crd"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={creditCrd}
+                    onChange={(e) => setCreditCrd(e.target.value)}
+                    placeholder="Ex. 210000"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="loyer-mensuel">Loyer mensuel (€)</Label>
+                  <Input
+                    id="loyer-mensuel"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={loyerMensuel}
+                    onChange={(e) => setLoyerMensuel(e.target.value)}
+                    placeholder="Ex. 800"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="date-fin-pret-immo">Date de fin de prêt</Label>
+                  <Input
+                    id="date-fin-pret-immo"
+                    type="date"
+                    value={dateFinPret}
+                    onChange={(e) => setDateFinPret(e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
           )}
 
