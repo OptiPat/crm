@@ -108,7 +108,14 @@ export function RioImportWizard({
     notes: "",
   });
 
-  const patrimoineFlow = useRioPatrimoineFlow({
+  const {
+    resetFormData: resetPatrimoineFormData,
+    finishImportFlow,
+    handlePatrimoineTriComplete,
+    handlePatrimoineTriCancel,
+    handleRioUpdateComplete,
+    handleRioUpdateCancel,
+  } = useRioPatrimoineFlow({
     contactId,
     defaultContactId,
     foyerId,
@@ -134,8 +141,8 @@ export function RioImportWizard({
     setExtractedData(null);
     setUploadedFile(null);
     setPatrimoineState(null);
-    setFormData(patrimoineFlow.resetFormData());
-  }, [patrimoineFlow]);
+    setFormData(resetPatrimoineFormData());
+  }, [resetPatrimoineFormData]);
 
   useEffect(() => {
     if (!open) {
@@ -143,26 +150,22 @@ export function RioImportWizard({
       resetWizard();
       return;
     }
+
+    if (bootstrapAppliedRef.current) return;
+    bootstrapAppliedRef.current = true;
+
     setSelectedContactId(contactId ?? defaultContactId);
-    setFormData((prev) => ({
-      ...prev,
+    setFormData({
       contact_id: contactId ?? defaultContactId,
       foyer_id: foyerId,
       type_document: defaultTypeDocument ?? "PATRIMOINE",
-      date_document: initialFormDate ?? prev.date_document,
-      notes: initialFormNotes ?? prev.notes,
-    }));
+      date_document: initialFormDate ?? "",
+      notes: initialFormNotes ?? "",
+      nom_fichier: initialUploadedFile?.name,
+    });
 
-    if (bootstrapAppliedRef.current) return;
-    if (!initialUploadedFile && !initialExtractedData) return;
-
-    bootstrapAppliedRef.current = true;
     if (initialUploadedFile) {
       setUploadedFile(initialUploadedFile);
-      setFormData((prev) => ({
-        ...prev,
-        nom_fichier: initialUploadedFile.name,
-      }));
     }
     if (initialExtractedData) {
       setExtractedData(initialExtractedData);
@@ -264,7 +267,7 @@ export function RioImportWizard({
     result: NonNullable<Awaited<ReturnType<typeof applySoloRioData>>>,
     coupleMemberIds?: [number, number]
   ) => {
-    await patrimoineFlow.finishImportFlow({
+    await finishImportFlow({
       data,
       result,
       uploadedFile,
@@ -322,7 +325,7 @@ export function RioImportWizard({
       const result = await applySoloRioData(data, importOpts);
       if (result) {
         if (!hasPatrimoineToTri(data)) {
-          await patrimoineFlow.finishImportFlow({
+          await finishImportFlow({
             data,
             result,
             uploadedFile,
@@ -345,20 +348,20 @@ export function RioImportWizard({
 
   const handlePatrimoineComplete = async (investissements?: NewInvestissement[]) => {
     if (patrimoineState?.hasExistingInvestments) {
-      await patrimoineFlow.handleRioUpdateComplete({
+      await handleRioUpdateComplete({
         onResetUpload: resetWizard,
-        onResetForm: () => setFormData(patrimoineFlow.resetFormData()),
+        onResetForm: () => setFormData(resetPatrimoineFormData()),
       });
       resetWizard();
       return;
     }
 
     if (investissements) {
-      await patrimoineFlow.handlePatrimoineTriComplete(investissements, {
+      await handlePatrimoineTriComplete(investissements, {
         setLoading,
         onClearExtractedData: () => setExtractedData(null),
         onResetUpload: resetWizard,
-        onResetForm: () => setFormData(patrimoineFlow.resetFormData()),
+        onResetForm: () => setFormData(resetPatrimoineFormData()),
       });
       resetWizard();
     }
@@ -366,9 +369,9 @@ export function RioImportWizard({
 
   const handlePatrimoineCancel = async () => {
     if (patrimoineState?.hasExistingInvestments) {
-      await patrimoineFlow.handleRioUpdateCancel();
+      await handleRioUpdateCancel();
     } else {
-      await patrimoineFlow.handlePatrimoineTriCancel();
+      await handlePatrimoineTriCancel();
     }
     resetWizard();
   };
