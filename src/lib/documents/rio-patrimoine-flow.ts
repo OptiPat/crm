@@ -1,20 +1,15 @@
 import type { NewDocument } from "@/lib/api/tauri-documents";
 import type { ExtractedData } from "@/lib/pdf";
 import { getMimeType } from "@/lib/documents/file-mime";
-
+import { extractPatrimoineItemsFromRio } from "./extract-patrimoine-items";
 export function hasPatrimoineToTri(data: ExtractedData): boolean {
-  return Boolean(
-    data.assuranceVie ||
-      data.per ||
-      data.scpi ||
-      data.residencePrincipale?.valeur ||
-      data.residenceSecondaire?.valeur ||
-      data.immobilierLocatif?.valeur ||
-      (data.biensImmobiliers && data.biensImmobiliers.length > 0) ||
-      data.livretA ||
-      data.ldd ||
-      data.compteCourant
-  );
+  const items = extractPatrimoineItemsFromRio(data);
+  return items.some((item) => {
+    if (["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(item.type)) {
+      return false;
+    }
+    return item.montant > 0;
+  });
 }
 
 export function convertRioDateToISO(dateStr: string): string {

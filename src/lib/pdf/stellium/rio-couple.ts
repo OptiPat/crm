@@ -1,5 +1,10 @@
 import type { BienImmobilier, ExtractedData } from "../types";
 import { parseStelliumAmount } from "./amounts";
+import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
+import {
+  isImmoActifCategory,
+  registerFinancialActifLine,
+} from "./financial-contracts";
 import { escapeRegex } from "./sections";
 
 export interface CoupleInvestisseurs {
@@ -353,55 +358,36 @@ function mapImmoType(label: string): BienImmobilier["type"] {
   return "IMMOBILIER";
 }
 
-function applyFinancialProduct(
-  data: ExtractedData,
-  category: string,
-  montant: number
-): void {
-  const lower = category.toLowerCase();
-  if (lower.includes("assurance vie")) {
-    data.assuranceVie = (data.assuranceVie ?? 0) + montant;
-    return;
+function parsePassifsEcheanceByPerson(
+  patrimoineSection: string,
+  hasCommunColumn: boolean
+): [number, number] {
+  const passifsIdx = patrimoineSection.search(/\bPassifs\b/i);
+  if (passifsIdx < 0) return [0, 0];
+
+  let block = patrimoineSection.slice(passifsIdx);
+  const endIdx = block.search(/\bRevenus et charges\b/i);
+  if (endIdx >= 0) {
+    block = block.slice(0, endIdx);
   }
-  if (lower.includes("compte courant")) {
-    data.compteCourant = (data.compteCourant ?? 0) + montant;
-    return;
+
+  let person1 = 0;
+  let person2 = 0;
+  const creditLinePattern = /\bCrédit[^\n]+/gi;
+  let match: RegExpExecArray | null;
+  while ((match = creditLinePattern.exec(block)) !== null) {
+    const amounts = parseTrailingAmounts(match[0]);
+    const [a1, a2] = pickPersonAmounts(amounts, hasCommunColumn);
+    if (a1) person1 += a1;
+    if (a2) person2 += a2;
   }
-  if (lower.includes("livret a")) {
-    data.livretA = (data.livretA ?? 0) + montant;
-    return;
+
+  if (person1 === 0 && person2 === 0) {
+    const total = parsePassifsEcheanceAnnuelle(patrimoineSection);
+    return [total, 0];
   }
-  if (lower.includes("ldd") || lower.includes("ldds")) {
-    data.ldd = (data.ldd ?? 0) + montant;
-    return;
-  }
-  if (lower === "pel") {
-    data.pel = (data.pel ?? 0) + montant;
-    return;
-  }
-  if (lower === "cel") {
-    data.cel = (data.cel ?? 0) + montant;
-    return;
-  }
-  if (lower === "per") {
-    data.per = (data.per ?? 0) + montant;
-    return;
-  }
-  if (lower === "perp") {
-    data.perp = (data.perp ?? 0) + montant;
-    return;
-  }
-  if (lower === "pea") {
-    data.pea = (data.pea ?? 0) + montant;
-    return;
-  }
-  if (lower.includes("compte titres")) {
-    data.compteTitres = (data.compteTitres ?? 0) + montant;
-    return;
-  }
-  if (lower === "scpi") {
-    data.scpi = (data.scpi ?? 0) + montant;
-  }
+
+  return [person1, person2];
 }
 
 export function parseCouplePatrimoine(
@@ -409,6 +395,17 @@ export function parseCouplePatrimoine(
   data: ExtractedData
 ): { person1Total?: number; person2Total?: number } {
   const hasCommunColumn = /\bCommun\b/.test(patrimoineSection);
+  const [passifsP1, passifsP2] = parsePassifsEcheanceByPerson(
+    patrimoineSection,
+    hasCommunColumn
+  );
+  if (passifsP1 > 0) {
+    data.chargesEmpruntsPassifs = passifsP1;
+  }
+  if (passifsP2 > 0 && data.conjoint) {
+    data.conjoint.chargesEmpruntsPassifs = passifsP2;
+  }
+
   const actifsBlock = patrimoineSection.split(/\bPassifs\b/i)[0] ?? patrimoineSection;
   const biens: BienImmobilier[] = [];
 
@@ -425,17 +422,7 @@ export function parseCouplePatrimoine(
     const montant = pickFoyerAmount(amounts, hasCommunColumn, true);
     if (!montant || montant <= 0) continue;
 
-    const lower = category.toLowerCase();
-    if (
-      lower.includes("résidence") ||
-      lower.includes("residence") ||
-      lower.includes("classique") ||
-      lower.includes("pinel") ||
-      lower.includes("lmnp") ||
-      lower.includes("lmp") ||
-      lower.includes("denormandie") ||
-      lower.includes("malraux")
-    ) {
+    if (isImmoActifCategory(category)) {
       const type = mapImmoType(category);
       const label = `${category} - ${nom}`;
       biens.push({
@@ -457,7 +444,7 @@ export function parseCouplePatrimoine(
       continue;
     }
 
-    applyFinancialProduct(data, category, montant);
+    registerFinancialActifLine(data, category, nom, montant);
   }
 
   if (biens.length > 0) {
@@ -525,10 +512,17 @@ export function parseCoupleRevenusCharges(
   if (chargesTotalLine) {
     const amounts = parseTrailingAmounts(chargesTotalLine[1]);
     data.chargesTotal = pickFoyerAmount(amounts, hasCommunColumn, true);
-    const [c1, c2] = pickPersonAmounts(amounts, hasCommunColumn);
+    const [, c2] = pickPersonAmounts(amounts, hasCommunColumn);
     if (c2) conjoint.chargesTotal = c2;
-    if (c1 && !c2) {
-      // charges souvent sur une seule personne
-    }
+  }
+
+  const creditConsoLine = chargesBlock.match(
+    /Autre dépense\s*-\s*Crédit conso\s+((?:(?:-|[\d\s,]+)\s*€\s*)+)/i
+  );
+  if (creditConsoLine) {
+    const amounts = parseTrailingAmounts(creditConsoLine[1]);
+    const [c1, c2] = pickPersonAmounts(amounts, hasCommunColumn);
+    if (c1) data.chargesEmprunts = c1;
+    if (c2) conjoint.chargesEmprunts = c2;
   }
 }

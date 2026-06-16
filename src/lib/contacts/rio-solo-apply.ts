@@ -6,14 +6,22 @@ import {
   getContactById,
   type Contact,
 } from "@/lib/api/tauri-contacts";
-import { getInvestissementsByContact } from "@/lib/api/tauri-investissements";
+import {
+  getInvestissementsByContact,
+  getInvestissementsByFoyer,
+} from "@/lib/api/tauri-investissements";
 import type { ExtractedData } from "@/lib/pdf";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import {
   formatIdentityLine,
   getPairIdentityConflictMessages,
 } from "@/lib/contacts/duplicate-identity";
-import { mapExtractedDataToContact } from "@/lib/contacts/rio-import-map";
+import {
+  buildSoloRioContactFields,
+  mergeRioFieldsOntoContact,
+} from "@/lib/contacts/rio-contact-fields";
+import { syncRioEnfants } from "@/lib/contacts/rio-enfants-apply";
+import { ensureDeclarantFoyer } from "@/lib/contacts/rio-foyer-ensure";
 
 export interface RioSoloApplyResult {
   finalContactId: number;
@@ -53,9 +61,63 @@ export async function resolveExistingContactForRio(
   return null;
 }
 
+async function finalizeSoloContact(
+  contact: Contact,
+  data: ExtractedData,
+  ctx: RioSoloApplyContext,
+  created: boolean
+): Promise<RioSoloApplyResult> {
+  const hasEnfants = (data.enfants?.length ?? 0) > 0;
+  let resolvedContact = contact;
+  let resolvedFoyerId = ctx.foyerId ?? contact.foyer_id;
+
+  if (hasEnfants || ctx.foyerId) {
+    try {
+      const foyerLink = await ensureDeclarantFoyer(resolvedContact, {
+        explicitFoyerId: ctx.foyerId,
+        hasEnfants,
+      });
+      resolvedContact = foyerLink.contact;
+      resolvedFoyerId = foyerLink.foyerId;
+    } catch {
+      // pas de foyer requis
+    }
+  }
+
+  if (hasEnfants && resolvedFoyerId) {
+    await syncRioEnfants({ enfants: data.enfants, foyerId: resolvedFoyerId });
+  }
+
+  let hasExistingInvestments = false;
+  try {
+    const invs = await getInvestissementsByContact(resolvedContact.id);
+    hasExistingInvestments = invs.length > 0;
+    if (!hasExistingInvestments && resolvedFoyerId) {
+      const foyerInvs = await getInvestissementsByFoyer(resolvedFoyerId);
+      hasExistingInvestments = foyerInvs.length > 0;
+    }
+  } catch {
+    hasExistingInvestments = false;
+  }
+
+  const displayNom = `${resolvedContact.prenom} ${resolvedContact.nom}`;
+  const successMessage = created
+    ? `✅ Nouveau contact créé: ${displayNom}`
+    : `✅ Contact mis à jour: ${displayNom}`;
+
+  return {
+    finalContactId: resolvedContact.id,
+    resolvedFoyerId,
+    successMessage,
+    hasExistingInvestments,
+    displayNom,
+  };
+}
+
 export async function applySoloRioImport(
   data: ExtractedData,
-  ctx: RioSoloApplyContext
+  ctx: RioSoloApplyContext,
+  options?: { deferFinancialFields?: boolean }
 ): Promise<RioSoloApplyResult | null> {
   let existingContact = await resolveExistingContactForRio(data, ctx.effectiveContactId);
 
@@ -86,60 +148,36 @@ export async function applySoloRioImport(
     }
   }
 
+  const rioFields = buildSoloRioContactFields(data, {
+    includeFinancial: !options?.deferFinancialFields,
+  });
+
   if (existingContact) {
-    const newData = mapExtractedDataToContact(data);
     await updateContact(
       existingContact.id,
-      contactToUpdatePayload(existingContact, {
-        nom: newData.nom || existingContact.nom,
-        prenom: newData.prenom || existingContact.prenom,
-        email: newData.email || existingContact.email,
-        telephone: newData.telephone || existingContact.telephone,
-        adresse: newData.adresse || existingContact.adresse,
-        code_postal: newData.code_postal || existingContact.code_postal,
-        ville: newData.ville || existingContact.ville,
-        date_naissance: newData.date_naissance || undefined,
-        profession: newData.profession || existingContact.profession,
-        notes: newData.notes || existingContact.notes,
-      })
+      contactToUpdatePayload(
+        existingContact,
+        mergeRioFieldsOntoContact(existingContact, rioFields)
+      )
     );
-
-    let hasExistingInvestments = false;
-    try {
-      const invs = await getInvestissementsByContact(existingContact.id);
-      hasExistingInvestments = invs.length > 0;
-    } catch {
-      hasExistingInvestments = false;
-    }
-
-    return {
-      finalContactId: existingContact.id,
-      resolvedFoyerId: ctx.foyerId,
-      successMessage: `✅ Contact mis à jour: ${data.prenom} ${data.nom}`,
-      hasExistingInvestments,
-      displayNom: `${existingContact.prenom} ${existingContact.nom}`,
-    };
+    const refreshed = await getContactById(existingContact.id);
+    return finalizeSoloContact(refreshed, data, ctx, false);
   }
 
-  const contactData = mapExtractedDataToContact(data);
-  if (!contactData.nom?.trim() || !contactData.prenom?.trim()) {
+  if (!rioFields.nom?.trim() || !rioFields.prenom?.trim()) {
     ctx.onMissingIdentity(
       "Impossible de créer le contact : nom et prénom manquants. Pour une CNI/passeport, importez depuis la fiche client (Patrimoine → Importer un document)."
     );
     return null;
   }
 
-  const newContact = await createContact(contactData);
-  const sansEmail = !data.email?.trim();
-  const successMessage = sansEmail
-    ? `✅ Nouveau contact créé: ${data.prenom} ${data.nom} (sans email)`
-    : `✅ Nouveau contact créé: ${data.prenom} ${data.nom}`;
+  const newContact = await createContact({
+    nom: rioFields.nom,
+    prenom: rioFields.prenom,
+    categorie: rioFields.categorie || "SUSPECT_CLIENT",
+    statut_suivi: rioFields.statut_suivi || "ACTIF",
+    ...rioFields,
+  });
 
-  return {
-    finalContactId: newContact.id,
-    resolvedFoyerId: ctx.foyerId,
-    successMessage,
-    hasExistingInvestments: false,
-    displayNom: `${data.prenom} ${data.nom}`,
-  };
+  return finalizeSoloContact(newContact, data, ctx, true);
 }

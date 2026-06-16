@@ -157,6 +157,39 @@ export function ContactDetailSyntheseTab({
               {contact.profession}
             </div>
           )}
+          {contact.regime_matrimonial && (
+            <div>
+              <span className="text-muted-foreground text-sm">Régime matrimonial : </span>
+              {contact.regime_matrimonial}
+            </div>
+          )}
+          {contact.revenus_annuels != null && contact.revenus_annuels > 0 && (
+            <div>
+              <span className="text-muted-foreground text-sm">Revenus annuels : </span>
+              {new Intl.NumberFormat("fr-FR", {
+                style: "currency",
+                currency: "EUR",
+                maximumFractionDigits: 0,
+              }).format(contact.revenus_annuels)}
+            </div>
+          )}
+          {contact.charges_emprunts != null && contact.charges_emprunts > 0 && (
+            <div>
+              <span className="text-muted-foreground text-sm">Charges d&apos;emprunts : </span>
+              {new Intl.NumberFormat("fr-FR", {
+                style: "currency",
+                currency: "EUR",
+                maximumFractionDigits: 0,
+              }).format(contact.charges_emprunts)}
+              <span className="text-muted-foreground text-sm"> / an</span>
+            </div>
+          )}
+          {contact.objectifs_patrimoniaux && (
+            <div>
+              <span className="text-muted-foreground text-sm">Objectifs : </span>
+              {contact.objectifs_patrimoniaux}
+            </div>
+          )}
           {contact.source_lead && (
             <div>
               <span className="text-muted-foreground text-sm">Source / lead : </span>

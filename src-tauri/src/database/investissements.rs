@@ -5,6 +5,7 @@ use rusqlite::{params, OptionalExtension, Result};
 
 const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
     montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
+    mensualite_credit, credit_crd, loyer_mensuel,
     versement_programme, montant_versement_programme, frequence_versement,
     reinvestissement_dividendes, notes, origine, created_at, updated_at";
 
@@ -25,18 +26,21 @@ impl super::Database {
             date_souscription: row.get(7)?,
             date_fin_demembrement: row.get(8)?,
             date_fin_pret: row.get(9)?,
-            versement_programme: row.get::<_, i64>(10)? != 0,
-            montant_versement_programme: row.get(11)?,
-            frequence_versement: row.get(12)?,
-            reinvestissement_dividendes: row.get::<_, i64>(13)? != 0,
-            notes: row.get(14)?,
+            mensualite_credit: row.get(10)?,
+            credit_crd: row.get(11)?,
+            loyer_mensuel: row.get(12)?,
+            versement_programme: row.get::<_, i64>(13)? != 0,
+            montant_versement_programme: row.get(14)?,
+            frequence_versement: row.get(15)?,
+            reinvestissement_dividendes: row.get::<_, i64>(16)? != 0,
+            notes: row.get(17)?,
             origine: row
-                .get::<_, String>(15)
+                .get::<_, String>(18)
                 .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-            created_at: row.get(16)?,
-            updated_at: row.get(17)?,
-            encours_actuel: row.get(18)?,
-            encours_date: row.get(19)?,
+            created_at: row.get(19)?,
+            updated_at: row.get(20)?,
+            encours_actuel: row.get(21)?,
+            encours_date: row.get(22)?,
         })
     }
 
@@ -135,6 +139,7 @@ impl super::Database {
                     i.foyer_id, f.nom as foyer_nom,
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
                     i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
+                    i.mensualite_credit, i.credit_crd, i.loyer_mensuel,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at,
                     {}
@@ -177,18 +182,21 @@ impl super::Database {
                 date_souscription: row.get(11)?,
                 date_fin_demembrement: row.get(12)?,
                 date_fin_pret: row.get(13)?,
-                versement_programme: row.get::<_, i64>(14)? != 0,
-                montant_versement_programme: row.get(15)?,
-                frequence_versement: row.get(16)?,
-                reinvestissement_dividendes: row.get::<_, i64>(17)? != 0,
-                notes: row.get(18)?,
+                mensualite_credit: row.get(14)?,
+                credit_crd: row.get(15)?,
+                loyer_mensuel: row.get(16)?,
+                versement_programme: row.get::<_, i64>(17)? != 0,
+                montant_versement_programme: row.get(18)?,
+                frequence_versement: row.get(19)?,
+                reinvestissement_dividendes: row.get::<_, i64>(20)? != 0,
+                notes: row.get(21)?,
                 origine: row
-                    .get::<_, String>(19)
+                    .get::<_, String>(22)
                     .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(20)?,
-                updated_at: row.get(21)?,
-                encours_actuel: row.get(22)?,
-                encours_date: row.get(23)?,
+                created_at: row.get(23)?,
+                updated_at: row.get(24)?,
+                encours_actuel: row.get(25)?,
+                encours_date: row.get(26)?,
             })
         })?;
 
@@ -310,9 +318,10 @@ impl super::Database {
         self.conn.execute(
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                                          montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
+                                         mensualite_credit, credit_crd, loyer_mensuel,
                                          versement_programme, montant_versement_programme, frequence_versement,
                                          reinvestissement_dividendes, notes, origine) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -323,6 +332,9 @@ impl super::Database {
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
                 date_fin_pret_timestamp,
+                &investissement.mensualite_credit,
+                &investissement.credit_crd,
+                &investissement.loyer_mensuel,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,
@@ -417,13 +429,16 @@ impl super::Database {
                 date_souscription = ?7,
                 date_fin_demembrement = ?8,
                 date_fin_pret = ?9,
-                versement_programme = ?10,
-                montant_versement_programme = ?11,
-                frequence_versement = ?12,
-                reinvestissement_dividendes = ?13,
-                notes = ?14,
+                mensualite_credit = ?10,
+                credit_crd = ?11,
+                loyer_mensuel = ?12,
+                versement_programme = ?13,
+                montant_versement_programme = ?14,
+                frequence_versement = ?15,
+                reinvestissement_dividendes = ?16,
+                notes = ?17,
                 updated_at = unixepoch()
-            WHERE id = ?15",
+            WHERE id = ?18",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -434,6 +449,9 @@ impl super::Database {
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
                 date_fin_pret_timestamp,
+                &investissement.mensualite_credit,
+                &investissement.credit_crd,
+                &investissement.loyer_mensuel,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,

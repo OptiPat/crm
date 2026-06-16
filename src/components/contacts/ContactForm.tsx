@@ -601,6 +601,96 @@ export function ContactForm({
             />
           </div>
         </div>
+      </FormSection>
+
+      <Separator />
+
+      <FormSection title="Coordonnées">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email || ""}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, email: e.target.value }));
+                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+              }}
+              className={fieldErrors.email ? "border-destructive" : ""}
+            />
+            <FieldHint error={fieldErrors.email} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="telephone">Téléphone</Label>
+            <Input
+              id="telephone"
+              value={formData.telephone || ""}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  telephone: sanitizePhoneInput(e.target.value),
+                }))
+              }
+              onBlur={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  telephone: formatPhoneInput(e.target.value),
+                }))
+              }
+              placeholder="06 12 34 56 78 ou +33 6 12 34 56 78"
+            />
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          onClick={() => setShowAddress((v) => !v)}
+        >
+          {showAddress ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          Adresse et localisation
+        </button>
+        {showAddress && (
+          <div className="space-y-4 pl-1">
+            {addressFromFoyer && (
+              <p className="text-xs text-muted-foreground rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2">
+                Adresse reprise d&apos;un autre membre du même foyer.
+              </p>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="adresse">Adresse</Label>
+              <Input
+                id="adresse"
+                value={formData.adresse || ""}
+                onChange={(e) => setFormData((prev) => ({ ...prev, adresse: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="code_postal">Code postal</Label>
+                <Input
+                  id="code_postal"
+                  value={formData.code_postal || ""}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, code_postal: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ville">Ville</Label>
+                <Input
+                  id="ville"
+                  value={formData.ville || ""}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, ville: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </FormSection>
+
+      <Separator />
+
+      <FormSection title="Situation professionnelle et patrimoine">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="profession">Profession</Label>
@@ -610,6 +700,63 @@ export function ContactForm({
               onChange={(e) => setFormData((prev) => ({ ...prev, profession: e.target.value }))}
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="regime_matrimonial">Régime matrimonial</Label>
+            <Input
+              id="regime_matrimonial"
+              value={formData.regime_matrimonial || ""}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, regime_matrimonial: e.target.value }))
+              }
+              placeholder="Ex. Communauté réduite aux acquêts"
+            />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="revenus_annuels">Revenus annuels (€)</Label>
+            <Input
+              id="revenus_annuels"
+              type="number"
+              min={0}
+              step={1}
+              value={formData.revenus_annuels ?? ""}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  revenus_annuels: e.target.value ? parseFloat(e.target.value) : undefined,
+                }))
+              }
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="charges_emprunts">Charges d&apos;emprunts (€/an)</Label>
+            <Input
+              id="charges_emprunts"
+              type="number"
+              min={0}
+              step={1}
+              value={formData.charges_emprunts ?? ""}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  charges_emprunts: e.target.value ? parseFloat(e.target.value) : undefined,
+                }))
+              }
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="objectifs_patrimoniaux">Objectifs patrimoniaux</Label>
+          <Textarea
+            id="objectifs_patrimoniaux"
+            value={formData.objectifs_patrimoniaux || ""}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, objectifs_patrimoniaux: e.target.value }))
+            }
+            rows={3}
+            placeholder="Ex. Préparer la retraite ; Accompagner les enfants"
+          />
         </div>
       </FormSection>
 
@@ -775,91 +922,6 @@ export function ContactForm({
           </FormSection>
         </>
       )}
-
-      <Separator />
-
-      <FormSection title="Coordonnées">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email || ""}
-              onChange={(e) => {
-                setFormData((prev) => ({ ...prev, email: e.target.value }));
-                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
-              }}
-              className={fieldErrors.email ? "border-destructive" : ""}
-            />
-            <FieldHint error={fieldErrors.email} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="telephone">Téléphone</Label>
-            <Input
-              id="telephone"
-              value={formData.telephone || ""}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  telephone: sanitizePhoneInput(e.target.value),
-                }))
-              }
-              onBlur={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  telephone: formatPhoneInput(e.target.value),
-                }))
-              }
-              placeholder="06 12 34 56 78 ou +33 6 12 34 56 78"
-            />
-          </div>
-        </div>
-
-        <button
-          type="button"
-          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-          onClick={() => setShowAddress((v) => !v)}
-        >
-          {showAddress ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          Adresse et localisation
-        </button>
-        {showAddress && (
-          <div className="space-y-4 pl-1">
-            {addressFromFoyer && (
-              <p className="text-xs text-muted-foreground rounded-md border border-sky-200 bg-sky-50/80 px-3 py-2">
-                Adresse reprise d&apos;un autre membre du même foyer.
-              </p>
-            )}
-            <div className="space-y-2">
-              <Label htmlFor="adresse">Adresse</Label>
-              <Input
-                id="adresse"
-                value={formData.adresse || ""}
-                onChange={(e) => setFormData((prev) => ({ ...prev, adresse: e.target.value }))}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="code_postal">Code postal</Label>
-                <Input
-                  id="code_postal"
-                  value={formData.code_postal || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, code_postal: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ville">Ville</Label>
-                <Input
-                  id="ville"
-                  value={formData.ville || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, ville: e.target.value }))}
-                />
-              </div>
-            </div>
-          </div>
-        )}
-      </FormSection>
 
       {(clientActif || filleulActif) && (
         <>

@@ -15,6 +15,9 @@ export interface Investissement {
   date_souscription?: number;
   date_fin_demembrement?: number;
   date_fin_pret?: number;
+  mensualite_credit?: number;
+  credit_crd?: number;
+  loyer_mensuel?: number;
   versement_programme: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;
@@ -37,6 +40,9 @@ export interface NewInvestissement {
   date_souscription?: string; // ISO string ou timestamp
   date_fin_demembrement?: string; // ISO string ou timestamp
   date_fin_pret?: string; // ISO string ou timestamp
+  mensualite_credit?: number;
+  credit_crd?: number;
+  loyer_mensuel?: number;
   versement_programme?: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;
@@ -60,6 +66,9 @@ export interface InvestissementWithDetails {
   date_souscription?: number;
   date_fin_demembrement?: number;
   date_fin_pret?: number;
+  mensualite_credit?: number;
+  credit_crd?: number;
+  loyer_mensuel?: number;
   versement_programme: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;

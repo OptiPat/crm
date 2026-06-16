@@ -13,6 +13,9 @@ import {
   buildRioPatrimoineDocument,
   hasPatrimoineToTri,
 } from "@/lib/documents/rio-patrimoine-flow";
+import { applyRioFinancialFields } from "@/lib/contacts/rio-financial-apply";
+import { createInvestissementValorisation } from "@/lib/api/tauri-investissement-valorisations";
+import { usesRioEncoursMontant, buildRioValorisationDateIso } from "@/lib/documents/rio-investissement-extras";
 import {
   isFoyerPatrimoineRio,
   patrimoineOwnerLabel,
@@ -138,8 +141,37 @@ export function useRioPatrimoineFlow(options: {
     ) => {
       callbacks.setLoading(true);
       try {
-        for (const inv of investissements) {
-          await createInvestissement(inv);
+        if (triExtractedData) {
+          const contactIds =
+            triCoupleMemberIds.length > 0
+              ? triCoupleMemberIds
+              : triContactId
+                ? [triContactId]
+                : [];
+          await applyRioFinancialFields(triExtractedData, contactIds);
+        }
+
+        const valorisationDate = triExtractedData
+          ? buildRioValorisationDateIso(triExtractedData)
+          : undefined;
+
+        type RioInvImport = NewInvestissement & { rioEncoursEuro?: number };
+
+        for (const inv of investissements as RioInvImport[]) {
+          const created = await createInvestissement(inv);
+          if (
+            valorisationDate &&
+            usesRioEncoursMontant(inv.type_produit) &&
+            inv.rioEncoursEuro &&
+            inv.rioEncoursEuro > 0
+          ) {
+            await createInvestissementValorisation({
+              investissement_id: created.id,
+              montant: Math.round(inv.rioEncoursEuro * 100),
+              date_valorisation: valorisationDate,
+              notes: "Import RIO",
+            });
+          }
         }
 
         const avecMoi = investissements.filter((i) => i.origine === "MON_CONSEIL").length;
@@ -183,22 +215,62 @@ export function useRioPatrimoineFlow(options: {
         callbacks.setLoading(false);
       }
     },
-    [triContactId, triCoupleMemberIds, resetTriState, options]
+    [triContactId, triCoupleMemberIds, triExtractedData, resetTriState, options]
   );
 
-  const handlePatrimoineTriCancel = useCallback(() => {
+  const handlePatrimoineTriCancel = useCallback(async () => {
+    if (triExtractedData) {
+      const contactIds =
+        triCoupleMemberIds.length > 0
+          ? triCoupleMemberIds
+          : triContactId
+            ? [triContactId]
+            : [];
+      if (contactIds.length > 0) {
+        await applyRioFinancialFields(triExtractedData, contactIds);
+      }
+    }
     setShowPatrimoineTri(false);
-    setTriExtractedData(null);
     if (triContactId || triCoupleMemberIds.length > 0) {
-      toast.info("Patrimoine non importé. Les contacts créés restent dans la base.");
+      toast.info("Patrimoine non importé. Revenus et objectifs du RIO ont été enregistrés sur le contact.");
     }
     resetTriState();
     options.onSuccess();
     options.onOpenChange(false);
-  }, [triContactId, triCoupleMemberIds, resetTriState, options]);
+  }, [triExtractedData, triContactId, triCoupleMemberIds, resetTriState, options]);
+
+  const handleRioUpdateCancel = useCallback(async () => {
+    if (triExtractedData) {
+      const contactIds =
+        triCoupleMemberIds.length > 0
+          ? triCoupleMemberIds
+          : triContactId
+            ? [triContactId]
+            : [];
+      if (contactIds.length > 0) {
+        await applyRioFinancialFields(triExtractedData, contactIds);
+      }
+    }
+    setShowRioUpdate(false);
+    if (triContactId || triCoupleMemberIds.length > 0) {
+      toast.info("Mise à jour patrimoine annulée. Revenus et objectifs du RIO ont été enregistrés sur le contact.");
+    }
+    resetTriState();
+    options.onSuccess();
+    options.onOpenChange(false);
+  }, [triExtractedData, triContactId, triCoupleMemberIds, resetTriState, options]);
 
   const handleRioUpdateComplete = useCallback(
-    (callbacks: { onResetUpload: () => void; onResetForm: () => void }) => {
+    async (callbacks: { onResetUpload: () => void; onResetForm: () => void }) => {
+      if (triExtractedData) {
+        const contactIds =
+          triCoupleMemberIds.length > 0
+            ? triCoupleMemberIds
+            : triContactId
+              ? [triContactId]
+              : [];
+        await applyRioFinancialFields(triExtractedData, contactIds);
+      }
       setShowRioUpdate(false);
       resetTriState();
       callbacks.onResetUpload();
@@ -206,19 +278,8 @@ export function useRioPatrimoineFlow(options: {
       options.onSuccess();
       options.onOpenChange(false);
     },
-    [resetTriState, options]
+    [triExtractedData, triCoupleMemberIds, triContactId, resetTriState, options]
   );
-
-  const handleRioUpdateCancel = useCallback(() => {
-    setShowRioUpdate(false);
-    setTriExtractedData(null);
-    if (triContactId || triCoupleMemberIds.length > 0) {
-      toast.info("Mise à jour RIO annulée. Les contacts restent enregistrés.");
-    }
-    resetTriState();
-    options.onSuccess();
-    options.onOpenChange(false);
-  }, [triContactId, triCoupleMemberIds, resetTriState, options]);
 
   const triUseFoyerPatrimoine = useMemo(
     () =>

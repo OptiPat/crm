@@ -24,6 +24,10 @@ export interface Contact {
   lieu_naissance?: string;
   profession?: string;
   situation_familiale?: string;
+  regime_matrimonial?: string;
+  revenus_annuels?: number;
+  charges_emprunts?: number;
+  objectifs_patrimoniaux?: string;
   source_lead?: string;
   profil_risque_sri?: number;
   // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
@@ -63,6 +67,10 @@ export interface NewContact {
   lieu_naissance?: string;
   profession?: string;
   situation_familiale?: string;
+  regime_matrimonial?: string;
+  revenus_annuels?: number;
+  charges_emprunts?: number;
+  objectifs_patrimoniaux?: string;
   source_lead?: string;
   profil_risque_sri?: number;
   // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)

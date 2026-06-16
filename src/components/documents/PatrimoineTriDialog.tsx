@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -9,6 +9,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Home,
   Briefcase,
@@ -28,15 +30,30 @@ import {
   buildRioPatrimoineOwner,
   patrimoineOwnerLabel,
 } from "@/lib/documents/rio-patrimoine-target";
+import { extractPatrimoineItemsFromRio } from "@/lib/documents/extract-patrimoine-items";
+import {
+  buildImmoInvestissementExtras,
+  buildPatrimoineMontantInitial,
+  usesRioEncoursMontant,
+} from "@/lib/documents/rio-investissement-extras";
 
-// Types de patrimoine détectés dans un RIO
+const IMMO_PRODUCT_TYPES = new Set(["RP", "RS", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP"]);
+
+function isImmoItem(item: PatrimoineItem): boolean {
+  return IMMO_PRODUCT_TYPES.has(item.type);
+}
+
 interface PatrimoineItem {
   id: string;
-  type: "IMMOBILIER" | "ASSURANCE_VIE" | "PER" | "SCPI" | "AUTRE" | "EPARGNE_BANCAIRE";
+  type: string;
   label: string;
   montant: number;
-  autoOrigine?: OrigineInvestissement; // Si défini, pas de question (ex: Livret A → toujours EXISTANT_CLIENT)
-  origine?: OrigineInvestissement; // Choix de l'utilisateur
+  autoOrigine?: OrigineInvestissement;
+  origine?: OrigineInvestissement;
+  creditCRD?: number;
+  mensualiteCredit?: number;
+  loyerMensuel?: number;
+  dateFinCredit?: string;
 }
 
 interface PatrimoineTriDialogProps {
@@ -51,135 +68,11 @@ interface PatrimoineTriDialogProps {
   onCancel: () => void;
 }
 
-// Extraire les éléments de patrimoine depuis les données du RIO
 function extractPatrimoineItems(data: ExtractedData): PatrimoineItem[] {
-  const items: PatrimoineItem[] = [];
-
-  // === ÉPARGNE BANCAIRE (automatiquement "À côté") ===
-  if (data.livretA && data.livretA > 0) {
-    items.push({
-      id: "livret-a",
-      type: "EPARGNE_BANCAIRE",
-      label: "Livret A",
-      montant: data.livretA,
-      autoOrigine: "EXISTANT_CLIENT",
-    });
-  }
-  
-  if (data.ldd && data.ldd > 0) {
-    items.push({
-      id: "ldd",
-      type: "EPARGNE_BANCAIRE",
-      label: "LDD (Livret Développement Durable)",
-      montant: data.ldd,
-      autoOrigine: "EXISTANT_CLIENT",
-    });
-  }
-  
-  if (data.compteCourant && data.compteCourant > 0) {
-    items.push({
-      id: "compte-courant",
-      type: "EPARGNE_BANCAIRE",
-      label: "Compte courant",
-      montant: data.compteCourant,
-      autoOrigine: "EXISTANT_CLIENT",
-    });
-  }
-  
-  if (data.livretEpargne && data.livretEpargne > 0) {
-    items.push({
-      id: "livret-epargne",
-      type: "EPARGNE_BANCAIRE",
-      label: "Livret d'épargne",
-      montant: data.livretEpargne,
-      autoOrigine: "EXISTANT_CLIENT",
-    });
-  }
-
-  // === IMMOBILIER (à trier) ===
-  // Nouvelle structure : utiliser biensImmobiliers si disponible
-  if (data.biensImmobiliers && data.biensImmobiliers.length > 0) {
-    for (const bien of data.biensImmobiliers) {
-      if (bien.valeur && bien.valeur > 0) {
-        items.push({
-          id: bien.id,
-          type: "IMMOBILIER",
-          label: bien.nom,
-          montant: bien.valeur,
-        });
-      }
-    }
-  } else {
-    // Fallback : ancienne structure
-    if (data.residencePrincipale?.valeur && data.residencePrincipale.valeur > 0) {
-      items.push({
-        id: "residence-principale",
-        type: "IMMOBILIER",
-        label: "Résidence principale",
-        montant: data.residencePrincipale.valeur,
-      });
-    }
-    
-    if (data.residenceSecondaire?.valeur && data.residenceSecondaire.valeur > 0) {
-      items.push({
-        id: "residence-secondaire",
-        type: "IMMOBILIER",
-        label: "Résidence secondaire",
-        montant: data.residenceSecondaire.valeur,
-      });
-    }
-    
-    if (data.immobilierLocatif?.valeur && data.immobilierLocatif.valeur > 0) {
-      items.push({
-        id: "immobilier-locatif",
-        type: "IMMOBILIER",
-        label: "Immobilier locatif",
-        montant: data.immobilierLocatif.valeur,
-      });
-    }
-  }
-
-  // === ASSURANCE-VIE (à trier) ===
-  if (data.assuranceVie && data.assuranceVie > 0) {
-    items.push({
-      id: "assurance-vie",
-      type: "ASSURANCE_VIE",
-      label: "Assurance-vie",
-      montant: data.assuranceVie,
-    });
-  }
-
-  // === PER (à trier) ===
-  if (data.per && data.per > 0) {
-    items.push({
-      id: "per",
-      type: "PER",
-      label: "PER (Plan Épargne Retraite)",
-      montant: data.per,
-    });
-  }
-
-  // === SCPI (à trier) ===
-  if (data.scpi && data.scpi > 0) {
-    items.push({
-      id: "scpi",
-      type: "SCPI",
-      label: "SCPI",
-      montant: data.scpi,
-    });
-  }
-
-  // === Autres placements (à trier) ===
-  if (data.actionsObligations && data.actionsObligations > 0) {
-    items.push({
-      id: "actions-obligations",
-      type: "AUTRE",
-      label: "Actions / Obligations",
-      montant: data.actionsObligations,
-    });
-  }
-
-  return items;
+  return extractPatrimoineItemsFromRio(data).map((item) => ({
+    ...item,
+    loyerMensuel: item.loyerAnnuel ? Math.round(item.loyerAnnuel / 12) : undefined,
+  }));
 }
 
 // Formater un montant en euros
@@ -252,6 +145,26 @@ export function PatrimoineTriDialog({
   const [items, setItems] = useState<PatrimoineItem[]>(() => 
     extractPatrimoineItems(extractedData)
   );
+  const completingRef = useRef(false);
+
+  useEffect(() => {
+    if (open) {
+      setItems(extractPatrimoineItems(extractedData));
+    }
+  }, [open, extractedData]);
+
+  const handleDialogOpenChange = (next: boolean) => {
+    if (next) {
+      onOpenChange(true);
+      return;
+    }
+    if (completingRef.current) {
+      completingRef.current = false;
+      onOpenChange(false);
+      return;
+    }
+    onCancel();
+  };
 
   // Séparer les items automatiques des items à trier
   const autoItems = items.filter(item => item.autoOrigine);
@@ -271,42 +184,55 @@ export function PatrimoineTriDialog({
     ));
   };
 
+  const updateItemField = (
+    itemId: string,
+    field: "mensualiteCredit" | "creditCRD" | "loyerMensuel" | "dateFinCredit",
+    value: number | string | undefined
+  ) => {
+    setItems((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, [field]: value } : item))
+    );
+  };
+
   // Valider et créer les investissements
   const handleValidate = () => {
-    const investissements: NewInvestissement[] = items
-      .filter(item => {
-        // Exclure l'épargne bancaire de la création d'investissements
-        // (on la stocke juste pour info dans les notes du contact)
-        return item.type !== "EPARGNE_BANCAIRE";
+    type RioInvImport = NewInvestissement & { rioEncoursEuro?: number };
+
+    const investissements: RioInvImport[] = items
+      .filter((item) => {
+        return !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(item.type);
       })
-      .map((item) =>
-        attachRioPatrimoineOwner(
+      .map((item) => {
+        const immoExtras = buildImmoInvestissementExtras({
+          editedType: item.type,
+          mensualiteCredit: item.mensualiteCredit,
+          creditCRD: item.creditCRD,
+          loyerMensuel: item.loyerMensuel,
+          dateFinCredit: item.dateFinCredit,
+        });
+        const base = attachRioPatrimoineOwner(
           {
-            type_produit:
-              item.type === "IMMOBILIER"
-                ? "IMMOBILIER"
-                : item.type === "ASSURANCE_VIE"
-                  ? "ASSURANCE_VIE"
-                  : item.type === "PER"
-                    ? "PER"
-                    : item.type === "SCPI"
-                      ? "SCPI"
-                      : "AUTRE",
+            type_produit: item.type,
             nom_produit: item.label,
-            montant_initial: Math.round(item.montant * 100),
+            montant_initial: buildPatrimoineMontantInitial(item.type, item.montant),
             origine: item.origine || item.autoOrigine || "EXISTANT_CLIENT",
+            ...immoExtras,
           },
           owner
-        )
-      );
+        );
+        if (usesRioEncoursMontant(item.type)) {
+          return { ...base, rioEncoursEuro: item.montant };
+        }
+        return base;
+      });
 
     onComplete(investissements);
+    completingRef.current = true;
     onOpenChange(false);
   };
 
   const handleCancel = () => {
     onCancel();
-    onOpenChange(false);
   };
 
   // Calculer les totaux
@@ -318,7 +244,7 @@ export function PatrimoineTriDialog({
     .reduce((sum, i) => sum + i.montant, 0);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -415,6 +341,67 @@ export function PatrimoineTriDialog({
                         À côté
                       </Button>
                     </div>
+
+                    {isImmoItem(item) && (
+                      <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Mensualité crédit (€/mois)</Label>
+                          <Input
+                            type="number"
+                            className="h-8"
+                            value={item.mensualiteCredit ?? ""}
+                            onChange={(e) =>
+                              updateItemField(
+                                item.id,
+                                "mensualiteCredit",
+                                e.target.value ? parseFloat(e.target.value) : undefined
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">CRD (€)</Label>
+                          <Input
+                            type="number"
+                            className="h-8"
+                            value={item.creditCRD ?? ""}
+                            onChange={(e) =>
+                              updateItemField(
+                                item.id,
+                                "creditCRD",
+                                e.target.value ? parseFloat(e.target.value) : undefined
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Loyer mensuel (€)</Label>
+                          <Input
+                            type="number"
+                            className="h-8"
+                            value={item.loyerMensuel ?? ""}
+                            onChange={(e) =>
+                              updateItemField(
+                                item.id,
+                                "loyerMensuel",
+                                e.target.value ? parseFloat(e.target.value) : undefined
+                              )
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Fin de prêt (JJ/MM/AAAA)</Label>
+                          <Input
+                            className="h-8"
+                            placeholder="15/06/2045"
+                            value={item.dateFinCredit ?? ""}
+                            onChange={(e) =>
+                              updateItemField(item.id, "dateFinCredit", e.target.value || undefined)
+                            }
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

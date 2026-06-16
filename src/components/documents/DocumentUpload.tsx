@@ -32,6 +32,8 @@ import { toast } from "sonner";
 import { useRioCoupleImport } from "@/hooks/useRioCoupleImport";
 import { useRioSoloImport } from "@/hooks/useRioSoloImport";
 import { useRioPatrimoineFlow } from "@/hooks/useRioPatrimoineFlow";
+import { hasPatrimoineToTri } from "@/lib/documents/rio-patrimoine-flow";
+import { applyQpiImport } from "@/lib/contacts/apply-qpi-import";
 import { isImageFile, useIdentityDocumentImport } from "@/hooks/useIdentityDocumentImport";
 import { getMimeType } from "@/lib/documents/file-mime";
 import type { IdentityImportMode } from "@/lib/documents/identity-document-apply";
@@ -325,15 +327,40 @@ export function DocumentUpload({
     setLoading(true);
 
     try {
+      if (data.typeDocument === "QPI") {
+        const qpiResult = await applyQpiImport(data, {
+          effectiveContactId: effectiveContactId,
+          uploadedFile: uploadedFile ?? undefined,
+          formNotes: formData.notes,
+        });
+        if (qpiResult) {
+          alert(qpiResult.successMessage);
+          setShowPreview(false);
+          setExtractedData(null);
+          resetUploadState();
+          setFormData(patrimoineFlow.resetFormData());
+          onSuccess();
+          onOpenChange(false);
+        } else {
+          alert(
+            "❌ Impossible d'enregistrer le profil investisseur : SRI manquant (1–7) ou identité insuffisante (nom + prénom)."
+          );
+        }
+        return;
+      }
+
+      const deferFinancial = hasPatrimoineToTri(data);
+      const importOpts = { deferFinancialFields: deferFinancial };
+
       if (data.isCouple && data.conjoint) {
-        const result = await applyCoupleRioData(data);
+        const result = await applyCoupleRioData(data, importOpts);
         if (result) {
           await finishRioImport(data, result, result.memberContactIds);
         }
         return;
       }
 
-      const result = await applySoloRioData(data);
+      const result = await applySoloRioData(data, importOpts);
       if (result) {
         await finishRioImport(data, result);
       }

@@ -23,6 +23,10 @@ pub struct Contact {
     pub lieu_naissance: Option<String>,
     pub profession: Option<String>,
     pub situation_familiale: Option<String>,
+    pub regime_matrimonial: Option<String>,
+    pub revenus_annuels: Option<f64>,
+    pub charges_emprunts: Option<f64>,
+    pub objectifs_patrimoniaux: Option<String>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
     // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
@@ -70,6 +74,10 @@ pub struct NewContact {
     pub lieu_naissance: Option<String>,
     pub profession: Option<String>,
     pub situation_familiale: Option<String>,
+    pub regime_matrimonial: Option<String>,
+    pub revenus_annuels: Option<f64>,
+    pub charges_emprunts: Option<f64>,
+    pub objectifs_patrimoniaux: Option<String>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
     // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
@@ -317,6 +325,9 @@ pub struct Investissement {
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,
     pub date_fin_pret: Option<i64>,
+    pub mensualite_credit: Option<i64>,
+    pub credit_crd: Option<i64>,
+    pub loyer_mensuel: Option<i64>,
     pub versement_programme: bool,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,
@@ -348,6 +359,9 @@ pub struct NewInvestissement {
     pub date_souscription: Option<String>,     // ISO string
     pub date_fin_demembrement: Option<String>, // ISO string
     pub date_fin_pret: Option<String>,         // ISO string
+    pub mensualite_credit: Option<i64>,
+    pub credit_crd: Option<i64>,
+    pub loyer_mensuel: Option<i64>,
     pub versement_programme: Option<bool>,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,
@@ -372,6 +386,9 @@ pub struct InvestissementWithDetails {
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,
     pub date_fin_pret: Option<i64>,
+    pub mensualite_credit: Option<i64>,
+    pub credit_crd: Option<i64>,
+    pub loyer_mensuel: Option<i64>,
     pub versement_programme: bool,
     pub montant_versement_programme: Option<i64>,
     pub frequence_versement: Option<String>,

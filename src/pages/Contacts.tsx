@@ -38,6 +38,7 @@ import { buildEtiquettesPourFiltre } from "@/lib/etiquettes/etiquettes-filter";
 import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { buildFoyerFlatRows } from "@/lib/foyers/foyer-list-rows";
 import { VirtualizedContactList } from "@/components/contacts/VirtualizedContactList";
+import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { estimateContactListRowHeight } from "@/lib/contacts/contact-list-row-height";
 import { VirtualizedFoyerContactList } from "@/components/contacts/VirtualizedFoyerContactList";
 import { FoyerFlatRowRenderer } from "@/components/contacts/FoyerFlatRowRenderer";
@@ -607,32 +608,14 @@ export function Contacts({ onNavigate }: ContactsProps) {
           if (contact.filleul_categorie) {
             // Ce contact est aussi un filleul → juste effacer categorie (mettre AUCUN)
             // 🔥 Ne pas spreader ...contact pour éviter les FK invalides
-            await updateContact(contact.id!, {
-              nom: contact.nom,
-              prenom: contact.prenom,
-              email: contact.email || undefined,
-              telephone: contact.telephone || undefined,
-              adresse: contact.adresse || undefined,
-              code_postal: contact.code_postal || undefined,
-              ville: contact.ville || undefined,
-              profession: contact.profession || undefined,
-              categorie: "AUCUN", // Effacer le statut client
-              statut_suivi: contact.statut_suivi || "ACTIF", // 🔥 Champ NOT NULL requis
-              filleul_categorie: contact.filleul_categorie,
-              parrain_id: contact.parrain_id || undefined,
-              prescripteur_id: contact.prescripteur_id || undefined,
-              date_naissance: contact.date_naissance 
-                ? new Date(contact.date_naissance * 1000).toISOString() 
-                : undefined,
-              date_dernier_contact: undefined, // Effacer les dates CLIENT
-              date_prochain_suivi: undefined,
-              date_dernier_contact_filleul: contact.date_dernier_contact_filleul 
-                ? new Date(contact.date_dernier_contact_filleul * 1000).toISOString() 
-                : undefined,
-              date_prochain_suivi_filleul: contact.date_prochain_suivi_filleul 
-                ? new Date(contact.date_prochain_suivi_filleul * 1000).toISOString() 
-                : undefined,
-            });
+            await updateContact(
+              contact.id!,
+              contactToUpdatePayload(contact, {
+                categorie: "AUCUN",
+                date_dernier_contact: undefined,
+                date_prochain_suivi: undefined,
+              })
+            );
             cleared++;
           } else {
             // Ce contact n'est PAS un filleul → supprimer le contact
@@ -652,32 +635,15 @@ export function Contacts({ onNavigate }: ContactsProps) {
               contact.categorie === "SUSPECT_CLIENT") {
             // Ce contact est aussi un client → juste effacer filleul_categorie + dates filleul
             // 🔥 Ne pas spreader ...contact pour éviter les FK invalides
-            await updateContact(contact.id!, {
-              nom: contact.nom,
-              prenom: contact.prenom,
-              email: contact.email || undefined,
-              telephone: contact.telephone || undefined,
-              adresse: contact.adresse || undefined,
-              code_postal: contact.code_postal || undefined,
-              ville: contact.ville || undefined,
-              profession: contact.profession || undefined,
-              categorie: contact.categorie,
-              statut_suivi: contact.statut_suivi || "ACTIF", // 🔥 Champ NOT NULL requis
-              filleul_categorie: undefined, // Effacer le statut filleul
-              parrain_id: undefined, // Effacer le lien parrain
-              prescripteur_id: contact.prescripteur_id || undefined,
-              date_naissance: contact.date_naissance 
-                ? new Date(contact.date_naissance * 1000).toISOString() 
-                : undefined,
-              date_dernier_contact: contact.date_dernier_contact 
-                ? new Date(contact.date_dernier_contact * 1000).toISOString() 
-                : undefined,
-              date_prochain_suivi: contact.date_prochain_suivi 
-                ? new Date(contact.date_prochain_suivi * 1000).toISOString() 
-                : undefined,
-              date_dernier_contact_filleul: undefined,
-              date_prochain_suivi_filleul: undefined,
-            });
+            await updateContact(
+              contact.id!,
+              contactToUpdatePayload(contact, {
+                filleul_categorie: undefined,
+                parrain_id: undefined,
+                date_dernier_contact_filleul: undefined,
+                date_prochain_suivi_filleul: undefined,
+              })
+            );
             cleared++;
           } else {
             // Ce contact n'est PAS un client → supprimer le contact

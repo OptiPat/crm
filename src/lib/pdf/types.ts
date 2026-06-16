@@ -15,6 +15,14 @@ export interface BienImmobilier {
   loyersAnnuels?: number; // Loyers annuels (pour locatif)
 }
 
+export interface ContratFinancier {
+  id: string;
+  type: string;
+  nom: string;
+  montant: number;
+  autoOrigine?: "MON_CONSEIL" | "EXISTANT_CLIENT";
+}
+
 export interface ExtractedText {
   text: string;
   numPages: number;
@@ -77,6 +85,8 @@ export interface ExtractedData {
   
   // === CHARGES ANNUELLES ===
   chargesEmprunts?: number;
+  /** Échéances annuelles lues dans l'onglet Passifs (crédits). */
+  chargesEmpruntsPassifs?: number;
   chargesPensionsAlimentaires?: number;
   chargesAutres?: number;
   chargesTotal?: number;
@@ -99,6 +109,9 @@ export interface ExtractedData {
   
   // === BIENS IMMOBILIERS DÉTAILLÉS ===
   biensImmobiliers?: BienImmobilier[];
+
+  /** Contrats financiers ligne à ligne (AV, PER, PEA, SCPI…). */
+  contratsFinanciers?: ContratFinancier[];
   
   // === PATRIMOINE FINANCIER ===
   epargneTotal?: number; // Somme de toute l'épargne
@@ -179,6 +192,8 @@ export interface ExtractedData {
     telephone?: string;
     revenusTotal?: number;
     chargesTotal?: number;
+    chargesEmprunts?: number;
+    chargesEmpruntsPassifs?: number;
     patrimoineTotal?: number;
   };
   

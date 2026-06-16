@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -23,8 +23,12 @@ import {
   StickyNote,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
-import type { Investissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
+import type { Investissement, NewInvestissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
 import { getInvestissementsByContact, updateInvestissement, createInvestissement } from "@/lib/api/tauri-investissements";
+import { createInvestissementValorisation } from "@/lib/api/tauri-investissement-valorisations";
+import {
+  getEffectiveEncoursCentimes,
+} from "@/lib/investissements/investissement-encours";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { getContactById, getContactsByFoyer, updateContact } from "@/lib/api/tauri-contacts";
 import { loadFoyerInvestissements } from "@/lib/foyers/foyer-utils";
@@ -32,6 +36,12 @@ import {
   attachRioPatrimoineOwner,
   buildRioPatrimoineOwner,
 } from "@/lib/documents/rio-patrimoine-target";
+import { extractPatrimoineItemsFromRio } from "@/lib/documents/extract-patrimoine-items";
+import {
+  buildImmoInvestissementExtras,
+  buildRioValorisationDateIso,
+  usesRioEncoursMontant,
+} from "@/lib/documents/rio-investissement-extras";
 
 interface RioUpdateComparisonDialogProps {
   open: boolean;
@@ -89,6 +99,28 @@ interface InvestissementComparison {
   loyerMensuel?: number;
   mensualiteCredit?: number;
   creditCRD?: number;
+  dateFinCredit?: string;
+}
+
+function usesRioEncoursField(type: string): boolean {
+  return usesRioEncoursMontant(type);
+}
+
+function referenceMontantEuro(inv: Investissement, type: string): number {
+  if (usesRioEncoursField(type)) {
+    return getEffectiveEncoursCentimes(inv) / 100;
+  }
+  return inv.montant_initial ? inv.montant_initial / 100 : 0;
+}
+
+function buildComparisonImmoExtras(comp: InvestissementComparison): Partial<NewInvestissement> {
+  return buildImmoInvestissementExtras({
+    editedType: comp.editedType,
+    mensualiteCredit: comp.mensualiteCredit,
+    creditCRD: comp.creditCRD,
+    loyerMensuel: comp.loyerMensuel,
+    dateFinCredit: comp.dateFinCredit,
+  });
 }
 
 // Fréquences de versement disponibles
@@ -126,104 +158,19 @@ function normalizeForComparison(str: string): string {
 }
 
 function extractInvestissementsFromRIO(data: ExtractedData): ExtractedInvestissement[] {
-  const items: ExtractedInvestissement[] = [];
-
-  // Biens immobiliers (nouvelle structure)
-  if (data.biensImmobiliers && data.biensImmobiliers.length > 0) {
-    for (const bien of data.biensImmobiliers) {
-      if (bien.valeur && bien.valeur > 0) {
-        let type = bien.type || "IMMOBILIER";
-        if (type === "RESIDENCE_PRINCIPALE") {
-          type = "RP";
-        }
-        
-        items.push({
-          id: bien.id,
-          type,
-          label: bien.nom,
-          montant: bien.valeur,
-          creditCRD: bien.creditCRD,
-          mensualiteCredit: bien.mensualiteCredit,
-          loyerAnnuel: bien.loyersAnnuels,
-          dateFinCredit: bien.dateFinCredit,
-        });
-      }
-    }
-  } else {
-    if (data.residencePrincipale?.valeur && data.residencePrincipale.valeur > 0) {
-      items.push({
-        id: "residence-principale",
-        type: "IMMOBILIER",
-        label: "Résidence principale",
-        montant: data.residencePrincipale.valeur,
-      });
-    }
-    if (data.immobilierLocatif?.valeur && data.immobilierLocatif.valeur > 0) {
-      items.push({
-        id: "immobilier-locatif",
-        type: "IMMOBILIER",
-        label: "Immobilier locatif",
-        montant: data.immobilierLocatif.valeur,
-      });
-    }
-  }
-
-  if (data.assuranceVie && data.assuranceVie > 0) {
-    items.push({
-      id: "assurance-vie",
-      type: "ASSURANCE_VIE",
-      label: "Assurance-vie",
-      montant: data.assuranceVie,
-    });
-  }
-
-  if (data.per && data.per > 0) {
-    items.push({
-      id: "per",
-      type: "PER",
-      label: "PER (Plan Épargne Retraite)",
-      montant: data.per,
-    });
-  }
-
-  if (data.scpi && data.scpi > 0) {
-    items.push({
-      id: "scpi",
-      type: "SCPI",
-      label: "SCPI",
-      montant: data.scpi,
-    });
-  }
-
-  if (data.livretA && data.livretA > 0) {
-    items.push({
-      id: "livret-a",
-      type: "EPARGNE_BANCAIRE",
-      label: "Livret A",
-      montant: data.livretA,
-      origine: "EXISTANT_CLIENT",
-    });
-  }
-  if (data.ldd && data.ldd > 0) {
-    items.push({
-      id: "ldd",
-      type: "EPARGNE_BANCAIRE",
-      label: "LDD",
-      montant: data.ldd,
-      origine: "EXISTANT_CLIENT",
-    });
-  }
-  if (data.compteCourant && data.compteCourant > 0) {
-    items.push({
-      id: "compte-courant",
-      type: "EPARGNE_BANCAIRE",
-      label: "Compte courant",
-      montant: data.compteCourant,
-      origine: "EXISTANT_CLIENT",
-    });
-  }
-
-  return items;
+  return extractPatrimoineItemsFromRio(data)
+    .filter((item) => !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(item.type))
+    .map((item) => ({
+      id: item.id,
+      type: item.type,
+      label: item.label,
+      montant: item.montant,
+      origine: item.autoOrigine,
+      creditCRD: item.creditCRD,
+      mensualiteCredit: item.mensualiteCredit,
+      loyerAnnuel: item.loyerAnnuel,
+      dateFinCredit: item.dateFinCredit,
+    }));
 }
 
 const COMPATIBLE_TYPES: Record<string, string[]> = {
@@ -348,6 +295,20 @@ export function RioUpdateComparisonDialog({
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [comparisons, setComparisons] = useState<InvestissementComparison[]>([]);
   const [notesRio, setNotesRio] = useState<string>("");
+  const completingRef = useRef(false);
+
+  const handleDialogOpenChange = (next: boolean) => {
+    if (next) {
+      onOpenChange(true);
+      return;
+    }
+    if (completingRef.current) {
+      completingRef.current = false;
+      onOpenChange(false);
+      return;
+    }
+    onCancel();
+  };
 
   useEffect(() => {
     if (open && contactId) {
@@ -389,7 +350,7 @@ export function RioUpdateComparisonDialog({
         
         if (match) {
           usedExistingIds.add(match.id);
-          const oldMontant = match.montant_initial ? match.montant_initial / 100 : 0;
+          const oldMontant = referenceMontantEuro(match, ext.type);
           const isChanged = Math.abs(oldMontant - ext.montant) > 1;
 
           newComparisons.push({
@@ -415,10 +376,10 @@ export function RioUpdateComparisonDialog({
             reinvestissementDividendes: match.reinvestissement_dividendes || false,
             pourcentageReinvestissement: undefined,
             dateSouscription: match.date_souscription ? new Date(match.date_souscription * 1000).toISOString().split("T")[0] : undefined,
-            // Pré-remplir avec les valeurs du RIO (priorité) ou existantes
             loyerMensuel: ext.loyerAnnuel ? Math.round(ext.loyerAnnuel / 12) : undefined,
             mensualiteCredit: ext.mensualiteCredit,
             creditCRD: ext.creditCRD,
+            dateFinCredit: ext.dateFinCredit,
           });
         } else {
           newComparisons.push({
@@ -445,6 +406,7 @@ export function RioUpdateComparisonDialog({
             loyerMensuel: ext.loyerAnnuel ? Math.round(ext.loyerAnnuel / 12) : undefined,
             mensualiteCredit: ext.mensualiteCredit,
             creditCRD: ext.creditCRD,
+            dateFinCredit: ext.dateFinCredit,
           });
         }
       }
@@ -594,7 +556,7 @@ export function RioUpdateComparisonDialog({
         const existing = existingInvestissements.find(inv => inv.id === existingId);
         if (!existing) return c;
         
-        const oldMontant = existing.montant_initial ? existing.montant_initial / 100 : 0;
+        const oldMontant = referenceMontantEuro(existing, c.editedType);
         const isChanged = Math.abs(oldMontant - c.editedMontant) > 1;
         
         // Mettre à jour TOUS les champs avec les valeurs de l'investissement existant
@@ -640,16 +602,22 @@ export function RioUpdateComparisonDialog({
     try {
       let updated = 0;
       let added = 0;
+      const valorisationDate = buildRioValorisationDateIso(extractedData);
 
       for (const comp of comparisons) {
         if (!comp.selectedForUpdate) continue;
 
+        const immoExtras = buildComparisonImmoExtras(comp);
+
         if (comp.linkedToExistingId === null) {
+          const encoursType = usesRioEncoursField(comp.editedType);
           const newInv = attachRioPatrimoineOwner(
             {
               type_produit: comp.editedType,
               nom_produit: comp.editedLabel,
-              montant_initial: Math.round(comp.editedMontant * 100),
+              montant_initial: encoursType
+                ? undefined
+                : Math.round(comp.editedMontant * 100),
               origine: comp.selectedOrigine,
               partenaire_id: comp.selectedPartenaireId || undefined,
               versement_programme: comp.versementProgramme,
@@ -661,10 +629,19 @@ export function RioUpdateComparisonDialog({
               date_souscription: comp.dateSouscription
                 ? `${comp.dateSouscription}T00:00:00Z`
                 : undefined,
+              ...immoExtras,
             },
             defaultOwner
           );
-          await createInvestissement(newInv);
+          const created = await createInvestissement(newInv);
+          if (encoursType) {
+            await createInvestissementValorisation({
+              investissement_id: created.id,
+              montant: Math.round(comp.editedMontant * 100),
+              date_valorisation: valorisationDate,
+              notes: "Import RIO",
+            });
+          }
           added++;
         } else {
           const existing = existingInvestissements.find((inv) => inv.id === comp.linkedToExistingId);
@@ -674,14 +651,35 @@ export function RioUpdateComparisonDialog({
             ? { foyer_id: existing.foyer_id }
             : { contact_id: existing.contact_id ?? contactId };
 
+          const encoursType = usesRioEncoursField(existing.type_produit);
+          const encoursChanged =
+            encoursType &&
+            Math.abs(referenceMontantEuro(existing, comp.editedType) - comp.editedMontant) > 1;
+
+          if (encoursChanged) {
+            await createInvestissementValorisation({
+              investissement_id: existing.id,
+              montant: Math.round(comp.editedMontant * 100),
+              date_valorisation: valorisationDate,
+              notes: "Mise à jour RIO",
+            });
+          }
+
+          const mergedNotes = existing.notes;
+
           const updatedInv = attachRioPatrimoineOwner(
             {
               type_produit: existing.type_produit,
               nom_produit: existing.nom_produit,
-              montant_initial: Math.round(comp.editedMontant * 100),
+              montant_initial: encoursType
+                ? existing.montant_initial
+                : Math.round(comp.editedMontant * 100),
               origine: comp.selectedOrigine,
               partenaire_id: comp.selectedPartenaireId ?? existing.partenaire_id,
-              notes: existing.notes,
+              notes: mergedNotes,
+              mensualite_credit: immoExtras.mensualite_credit ?? existing.mensualite_credit,
+              credit_crd: immoExtras.credit_crd ?? existing.credit_crd,
+              loyer_mensuel: immoExtras.loyer_mensuel ?? existing.loyer_mensuel,
               versement_programme: comp.versementProgramme,
               montant_versement_programme: comp.montantVersement
                 ? Math.round(comp.montantVersement * 100)
@@ -693,6 +691,9 @@ export function RioUpdateComparisonDialog({
                 : existing.date_souscription
                   ? new Date(existing.date_souscription * 1000).toISOString()
                   : undefined,
+              date_fin_pret: immoExtras.date_fin_pret ?? (existing.date_fin_pret
+                ? new Date(existing.date_fin_pret * 1000).toISOString()
+                : undefined),
             },
             owner
           );
@@ -733,8 +734,13 @@ export function RioUpdateComparisonDialog({
             code_postal: contact.code_postal,
             ville: contact.ville,
             date_naissance: contact.date_naissance ? new Date(contact.date_naissance * 1000).toISOString() : undefined,
+            lieu_naissance: contact.lieu_naissance,
             profession: contact.profession,
             situation_familiale: contact.situation_familiale,
+            regime_matrimonial: contact.regime_matrimonial,
+            revenus_annuels: contact.revenus_annuels,
+            charges_emprunts: contact.charges_emprunts,
+            objectifs_patrimoniaux: contact.objectifs_patrimoniaux,
             source_lead: contact.source_lead,
             profil_risque_sri: contact.profil_risque_sri,
             // Dates de suivi CLIENT
@@ -753,6 +759,7 @@ export function RioUpdateComparisonDialog({
       }
 
       alert(`✅ Mise à jour terminée !\n\n• ${updated} investissement(s) mis à jour\n• ${added} investissement(s) ajouté(s)${notesRio.trim() ? "\n• Notes ajoutées au contact" : ""}`);
+      completingRef.current = true;
       onComplete();
     } catch (error) {
       console.error("Erreur lors de la mise à jour:", error);
@@ -784,6 +791,9 @@ export function RioUpdateComparisonDialog({
           <div className="flex-1 flex items-center gap-2 flex-wrap">
             {getTypeIcon(comp.type)}
             <span className="font-medium text-sm">{comp.label}</span>
+            {usesRioEncoursField(comp.editedType) && (
+              <span className="text-xs text-muted-foreground">(encours)</span>
+            )}
             
             {/* Affichage avant → après avec différence */}
             {comp.oldMontant != null && comp.oldMontant > 0 ? (
@@ -854,7 +864,7 @@ export function RioUpdateComparisonDialog({
                         : null;
                       return (
                         <option key={existing.id} value={existing.id.toString()}>
-                          {existing.type_produit} - {existing.nom_produit} ({formatEuro(existing.montant_initial ? existing.montant_initial / 100 : 0)})
+                          {existing.type_produit} - {existing.nom_produit} ({formatEuro(referenceMontantEuro(existing, existing.type_produit))})
                           {partenaireNom ? ` | ${partenaireNom}` : ""}
                           {dateStr ? ` | ${dateStr}` : ""}
                           {existing.origine === "MON_CONSEIL" ? " · Avec moi" : " · À côté"}
@@ -1318,7 +1328,7 @@ export function RioUpdateComparisonDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

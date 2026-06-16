@@ -92,13 +92,12 @@ describe("Stellium — RIO Martinez 2026", () => {
 
   it("extrait les objectifs et métadonnées", () => {
     expect(data.dateEntreeRelation).toBe("27/02/2026");
-    expect(data.objectifsPrincipaux).toEqual(
-      expect.arrayContaining([
-        "Accompagner vos enfants",
-        "Préparer votre retraite",
-        expect.stringMatching(/Optimiser la rentabilité/i),
-      ])
-    );
+    expect(data.objectifsPrincipaux).toEqual([
+      "Accompagner vos enfants",
+      "Préparer votre retraite",
+      "Disposer de revenus ponctuellement (en cas de besoin)",
+      "Optimiser la rentabilité de vos placements financiers",
+    ]);
     expect(data.typeDocument).toBe("RIO");
     expect(data.confidence).toBeGreaterThanOrEqual(75);
   });

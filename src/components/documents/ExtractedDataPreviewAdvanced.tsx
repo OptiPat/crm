@@ -53,6 +53,8 @@ export function ExtractedDataPreviewAdvanced({
     new Set(["identite", "revenus", "patrimoine"])
   );
 
+  const previewReadonlyClass = "bg-muted cursor-not-allowed";
+
   const toggleSection = (section: string) => {
     const newExpanded = new Set(expandedSections);
     if (newExpanded.has(section)) {
@@ -252,12 +254,11 @@ export function ExtractedDataPreviewAdvanced({
 
                 {formData.nationalite !== undefined && (
                   <div className="space-y-2">
-                    <Label>Nationalité</Label>
+                    <Label>Nationalité (lecture seule)</Label>
                     <Input
+                      readOnly
+                      className={previewReadonlyClass}
                       value={formData.nationalite || ""}
-                      onChange={(e) =>
-                        setFormData({ ...formData, nationalite: e.target.value })
-                      }
                     />
                   </div>
                 )}
@@ -413,22 +414,18 @@ export function ExtractedDataPreviewAdvanced({
 
                 {formData.statutProfessionnel !== undefined && (
                   <div className="space-y-2">
-                    <Label>Statut professionnel</Label>
+                    <Label>Statut professionnel (lecture seule)</Label>
                     <Input
+                      readOnly
+                      className={previewReadonlyClass}
                       value={formData.statutProfessionnel || ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          statutProfessionnel: e.target.value,
-                        })
-                      }
                     />
                   </div>
                 )}
 
                 {formData.employeur !== undefined && (
                   <div className="space-y-2">
-                    <Label>Employeur</Label>
+                    <Label>Employeur (→ profession si vide)</Label>
                     <Input
                       value={formData.employeur || ""}
                       onChange={(e) =>
@@ -440,15 +437,11 @@ export function ExtractedDataPreviewAdvanced({
 
                 {formData.secteurActivite !== undefined && (
                   <div className="space-y-2">
-                    <Label>Secteur d'activité</Label>
+                    <Label>Secteur d&apos;activité (lecture seule)</Label>
                     <Input
+                      readOnly
+                      className={previewReadonlyClass}
                       value={formData.secteurActivite || ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          secteurActivite: e.target.value,
-                        })
-                      }
                     />
                   </div>
                 )}
@@ -602,32 +595,22 @@ export function ExtractedDataPreviewAdvanced({
                 {formData.patrimoineTotal !== undefined && (
                   <>
                     <div className="space-y-2">
-                      <Label className="font-semibold text-lg">Patrimoine brut</Label>
+                      <Label className="font-semibold text-lg">Patrimoine brut (lecture seule)</Label>
                       <Input
+                        readOnly
                         type="number"
+                        className={`font-semibold text-lg ${previewReadonlyClass}`}
                         value={formData.patrimoineTotal || ""}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            patrimoineTotal: parseInt(e.target.value) || undefined,
-                          })
-                        }
-                        className="font-semibold text-lg"
                       />
                     </div>
                     {formData.patrimoineNet !== undefined && (
                       <div className="space-y-2">
-                        <Label className="font-semibold text-lg">Patrimoine net</Label>
+                        <Label className="font-semibold text-lg">Patrimoine net (lecture seule)</Label>
                         <Input
+                          readOnly
                           type="number"
+                          className={`font-semibold text-lg ${previewReadonlyClass}`}
                           value={formData.patrimoineNet || ""}
-                          onChange={(e) =>
-                            setFormData({
-                              ...formData,
-                              patrimoineNet: parseInt(e.target.value) || undefined,
-                            })
-                          }
-                          className="font-semibold text-lg"
                         />
                       </div>
                     )}
@@ -1239,17 +1222,12 @@ export function ExtractedDataPreviewAdvanced({
 
                 {formData.capaciteEpargneMensuelle !== undefined && (
                   <div className="space-y-2">
-                    <Label>Capacité d'épargne mensuelle (€)</Label>
+                    <Label>Capacité d&apos;épargne mensuelle (lecture seule, €)</Label>
                     <Input
+                      readOnly
                       type="number"
+                      className={previewReadonlyClass}
                       value={formData.capaciteEpargneMensuelle || ""}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          capaciteEpargneMensuelle:
-                            parseInt(e.target.value) || undefined,
-                        })
-                      }
                     />
                   </div>
                 )}

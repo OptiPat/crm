@@ -2,7 +2,7 @@
 // Ce schéma Drizzle est DEV / DOC uniquement (génération SQL, inspection via `db:studio`).
 // Il n'est importé par aucun code applicatif et ne doit PAS servir en production.
 // Toute modification de structure se fait d'abord côté Rust, puis on synchronise ici.
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // ============================================
@@ -72,6 +72,10 @@ export const contacts = sqliteTable("contacts", {
   situationFamiliale: text("situation_familiale", {
     enum: ["CELIBATAIRE", "MARIE", "PACSE", "UNION_LIBRE", "DIVORCE", "VEUF", "AUTRE"],
   }),
+  regimeMatrimonial: text("regime_matrimonial"),
+  revenusAnnuels: real("revenus_annuels"),
+  chargesEmprunts: real("charges_emprunts"),
+  objectifsPatrimoniaux: text("objectifs_patrimoniaux"),
   
   // Informations commerciales
   sourceLead: text("source_lead"),
@@ -214,6 +218,10 @@ export const investissements = sqliteTable("investissements", {
   // Dates
   dateSouscription: integer("date_souscription", { mode: "timestamp" }),
   dateFinDemembrement: integer("date_fin_demembrement", { mode: "timestamp" }), // Pour SCPI démembrées
+  dateFinPret: integer("date_fin_pret", { mode: "timestamp" }),
+  mensualiteCredit: integer("mensualite_credit"), // En centimes
+  creditCrd: integer("credit_crd"), // En centimes
+  loyerMensuel: integer("loyer_mensuel"), // En centimes
   
   // Versements programmés
   versementProgramme: integer("versement_programme", { mode: "boolean" })

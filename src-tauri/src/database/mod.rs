@@ -477,6 +477,7 @@ impl Database {
 
         // Migration automatique : Ajouter date_fin_pret aux investissements
         self.migrate_add_date_fin_pret()?;
+        self.migrate_add_investissement_immo_financing_fields()?;
 
         self.migrate_investissement_valorisations()?;
 
@@ -514,6 +515,7 @@ impl Database {
         self.migrate_contacts_google_sync()?;
         self.migrate_google_contact_name_proposal_dismissals()?;
         self.migrate_add_lieu_naissance()?;
+        self.migrate_add_contact_rio_financial_fields()?;
         self.migrate_drop_contacts_date_expiration_identite()?;
 
         Ok(())
@@ -538,6 +540,33 @@ impl Database {
         self.conn
             .execute("ALTER TABLE contacts ADD COLUMN lieu_naissance TEXT", [])?;
         println!("✅ Migration lieu_naissance appliquée");
+        Ok(())
+    }
+
+    fn migrate_add_contact_rio_financial_fields(&self) -> Result<()> {
+        let columns: [(&str, &str); 4] = [
+            ("regime_matrimonial", "TEXT"),
+            ("revenus_annuels", "REAL"),
+            ("charges_emprunts", "REAL"),
+            ("objectifs_patrimoniaux", "TEXT"),
+        ];
+        let mut added = false;
+        for (name, sql_type) in columns {
+            if self.table_has_column("contacts", name)? {
+                continue;
+            }
+            if !added {
+                println!("🔄 Migration : champs RIO sur contacts (régime, revenus, charges, objectifs)...");
+                added = true;
+            }
+            self.conn.execute(
+                &format!("ALTER TABLE contacts ADD COLUMN {name} {sql_type}"),
+                [],
+            )?;
+        }
+        if added {
+            println!("✅ Migration champs RIO contacts appliquée");
+        }
         Ok(())
     }
 
@@ -1309,6 +1338,33 @@ impl Database {
             println!("✅ Migration appliquée : colonne date_fin_pret ajoutée aux investissements");
         }
 
+        Ok(())
+    }
+
+    /// Migration : mensualité crédit, CRD et loyer mensuel (centimes) sur investissements immo.
+    fn migrate_add_investissement_immo_financing_fields(&self) -> Result<()> {
+        for column in ["mensualite_credit", "credit_crd", "loyer_mensuel"] {
+            let exists = {
+                let mut stmt = self.conn.prepare("PRAGMA table_info(investissements)")?;
+                let mut rows = stmt.query([])?;
+                let mut found = false;
+                while let Some(row) = rows.next()? {
+                    let name: String = row.get(1)?;
+                    if name == column {
+                        found = true;
+                        break;
+                    }
+                }
+                found
+            };
+            if !exists {
+                self.conn.execute(
+                    &format!("ALTER TABLE investissements ADD COLUMN {column} INTEGER"),
+                    [],
+                )?;
+                println!("✅ Migration appliquée : colonne {column} ajoutée aux investissements");
+            }
+        }
         Ok(())
     }
 

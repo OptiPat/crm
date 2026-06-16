@@ -21,13 +21,17 @@ import {
 import {
   buildCoupleApplySummary,
   contactMatchesCoupleMember,
-  mapCoupleMemberToNewContact,
   pickPreferredContactForCouple,
   resolveCoupleMemberInContacts,
   toPerson1Extract,
   toPerson2Extract,
   type RioCoupleMemberExtract,
 } from "@/lib/contacts/rio-couple-import";
+import {
+  buildCoupleMemberRioFields,
+  mergeRioFieldsOntoContact,
+} from "@/lib/contacts/rio-contact-fields";
+import { syncRioEnfants } from "@/lib/contacts/rio-enfants-apply";
 import {
   buildFoyerNomFromMembers,
   linkContactToFoyer,
@@ -93,11 +97,13 @@ async function resolveCoupleMember(
 async function upsertCoupleMember(
   member: RioCoupleMemberExtract,
   ctx: RioCoupleApplyContext,
-  options?: {
-    situationFamiliale?: string;
+  options: {
+    rioData: ExtractedData;
+    memberKey: "person1" | "person2";
     preferredContact?: Contact | null;
     spouseContact?: Contact | null;
     excludeContactId?: number;
+    includeFinancial?: boolean;
   }
 ): Promise<{ contact: Contact; created: boolean } | null> {
   let existing = await resolveCoupleMember(member, ctx.importContacts, options);
@@ -129,36 +135,34 @@ async function upsertCoupleMember(
     }
   }
 
-  const newData = mapCoupleMemberToNewContact(member, {
-    situationFamiliale: options?.situationFamiliale,
+  const rioFields = buildCoupleMemberRioFields(options.rioData, options.memberKey, {
+    includeFinancial: options.includeFinancial,
   });
 
   if (existing) {
     await updateContact(
       existing.id,
-      contactToUpdatePayload(existing, {
-        nom: newData.nom || existing.nom,
-        prenom: newData.prenom || existing.prenom,
-        civilite: newData.civilite || existing.civilite,
-        email: newData.email || existing.email,
-        telephone: newData.telephone || existing.telephone,
-        adresse: newData.adresse || existing.adresse,
-        code_postal: newData.code_postal || existing.code_postal,
-        ville: newData.ville || existing.ville,
-        date_naissance: newData.date_naissance || undefined,
-        profession: newData.profession || existing.profession,
-        situation_familiale: newData.situation_familiale || existing.situation_familiale,
-      })
+      contactToUpdatePayload(
+        existing,
+        mergeRioFieldsOntoContact(existing, rioFields)
+      )
     );
-    return { contact: existing, created: false };
+    const refreshed = await getContactById(existing.id);
+    return { contact: refreshed, created: false };
   }
 
-  if (!newData.nom?.trim() || !newData.prenom?.trim()) {
+  if (!rioFields.nom?.trim() || !rioFields.prenom?.trim()) {
     ctx.onMissingIdentity("Impossible de créer le contact : nom et prénom manquants.");
     return null;
   }
 
-  const created = await createContact(newData);
+  const created = await createContact({
+    nom: rioFields.nom,
+    prenom: rioFields.prenom,
+    categorie: rioFields.categorie || "SUSPECT_CLIENT",
+    statut_suivi: rioFields.statut_suivi || "ACTIF",
+    ...rioFields,
+  });
   return { contact: created, created: true };
 }
 
@@ -175,6 +179,8 @@ export async function ensureCoupleFoyer(
       contact2.foyer_id &&
       Number(contact1.foyer_id) === Number(contact2.foyer_id)
     ) {
+      foyerIdToUse = contact1.foyer_id;
+    } else if (contact1.foyer_id && contact2.foyer_id) {
       foyerIdToUse = contact1.foyer_id;
     } else if (contact1.foyer_id && !contact2.foyer_id) {
       foyerIdToUse = contact1.foyer_id;
@@ -207,7 +213,8 @@ export async function ensureCoupleFoyer(
 
 export async function applyCoupleRioImport(
   data: ExtractedData,
-  ctx: RioCoupleApplyContext
+  ctx: RioCoupleApplyContext,
+  options?: { deferFinancialFields?: boolean }
 ): Promise<RioCoupleApplyResult | null> {
   const person1Extract = toPerson1Extract(data);
   const person2Extract = toPerson2Extract(data);
@@ -231,14 +238,20 @@ export async function applyCoupleRioImport(
     person2Extract
   );
 
+  const includeFinancial = !options?.deferFinancialFields;
+
   const person1Result = await upsertCoupleMember(person1Extract, ctx, {
-    situationFamiliale: data.situationFamiliale,
+    rioData: data,
+    memberKey: "person1",
+    includeFinancial,
     preferredContact: person1Preferred,
   });
   if (!person1Result) return null;
 
   const person2Result = await upsertCoupleMember(person2Extract, ctx, {
-    situationFamiliale: data.situationFamiliale,
+    rioData: data,
+    memberKey: "person2",
+    includeFinancial,
     preferredContact: person2Preferred,
     spouseContact: person1Result.contact,
     excludeContactId: person1Result.contact.id,
@@ -250,6 +263,10 @@ export async function applyCoupleRioImport(
     person2Result.contact,
     ctx.explicitFoyerId
   );
+
+  if (data.enfants?.length) {
+    await syncRioEnfants({ enfants: data.enfants, foyerId: foyerLink.foyerId });
+  }
 
   const finalContactId = person2Preferred
     ? foyerLink.contact2.id

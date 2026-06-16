@@ -10,6 +10,12 @@ import {
   parseCouplePatrimoine,
   parseCoupleRevenusCharges,
 } from "./rio-couple";
+import { enrichBiensImmobiliersWithCredits } from "./immo-credits";
+import {
+  isImmoActifCategory,
+  registerFinancialActifLine,
+} from "./financial-contracts";
+import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { extractFieldValue, getSection, splitStelliumSections } from "./sections";
 
 function splitNomPrenom(value: string): { nom?: string; prenom?: string } {
@@ -80,73 +86,17 @@ function parseActifLines(patrimoineSection: string): ParsedActifLine[] {
   return lines;
 }
 
-function applyFinancialProduct(
-  data: ExtractedData,
-  category: string,
-  montant: number
-): void {
-  const lower = category.toLowerCase();
-  if (lower.includes("assurance vie")) {
-    data.assuranceVie = (data.assuranceVie ?? 0) + montant;
-    return;
-  }
-  if (lower.includes("compte courant")) {
-    data.compteCourant = (data.compteCourant ?? 0) + montant;
-    return;
-  }
-  if (lower.includes("livret a")) {
-    data.livretA = (data.livretA ?? 0) + montant;
-    return;
-  }
-  if (lower.includes("ldd") || lower.includes("ldds")) {
-    data.ldd = (data.ldd ?? 0) + montant;
-    return;
-  }
-  if (lower === "pel") {
-    data.pel = (data.pel ?? 0) + montant;
-    return;
-  }
-  if (lower === "cel") {
-    data.cel = (data.cel ?? 0) + montant;
-    return;
-  }
-  if (lower === "per") {
-    data.per = (data.per ?? 0) + montant;
-    return;
-  }
-  if (lower === "perp") {
-    data.perp = (data.perp ?? 0) + montant;
-    return;
-  }
-  if (lower === "pea") {
-    data.pea = (data.pea ?? 0) + montant;
-    return;
-  }
-  if (lower.includes("compte titres")) {
-    data.compteTitres = (data.compteTitres ?? 0) + montant;
-    return;
-  }
-  if (lower === "scpi") {
-    data.scpi = (data.scpi ?? 0) + montant;
-  }
-}
-
 function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
+  const passifsCharges = parsePassifsEcheanceAnnuelle(patrimoineSection);
+  if (passifsCharges > 0) {
+    data.chargesEmpruntsPassifs = passifsCharges;
+  }
+
   const actifLines = parseActifLines(patrimoineSection);
   const biens: BienImmobilier[] = [];
 
   for (const line of actifLines) {
-    const lower = line.category.toLowerCase();
-    if (
-      lower.includes("résidence") ||
-      lower.includes("residence") ||
-      lower.includes("classique") ||
-      lower.includes("pinel") ||
-      lower.includes("lmnp") ||
-      lower.includes("lmp") ||
-      lower.includes("denormandie") ||
-      lower.includes("malraux")
-    ) {
+    if (isImmoActifCategory(line.category)) {
       const type = mapImmoType(line.category);
       const label = `${line.category} - ${line.nom}`;
       const bien: BienImmobilier = {
@@ -169,7 +119,7 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
       continue;
     }
 
-    applyFinancialProduct(data, line.category, line.montant);
+    registerFinancialActifLine(data, line.category, line.nom, line.montant);
   }
 
   if (biens.length > 0) {
@@ -231,14 +181,23 @@ function parseEnfants(relationsSection: string): ExtractedData["enfants"] {
   return enfants.length > 0 ? enfants : undefined;
 }
 
+/** Colonne « Attribué à » : prénom + NOM, éventuellement couple (A & B). */
+const RIO_OBJECTIF_ASSIGNEE =
+  /(?:[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'\s-]+(?:\s*&\s*[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'\s-]+)*)/;
+
 function parseObjectifs(objectifsSection: string): string[] {
   const tableBody = objectifsSection.replace(/^[\s\S]*?Horizon\s+/i, "");
+  const stopIdx = tableBody.search(/\bEpargne de précaution\b/i);
+  const body = stopIdx >= 0 ? tableBody.slice(0, stopIdx) : tableBody;
+
   const objectifs: string[] = [];
-  const pattern =
-    /([\s\S]+?)\s{2,}.+?\s{2,}(\d+)\s+-/g;
+  const pattern = new RegExp(
+    `([\\s\\S]+?)\\s{2,}${RIO_OBJECTIF_ASSIGNEE.source}\\s{2,}(\\d+)\\s+(?:-|(?:\\d+\\s+\\w+))`,
+    "g"
+  );
 
   let match: RegExpExecArray | null;
-  while ((match = pattern.exec(tableBody)) !== null) {
+  while ((match = pattern.exec(body)) !== null) {
     const label = match[1].replace(/\s+/g, " ").trim();
     if (label && !/^Epargne de précaution/i.test(label)) {
       objectifs.push(label);
@@ -416,6 +375,7 @@ function parseStelliumRioSolo(
 
   if (patrimoine) {
     parsePatrimoine(patrimoine, data);
+    enrichBiensImmobiliersWithCredits(text, data.biensImmobiliers);
   }
 
   if (revenusCharges) {
@@ -491,6 +451,7 @@ function parseStelliumRioCouple(
 
   if (patrimoine) {
     const { person1Total, person2Total } = parseCouplePatrimoine(patrimoine, data);
+    enrichBiensImmobiliersWithCredits(text, data.biensImmobiliers);
     if (data.conjoint && person2Total) {
       data.conjoint.patrimoineTotal = person2Total;
     }

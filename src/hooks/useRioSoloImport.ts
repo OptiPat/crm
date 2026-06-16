@@ -8,13 +8,17 @@ export function useRioSoloImport(options: {
   foyerId?: number;
 }) {
   const applySoloRioData = useCallback(
-    async (data: ExtractedData) => {
-      return applySoloRioImport(data, {
-        effectiveContactId: options.effectiveContactId,
-        foyerId: options.foyerId,
-        onMissingIdentity: (message) => toast.error(message),
-        confirmIdentityMerge: (message) => window.confirm(message),
-      });
+    async (data: ExtractedData, importOptions?: { deferFinancialFields?: boolean }) => {
+      return applySoloRioImport(
+        data,
+        {
+          effectiveContactId: options.effectiveContactId,
+          foyerId: options.foyerId,
+          onMissingIdentity: (message) => toast.error(message),
+          confirmIdentityMerge: (message) => window.confirm(message),
+        },
+        importOptions
+      );
     },
     [options.effectiveContactId, options.foyerId]
   );
