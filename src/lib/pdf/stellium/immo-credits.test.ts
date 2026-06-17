@@ -1,14 +1,14 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { parseStelliumRio } from "./rio-parser";
-import plazaFixture from "./fixtures/rio-plaza-2026.txt?raw";
+import dupontFixture from "./fixtures/rio-solo-dupont-2026.txt?raw";
 import {
   enrichBiensImmobiliersWithCredits,
   parseStelliumPassifsMortgageCredits,
 } from "./immo-credits";
 import type { BienImmobilier } from "../types";
 
-describe("immo-credits — Plaza 2026", () => {
-  const data = parseStelliumRio(plazaFixture);
+describe("immo-credits — Dupont solo 2026", () => {
+  const data = parseStelliumRio(dupontFixture);
 
   it("associe mensualité et CRD aux biens immobiliers", () => {
     const rp = data.biensImmobiliers?.find((b) => b.nom === "Primo MTP");
@@ -29,7 +29,7 @@ describe("immo-credits — Plaza 2026", () => {
   });
 
   it("associe crédits avec colonnes tabulées (extraction PDF spatiale)", () => {
-    const tabbed = plazaFixture.replace(/ {2,}/g, "\t");
+    const tabbed = dupontFixture.replace(/ {2,}/g, "\t");
     const tabbedData = parseStelliumRio(tabbed);
     const rp = tabbedData.biensImmobiliers?.find((b) => b.nom === "Primo MTP");
     expect(rp?.creditCRD).toBe(210000);
@@ -51,7 +51,7 @@ describe("immo-credits — Plaza 2026", () => {
         valeur: 72500,
       },
     ];
-    enrichBiensImmobiliersWithCredits(plazaFixture, biens);
+    enrichBiensImmobiliersWithCredits(dupontFixture, biens);
     expect(biens[0]).toMatchObject({
       creditCRD: 210000,
       mensualiteCredit: 1500,
@@ -64,7 +64,7 @@ describe("immo-credits — Plaza 2026", () => {
   });
 
   it("parse les lignes crédit Stellium Passifs", () => {
-    const credits = parseStelliumPassifsMortgageCredits(plazaFixture);
+    const credits = parseStelliumPassifsMortgageCredits(dupontFixture);
     expect(credits).toHaveLength(2);
     expect(credits.find((c) => c.productType.toUpperCase() === "RP")).toMatchObject({
       echeanceAnnuelle: 18000,

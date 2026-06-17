@@ -139,7 +139,7 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
     const rpNomEscaped = rpNomOriginal.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     // Pattern avec flag 'g' pour trouver TOUS les matchs
-    // Format: "Primo MTP Nicolas P. 9 454 € 169 072 € 01/11/2046"
+    // Format: "Primo MTP DUPONT J. 9 454 € 169 072 € 01/11/2046"
     // On veut capturer les 2 montants COMPLETS
     const creditPatternGlobal = new RegExp(
       `${rpNomEscaped}[^€]*?(\\d[\\d\\s,.]+)\\s*€[^€]*?(\\d[\\d\\s,.]+)\\s*€(?:[^€]*(\\d{2}\\/\\d{2}\\/\\d{4}))?`,
@@ -236,7 +236,7 @@ export function extractBiensImmobiliers(text: string): BienImmobilier[] {
       };
       
       // Chercher le crédit associé (sauf crédit SCPI générique, traité après)
-      // Format RIO: "Crédit immobilier - Pinel sète Nicolas P. 8 306 € 143 128 € 01/12/2046"
+      // Format RIO: "Crédit immobilier - Pinel sète DUPONT J. 8 306 € 143 128 € 01/12/2046"
       // Le matching doit être intelligent car les noms peuvent différer entre ACTIFS et PASSIFS
       // Note: PDF.js peut insérer des espaces ("Cré dit" au lieu de "Crédit")
       const nomNormalized = normalizeNom(nomBien);

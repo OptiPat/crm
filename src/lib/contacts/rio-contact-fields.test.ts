@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import {
   buildCoupleMemberRioFields,
@@ -26,8 +26,8 @@ describe("rio-contact-fields", () => {
   it("mappe identité, revenus, charges, régime et objectifs", () => {
     const fields = buildSoloRioContactFields({
       typeDocument: "RIO",
-      nom: "MARTINEZ LOPEZ",
-      prenom: "Franck",
+      nom: "LEGRAND",
+      prenom: "Paul",
       civilite: "Monsieur",
       lieuNaissance: "Saint flour",
       dateNaissance: "25/10/1975",
@@ -165,15 +165,15 @@ describe("rio-contact-fields", () => {
   it("buildCoupleMemberRioFields répartit charges et objectifs sur P1 seulement", () => {
     const data = {
       typeDocument: "RIO" as const,
-      nom: "GENTIL",
-      prenom: "Gwendal",
+      nom: "MOREAU",
+      prenom: "Guillaume",
       lieuNaissance: "Lyon",
       chargesEmprunts: 100,
       chargesEmpruntsPassifs: 9672,
       objectifsPrincipaux: ["Préparer votre retraite"],
       conjoint: {
-        nom: "NOYEZ",
-        prenom: "Laurene",
+        nom: "DURAND",
+        prenom: "Claire",
         lieuNaissance: "Paris",
         chargesEmprunts: 200,
         chargesEmpruntsPassifs: 9672,

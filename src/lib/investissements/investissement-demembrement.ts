@@ -1,5 +1,7 @@
 /** SCPI démembrement : temporaire (échéance) ou viager (sans date de fin). */
 
+import { formatCalendarDateFr, unixToDateInput } from "@/lib/dates/calendar-date";
+
 export type DemembrementKind = "TEMPORAIRE" | "VIAGER";
 export type DetentionDemembrement = "USUFRUIT" | "NUE_PROPRIETE";
 
@@ -137,4 +139,45 @@ export function yearsBetweenDateInputs(
   let years = y2 - y1;
   if (m2 < m1 || (m2 === m1 && d2 < d1)) years -= 1;
   return years > 0 ? years : null;
+}
+
+/** Libellé court pour synthèses (rapport CIF, etc.) : « viager » ou « temporaire N ans ». */
+export function formatDemembrementDureeLabel(input: {
+  type_produit: string;
+  notes?: string | null;
+  date_fin_demembrement?: number | null;
+  date_souscription?: number | null;
+}): string | null {
+  if (input.type_produit !== "SCPI_DEMEMBREMENT") return null;
+
+  const parsed = parseDemembrementDuree(input.notes);
+  if (parsed.kind === "VIAGER") return "viager";
+
+  const kind = detectDemembrementKind({
+    typeProduit: input.type_produit,
+    hasDateFin: input.date_fin_demembrement != null,
+    notes: input.notes,
+  });
+  if (kind === "VIAGER") return "viager";
+
+  if (parsed.annees != null && parsed.annees > 0) {
+    return `temporaire ${parsed.annees} ans`;
+  }
+
+  if (input.date_souscription != null && input.date_fin_demembrement != null) {
+    const years = yearsBetweenDateInputs(
+      unixToDateInput(input.date_souscription),
+      unixToDateInput(input.date_fin_demembrement)
+    );
+    if (years != null && years > 0) {
+      return `temporaire ${years} ans`;
+    }
+  }
+
+  if (input.date_fin_demembrement != null) {
+    const fin = formatCalendarDateFr(input.date_fin_demembrement);
+    return fin ? `temporaire fin ${fin}` : "temporaire";
+  }
+
+  return parsed.kind === "TEMPORAIRE" ? "temporaire" : null;
 }

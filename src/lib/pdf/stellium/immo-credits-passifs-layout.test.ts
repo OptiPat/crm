@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { parseStelliumRio } from "./rio-parser";
 import type { BienImmobilier } from "../types";
 import {
@@ -6,7 +6,7 @@ import {
   parseStelliumPassifsMortgageCredits,
 } from "./immo-credits";
 
-/** Passifs + actifs minimaux — extrait du PDF Plaza 16/06/2026. */
+/** Passifs + actifs minimaux — extrait du PDF Dupont 16/06/2026. */
 const REAL_PDF_PASSIFS = `Patrimoine Actifs
 Résidence principale - Primo MTP 340 000 €
 LMNP Classique - Sete AIRBNB 72 500 €
@@ -15,11 +15,11 @@ Passifs
 Désignation Emprunteur Echéance par an CRD Date d'échéance
 Crédits immobilier 24 045 € 410 881 €
 Crédit immobilier - Amortissable -
-Primo MTP Nicolas PLAZA 9 454 € 166 183 € 10/11/2046
+Primo MTP Jean DUPONT 9 454 € 166 183 € 10/11/2046
 Crédit immobilier - Amortissable - Pinel
-sète Nicolas PLAZA 8 306 € 141 267 € 24/12/2046
+sète Jean DUPONT 8 306 € 141 267 € 24/12/2046
 Crédit immobilier - Amortissable -
-Crédits immobilier - LMNP AIRBNB Nicolas PLAZA 6 285 € 103 431 € 18/02/2046
+Crédits immobilier - LMNP AIRBNB Jean DUPONT 6 285 € 103 431 € 18/02/2046
 TOTAL 24 045 € 410 881 €
 Revenus et charges
 Revenu foncier ou BIC - Sete AIRBNB 10 500 €
@@ -28,7 +28,7 @@ Charges
 Mensualité de crédit - Primo MTP 9 454 € 9 454 €
 Mensualité de crédit - Pinel sète 8 306 € 8 306 €`;
 
-describe("immo-credits — PDF Plaza 16/06/2026 (passifs réels)", () => {
+describe("immo-credits — PDF Dupont 16/06/2026 (passifs réels)", () => {
   it("parse et associe le crédit Primo MTP", () => {
     const credits = parseStelliumPassifsMortgageCredits(REAL_PDF_PASSIFS);
     const primoCredit = credits.find(
@@ -43,7 +43,7 @@ describe("immo-credits — PDF Plaza 16/06/2026 (passifs réels)", () => {
     });
 
     const data = parseStelliumRio(
-      `Recueil d'informations Consultant : Nicolas PLAZA Investisseur : Nicolas PLAZA ${REAL_PDF_PASSIFS}`
+      `Recueil d'informations Consultant : Jean DUPONT Investisseur : Jean DUPONT ${REAL_PDF_PASSIFS}`
     );
     const rp = data.biensImmobiliers?.find((b) => b.nom === "Primo MTP");
     expect(rp?.creditCRD).toBe(166183);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   buildScpiLettreMissionPage1Preview,
   buildScpiLettreMissionPreview,
@@ -22,7 +22,7 @@ describe("buildScpiLettreMissionPreview", () => {
       date_rio: "10/01/2026",
       date_qpi: null,
       objectifs_client: "Optimiser la rentabilité de l'épargne",
-      cgp_nom_complet: "Nicolas PLAZA",
+      cgp_nom_complet: "Jean DUPONT",
       cgp_anacofi_numero: "E011507",
     });
 
@@ -37,7 +37,7 @@ describe("buildScpiLettreMissionPreview", () => {
       .join("");
     expect(page1Text).toContain("Jean Dupont");
     expect(page1Text).toContain("13/06/2026");
-    expect(page1Text).toContain("Nicolas PLAZA");
+    expect(page1Text).toContain("Jean DUPONT");
 
     const page2Text = preview.pages[1].bodySegments.map(segText).join("");
     expect(page2Text).toContain("Optimiser la rentabilité de l'épargne");
@@ -90,7 +90,7 @@ describe("buildScpiLettreMissionPreview", () => {
     );
     expect(sigLeft.join("\n")).toContain("Fait le 13/06/2026");
     expect(sigLeft.join("\n")).toContain("Un exemplaire original pour le Conseiller");
-    expect(sigLeft.join("\n")).toContain("Le CIF : Nicolas PLAZA");
+    expect(sigLeft.join("\n")).toContain("Le CIF : Jean DUPONT");
     expect(sigRight.join("\n")).toContain("Un exemplaire original pour le Client");
     expect(sigRight.join("\n")).toContain("Par Jean Dupont");
     expect(sigRight.join("\n")).toContain("Signature(s)");

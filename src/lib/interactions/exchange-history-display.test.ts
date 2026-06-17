@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   exchangeEntryKey,
   isEmailCampaignEntry,
@@ -12,7 +12,7 @@ const emailEntry: ExchangeHistoryEntry = {
   entry_kind: "email_campagne",
   sort_date: 1_700_000_000,
   contact_id: 1,
-  contact_nom: "PLAZA",
+  contact_nom: "DUPONT",
   contact_prenom: "Bruno",
   contact_etiquette_id: 42,
   etiquette_nom: "Campagne test",

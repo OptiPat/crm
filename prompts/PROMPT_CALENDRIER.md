@@ -68,7 +68,7 @@ reqwest = { version = "0.11", features = ["json"] }
 │                                                             │
 │  ┌─────────────────────────────────────────────────────────┐
 │  │  ✅ Connecté à Google Agenda                            │
-│  │  Compte : cgp@gmail.com                                 │
+│  │  Compte : cgp@example.com                               │
 │  │                              [Déconnecter]              │
 │  └─────────────────────────────────────────────────────────┘
 │                                                             │

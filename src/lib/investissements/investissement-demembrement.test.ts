@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   addYearsToDateInput,
   detectDemembrementKind,
+  formatDemembrementDureeLabel,
   parseDemembrementDuree,
   parseModeDetention,
   stripDemembrementDureeFromNotes,
@@ -55,6 +56,35 @@ describe("investissement-demembrement", () => {
   it("calcule la date de fin depuis la souscription", () => {
     expect(addYearsToDateInput("2020-03-15", 10)).toBe("2030-03-15");
     expect(yearsBetweenDateInputs("2020-03-15", "2030-03-15")).toBe(10);
+  });
+
+  it("formate viager et temporaire pour synthèses", () => {
+    expect(
+      formatDemembrementDureeLabel({
+        type_produit: "SCPI_DEMEMBREMENT",
+        notes: "Durée: viager",
+      })
+    ).toBe("viager");
+    expect(
+      formatDemembrementDureeLabel({
+        type_produit: "SCPI_DEMEMBREMENT",
+        notes: "Durée: 8 ans",
+      })
+    ).toBe("temporaire 8 ans");
+    expect(
+      formatDemembrementDureeLabel({
+        type_produit: "SCPI_DEMEMBREMENT",
+        notes: "",
+        date_souscription: Date.parse("2020-03-15T00:00:00Z") / 1000,
+        date_fin_demembrement: Date.parse("2030-03-15T00:00:00Z") / 1000,
+      })
+    ).toBe("temporaire 10 ans");
+    expect(
+      formatDemembrementDureeLabel({
+        type_produit: "SCPI",
+        notes: "Durée: viager",
+      })
+    ).toBeNull();
   });
 
   it("parse et enregistre le mode de détention", () => {

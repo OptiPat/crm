@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 
 vi.mock("@/lib/api/tauri-contacts", () => ({
@@ -40,8 +40,8 @@ import { applySoloRioImport } from "./rio-solo-apply";
 
 const baseContact: Contact = {
   id: 42,
-  nom: "PLAZA",
-  prenom: "Nicolas",
+  nom: "DUPONT",
+  prenom: "Jean",
   categorie: "SUSPECT_CLIENT",
   statut_suivi: "ACTIF",
   created_at: 0,
@@ -79,8 +79,8 @@ describe("applySoloRioImport", () => {
     const result = await applySoloRioImport(
       {
         typeDocument: "RIO",
-        nom: "PLAZA",
-        prenom: "Nicolas",
+        nom: "DUPONT",
+        prenom: "Jean",
         revenusTotal: 80_000,
         chargesEmprunts: 2_400,
         objectifsPrincipaux: ["Retraite"],
@@ -150,8 +150,8 @@ describe("applySoloRioImport", () => {
     await applySoloRioImport(
       {
         typeDocument: "RIO",
-        nom: "PLAZA",
-        prenom: "Nicolas",
+        nom: "DUPONT",
+        prenom: "Jean",
         revenuBrutGlobal: 55_000,
       },
       {

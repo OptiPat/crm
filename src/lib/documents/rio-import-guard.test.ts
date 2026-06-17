@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   assessRioImport,
   listMissingConfidenceFields,
@@ -10,8 +10,8 @@ describe("rio-import-guard", () => {
   it("autorise un RIO Stellium avec confiance suffisante", () => {
     const data: ExtractedData = {
       typeDocument: "RIO",
-      nom: "MARTINEZ LOPEZ",
-      prenom: "Franck",
+      nom: "LEGRAND",
+      prenom: "Paul",
       email: "a@b.fr",
       patrimoineTotal: 100_000,
       confidence: 80,
@@ -41,8 +41,8 @@ describe("rio-import-guard", () => {
   it("avertit si type sélectionné ≠ document détecté", () => {
     const data: ExtractedData = {
       typeDocument: "QPI",
-      nom: "PLAZA",
-      prenom: "Nicolas",
+      nom: "DUPONT",
+      prenom: "Jean",
       profilRisque: 4,
       confidence: 85,
     };
@@ -74,8 +74,8 @@ describe("rio-import-guard", () => {
     const data: ExtractedData = {
       typeDocument: "RIO",
       isCouple: true,
-      nom: "NOYEZ",
-      prenom: "Laurene",
+      nom: "DURAND",
+      prenom: "Claire",
       email: "a@b.fr",
       patrimoineTotal: 100_000,
       confidence: 80,

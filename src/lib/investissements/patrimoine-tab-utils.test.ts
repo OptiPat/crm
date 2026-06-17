@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import {
   computePatrimoineStats,
@@ -43,7 +43,7 @@ describe("patrimoine-tab-utils", () => {
   it("fusionne sans doublon en privilégiant le contact courant", () => {
     const merged = mergeContactPatrimoineRows(
       1,
-      "Nicolas PLAZA",
+      "Jean DUPONT",
       [base({ id: 10 })],
       [base({ id: 10, nom_produit: "Foyer dup" })],
       []

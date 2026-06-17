@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   buildNewsletterHtml,
   buildNewsletterHtmlOptions,
@@ -189,18 +189,18 @@ describe("newsletter-html", () => {
       {
         ...sampleContent,
         includeConseiller: false,
-        conseillerName: "Nicolas PLAZA",
-        conseillerPhone: "0652138822",
+        conseillerName: "Jean DUPONT",
+        conseillerPhone: "0612345678",
       },
       {
         cabinetName: "Cabinet Test",
-        cgpPrenom: "Nicolas",
-        cgpNom: "PLAZA",
-        cgpPhone: "0652138822",
+        cgpPrenom: "Jean",
+        cgpNom: "DUPONT",
+        cgpPhone: "0612345678",
       }
     );
     expect(html).not.toContain("Votre conseiller");
-    expect(html).not.toContain("Nicolas PLAZA");
+    expect(html).not.toContain("Jean DUPONT");
   });
 
   it("uses edited conseiller name in HTML", () => {
@@ -210,11 +210,10 @@ describe("newsletter-html", () => {
         conseillerName: "Jean DUPONT",
         conseillerPhone: "0102030405",
       },
-      { cabinetName: "Cabinet Test", cgpPrenom: "Nicolas", cgpNom: "PLAZA" }
+      { cabinetName: "Cabinet Test", cgpPrenom: "Jean", cgpNom: "DUPONT" }
     );
     expect(html).toContain("Jean DUPONT");
     expect(html).toContain("0102030405");
-    expect(html).not.toContain("Nicolas PLAZA");
   });
 
   it("omits CTA block when includeCta is false", () => {

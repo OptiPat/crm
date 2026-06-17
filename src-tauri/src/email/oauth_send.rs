@@ -1,4 +1,4 @@
-use super::oauth_client::build_basic_client;
+﻿use super::oauth_client::build_basic_client;
 use super::oauth_store::{EmailOAuthConnection, EmailOAuthStore};
 use super::response_sync::parse_gmail_send_response;
 use super::signature_html::{
@@ -401,8 +401,8 @@ mod tests {
     #[test]
     fn from_header_includes_cgp_display_name() {
         let raw = build_rfc2822(
-            "nplaza.invest@gmail.com",
-            Some("Nicolas PLAZA"),
+            "cgp@example.com",
+            Some("Jean DUPONT"),
             "client@example.com",
             Some("Marie"),
             "Sujet",
@@ -410,7 +410,7 @@ mod tests {
             None,
             None,
         );
-        assert!(raw.starts_with("From: Nicolas PLAZA <nplaza.invest@gmail.com>"));
+        assert!(raw.starts_with("From: Jean DUPONT <cgp@example.com>"));
     }
 
     #[test]

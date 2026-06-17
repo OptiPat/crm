@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { contactMatchesSearch, textMatchesSearch } from "./search-utils";
 
 describe("textMatchesSearch", () => {
@@ -12,8 +12,8 @@ describe("textMatchesSearch", () => {
   });
 
   it("accepte plusieurs mots sur des champs distincts", () => {
-    expect(textMatchesSearch("nicolas plaza", "PLAZA", "Nicolas")).toBe(true);
-    expect(textMatchesSearch("plaza nicolas", "PLAZA", "Nicolas")).toBe(true);
+    expect(textMatchesSearch("jean dupont", "DUPONT", "Jean")).toBe(true);
+    expect(textMatchesSearch("dupont jean", "DUPONT", "Jean")).toBe(true);
   });
 });
 
@@ -37,15 +37,15 @@ describe("contactMatchesSearch", () => {
 
   it("trouve prénom + nom (ordre libre)", () => {
     expect(
-      contactMatchesSearch("nicolas plaza", {
-        nom: "PLAZA",
-        prenom: "Nicolas",
+      contactMatchesSearch("jean dupont", {
+        nom: "DUPONT",
+        prenom: "Jean",
       })
     ).toBe(true);
     expect(
-      contactMatchesSearch("plaza nicolas", {
-        nom: "PLAZA",
-        prenom: "Nicolas",
+      contactMatchesSearch("dupont jean", {
+        nom: "DUPONT",
+        prenom: "Jean",
       })
     ).toBe(true);
   });

@@ -1,4 +1,4 @@
-import { Button } from "@/components/ui/button";
+﻿import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -288,7 +288,7 @@ export function NewsletterSectionEditor({
                 id="nl-conseiller-name"
                 value={conseillerName}
                 onChange={(e) => update({ conseillerName: e.target.value })}
-                placeholder="Ex. Nicolas PLAZA"
+                placeholder="Ex. Jean DUPONT"
               />
             </div>
             <div className="space-y-1">
@@ -299,7 +299,7 @@ export function NewsletterSectionEditor({
                 id="nl-conseiller-phone"
                 value={conseillerPhone}
                 onChange={(e) => update({ conseillerPhone: e.target.value })}
-                placeholder="Ex. 06 52 13 88 22"
+                placeholder="Ex. 06 12 34 56 78"
               />
             </div>
             <p className="text-xs text-muted-foreground">

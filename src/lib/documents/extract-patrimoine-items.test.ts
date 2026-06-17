@@ -1,12 +1,12 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { parseStelliumRio } from "@/lib/pdf/stellium/rio-parser";
-import plazaFixture from "@/lib/pdf/stellium/fixtures/rio-plaza-2026.txt?raw";
-import debbaghiFixture from "@/lib/pdf/stellium/fixtures/rio-debbaghi-couple-2026.txt?raw";
+import dupontFixture from "@/lib/pdf/stellium/fixtures/rio-solo-dupont-2026.txt?raw";
+import rousseauFixture from "@/lib/pdf/stellium/fixtures/rio-couple-rousseau-2026.txt?raw";
 import { extractPatrimoineItemsFromRio } from "./extract-patrimoine-items";
 
 describe("extractPatrimoineItemsFromRio", () => {
-  it("expose chaque contrat AV/PER avec nom distinct (Plaza)", () => {
-    const data = parseStelliumRio(plazaFixture);
+  it("expose chaque contrat AV/PER avec nom distinct (Dupont)", () => {
+    const data = parseStelliumRio(dupontFixture);
     const items = extractPatrimoineItemsFromRio(data);
 
     const av = items.filter((i) => i.type === "ASSURANCE_VIE");
@@ -20,15 +20,15 @@ describe("extractPatrimoineItemsFromRio", () => {
   });
 
   it("pré-remplit crédits immo structurés", () => {
-    const data = parseStelliumRio(plazaFixture);
+    const data = parseStelliumRio(dupontFixture);
     const rp = extractPatrimoineItemsFromRio(data).find((i) => i.label.includes("Primo MTP"));
     expect(rp?.mensualiteCredit).toBe(1500);
     expect(rp?.creditCRD).toBe(210_000);
     expect(rp?.dateFinCredit).toBe("15/06/2045");
   });
 
-  it("inclut PEA/PEL via contrats financiers (Debbaghi)", () => {
-    const data = parseStelliumRio(debbaghiFixture);
+  it("inclut PEA/PEL via contrats financiers (couple Rousseau)", () => {
+    const data = parseStelliumRio(rousseauFixture);
     const items = extractPatrimoineItemsFromRio(data);
     const types = new Set(items.map((i) => i.type));
     expect(types.has("PEA")).toBe(true);

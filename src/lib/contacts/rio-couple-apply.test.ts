@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+﻿import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 
 vi.mock("@/lib/api/tauri-contacts", () => ({
@@ -79,24 +79,24 @@ describe("applyCoupleRioImport", () => {
   it("diffère les champs financiers couple quand deferFinancialFields", async () => {
     vi.mocked(findContactByName).mockResolvedValue(null);
     vi.mocked(createContact)
-      .mockResolvedValueOnce(makeContact(1, "GENTIL", "Gwendal"))
-      .mockResolvedValueOnce(makeContact(2, "NOYEZ", "Laurene"));
+      .mockResolvedValueOnce(makeContact(1, "MOREAU", "Guillaume"))
+      .mockResolvedValueOnce(makeContact(2, "DURAND", "Claire"));
     vi.mocked(getContactById)
-      .mockResolvedValueOnce(makeContact(1, "GENTIL", "Gwendal"))
-      .mockResolvedValueOnce(makeContact(2, "NOYEZ", "Laurene"));
+      .mockResolvedValueOnce(makeContact(1, "MOREAU", "Guillaume"))
+      .mockResolvedValueOnce(makeContact(2, "DURAND", "Claire"));
 
     const result = await applyCoupleRioImport(
       {
         typeDocument: "RIO",
         isCouple: true,
-        nom: "GENTIL",
-        prenom: "Gwendal",
+        nom: "MOREAU",
+        prenom: "Guillaume",
         revenusTotal: 50_000,
         chargesEmprunts: 100,
         objectifsPrincipaux: ["Retraite"],
         conjoint: {
-          nom: "NOYEZ",
-          prenom: "Laurene",
+          nom: "DURAND",
+          prenom: "Claire",
           revenusTotal: 40_000,
           chargesEmprunts: 200,
         },

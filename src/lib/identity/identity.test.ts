@@ -1,4 +1,12 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
+import {
+  ANONYMOUS_CNI_BIRTH_FR,
+  ANONYMOUS_CNI_BIRTH_PLACE,
+  ANONYMOUS_CNI_GIVEN,
+  ANONYMOUS_CNI_MRZ_LINE1,
+  ANONYMOUS_CNI_MRZ_LINE2,
+  ANONYMOUS_CNI_SURNAME,
+} from "@/lib/identity/fixtures/anonymous-cni-mrz";
 import { mrzCheckDigit } from "@/lib/identity/mrz-checksum";
 import { parseMrzFromText, parseMrzLines } from "@/lib/identity/mrz-parser";
 import { extractVisualIdentityFields } from "@/lib/identity/visual-identity-parser";
@@ -38,25 +46,22 @@ describe("mrz-checksum", () => {
 
 describe("mrz-parser", () => {
   it("parse une ancienne CNI française 2×36", () => {
-    const lines = [
-      "IDFRAPLAZA<<<<<<<<<<<<<<<<<<<<<<<034050",
-      "2008343542904NICOLAS<<PASCA9309094M9",
-    ];
+    const lines = [ANONYMOUS_CNI_MRZ_LINE1, ANONYMOUS_CNI_MRZ_LINE2];
     const parsed = parseMrzLines(lines);
     expect(parsed?.format).toBe("FRA_LEGACY");
-    expect(parsed?.dateNaissance).toBe("09/09/1993");
-    expect(parsed?.surname).toBe("PLAZA");
-    expect(parsed?.givenNames).toContain("NICOLAS");
+    expect(parsed?.dateNaissance).toBe(ANONYMOUS_CNI_BIRTH_FR);
+    expect(parsed?.surname).toBe(ANONYMOUS_CNI_SURNAME);
+    expect(parsed?.givenNames).toContain(ANONYMOUS_CNI_GIVEN);
   });
 
   it("extrait la MRZ d'un bloc texte", () => {
     const text = `
       CARTE NATIONALE D'IDENTITE
-      IDFRAPLAZA<<<<<<<<<<<<<<<<<<<<<<<034050
-      2008343542904NICOLAS<<PASCA9309094M9
+      ${ANONYMOUS_CNI_MRZ_LINE1}
+      ${ANONYMOUS_CNI_MRZ_LINE2}
     `;
     const parsed = parseMrzFromText(text);
-    expect(parsed?.dateNaissance).toBe("09/09/1993");
+    expect(parsed?.dateNaissance).toBe(ANONYMOUS_CNI_BIRTH_FR);
   });
 
   it("parse un passeport TD3 (2×44 ICAO)", () => {
@@ -90,14 +95,14 @@ describe("mrz-parser", () => {
 describe("visual-identity-parser", () => {
   it("lit date avec espaces OCR et ignore la validité", () => {
     const fields = extractVisualIdentityFields(`
-      Nom ALAMÉDA
+      Nom BÉRNARD
       Prénom(s)
       Luc
       Ne(e) le 15 03 1985
       a PARIS (75)
       Valable jusqu'au 10 01 2031
     `);
-    expect(fields.nom).toBe("ALAMÉDA");
+    expect(fields.nom).toBe("BÉRNARD");
     expect(fields.prenom).toBe("Luc");
     expect(fields.dateNaissance).toBe("15/03/1985");
     expect(fields.dateExpiration).toBe("10/01/2031");
@@ -106,22 +111,22 @@ describe("visual-identity-parser", () => {
 
   it("lit date et lieu au format CNI", () => {
     const fields = extractVisualIdentityFields(`
-      Nom: ALAMEDA
+      Nom: BERNARD
       Prénom: Luc
-      Né(e) le : 09.09.1993
-      à : MONTPELLIER
+      Né(e) le : 15.03.1985
+      à : PARIS
       Taille : 1,75m
     `);
-    expect(fields.nom).toBe("ALAMEDA");
+    expect(fields.nom).toBe("BERNARD");
     expect(fields.prenom).toBe("Luc");
-    expect(fields.dateNaissance).toBe("09/09/1993");
-    expect(fields.lieuNaissance).toBe("Montpellier");
+    expect(fields.dateNaissance).toBe(ANONYMOUS_CNI_BIRTH_FR);
+    expect(fields.lieuNaissance).toBe(ANONYMOUS_CNI_BIRTH_PLACE);
   });
 
   it("lit la date d'expiration passeport", () => {
     const fields = extractVisualIdentityFields(`
       Date d'expiration : 15/04/2032
-      Né(e) le : 09.09.1993
+      Né(e) le : 15.03.1985
     `);
     expect(fields.dateExpiration).toBe("15/04/2032");
   });
@@ -145,9 +150,9 @@ describe("visual-identity-parser", () => {
   it("lit Place of birth sur passeport bilingue", () => {
     const fields = extractVisualIdentityFields(`
       Lieu de naissance / Place of birth
-      MONTPELLIER (34172)
+      PARIS (75001)
     `);
-    expect(fields.lieuNaissance).toBe("Montpellier");
+    expect(fields.lieuNaissance).toBe(ANONYMOUS_CNI_BIRTH_PLACE);
   });
 });
 
@@ -172,21 +177,21 @@ describe("parse-identity-document regions", () => {
   it("recto et verso séparés (PDF 2 pages)", () => {
     const result = parseIdentityFromRegions({
       rectoText: `
-        Nom: PLAZA
-        Prénom: Nicolas
-        Né(e) le : 09.09.1993
-        à : MONTPELLIER
+        Nom: BERNARD
+        Prénom: Luc
+        Né(e) le : 15.03.1985
+        à : PARIS
         Carte valable jusqu'au : 10/01/2031
       `,
       versoText: `
-        IDFRAPLAZA<<<<<<<<<<<<<<<<<<<<<<<034050
-        2008343542904NICOLAS<<PASCA9309094M9
+        ${ANONYMOUS_CNI_MRZ_LINE1}
+        ${ANONYMOUS_CNI_MRZ_LINE2}
       `,
     });
     expect(result.mrzVerified).toBe(true);
-    expect(result.dateNaissanceFr).toBe("09/09/1993");
+    expect(result.dateNaissanceFr).toBe(ANONYMOUS_CNI_BIRTH_FR);
     expect(result.dateExpirationFr).toBe("10/01/2031");
-    expect(result.lieuNaissance).toBe("Montpellier");
+    expect(result.lieuNaissance).toBe(ANONYMOUS_CNI_BIRTH_PLACE);
   });
 });
 
@@ -195,13 +200,13 @@ describe("parse-identity-document legacy", () => {
     const result = parseIdentityFromText(`
       Valable jusqu'au 10/01/2031
       Nationalité Française
-      Nom: ALAMEDA
+      Nom: BERNARD
       Prénom: Luc
       Né(e) le : 15.03.1985
       à : PARIS
     `);
     expect(result.mrzVerified).toBe(false);
-    expect(result.nom).toBe("ALAMEDA");
+    expect(result.nom).toBe("BERNARD");
     expect(result.provenance.nom).toBe("visual_suggestion");
     expect(result.dateNaissanceFr).toBe("15/03/1985");
     expect(result.provenance.dateNaissance).toBe("visual_suggestion");
@@ -211,14 +216,14 @@ describe("parse-identity-document legacy", () => {
   it("MRZ vérifiée prime sur le visuel", () => {
     const result = parseIdentityFromText(`
       Né(e) le : 01.01.2000
-      à : MONTPELLIER
-      IDFRAPLAZA<<<<<<<<<<<<<<<<<<<<<<<034050
-      2008343542904NICOLAS<<PASCA9309094M9
+      à : PARIS
+      ${ANONYMOUS_CNI_MRZ_LINE1}
+      ${ANONYMOUS_CNI_MRZ_LINE2}
     `);
     expect(result.mrzVerified).toBe(true);
-    expect(result.dateNaissanceFr).toBe("09/09/1993");
+    expect(result.dateNaissanceFr).toBe(ANONYMOUS_CNI_BIRTH_FR);
     expect(result.provenance.dateNaissance).toBe("mrz_verified");
-    expect(result.lieuNaissance).toBe("Montpellier");
+    expect(result.lieuNaissance).toBe(ANONYMOUS_CNI_BIRTH_PLACE);
     expect(result.provenance.lieuNaissance).toBe("visual_suggestion");
   });
 });
@@ -247,13 +252,13 @@ describe("merge-identity-fields", () => {
         prenom: "mrz_verified",
       },
       rawText: "",
-      dateNaissanceFr: "09/09/1993",
-      lieuNaissance: "Montpellier",
-      nom: "DUPONT",
-      prenom: "Jean",
+      dateNaissanceFr: ANONYMOUS_CNI_BIRTH_FR,
+      lieuNaissance: ANONYMOUS_CNI_BIRTH_PLACE,
+      nom: ANONYMOUS_CNI_SURNAME,
+      prenom: "Luc",
     });
-    expect(patch.lieu_naissance).toBe("Montpellier");
-    expect(patch.date_naissance).toBe("1993-09-09");
+    expect(patch.lieu_naissance).toBe(ANONYMOUS_CNI_BIRTH_PLACE);
+    expect(patch.date_naissance).toBe("1985-03-15");
     expect(patch.nom).toBeUndefined();
     expect(skippedFields).toContain("Nom");
     expect(filledFields).toContain("Lieu de naissance");
@@ -281,11 +286,11 @@ describe("merge-identity-fields", () => {
         prenom: "none",
       },
       rawText: "",
-      dateNaissanceFr: "09/09/1993",
+      dateNaissanceFr: ANONYMOUS_CNI_BIRTH_FR,
       sex: "M",
     });
     const payload = contactToUpdatePayload(contact, patch);
-    expect(payload.date_naissance).toMatch(/^1993-09-09T/);
+    expect(payload.date_naissance).toMatch(/^1985-03-15T/);
     expect(payload.civilite).toBe("M");
   });
 
@@ -297,6 +302,6 @@ describe("merge-identity-fields", () => {
   it("contactHasStoredBirthPlace ignore les chaînes vides", () => {
     expect(contactHasStoredBirthPlace(undefined)).toBe(false);
     expect(contactHasStoredBirthPlace("   ")).toBe(false);
-    expect(contactHasStoredBirthPlace("Montpellier")).toBe(true);
+    expect(contactHasStoredBirthPlace(ANONYMOUS_CNI_BIRTH_PLACE)).toBe(true);
   });
 });

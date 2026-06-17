@@ -693,14 +693,14 @@ mod tests {
         let event: CalendarEvent = serde_json::from_str(
             r#"{
                 "start": { "dateTime": "2026-06-11T12:00:00Z" },
-                "attendees": [ { "email": "kevinbouton34@gmail.com" } ],
+                "attendees": [ { "email": "client@example.com" } ],
                 "status": "confirmed"
             }"#,
         )
         .expect("event");
         assert!(calendar_event_matches_rdv(
             &event,
-            "kevinbouton34@gmail.com",
+            "client@example.com",
             sent
         ));
     }
@@ -711,14 +711,14 @@ mod tests {
         let event: CalendarEvent = serde_json::from_str(
             r#"{
                 "start": { "dateTime": "2026-06-11T12:00:00Z" },
-                "description": "Invité : kevinbouton34@gmail.com",
+                "description": "Invité : client@example.com",
                 "status": "confirmed"
             }"#,
         )
         .expect("event");
         assert!(calendar_event_matches_rdv(
             &event,
-            "kevinbouton34@gmail.com",
+            "client@example.com",
             sent
         ));
     }

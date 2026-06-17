@@ -1,18 +1,18 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { buildConventionRtoPreview } from "@/lib/souscription-cif/render-convention-rto";
 import type { ScpiLmPagePreview } from "@/lib/souscription-cif/render-template";
 import { RTO_DOCUMENT_TITLE } from "@/lib/souscription-cif/rto-page1";
 
 describe("buildConventionRtoPreview", () => {
   const baseVariables = {
-    client_nom_prenom: "Luc ALAMEDA",
+    client_nom_prenom: "Luc BERNARD",
     client_date_naissance: "12/03/1975",
     client_lieu_naissance: "Montpellier",
     client_adresse: "12 rue des Oliviers",
     client_cp_ville: "34000 Montpellier",
     client_ville: "Montpellier",
     date_document: "13/06/2026",
-    cgp_nom_complet: "Nicolas PLAZA",
+    cgp_nom_complet: "Jean DUPONT",
     cgp_adresse_ligne: "4 impasse des arbousiers",
     cgp_cp_ville: "34660 Cournonsec",
     cgp_rcs_ville: "Montpellier",
@@ -20,7 +20,7 @@ describe("buildConventionRtoPreview", () => {
     cgp_siren_compact: "843139148",
     cgp_orias: "19000736",
     cgp_anacofi_numero: "E011507",
-    cgp_representant_legal: "Nicolas PLAZA en qualité de gérant",
+    cgp_representant_legal: "Jean DUPONT en qualité de gérant",
   };
 
   function pageText(page: ScpiLmPagePreview) {
@@ -43,15 +43,15 @@ describe("buildConventionRtoPreview", () => {
     const headerLeft = (page.headerLeft ?? [])
       .map((line) => line.map((s) => (s.kind === "text" ? s.value : "")).join(""))
       .join("\n");
-    expect(headerLeft).toContain("Luc ALAMEDA");
+    expect(headerLeft).toContain("Luc BERNARD");
 
     const body = pageText(page);
     expect(body).toContain("Identification des intervenants");
-    expect(body).toContain("La société Nicolas PLAZA");
+    expect(body).toContain("La société Jean DUPONT");
     expect(body).toContain("ayant son siège social au 4 impasse des arbousiers");
     expect(body).toContain("immatriculée au Registre du Commerce");
     expect(body).toContain("ORIAS sous le n°19000736");
-    expect(body).toContain("Nicolas PLAZA en qualité de gérant.");
+    expect(body).toContain("Jean DUPONT en qualité de gérant.");
     expect(body).toContain("Ci-après désigné « le Conseiller ».");
     expect(body).toContain("Ensemble, « les Parties ».");
     expect(body).not.toContain("PRÉAMBULE");
@@ -151,9 +151,9 @@ describe("buildConventionRtoPreview", () => {
     const sigRight = (page6.signatureColumns?.right ?? [])
       .map((line) => line.map((s) => (s.kind === "text" ? s.value : "")).join(""))
       .join("\n");
-    expect(sigLeft).toContain("Le Conseiller Nicolas PLAZA");
+    expect(sigLeft).toContain("Le Conseiller Jean DUPONT");
     expect(sigLeft).toContain("Titre : Gérant");
-    expect(sigRight).toContain("Le Client Luc ALAMEDA");
+    expect(sigRight).toContain("Le Client Luc BERNARD");
     expect(sigRight).toContain("Titre : Client");
   });
 });

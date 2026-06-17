@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { buildRapportMissionPreview } from "@/lib/souscription-cif/render-rapport-mission";
 import { RM_DOCUMENT_TITLE } from "@/lib/souscription-cif/rapport-mission-page1";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@/lib/souscription-cif/rapport-mission-recap-table";
 
 const baseVariables = {
-  client_nom_prenom: "Luc ALAMEDA",
+  client_nom_prenom: "Luc BERNARD",
   client_adresse: "12 rue Example",
   client_cp_ville: "34000 Montpellier",
   client_ville: "Montpellier",
@@ -19,7 +19,7 @@ const baseVariables = {
   client_date_naissance: "01/01/1980",
   client_lieu_naissance: "Montpellier",
   date_document: "14/06/2026",
-  cgp_nom_complet: "Nicolas PLAZA",
+  cgp_nom_complet: "Jean DUPONT",
   cgp_rcs_ville: "Montpellier",
   cgp_siren: "843 139 148",
   cgp_adresse_ligne: "4 impasse des arbousiers",
@@ -54,11 +54,11 @@ describe("buildRapportMissionPreview", () => {
     const headerLeft = (page.headerLeft ?? []).flat().map((s) =>
       s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`
     );
-    expect(headerLeft.join("")).toContain("Luc ALAMEDA");
+    expect(headerLeft.join("")).toContain("Luc BERNARD");
 
     const body = segmentText(page.bodySegments);
     expect(body).toContain("Identification des intervenants");
-    expect(body).toContain("Nicolas PLAZA");
+    expect(body).toContain("Jean DUPONT");
     expect(body).toContain("Ci-après désigné « le Conseiller »");
   });
 
@@ -135,9 +135,9 @@ describe("buildRapportMissionPreview", () => {
       .join("\n");
     expect(sigLeft).toContain("Signature du conseiller");
     expect(sigLeft).toContain("Lu et Approuvé");
-    expect(sigLeft).toContain("Nicolas PLAZA");
+    expect(sigLeft).toContain("Jean DUPONT");
     expect(sigRight).toContain("Signature du client");
     expect(sigRight).toContain("rapport de mission et déclaration d'adéquation");
-    expect(sigRight).toContain("Luc ALAMEDA");
+    expect(sigRight).toContain("Luc BERNARD");
   });
 });

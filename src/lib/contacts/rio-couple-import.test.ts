@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import {
   pickPreferredContactForCouple,
@@ -19,13 +19,13 @@ const baseContact = (overrides: Partial<Contact> & Pick<Contact, "id" | "nom" | 
 
 const coupleData: ExtractedData = {
   isCouple: true,
-  nom: "DEBBAGHI",
-  prenom: "Mehdi",
-  email: "sci.meta@yahoo.com",
+  nom: "ROUSSEAU",
+  prenom: "Marc",
+  email: "marc.rousseau@example.com",
   conjoint: {
-    nom: "DEBBAGHI",
-    prenom: "Aleksandra",
-    email: "contact.szymanska@gmail.com",
+    nom: "ROUSSEAU",
+    prenom: "Anne",
+    email: "anne.petit@example.com",
   },
 };
 
@@ -36,9 +36,9 @@ describe("rio-couple-import", () => {
   it("résout par email sans créer de doublon", () => {
     const mehdi = baseContact({
       id: 1,
-      nom: "DEBBAGHI",
-      prenom: "Mehdi",
-      email: "sci.meta@yahoo.com",
+      nom: "ROUSSEAU",
+      prenom: "Marc",
+      email: "marc.rousseau@example.com",
     });
     const found = resolveCoupleMemberInContacts(person1, [mehdi]);
     expect(found?.id).toBe(1);
@@ -47,14 +47,14 @@ describe("rio-couple-import", () => {
   it("résout le conjoint via le foyer du premier membre", () => {
     const mehdi = baseContact({
       id: 1,
-      nom: "DEBBAGHI",
-      prenom: "Mehdi",
+      nom: "ROUSSEAU",
+      prenom: "Marc",
       foyer_id: 10,
     });
     const aleks = baseContact({
       id: 2,
-      nom: "DEBBAGHI",
-      prenom: "Aleksandra",
+      nom: "ROUSSEAU",
+      prenom: "Anne",
       foyer_id: 10,
     });
     const found = resolveCoupleMemberInContacts(person2, [mehdi, aleks], {
@@ -66,9 +66,9 @@ describe("rio-couple-import", () => {
   it("associe la fiche ouverte au bon membre du couple", () => {
     const aleks = baseContact({
       id: 2,
-      nom: "DEBBAGHI",
-      prenom: "Aleksandra",
-      email: "contact.szymanska@gmail.com",
+      nom: "ROUSSEAU",
+      prenom: "Anne",
+      email: "anne.petit@example.com",
     });
     const picked = pickPreferredContactForCouple(aleks, person1, person2);
     expect(picked.person2Preferred?.id).toBe(2);
@@ -83,9 +83,9 @@ describe("rio-couple-import", () => {
   it("n'assigne pas la fiche ouverte au mauvais membre", () => {
     const aleks = baseContact({
       id: 2,
-      nom: "DEBBAGHI",
-      prenom: "Aleksandra",
-      email: "contact.szymanska@gmail.com",
+      nom: "ROUSSEAU",
+      prenom: "Anne",
+      email: "anne.petit@example.com",
     });
     expect(
       resolveCoupleMemberInContacts(person1, [aleks], { preferredContact: aleks })

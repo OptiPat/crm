@@ -1,4 +1,4 @@
-/** Page 1 — Lettre de mission CIF (corps après le titre + pied de page). */
+﻿/** Page 1 — Lettre de mission CIF (corps après le titre + pied de page). */
 
 export const SCPI_LM_PAGE1_BODY_AFTER_TITLE = `Je vous ai transmis lors de notre premier entretien du {{date_der}} un document comportant les mentions prévues à l'article 325-3 du Règlement général de l'AMF dont vous avez pu prendre connaissance. Par ailleurs, vous avez bien voulu me communiquer un certain nombre d'informations dont la finalité était de me permettre :
 - De procéder à l'analyse de votre situation financière et patrimoniale ;
@@ -58,7 +58,7 @@ export const SOUSCRIPTION_VARIABLE_LABELS: Record<string, string> = {
   origine_fonds: "Origine des fonds",
   descriptions_scpi: "Descriptions SCPI",
   cgp_nom_complet: "Nom du conseiller",
-  cgp_cabinet: "Raison sociale du cabinet (ex. PLAZAVENIR)",
+  cgp_cabinet: "Raison sociale du cabinet (ex. CABINET EXEMPLE)",
   cgp_representant_legal: "Représentant légal (gérant)",
   cgp_formule_politesse: "Formule conseiller (appel page 8)",
   cgp_rcs_ville: "Ville RCS",

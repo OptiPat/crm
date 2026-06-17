@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   buildCniOcrPlan,
   buildCniSideBySideImagePlan,
@@ -13,6 +13,10 @@ import {
   refineIdentityDocumentKind,
   resolveIdentityDocumentKindFromPaths,
 } from "@/lib/documents/extraction/identity-document-kind";
+import {
+  ANONYMOUS_CNI_MRZ_LINE1,
+  ANONYMOUS_CNI_MRZ_LINE2,
+} from "@/lib/identity/fixtures/anonymous-cni-mrz";
 import { selectBestMrzOcrText } from "@/lib/documents/extraction/ocr/mrz-ocr";
 import { resolveIdentityUserMessage } from "@/lib/identity/identity-status-messages";
 
@@ -79,19 +83,19 @@ describe("identity document kind", () => {
 
 describe("selectBestMrzOcrText", () => {
   const validMrz = `
-    IDFRAPLAZA<<<<<<<<<<<<<<<<<<<<<<<034050
-    2008343542904NICOLAS<<PASCA9309094M9
+    ${ANONYMOUS_CNI_MRZ_LINE1}
+    ${ANONYMOUS_CNI_MRZ_LINE2}
   `;
 
   it("préfère une MRZ vérifiable (vieille CNI 2×36)", () => {
     const noisy = `
       VALABLEJUSQU AU 10 01 2031
-      IDFRAPLAZA<<<<<O34O5O
-      2OO83435429O4NICOLAS<<PASCA93O9O94M9
+      IDFRABERNARD<<<<<O12O5O
+      123456789O122LUC<<<<<<<<<<<85O3150M9
     `;
     const best = selectBestMrzOcrText([noisy, validMrz]);
-    expect(best).toContain("IDFRAPLAZA");
-    expect(best).toContain("9309094M9");
+    expect(best).toContain("IDFRABERNARD");
+    expect(best).toContain("8503150M0");
   });
 });
 

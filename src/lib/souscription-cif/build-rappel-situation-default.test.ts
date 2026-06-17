@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   buildDefaultRappelSituation,
   buildRappelSituationSupplement,
@@ -10,15 +10,32 @@ import {
 import {
   RM_PANEL_IMMOBILIER_BULLET_LABEL,
   RM_PANEL_REVENUS_BULLET_LABEL,
+  RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL,
 } from "@/lib/souscription-cif/rapport-mission-recap-table";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Document } from "@/lib/api/tauri-documents";
+import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Foyer } from "@/lib/api/tauri-foyers";
+
+const baseInvestissement = (overrides: Partial<Investissement>): Investissement =>
+  ({
+    id: 1,
+    contact_id: 1,
+    type_produit: "SCPI",
+    nom_produit: "Comète",
+    montant_initial: 80_000_00,
+    origine: "EXISTANT_CLIENT",
+    versement_programme: false,
+    reinvestissement_dividendes: false,
+    created_at: 0,
+    updated_at: 0,
+    ...overrides,
+  }) as Investissement;
 
 const baseContact: Contact = {
   id: 1,
   categorie: "CLIENT",
-  nom: "ALAMEDA",
+  nom: "BERNARD",
   prenom: "Luc",
   statut_suivi: "ACTIF",
   situation_familiale: "MARIE",
@@ -32,7 +49,7 @@ describe("buildDefaultRappelSituation", () => {
   it("préremplit age, situation, SRI et données foyer", () => {
     const foyer: Foyer = {
       id: 1,
-      nom: "ALAMEDA",
+      nom: "BERNARD",
       type_foyer: "COUPLE",
       revenu_fiscal_reference: 85000,
       tranche_imposition: "TMI 30%",
@@ -124,6 +141,29 @@ describe("buildDefaultRappelSituation", () => {
     expect(text).toContain("➞ Appétences ESG : Minimum 10 %");
   });
 
+  it("préremplit immobilier et valeurs mobilières depuis le patrimoine", () => {
+    const investissements = [
+      baseInvestissement({
+        id: 1,
+        type_produit: "RESIDENCE_PRINCIPALE",
+        nom_produit: "RP",
+        montant_initial: 420_000_00,
+      }),
+      baseInvestissement({
+        id: 2,
+        type_produit: "ASSURANCE_VIE",
+        nom_produit: "Generali",
+        montant_initial: 120_000_00,
+      }),
+    ];
+
+    const text = buildDefaultRappelSituation(baseContact, null, { investissements });
+    expect(text).toContain(`➞ ${RM_PANEL_IMMOBILIER_BULLET_LABEL} :`);
+    expect(text).toContain("Résidence Principale");
+    expect(text).toContain(`➞ ${RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL} :`);
+    expect(text).toContain("Assurance Vie");
+  });
+
   it("syncRappelSituationFromContact met à jour l'âge sans effacer le reste", () => {
     const manual = [
       "➞ Classification : Client non professionnel",
@@ -141,5 +181,51 @@ describe("buildDefaultRappelSituation", () => {
     expect(synced).toContain("Marié(e)");
     expect(synced).toContain("➞ Nombre d'enfants : 1");
     expect(synced).toContain("➞ Appétences ESG : Préférence ISR");
+  });
+
+  it("complète immobilier / valeurs mobilières vides même avec « : » dans le libellé", () => {
+    const manual = [
+      "➞ Classification : Client non professionnel",
+      `➞ ${RM_PANEL_IMMOBILIER_BULLET_LABEL} :`,
+      `➞ ${RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL} :`,
+    ].join("\n");
+
+    const synced = syncRappelSituationFromContact(manual, baseContact, null, {
+      investissements: [
+        baseInvestissement({
+          type_produit: "RESIDENCE_PRINCIPALE",
+          nom_produit: "RP",
+          montant_initial: 300_000_00,
+        }),
+        baseInvestissement({
+          id: 2,
+          type_produit: "ASSURANCE_VIE",
+          nom_produit: "AV",
+          montant_initial: 50_000_00,
+        }),
+      ],
+    });
+
+    expect(synced).toContain("Résidence Principale");
+    expect(synced).toContain("Assurance Vie");
+  });
+
+  it("ne remplace pas immobilier / valeurs mobilières déjà saisis", () => {
+    const manual = [
+      `➞ ${RM_PANEL_IMMOBILIER_BULLET_LABEL} : RP Paris + appétence diversification`,
+      `➞ ${RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL} : PEA long terme`,
+    ].join("\n");
+
+    const synced = syncRappelSituationFromContact(manual, baseContact, null, {
+      investissements: [
+        baseInvestissement({ type_produit: "PINEL", montant_initial: 200_000_00 }),
+        baseInvestissement({ type_produit: "PER", montant_initial: 50_000_00 }),
+      ],
+    });
+
+    expect(synced).toContain("RP Paris + appétence diversification");
+    expect(synced).toContain("PEA long terme");
+    expect(synced).not.toContain("Pinel");
+    expect(synced).not.toContain("PER");
   });
 });

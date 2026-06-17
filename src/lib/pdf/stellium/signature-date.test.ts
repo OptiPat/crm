@@ -1,23 +1,23 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { normalizeStelliumText } from "./normalize";
 import { extractStelliumSignatureDate } from "./signature-date";
-import debbaghiFixture from "./fixtures/rio-debbaghi-couple-2026.txt?raw";
-import martinezFixture from "./fixtures/rio-martinez-2026.txt?raw";
-import qpiFixture from "./fixtures/qpi-plaza-2026.txt?raw";
+import rousseauFixture from "./fixtures/rio-couple-rousseau-2026.txt?raw";
+import legrandFixture from "./fixtures/rio-solo-legrand-2026.txt?raw";
+import qpiDupontFixture from "./fixtures/qpi-solo-dupont-2026.txt?raw";
 
 describe("extractStelliumSignatureDate", () => {
   it("extrait la date RIO depuis le bloc signature (dernière page)", () => {
-    const text = normalizeStelliumText(debbaghiFixture);
+    const text = normalizeStelliumText(rousseauFixture);
     expect(extractStelliumSignatureDate(text, "RIO")).toBe("15/06/2026");
   });
 
-  it("extrait la date RIO solo Martinez", () => {
-    const text = normalizeStelliumText(martinezFixture);
+  it("extrait la date RIO solo Legrand", () => {
+    const text = normalizeStelliumText(legrandFixture);
     expect(extractStelliumSignatureDate(text, "RIO")).toBe("15/06/2026");
   });
 
   it("extrait la date QPI depuis le bloc signature (dernière page)", () => {
-    const text = normalizeStelliumText(qpiFixture);
+    const text = normalizeStelliumText(qpiDupontFixture);
     expect(extractStelliumSignatureDate(text, "QPI")).toBe("15/06/2026");
   });
 

@@ -1,4 +1,4 @@
-import type { Contact } from "@/lib/api/tauri-contacts";
+﻿import type { Contact } from "@/lib/api/tauri-contacts";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatDateInputFr } from "@/lib/souscription-cif/format-date-input-fr";
@@ -29,7 +29,7 @@ function cgpRepresentantLegal(cgp: CgpConfig | null): string | null {
   return nom ? `${nom} en qualité de gérant` : null;
 }
 
-/** Ex. « Nicolas PLAZA, » — formule d'appel au conseiller (page 8 annexes). */
+/** Ex. « Jean DUPONT, » — formule d'appel au conseiller (page 8 annexes). */
 function cgpFormulePolitesse(cgp: CgpConfig | null): string | null {
   const nomPrenom = cgpNomComplet(cgp);
   return nomPrenom ? `${nomPrenom},` : null;

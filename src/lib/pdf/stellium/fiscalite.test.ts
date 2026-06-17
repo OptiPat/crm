@@ -1,13 +1,13 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { parseStelliumFiscalite } from "./fiscalite";
-import debbaghiFixture from "./fixtures/rio-debbaghi-couple-2026.txt?raw";
-import martinezFixture from "./fixtures/rio-martinez-2026.txt?raw";
-import noyezFixture from "./fixtures/rio-noyez-gentil-couple-2026.txt?raw";
+import rousseauFixture from "./fixtures/rio-couple-rousseau-2026.txt?raw";
+import legrandFixture from "./fixtures/rio-solo-legrand-2026.txt?raw";
+import durandMoreauFixture from "./fixtures/rio-couple-durand-moreau-2026.txt?raw";
 import { getSection, splitStelliumSections } from "./sections";
 
 describe("stellium fiscalite", () => {
-  it("extrait TMI et revenu brut global du couple DEBBAGHI", () => {
-    const sections = splitStelliumSections(debbaghiFixture);
+  it("extrait TMI et revenu brut global du couple ROUSSEAU", () => {
+    const sections = splitStelliumSections(rousseauFixture);
     const fiscalite = getSection(sections, "fiscalite");
     expect(fiscalite).toBeTruthy();
 
@@ -16,8 +16,8 @@ describe("stellium fiscalite", () => {
     expect(parsed.revenuBrutGlobal).toBe(63264 + 63264);
   });
 
-  it("extrait le revenu brut global solo Martinez (sans TMI dans le PDF)", () => {
-    const sections = splitStelliumSections(martinezFixture);
+  it("extrait le revenu brut global solo Legrand (sans TMI dans le PDF)", () => {
+    const sections = splitStelliumSections(legrandFixture);
     const fiscalite = getSection(sections, "fiscalite");
     expect(fiscalite).toBeTruthy();
 
@@ -26,8 +26,8 @@ describe("stellium fiscalite", () => {
     expect(parsed.revenuBrutGlobal).toBe(72_026);
   });
 
-  it("agrège les revenus bruts globaux du couple NOYEZ/GENTIL", () => {
-    const sections = splitStelliumSections(noyezFixture);
+  it("agrège les revenus bruts globaux du couple DURAND/MOREAU", () => {
+    const sections = splitStelliumSections(durandMoreauFixture);
     const fiscalite = getSection(sections, "fiscalite");
     expect(fiscalite).toBeTruthy();
 

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+﻿import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { ExtractedData } from "@/lib/pdf";
 
@@ -23,9 +23,9 @@ import { applyQpiImport } from "./apply-qpi-import";
 
 const existingClient: Contact = {
   id: 42,
-  nom: "PLAZA",
-  prenom: "Nicolas",
-  email: "nicolas@example.com",
+  nom: "DUPONT",
+  prenom: "Jean",
+  email: "jean.dupont@example.com",
   telephone: "+33600000000",
   categorie: "CLIENT",
   statut_suivi: "ACTIF",
@@ -36,8 +36,8 @@ const existingClient: Contact = {
 
 const qpiData: ExtractedData = {
   typeDocument: "QPI",
-  nom: "PLAZA",
-  prenom: "Nicolas",
+  nom: "DUPONT",
+  prenom: "Jean",
   profilRisque: 4,
   dateSignature: "15/06/2026",
   sensibiliteExtraFinanciere:
@@ -64,7 +64,7 @@ describe("applyQpiImport", () => {
     await applyQpiImport(qpiData, { effectiveContactId: 42 });
 
     const payload = updateContact.mock.calls[0][1];
-    expect(payload.email).toBe("nicolas@example.com");
+    expect(payload.email).toBe("jean.dupont@example.com");
     expect(payload.telephone).toBe("+33600000000");
   });
 

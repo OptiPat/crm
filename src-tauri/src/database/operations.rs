@@ -1,4 +1,4 @@
-use super::Database;
+﻿use super::Database;
 use rusqlite::{params, Result};
 
 pub(crate) const REDUCTION_IMPOT_ETIQUETTE_CANONICAL: &str = "Réduction d'impôt fin d'année";
@@ -2671,7 +2671,7 @@ mod database_integration_tests {
                 date_dernier_contact: Some(old_iso.clone()),
                 registre: Some("VOUS".into()),
                 email: Some("vous.client@example.com".into()),
-                ..sample_contact("Martin", "Franck")
+                ..sample_contact("Martin", "Paul")
             })
             .unwrap()
             .id

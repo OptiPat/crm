@@ -10,8 +10,11 @@ import { SouscriptionCifDossierForm } from "@/components/souscription-cif/Souscr
 import { getClientCategorieLabel } from "@/lib/contacts/contact-list-labels";
 import { getAllContacts, getContactById, getContactsByFoyer, type Contact } from "@/lib/api/tauri-contacts";
 import { getDocumentsByContact, type Document } from "@/lib/api/tauri-documents";
+import { getInvestissementsByContact, type Investissement } from "@/lib/api/tauri-investissements";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
+import { loadFoyerInvestissements } from "@/lib/foyers/foyer-utils";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { buildDefaultConseil } from "@/lib/souscription-cif/build-default-annexes-fields";
@@ -266,10 +269,15 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     const syncDossierFromContact = (
       foyer: Awaited<ReturnType<typeof getFoyerById>> | null,
       documents: Document[],
-      foyerMembers: Contact[]
+      foyerMembers: Contact[],
+      investissements: Investissement[]
     ) => {
       if (cancelled || selectedContactIdRef.current !== contactId) return;
-      const rappelSupplement = buildRappelSituationSupplement(foyerMembers, documents);
+      const rappelSupplement = buildRappelSituationSupplement(
+        foyerMembers,
+        documents,
+        investissements
+      );
       setDossiersByContactId((prev) => {
         const key = buildDossierStorageKey(contactId, productType);
         const existing = getDossierForContact(prev, contactId, productType);
@@ -329,19 +337,25 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         contact.foyer_id ? getFoyerById(contact.foyer_id) : Promise.resolve(null),
         contact.foyer_id ? getContactsByFoyer(contact.foyer_id) : Promise.resolve([]),
         getDocumentsByContact(contactId),
-      ]).then(([foyer, foyerMembers, documents]) => {
+      ]).then(async ([foyer, foyerMembers, documents]) => {
+        if (cancelled || selectedContactIdRef.current !== contactId) return;
+        const investissements = contact.foyer_id
+          ? await loadFoyerInvestissements(contact.foyer_id, foyerMembers)
+          : await getInvestissementsByContact(contactId);
         if (!cancelled && selectedContactIdRef.current === contactId) {
-          syncDossierFromContact(foyer, documents, foyerMembers);
+          syncDossierFromContact(foyer, documents, foyerMembers, investissements);
         }
       });
     };
 
     loadAndSyncDossier();
     const unsubDocuments = subscribeDocumentsChanged(loadAndSyncDossier);
+    const unsubInvestissements = subscribeInvestissementsChanged(loadAndSyncDossier);
 
     return () => {
       cancelled = true;
       unsubDocuments();
+      unsubInvestissements();
     };
   }, [selectedContactId, selectedContact, productType]);
 

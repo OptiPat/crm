@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import {
   detectStelliumDocument,
   isStelliumQpi,
@@ -8,42 +8,42 @@ import {
   parseStelliumRio,
 } from "./index";
 import { parseAuto } from "../parse-auto";
-import rioFixture from "./fixtures/rio-martinez-2026.txt?raw";
-import debbaghiFixture from "./fixtures/rio-debbaghi-couple-2026.txt?raw";
-import noyezFixture from "./fixtures/rio-noyez-gentil-couple-2026.txt?raw";
-import qpiFixture from "./fixtures/qpi-plaza-2026.txt?raw";
+import legrandFixture from "./fixtures/rio-solo-legrand-2026.txt?raw";
+import rousseauFixture from "./fixtures/rio-couple-rousseau-2026.txt?raw";
+import durandMoreauFixture from "./fixtures/rio-couple-durand-moreau-2026.txt?raw";
+import qpiDupontFixture from "./fixtures/qpi-solo-dupont-2026.txt?raw";
 
 describe("Stellium — détection document", () => {
-  it("détecte le RIO Martinez", () => {
-    expect(isStelliumRio(rioFixture)).toBe(true);
-    expect(isStelliumQpi(rioFixture)).toBe(false);
-    expect(detectStelliumDocument(rioFixture)).toBe("RIO");
+  it("détecte le RIO Legrand solo", () => {
+    expect(isStelliumRio(legrandFixture)).toBe(true);
+    expect(isStelliumQpi(legrandFixture)).toBe(false);
+    expect(detectStelliumDocument(legrandFixture)).toBe("RIO");
   });
 
-  it("détecte le QPI Plaza sans faux positif RIO", () => {
-    expect(isStelliumQpi(qpiFixture)).toBe(true);
-    expect(isStelliumRio(qpiFixture)).toBe(false);
-    expect(isStelliumRio(qpiFixture)).toBe(false);
-    expect(detectStelliumDocument(qpiFixture)).toBe("QPI");
+  it("détecte le QPI Dupont sans faux positif RIO", () => {
+    expect(isStelliumQpi(qpiDupontFixture)).toBe(true);
+    expect(isStelliumRio(qpiDupontFixture)).toBe(false);
+    expect(isStelliumRio(qpiDupontFixture)).toBe(false);
+    expect(detectStelliumDocument(qpiDupontFixture)).toBe("QPI");
   });
 });
 
-describe("Stellium — RIO Martinez 2026", () => {
-  const data = parseStelliumRio(rioFixture);
+describe("Stellium — RIO solo Legrand 2026", () => {
+  const data = parseStelliumRio(legrandFixture);
 
   it("extrait l'identité et les coordonnées", () => {
     expect(data.civilite).toBe("M");
-    expect(data.nom).toBe("MARTINEZ LOPEZ");
-    expect(data.prenom).toBe("Franck");
-    expect(data.nomNaissance).toBe("MARTINEZ LOPEZ");
+    expect(data.nom).toBe("LEGRAND");
+    expect(data.prenom).toBe("Paul");
+    expect(data.nomNaissance).toBe("LEGRAND");
     expect(data.dateNaissance).toBe("25/10/1975");
     expect(data.lieuNaissance).toMatch(/Saint flour/i);
     expect(data.nationalite).toBe("Française");
-    expect(data.email).toBe("franck.martinez-lopez@outlook.fr");
-    expect(data.telephone).toBe("+33647364854");
-    expect(data.adresse).toBe("5 rue viguerie");
-    expect(data.codePostal).toBe("31300");
-    expect(data.ville).toBe("Toulouse");
+    expect(data.email).toBe("paul.legrand@example.com");
+    expect(data.telephone).toBe("+33600000001");
+    expect(data.adresse).toBe("12 rue des Acacias");
+    expect(data.codePostal).toBe("75001");
+    expect(data.ville).toBe("Paris");
   });
 
   it("extrait la situation familiale et les enfants", () => {
@@ -52,7 +52,7 @@ describe("Stellium — RIO Martinez 2026", () => {
     expect(data.enfants).toHaveLength(2);
     expect(data.enfants?.[0]).toMatchObject({
       prenom: "Lisa",
-      nom: "MARTINEZ LOPEZ",
+      nom: "LEGRAND",
       dateNaissance: "19/02/2009",
     });
     expect(data.enfants?.[1]).toMatchObject({
@@ -110,33 +110,33 @@ describe("Stellium — RIO Martinez 2026", () => {
   });
 
   it("parseAuto route vers le parser Stellium", () => {
-    const auto = parseAuto(rioFixture);
-    expect(auto.nom).toBe("MARTINEZ LOPEZ");
+    const auto = parseAuto(legrandFixture);
+    expect(auto.nom).toBe("LEGRAND");
     expect(auto.patrimoineTotal).toBe(295268);
   });
 });
 
-describe("Stellium — RIO couple DEBBAGHI 2026", () => {
-  const data = parseStelliumRio(debbaghiFixture);
+describe("Stellium — RIO couple ROUSSEAU 2026", () => {
+  const data = parseStelliumRio(rousseauFixture);
 
   it("détecte le couple et extrait les deux identités", () => {
     expect(data.isCouple).toBe(true);
     expect(data.civilite).toBe("M");
-    expect(data.nom).toBe("DEBBAGHI");
-    expect(data.prenom).toBe("Mehdi");
-    expect(data.email).toBe("sci.meta@yahoo.com");
-    expect(data.telephone).toBe("+33651352058");
+    expect(data.nom).toBe("ROUSSEAU");
+    expect(data.prenom).toBe("Marc");
+    expect(data.email).toBe("marc.rousseau@example.com");
+    expect(data.telephone).toBe("+33600000002");
     expect(data.dateNaissance).toBe("22/10/1987");
     expect(data.profession).toBe("Chef de projet");
     expect(data.employeur).toBe("AIRBUS");
 
     expect(data.conjoint).toMatchObject({
       civilite: "MME",
-      nom: "DEBBAGHI",
-      prenom: "Aleksandra",
-      nomNaissance: "SZYMANSKA",
-      email: "contact.szymanska@gmail.com",
-      telephone: "+33780032158",
+      nom: "ROUSSEAU",
+      prenom: "Anne",
+      nomNaissance: "PETIT",
+      email: "anne.petit@example.com",
+      telephone: "+33600000003",
       dateNaissance: "27/09/1985",
       profession: "Coordinatrice logistique",
       employeur: "IDP ARCHITECTE",
@@ -146,13 +146,13 @@ describe("Stellium — RIO couple DEBBAGHI 2026", () => {
   it("extrait situation, enfants et adresse commune", () => {
     expect(data.situationFamiliale).toBe("MARIE");
     expect(data.regimeMatrimonial).toBe("Communauté réduite aux acquets");
-    expect(data.adresse).toBe("49 rue de la savoie");
-    expect(data.codePostal).toBe("31170");
-    expect(data.ville).toBe("TOURNEFEUILLE");
+    expect(data.adresse).toBe("3 allée des Ormes");
+    expect(data.codePostal).toBe("33000");
+    expect(data.ville).toBe("Bordeaux");
     expect(data.nombreEnfants).toBe(2);
     expect(data.enfants).toEqual([
-      { prenom: "Elena", nom: "DEBBAGHI", dateNaissance: "09/11/2019" },
-      { prenom: "Noémie", nom: "DEBBAGHI", dateNaissance: "23/03/2021" },
+      { prenom: "Elena", nom: "ROUSSEAU", dateNaissance: "09/11/2019" },
+      { prenom: "Noémie", nom: "ROUSSEAU", dateNaissance: "23/03/2021" },
     ]);
   });
 
@@ -186,21 +186,21 @@ describe("Stellium — RIO couple DEBBAGHI 2026", () => {
   });
 });
 
-describe("Stellium — RIO couple NOYEZ/GENTIL 2026", () => {
-  const data = parseStelliumRio(noyezFixture);
+describe("Stellium — RIO couple DURAND/MOREAU 2026", () => {
+  const data = parseStelliumRio(durandMoreauFixture);
 
   it("détecte le couple et extrait les deux identités", () => {
     expect(data.isCouple).toBe(true);
-    expect(data.nom).toBe("NOYEZ");
-    expect(data.prenom).toBe("Laurene");
-    expect(data.email).toBe("laurene.noyez@gmail.com");
+    expect(data.nom).toBe("DURAND");
+    expect(data.prenom).toBe("Claire");
+    expect(data.email).toBe("claire.durand@example.com");
     expect(data.profession).toBe("Kinésithérapeute");
 
     expect(data.conjoint).toMatchObject({
-      nom: "GENTIL",
-      prenom: "Gwendal",
-      email: "gentilgwendal@gmail.com",
-      telephone: "+33670527215",
+      nom: "MOREAU",
+      prenom: "Guillaume",
+      email: "guillaume.moreau@example.com",
+      telephone: "+33600000005",
       dateNaissance: "12/07/1996",
       profession: "Kinésithérapeute",
     });
@@ -208,7 +208,7 @@ describe("Stellium — RIO couple NOYEZ/GENTIL 2026", () => {
 
   it("extrait situation et adresse", () => {
     expect(data.situationFamiliale).toBe("UNION_LIBRE");
-    expect(data.ville).toBe("Annecy");
+    expect(data.ville).toBe("Lyon");
     expect(data.nombreEnfants).toBeUndefined();
   });
 
@@ -240,12 +240,12 @@ describe("Stellium — RIO couple NOYEZ/GENTIL 2026", () => {
   });
 });
 
-describe("Stellium — QPI Plaza 2026", () => {
-  const data = parseStelliumQpi(qpiFixture);
+describe("Stellium — QPI solo Dupont 2026", () => {
+  const data = parseStelliumQpi(qpiDupontFixture);
 
   it("extrait l'identité", () => {
-    expect(data.nom).toBe("PLAZA");
-    expect(data.prenom).toBe("Nicolas");
+    expect(data.nom).toBe("DUPONT");
+    expect(data.prenom).toBe("Jean");
     expect(data.dateDocument).toBe("15/06/2026");
     expect(data.dateSignature).toBe("15/06/2026");
     expect(data.typeDocument).toBe("QPI");
@@ -267,9 +267,9 @@ describe("Stellium — QPI Plaza 2026", () => {
   });
 
   it("parseAuto route vers le parser QPI", () => {
-    const auto = parseAuto(qpiFixture);
+    const auto = parseAuto(qpiDupontFixture);
     expect(auto.typeDocument).toBe("QPI");
     expect(auto.profilRisque).toBe(4);
-    expect(auto.nom).toBe("PLAZA");
+    expect(auto.nom).toBe("DUPONT");
   });
 });

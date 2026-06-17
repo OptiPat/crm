@@ -18,12 +18,19 @@ import {
   RM_RECAP_SITUATION_BULLET_LABELS,
   RM_RECAP_SITUATION_SRI_BULLET_LABEL,
 } from "@/lib/souscription-cif/rapport-mission-recap-table";
+import {
+  filterRappelPatrimoineInvestissements,
+  resolveRappelImmobilierLine,
+  resolveRappelValeursMobilieresLine,
+} from "@/lib/souscription-cif/build-rappel-patrimoine-summary";
+import type { Investissement } from "@/lib/api/tauri-investissements";
 
 const BULLET_LABELS_EMPTY_WITH_COLON = new Set<string>(RM_PANEL_BULLET_LABELS_EMPTY_WITH_COLON);
 
 export type RappelSituationSupplement = {
   nombreEnfants?: number | null;
   appetencesEsg?: string | null;
+  investissements?: readonly Investissement[];
 };
 
 function formatSituationMatrimonialeLine(contact: Contact | null): string | null {
@@ -57,12 +64,14 @@ export function latestQpiAppetencesEsg(documents: readonly Document[]): string |
 
 export function buildRappelSituationSupplement(
   foyerMembers: readonly Contact[],
-  documents: readonly Document[]
+  documents: readonly Document[],
+  investissements: readonly Investissement[] = []
 ): RappelSituationSupplement {
   const nombreEnfants = countEnfantsFoyer(foyerMembers);
   return {
     nombreEnfants: nombreEnfants > 0 ? nombreEnfants : null,
     appetencesEsg: latestQpiAppetencesEsg(documents),
+    investissements,
   };
 }
 
@@ -117,7 +126,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/** Puces recalculées depuis le contact / le foyer (pas les saisies libres type épargne). */
+/** Puces recalculées depuis le contact / le foyer (écrase la saisie dossier). */
 const CONTACT_SYNC_RAPPEL_LABELS = [
   "Classification",
   "Âge",
@@ -125,9 +134,14 @@ const CONTACT_SYNC_RAPPEL_LABELS = [
   "Situation matrimoniale",
   "Nombre d'enfants",
   RM_PANEL_REVENUS_BULLET_LABEL,
-  RM_PANEL_IMMOBILIER_BULLET_LABEL,
   RM_RECAP_SITUATION_SRI_BULLET_LABEL,
   "Appétences ESG",
+] as const;
+
+/** Puces complétées seulement si vides dans le dossier (saisie manuelle préservée). */
+const EMPTY_ONLY_SYNC_RAPPEL_LABELS = [
+  RM_PANEL_IMMOBILIER_BULLET_LABEL,
+  RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL,
 ] as const;
 
 function bulletLinePattern(label: string): string {
@@ -136,9 +150,9 @@ function bulletLinePattern(label: string): string {
 }
 
 function replaceOrInsertBulletLine(text: string, label: string, line: string): string {
-  const pattern = new RegExp(`^➞ ${bulletLinePattern(label)}(?= :|$).*$`, "m");
-  if (pattern.test(text)) {
-    return text.replace(pattern, line);
+  const found = findRappelBulletLine(text, label);
+  if (found) {
+    return `${text.slice(0, found.start)}${line}${text.slice(found.end)}`;
   }
 
   const labelIndex = RM_RECAP_SITUATION_BULLET_LABELS.indexOf(
@@ -161,6 +175,58 @@ function replaceOrInsertBulletLine(text: string, label: string, line: string): s
   return text.trim() ? `${text}\n${line}` : line;
 }
 
+function findRappelBulletLine(
+  text: string,
+  label: string
+): { line: string; start: number; end: number } | null {
+  let offset = 0;
+  for (const line of text.split("\n")) {
+    if (line.startsWith(`➞ ${label} :`) || line === `➞ ${label}`) {
+      return { line, start: offset, end: offset + line.length };
+    }
+    offset += line.length + 1;
+  }
+  return null;
+}
+
+function isRappelBulletEmpty(text: string, label: string): boolean {
+  const found = findRappelBulletLine(text, label);
+  if (!found) return true;
+  if (found.line === `➞ ${label}`) return true;
+  const value = found.line.slice(`➞ ${label} :`.length).trim();
+  return !value;
+}
+
+function syncRappelLabels(
+  result: string,
+  freshByLabel: Map<string, string>,
+  labels: readonly string[],
+  options?: { emptyOnly?: boolean }
+): string {
+  let updated = result;
+  for (const label of labels) {
+    if (options?.emptyOnly && !isRappelBulletEmpty(updated, label)) continue;
+    const line = freshByLabel.get(label);
+    if (line) updated = replaceOrInsertBulletLine(updated, label, line);
+  }
+  return updated;
+}
+
+/** Indexe les puces par libellé canonique (gère les « : » à l'intérieur du libellé Immobilier). */
+export function indexRappelSituationLines(text: string): Map<string, string> {
+  const byLabel = new Map<string, string>();
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("➞ ")) continue;
+    for (const label of RM_RECAP_SITUATION_BULLET_LABELS) {
+      if (line.startsWith(`➞ ${label} :`) || line === `➞ ${label}`) {
+        byLabel.set(label, line);
+        break;
+      }
+    }
+  }
+  return byLabel;
+}
+
 /**
  * Met à jour les puces dérivées du contact (âge, situation, SRI, foyer…) sans effacer le reste.
  * Si le bloc est vide, retourne le brouillon complet.
@@ -174,17 +240,13 @@ export function syncRappelSituationFromContact(
   const fresh = buildDefaultRappelSituation(contact, foyer, supplement);
   if (!existing.trim()) return fresh;
 
-  const freshByLabel = new Map<string, string>();
-  for (const line of fresh.split("\n")) {
-    const match = line.match(/^➞ (.+?)(?: :|$)/);
-    if (match?.[1]) freshByLabel.set(match[1], line);
-  }
+  const freshByLabel = indexRappelSituationLines(fresh);
 
   let result = existing;
-  for (const label of CONTACT_SYNC_RAPPEL_LABELS) {
-    const line = freshByLabel.get(label);
-    if (line) result = replaceOrInsertBulletLine(result, label, line);
-  }
+  result = syncRappelLabels(result, freshByLabel, CONTACT_SYNC_RAPPEL_LABELS);
+  result = syncRappelLabels(result, freshByLabel, EMPTY_ONLY_SYNC_RAPPEL_LABELS, {
+    emptyOnly: true,
+  });
   return result;
 }
 
@@ -201,7 +263,13 @@ export function buildDefaultRappelSituation(
 
   const sriLine = formatSriWithDefinition(contact?.profil_risque_sri);
 
-  const immobilier = foyer?.situation_patrimoniale?.trim() || null;
+  const investissements = supplement.investissements ?? [];
+  const scopedInvestissements =
+    contact?.id != null
+      ? filterRappelPatrimoineInvestissements(contact.id, investissements)
+      : investissements;
+  const immobilier = resolveRappelImmobilierLine(foyer, scopedInvestissements);
+  const valeursMobilieres = resolveRappelValeursMobilieresLine(scopedInvestissements);
 
   const values: Record<(typeof RM_RECAP_SITUATION_BULLET_LABELS)[number], string | null> = {
     Classification: "Client non professionnel",
@@ -211,7 +279,7 @@ export function buildDefaultRappelSituation(
     "Nombre d'enfants": formatNombreEnfants(supplement.nombreEnfants),
     [RM_PANEL_REVENUS_BULLET_LABEL]: formatFiscalLine(foyer),
     [RM_PANEL_IMMOBILIER_BULLET_LABEL]: immobilier,
-    [RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL]: null,
+    [RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL]: valeursMobilieres,
     [RM_PANEL_EPARGNE_BULLET_LABEL]: null,
     [RM_PANEL_ENDETTEMENT_BULLET_LABEL]: null,
     [RM_PANEL_MONTANT_INVESTISSEMENT_BULLET_LABEL]: null,

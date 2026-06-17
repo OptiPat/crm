@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+﻿import { describe, expect, it } from "vitest";
 import { formatEuroAmountCif, formatPercentCif } from "@/lib/souscription-cif/build-annexes-scpi-costs";
 import { ANNEXES_RAPPORT_DOCUMENT_TITLE } from "@/lib/souscription-cif/cif-documents";
 import {
@@ -335,13 +335,13 @@ describe("buildAnnexesRapportPreview", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
       {
-        client_nom_prenom: "Luc ALAMEDA",
+        client_nom_prenom: "Luc BERNARD",
         client_adresse: "12 rue des Oliviers",
         client_cp_ville: "34000 Montpellier",
         client_ville: "Montpellier",
         date_document: "13/06/2026",
-        cgp_formule_politesse: "Nicolas PLAZA,",
-        cgp_nom_complet: "Nicolas PLAZA",
+        cgp_formule_politesse: "Jean DUPONT,",
+        cgp_nom_complet: "Jean DUPONT",
         cgp_adresse_ligne: "4 impasse des arbousiers",
         cgp_cp_ville: "34660 Cournonsec",
       },
@@ -359,14 +359,14 @@ describe("buildAnnexesRapportPreview", () => {
     const headerLeft = page9.headerLeft!
       .map((line) => line.map(seg).join(""))
       .join("\n");
-    expect(headerLeft).toContain("Luc ALAMEDA");
+    expect(headerLeft).toContain("Luc BERNARD");
     expect(headerLeft).toContain("12 rue des Oliviers");
     expect(headerLeft).toContain("34000 Montpellier");
 
     const headerRight = page9.headerRight!
       .map((line) => line.map(seg).join(""))
       .join("\n");
-    expect(headerRight).toContain("Nicolas PLAZA");
+    expect(headerRight).toContain("Jean DUPONT");
     expect(headerRight).toContain("4 impasse des arbousiers");
     expect(headerRight).toContain("34660 Cournonsec");
     expect(headerRight).toContain("À Montpellier, le 13/06/2026");
@@ -376,7 +376,7 @@ describe("buildAnnexesRapportPreview", () => {
     expect(page9.bodySegments.some((s) => s.kind === "underline" && s.value.startsWith("Objet :"))).toBe(
       true
     );
-    expect(body).toContain("Nicolas PLAZA,");
+    expect(body).toContain("Jean DUPONT,");
     expect(body).not.toContain("Monsieur");
     expect(body).toContain("Je renonce à mon délai de rétractation de 14 jours");
     expect(body).toContain("Je vous remercie de démarrer votre prestation dès à présent.");

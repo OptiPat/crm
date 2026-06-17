@@ -1,14 +1,46 @@
 ---
-description: Ne jamais committer noms clients réels ni chemins perso Windows
-globs: "**/*.{md,ps1,tsx,ts,rs}"
-alwaysApply: false
+description: Dépôt public — interdiction données clients réelles (RIO/QPI, PII)
+alwaysApply: true
 ---
 
-# Données sensibles dans le repo (public)
+# Données sensibles — dépôt public
 
-- **Interdit** : noms de famille réels, montants réels liés à un client, emails, `C:\Users\...\`
-- **Exemples doc** : prénoms seuls (« Marie et Pierre ») ou placeholders `NOM1`, `NOM2`
-- **Chemins** : `%APPDATA%\com.patrimoine-crm.app\` ou `$env:APPDATA\...`
-- **Jamais** : `.db`, `.xlsx`, `auth.json`, `*.key`, `.env`
+Ce dépôt est **public**. Aucune donnée nominative ou patrimoniale **réelle** ne doit y figurer.
 
-Avant commit : `git diff` — pas de donnée nominative réelle.
+## Interdit dans le code, les tests, les fixtures et la doc
+
+| Catégorie | Exemples interdits |
+|-----------|-------------------|
+| **Documents investisseurs** | PDF RIO/QPI/CNI réels, extraits non anonymisés, fichiers `.pdf` client |
+| **Identité** | Nom / prénom / nom de naissance de vrais clients ou prospects ; scan CNI / passeport réel ; MRZ extraite d’un vrai document |
+| **Email** | `@gmail.com`, `@outlook.fr`, `@yahoo.com`, adresses perso ou client |
+| **Adresse postale** | Rue + CP + ville identifiables (domicile client) |
+| **Téléphone** | Numéros mobiles réels (`+33 6…`, `06…`) |
+| **Patrimoine lié à une personne** | Montants + identité extractibles d’un dossier réel |
+| **Secrets / prod** | `.db`, `.env`, `auth.json`, `secrets.key`, tokens OAuth, `C:\Users\…` |
+
+## Autorisé (fixtures & tests)
+
+- Noms **fictifs** génériques : `DUPONT Jean`, `LEGRAND Paul`, `BERNARD Luc`, `NOM1` / `NOM2`
+- Emails : **`@example.com`** ou `a@b.fr`, `j@x.fr` (tests unitaires)
+- Téléphones : séquences **évidemment factices** (`+33600000001`, `0612345678`, `06 12 34 56 78`)
+- Adresses : libellés génériques (`12 rue des Acacias`, `8 place du Marché`) + CP/ville **non liés à un client**
+- Extraits Stellium : `src/lib/pdf/stellium/fixtures/*.txt` — texte aplati **anonymisé**, jamais copié tel quel depuis un PDF client sans passage anonymisation
+- MRZ / CNI tests : `src/lib/identity/fixtures/anonymous-cni-mrz.ts` — lignes 2×36 **fictives** (BERNARD Luc, 15/03/1985, n° carte factice) ; passeport TD3 = exemples ICAO (`ERIKSSON`, `UTO`)
+
+## Avant commit (humain ou agent)
+
+1. `git diff` — repérer noms, emails perso, adresses, tel.
+2. Contrôle rapide :
+   - `rg -i "plaza|noyez|martinez|alameda|debbaghi|@gmail|@outlook|@yahoo" --glob "!node_modules"`
+   - `rg "@(gmail|outlook|yahoo|hotmail)" --glob "!node_modules"`
+3. **Ne pas** committer de binaire PDF client ni de capture d’écran de fiche contact.
+
+## Agents Cursor
+
+- Lors d’un import / fixture / test : **anonymiser** avant d’écrire dans le dépôt.
+- Ne pas recopier depuis `%APPDATA%\com.patrimoine-crm.app\` (base prod, documents) vers le repo.
+- Les placeholders UI (`Paramètres`, newsletter) = exemples génériques, pas les coordonnées du CGP réel.
+- En cas de doute : fictif + `@example.com` plutôt que données extraites d’un vrai dossier.
+
+Réf. runtime (hors dépôt) : `docs/CHIFFREMENT.md`, `architecture.mdc`.

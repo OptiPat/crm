@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+﻿import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 
 vi.mock("@/lib/api/tauri-contacts", () => ({
@@ -24,8 +24,8 @@ describe("syncRioEnfants", () => {
   it("ne matche pas un déclarant même homonyme", async () => {
     const parent: Contact = {
       id: 10,
-      nom: "MARTINEZ LOPEZ",
-      prenom: "Franck",
+      nom: "LEGRAND",
+      prenom: "Paul",
       categorie: "CLIENT",
       statut_suivi: "ACTIF",
       role_foyer: "DECLARANT_1",
@@ -50,8 +50,8 @@ describe("syncRioEnfants", () => {
       foyerId: 1,
       enfants: [
         {
-          prenom: "Franck",
-          nom: "MARTINEZ LOPEZ",
+          prenom: "Paul",
+          nom: "LEGRAND",
           dateNaissance: "25/10/1975",
         },
       ],
@@ -65,7 +65,7 @@ describe("syncRioEnfants", () => {
   it("met à jour un enfant existant sans effacer sa date si RIO sans date", async () => {
     const child: Contact = {
       id: 20,
-      nom: "MARTINEZ LOPEZ",
+      nom: "LEGRAND",
       prenom: "Lisa",
       categorie: "SUSPECT_CLIENT",
       statut_suivi: "ACTIF",
@@ -80,7 +80,7 @@ describe("syncRioEnfants", () => {
 
     await syncRioEnfants({
       foyerId: 1,
-      enfants: [{ prenom: "Lisa", nom: "MARTINEZ LOPEZ" }],
+      enfants: [{ prenom: "Lisa", nom: "LEGRAND" }],
     });
 
     const payload = vi.mocked(updateContact).mock.calls[0]?.[1];
