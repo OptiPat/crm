@@ -30,8 +30,7 @@ export const RM_RAPPORT_REVENUS_BULLET_LABEL = "Revenus";
 
 export const RM_RAPPORT_IMMOBILIER_BULLET_LABEL = "Immobilier";
 
-export const RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL =
-  "Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme)";
+export const RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL = "Valeurs mobilières";
 
 export const RM_RAPPORT_EPARGNE_BULLET_LABEL = "Épargne de précaution";
 
@@ -58,6 +57,10 @@ export const RM_LEGACY_PANEL_TO_RAPPORT_BULLET_LABELS: ReadonlyArray<readonly [s
   [
     "Immobilier (à détailler si besoin, résidence principale, secondaire, locative avec revenus associés)",
     RM_RAPPORT_IMMOBILIER_BULLET_LABEL,
+  ],
+  [
+    "Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme)",
+    RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL,
   ],
   ["Épargne de précaution", RM_RAPPORT_EPARGNE_BULLET_LABEL],
 ];

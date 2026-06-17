@@ -168,9 +168,14 @@ export interface ExtractedData {
   connaissancesFinancieres?: string; // Faible, Moyen, Élevé
   experienceInvestissement?: string; // Non applicable pour RIO
   aversionRisque?: string;
+  /** Résumé durabilité / ESG (section « Sensibilité extra-financière » du QPI). */
+  sensibiliteExtraFinanciere?: string;
   
   // === DOCUMENT ===
+  /** Date d'impression / en-tête (peut différer de la signature). */
   dateDocument?: string;
+  /** Date de signature lue sur la dernière page du RIO ou QPI. */
+  dateSignature?: string;
   typeDocument?: string;
   dateEntreeRelation?: string;
 

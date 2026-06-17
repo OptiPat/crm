@@ -53,6 +53,21 @@ describe("rio-import-guard", () => {
 
   it("liste les champs manquants QPI", () => {
     expect(listMissingConfidenceFields({ typeDocument: "QPI" }, "QPI")).toContain("profil SRI");
+    expect(listMissingConfidenceFields({ typeDocument: "QPI" }, "QPI")).toContain(
+      "date de signature"
+    );
+  });
+
+  it("liste la date de signature manquante pour RIO", () => {
+    expect(listMissingConfidenceFields({ typeDocument: "RIO" }, "RIO")).toContain(
+      "date de signature"
+    );
+    expect(
+      listMissingConfidenceFields(
+        { typeDocument: "RIO", dateSignature: "15/06/2026" },
+        "RIO"
+      )
+    ).not.toContain("date de signature");
   });
 
   it("avertit si peu de lignes colonnes dans un RIO couple tabulé", () => {

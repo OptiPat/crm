@@ -1,16 +1,22 @@
+use crate::documents_storage;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 const MAX_BACKUPS: usize = 10;
 
 /// Copie la base avant les migrations au démarrage (si elle existait déjà).
+/// Duplique aussi le dossier `documents/` (PDF) avec le même horodatage.
 pub fn create_pre_migration_backup(app_data_dir: &Path, db_path: &Path) -> std::io::Result<PathBuf> {
     let backups_dir = app_data_dir.join("backups");
     fs::create_dir_all(&backups_dir)?;
 
     let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S_%3f");
-    let dest = backups_dir.join(format!("patrimoine-crm_{timestamp}.db"));
+    let stem = format!("patrimoine-crm_{timestamp}");
+    let dest = backups_dir.join(format!("{stem}.db"));
     fs::copy(db_path, &dest)?;
+    if let Some(docs_dest) = documents_storage::backup_documents_dir(app_data_dir, &backups_dir, &stem)? {
+        println!("✅ Backup documents créé : {:?}", docs_dest);
+    }
     println!("✅ Backup créé : {:?}", dest);
 
     prune_old_backups(&backups_dir)?;
@@ -30,12 +36,15 @@ fn prune_old_backups(backups_dir: &Path) -> std::io::Result<()> {
 
     // Tri par horodatage dans le nom (fs::copy recopie le mtime de la source)
     entries.sort_by(|a, b| backup_sort_key(a).cmp(&backup_sort_key(b)));
+    let mut removed: Vec<PathBuf> = Vec::new();
     while entries.len() > MAX_BACKUPS {
         if let Some(oldest) = entries.first() {
+            removed.push(oldest.clone());
             let _ = fs::remove_file(oldest);
             entries.remove(0);
         }
     }
+    documents_storage::prune_paired_documents_backups(backups_dir, &removed);
     Ok(())
 }
 
@@ -136,6 +145,15 @@ pub fn restore_db_from_backup(
         None
     };
     fs::copy(&src, db_path)?;
+
+    if let Some(dir_name) = documents_storage::paired_documents_backup_dir_name(file_name) {
+        let docs_backup = backups_dir.join(&dir_name);
+        if docs_backup.is_dir() {
+            documents_storage::restore_documents_from_backup(app_data_dir, &docs_backup)?;
+            println!("✅ Documents restaurés depuis {:?}", docs_backup);
+        }
+    }
+
     Ok((src, safety))
 }
 
@@ -168,6 +186,29 @@ mod tests {
             .expect("open restored db")
             .query_row("SELECT v FROM marker", [], |row| row.get(0))
             .expect("read marker")
+    }
+
+    #[test]
+    fn create_pre_migration_backup_includes_documents_dir() {
+        let app_data = unique_temp_dir();
+        fs::create_dir_all(&app_data).expect("temp dir");
+        let db_path = app_data.join("patrimoine-crm.db");
+        write_marker_db(&db_path, "live");
+
+        let docs = app_data.join("documents");
+        fs::create_dir_all(&docs).expect("docs");
+        fs::write(docs.join("test.pdf"), b"pdf").expect("write pdf");
+
+        let backup_path =
+            create_pre_migration_backup(&app_data, &db_path).expect("backup with docs");
+        let stem = backup_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .expect("stem");
+        let docs_backup = app_data.join("backups").join(format!("{stem}_documents"));
+        assert!(docs_backup.join("test.pdf").is_file());
+
+        let _ = fs::remove_dir_all(&app_data);
     }
 
     #[test]

@@ -185,6 +185,8 @@ pub struct Document {
     pub mime_type: Option<String>,
     pub date_document: Option<String>,
     pub notes: Option<String>,
+    /// Résumé durabilité / ESG extrait du QPI (section « Sensibilité extra-financière »).
+    pub sensibilite_extra_financiere: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -200,6 +202,7 @@ pub struct NewDocument {
     pub mime_type: Option<String>,
     pub date_document: Option<String>,
     pub notes: Option<String>,
+    pub sensibilite_extra_financiere: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

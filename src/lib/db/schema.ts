@@ -301,6 +301,7 @@ export const documents = sqliteTable("documents", {
   nomFichier: text("nom_fichier").notNull(),
   cheminFichier: text("chemin_fichier").notNull(),
   dateDocument: integer("date_document", { mode: "timestamp" }),
+  sensibiliteExtraFinanciere: text("sensibilite_extra_financiere"),
   hashFichier: text("hash_fichier"), // Pour vérifier l'intégrité
   
   createdAt: integer("created_at", { mode: "timestamp" })

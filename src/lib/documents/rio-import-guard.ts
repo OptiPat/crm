@@ -45,7 +45,9 @@ export function listMissingConfidenceFields(
 
   if (kind === "QPI") {
     if (!has(data.profilRisque)) missing.push("profil SRI");
-    if (!has(data.dateDocument)) missing.push("date du document");
+    if (!has(data.dateSignature) && !has(data.dateDocument)) {
+      missing.push("date de signature");
+    }
     return missing;
   }
 
@@ -53,6 +55,9 @@ export function listMissingConfidenceFields(
   if (!has(data.telephone)) missing.push("téléphone");
   if (!has(data.revenusTotal)) missing.push("revenus");
   if (!has(data.patrimoineTotal)) missing.push("patrimoine");
+  if (!has(data.dateSignature) && !has(data.dateDocument)) {
+    missing.push("date de signature");
+  }
   if ((data.biensImmobiliers?.length ?? 0) === 0 && !has(data.assuranceVie)) {
     missing.push("détail patrimoine");
   }

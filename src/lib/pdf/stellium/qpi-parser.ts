@@ -1,5 +1,6 @@
 import type { ExtractedData } from "../types";
 import { computeStelliumConfidence } from "./confidence";
+import { extractStelliumSignatureDate } from "./signature-date";
 import { normalizeStelliumText } from "./normalize";
 import { extractFieldValue, getSection, splitStelliumSections } from "./sections";
 
@@ -68,6 +69,20 @@ function extractExperienceLabel(text: string): string | undefined {
   return checked?.[1];
 }
 
+/** Première phrase de la section « Sensibilité extra-financière » (résumé durabilité / ESG). */
+export function extractSensibiliteExtraFinanciere(text: string): string | undefined {
+  const pattern =
+    /Sensibilit[eé]\s+extra[- ]financi[eè]re\s+((?:Vous|Je)\s+.+?)(?=\s+(?:La notion|Profil investisseur|Protection des données|Vos réponses)|$)/gi;
+  let result: string | undefined;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text)) !== null) {
+    const phrase = match[1].replace(/\s+/g, " ").trim();
+    if (/sur des éléments de durabilit[eé]/i.test(phrase)) continue;
+    result = phrase;
+  }
+  return result;
+}
+
 /**
  * Parse un Profil investisseur (QPI) Stellium.
  */
@@ -94,6 +109,11 @@ export function parseStelliumQpi(rawText: string): ExtractedData {
     data.dateDocument = dateMatch[1];
   }
 
+  const dateSignature = extractStelliumSignatureDate(text, "QPI");
+  if (dateSignature) {
+    data.dateSignature = dateSignature;
+  }
+
   const profilLabel = extractProfilRisqueLabel(profilSection);
   data.profilRisque = mapProfilToSri(profilLabel);
   data.aversionRisque = profilLabel;
@@ -108,8 +128,9 @@ export function parseStelliumQpi(rawText: string): ExtractedData {
     data.experienceInvestissement = experience;
   }
 
-  if (/ne souhaite pas préciser vos préférences en matière de durabilité/i.test(text)) {
-    data.horizonPlacement = "Non précisé (ESG)";
+  const sensibilite = extractSensibiliteExtraFinanciere(text);
+  if (sensibilite) {
+    data.sensibiliteExtraFinanciere = sensibilite;
   }
 
   data.confidence = computeStelliumConfidence(data, "QPI");

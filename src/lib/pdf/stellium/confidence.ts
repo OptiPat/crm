@@ -22,6 +22,7 @@ const RIO_WEIGHTS: Readonly<Partial<Record<ConfidenceField, number>>> = {
   enfantsList: 4,
   objectifsPrincipaux: 4,
   dateEntreeRelation: 3,
+  dateSignature: 4,
   conjointEmail: 3,
   conjointNom: 3,
 };
@@ -32,7 +33,9 @@ const QPI_WEIGHTS: Readonly<Partial<Record<ConfidenceField, number>>> = {
   profilRisque: 15,
   connaissancesFinancieres: 12,
   experienceInvestissement: 8,
-  dateDocument: 8,
+  sensibiliteExtraFinanciere: 8,
+  dateSignature: 8,
+  dateDocument: 4,
 };
 
 function hasValue(data: ExtractedData, field: ConfidenceField): boolean {

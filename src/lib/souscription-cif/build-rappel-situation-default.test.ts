@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { buildDefaultRappelSituation, normalizeRappelSituationClient, syncRappelSituationFromContact } from "@/lib/souscription-cif/build-rappel-situation-default";
+import {
+  buildDefaultRappelSituation,
+  buildRappelSituationSupplement,
+  countEnfantsFoyer,
+  latestQpiAppetencesEsg,
+  normalizeRappelSituationClient,
+  syncRappelSituationFromContact,
+} from "@/lib/souscription-cif/build-rappel-situation-default";
 import {
   RM_PANEL_IMMOBILIER_BULLET_LABEL,
   RM_PANEL_REVENUS_BULLET_LABEL,
 } from "@/lib/souscription-cif/rapport-mission-recap-table";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { Document } from "@/lib/api/tauri-documents";
 import type { Foyer } from "@/lib/api/tauri-foyers";
 
 const baseContact: Contact = {
@@ -59,9 +67,8 @@ describe("buildDefaultRappelSituation", () => {
 
     expect(rapport).toContain("➞ Revenus :");
     expect(rapport).toContain("➞ Immobilier :");
-    expect(rapport).toContain(
-      "➞ Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme) :"
-    );
+    expect(rapport).toContain("➞ Valeurs mobilières :");
+    expect(rapport).not.toContain("détention court, moyen ou long terme");
     expect(rapport).toContain("➞ Épargne de précaution :");
     expect(rapport).toContain("➞ Endettement :");
     expect(rapport).toContain("➞ Montant de l'investissement envisagé :");
@@ -71,6 +78,52 @@ describe("buildDefaultRappelSituation", () => {
     expect(rapport).not.toContain("SRI + définition");
   });
 
+  it("préremplit régime matrimonial, enfants du foyer et ESG QPI", () => {
+    const contact: Contact = {
+      ...baseContact,
+      situation_familiale: "PACSE",
+      regime_matrimonial: "Séparation de biens",
+    };
+    const members: Contact[] = [
+      contact,
+      {
+        ...baseContact,
+        id: 2,
+        prenom: "Emma",
+        role_foyer: "ENFANT",
+      },
+      {
+        ...baseContact,
+        id: 3,
+        prenom: "Leo",
+        role_foyer: "ENFANT",
+      },
+    ];
+    const documents: Document[] = [
+      {
+        id: 10,
+        contact_id: 1,
+        type_document: "QPI",
+        nom_fichier: "qpi.pdf",
+        chemin_fichier: "/tmp/qpi.pdf",
+        taille_fichier: 100,
+        sensibilite_extra_financiere:
+          "Minimum 10 % d'investissements durables dans le portefeuille.",
+        created_at: 200,
+        updated_at: 200,
+      },
+    ];
+
+    const supplement = buildRappelSituationSupplement(members, documents);
+    expect(countEnfantsFoyer(members)).toBe(2);
+    expect(latestQpiAppetencesEsg(documents)).toContain("10 %");
+
+    const text = buildDefaultRappelSituation(contact, null, supplement);
+    expect(text).toContain("Pacsé(e) — Séparation de biens");
+    expect(text).toContain("➞ Nombre d'enfants : 2");
+    expect(text).toContain("➞ Appétences ESG : Minimum 10 %");
+  });
+
   it("syncRappelSituationFromContact met à jour l'âge sans effacer le reste", () => {
     const manual = [
       "➞ Classification : Client non professionnel",
@@ -78,10 +131,15 @@ describe("buildDefaultRappelSituation", () => {
       "➞ Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme) : PEA",
     ].join("\n");
 
-    const synced = syncRappelSituationFromContact(manual, baseContact, null);
+    const synced = syncRappelSituationFromContact(manual, baseContact, null, {
+      nombreEnfants: 1,
+      appetencesEsg: "Préférence ISR",
+    });
     expect(synced).toContain("➞ Âge :");
     expect(synced).not.toContain("➞ Âge : 40 ans");
     expect(synced).toContain("PEA");
     expect(synced).toContain("Marié(e)");
+    expect(synced).toContain("➞ Nombre d'enfants : 1");
+    expect(synced).toContain("➞ Appétences ESG : Préférence ISR");
   });
 });

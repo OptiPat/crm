@@ -8,19 +8,26 @@ import { useCifPrintExport } from "@/hooks/use-cif-print-export";
 import { buildCifPrintBundle } from "@/lib/souscription-cif/cif-print-export";
 import { SouscriptionCifDossierForm } from "@/components/souscription-cif/SouscriptionCifDossierForm";
 import { getClientCategorieLabel } from "@/lib/contacts/contact-list-labels";
-import { getAllContacts, getContactById, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, getContactById, getContactsByFoyer, type Contact } from "@/lib/api/tauri-contacts";
+import { getDocumentsByContact, type Document } from "@/lib/api/tauri-documents";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { buildDefaultConseil } from "@/lib/souscription-cif/build-default-annexes-fields";
 import { buildMesPreconisationsFromSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import { buildDefaultObjectifsClient } from "@/lib/souscription-cif/build-default-objectifs-client";
 import { buildDefaultRappelDemande } from "@/lib/souscription-cif/build-default-rappel-demande";
-import { buildDefaultRappelSituation, syncRappelSituationFromContact } from "@/lib/souscription-cif/build-rappel-situation-default";
+import {
+  buildDefaultRappelSituation,
+  buildRappelSituationSupplement,
+  syncRappelSituationFromContact,
+} from "@/lib/souscription-cif/build-rappel-situation-default";
 import {
   getReadyContactSelection,
   lieuNaissanceFromContact,
 } from "@/lib/souscription-cif/sync-dossier-contact-fields";
+import { dossierDatePatchFromDocuments } from "@/lib/souscription-cif/sync-dossier-document-dates";
 import { buildSouscriptionVariables } from "@/lib/souscription-cif/build-variables";
 import {
   defaultSouscriptionDossierFields,
@@ -256,8 +263,13 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     const { contactId, contact } = selection;
     let cancelled = false;
 
-    const syncDossierFromContact = (foyer: Awaited<ReturnType<typeof getFoyerById>> | null) => {
+    const syncDossierFromContact = (
+      foyer: Awaited<ReturnType<typeof getFoyerById>> | null,
+      documents: Document[],
+      foyerMembers: Contact[]
+    ) => {
       if (cancelled || selectedContactIdRef.current !== contactId) return;
+      const rappelSupplement = buildRappelSituationSupplement(foyerMembers, documents);
       setDossiersByContactId((prev) => {
         const key = buildDossierStorageKey(contactId, productType);
         const existing = getDossierForContact(prev, contactId, productType);
@@ -267,6 +279,8 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         if (existing.lieuNaissance !== contactLieu) {
           patch.lieuNaissance = contactLieu;
         }
+
+        Object.assign(patch, dossierDatePatchFromDocuments(existing, documents));
 
         if (!existing.objectifsClient?.trim()) {
           patch.objectifsClient = buildDefaultObjectifsClient(foyer);
@@ -279,12 +293,17 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         }
 
         if (!existing.rappelSituationClient?.trim()) {
-          patch.rappelSituationClient = buildDefaultRappelSituation(contact, foyer);
+          patch.rappelSituationClient = buildDefaultRappelSituation(
+            contact,
+            foyer,
+            rappelSupplement
+          );
         } else {
           const syncedRappel = syncRappelSituationFromContact(
             existing.rappelSituationClient,
             contact,
-            foyer
+            foyer,
+            rappelSupplement
           );
           if (syncedRappel !== existing.rappelSituationClient) {
             patch.rappelSituationClient = syncedRappel;
@@ -305,19 +324,24 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
       });
     };
 
-    if (!contact.foyer_id) {
-      syncDossierFromContact(null);
-      return;
-    }
+    const loadAndSyncDossier = () => {
+      void Promise.all([
+        contact.foyer_id ? getFoyerById(contact.foyer_id) : Promise.resolve(null),
+        contact.foyer_id ? getContactsByFoyer(contact.foyer_id) : Promise.resolve([]),
+        getDocumentsByContact(contactId),
+      ]).then(([foyer, foyerMembers, documents]) => {
+        if (!cancelled && selectedContactIdRef.current === contactId) {
+          syncDossierFromContact(foyer, documents, foyerMembers);
+        }
+      });
+    };
 
-    void getFoyerById(contact.foyer_id).then((foyer) => {
-      if (!cancelled && selectedContactIdRef.current === contactId) {
-        syncDossierFromContact(foyer);
-      }
-    });
+    loadAndSyncDossier();
+    const unsubDocuments = subscribeDocumentsChanged(loadAndSyncDossier);
 
     return () => {
       cancelled = true;
+      unsubDocuments();
     };
   }, [selectedContactId, selectedContact, productType]);
 

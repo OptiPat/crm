@@ -28,7 +28,8 @@ export function ParametresApplicationSection() {
           <CheckForUpdatesButton />
           <p className="text-xs text-muted-foreground flex items-start gap-2">
             <Download className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-            Un backup SQLite est créé automatiquement avant chaque migration de schéma.
+            Un backup SQLite (base + dossier documents PDF) est créé automatiquement avant chaque
+            migration de schéma, et au plus une fois par jour.
           </p>
         </div>
       </SettingsPanel>

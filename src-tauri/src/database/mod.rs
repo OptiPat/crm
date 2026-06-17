@@ -519,8 +519,22 @@ impl Database {
         self.migrate_google_contact_name_proposal_dismissals()?;
         self.migrate_add_lieu_naissance()?;
         self.migrate_add_contact_rio_financial_fields()?;
+        self.migrate_documents_sensibilite_extra_financiere()?;
         self.migrate_drop_contacts_date_expiration_identite()?;
 
+        Ok(())
+    }
+
+    fn migrate_documents_sensibilite_extra_financiere(&self) -> Result<()> {
+        if self.table_has_column("documents", "sensibilite_extra_financiere")? {
+            return Ok(());
+        }
+        println!("🔄 Migration : sensibilite_extra_financiere sur documents...");
+        self.conn.execute(
+            "ALTER TABLE documents ADD COLUMN sensibilite_extra_financiere TEXT",
+            [],
+        )?;
+        println!("✅ Migration sensibilite_extra_financiere appliquée");
         Ok(())
     }
 

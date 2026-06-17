@@ -15,6 +15,8 @@ export interface Document {
   mime_type?: string;
   date_document?: string;
   notes?: string;
+  /** Résumé durabilité / ESG extrait du QPI. */
+  sensibilite_extra_financiere?: string;
   created_at: number;
   updated_at: number;
 }
@@ -29,6 +31,7 @@ export interface NewDocument {
   mime_type?: string;
   date_document?: string;
   notes?: string;
+  sensibilite_extra_financiere?: string;
 }
 
 export async function getAllDocuments(): Promise<Document[]> {

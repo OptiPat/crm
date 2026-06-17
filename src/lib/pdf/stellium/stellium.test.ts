@@ -98,6 +98,7 @@ describe("Stellium — RIO Martinez 2026", () => {
   it("extrait les objectifs et métadonnées", () => {
     expect(data.dateEntreeRelation).toBe("27/02/2026");
     expect(data.dateDocument).toBe("15/06/2026");
+    expect(data.dateSignature).toBe("15/06/2026");
     expect(data.objectifsPrincipaux).toEqual([
       "Accompagner vos enfants",
       "Préparer votre retraite",
@@ -177,6 +178,7 @@ describe("Stellium — RIO couple DEBBAGHI 2026", () => {
   it("extrait métadonnées et objectifs", () => {
     expect(data.dateEntreeRelation).toBe("16/09/2021");
     expect(data.dateDocument).toBe("15/06/2026");
+    expect(data.dateSignature).toBe("15/06/2026");
     expect(data.trancheImposition).toBe("11%");
     expect(data.revenuBrutGlobal).toBe(126528);
     expect(data.objectifsPrincipaux?.length).toBeGreaterThanOrEqual(4);
@@ -232,6 +234,7 @@ describe("Stellium — RIO couple NOYEZ/GENTIL 2026", () => {
   it("extrait métadonnées", () => {
     expect(data.dateEntreeRelation).toBe("29/07/2025");
     expect(data.dateDocument).toBe("15/06/2026");
+    expect(data.dateSignature).toBe("15/06/2026");
     expect(data.revenuBrutGlobal).toBe(37_289 + 34_958);
     expect(data.confidence).toBeGreaterThanOrEqual(75);
   });
@@ -244,6 +247,7 @@ describe("Stellium — QPI Plaza 2026", () => {
     expect(data.nom).toBe("PLAZA");
     expect(data.prenom).toBe("Nicolas");
     expect(data.dateDocument).toBe("15/06/2026");
+    expect(data.dateSignature).toBe("15/06/2026");
     expect(data.typeDocument).toBe("QPI");
   });
 
@@ -256,6 +260,9 @@ describe("Stellium — QPI Plaza 2026", () => {
   it("extrait le niveau de connaissances", () => {
     expect(data.connaissancesFinancieres).toBe("Élevé");
     expect(data.experienceInvestissement).toBe("Expérimenté");
+    expect(data.sensibiliteExtraFinanciere).toBe(
+      "Vous ne souhaitez pas préciser vos préférences en matière de durabilité"
+    );
     expect(data.confidence).toBeGreaterThanOrEqual(70);
   });
 

@@ -9,8 +9,9 @@ export {
   type StelliumDocumentKind,
 } from "./detect";
 export { parseStelliumRio } from "./rio-parser";
-export { parseStelliumQpi, mapProfilToSri } from "./qpi-parser";
+export { parseStelliumQpi, mapProfilToSri, extractSensibiliteExtraFinanciere } from "./qpi-parser";
 export { computeStelliumConfidence } from "./confidence";
+export { extractStelliumSignatureDate } from "./signature-date";
 
 import type { ExtractedData } from "../types";
 import { detectStelliumDocument } from "./detect";

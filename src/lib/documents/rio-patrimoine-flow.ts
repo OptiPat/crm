@@ -39,9 +39,11 @@ export function buildRioPatrimoineDocument(options: {
     chemin_fichier: uploadedFile.path,
     taille_fichier: uploadedFile.size,
     mime_type: getMimeType(uploadedFile.name),
-    date_document: data.dateDocument
-      ? convertRioDateToISO(data.dateDocument)
-      : formDateDocument || undefined,
+    date_document: data.dateSignature
+      ? convertRioDateToISO(data.dateSignature)
+      : data.dateDocument
+        ? convertRioDateToISO(data.dateDocument)
+        : formDateDocument || undefined,
     notes: formNotes,
   };
 }

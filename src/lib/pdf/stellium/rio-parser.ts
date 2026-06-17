@@ -18,6 +18,7 @@ import {
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { applyFiscaliteToExtractedData, parseStelliumFiscalite } from "./fiscalite";
 import { extractFieldValue, getSection, splitStelliumSections } from "./sections";
+import { extractStelliumSignatureDate } from "./signature-date";
 
 function splitNomPrenom(value: string): { nom?: string; prenom?: string } {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -415,6 +416,11 @@ function parseStelliumRioSolo(
     data.dateDocument = dateDocument;
   }
 
+  const dateSignature = extractStelliumSignatureDate(text, "RIO");
+  if (dateSignature) {
+    data.dateSignature = dateSignature;
+  }
+
   data.confidence = computeStelliumConfidence(data, "RIO");
   return data;
 }
@@ -500,6 +506,11 @@ function parseStelliumRioCouple(
   const dateDocument = extractRioDocumentDateFromFooter(text);
   if (dateDocument) {
     data.dateDocument = dateDocument;
+  }
+
+  const dateSignature = extractStelliumSignatureDate(text, "RIO");
+  if (dateSignature) {
+    data.dateSignature = dateSignature;
   }
 
   data.confidence = computeStelliumConfidence(data, "RIO");

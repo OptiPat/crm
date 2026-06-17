@@ -60,6 +60,7 @@ export function buildPatrimoineMontantInitial(
 }
 
 export function buildRioValorisationDateIso(data: {
+  dateSignature?: string;
   dateDocument?: string;
   dateEntreeRelation?: string;
 }): string {
@@ -70,6 +71,7 @@ export function buildRioValorisationDateIso(data: {
     return `${match[3]}-${match[2]}-${match[1]}T00:00:00Z`;
   };
   return (
+    parseFr(data.dateSignature) ??
     parseFr(data.dateDocument) ??
     parseFr(data.dateEntreeRelation) ??
     `${new Date().toISOString().slice(0, 10)}T00:00:00Z`

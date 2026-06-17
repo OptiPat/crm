@@ -213,8 +213,9 @@ export function ParametresDatabaseSection({
       >
         <div className="space-y-4">
           <Explainer>
-            Le fichier ci-dessous contient tous vos contacts, foyers, investissements et réglages. Vous pouvez
-            le sauvegarder vous-même en copiant ce fichier (pendant que le CRM est fermé).
+            Le fichier ci-dessous contient tous vos contacts, foyers, investissements et réglages. Les PDF
+            sont dans le sous-dossier <code className="text-xs bg-muted px-1 rounded">documents/</code> au
+            même emplacement. Vous pouvez sauvegarder tout le dossier applicatif (CRM fermé).
           </Explainer>
 
           <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
@@ -268,10 +269,11 @@ export function ParametresDatabaseSection({
           {backups.length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium">Copies automatiques de secours</p>
-              <Explainer>
-                Avant chaque mise à jour du logiciel, le CRM duplique votre base. Ce n&apos;est pas un export
-                Excel : ce sont des fichiers techniques pour revenir en arrière en cas de problème. Vous n&apos;avez
-                normalement <strong>rien à faire</strong> avec cette liste.
+            <Explainer>
+                Avant chaque mise à jour du logiciel (et une fois par jour), le CRM duplique votre base{" "}
+                <strong>et le dossier documents</strong> (PDF). Ce ne sont pas des exports Excel : des
+                fichiers techniques pour revenir en arrière. La restauration d&apos;une copie remet aussi
+                les PDF de la même date si disponibles.
               </Explainer>
               <ul className="rounded-xl border divide-y max-h-48 overflow-y-auto text-xs font-mono bg-background">
                 {backups.slice(0, 12).map((b) => (

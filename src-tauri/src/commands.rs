@@ -491,9 +491,20 @@ pub fn get_documents_by_contact(
 
 #[tauri::command]
 pub fn create_document(
+    app: tauri::AppHandle,
     db: State<'_, DbState>,
-    new_document: NewDocument,
+    mut new_document: NewDocument,
 ) -> Result<Document, String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("App data introuvable : {e}"))?;
+    let source = std::path::Path::new(&new_document.chemin_fichier);
+    let (stored_path, size) = crate::documents_storage::ensure_document_stored(&app_data_dir, source)
+        .map_err(|e| format!("Impossible de stocker le document : {e}"))?;
+    new_document.chemin_fichier = stored_path.to_string_lossy().into_owned();
+    new_document.taille_fichier = size as i64;
+
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -527,13 +538,36 @@ pub fn update_document(
 }
 
 #[tauri::command]
-pub fn delete_document(db: State<'_, DbState>, id: i64) -> Result<(), String> {
-    let db_guard = db.lock().unwrap();
-    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+pub fn delete_document(app: tauri::AppHandle, db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let app_data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("App data introuvable : {e}"))?;
 
-    database
-        .delete_document(id)
-        .map_err(|e| format!("Failed to delete document: {}", e))
+    let chemin_fichier = {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .get_document_by_id(id)
+            .map_err(|e| format!("Failed to get document: {}", e))?
+            .chemin_fichier
+    };
+
+    {
+        let db_guard = db.lock().unwrap();
+        let database = db_guard.as_ref().ok_or("Database not initialized")?;
+        database
+            .delete_document(id)
+            .map_err(|e| format!("Failed to delete document: {}", e))?;
+    }
+
+    if let Err(e) =
+        crate::documents_storage::delete_managed_document_file(&app_data_dir, std::path::Path::new(&chemin_fichier))
+    {
+        eprintln!("⚠️ Suppression fichier document : {e}");
+    }
+
+    Ok(())
 }
 
 // ========== TEMPLATES EMAIL ==========

@@ -2,31 +2,36 @@
 
 use rusqlite::{params, Result};
 
+fn map_document_row(row: &rusqlite::Row<'_>) -> Result<super::models::Document> {
+    Ok(super::models::Document {
+        id: row.get(0)?,
+        contact_id: row.get(1)?,
+        foyer_id: row.get(2)?,
+        type_document: row.get(3)?,
+        nom_fichier: row.get(4)?,
+        chemin_fichier: row.get(5)?,
+        taille_fichier: row.get(6)?,
+        mime_type: row.get(7)?,
+        date_document: row.get(8)?,
+        notes: row.get(9)?,
+        sensibilite_extra_financiere: row.get(10)?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
+    })
+}
+
+const DOCUMENT_SELECT: &str = "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
+                    taille_fichier, mime_type, date_document, notes, sensibilite_extra_financiere,
+                    created_at, updated_at
+             FROM documents";
+
 impl super::Database {
     pub fn get_all_documents(&self) -> Result<Vec<super::models::Document>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
-                    taille_fichier, mime_type, date_document, notes, created_at, updated_at
-             FROM documents 
-             ORDER BY created_at DESC",
-        )?;
+        let mut stmt = self
+            .conn
+            .prepare(&format!("{DOCUMENT_SELECT} ORDER BY created_at DESC"))?;
 
-        let documents = stmt.query_map([], |row| {
-            Ok(super::models::Document {
-                id: row.get(0)?,
-                contact_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                type_document: row.get(3)?,
-                nom_fichier: row.get(4)?,
-                chemin_fichier: row.get(5)?,
-                taille_fichier: row.get(6)?,
-                mime_type: row.get(7)?,
-                date_document: row.get(8)?,
-                notes: row.get(9)?,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
-            })
-        })?;
+        let documents = stmt.query_map([], map_document_row)?;
 
         let mut result = Vec::new();
         for document in documents {
@@ -36,30 +41,11 @@ impl super::Database {
     }
 
     pub fn get_documents_by_contact(&self, contact_id: i64) -> Result<Vec<super::models::Document>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
-                    taille_fichier, mime_type, date_document, notes, created_at, updated_at
-             FROM documents
-             WHERE contact_id = ?1
-             ORDER BY created_at DESC",
-        )?;
+        let mut stmt = self.conn.prepare(&format!(
+            "{DOCUMENT_SELECT} WHERE contact_id = ?1 ORDER BY created_at DESC"
+        ))?;
 
-        let documents = stmt.query_map(params![contact_id], |row| {
-            Ok(super::models::Document {
-                id: row.get(0)?,
-                contact_id: row.get(1)?,
-                foyer_id: row.get(2)?,
-                type_document: row.get(3)?,
-                nom_fichier: row.get(4)?,
-                chemin_fichier: row.get(5)?,
-                taille_fichier: row.get(6)?,
-                mime_type: row.get(7)?,
-                date_document: row.get(8)?,
-                notes: row.get(9)?,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
-            })
-        })?;
+        let documents = stmt.query_map(params![contact_id], map_document_row)?;
 
         let mut result = Vec::new();
         for document in documents {
@@ -74,8 +60,9 @@ impl super::Database {
     ) -> Result<super::models::Document> {
         self.conn.execute(
             "INSERT INTO documents (contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
-                                   taille_fichier, mime_type, date_document, notes) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                                   taille_fichier, mime_type, date_document, notes,
+                                   sensibilite_extra_financiere) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 &document.contact_id,
                 &document.foyer_id,
@@ -86,6 +73,7 @@ impl super::Database {
                 &document.mime_type,
                 &document.date_document,
                 &document.notes,
+                &document.sensibilite_extra_financiere,
             ],
         )?;
 
@@ -95,27 +83,9 @@ impl super::Database {
 
     pub fn get_document_by_id(&self, id: i64) -> Result<super::models::Document> {
         self.conn.query_row(
-            "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
-                    taille_fichier, mime_type, date_document, notes, created_at, updated_at
-             FROM documents 
-             WHERE id = ?1",
+            &format!("{DOCUMENT_SELECT} WHERE id = ?1"),
             params![id],
-            |row| {
-                Ok(super::models::Document {
-                    id: row.get(0)?,
-                    contact_id: row.get(1)?,
-                    foyer_id: row.get(2)?,
-                    type_document: row.get(3)?,
-                    nom_fichier: row.get(4)?,
-                    chemin_fichier: row.get(5)?,
-                    taille_fichier: row.get(6)?,
-                    mime_type: row.get(7)?,
-                    date_document: row.get(8)?,
-                    notes: row.get(9)?,
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
-                })
-            },
+            map_document_row,
         )
     }
 
@@ -132,8 +102,9 @@ impl super::Database {
                 nom_fichier = ?4,
                 date_document = ?5,
                 notes = ?6,
+                sensibilite_extra_financiere = ?7,
                 updated_at = unixepoch()
-            WHERE id = ?7",
+            WHERE id = ?8",
             params![
                 &document.contact_id,
                 &document.foyer_id,
@@ -141,6 +112,7 @@ impl super::Database {
                 &document.nom_fichier,
                 &document.date_document,
                 &document.notes,
+                &document.sensibilite_extra_financiere,
                 id
             ],
         )?;

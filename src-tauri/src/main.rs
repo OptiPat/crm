@@ -4,6 +4,7 @@
 mod auth;
 mod backup;
 mod commands;
+mod documents_storage;
 mod contact_name;
 mod database;
 mod email;

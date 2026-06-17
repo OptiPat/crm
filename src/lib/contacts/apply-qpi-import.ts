@@ -8,7 +8,10 @@ import {
 import { createDocument, type NewDocument } from "@/lib/api/tauri-documents";
 import type { ExtractedData } from "@/lib/pdf";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
-import { buildSoloRioIdentityContactFields } from "@/lib/contacts/rio-contact-fields";
+import {
+  buildSoloRioIdentityContactFields,
+  mergeRioFieldsOntoContact,
+} from "@/lib/contacts/rio-contact-fields";
 import { getMimeType } from "@/lib/documents/file-mime";
 import { convertRioDateToISO } from "@/lib/documents/rio-patrimoine-flow";
 
@@ -40,15 +43,20 @@ export async function applyQpiImport(
   }
 
   const identity = buildSoloRioIdentityContactFields(data);
+  const { categorie: _c, statut_suivi: _s, ...identityFields } = identity;
 
   if (contactId) {
     const existing = await getContactById(contactId);
     await updateContact(
       contactId,
-      contactToUpdatePayload(existing, {
-        ...identity,
-        profil_risque_sri: data.profilRisque,
-      })
+      contactToUpdatePayload(
+        existing,
+        mergeRioFieldsOntoContact(
+          existing,
+          { ...identityFields, profil_risque_sri: data.profilRisque },
+          { identityFillEmptyOnly: true }
+        )
+      )
     );
   } else {
     if (!identity.nom?.trim() || !identity.prenom?.trim()) return null;
@@ -69,8 +77,13 @@ export async function applyQpiImport(
       chemin_fichier: options.uploadedFile.path,
       taille_fichier: options.uploadedFile.size,
       mime_type: getMimeType(options.uploadedFile.name),
-      date_document: data.dateDocument ? convertRioDateToISO(data.dateDocument) : undefined,
+      date_document: data.dateSignature
+        ? convertRioDateToISO(data.dateSignature)
+        : data.dateDocument
+          ? convertRioDateToISO(data.dateDocument)
+          : undefined,
       notes: options.formNotes,
+      sensibilite_extra_financiere: data.sensibiliteExtraFinanciere?.trim() || undefined,
     };
     await createDocument(doc);
   }

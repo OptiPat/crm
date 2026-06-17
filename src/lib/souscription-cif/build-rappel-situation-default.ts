@@ -1,4 +1,5 @@
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { Document } from "@/lib/api/tauri-documents";
 import type { Foyer } from "@/lib/api/tauri-foyers";
 import { computeAgeAtDate, formatAgeLabel } from "@/lib/contacts/contact-birthday";
 import { formatSituationLabel } from "@/lib/contacts/contact-form-utils";
@@ -19,6 +20,51 @@ import {
 } from "@/lib/souscription-cif/rapport-mission-recap-table";
 
 const BULLET_LABELS_EMPTY_WITH_COLON = new Set<string>(RM_PANEL_BULLET_LABELS_EMPTY_WITH_COLON);
+
+export type RappelSituationSupplement = {
+  nombreEnfants?: number | null;
+  appetencesEsg?: string | null;
+};
+
+function formatSituationMatrimonialeLine(contact: Contact | null): string | null {
+  const situation = formatSituationLabel(contact?.situation_familiale);
+  const regime = contact?.regime_matrimonial?.trim();
+  if (situation && regime) return `${situation} — ${regime}`;
+  return situation ?? regime ?? null;
+}
+
+/** Membres du foyer avec le rôle « Enfant » (RIO / fiche contact). */
+export function countEnfantsFoyer(members: readonly Contact[]): number {
+  return members.filter((c) => c.role_foyer === "ENFANT").length;
+}
+
+function formatNombreEnfants(count: number | null | undefined): string | null {
+  if (count == null || count <= 0) return null;
+  return String(count);
+}
+
+/** Dernier QPI importé avec résumé durabilité / ESG. */
+export function latestQpiAppetencesEsg(documents: readonly Document[]): string | null {
+  let best: Document | undefined;
+  for (const doc of documents) {
+    if (doc.type_document !== "QPI") continue;
+    const text = doc.sensibilite_extra_financiere?.trim();
+    if (!text) continue;
+    if (!best || doc.created_at > best.created_at) best = doc;
+  }
+  return best?.sensibilite_extra_financiere?.trim() ?? null;
+}
+
+export function buildRappelSituationSupplement(
+  foyerMembers: readonly Contact[],
+  documents: readonly Document[]
+): RappelSituationSupplement {
+  const nombreEnfants = countEnfantsFoyer(foyerMembers);
+  return {
+    nombreEnfants: nombreEnfants > 0 ? nombreEnfants : null,
+    appetencesEsg: latestQpiAppetencesEsg(documents),
+  };
+}
 
 function bulletLine(label: string, value?: string | null): string {
   const v = value?.trim();
@@ -77,9 +123,11 @@ const CONTACT_SYNC_RAPPEL_LABELS = [
   "Âge",
   "Résidence fiscale",
   "Situation matrimoniale",
+  "Nombre d'enfants",
   RM_PANEL_REVENUS_BULLET_LABEL,
   RM_PANEL_IMMOBILIER_BULLET_LABEL,
   RM_RECAP_SITUATION_SRI_BULLET_LABEL,
+  "Appétences ESG",
 ] as const;
 
 function bulletLinePattern(label: string): string {
@@ -120,9 +168,10 @@ function replaceOrInsertBulletLine(text: string, label: string, line: string): s
 export function syncRappelSituationFromContact(
   existing: string,
   contact: Contact | null,
-  foyer: Foyer | null
+  foyer: Foyer | null,
+  supplement: RappelSituationSupplement = {}
 ): string {
-  const fresh = buildDefaultRappelSituation(contact, foyer);
+  const fresh = buildDefaultRappelSituation(contact, foyer, supplement);
   if (!existing.trim()) return fresh;
 
   const freshByLabel = new Map<string, string>();
@@ -142,7 +191,8 @@ export function syncRappelSituationFromContact(
 /** Rappel de situation — brouillon depuis contact + foyer (Recueil / QPI à compléter). */
 export function buildDefaultRappelSituation(
   contact: Contact | null,
-  foyer: Foyer | null
+  foyer: Foyer | null,
+  supplement: RappelSituationSupplement = {}
 ): string {
   const age =
     contact?.date_naissance != null
@@ -157,8 +207,8 @@ export function buildDefaultRappelSituation(
     Classification: "Client non professionnel",
     Âge: age,
     "Résidence fiscale": "France",
-    "Situation matrimoniale": formatSituationLabel(contact?.situation_familiale),
-    "Nombre d'enfants": null,
+    "Situation matrimoniale": formatSituationMatrimonialeLine(contact),
+    "Nombre d'enfants": formatNombreEnfants(supplement.nombreEnfants),
     [RM_PANEL_REVENUS_BULLET_LABEL]: formatFiscalLine(foyer),
     [RM_PANEL_IMMOBILIER_BULLET_LABEL]: immobilier,
     [RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL]: null,
@@ -166,7 +216,7 @@ export function buildDefaultRappelSituation(
     [RM_PANEL_ENDETTEMENT_BULLET_LABEL]: null,
     [RM_PANEL_MONTANT_INVESTISSEMENT_BULLET_LABEL]: null,
     [RM_RECAP_SITUATION_SRI_BULLET_LABEL]: sriLine,
-    "Appétences ESG": null,
+    "Appétences ESG": supplement.appetencesEsg?.trim() || null,
   };
 
   return RM_RECAP_SITUATION_BULLET_LABELS.map((label) => bulletLine(label, values[label])).join(

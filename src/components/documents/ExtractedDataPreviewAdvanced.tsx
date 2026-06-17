@@ -319,7 +319,10 @@ export function ExtractedDataPreviewAdvanced({
               </span>
             </div>
             <div className="text-sm text-muted-foreground">
-              {formData.dateDocument && `Document du ${formData.dateDocument} • `}
+              {formData.dateSignature && `Signature : ${formData.dateSignature} • `}
+              {!formData.dateSignature &&
+                formData.dateDocument &&
+                `Document du ${formData.dateDocument} • `}
               {formData.dateEntreeRelation &&
                 `Entrée en relation : ${formData.dateEntreeRelation}`}
             </div>
@@ -330,10 +333,15 @@ export function ExtractedDataPreviewAdvanced({
           <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
             <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-blue-600" aria-hidden />
             <p>
-              L&apos;import enregistre l&apos;identité, les coordonnées, le profil{" "}
-              <strong>SRI</strong> et le PDF QPI sur la fiche contact. Les niveaux de
-              connaissances, d&apos;expérience et le libellé d&apos;aversion au risque (ex. «
-              Dynamique ») sont affichés à titre indicatif — ils ne sont pas persistés en base.
+              Enregistrement sur le contact : identité et <strong>SRI</strong>. Sur le document QPI :
+              PDF, <strong>date de signature</strong>
+              {formData.sensibiliteExtraFinanciere ? (
+                <>
+                  {" "}
+                  et <strong>durabilité</strong>
+                </>
+              ) : null}
+              . Connaissances / expérience : lecture indicative uniquement.
             </p>
           </div>
         )}
@@ -1138,7 +1146,7 @@ export function ExtractedDataPreviewAdvanced({
             <PreviewSection {...sectionProps}
               id="objectifs"
               icon={Target}
-              title="Objectifs & Profil"
+              title={isQpiPreview ? "Profil investisseur" : "Objectifs & Profil"}
               hidden={!isSectionVisible("objectifs")}
               forceExpanded={guidedMode}
             >
@@ -1166,6 +1174,36 @@ export function ExtractedDataPreviewAdvanced({
                         })
                       }
                     />
+                  </div>
+                )}
+                {isQpiPreview &&
+                  (formData.sensibiliteExtraFinanciere ||
+                    formData.connaissancesFinancieres ||
+                    formData.experienceInvestissement) && (
+                  <div className="space-y-2 md:col-span-2 rounded-lg border bg-muted/40 p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Durabilité enregistrée sur le document QPI. Connaissances / expérience :
+                      lecture indicative uniquement.
+                    </p>
+                    {formData.sensibiliteExtraFinanciere && (
+                      <p className="text-sm">
+                        <span className="font-medium">Durabilité :</span>{" "}
+                        {formData.sensibiliteExtraFinanciere}
+                      </p>
+                    )}
+                    {(formData.connaissancesFinancieres ||
+                      formData.experienceInvestissement) && (
+                      <p className="text-sm text-muted-foreground">
+                        {[
+                          formData.connaissancesFinancieres &&
+                            `Connaissances : ${formData.connaissancesFinancieres}`,
+                          formData.experienceInvestissement &&
+                            `Expérience : ${formData.experienceInvestissement}`,
+                        ]
+                          .filter(Boolean)
+                          .join(" • ")}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
