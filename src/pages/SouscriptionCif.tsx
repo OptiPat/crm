@@ -3,12 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { CifDocumentPrintPortal } from "@/components/souscription-cif/CifDocumentPrintPortal";
+import { CifPagedDocumentPreview } from "@/components/souscription-cif/CifPagedDocumentPreview";
 import { ScpiLettreMissionPreview } from "@/components/souscription-cif/ScpiLettreMissionPreview";
 import { SouscriptionCifDossierForm } from "@/components/souscription-cif/SouscriptionCifDossierForm";
 import { useCifPrintExport } from "@/hooks/use-cif-print-export";
 import { buildCifPrintBundle } from "@/lib/souscription-cif/cif-print-export";
-import { pickPreviewForDocument } from "@/lib/souscription-cif/cif-pagination-config";
-import { previewContentFingerprint } from "@/lib/souscription-cif/cif-pagination-from-dom";
 import { getClientCategorieLabel } from "@/lib/contacts/contact-list-labels";
 import { getAllContacts, getContactById, getContactsByFoyer, type Contact } from "@/lib/api/tauri-contacts";
 import { getDocumentsByContact, type Document } from "@/lib/api/tauri-documents";
@@ -39,10 +38,7 @@ import {
   type SouscriptionDossierFields,
 } from "@/lib/souscription-cif/dossier-fields";
 import { getFoyerById } from "@/lib/api/tauri-foyers";
-import {
-  buildScpiLettreMissionPreview,
-  type ScpiLettreMissionPreview as ScpiLettreMissionPreviewData,
-} from "@/lib/souscription-cif/render-template";
+import { buildScpiLettreMissionPreview } from "@/lib/souscription-cif/render-template";
 import { buildAnnexesRapportPreview } from "@/lib/souscription-cif/render-annexes-rapport";
 import { buildConventionRtoPreview } from "@/lib/souscription-cif/render-convention-rto";
 import { buildRapportMissionPreview } from "@/lib/souscription-cif/render-rapport-mission";
@@ -417,85 +413,20 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     [lettreMissionPreview, conventionRtoPreview, rapportMissionPreview, annexesRapportPreview]
   );
 
-  const [paginatedPreviews, setPaginatedPreviews] = useState<
-    Partial<Record<SouscriptionCifDocumentId, ScpiLettreMissionPreviewData>>
-  >({});
-
-  useEffect(() => {
-    setPaginatedPreviews({});
-  }, [selectedContactId, productType]);
-
-  const cifPreviewsForDisplayAndPrint = useMemo(
-    () => ({
-      "lettre-mission": pickPreviewForDocument(
-        "lettre-mission",
-        cifPreviews["lettre-mission"],
-        paginatedPreviews
-      ),
-      "convention-rto": pickPreviewForDocument(
-        "convention-rto",
-        cifPreviews["convention-rto"],
-        paginatedPreviews
-      ),
-      "rapport-mission": pickPreviewForDocument(
-        "rapport-mission",
-        cifPreviews["rapport-mission"],
-        paginatedPreviews
-      ),
-      "annexes-rapport": pickPreviewForDocument(
-        "annexes-rapport",
-        cifPreviews["annexes-rapport"],
-        paginatedPreviews
-      ),
-    }),
-    [cifPreviews, paginatedPreviews]
-  );
-
-  const handleRapportMissionExpanded = useCallback((p: ScpiLettreMissionPreviewData) => {
-    setPaginatedPreviews((prev) => {
-      const current = prev["rapport-mission"];
-      if (
-        current &&
-        current.pages.length === p.pages.length &&
-        previewContentFingerprint(current) === previewContentFingerprint(p)
-      ) {
-        return prev;
-      }
-      return { ...prev, "rapport-mission": p };
-    });
-  }, []);
-
-  const handleAnnexesRapportExpanded = useCallback((p: ScpiLettreMissionPreviewData) => {
-    setPaginatedPreviews((prev) => {
-      const current = prev["annexes-rapport"];
-      if (
-        current &&
-        current.pages.length === p.pages.length &&
-        previewContentFingerprint(current) === previewContentFingerprint(p)
-      ) {
-        return prev;
-      }
-      return { ...prev, "annexes-rapport": p };
-    });
-  }, []);
-
   const { printBundle, printDocuments, isPrinting } = useCifPrintExport();
 
   const clientPdfName = variables.client_nom_prenom?.trim() || "Client";
 
   const printAllDocuments = useCallback(() => {
-    void printDocuments(
-      buildCifPrintBundle(cifPreviewsForDisplayAndPrint, DOCUMENT_LABELS),
-      clientPdfName
-    );
-  }, [cifPreviewsForDisplayAndPrint, clientPdfName, printDocuments]);
+    void printDocuments(buildCifPrintBundle(cifPreviews, DOCUMENT_LABELS), clientPdfName);
+  }, [cifPreviews, clientPdfName, printDocuments]);
 
   const printActiveDocument = useCallback(() => {
     void printDocuments(
-      buildCifPrintBundle(cifPreviewsForDisplayAndPrint, DOCUMENT_LABELS, [activeDocument]),
+      buildCifPrintBundle(cifPreviews, DOCUMENT_LABELS, [activeDocument]),
       clientPdfName
     );
-  }, [activeDocument, cifPreviewsForDisplayAndPrint, clientPdfName, printDocuments]);
+  }, [activeDocument, cifPreviews, clientPdfName, printDocuments]);
 
   const preview =
     activeDocument === "convention-rto"
@@ -756,10 +687,8 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
               </TabsContent>
 
               <TabsContent value="rapport-mission" className="mt-3 space-y-3">
-                <ScpiLettreMissionPreview
+                <CifPagedDocumentPreview
                   preview={rapportMissionPreview}
-                  enablePagination
-                  onExpandedPreviewChange={handleRapportMissionExpanded}
                   documentLabel={DOCUMENT_LABELS["rapport-mission"]}
                   resetKey={`${selectedContactId}-${productType}-rapport-mission`}
                   onMissingVariableClick={handleMissingVariableClick}
@@ -767,10 +696,8 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
               </TabsContent>
 
               <TabsContent value="annexes-rapport" className="mt-3 space-y-3">
-                <ScpiLettreMissionPreview
+                <CifPagedDocumentPreview
                   preview={annexesRapportPreview}
-                  enablePagination
-                  onExpandedPreviewChange={handleAnnexesRapportExpanded}
                   documentLabel={DOCUMENT_LABELS["annexes-rapport"]}
                   resetKey={`${selectedContactId}-${productType}-annexes-rapport`}
                   onMissingVariableClick={handleMissingVariableClick}

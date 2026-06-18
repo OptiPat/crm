@@ -74,26 +74,16 @@ export const RM_PAGE3_FAIT_A = "Fait à {{client_ville}}, le {{date_document}}."
 /** @deprecated Utiliser RM_PAGE3_FAIT_A */
 export const RM_PAGE2_FAIT_A = RM_PAGE3_FAIT_A;
 
-/** Colonne gauche — signature conseiller. */
+/** Colonne gauche — signature conseiller (l'espace manuscrit est ajouté en CSS). */
 export const RM_PAGE2_SIGNATURE_LEFT = `Signature du conseiller :
 
 « Lu et Approuvé »
 
-{{cgp_nom_complet}}
+{{cgp_nom_complet}}`;
 
-
-
-
-`;
-
-/** Colonne droite — signature client(s). */
+/** Colonne droite — signature client(s) (l'espace manuscrit est ajouté en CSS). */
 export const RM_PAGE2_SIGNATURE_RIGHT = `Signature du client :
 
 Certifie avoir reçu le rapport de mission et déclaration d'adéquation
 
-{{client_nom_prenom}}
-
-
-
-
-`;
+{{client_nom_prenom}}`;

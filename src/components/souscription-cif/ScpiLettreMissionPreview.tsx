@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Badge } from "@/components/ui/badge";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   cifDocumentBodyClass,
@@ -16,9 +15,7 @@ import type {
   ScpiLmPagePreview,
   ScpiLettreMissionPreview,
 } from "@/lib/souscription-cif/render-template";
-import { AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
-import { useCifExpandedPreview } from "@/hooks/use-cif-expanded-preview";
-import { pageNeedsPagination } from "@/lib/souscription-cif/cif-pagination";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AnnexesScpiCostsTable } from "@/components/souscription-cif/AnnexesScpiCostsTable";
 import { AnnexesScpiObjectifsPatrimoniauxTable } from "@/components/souscription-cif/AnnexesScpiObjectifsPatrimoniauxTable";
 import { AnnexesScpiCaracteristiquesOperationTable } from "@/components/souscription-cif/AnnexesScpiCaracteristiquesOperationTable";
@@ -30,6 +27,7 @@ import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInst
 import { RmRecapTable } from "@/components/souscription-cif/RmRecapTable";
 import { ScpiLmSignatureBlock } from "@/components/souscription-cif/ScpiLmSignatureBlock";
 import { CifPreviewSegments } from "@/components/souscription-cif/CifPreviewSegments";
+import { CifProse } from "@/components/souscription-cif/CifProse";
 export function ScpiLmBodyContent({
   page,
   onMissingVariableClick,
@@ -61,12 +59,11 @@ export function ScpiLmBodyContent({
       {page.title && <h2 className={cifDocumentTitleClass}>{page.title}</h2>}
 
       {page.bodySegments.length > 0 && (
-        <div className={cifDocumentBodyProseClass} data-cif-prose>
-          <CifPreviewSegments
-            segments={page.bodySegments}
-            onMissingVariableClick={onMissingVariableClick}
-          />
-        </div>
+        <CifProse
+          className={cifDocumentBodyProseClass}
+          segments={page.bodySegments}
+          onMissingVariableClick={onMissingVariableClick}
+        />
       )}
 
       {page.centeredSectionTitle && (
@@ -85,12 +82,11 @@ export function ScpiLmBodyContent({
       )}
 
       {page.bodySegmentsContinuation && page.bodySegmentsContinuation.length > 0 && (
-        <div className={cifDocumentBodyProseClass}>
-          <CifPreviewSegments
-            segments={page.bodySegmentsContinuation}
-            onMissingVariableClick={onMissingVariableClick}
-          />
-        </div>
+        <CifProse
+          className={cifDocumentBodyProseClass}
+          segments={page.bodySegmentsContinuation}
+          onMissingVariableClick={onMissingVariableClick}
+        />
       )}
 
       {page.rapportRecapRows && page.rapportRecapRows.length > 0 && (
@@ -278,80 +274,21 @@ export function ScpiLmBodyContent({
   );
 }
 
-const OVERFLOW_PEEK_MAX_PX = 200;
-
 function ScpiLmPageContent({
   page,
-  onOverflowChange,
   onMissingVariableClick,
-  suppressOverflowWarning = false,
 }: {
   page: ScpiLmPagePreview;
-  onOverflowChange?: (
-    overflows: boolean,
-    overflowPx: number,
-    bodyEl: HTMLDivElement
-  ) => void;
   onMissingVariableClick?: (key: string) => void;
-  /** Masque l'avertissement rouge (repagination auto en cours). */
-  suppressOverflowWarning?: boolean;
 }) {
-  const bodyRef = useRef<HTMLDivElement>(null);
-  const onOverflowChangeRef = useRef(onOverflowChange);
-  onOverflowChangeRef.current = onOverflowChange;
-  const [overflowPx, setOverflowPx] = useState(0);
-
-  useLayoutEffect(() => {
-    const el = bodyRef.current;
-    if (!el) return;
-
-    const check = () => {
-      const px = Math.max(0, Math.round(el.scrollHeight - el.clientHeight));
-      setOverflowPx(px);
-      const overflows = px > 2;
-      onOverflowChangeRef.current?.(overflows, px, el);
-    };
-
-    check();
-    const ro = new ResizeObserver(check);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [page]);
-
-  const overflows = overflowPx > 2 && !suppressOverflowWarning;
-  const peekHeight = Math.min(overflowPx + 28, OVERFLOW_PEEK_MAX_PX);
-
   return (
     <div className="mx-auto w-full max-w-[210mm]">
       <div className={cifDocumentPageClass}>
         <div
-          ref={bodyRef}
-          data-cif-body
           lang="fr"
           className={cn(cifDocumentBodyClass, cifDocumentBodyTextClass, "relative")}
         >
           <ScpiLmBodyContent page={page} onMissingVariableClick={onMissingVariableClick} />
-
-          {overflows && (
-            <>
-              <div
-                className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-10 bg-gradient-to-t from-red-100/90 to-transparent"
-                aria-hidden
-              />
-              <div
-                className="pointer-events-none absolute inset-x-[12mm] bottom-0 z-20 flex items-end justify-center"
-                aria-hidden
-              >
-                <span className="mb-0.5 rounded bg-red-600 px-2 py-0.5 text-[7pt] font-semibold uppercase tracking-wide text-white shadow-sm">
-                  Limite zone corps A4
-                </span>
-              </div>
-              <div
-                className="pointer-events-none absolute inset-x-[8mm] bottom-0 z-20 border-b-2 border-dashed border-red-500"
-                aria-hidden
-              />
-            </>
-          )}
         </div>
 
         <div className={cifDocumentFooterClass}>
@@ -361,36 +298,6 @@ function ScpiLmPageContent({
           />
         </div>
       </div>
-
-      {overflows && (
-        <div
-          className={cn(
-            "relative -mt-px overflow-hidden border-2 border-dashed border-red-400 border-t-0",
-            "bg-[repeating-linear-gradient(-45deg,rgb(254_242_242)_0,rgb(254_242_242)_6px,rgb(254_226_226)_6px,rgb(254_226_226)_12px)]",
-            "shadow-md"
-          )}
-          style={{ height: peekHeight }}
-        >
-          <p className="sticky top-0 z-10 border-b border-red-300 bg-red-100/95 px-[20mm] py-1.5 text-[8pt] font-semibold text-red-900">
-            Contenu hors A4 — à repaginer ou raccourcir
-            {overflowPx > OVERFLOW_PEEK_MAX_PX - 28 && (
-              <span className="font-normal text-red-800/80">
-                {" "}
-                (aperçu tronqué, ~{Math.round(overflowPx * 0.26)} mm masqués au total)
-              </span>
-            )}
-          </p>
-          <div
-            className={cn(
-              cifDocumentBodyTextClass,
-              "overflow-hidden px-[20mm] pb-3 text-red-950/90"
-            )}
-            style={{ marginTop: -overflowPx }}
-          >
-            <ScpiLmBodyContent page={page} onMissingVariableClick={onMissingVariableClick} />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -437,10 +344,6 @@ function PageNavControls({
 type ScpiLettreMissionPreviewProps = {
   preview: ScpiLettreMissionPreview;
   className?: string;
-  /** Repagination automatique quand le contenu dépasse l'A4. */
-  enablePagination?: boolean;
-  /** Preview repaginé (aperçu + export PDF). */
-  onExpandedPreviewChange?: (preview: ScpiLettreMissionPreview) => void;
   /** Libellé du document dans la barre d'aperçu. */
   documentLabel?: string;
   /** Réinitialise à la page 1 (ex. changement de client ou de document). */
@@ -449,56 +352,26 @@ type ScpiLettreMissionPreviewProps = {
   onMissingVariableClick?: (key: string) => void;
 };
 
+/**
+ * Aperçu d'un document CIF à pages figées (lettre de mission, convention RTO).
+ *
+ * Les documents à contenu variable (rapport de mission, annexes) utilisent
+ * `CifPagedDocumentPreview` (pagination CSS native via Paged.js).
+ */
 export function ScpiLettreMissionPreview({
-  preview: rawPreview,
+  preview,
   className,
-  enablePagination = false,
-  onExpandedPreviewChange,
   documentLabel = "Lettre de mission",
   resetKey,
   onMissingVariableClick,
 }: ScpiLettreMissionPreviewProps) {
-  const { expandedPreview, paginateFromOverflow, contentFingerprint } = useCifExpandedPreview(
-    rawPreview,
-    enablePagination,
-    resetKey
-  );
-  const preview = enablePagination ? expandedPreview : rawPreview;
-
   const [pageIndex, setPageIndex] = useState(0);
-  const [pageOverflows, setPageOverflows] = useState(false);
-  const onExpandedPreviewChangeRef = useRef(onExpandedPreviewChange);
-  onExpandedPreviewChangeRef.current = onExpandedPreviewChange;
-  const lastNotifiedPagesKeyRef = useRef<string | null>(null);
-  const overflowPaginateKeyRef = useRef<string | null>(null);
   const totalPages = preview.pages.length;
   const safeIndex = Math.min(pageIndex, Math.max(0, totalPages - 1));
   const page = preview.pages[safeIndex];
 
   useEffect(() => {
-    if (!enablePagination || !onExpandedPreviewChangeRef.current) return;
-    const key = `${contentFingerprint}|${preview.pages.length}|${preview.pages
-      .map(
-        (p) =>
-          `${p.rapportRecapRows?.length ?? 0}:${p.bodySegments.length}:${
-            p.bodySegmentsAfterRecapTable?.length ?? 0
-          }`
-      )
-      .join("|")}`;
-    if (key === lastNotifiedPagesKeyRef.current) return;
-    lastNotifiedPagesKeyRef.current = key;
-    onExpandedPreviewChangeRef.current(expandedPreview);
-  }, [enablePagination, expandedPreview, preview.pages, contentFingerprint]);
-
-  useEffect(() => {
-    overflowPaginateKeyRef.current = null;
-    lastNotifiedPagesKeyRef.current = null;
-  }, [contentFingerprint, preview.pages.length]);
-
-  useEffect(() => {
     setPageIndex(0);
-    lastNotifiedPagesKeyRef.current = null;
-    overflowPaginateKeyRef.current = null;
   }, [resetKey]);
 
   useEffect(() => {
@@ -506,29 +379,6 @@ export function ScpiLettreMissionPreview({
       setPageIndex(Math.max(0, totalPages - 1));
     }
   }, [pageIndex, totalPages]);
-
-  useEffect(() => {
-    setPageOverflows(false);
-    overflowPaginateKeyRef.current = null;
-  }, [page, preview]);
-
-  const handleOverflow = useCallback(
-    (overflows: boolean, overflowPx: number, bodyEl: HTMLDivElement) => {
-      if (overflows && enablePagination && pageNeedsPagination(page)) {
-        const attemptKey = `${safeIndex}:${overflowPx}:${preview.pages.length}`;
-        if (overflowPaginateKeyRef.current === attemptKey) {
-          setPageOverflows(false);
-          return;
-        }
-        overflowPaginateKeyRef.current = attemptKey;
-        paginateFromOverflow(safeIndex, bodyEl);
-        setPageOverflows(false);
-      } else {
-        setPageOverflows(overflows);
-      }
-    },
-    [enablePagination, page, paginateFromOverflow, preview.pages.length, safeIndex]
-  );
 
   if (!page) return null;
 
@@ -553,16 +403,6 @@ export function ScpiLettreMissionPreview({
             Aperçu — {documentLabel} — page {page.pageNumber}
           </p>
           <div className="flex flex-wrap items-center gap-2">
-            {pageOverflows && (
-              <Badge
-                variant="outline"
-                className="gap-1 border-amber-300 bg-amber-50 text-amber-950"
-                title="Le texte dépasse la zone utile A4 : la partie masquée est affichée en rouge sous la feuille."
-              >
-                <AlertTriangle className="h-3 w-3" aria-hidden />
-                Déborde de l&apos;A4
-              </Badge>
-            )}
             {showNav && (
               <p className="text-xs text-muted-foreground">
                 {safeIndex + 1} / {totalPages}
@@ -573,12 +413,7 @@ export function ScpiLettreMissionPreview({
         </div>
 
         <div className="flex justify-center p-4 sm:p-6">
-          <ScpiLmPageContent
-            page={page}
-            onOverflowChange={handleOverflow}
-            onMissingVariableClick={onMissingVariableClick}
-            suppressOverflowWarning={enablePagination}
-          />
+          <ScpiLmPageContent page={page} onMissingVariableClick={onMissingVariableClick} />
         </div>
       </div>
 

@@ -69,8 +69,6 @@ export function buildRapportMissionPreview(
   const page2: ScpiLmPagePreview = {
     pageNumber: 2,
     bodySegments: [],
-    dynamicPagination: true,
-    paginationSliceId: "rm-page-2",
     rapportRecapRows: [
       buildDemandeRecapRow(variables),
       buildSituationRecapRow(variables),
@@ -82,8 +80,6 @@ export function buildRapportMissionPreview(
   const page3: ScpiLmPagePreview = {
     pageNumber: 3,
     bodySegments: [],
-    dynamicPagination: true,
-    paginationSliceId: "rm-page-3",
     rapportRecapRows: mapRecapTemplates(RM_PAGE3_RECAP_ROW_TEMPLATES, variables),
     bodySegmentsAfterRecapTable: renderTemplateSegments(RM_PAGE3_FAIT_A, variables),
     signatureColumns: {

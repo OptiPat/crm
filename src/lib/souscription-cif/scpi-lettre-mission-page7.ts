@@ -28,10 +28,7 @@ export const SCPI_LM_PAGE7_SIGNATURE_LEFT = `Fait le {{date_document}}
 Un exemplaire original pour le Conseiller
 
 Le CIF : {{cgp_nom_complet}}
-Signature
-
-
-`;
+Signature`;
 
 /** Colonne droite — bloc signatures (exemplaire Client). */
 export const SCPI_LM_PAGE7_SIGNATURE_RIGHT = `Fait le {{date_document}}
@@ -40,9 +37,4 @@ export const SCPI_LM_PAGE7_SIGNATURE_RIGHT = `Fait le {{date_document}}
 Un exemplaire original pour le Client
 
 Par {{client_nom_prenom}}
-Signature(s)
-
-
-
-
-`;
+Signature(s)`;

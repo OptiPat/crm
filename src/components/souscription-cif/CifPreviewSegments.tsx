@@ -37,6 +37,7 @@ export function CifPreviewSegments({ segments, onMissingVariableClick }: CifPrev
         ) : (
           <mark
             key={i}
+            data-cif-missing-key={seg.key}
             role={onMissingVariableClick ? "button" : undefined}
             tabIndex={onMissingVariableClick ? 0 : undefined}
             className={cn(

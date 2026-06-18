@@ -27,6 +27,40 @@ function waitForNextFrame(): Promise<void> {
   });
 }
 
+/** Délai max d'attente de la pagination Paged.js avant impression (filet anti-blocage). */
+const PAGED_READY_TIMEOUT_MS = 10_000;
+
+/** Attend que le portail d'impression ait fini de paginer (data-paged-ready="true"). */
+function waitForCifPagedReady(): Promise<void> {
+  return new Promise((resolve) => {
+    const portal = document.getElementById("cif-print-portal");
+    if (!portal) {
+      resolve();
+      return;
+    }
+    if (portal.dataset.pagedReady === "true") {
+      resolve();
+      return;
+    }
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      window.clearTimeout(timer);
+      resolve();
+    };
+    const observer = new MutationObserver(() => {
+      if (portal.dataset.pagedReady === "true") finish();
+    });
+    observer.observe(portal, {
+      attributes: true,
+      attributeFilter: ["data-paged-ready"],
+    });
+    const timer = window.setTimeout(finish, PAGED_READY_TIMEOUT_MS);
+  });
+}
+
 /**
  * Attend la fermeture de la boîte d'impression.
  * @returns true si l'utilisateur a probablement enregistré, false si annulation (heuristique media print).
@@ -94,6 +128,8 @@ export function useCifPrintExport() {
     flushSync(() => setPrintBundle(documents));
     document.title = printTitle;
     document.documentElement.classList.add(CIF_PRINT_HTML_CLASS);
+    await waitForNextFrame();
+    await waitForCifPagedReady();
     await waitForNextFrame();
     let completed = false;
     try {

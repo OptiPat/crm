@@ -21,19 +21,9 @@ export const RTO_PAGE6_FAIT_A = `Fait à {{client_ville}}, le {{date_document}},
 export const RTO_PAGE6_SIGNATURE_LEFT = `Le Conseiller {{cgp_nom_complet}}
 
 Par : {{cgp_nom_complet}}
-Titre : Gérant
-
-
-
-
-`;
+Titre : Gérant`;
 
 export const RTO_PAGE6_SIGNATURE_RIGHT = `Le Client {{client_nom_prenom}}
 
 Par : {{client_nom_prenom}}
-Titre : Client
-
-
-
-
-`;
+Titre : Client`;

@@ -56,13 +56,15 @@ function SignatureColumn({
           </p>
         )
       )}
+      {/* Espace de signature manuscrite — hauteur fixe, pas de lignes vides arbitraires. */}
+      <div className="cif-signature-space" aria-hidden="true" />
     </div>
   );
 }
 
 export function ScpiLmSignatureBlock({ left, right, className }: ScpiLmSignatureBlockProps) {
   return (
-    <div className={cn("mt-[6mm] flex justify-center", className)}>
+    <div className={cn("cif-signature-block mt-[6mm] flex justify-center", className)}>
       <div className="grid w-full max-w-[160mm] grid-cols-[1fr_auto_1fr] items-stretch">
         <SignatureColumn lines={left} className="px-[3mm]" />
         <div className="cif-signature-divider" aria-hidden />

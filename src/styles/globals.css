@@ -68,9 +68,20 @@
   }
 }
 
-/** Export PDF CIF — impression navigateur (haute fidélité). */
+/** Export PDF CIF — impression navigateur (haute fidélité).
+ *
+ * Hors impression, le portail est rendu mais invisible (opacity:0) plutôt que
+ * `display:none` : Paged.js doit pouvoir MESURER la mise en page pour paginer
+ * (un conteneur display:none a une hauteur nulle → pagination impossible).
+ * position:fixed + z-index négatif l'écartent sans créer de scroll. */
 #cif-print-portal {
-  display: none;
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 210mm;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
 }
 
 /** Rendu hors écran — inutilisé en mode impression. */
@@ -86,6 +97,29 @@
 /** Police document CIF — hex / @font-face (aperçu + capture PDF). */
 .cif-document-comfortaa {
   font-family: "Comfortaa", sans-serif;
+}
+
+/** Aperçu paginé Paged.js (écran) — feuilles A4 centrées avec ombre. */
+.cif-paged-screen {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.cif-paged-screen .pagedjs_pages {
+  display: block;
+}
+
+.cif-paged-screen .pagedjs_page {
+  margin: 0 auto 16px;
+  background: #fff;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.12),
+    0 1px 2px rgba(0, 0, 0, 0.24);
+}
+
+/** Espace de signature manuscrite (hauteur fixe sous le nom). */
+.cif-signature-space {
+  height: 15mm;
 }
 
 /** Séparateur vertical bloc signatures (Rapport de mission, etc.). */
@@ -135,6 +169,11 @@
   }
 
   html.cif-printing #cif-print-portal {
+    position: static !important;
+    width: auto !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: auto !important;
     display: block !important;
   }
 
@@ -169,13 +208,12 @@
     margin-top: auto !important;
   }
 
-  html.cif-printing .cif-rm-recap-table tr {
-    break-inside: avoid;
-    page-break-inside: avoid;
-  }
-
-  html.cif-printing .cif-rm-recap-table td,
-  html.cif-printing .cif-rm-recap-table th {
+  /* Docs à pages figées uniquement : garder les lignes récap atomiques.
+     Les docs paginés (.pagedjs_page) laissent au contraire les longues lignes
+     se fragmenter (voir cif-paged-css.ts) — ne pas forcer break-inside ici. */
+  html.cif-printing .cif-print-page .cif-rm-recap-table tr,
+  html.cif-printing .cif-print-page .cif-rm-recap-table td,
+  html.cif-printing .cif-print-page .cif-rm-recap-table th {
     break-inside: avoid;
     page-break-inside: avoid;
   }
