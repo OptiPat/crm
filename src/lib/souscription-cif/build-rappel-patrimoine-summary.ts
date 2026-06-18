@@ -18,24 +18,26 @@ function primaryAmountCentimes(inv: Investissement): number | undefined {
   return amount != null && amount > 0 ? amount : undefined;
 }
 
-function appendAmountAndLoyer(
-  parts: string[],
-  inv: Investissement,
-  options?: { withLoyer?: boolean }
-): void {
+function immobilierFinancingDetails(inv: Investissement): string[] {
+  const details: string[] = [];
   const amount = primaryAmountCentimes(inv);
   if (amount != null) {
-    parts.push(formatEuroCentimes(amount));
+    details.push(formatEuroCentimes(amount));
   }
-  if (options?.withLoyer && inv.loyer_mensuel != null && inv.loyer_mensuel > 0) {
-    parts.push(`loyer ${formatEuroCentimes(inv.loyer_mensuel)}/mois`);
+  if (inv.loyer_mensuel != null && inv.loyer_mensuel > 0) {
+    details.push(`loyer ${formatEuroCentimes(inv.loyer_mensuel)}/mois`);
   }
+  if (inv.mensualite_credit != null && inv.mensualite_credit > 0) {
+    details.push(`mensualité ${formatEuroCentimes(inv.mensualite_credit)}/mois`);
+  }
+  return details;
 }
 
 function formatImmobilierEntry(inv: Investissement): string {
-  const parts = [formatNomProduit(inv.type_produit)];
-  appendAmountAndLoyer(parts, inv, { withLoyer: true });
-  return parts.join(" ");
+  const typeLabel = formatNomProduit(inv.type_produit);
+  const details = immobilierFinancingDetails(inv);
+  if (details.length === 0) return typeLabel;
+  return `${typeLabel} : ${details.join(", ")}`;
 }
 
 function shouldShowFinancialNomProduit(typeProduit: string): boolean {
@@ -51,7 +53,11 @@ function formatFinancierEntry(inv: Investissement): string {
   const parts = [label];
   const dureeDemembrement = formatDemembrementDureeLabel(inv);
   if (dureeDemembrement) parts.push(dureeDemembrement);
-  appendAmountAndLoyer(parts, inv);  return parts.join(" ");
+  const amount = primaryAmountCentimes(inv);
+  if (amount != null) {
+    parts.push(formatEuroCentimes(amount));
+  }
+  return parts.join(" ");
 }
 
 function summarizePatrimoineEntries(

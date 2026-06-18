@@ -42,6 +42,7 @@ function pushFinancialFallbacks(data: ExtractedData, items: PatrimoineExtractIte
     const value = data[fb.key];
     if (typeof value !== "number" || value <= 0) continue;
     if (items.some((i) => i.type === fb.type && i.label === fb.label)) continue;
+    if (items.some((i) => i.type === fb.type)) continue;
     if (fb.type === "ASSURANCE_VIE" && items.some((i) => i.type === "ASSURANCE_VIE")) continue;
     if (fb.type === "PER" && items.some((i) => i.type === "PER")) continue;
     items.push({
@@ -112,9 +113,7 @@ export function extractPatrimoineItemsFromRio(data: ExtractedData): PatrimoineEx
     }
   }
 
-  if (!data.contratsFinanciers?.length) {
-    pushFinancialFallbacks(data, items);
-  }
+  pushFinancialFallbacks(data, items);
 
   return items;
 }

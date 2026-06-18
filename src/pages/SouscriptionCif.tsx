@@ -291,10 +291,10 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         Object.assign(patch, dossierDatePatchFromDocuments(existing, documents));
 
         if (!existing.objectifsClient?.trim()) {
-          patch.objectifsClient = buildDefaultObjectifsClient(foyer);
+          patch.objectifsClient = buildDefaultObjectifsClient(contact, foyer);
         }
         if (!existing.rappelDemande?.trim()) {
-          patch.rappelDemande = buildDefaultRappelDemande();
+          patch.rappelDemande = buildDefaultRappelDemande(contact, foyer);
         }
         if (!existing.conseil?.trim()) {
           patch.conseil = buildDefaultConseil();

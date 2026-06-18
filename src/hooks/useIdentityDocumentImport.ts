@@ -20,6 +20,12 @@ import {
 const IDENTITY_REQUIRED_MSG =
   "Sélectionnez un client pour importer une pièce d'identité.";
 
+function formatIdentityExtractError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && error) return error;
+  return "échec de l'OCR (vérifiez la console pour le détail)";
+}
+
 export function isImageFile(name: string): boolean {
   return /\.(jpe?g|png|webp)$/i.test(name);
 }
@@ -109,7 +115,7 @@ export function useIdentityDocumentImport(options: {
         if (toastMsg) toast.warning(toastMsg);
       } catch (error) {
         console.error("Erreur extraction identité (2 fichiers):", error);
-        toast.error("Erreur lors de la lecture recto/verso: " + String(error));
+        toast.error("Erreur lors de la lecture recto/verso : " + formatIdentityExtractError(error));
       } finally {
         setExtracting(false);
       }
@@ -139,7 +145,9 @@ export function useIdentityDocumentImport(options: {
         if (toastMsg) toast.warning(toastMsg);
       } catch (error) {
         console.error("Erreur extraction identité:", error);
-        toast.error("Erreur lors de la lecture de la pièce d'identité: " + String(error));
+        toast.error(
+          "Erreur lors de la lecture de la pièce d'identité : " + formatIdentityExtractError(error)
+        );
       } finally {
         setExtracting(false);
       }

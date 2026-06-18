@@ -4,10 +4,12 @@ import {
   buildRappelSituationSupplement,
   countEnfantsFoyer,
   latestQpiAppetencesEsg,
+  migrateRappelSituationPanelLabels,
   normalizeRappelSituationClient,
   syncRappelSituationFromContact,
 } from "@/lib/souscription-cif/build-rappel-situation-default";
 import {
+  RM_HINT_IMMOBILIER_BULLET_LABEL,
   RM_PANEL_IMMOBILIER_BULLET_LABEL,
   RM_PANEL_REVENUS_BULLET_LABEL,
   RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL,
@@ -67,9 +69,9 @@ describe("buildDefaultRappelSituation", () => {
     expect(text).toContain("➞ Épargne de précaution :");
     expect(text).toContain("➞ Endettement :");
     expect(text).toContain("Marié(e)");
-    expect(text).toContain("Profil de risque (SRI + définition)");
-    expect(text).toContain("SRI 4 — Dynamique");
-    expect(text).toContain("croissance à long terme");
+    expect(text).toContain("Profil de risque investisseur (SRI + définition)");
+    expect(text).toContain("SRI 4/5 — Dynamique");
+    expect(text).toContain("marchés volatils");
     expect(text).toContain("RFR");
     expect(text).toContain("RP + locatif");
   });
@@ -80,7 +82,7 @@ describe("buildDefaultRappelSituation", () => {
 
     expect(panel).toContain(RM_PANEL_REVENUS_BULLET_LABEL);
     expect(panel).toContain(RM_PANEL_IMMOBILIER_BULLET_LABEL);
-    expect(panel).toContain("Profil de risque (SRI + définition)");
+    expect(panel).toContain("Profil de risque investisseur (SRI + définition)");
 
     expect(rapport).toContain("➞ Revenus :");
     expect(rapport).toContain("➞ Immobilier :");
@@ -90,7 +92,7 @@ describe("buildDefaultRappelSituation", () => {
     expect(rapport).toContain("➞ Endettement :");
     expect(rapport).toContain("➞ Montant de l'investissement envisagé :");
     expect(rapport).toContain("➞ Appétences ESG :");
-    expect(rapport).toContain("➞ Profil de risque : SRI 4 — Dynamique");
+    expect(rapport).toContain("➞ Profil de risque investisseur : SRI 4/5 — Dynamique");
     expect(rapport).not.toContain("Imposition ; Nombre de parts");
     expect(rapport).not.toContain("SRI + définition");
   });
@@ -177,7 +179,8 @@ describe("buildDefaultRappelSituation", () => {
     });
     expect(synced).toContain("➞ Âge :");
     expect(synced).not.toContain("➞ Âge : 40 ans");
-    expect(synced).toContain("PEA");
+    expect(synced).toContain("➞ Valeurs mobilières : PEA");
+    expect(synced).not.toContain("détention court");
     expect(synced).toContain("Marié(e)");
     expect(synced).toContain("➞ Nombre d'enfants : 1");
     expect(synced).toContain("➞ Appétences ESG : Préférence ISR");
@@ -227,5 +230,12 @@ describe("buildDefaultRappelSituation", () => {
     expect(synced).toContain("PEA long terme");
     expect(synced).not.toContain("Pinel");
     expect(synced).not.toContain("PER");
+  });
+
+  it("migrateRappelSituationPanelLabels raccourcit les anciens libellés longs", () => {
+    const legacy = `➞ ${RM_HINT_IMMOBILIER_BULLET_LABEL} : RP + locatif`;
+    expect(migrateRappelSituationPanelLabels(legacy)).toBe(
+      `➞ ${RM_PANEL_IMMOBILIER_BULLET_LABEL} : RP + locatif`
+    );
   });
 });

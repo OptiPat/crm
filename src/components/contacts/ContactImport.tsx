@@ -116,7 +116,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     { value: "produit", label: "Type de produit (SCPI, AV, PER...)" },
     { value: "nom_produit", label: "Nom du produit (Comète, Primovie...)" },
     { value: "partenaire", label: "Partenaire (Alderan, Vie Plus...)" },
-    { value: "profil_risque_sri", label: "Profil investisseur / Risque" },
+    { value: "profil_risque_sri", label: "Profil de risque investisseur (SRI 1–5)" },
     { value: "date_souscription", label: "Date de souscription (→ Notes)" },
     { value: "montant", label: "Montant souscrit (→ Notes)" },
     { value: "montant_vp", label: "Montant VP (→ Notes, si SCPI/AV/PER)" },

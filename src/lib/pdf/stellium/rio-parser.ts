@@ -1,7 +1,7 @@
 import type { BienImmobilier, ExtractedData } from "../types";
 import { extractAmountAfterLabel, parseStelliumAmount, AMOUNT_CAPTURE } from "./amounts";
 import { computeStelliumConfidence } from "./confidence";
-import { normalizeStelliumText } from "./normalize";
+import { normalizeStelliumText, sanitizeStelliumFieldValue } from "./normalize";
 import {
   detectCoupleRio,
   normalizeSituationFamiliale,
@@ -14,6 +14,7 @@ import { enrichBiensImmobiliersWithCredits } from "./immo-credits";
 import {
   isImmoActifCategory,
   registerFinancialActifLine,
+  hasEpargneBancaireDetail,
 } from "./financial-contracts";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { applyFiscaliteToExtractedData, parseStelliumFiscalite } from "./fiscalite";
@@ -79,21 +80,50 @@ interface ParsedActifLine {
 function parseActifLines(patrimoineSection: string): ParsedActifLine[] {
   const actifsBlock = patrimoineSection.split(/\bPassifs\b/i)[0] ?? patrimoineSection;
   const lines: ParsedActifLine[] = [];
-  const pattern =
+  const seen = new Set<string>();
+
+  const pushLine = (category: string, nom: string, montant: number) => {
+    const key = `${category.toLowerCase()}|${nom.toLowerCase()}|${montant}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    lines.push({ category, nom, montant });
+  };
+
+  const patternWithDash =
     /(Résidence principale|Résidence secondaire|Assurance vie|Compte courant|Livret A|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|Classique|Pinel|LMNP|LMP|Denormandie|Malraux)\s*[-–—]\s*(.+?)\s+([\d\s,]+)\s*€/gi;
 
   let match: RegExpExecArray | null;
-  while ((match = pattern.exec(actifsBlock)) !== null) {
+  while ((match = patternWithDash.exec(actifsBlock)) !== null) {
     const montant = parseStelliumAmount(match[3]);
     if (!montant) continue;
-    lines.push({
-      category: match[1].trim(),
-      nom: match[2].trim(),
-      montant,
-    });
+    pushLine(match[1].trim(), match[2].trim(), montant);
+  }
+
+  const bankPattern =
+    /(Compte courant|Livret A|LDD|LDDS|PEL|CEL)\s*(?:[-–—]\s*(.+?)\s+)?([\d\s,]+)\s*€/gi;
+  while ((match = bankPattern.exec(actifsBlock)) !== null) {
+    if (match[2]?.trim()) continue;
+    const montant = parseStelliumAmount(match[3]);
+    if (!montant) continue;
+    const category = match[1].trim();
+    pushLine(category, category, montant);
   }
 
   return lines;
+}
+
+function applySoloEpargneBancaireSubtotalFallback(
+  patrimoineSection: string,
+  data: ExtractedData
+): void {
+  if (hasEpargneBancaireDetail(data)) return;
+  const subtotal = extractAmountAfterLabel(
+    patrimoineSection,
+    /\bÉpargne bancaire\s+([\d\s,]+)\s*€/i
+  );
+  if (subtotal && subtotal > 0) {
+    registerFinancialActifLine(data, "Compte courant", "Épargne bancaire", subtotal);
+  }
 }
 
 function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
@@ -131,6 +161,8 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
 
     registerFinancialActifLine(data, line.category, line.nom, line.montant);
   }
+
+  applySoloEpargneBancaireSubtotalFallback(patrimoineSection, data);
 
   if (biens.length > 0) {
     data.biensImmobiliers = biens;
@@ -193,28 +225,147 @@ function parseEnfants(relationsSection: string): ExtractedData["enfants"] {
 
 /** Colonne « Attribué à » : prénom + NOM, éventuellement couple (A & B). */
 const RIO_OBJECTIF_ASSIGNEE =
-  /(?:[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'\s-]+(?:\s*&\s*[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'\s-]+)*)/;
+  /(?:[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-Za-zÀ-Ü'\s-]+(?:\s*&\s*[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'\s-]+)*)/;
 
-function parseObjectifs(objectifsSection: string): string[] {
-  const tableBody = objectifsSection.replace(/^[\s\S]*?Horizon\s+/i, "");
-  const stopIdx = tableBody.search(/\bEpargne de précaution\b/i);
+const RIO_OBJECTIFS_TABLE_HEADER =
+  /Objectif\(s\)\s+Attribu[eé]\s+[àa]\s+Priorit[eé]\s+Horizon/i;
+
+/** Fin de ligne tableau : assignation + priorité + horizon. */
+const RIO_OBJECTIF_ROW_SUFFIX = new RegExp(
+  `(${RIO_OBJECTIF_ASSIGNEE.source})\\s+(\\d+)\\s+(?:-(?:\\s|$)|\\d+\\s+\\w+)`,
+  "g"
+);
+
+/** Début probable d'une nouvelle ligne objectif dans l'écart inter-lignes PDF. */
+const RIO_OBJECTIF_LABEL_START =
+  /(?:Se constituer|Disposer de|Accompagner vos|Préparer votre|Optimiser la|Compléter vos|Transmettre votre|Diversifier votre|[A-ZÀ-Ü][a-zà-üéèê'ô-]+ (?:la |le |les |l'|vos |votre |un |une |des |du |de |d'|en |à |sur |pour |par ))/;
+
+const RIO_OBJECTIF_ROW_START = new RegExp(`\\s+(?=${RIO_OBJECTIF_LABEL_START.source})`);
+
+function normalizeRioObjectifLabel(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function isRioObjectifLabelNoise(label: string): boolean {
+  return (
+    !label ||
+    /^Objectif\(s\)/i.test(label) ||
+    /^Epargne de pr[eé]caution/i.test(label) ||
+    /^Attribu[eé]/i.test(label)
+  );
+}
+
+/** Sépare suite de cellule objectif (coupure PDF) et début de la ligne suivante. */
+function splitRioObjectifGap(gap: string): {
+  continuation?: string;
+  nextRowPrefix?: string;
+} {
+  const trimmed = gap.trim();
+  if (!trimmed) return {};
+
+  const nextRowAtStart = new RegExp(`^${RIO_OBJECTIF_LABEL_START.source}`);
+  if (nextRowAtStart.test(trimmed)) {
+    return { nextRowPrefix: trimmed };
+  }
+
+  const match = trimmed.match(RIO_OBJECTIF_ROW_START);
+  if (!match || match.index === undefined || match.index === 0) {
+    return { continuation: trimmed };
+  }
+
+  return {
+    continuation: trimmed.slice(0, match.index).trim() || undefined,
+    nextRowPrefix: trimmed.slice(match.index).trim() || undefined,
+  };
+}
+
+interface RioObjectifRowAnchor {
+  assigneeStart: number;
+  end: number;
+}
+
+function findRioObjectifRowAnchors(body: string): RioObjectifRowAnchor[] {
+  const anchors: RioObjectifRowAnchor[] = [];
+  RIO_OBJECTIF_ROW_SUFFIX.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = RIO_OBJECTIF_ROW_SUFFIX.exec(body)) !== null) {
+    anchors.push({
+      assigneeStart: match.index,
+      end: match.index + match[0].length,
+    });
+  }
+  return anchors;
+}
+
+function parseRioObjectifsTableBody(tableBody: string): string[] {
+  const stopIdx = tableBody.search(/\bEpargne de pr[eé]caution\b/i);
   const body = stopIdx >= 0 ? tableBody.slice(0, stopIdx) : tableBody;
+  const anchors = findRioObjectifRowAnchors(body);
+  if (anchors.length === 0) return [];
 
   const objectifs: string[] = [];
-  const pattern = new RegExp(
-    `([\\s\\S]+?)\\s{2,}${RIO_OBJECTIF_ASSIGNEE.source}\\s{2,}(\\d+)\\s+(?:-|(?:\\d+\\s+\\w+))`,
-    "g"
-  );
+  let pos = 0;
+  let pendingPrefix = "";
 
-  let match: RegExpExecArray | null;
-  while ((match = pattern.exec(body)) !== null) {
-    const label = match[1].replace(/\s+/g, " ").trim();
-    if (label && !/^Epargne de précaution/i.test(label)) {
+  for (let i = 0; i < anchors.length; i++) {
+    const { assigneeStart, end } = anchors[i];
+    let label = normalizeRioObjectifLabel(
+      `${pendingPrefix}${body.slice(pos, assigneeStart)}`
+    );
+    pendingPrefix = "";
+
+    if (i + 1 < anchors.length) {
+      const gap = body.slice(end, anchors[i + 1].assigneeStart);
+      const { continuation, nextRowPrefix } = splitRioObjectifGap(gap);
+      if (continuation) {
+        label = normalizeRioObjectifLabel(`${label} ${continuation}`);
+      }
+      pendingPrefix = nextRowPrefix ? `${nextRowPrefix} ` : "";
+      pos = anchors[i + 1].assigneeStart;
+    } else {
+      pos = end;
+    }
+
+    if (!isRioObjectifLabelNoise(label)) {
       objectifs.push(label);
     }
   }
 
-  return [...new Set(objectifs)];
+  return objectifs;
+}
+
+/** Repère le bloc table Objectifs dans tout le texte (coupure de page PDF). */
+export function findRioObjectifsTableBlock(fullText: string): string | undefined {
+  const match = fullText.match(
+    new RegExp(
+      `(${RIO_OBJECTIFS_TABLE_HEADER.source}[\\s\\S]*?)(?=Epargne de pr[eé]caution|MENTIONS RESERVEES|Effort d['']épargne mensuel|$)`,
+      "i"
+    )
+  );
+  return match?.[1]?.trim();
+}
+
+/** Extrait les libellés objectifs (table Objectifs du RIO, indépendant du QPI). */
+export function parseRioObjectifsSection(objectifsSection: string): string[] {
+  const tableBody = objectifsSection.replace(/^[\s\S]*?Horizon\s+/i, "");
+  return parseRioObjectifsTableBody(tableBody);
+}
+
+function resolveRioObjectifsPrincipaux(
+  fullText: string,
+  objectifsSection?: string
+): string[] {
+  if (objectifsSection) {
+    const fromSection = parseRioObjectifsSection(objectifsSection);
+    if (fromSection.length > 0) return fromSection;
+  }
+
+  const tableBlock = findRioObjectifsTableBlock(fullText);
+  if (tableBlock) {
+    return parseRioObjectifsSection(tableBlock);
+  }
+
+  return [];
 }
 
 function parseRevenusCharges(section: string, data: ExtractedData): void {
@@ -353,7 +504,9 @@ function parseStelliumRioSolo(
     "Même foyer fiscal",
   ]);
   if (regime) {
-    data.regimeMatrimonial = regime.split(/\s+Même foyer fiscal/i)[0]?.trim();
+    data.regimeMatrimonial = sanitizeStelliumFieldValue(
+      regime.split(/\s+Même foyer fiscal/i)[0]
+    );
   }
 
   const enfants = parseEnfants(relations);
@@ -393,11 +546,9 @@ function parseStelliumRioSolo(
     parseRevenusCharges(revenusCharges, data);
   }
 
-  if (objectifs) {
-    const parsedObjectifs = parseObjectifs(objectifs);
-    if (parsedObjectifs.length > 0) {
-      data.objectifsPrincipaux = parsedObjectifs;
-    }
+  const parsedObjectifs = resolveRioObjectifsPrincipaux(text, objectifs);
+  if (parsedObjectifs.length > 0) {
+    data.objectifsPrincipaux = parsedObjectifs;
   }
 
   if (fiscalite) {
@@ -460,7 +611,9 @@ function parseStelliumRioCouple(
     "Même foyer fiscal",
   ]);
   if (regime && regime !== "-") {
-    data.regimeMatrimonial = regime.split(/\s+Même foyer fiscal/i)[0]?.trim();
+    data.regimeMatrimonial = sanitizeStelliumFieldValue(
+      regime.split(/\s+Même foyer fiscal/i)[0]
+    );
   }
 
   const enfants = parseCoupleEnfants(relations);
@@ -487,11 +640,9 @@ function parseStelliumRioCouple(
     parseCoupleRevenusCharges(revenusCharges, data, data.conjoint);
   }
 
-  if (objectifs) {
-    const parsedObjectifs = parseObjectifs(objectifs);
-    if (parsedObjectifs.length > 0) {
-      data.objectifsPrincipaux = parsedObjectifs;
-    }
+  const parsedObjectifs = resolveRioObjectifsPrincipaux(text, objectifs);
+  if (parsedObjectifs.length > 0) {
+    data.objectifsPrincipaux = parsedObjectifs;
   }
 
   if (fiscalite) {

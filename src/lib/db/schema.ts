@@ -79,7 +79,7 @@ export const contacts = sqliteTable("contacts", {
   
   // Informations commerciales
   sourceLead: text("source_lead"),
-  profilRisqueSri: integer("profil_risque_sri"), // 1 à 7
+  profilRisqueSri: integer("profil_risque_sri"), // 1 à 5
   
   // Suivi
   dateDernierContact: integer("date_dernier_contact", { mode: "timestamp" }),

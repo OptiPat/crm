@@ -4,7 +4,7 @@ import { extractStelliumSignatureDate } from "./signature-date";
 import { normalizeStelliumText } from "./normalize";
 import { extractFieldValue, getSection, splitStelliumSections } from "./sections";
 
-/** Profils Stellium (échelle 1–5) → SRI CRM (1–7). */
+/** Profils Stellium QPI (échelle 1–5) → profil CRM (1–5). */
 const STELLIUM_PROFILE_TO_SRI: Readonly<Record<string, number>> = {
   sécurisé: 1,
   securise: 1,
@@ -12,7 +12,7 @@ const STELLIUM_PROFILE_TO_SRI: Readonly<Record<string, number>> = {
   équilibré: 3,
   equilibre: 3,
   dynamique: 4,
-  offensif: 6,
+  offensif: 5,
 };
 
 const KNOWLEDGE_TO_LEVEL: Readonly<Record<string, string>> = {

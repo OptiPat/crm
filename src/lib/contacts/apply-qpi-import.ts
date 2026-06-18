@@ -14,6 +14,7 @@ import {
 } from "@/lib/contacts/rio-contact-fields";
 import { getMimeType } from "@/lib/documents/file-mime";
 import { convertRioDateToISO } from "@/lib/documents/rio-patrimoine-flow";
+import { formatSriLabel, PROFIL_RISQUE_MAX, PROFIL_RISQUE_SRI_FIELD_LABEL } from "@/lib/contacts/investisseur-sri";
 
 export interface QpiApplyResult {
   finalContactId: number;
@@ -28,7 +29,7 @@ export async function applyQpiImport(
     formNotes?: string;
   }
 ): Promise<QpiApplyResult | null> {
-  if (data.profilRisque == null || data.profilRisque < 1 || data.profilRisque > 7) {
+  if (data.profilRisque == null || data.profilRisque < 1 || data.profilRisque > PROFIL_RISQUE_MAX) {
     return null;
   }
 
@@ -90,6 +91,6 @@ export async function applyQpiImport(
 
   return {
     finalContactId: contactId!,
-    successMessage: `✅ Profil investisseur enregistré (SRI ${data.profilRisque})`,
+    successMessage: `✅ ${PROFIL_RISQUE_SRI_FIELD_LABEL} enregistré (${formatSriLabel(data.profilRisque) ?? `SRI ${data.profilRisque}`})`,
   };
 }

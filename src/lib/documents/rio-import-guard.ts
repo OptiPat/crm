@@ -1,4 +1,5 @@
 import type { ExtractedData } from "@/lib/pdf";
+import { PROFIL_RISQUE_SRI_MISSING_LABEL } from "@/lib/contacts/investisseur-sri";
 import { countStelliumColumnLines } from "@/lib/pdf/pdf-layout";
 import { detectStelliumDocument } from "@/lib/pdf/stellium";
 import { isGuidedStelliumPreview } from "./rio-import-preview";
@@ -44,7 +45,7 @@ export function listMissingConfidenceFields(
   if (!has(data.prenom)) missing.push("prénom");
 
   if (kind === "QPI") {
-    if (!has(data.profilRisque)) missing.push("profil SRI");
+    if (!has(data.profilRisque)) missing.push(PROFIL_RISQUE_SRI_MISSING_LABEL);
     if (!has(data.dateSignature) && !has(data.dateDocument)) {
       missing.push("date de signature");
     }

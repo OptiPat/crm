@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   assessRioImport,
   listMissingConfidenceFields,
@@ -52,7 +52,9 @@ describe("rio-import-guard", () => {
   });
 
   it("liste les champs manquants QPI", () => {
-    expect(listMissingConfidenceFields({ typeDocument: "QPI" }, "QPI")).toContain("profil SRI");
+    expect(listMissingConfidenceFields({ typeDocument: "QPI" }, "QPI")).toContain(
+      "SRI (profil investisseur)"
+    );
     expect(listMissingConfidenceFields({ typeDocument: "QPI" }, "QPI")).toContain(
       "date de signature"
     );

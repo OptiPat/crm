@@ -168,9 +168,7 @@ function normalizeForComparison(str: string): string {
 }
 
 function extractInvestissementsFromRIO(data: ExtractedData): ExtractedInvestissement[] {
-  return extractPatrimoineItemsFromRio(data)
-    .filter((item) => !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(item.type))
-    .map((item) => ({
+  return extractPatrimoineItemsFromRio(data).map((item) => ({
       id: item.id,
       type: item.type,
       label: item.label,

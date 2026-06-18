@@ -4,6 +4,7 @@ import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import {
   isImmoActifCategory,
   registerFinancialActifLine,
+  hasEpargneBancaireDetail,
 } from "./financial-contracts";
 import { escapeRegex } from "./sections";
 
@@ -445,6 +446,34 @@ export function parseCouplePatrimoine(
     }
 
     registerFinancialActifLine(data, category, nom, montant);
+  }
+
+  const bankPattern = new RegExp(
+    `(Compte courant|Livret A|LDD|LDDS|PEL|CEL)\\s*(?:[-–—]\\s*(.+?)\\s+)?((?:(?:-|[\\d\\s,]+)\\s*€\\s*)+)`,
+    "gi"
+  );
+  while ((match = bankPattern.exec(actifsBlock)) !== null) {
+    if (match[2]?.trim()) continue;
+    const category = match[1].trim();
+    const nom = match[2]?.trim() || category;
+    const amounts = parseTrailingAmounts(match[3]);
+    const montant = pickFoyerAmount(amounts, hasCommunColumn, true);
+    if (!montant || montant <= 0) continue;
+    if (isImmoActifCategory(category)) continue;
+    registerFinancialActifLine(data, category, nom, montant);
+  }
+
+  if (!hasEpargneBancaireDetail(data)) {
+    const epargneLine = actifsBlock.match(
+      /\bÉpargne bancaire\s+((?:(?:-|[\d\s,]+)\s*€\s*)+)/i
+    );
+    if (epargneLine) {
+      const amounts = parseTrailingAmounts(epargneLine[1]);
+      const subtotal = pickFoyerAmount(amounts, hasCommunColumn, true);
+      if (subtotal && subtotal > 0) {
+        registerFinancialActifLine(data, "Compte courant", "Épargne bancaire", subtotal);
+      }
+    }
   }
 
   if (biens.length > 0) {

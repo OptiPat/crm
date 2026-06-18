@@ -49,7 +49,7 @@ image = "0.24"
 | Document | Données à extraire |
 |----------|-------------------|
 | **RIO** | Nom, prénom, adresse, patrimoine, revenus, objectifs |
-| **Fiche profil risque** | SRI (1-7), horizon de placement |
+| **Fiche profil risque** | Profil de risque investisseur — SRI (1–5), horizon de placement |
 | **DER** | Identité, coordonnées |
 | **Relevé de compte** | Solde, mouvements |
 | **RIB** | IBAN, BIC, titulaire |

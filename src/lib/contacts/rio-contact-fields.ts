@@ -1,6 +1,8 @@
 import type { Contact, NewContact } from "@/lib/api/tauri-contacts";
-import type { ExtractedData } from "@/lib/pdf";
+import { PROFIL_RISQUE_MAX } from "@/lib/contacts/investisseur-sri";
 import { parseFrenchDateToIso } from "@/lib/contacts/rio-couple-import";
+import type { ExtractedData } from "@/lib/pdf/types";
+import { sanitizeStelliumFieldValue } from "@/lib/pdf/stellium/normalize";
 
 const CIVILITE_MAP: Record<string, "M" | "MME" | "AUTRE"> = {
   M: "M",
@@ -40,10 +42,23 @@ export function formatRioObjectifs(objectifs?: string[]): string | undefined {
   return lines.length > 0 ? lines.join(" ; ") : undefined;
 }
 
+/** Affichage preview import : une ligne par objectif (table RIO). */
+export function formatRioObjectifsLines(objectifs?: string[]): string | undefined {
+  if (!objectifs?.length) return undefined;
+  const lines = objectifs.map((o) => o.trim()).filter(Boolean);
+  return lines.length > 0 ? lines.join("\n") : undefined;
+}
+
+/** Inverse de formatRioObjectifs / saisie preview (lignes ou « ; »). */
+export function parseRioObjectifsText(text: string): string[] {
+  return text
+    .split(/\n|;/)
+    .map((o) => o.trim())
+    .filter(Boolean);
+}
+
 export function normalizeRegimeMatrimonial(value?: string): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed || trimmed === "-" || trimmed === "–") return undefined;
-  return trimmed;
+  return sanitizeStelliumFieldValue(value);
 }
 
 /** Charges d'emprunts = crédit conso (section Charges) + échéances Passifs. */
@@ -51,7 +66,9 @@ export function resolveChargesEmprunts(data: ExtractedData): number | undefined 
   const charges = data.chargesEmprunts ?? 0;
   const passifs = data.chargesEmpruntsPassifs ?? 0;
   const total = charges + passifs;
-  return total > 0 ? total : undefined;
+  if (total > 0) return total;
+  if (data.chargesTotal != null && data.chargesTotal > 0) return data.chargesTotal;
+  return undefined;
 }
 
 export function resolveRevenusAnnuels(data: ExtractedData): number | undefined {
@@ -126,7 +143,7 @@ export function buildSoloRioFinancialContactFields(data: ExtractedData): Partial
   const objectifs = formatRioObjectifs(data.objectifsPrincipaux);
   if (objectifs) fields.objectifs_patrimoniaux = objectifs;
 
-  if (data.profilRisque != null && data.profilRisque >= 1 && data.profilRisque <= 7) {
+  if (data.profilRisque != null && data.profilRisque >= 1 && data.profilRisque <= PROFIL_RISQUE_MAX) {
     fields.profil_risque_sri = data.profilRisque;
   }
 
@@ -165,7 +182,7 @@ export function buildCoupleMemberRioFinancialFields(
   if (member === "person1") {
     const objectifs = formatRioObjectifs(data.objectifsPrincipaux);
     if (objectifs) partial.objectifs_patrimoniaux = objectifs;
-    if (data.profilRisque != null && data.profilRisque >= 1 && data.profilRisque <= 7) {
+    if (data.profilRisque != null && data.profilRisque >= 1 && data.profilRisque <= PROFIL_RISQUE_MAX) {
       partial.profil_risque_sri = data.profilRisque;
     }
   }

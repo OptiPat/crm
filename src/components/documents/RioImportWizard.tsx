@@ -28,6 +28,7 @@ import { useRioSoloImport } from "@/hooks/useRioSoloImport";
 import { useRioPatrimoineFlow } from "@/hooks/useRioPatrimoineFlow";
 import { hasPatrimoineToTri } from "@/lib/documents/rio-patrimoine-flow";
 import { applyQpiImport } from "@/lib/contacts/apply-qpi-import";
+import { PROFIL_RISQUE_SRI_FIELD_LABEL } from "@/lib/contacts/investisseur-sri";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { buildRioPreviewSummary } from "@/lib/documents/rio-import-preview";
@@ -363,7 +364,7 @@ export function RioImportWizard({
           onOpenChange(false);
         } else {
           toast.error(
-            "Impossible d'enregistrer le profil : SRI manquant (1–7) ou identité insuffisante."
+            `Impossible d'enregistrer le profil : ${PROFIL_RISQUE_SRI_FIELD_LABEL.toLowerCase()} manquant ou identité insuffisante.`
           );
         }
         return;

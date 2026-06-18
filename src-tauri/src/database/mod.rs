@@ -520,6 +520,7 @@ impl Database {
         self.migrate_add_lieu_naissance()?;
         self.migrate_add_contact_rio_financial_fields()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
+        self.migrate_contacts_profil_risque_echelle_5()?;
         self.migrate_drop_contacts_date_expiration_identite()?;
 
         Ok(())
@@ -535,6 +536,33 @@ impl Database {
             [],
         )?;
         println!("✅ Migration sensibilite_extra_financiere appliquée");
+        Ok(())
+    }
+
+    /// Ancienne échelle profil 1–7 → nouvelle échelle QPI 1–5 (réglementaire).
+    fn migrate_contacts_profil_risque_echelle_5(&self) -> Result<()> {
+        if self.get_setting("migration_profil_risque_echelle_5_v1")?.is_some() {
+            return Ok(());
+        }
+        if !self.table_has_column("contacts", "profil_risque_sri")? {
+            return Ok(());
+        }
+
+        println!("🔄 Migration : profil_risque_sri échelle 1–5…");
+        // Ancien niveau 5 = « Dynamique + » → Dynamique (4), avant de remapper 6–7.
+        let n5 = self.conn.execute(
+            "UPDATE contacts SET profil_risque_sri = 4 WHERE profil_risque_sri = 5",
+            [],
+        )?;
+        let n67 = self.conn.execute(
+            "UPDATE contacts SET profil_risque_sri = 5 WHERE profil_risque_sri IN (6, 7)",
+            [],
+        )?;
+        self.set_setting("migration_profil_risque_echelle_5_v1", "1")?;
+        println!(
+            "✅ Migration profil_risque_sri : {} contact(s) 5→4, {} contact(s) 6–7→5",
+            n5, n67
+        );
         Ok(())
     }
 

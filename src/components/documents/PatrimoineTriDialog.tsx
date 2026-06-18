@@ -230,9 +230,7 @@ export function PatrimoineTriDialog({
     type RioInvImport = NewInvestissement & { rioEncoursEuro?: number };
 
     const investissements: RioInvImport[] = items
-      .filter((item) => {
-        return !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(item.type);
-      })
+      .filter((item) => item.autoOrigine || item.origine)
       .map((item) => {
         const immoExtras = buildImmoInvestissementExtras({
           editedType: item.type,

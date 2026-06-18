@@ -18,7 +18,22 @@ export function normalizeStelliumText(raw: string): string {
   // Coches PDF (plusieurs encodages possibles)
   text = text.replace(/[\u2713\u2611\uFE6B]/g, "✓");
 
+  // Puces Word/PDF (U+F0B7 affichée □ si police absente)
+  text = text.replace(/[\uE000-\uF8FF]/g, " ");
+  text = text.replace(/[\u2022\u25CF\u25E6\u25AA\u2023\u2043\u2219\u00B7]/g, " ");
+
   text = normalizeStelliumAmounts(text);
 
   return text.trim();
+}
+
+/** Nettoie une valeur extraite (puces, espaces) avant affichage ou persistance. */
+export function sanitizeStelliumFieldValue(value?: string): string | undefined {
+  const trimmed = value
+    ?.replace(/[\uE000-\uF8FF]/g, " ")
+    .replace(/[\u2022\u25CF\u25E6\u25AA\u2023\u2043\u2219\u00B7\uFEFF]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!trimmed || trimmed === "-" || trimmed === "–") return undefined;
+  return trimmed;
 }

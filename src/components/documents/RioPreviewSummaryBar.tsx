@@ -1,6 +1,11 @@
 import { ArrowRight, Home, TrendingUp, User, Wallet } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import {
+  formatSriLabel,
+  PROFIL_RISQUE_MAX,
+  PROFIL_RISQUE_SRI_FIELD_LABEL,
+} from "@/lib/contacts/investisseur-sri";
+import {
   buildRioPreviewSummary,
   formatEuroCompact,
 } from "@/lib/documents/rio-import-preview";
@@ -59,10 +64,12 @@ export function RioPreviewSummaryBar({ data }: RioPreviewSummaryBarProps) {
         <div className="rounded-lg border bg-card p-3">
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
             <TrendingUp className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            Profil SRI
+            {PROFIL_RISQUE_SRI_FIELD_LABEL}
           </div>
           <div className="font-semibold text-sm">
-            {summary.sri != null && summary.sri > 0 ? `${summary.sri} / 7` : "—"}
+            {summary.sri != null && summary.sri > 0
+              ? formatSriLabel(summary.sri) ?? `${summary.sri} / ${PROFIL_RISQUE_MAX}`
+              : "—"}
           </div>
         </div>
       </div>

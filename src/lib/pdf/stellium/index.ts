@@ -8,7 +8,7 @@ export {
   isStelliumRio,
   type StelliumDocumentKind,
 } from "./detect";
-export { parseStelliumRio } from "./rio-parser";
+export { parseStelliumRio, parseRioObjectifsSection, findRioObjectifsTableBlock } from "./rio-parser";
 export { parseStelliumQpi, mapProfilToSri, extractSensibiliteExtraFinanciere } from "./qpi-parser";
 export { computeStelliumConfidence } from "./confidence";
 export { extractStelliumSignatureDate } from "./signature-date";

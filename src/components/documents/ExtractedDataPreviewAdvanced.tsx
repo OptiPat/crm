@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -40,8 +41,17 @@ import {
   buildRioPreviewSummary,
   isGuidedStelliumPreview,
 } from "@/lib/documents/rio-import-preview";
-import { formatSriLabel } from "@/lib/contacts/investisseur-sri";
+import {
+  formatSriLabel,
+  PROFIL_RISQUE_MAX,
+  PROFIL_RISQUE_SRI_FIELD_LABEL,
+} from "@/lib/contacts/investisseur-sri";
 import { assessRioImport } from "@/lib/documents/rio-import-guard";
+import {
+  formatRioObjectifsLines,
+  normalizeRegimeMatrimonial,
+  parseRioObjectifsText,
+} from "@/lib/contacts/rio-contact-fields";
 import { RioImportStepper } from "./RioImportStepper";
 import { RioPreviewSummaryBar } from "./RioPreviewSummaryBar";
 
@@ -153,18 +163,35 @@ export function ExtractedDataPreviewAdvanced({
     return assessRioImport(formData);
   }, [formData, guidedMode]);
   const applyBlocked = stelliumApplyAssessment?.canProceed === false;
+  const hasRioObjectifs = (formData.objectifsPrincipaux?.length ?? 0) > 0;
+  const showRioObjectifsSection = formData.typeDocument === "RIO";
+  const showRioRevenusSection = formData.typeDocument === "RIO";
+  const showQpiProfilSection =
+    isQpiPreview &&
+    (formData.profilRisque !== undefined ||
+      Boolean(
+        formData.sensibiliteExtraFinanciere ||
+          formData.connaissancesFinancieres ||
+          formData.experienceInvestissement
+      ));
 
   useEffect(() => {
     // En panel (wizard étape 2), l'état local vit jusqu'à « Appliquer » — pas de resync à chaque render parent.
     if (variant === "panel") return;
-    setFormData(extractedData);
+    const regime = normalizeRegimeMatrimonial(extractedData.regimeMatrimonial);
+    setFormData({
+      ...extractedData,
+      ...(regime !== extractedData.regimeMatrimonial
+        ? { regimeMatrimonial: regime }
+        : {}),
+    });
     setGuidedTab("contact");
   }, [extractedData, variant]);
 
   const isSectionVisible = (sectionId: string): boolean => {
     if (!guidedMode) return true;
     if (isQpiPreview) {
-      if (sectionId === "objectifs") return guidedTab === "profil";
+      if (sectionId === "profil") return guidedTab === "profil";
       if (["identite", "situation"].includes(sectionId)) return guidedTab === "contact";
       return false;
     }
@@ -289,12 +316,21 @@ export function ExtractedDataPreviewAdvanced({
 
   const hasData = (fields: any[]) => fields.some((f) => f !== undefined && f !== null && f !== "");
 
+  const showRevenusChargesSection =
+    showRioRevenusSection ||
+    hasData([
+      formData.revenusSalaires,
+      formData.revenusTotal,
+      formData.chargesEmprunts,
+      formData.chargesTotal,
+    ]);
+
   const getPreviewDescription = (typeDocument?: string): string => {
     switch (typeDocument) {
       case "RIO":
         return "Vérifiez les données extraites du RIO. Après « Appliquer », le contact sera mis à jour et le patrimoine pourra être trié (« avec moi » / « à côté »).";
       case "QPI":
-        return "Vérifiez le profil SRI et l'identité. Seuls le SRI, le nom/prénom et le PDF seront enregistrés sur le contact.";
+        return `Vérifiez le ${PROFIL_RISQUE_SRI_FIELD_LABEL.toLowerCase()} et l'identité. Seuls le SRI, le nom/prénom et le PDF seront enregistrés sur le contact.`;
       default:
         return "Vérifiez et complétez les informations avant de les appliquer";
     }
@@ -570,7 +606,11 @@ export function ExtractedDataPreviewAdvanced({
                   <div className="space-y-2">
                     <Label>Régime matrimonial</Label>
                     <Input
-                      value={formData.regimeMatrimonial || ""}
+                      value={
+                        normalizeRegimeMatrimonial(formData.regimeMatrimonial) ??
+                        formData.regimeMatrimonial ??
+                        ""
+                      }
                       onChange={(e) =>
                         setFormData({
                           ...formData,
@@ -625,11 +665,7 @@ export function ExtractedDataPreviewAdvanced({
           )}
 
           {/* Section Revenus & Charges */}
-          {hasData([
-            formData.revenusSalaires,
-            formData.revenusTotal,
-            formData.chargesTotal,
-          ]) && (
+          {showRevenusChargesSection && (
             <PreviewSection {...sectionProps}
               id="revenus"
               icon={Euro}
@@ -639,13 +675,11 @@ export function ExtractedDataPreviewAdvanced({
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Revenus */}
-                {hasData([formData.revenusSalaires, formData.revenusTotal]) && (
+                {(showRioRevenusSection ||
+                  hasData([formData.revenusSalaires, formData.revenusTotal])) && (
                   <>
                     <div className="md:col-span-2">
-                      <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
-                        <Euro className="h-4 w-4 text-muted-foreground shrink-0" aria-hidden />
-                        Revenus annuels
-                      </h4>
+                      <h4 className="font-medium text-sm mb-3">Revenus annuels</h4>
                     </div>
 
                     {formData.revenusSalaires !== undefined && (
@@ -696,30 +730,39 @@ export function ExtractedDataPreviewAdvanced({
                       </div>
                     )}
 
-                    {formData.revenusTotal !== undefined && (
+                    {(showRioRevenusSection || formData.revenusTotal !== undefined) && (
                       <div className="space-y-2">
                         <Label className="font-semibold">Total revenus</Label>
                         <Input
                           type="number"
-                          value={formData.revenusTotal || ""}
+                          value={formData.revenusTotal ?? ""}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              revenusTotal: parseInt(e.target.value) || undefined,
+                              revenusTotal: e.target.value
+                                ? parseInt(e.target.value, 10)
+                                : undefined,
                             })
                           }
                           className="font-semibold"
+                          placeholder="Revenus annuels du foyer"
                         />
+                        {showRioRevenusSection && formData.revenusTotal == null && (
+                          <p className="text-xs text-muted-foreground">
+                            Non détecté dans le PDF — saisissez le total revenus du RIO.
+                          </p>
+                        )}
                       </div>
                     )}
                   </>
                 )}
 
                 {/* Charges */}
-                {hasData([formData.chargesEmprunts, formData.chargesTotal]) && (
+                {(showRioRevenusSection ||
+                  hasData([formData.chargesEmprunts, formData.chargesTotal])) && (
                   <>
                     <div className="md:col-span-2 mt-4">
-                      <h4 className="font-medium text-sm mb-3">💸 Charges annuelles</h4>
+                      <h4 className="font-medium text-sm mb-3">Charges annuelles</h4>
                     </div>
 
                     {formData.chargesEmprunts !== undefined && (
@@ -739,20 +782,28 @@ export function ExtractedDataPreviewAdvanced({
                       </div>
                     )}
 
-                    {formData.chargesTotal !== undefined && (
+                    {(showRioRevenusSection || formData.chargesTotal !== undefined) && (
                       <div className="space-y-2">
                         <Label className="font-semibold">Total charges</Label>
                         <Input
                           type="number"
-                          value={formData.chargesTotal || ""}
+                          value={formData.chargesTotal ?? ""}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              chargesTotal: parseInt(e.target.value) || undefined,
+                              chargesTotal: e.target.value
+                                ? parseInt(e.target.value, 10)
+                                : undefined,
                             })
                           }
                           className="font-semibold"
+                          placeholder="Charges annuelles du foyer"
                         />
+                        {showRioRevenusSection && formData.chargesTotal == null && (
+                          <p className="text-xs text-muted-foreground">
+                            Non détecté dans le PDF — saisissez le total charges si besoin.
+                          </p>
+                        )}
                       </div>
                     )}
                   </>
@@ -1141,19 +1192,50 @@ export function ExtractedDataPreviewAdvanced({
             </PreviewSection>
           )}
 
-          {/* Section Objectifs */}
-          {formData.profilRisque !== undefined && (
+          {/* Objectifs patrimoniaux (RIO uniquement — section Objectifs du recueil) */}
+          {showRioObjectifsSection && (
             <PreviewSection {...sectionProps}
               id="objectifs"
               icon={Target}
-              title={isQpiPreview ? "Profil investisseur" : "Objectifs & Profil"}
+              title="Objectifs patrimoniaux"
               hidden={!isSectionVisible("objectifs")}
+              forceExpanded={guidedMode}
+            >
+              <div className="space-y-2">
+                <Label>Objectifs</Label>
+                <Textarea
+                  rows={5}
+                  value={formatRioObjectifsLines(formData.objectifsPrincipaux) ?? ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      objectifsPrincipaux: parseRioObjectifsText(e.target.value),
+                    })
+                  }
+                  placeholder={"Optimiser la rentabilité de vos placements financiers\nPréparer votre retraite"}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {hasRioObjectifs
+                    ? "Extraits de la section Objectifs du RIO (priorité / horizon non importés). Enregistrés sur la fiche contact avec revenus et charges."
+                    : "Aucun objectif détecté dans le PDF — saisissez-les manuellement ou vérifiez le document source."}
+                </p>
+              </div>
+            </PreviewSection>
+          )}
+
+          {/* Profil investisseur (QPI uniquement) */}
+          {showQpiProfilSection && (
+            <PreviewSection {...sectionProps}
+              id="profil"
+              icon={Target}
+              title="Profil investisseur"
+              hidden={!isSectionVisible("profil")}
               forceExpanded={guidedMode}
             >
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {formData.profilRisque !== undefined && (
                   <div className="space-y-2">
-                    <Label>Profil de risque (SRI)</Label>
+                    <Label>{PROFIL_RISQUE_SRI_FIELD_LABEL}</Label>
                     {formData.aversionRisque && (
                       <p className="text-xs text-muted-foreground">
                         Profil Stellium : {formData.aversionRisque}
@@ -1165,7 +1247,7 @@ export function ExtractedDataPreviewAdvanced({
                     <Input
                       type="number"
                       min="1"
-                      max="7"
+                      max={String(PROFIL_RISQUE_MAX)}
                       value={formData.profilRisque || ""}
                       onChange={(e) =>
                         setFormData({
@@ -1176,10 +1258,9 @@ export function ExtractedDataPreviewAdvanced({
                     />
                   </div>
                 )}
-                {isQpiPreview &&
-                  (formData.sensibiliteExtraFinanciere ||
-                    formData.connaissancesFinancieres ||
-                    formData.experienceInvestissement) && (
+                {(formData.sensibiliteExtraFinanciere ||
+                  formData.connaissancesFinancieres ||
+                  formData.experienceInvestissement) && (
                   <div className="space-y-2 md:col-span-2 rounded-lg border bg-muted/40 p-3">
                     <p className="text-xs text-muted-foreground">
                       Durabilité enregistrée sur le document QPI. Connaissances / expérience :

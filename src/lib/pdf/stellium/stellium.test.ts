@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   detectStelliumDocument,
   isStelliumQpi,
@@ -6,6 +6,8 @@ import {
   mapProfilToSri,
   parseStelliumQpi,
   parseStelliumRio,
+  parseRioObjectifsSection,
+  findRioObjectifsTableBlock,
 } from "./index";
 import { parseAuto } from "../parse-auto";
 import legrandFixture from "./fixtures/rio-solo-legrand-2026.txt?raw";
@@ -107,6 +109,76 @@ describe("Stellium — RIO solo Legrand 2026", () => {
     ]);
     expect(data.typeDocument).toBe("RIO");
     expect(data.confidence).toBeGreaterThanOrEqual(75);
+  });
+
+  it("extrait les objectifs solo (libellé + assignation + priorité)", () => {
+    const section =
+      "Objectifs  Objectif(s)   Attribué à   Priorité   Horizon  " +
+      "Optimiser la rentabilité de vos placements financiers   Nicolas PLAZA   1   -  " +
+      "Préparer votre retraite   Nicolas PLAZA   2   -  " +
+      "Se constituer un patrimoine immobilier   Nicolas PLAZA   3   -  " +
+      "Epargne de précaution souhaitée   20   000   €";
+    expect(parseRioObjectifsSection(section)).toEqual([
+      "Optimiser la rentabilité de vos placements financiers",
+      "Préparer votre retraite",
+      "Se constituer un patrimoine immobilier",
+    ]);
+  });
+
+  it("extrait les objectifs avec espaces simples (PDF.js)", () => {
+    const section =
+      "Objectif(s) Attribué à Priorité Horizon " +
+      "Optimiser la rentabilité de vos placements financiers Nicolas PLAZA 1 - " +
+      "Préparer votre retraite Nicolas PLAZA 2 - " +
+      "Se constituer un patrimoine immobilier Nicolas PLAZA 3 - " +
+      "Epargne de précaution souhaitée 20 000 €";
+    expect(parseRioObjectifsSection(section)).toEqual([
+      "Optimiser la rentabilité de vos placements financiers",
+      "Préparer votre retraite",
+      "Se constituer un patrimoine immobilier",
+    ]);
+  });
+
+  it("recolle une cellule objectif coupée sur deux lignes PDF", () => {
+    const section =
+      "Objectif(s) Attribué à Priorité Horizon " +
+      "Optimiser la rentabilité de vos Nicolas PLAZA 1 - placements financiers " +
+      "Préparer votre retraite Nicolas PLAZA 2 - " +
+      "Se constituer un patrimoine immobilier Nicolas PLAZA 3 - " +
+      "Epargne de précaution souhaitée 20 000 €";
+    expect(parseRioObjectifsSection(section)).toEqual([
+      "Optimiser la rentabilité de vos placements financiers",
+      "Préparer votre retraite",
+      "Se constituer un patrimoine immobilier",
+    ]);
+  });
+
+  it("recolle les objectifs sur deux lignes comme dans les fixtures Stellium", () => {
+    const section =
+      "Objectif(s) Attribué à Priorité Horizon " +
+      "Optimiser la rentabilité de vos  placements financiers Marc ROUSSEAU & Anne ROUSSEAU 1 - " +
+      "Préparer votre retraite Marc ROUSSEAU & Anne ROUSSEAU 2 - Epargne de précaution 15 000 €";
+    expect(parseRioObjectifsSection(section)).toEqual([
+      "Optimiser la rentabilité de vos placements financiers",
+      "Préparer votre retraite",
+    ]);
+  });
+
+  it("retrouve la table Objectifs après une coupure de page", () => {
+    const text =
+      "Fiscalité IR net à payer 1000 € Objectifs Recueil d'informations - Nicolas PLAZA - 15/06/2026 3/6 " +
+      "Objectif(s) Attribué à Priorité Horizon Optimiser la rentabilité de vos placements financiers Nicolas PLAZA 1 - " +
+      "Préparer votre retraite Nicolas PLAZA 2 - Epargne de précaution souhaitée 20 000 € MENTIONS RESERVEES";
+    const block = findRioObjectifsTableBlock(text);
+    expect(block).toBeTruthy();
+    expect(parseRioObjectifsSection(block!)).toEqual([
+      "Optimiser la rentabilité de vos placements financiers",
+      "Préparer votre retraite",
+    ]);
+    expect(parseStelliumRio(text).objectifsPrincipaux).toEqual([
+      "Optimiser la rentabilité de vos placements financiers",
+      "Préparer votre retraite",
+    ]);
   });
 
   it("parseAuto route vers le parser Stellium", () => {
@@ -251,8 +323,9 @@ describe("Stellium — QPI solo Dupont 2026", () => {
     expect(data.typeDocument).toBe("QPI");
   });
 
-  it("mappe le profil de risque vers le SRI CRM", () => {
+  it("mappe le profil de risque vers l'échelle CRM 1–5", () => {
     expect(mapProfilToSri("Dynamique")).toBe(4);
+    expect(mapProfilToSri("Offensif")).toBe(5);
     expect(data.profilRisque).toBe(4);
     expect(data.aversionRisque).toBe("Dynamique");
   });

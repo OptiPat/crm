@@ -132,3 +132,18 @@ export function registerFinancialActifLine(
   appendContratFinancier(data, category, nom, montant);
   applyFinancialProductAggregate(data, category, montant);
 }
+
+export function hasEpargneBancaireDetail(data: ExtractedData): boolean {
+  return (
+    (data.livretA ?? 0) > 0 ||
+    (data.compteCourant ?? 0) > 0 ||
+    (data.ldd ?? 0) > 0 ||
+    (data.pel ?? 0) > 0 ||
+    (data.cel ?? 0) > 0 ||
+    Boolean(
+      data.contratsFinanciers?.some((c) =>
+        ["LIVRET_A", "EPARGNE_BANCAIRE", "LDDS", "PEL", "CEL"].includes(c.type)
+      )
+    )
+  );
+}

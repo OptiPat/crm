@@ -39,14 +39,14 @@ describe("build-rappel-patrimoine-summary", () => {
     expect(text).toBe("RP + locatif (texte foyer)");
   });
 
-  it("immobilier : type + montant + loyer, sans nom entre parenthèses", () => {
+  it("immobilier : ponctuation type : valeur, loyer, mensualité", () => {
     const text = resolveRappelImmobilierLine(null, [
       baseInv({
         id: 1,
         type_produit: "RESIDENCE_PRINCIPALE",
         nom_produit: "Primo MTP",
         montant_initial: 300_000_00,
-        loyer_mensuel: 750_00,
+        mensualite_credit: 750_00,
       }),
       baseInv({
         id: 2,
@@ -54,15 +54,24 @@ describe("build-rappel-patrimoine-summary", () => {
         nom_produit: "Cap Azur - Sete",
         montant_initial: 160_820_00,
         loyer_mensuel: 580_00,
+        mensualite_credit: 650_00,
+      }),
+      baseInv({
+        id: 3,
+        type_produit: "LMNP",
+        nom_produit: "Studio Lyon",
+        montant_initial: 145_000_00,
+        loyer_mensuel: 875_00,
+        mensualite_credit: 585_00,
       }),
     ]);
-    expect(text).toContain("Résidence Principale");
-    expect(text).toContain("300");
-    expect(text).toContain("Pinel");
-    expect(text).toContain("160");
-    expect(text).toContain("loyer");
+    expect(text).toMatch(/Résidence Principale : 300.*€, mensualité 750.*€\/mois/);
+    expect(text).toMatch(/Pinel : 160.*€, loyer 580.*€\/mois, mensualité 650.*€\/mois/);
+    expect(text).toMatch(/LMNP : 145.*€, loyer 875.*€\/mois, mensualité 585.*€\/mois/);
+    expect(text).not.toContain("CRD");
     expect(text).not.toContain("Primo");
     expect(text).not.toContain("Cap Azur");
+    expect(text).not.toContain("Studio Lyon");
   });
 
   it("valeurs mobilières : parenthèses SCPI seulement, durée démembrement, liste complète", () => {

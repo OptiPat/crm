@@ -20,7 +20,11 @@ import {
   formatCiviliteLabel,
   formatSituationLabel,
 } from "@/lib/contacts/contact-form-utils";
-import { formatSriLabel, formatSriWithDefinition } from "@/lib/contacts/investisseur-sri";
+import {
+  formatSriLabel,
+  getSriDefinition,
+  PROFIL_RISQUE_SRI_FIELD_LABEL,
+} from "@/lib/contacts/investisseur-sri";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { toast } from "sonner";
 
@@ -198,11 +202,11 @@ export function ContactDetailSyntheseTab({
           )}
           {contact.profil_risque_sri && (
             <div>
-              <span className="text-muted-foreground text-sm">Profil investisseur (SRI) : </span>
+              <span className="text-muted-foreground text-sm">{PROFIL_RISQUE_SRI_FIELD_LABEL} : </span>
               {formatSriLabel(contact.profil_risque_sri) ?? contact.profil_risque_sri}
-              {formatSriWithDefinition(contact.profil_risque_sri) && (
+              {getSriDefinition(contact.profil_risque_sri) && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {formatSriWithDefinition(contact.profil_risque_sri)}
+                  {getSriDefinition(contact.profil_risque_sri)}
                 </p>
               )}
             </div>

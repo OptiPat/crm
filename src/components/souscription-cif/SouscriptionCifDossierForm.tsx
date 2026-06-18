@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
+import { RM_RAPPEL_SITUATION_PANEL_HINTS } from "@/lib/souscription-cif/rapport-mission-recap-table";
 import { SCPI_ANNEXE_PRODUCT_FICHES } from "@/lib/souscription-cif/scpi-annexe-catalog";
 import {
   buildMesPreconisationsFromSouscriptions,
@@ -228,6 +229,16 @@ export function SouscriptionCifDossierForm({
                 onChange={(e) => onChange({ rappelSituationClient: e.target.value })}
                 placeholder="Puces Recueil / QPI (âge, revenus, immobilier, SRI, ESG…)"
               />
+              <p className="text-xs text-muted-foreground">
+                Libellés courts dans le champ — précisions pour certaines rubriques :
+              </p>
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                {RM_RAPPEL_SITUATION_PANEL_HINTS.map(({ label, hint }) => (
+                  <li key={label}>
+                    <span className="font-medium text-foreground/80">{label}</span> — {hint}
+                  </li>
+                ))}
+              </ul>
             </div>
             <div className="space-y-2">
               <Label htmlFor="cif-analyse-situation">Analyse de la situation</Label>

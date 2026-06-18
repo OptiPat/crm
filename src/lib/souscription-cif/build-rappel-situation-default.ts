@@ -6,6 +6,7 @@ import { formatSituationLabel } from "@/lib/contacts/contact-form-utils";
 import { formatFoyerCurrencyEur } from "@/lib/foyers/foyer-display";
 import { formatSriWithDefinition } from "@/lib/contacts/investisseur-sri";
 import {
+  RM_LEGACY_PANEL_BULLET_LABEL_ALIASES,
   RM_LEGACY_PANEL_TO_RAPPORT_BULLET_LABELS,
   RM_PANEL_BULLET_LABELS_EMPTY_WITH_COLON,
   RM_PANEL_ENDETTEMENT_BULLET_LABEL,
@@ -17,6 +18,7 @@ import {
   RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL,
   RM_RECAP_SITUATION_BULLET_LABELS,
   RM_RECAP_SITUATION_SRI_BULLET_LABEL,
+  rappelSituationLabelAliases,
 } from "@/lib/souscription-cif/rapport-mission-recap-table";
 import {
   filterRappelPatrimoineInvestissements,
@@ -104,9 +106,21 @@ function replaceBulletLabel(text: string, panelLabel: string, rapportLabel: stri
   );
 }
 
+/** Raccourcit les libellés panneau (ancienne saisie verbose → puces courtes). */
+export function migrateRappelSituationPanelLabels(text: string): string {
+  let result = text;
+  for (const [legacy, canonical] of RM_LEGACY_PANEL_BULLET_LABEL_ALIASES) {
+    result = result.replace(
+      new RegExp(`^➞ ${escapeRegExp(legacy)}(?= :|$)`, "gm"),
+      `➞ ${canonical}`
+    );
+  }
+  return result;
+}
+
 /** Adaptations pour le rendu rapport (libellés document ≠ panneau dossier). */
 export function normalizeRappelSituationClient(text: string): string {
-  let result = text
+  let result = migrateRappelSituationPanelLabels(text)
     .replace(/➞ Classification non professionnel/g, "➞ Classification")
     .replace(/^➞ Age(?= :|$)/gm, "➞ Âge")
     .replace(/^➞ Nombre d'enfants$/gm, "➞ Nombre d'enfants :")
@@ -177,12 +191,14 @@ function replaceOrInsertBulletLine(text: string, label: string, line: string): s
 
 function findRappelBulletLine(
   text: string,
-  label: string
+  panelLabel: string
 ): { line: string; start: number; end: number } | null {
   let offset = 0;
   for (const line of text.split("\n")) {
-    if (line.startsWith(`➞ ${label} :`) || line === `➞ ${label}`) {
-      return { line, start: offset, end: offset + line.length };
+    for (const alias of rappelSituationLabelAliases(panelLabel)) {
+      if (line.startsWith(`➞ ${alias} :`) || line === `➞ ${alias}`) {
+        return { line, start: offset, end: offset + line.length };
+      }
     }
     offset += line.length + 1;
   }
@@ -212,16 +228,27 @@ function syncRappelLabels(
   return updated;
 }
 
-/** Indexe les puces par libellé canonique (gère les « : » à l'intérieur du libellé Immobilier). */
+/** Indexe les puces par libellé court (accepte les anciens libellés longs). */
 export function indexRappelSituationLines(text: string): Map<string, string> {
   const byLabel = new Map<string, string>();
   for (const line of text.split("\n")) {
     if (!line.startsWith("➞ ")) continue;
     for (const label of RM_RECAP_SITUATION_BULLET_LABELS) {
-      if (line.startsWith(`➞ ${label} :`) || line === `➞ ${label}`) {
-        byLabel.set(label, line);
-        break;
+      let matched = false;
+      for (const alias of rappelSituationLabelAliases(label)) {
+        if (line.startsWith(`➞ ${alias} :`)) {
+          const value = line.slice(`➞ ${alias} :`.length);
+          byLabel.set(label, `➞ ${label} :${value}`);
+          matched = true;
+          break;
+        }
+        if (line === `➞ ${alias}`) {
+          byLabel.set(label, `➞ ${label}`);
+          matched = true;
+          break;
+        }
       }
+      if (matched) break;
     }
   }
   return byLabel;
@@ -240,14 +267,15 @@ export function syncRappelSituationFromContact(
   const fresh = buildDefaultRappelSituation(contact, foyer, supplement);
   if (!existing.trim()) return fresh;
 
+  const migrated = migrateRappelSituationPanelLabels(existing);
   const freshByLabel = indexRappelSituationLines(fresh);
 
-  let result = existing;
+  let result = migrated;
   result = syncRappelLabels(result, freshByLabel, CONTACT_SYNC_RAPPEL_LABELS);
   result = syncRappelLabels(result, freshByLabel, EMPTY_ONLY_SYNC_RAPPEL_LABELS, {
     emptyOnly: true,
   });
-  return result;
+  return migrateRappelSituationPanelLabels(result);
 }
 
 /** Rappel de situation — brouillon depuis contact + foyer (Recueil / QPI à compléter). */

@@ -1,4 +1,5 @@
 import type { Contact, NewContact } from "@/lib/api/tauri-contacts";
+import { PROFIL_RISQUE_MAX, PROFIL_RISQUE_SRI_FIELD_LABEL } from "@/lib/contacts/investisseur-sri";
 import { unixToDateInput } from "@/lib/dates/calendar-date";
 
 export const CLIENT_STATUTS = ["AUCUN", "CLIENT", "PROSPECT_CLIENT", "SUSPECT_CLIENT"] as const;
@@ -309,8 +310,8 @@ export function getFieldErrors(formData: NewContact): FieldErrors {
     errors.email = "Adresse email invalide";
   }
   const sri = formData.profil_risque_sri;
-  if (sri !== undefined && (sri < 1 || sri > 7)) {
-    errors.profil_risque_sri = "Doit être entre 1 et 7";
+  if (sri !== undefined && (sri < 1 || sri > PROFIL_RISQUE_MAX)) {
+    errors.profil_risque_sri = `${PROFIL_RISQUE_SRI_FIELD_LABEL} : valeur entre 1 et ${PROFIL_RISQUE_MAX}`;
   }
   return errors;
 }

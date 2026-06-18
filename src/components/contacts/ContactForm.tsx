@@ -54,7 +54,11 @@ import {
 import { toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
-import { formatSriWithDefinition } from "@/lib/contacts/investisseur-sri";
+import {
+  formatSriWithDefinition,
+  PROFIL_RISQUE_MAX,
+  PROFIL_RISQUE_SRI_FIELD_LABEL,
+} from "@/lib/contacts/investisseur-sri";
 import {
   type ClientStatut,
   type Civilite,
@@ -893,12 +897,12 @@ export function ContactForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="profil_risque_sri">Profil investisseur (1-7)</Label>
+                <Label htmlFor="profil_risque_sri">{PROFIL_RISQUE_SRI_FIELD_LABEL}</Label>
                 <Input
                   id="profil_risque_sri"
                   type="number"
                   min={1}
-                  max={7}
+                  max={PROFIL_RISQUE_MAX}
                   value={formData.profil_risque_sri ?? ""}
                   onChange={(e) => {
                     setFormData((prev) => ({

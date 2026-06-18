@@ -1,9 +1,12 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import {
   buildCoupleMemberRioFields,
   buildSoloRioContactFields,
+  formatRioObjectifs,
   mergeRioFieldsOntoContact,
+  normalizeRegimeMatrimonial,
+  parseRioObjectifsText,
   resolveChargesEmprunts,
 } from "./rio-contact-fields";
 
@@ -57,6 +60,34 @@ describe("rio-contact-fields", () => {
     expect(fields.regime_matrimonial).toBeUndefined();
   });
 
+  it("retire la puce Word (U+F0B7) du régime matrimonial", () => {
+    expect(normalizeRegimeMatrimonial("Séparation de biens\uF0B7")).toBe(
+      "Séparation de biens"
+    );
+    const fields = buildSoloRioContactFields({
+      typeDocument: "RIO",
+      nom: "X",
+      prenom: "Y",
+      regimeMatrimonial: "Séparation de biens\uF0B7",
+    });
+    expect(fields.regime_matrimonial).toBe("Séparation de biens");
+  });
+
+  it("formatRioObjectifs et parseRioObjectifsText sont réversibles", () => {
+    const objectifs = ["Préparer votre retraite", "Transmettre votre patrimoine"];
+    const text = formatRioObjectifs(objectifs)!;
+    expect(parseRioObjectifsText(text)).toEqual(objectifs);
+  });
+
+  it("parseRioObjectifsText accepte une ligne par objectif", () => {
+    const text =
+      "Optimiser la rentabilité de vos placements financiers\nPréparer votre retraite";
+    expect(parseRioObjectifsText(text)).toEqual([
+      "Optimiser la rentabilité de vos placements financiers",
+      "Préparer votre retraite",
+    ]);
+  });
+
   it("additionne charges conso et passifs", () => {
     expect(
       resolveChargesEmprunts({
@@ -65,6 +96,15 @@ describe("rio-contact-fields", () => {
         chargesEmpruntsPassifs: 30516,
       })
     ).toBe(32916);
+  });
+
+  it("utilise chargesTotal si détail emprunts absent (saisie manuelle)", () => {
+    expect(
+      resolveChargesEmprunts({
+        typeDocument: "RIO",
+        chargesTotal: 12_000,
+      })
+    ).toBe(12_000);
   });
 
   it("mergeRioFieldsOntoContact préserve date_naissance si RIO sans date", () => {

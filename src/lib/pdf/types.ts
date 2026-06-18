@@ -164,7 +164,7 @@ export interface ExtractedData {
   capaciteEpargneMensuelle?: number;
   
   // === PROFIL INVESTISSEUR ===
-  profilRisque?: number; // SRI 1-7
+  profilRisque?: number; // Profil de risque QPI 1-5
   connaissancesFinancieres?: string; // Faible, Moyen, Élevé
   experienceInvestissement?: string; // Non applicable pour RIO
   aversionRisque?: string;

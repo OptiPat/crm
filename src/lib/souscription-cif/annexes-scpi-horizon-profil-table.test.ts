@@ -5,7 +5,7 @@ describe("buildAnnexesScpiHorizonProfilRowViews", () => {
   it("coche + de 10 ans et le profil SRI du contact", () => {
     const rows = buildAnnexesScpiHorizonProfilRowViews(4);
 
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(5);
     expect(rows[2].horizon).toEqual({
       kind: "check",
       label: "+ de 10 ans",

@@ -1,20 +1,19 @@
 /** Tableau récap — Rapport de mission page 1 (2 lignes). */
 
+import { PROFIL_RISQUE_INVESTISSEUR_LABEL } from "@/lib/contacts/investisseur-sri";
+
 export const RM_RECAP_ROW_DEMANDE_TITLE = "RAPPEL DE LA DEMANDE";
 
 export const RM_RECAP_ROW_SITUATION_TITLE = "RAPPEL DE LA SITUATION DU CLIENT";
 
 export const RM_RECAP_SITUATION_INTRO = `La situation du Client est reprise dans le Recueil d'Information. Le profil financier ainsi que les préférences en matière de durabilité sont repris dans le Questionnaire Profil Investisseur.`;
 
-/** Libellés panneau dossier (longs) — préremplissage et édition. */
-export const RM_PANEL_REVENUS_BULLET_LABEL =
-  "Revenus ; Imposition ; Nombre de parts fiscales ; TMI ou taux de prélèvement";
+/** Libellés courts — panneau dossier et document rapport. */
+export const RM_PANEL_REVENUS_BULLET_LABEL = "Revenus";
 
-export const RM_PANEL_IMMOBILIER_BULLET_LABEL =
-  "Immobilier (à détailler si besoin : résidence principale, secondaire, locative avec revenus associés, appétence, objectif : diversification, rééquilibrage)";
+export const RM_PANEL_IMMOBILIER_BULLET_LABEL = "Immobilier";
 
-export const RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL =
-  "Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme)";
+export const RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL = "Valeurs mobilières";
 
 export const RM_PANEL_EPARGNE_BULLET_LABEL = "Épargne de précaution";
 
@@ -23,32 +22,69 @@ export const RM_PANEL_ENDETTEMENT_BULLET_LABEL = "Endettement";
 export const RM_PANEL_MONTANT_INVESTISSEMENT_BULLET_LABEL =
   "Montant de l'investissement envisagé";
 
-export const RM_RECAP_SITUATION_SRI_BULLET_LABEL = "Profil de risque (SRI + définition)";
+export const RM_RECAP_SITUATION_SRI_BULLET_LABEL =
+  `${PROFIL_RISQUE_INVESTISSEUR_LABEL} (SRI + définition)`;
 
-/** Libellés document rapport (courts). */
-export const RM_RAPPORT_REVENUS_BULLET_LABEL = "Revenus";
+/** Précisions affichées sous le panneau de saisie (pas dans les puces). */
+export const RM_HINT_REVENUS_BULLET_LABEL =
+  "Revenus ; Imposition ; Nombre de parts fiscales ; TMI ou taux de prélèvement";
 
-export const RM_RAPPORT_IMMOBILIER_BULLET_LABEL = "Immobilier";
+export const RM_HINT_IMMOBILIER_BULLET_LABEL =
+  "Immobilier (à détailler si besoin : résidence principale, secondaire, locative avec revenus associés, appétence, objectif : diversification, rééquilibrage)";
 
-export const RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL = "Valeurs mobilières";
+export const RM_HINT_VALEURS_MOBILIERES_BULLET_LABEL =
+  "Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme)";
 
-export const RM_RAPPORT_EPARGNE_BULLET_LABEL = "Épargne de précaution";
+/** Aide contextuelle sous le textarea « Rappel de la situation ». */
+export const RM_RAPPEL_SITUATION_PANEL_HINTS: ReadonlyArray<{
+  label: string;
+  hint: string;
+}> = [
+  { label: RM_PANEL_REVENUS_BULLET_LABEL, hint: `${RM_HINT_REVENUS_BULLET_LABEL} :` },
+  { label: RM_PANEL_IMMOBILIER_BULLET_LABEL, hint: `${RM_HINT_IMMOBILIER_BULLET_LABEL} :` },
+  {
+    label: RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL,
+    hint: `${RM_HINT_VALEURS_MOBILIERES_BULLET_LABEL} :`,
+  },
+];
 
-export const RM_RAPPORT_ENDETTEMENT_BULLET_LABEL = "Endettement";
+/** Libellés document rapport (alias des libellés panneau courts). */
+export const RM_RAPPORT_REVENUS_BULLET_LABEL = RM_PANEL_REVENUS_BULLET_LABEL;
+
+export const RM_RAPPORT_IMMOBILIER_BULLET_LABEL = RM_PANEL_IMMOBILIER_BULLET_LABEL;
+
+export const RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL =
+  RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL;
+
+export const RM_RAPPORT_EPARGNE_BULLET_LABEL = RM_PANEL_EPARGNE_BULLET_LABEL;
+
+export const RM_RAPPORT_ENDETTEMENT_BULLET_LABEL = RM_PANEL_ENDETTEMENT_BULLET_LABEL;
 
 export const RM_RAPPORT_MONTANT_INVESTISSEMENT_BULLET_LABEL =
-  "Montant de l'investissement envisagé";
+  RM_PANEL_MONTANT_INVESTISSEMENT_BULLET_LABEL;
 
-export const RM_RAPPORT_SRI_BULLET_LABEL = "Profil de risque";
+export const RM_RAPPORT_SRI_BULLET_LABEL = PROFIL_RISQUE_INVESTISSEUR_LABEL;
 
-/** Panneau → rapport (libellés de puce). */
+/** Anciens libellés panneau (longs) → libellés courts. */
+export const RM_LEGACY_PANEL_BULLET_LABEL_ALIASES: ReadonlyArray<readonly [string, string]> = [
+  [RM_HINT_REVENUS_BULLET_LABEL, RM_PANEL_REVENUS_BULLET_LABEL],
+  [RM_HINT_IMMOBILIER_BULLET_LABEL, RM_PANEL_IMMOBILIER_BULLET_LABEL],
+  [RM_HINT_VALEURS_MOBILIERES_BULLET_LABEL, RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL],
+  [
+    "Immobilier (à détailler si besoin, résidence principale, secondaire, locative avec revenus associés)",
+    RM_PANEL_IMMOBILIER_BULLET_LABEL,
+  ],
+  [
+    "Profil de risque (SRI + définition)",
+    RM_RECAP_SITUATION_SRI_BULLET_LABEL,
+  ],
+];
+
+/** Panneau → rapport (libellés de puce) — brouillons legacy uniquement. */
 export const RM_PANEL_TO_RAPPORT_BULLET_LABELS: ReadonlyArray<readonly [string, string]> = [
-  [RM_PANEL_REVENUS_BULLET_LABEL, RM_RAPPORT_REVENUS_BULLET_LABEL],
-  [RM_PANEL_IMMOBILIER_BULLET_LABEL, RM_RAPPORT_IMMOBILIER_BULLET_LABEL],
-  [RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL, RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL],
-  [RM_PANEL_EPARGNE_BULLET_LABEL, RM_RAPPORT_EPARGNE_BULLET_LABEL],
-  [RM_PANEL_ENDETTEMENT_BULLET_LABEL, RM_RAPPORT_ENDETTEMENT_BULLET_LABEL],
-  [RM_PANEL_MONTANT_INVESTISSEMENT_BULLET_LABEL, RM_RAPPORT_MONTANT_INVESTISSEMENT_BULLET_LABEL],
+  [RM_HINT_REVENUS_BULLET_LABEL, RM_RAPPORT_REVENUS_BULLET_LABEL],
+  [RM_HINT_IMMOBILIER_BULLET_LABEL, RM_RAPPORT_IMMOBILIER_BULLET_LABEL],
+  [RM_HINT_VALEURS_MOBILIERES_BULLET_LABEL, RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL],
   [RM_RECAP_SITUATION_SRI_BULLET_LABEL, RM_RAPPORT_SRI_BULLET_LABEL],
 ];
 
@@ -57,10 +93,6 @@ export const RM_LEGACY_PANEL_TO_RAPPORT_BULLET_LABELS: ReadonlyArray<readonly [s
   [
     "Immobilier (à détailler si besoin, résidence principale, secondaire, locative avec revenus associés)",
     RM_RAPPORT_IMMOBILIER_BULLET_LABEL,
-  ],
-  [
-    "Valeurs mobilières (à détailler si besoin, détention court, moyen ou long terme)",
-    RM_RAPPORT_VALEURS_MOBILIERES_BULLET_LABEL,
   ],
   ["Épargne de précaution", RM_RAPPORT_EPARGNE_BULLET_LABEL],
 ];
@@ -92,3 +124,12 @@ export const RM_PANEL_BULLET_LABELS_EMPTY_WITH_COLON: readonly string[] = [
   RM_PANEL_MONTANT_INVESTISSEMENT_BULLET_LABEL,
   "Appétences ESG",
 ];
+
+/** Tous les libellés reconnus pour une puce (court + anciens longs). */
+export function rappelSituationLabelAliases(panelLabel: string): readonly string[] {
+  const aliases = new Set<string>([panelLabel]);
+  for (const [legacy, canonical] of RM_LEGACY_PANEL_BULLET_LABEL_ALIASES) {
+    if (canonical === panelLabel) aliases.add(legacy);
+  }
+  return [...aliases];
+}
