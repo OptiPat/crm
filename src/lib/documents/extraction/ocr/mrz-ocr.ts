@@ -14,6 +14,9 @@ export function scoreMrzOcrText(text: string): number {
   }
   let score = mrz.confidence;
   if (isMrzFullyVerified(mrz)) score += 200;
+  // Favorise aussi la passe dont la date d'expiration passe le checksum ICAO,
+  // pour ne pas privilégier une lecture correcte ailleurs mais fausse sur l'expiration.
+  if (mrz.checksVerified.expiryDate) score += 50;
   return score;
 }
 

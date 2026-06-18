@@ -195,6 +195,61 @@ describe("parse-identity-document regions", () => {
   });
 });
 
+describe("parse-identity-document expiration", () => {
+  it("n'affiche pas une date d'expiration MRZ au checksum invalide", () => {
+    const result = parseIdentityFromRegions({
+      rectoText: `
+        Nom: ERIKSSON
+        Prénom: Anna
+      `,
+      versoText: `
+        P<UTOERIKSSON<<ANNA<MARIA<<<<<<<<<<<<<<<<<<<<
+        L898902C<3UTO6908061F4606239ZE184226B<<<<<10
+      `,
+    });
+    expect(result.mrz?.checksVerified.expiryDate).toBe(false);
+    expect(result.dateExpirationFr).toBeUndefined();
+    expect(result.provenance.dateExpiration).toBe("none");
+  });
+
+  it("rejette une date d'expiration visuelle implausible (= naissance)", () => {
+    const fields = extractVisualIdentityFields(`
+      Né(e) le : 15.03.1985
+      Valable jusqu'au 15 03 1985
+    `);
+    expect(fields.dateExpiration).toBeUndefined();
+  });
+
+  it("signale une ancienne CNI FR potentiellement prolongée de 5 ans", () => {
+    const result = parseIdentityFromRegions({
+      rectoText: `
+        Carte valable jusqu'au : 10/01/2019
+      `,
+      versoText: `
+        ${ANONYMOUS_CNI_MRZ_LINE1}
+        ${ANONYMOUS_CNI_MRZ_LINE2}
+      `,
+    });
+    expect(result.mrz?.format).toBe("FRA_LEGACY");
+    expect(result.dateExpirationFr).toBe("10/01/2019");
+    expect(result.expiryMayBeExtended).toBe(true);
+  });
+
+  it("ne signale pas de prolongation pour une expiration récente", () => {
+    const result = parseIdentityFromRegions({
+      rectoText: `
+        Carte valable jusqu'au : 10/01/2031
+      `,
+      versoText: `
+        ${ANONYMOUS_CNI_MRZ_LINE1}
+        ${ANONYMOUS_CNI_MRZ_LINE2}
+      `,
+    });
+    expect(result.dateExpirationFr).toBe("10/01/2031");
+    expect(result.expiryMayBeExtended).toBe(false);
+  });
+});
+
 describe("parse-identity-document legacy", () => {
   it("sans MRZ vérifiable : suggestions visuelles seulement", () => {
     const result = parseIdentityFromText(`

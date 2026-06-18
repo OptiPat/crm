@@ -35,7 +35,11 @@ export function isMrzFullyVerified(mrz: ParsedMrz): boolean {
   return mrz.checksVerified.birthDate && mrz.checksVerified.documentNumber;
 }
 
-const MRZ_LINE_RE = /^[A-Z0-9<]{28,44}$/;
+// Borne haute tolérante : l'OCR ajoute souvent des caractères de remplissage
+// parasites. Le code aval normalise toujours à la longueur canonique
+// (44/36/30) via padEnd/slice, donc une ligne légèrement trop longue reste
+// exploitable au lieu d'être rejetée (sinon la MRZ passeport entière est perdue).
+const MRZ_LINE_RE = /^[A-Z0-9<]{28,50}$/;
 
 /** Ligne MRZ plausible (présence de `<` ou préfixe ICAO / n° carte FR). */
 function looksLikeMrzLine(line: string): boolean {

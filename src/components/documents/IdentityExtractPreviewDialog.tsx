@@ -221,6 +221,14 @@ export function IdentityExtractPreviewDialog({
               <p className="mt-1">{statusMessage}</p>
             </div>
 
+            {extracted?.expiryMayBeExtended && (
+              <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                Ancienne CNI : la validité a peut-être été prolongée de 5 ans (non
+                imprimé sur la carte). Vérifiez la date de fin de validité auprès du
+                titulaire avant d&apos;appliquer.
+              </div>
+            )}
+
             {showNameFields && (
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">

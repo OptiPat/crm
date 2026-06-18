@@ -206,13 +206,33 @@ export function extractVisualIdentityFields(text: string): VisualIdentityFields 
     result.dateNaissance = extractLikelyBirthDate(normalized);
   }
 
-  result.dateExpiration = extractVisualExpiryDate(normalized);
+  result.dateExpiration = extractVisualExpiryDate(normalized, result.dateNaissance);
   result.lieuNaissance = extractLikelyBirthPlace(normalized, result.dateNaissance);
 
   return result;
 }
 
-function extractVisualExpiryDate(text: string): string | undefined {
+/**
+ * Plausibilité d'une date d'expiration de pièce d'identité :
+ * fenêtre raisonnable autour d'aujourd'hui (docs périmés récents inclus,
+ * validité max ~15 ans) et nettement postérieure à la naissance.
+ * Évite de retenir une date de naissance / délivrance / OCR aberrante.
+ */
+export function isPlausibleExpiryDate(dateFr: string, birthDateFr?: string): boolean {
+  const normalized = normalizeIdentityDate(dateFr);
+  if (!normalized) return false;
+  const year = parseInt(normalized.slice(6, 10), 10);
+  const currentYear = new Date().getFullYear();
+  if (year < currentYear - 20 || year > currentYear + 20) return false;
+  if (birthDateFr) {
+    const birth = normalizeIdentityDate(birthDateFr);
+    const birthYear = birth ? parseInt(birth.slice(6, 10), 10) : 0;
+    if (birthYear && year <= birthYear) return false;
+  }
+  return true;
+}
+
+function extractVisualExpiryDate(text: string, birthDateFr?: string): string | undefined {
   const expiryPatterns = [
     new RegExp(`Carte\\s+valable\\s+jusqu['']?au\\s*:?\\s*(${DATE_TOKEN})`, "i"),
     new RegExp(`Valable\\s+jusqu['']?au\\s*:?\\s*(${DATE_TOKEN})`, "i"),
@@ -224,7 +244,7 @@ function extractVisualExpiryDate(text: string): string | undefined {
     const match = text.match(pattern);
     if (match) {
       const date = normalizeIdentityDate(match[1]!);
-      if (date) return date;
+      if (date && isPlausibleExpiryDate(date, birthDateFr)) return date;
     }
   }
 

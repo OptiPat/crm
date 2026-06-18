@@ -17,6 +17,20 @@ export type IdentityUserMessageCode =
   | "mrz_detected_unverified"
   | "partial_visual";
 
+/**
+ * Détecte une ancienne CNI française dont la validité a pu être prolongée de
+ * 5 ans (cartes délivrées 2004–2013 à des majeurs) : la date d'expiration
+ * imprimée (validité 10 ans) tombe alors entre 2014 et 2023.
+ */
+function expiryMayBeFrenchCniExtended(
+  format: string | undefined,
+  dateExpirationFr?: string
+): boolean {
+  if (format !== "FRA_LEGACY" || !dateExpirationFr) return false;
+  const year = parseInt(dateExpirationFr.slice(6, 10), 10);
+  return Number.isInteger(year) && year >= 2014 && year <= 2023;
+}
+
 export function looksLikeIdentityDocument(text: string): boolean {
   if (parseMrzFromText(text)) return true;
   const visual = extractVisualIdentityFields(text);
@@ -38,6 +52,12 @@ export type IdentityExtractResult = {
   dateExpiration?: string;
   /** jj/mm/aaaa */
   dateExpirationFr?: string;
+  /**
+   * Ancienne CNI française (2004–2013) : validité prolongée automatiquement
+   * de 5 ans sans que la date imprimée ne change. La date d'expiration lue
+   * peut donc être périmée à tort — à confirmer auprès du titulaire.
+   */
+  expiryMayBeExtended?: boolean;
   lieuNaissance?: string;
   sex?: "M" | "F";
   documentNumber?: string;
@@ -130,11 +150,6 @@ export function parseIdentityFromRegions(input: {
     dateNaissanceFr = mrz.dateNaissance;
     provenance.dateNaissance = "mrz_verified";
 
-    if (mrz.dateExpiration && mrz.checksVerified.expiryDate) {
-      dateExpirationFr = mrz.dateExpiration;
-      provenance.dateExpiration = "mrz_verified";
-    }
-
     const mrzNom = sanitizePersonName(mrz.surname?.replace(/\s+/g, " ").trim().toUpperCase());
     const mrzPrenomRaw = sanitizePersonName(mrz.givenNames?.replace(/\s+/g, " ").trim());
     if (mrzNom) {
@@ -153,11 +168,14 @@ export function parseIdentityFromRegions(input: {
     provenance.dateNaissance = "visual_suggestion";
   }
 
-  if (!dateExpirationFr && visual.dateExpiration) {
-    dateExpirationFr = visual.dateExpiration;
-    provenance.dateExpiration = "visual_suggestion";
-  } else if (!dateExpirationFr && mrz?.dateExpiration) {
+  // Expiration : MRZ uniquement si son checksum ICAO est valide, sinon
+  // suggestion visuelle validée. Jamais une date MRZ au checksum invalide
+  // (mieux vaut un champ vide qu'une fausse date affichée avec assurance).
+  if (mrz?.dateExpiration && mrz.checksVerified.expiryDate) {
     dateExpirationFr = mrz.dateExpiration;
+    provenance.dateExpiration = "mrz_verified";
+  } else if (visual.dateExpiration) {
+    dateExpirationFr = visual.dateExpiration;
     provenance.dateExpiration = "visual_suggestion";
   }
 
@@ -210,6 +228,7 @@ export function parseIdentityFromRegions(input: {
     dateNaissanceFr,
     dateExpiration: dateExpirationFr ? identityDateFrToIso(dateExpirationFr) : undefined,
     dateExpirationFr,
+    expiryMayBeExtended: expiryMayBeFrenchCniExtended(mrz?.format, dateExpirationFr),
     lieuNaissance,
     sex: mrzVerified ? mrz?.sex : undefined,
     documentNumber: mrzVerified ? mrz?.documentNumber : undefined,
