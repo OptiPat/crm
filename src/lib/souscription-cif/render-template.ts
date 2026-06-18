@@ -110,6 +110,10 @@ export type ScpiLmPagePreview = {
   bodySegmentsSection6Intro?: SouscriptionPreviewSegment[];
   /** § 7 Notes importantes (page 7). */
   bodySegmentsSection7?: SouscriptionPreviewSegment[];
+  /** Repagination dynamique A4 (pages à contenu variable uniquement). */
+  dynamicPagination?: boolean;
+  /** Identifiant stable pour resynchroniser le texte après découpage. */
+  paginationSliceId?: string;
 };
 
 export type ScpiLettreMissionPreview = {

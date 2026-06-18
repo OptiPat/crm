@@ -24,7 +24,7 @@ export function RmRecapTable({
   return (
     <table
       className={cn(
-        "mt-[4mm] w-full table-fixed border-collapse text-left text-[8pt] leading-[1.25] text-neutral-900",
+        "cif-rm-recap-table mt-[4mm] w-full table-fixed border-collapse text-left text-[8pt] leading-[1.25] text-neutral-900",
         className
       )}
     >

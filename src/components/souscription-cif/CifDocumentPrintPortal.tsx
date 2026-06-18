@@ -30,7 +30,10 @@ export function CifDocumentPrintPortal({ documents }: CifDocumentPrintPortalProp
               docIndex > 0 && pageIndex === 0 && "cif-print-doc-start"
             )}
           >
-            <div lang="fr" className={cn(cifDocumentBodyClass, cifDocumentBodyTextClass)}>
+            <div
+              lang="fr"
+              className={cn(cifDocumentBodyClass, cifDocumentBodyTextClass, "cif-print-body")}
+            >
               <ScpiLmBodyContent page={page} />
             </div>
             <footer className={cifDocumentFooterClass}>

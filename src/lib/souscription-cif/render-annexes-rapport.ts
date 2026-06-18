@@ -119,6 +119,8 @@ export function buildAnnexesRapportPreview(
 
   const page5: ScpiLmPagePreview = {
     pageNumber: 5,
+    dynamicPagination: true,
+    paginationSliceId: "annexes-page-5",
     bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE4_INTRO, variables),
     footerSegments,
   };

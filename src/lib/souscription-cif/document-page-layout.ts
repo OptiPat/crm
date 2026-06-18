@@ -9,6 +9,33 @@ export const CIF_DOCUMENT_PAGE_MM = {
   footerPaddingY: 6,
 } as const;
 
+/** Convertit mm CSS en px (96 dpi — aligné navigateur / Tailwind). */
+export function cifMmToPx(mm: number): number {
+  return Math.round(mm * (96 / 25.4));
+}
+
+/**
+ * Hauteur utile max du corps document (zone flex entre pied de page et bord haut).
+ * Fallback quand la mesure DOM off-screen renvoie 0.
+ */
+export function getCifDocumentBodyMaxHeightPx(): number {
+  const pagePx = cifMmToPx(CIF_DOCUMENT_PAGE_MM.height);
+  const footerPx = cifMmToPx(
+    CIF_DOCUMENT_PAGE_MM.footerPaddingY * 2 + 5 /* bordure + ligne 7pt */
+  );
+  return pagePx - footerPx;
+}
+
+/** Hauteur disponible pour le contenu (corps − padding pt/pb internes). */
+export function getCifDocumentBodyContentMaxHeightPx(): number {
+  const paddingPx = cifMmToPx(20 + 8);
+  return getCifDocumentBodyMaxHeightPx() - paddingPx;
+}
+
+/** Largeur utile contenu (210 mm − marges latérales). */
+export function getCifDocumentBodyContentWidthPx(): number {
+  return cifMmToPx(CIF_DOCUMENT_PAGE_MM.width - CIF_DOCUMENT_PAGE_MM.marginX * 2);
+}
 /** Coque page document (hauteur A4 fixe, pied de page en bas). */
 export const cifDocumentPageClass =
   "mx-auto flex w-full max-w-[210mm] h-[297mm] min-h-[297mm] max-h-[297mm] flex-col overflow-hidden bg-white shadow-md";

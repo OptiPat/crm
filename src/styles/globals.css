@@ -147,8 +147,37 @@
   html.cif-printing .cif-print-page {
     box-shadow: none !important;
     margin: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    overflow: hidden !important;
     break-after: page;
     page-break-after: always;
+  }
+
+  html.cif-printing .cif-print-page .cif-print-body {
+    flex: 1 1 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    height: auto !important;
+  }
+
+  html.cif-printing .cif-print-page footer {
+    flex-shrink: 0 !important;
+    margin-top: auto !important;
+  }
+
+  html.cif-printing .cif-rm-recap-table tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  html.cif-printing .cif-rm-recap-table td,
+  html.cif-printing .cif-rm-recap-table th {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
   html.cif-printing .cif-print-page:last-child {
