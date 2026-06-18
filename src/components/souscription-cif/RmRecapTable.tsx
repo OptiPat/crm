@@ -47,10 +47,10 @@ export function RmRecapTable({
       <tbody>
         {rows.map((row) => (
           <tr key={row.title}>
-            <th className="border border-neutral-400 bg-neutral-50 px-1.5 py-1.5 text-left align-top font-semibold whitespace-pre-wrap [text-align-last:auto]">
+            <th className="border border-neutral-400 bg-neutral-50 px-1.5 py-1.5 text-left align-top font-semibold whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0 [text-align-last:auto]">
               {row.title}
             </th>
-            <td className="border border-neutral-400 px-1.5 py-1.5 align-top whitespace-pre-wrap [text-align-last:auto]">
+            <td className="border border-neutral-400 px-1.5 py-1.5 align-top whitespace-pre-wrap break-words [overflow-wrap:anywhere] min-w-0 [text-align-last:auto]">
               <CifPreviewSegments
                 segments={row.contentSegments}
                 onMissingVariableClick={onMissingVariableClick}

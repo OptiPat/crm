@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { formatEuroAmountCif, formatPercentCif } from "@/lib/souscription-cif/build-annexes-scpi-costs";
 import { ANNEXES_RAPPORT_DOCUMENT_TITLE } from "@/lib/souscription-cif/cif-documents";
 import {
@@ -150,6 +150,7 @@ describe("buildAnnexesRapportPreview", () => {
       {
         rappel_demande:
           "Les objectifs du client sont : d'obtenir des revenus complémentaires et d'optimiser la rentabilité de ses placements.",
+        niveau_experience_qpi: "Expérimenté",
       },
       {
         ...defaultSouscriptionDossierFields(),
@@ -180,8 +181,10 @@ describe("buildAnnexesRapportPreview", () => {
     const connaissancesCell = page6.rapportRecapRows?.[3].contentSegments
       .map((s) => (s.kind === "text" ? s.value : ""))
       .join("");
-    expect(connaissancesCell).toContain("Novice");
+    expect(connaissancesCell).toContain("Expérimenté");
+    expect(connaissancesCell).not.toContain("Novice");
     expect(connaissancesCell).toContain("DIC, Statuts");
+    expect(preview.missingKeys).not.toContain("niveau_experience_qpi");
 
     expect(page6.showAnnexesCostsTable).toBe(true);
     const costsIntro = page6.bodySegmentsAfterRecapTable

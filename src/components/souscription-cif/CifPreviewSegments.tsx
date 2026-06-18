@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import type { SouscriptionPreviewSegment } from "@/lib/souscription-cif/render-template";
 import { cifTextUnderlineClass } from "@/lib/souscription-cif/document-page-layout";
 import { cn } from "@/lib/utils";
@@ -7,19 +8,31 @@ type CifPreviewSegmentsProps = {
   onMissingVariableClick?: (key: string) => void;
 };
 
+function renderTextWithLineBreaks(value: string, keyPrefix: string) {
+  const lines = value.split("\n");
+  return lines.map((line, lineIndex) => (
+    <Fragment key={`${keyPrefix}-${lineIndex}`}>
+      {lineIndex > 0 && <br />}
+      {line}
+    </Fragment>
+  ));
+}
+
 export function CifPreviewSegments({ segments, onMissingVariableClick }: CifPreviewSegmentsProps) {
   return (
     <>
       {segments.map((seg, i) =>
         seg.kind === "text" ? (
-          <span key={i}>{seg.value}</span>
+          <span key={i} className="break-words [overflow-wrap:anywhere]">
+            {renderTextWithLineBreaks(seg.value, String(i))}
+          </span>
         ) : seg.kind === "underline" ? (
-          <span key={i} className={cifTextUnderlineClass}>
-            {seg.value}
+          <span key={i} className={cn(cifTextUnderlineClass, "break-words [overflow-wrap:anywhere]")}>
+            {renderTextWithLineBreaks(seg.value, String(i))}
           </span>
         ) : seg.kind === "bold" ? (
-          <span key={i} className="font-bold">
-            {seg.value}
+          <span key={i} className="break-words font-bold [overflow-wrap:anywhere]">
+            {renderTextWithLineBreaks(seg.value, String(i))}
           </span>
         ) : (
           <mark

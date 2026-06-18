@@ -165,8 +165,8 @@ export interface ExtractedData {
   
   // === PROFIL INVESTISSEUR ===
   profilRisque?: number; // Profil de risque QPI 1-5
-  connaissancesFinancieres?: string; // Faible, Moyen, Élevé
-  experienceInvestissement?: string; // Non applicable pour RIO
+  /** Niveau QPI : Novice, Informé ou Expérimenté. */
+  experienceInvestissement?: string;
   aversionRisque?: string;
   /** Résumé durabilité / ESG (section « Sensibilité extra-financière » du QPI). */
   sensibiliteExtraFinanciere?: string;

@@ -84,17 +84,26 @@ function bulletLine(label: string, value?: string | null): string {
   return `➞ ${label}`;
 }
 
-function formatFiscalLine(foyer: Foyer | null): string | null {
-  if (!foyer) return null;
+function formatTrancheImpositionForRappel(raw: string): string {
+  const rate = raw.trim().replace(/^TMI\s*:?\s*/i, "").trim();
+  if (!rate) return raw.trim();
+  return `TMI : ${rate}`;
+}
+
+function formatRevenusLine(contact: Contact | null, foyer: Foyer | null): string | null {
   const parts: string[] = [];
-  if (foyer.revenu_fiscal_reference != null) {
-    parts.push(`RFR ${formatFoyerCurrencyEur(foyer.revenu_fiscal_reference)}`);
+  const revenus = contact?.revenus_annuels;
+  if (revenus != null && revenus > 0) {
+    const formatted = formatFoyerCurrencyEur(revenus);
+    if (formatted) parts.push(formatted);
   }
-  if (foyer.tranche_imposition?.trim()) {
-    parts.push(foyer.tranche_imposition.trim());
+  if (foyer?.tranche_imposition?.trim()) {
+    parts.push(formatTrancheImpositionForRappel(foyer.tranche_imposition));
   }
-  if (foyer.nombre_parts_fiscales != null) {
-    parts.push(`${foyer.nombre_parts_fiscales} part${foyer.nombre_parts_fiscales > 1 ? "s" : ""}`);
+  if (foyer?.nombre_parts_fiscales != null) {
+    parts.push(
+      `${foyer.nombre_parts_fiscales} part${foyer.nombre_parts_fiscales > 1 ? "s" : ""}`
+    );
   }
   return parts.length > 0 ? parts.join(" ; ") : null;
 }
@@ -305,7 +314,7 @@ export function buildDefaultRappelSituation(
     "Résidence fiscale": "France",
     "Situation matrimoniale": formatSituationMatrimonialeLine(contact),
     "Nombre d'enfants": formatNombreEnfants(supplement.nombreEnfants),
-    [RM_PANEL_REVENUS_BULLET_LABEL]: formatFiscalLine(foyer),
+    [RM_PANEL_REVENUS_BULLET_LABEL]: formatRevenusLine(contact, foyer),
     [RM_PANEL_IMMOBILIER_BULLET_LABEL]: immobilier,
     [RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL]: valeursMobilieres,
     [RM_PANEL_EPARGNE_BULLET_LABEL]: null,

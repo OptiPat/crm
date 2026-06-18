@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   buildDefaultRappelSituation,
   buildRappelSituationSupplement,
@@ -49,22 +49,29 @@ const baseContact: Contact = {
 
 describe("buildDefaultRappelSituation", () => {
   it("préremplit age, situation, SRI et données foyer", () => {
+    const contact: Contact = {
+      ...baseContact,
+      revenus_annuels: 85_000,
+    };
     const foyer: Foyer = {
       id: 1,
       nom: "BERNARD",
       type_foyer: "COUPLE",
       revenu_fiscal_reference: 85000,
-      tranche_imposition: "TMI 30%",
+      tranche_imposition: "30%",
       nombre_parts_fiscales: 2.5,
       situation_patrimoniale: "RP + locatif",
       created_at: 0,
       updated_at: 0,
     };
 
-    const text = buildDefaultRappelSituation(baseContact, foyer);
+    const text = buildDefaultRappelSituation(contact, foyer);
     expect(text).toContain("➞ Âge :");
     expect(text).toContain("➞ Nombre d'enfants :");
     expect(text).toContain(`➞ ${RM_PANEL_REVENUS_BULLET_LABEL} :`);
+    expect(text).toContain("85");
+    expect(text).not.toContain("RFR");
+    expect(text).toContain("TMI : 30%");
     expect(text).toContain(`➞ ${RM_PANEL_IMMOBILIER_BULLET_LABEL} :`);
     expect(text).toContain("➞ Épargne de précaution :");
     expect(text).toContain("➞ Endettement :");
@@ -72,7 +79,6 @@ describe("buildDefaultRappelSituation", () => {
     expect(text).toContain("Profil de risque investisseur (SRI + définition)");
     expect(text).toContain("SRI 4/5 — Dynamique");
     expect(text).toContain("marchés volatils");
-    expect(text).toContain("RFR");
     expect(text).toContain("RP + locatif");
   });
 

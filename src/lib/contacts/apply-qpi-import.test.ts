@@ -42,6 +42,7 @@ const qpiData: ExtractedData = {
   dateSignature: "15/06/2026",
   sensibiliteExtraFinanciere:
     "Vous ne souhaitez pas préciser vos préférences en matière de durabilité",
+  experienceInvestissement: "Expérimenté",
 };
 
 describe("applyQpiImport", () => {
@@ -68,7 +69,7 @@ describe("applyQpiImport", () => {
     expect(payload.telephone).toBe("+33600000000");
   });
 
-  it("enregistre date de signature et durabilité sur le document QPI", async () => {
+  it("enregistre date de signature, durabilité et expérience sur le document QPI", async () => {
     await applyQpiImport(qpiData, {
       effectiveContactId: 42,
       uploadedFile: { path: "/tmp/qpi.pdf", name: "qpi.pdf", size: 1000 },
@@ -79,5 +80,6 @@ describe("applyQpiImport", () => {
     expect(doc.type_document).toBe("QPI");
     expect(doc.date_document).toBe("2026-06-15");
     expect(doc.sensibilite_extra_financiere).toBe(qpiData.sensibiliteExtraFinanciere);
+    expect(doc.experience_investissement).toBe("Expérimenté");
   });
 });

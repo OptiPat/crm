@@ -15,13 +15,8 @@ const STELLIUM_PROFILE_TO_SRI: Readonly<Record<string, number>> = {
   offensif: 5,
 };
 
-const KNOWLEDGE_TO_LEVEL: Readonly<Record<string, string>> = {
-  novice: "Faible",
-  informé: "Moyen",
-  informe: "Moyen",
-  expérimenté: "Élevé",
-  experimente: "Élevé",
-};
+const EXPERIENCE_LEVELS = ["Novice", "Informé", "Expérimenté"] as const;
+type ExperienceLevel = (typeof EXPERIENCE_LEVELS)[number];
 
 function splitNomPrenom(value: string): { nom?: string; prenom?: string } {
   const parts = value.trim().split(/\s+/).filter(Boolean);
@@ -57,16 +52,22 @@ function mapProfilToSri(label: string | undefined): number | undefined {
   return STELLIUM_PROFILE_TO_SRI[normalizeProfileLabel(label)];
 }
 
-function extractConnaissanceLevel(text: string): string | undefined {
-  const checked = text.match(/(?:✓|☑)\s*(Novice|Informé|Expérimenté)(?=\s|$)/i);
-  const raw = checked?.[1];
-  if (!raw) return undefined;
-  return KNOWLEDGE_TO_LEVEL[normalizeProfileLabel(raw)] ?? raw;
-}
+/** Niveau QPI : Novice, Informé ou Expérimenté (coche immédiatement avant le libellé retenu). */
+export function extractExperienceLevel(text: string): ExperienceLevel | undefined {
+  const noviceIdx = text.search(/\bNovice\b/i);
+  if (noviceIdx < 0) return undefined;
+  const slice = text.slice(Math.max(0, noviceIdx - 20), noviceIdx + 140);
 
-function extractExperienceLabel(text: string): string | undefined {
-  const checked = text.match(/(?:✓|☑)\s*(Novice|Informé|Expérimenté)(?=\s|$)/i);
-  return checked?.[1];
+  const checked = slice.match(/(?:✓|☑)\s*(Novice|Informé|Expérimenté)(?=\s|$)/i);
+  if (!checked?.[1]) return undefined;
+
+  const key = normalizeProfileLabel(checked[1]);
+  const map: Readonly<Record<string, ExperienceLevel>> = {
+    novice: "Novice",
+    informe: "Informé",
+    experimente: "Expérimenté",
+  };
+  return map[key];
 }
 
 /** Première phrase de la section « Sensibilité extra-financière » (résumé durabilité / ESG). */
@@ -118,12 +119,7 @@ export function parseStelliumQpi(rawText: string): ExtractedData {
   data.profilRisque = mapProfilToSri(profilLabel);
   data.aversionRisque = profilLabel;
 
-  const connaissance = extractConnaissanceLevel(text.slice(0, 5000));
-  if (connaissance) {
-    data.connaissancesFinancieres = connaissance;
-  }
-
-  const experience = extractExperienceLabel(text.slice(0, 5000));
+  const experience = extractExperienceLevel(text.slice(0, 5000));
   if (experience) {
     data.experienceInvestissement = experience;
   }

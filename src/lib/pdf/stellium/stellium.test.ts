@@ -330,8 +330,7 @@ describe("Stellium — QPI solo Dupont 2026", () => {
     expect(data.aversionRisque).toBe("Dynamique");
   });
 
-  it("extrait le niveau de connaissances", () => {
-    expect(data.connaissancesFinancieres).toBe("Élevé");
+  it("extrait le niveau d'expérience (Novice, Informé ou Expérimenté)", () => {
     expect(data.experienceInvestissement).toBe("Expérimenté");
     expect(data.sensibiliteExtraFinanciere).toBe(
       "Vous ne souhaitez pas préciser vos préférences en matière de durabilité"

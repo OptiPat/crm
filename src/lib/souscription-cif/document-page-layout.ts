@@ -15,14 +15,15 @@ export const cifDocumentPageClass =
 
 /** Zone corps — occupe l'espace restant au-dessus du pied de page (pas de scroll). */
 export const cifDocumentBodyClass =
-  "min-h-0 flex-1 overflow-hidden px-[20mm] pt-[20mm] pb-[8mm]";
+  "min-h-0 flex-1 overflow-x-hidden overflow-y-hidden px-[20mm] pt-[20mm] pb-[8mm]";
 
 /** Corps document — 10 pt, interligne proche Word, paragraphes justifiés. */
 export const cifDocumentBodyTextClass =
   "cif-document-comfortaa font-comfortaa text-[10pt] leading-[1.15] text-neutral-900 text-justify [text-align-last:left] hyphens-auto";
 
 /** Bloc de texte corps (paragraphes préformatés). */
-export const cifDocumentBodyProseClass = "whitespace-pre-wrap";
+export const cifDocumentBodyProseClass =
+  "whitespace-pre-wrap break-words [overflow-wrap:anywhere]";
 
 /** Pied de page document (bas de page A4). */
 export const cifDocumentFooterClass =

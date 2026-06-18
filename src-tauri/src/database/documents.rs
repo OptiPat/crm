@@ -15,14 +15,15 @@ fn map_document_row(row: &rusqlite::Row<'_>) -> Result<super::models::Document> 
         date_document: row.get(8)?,
         notes: row.get(9)?,
         sensibilite_extra_financiere: row.get(10)?,
-        created_at: row.get(11)?,
-        updated_at: row.get(12)?,
+        experience_investissement: row.get(11)?,
+        created_at: row.get(12)?,
+        updated_at: row.get(13)?,
     })
 }
 
 const DOCUMENT_SELECT: &str = "SELECT id, contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
                     taille_fichier, mime_type, date_document, notes, sensibilite_extra_financiere,
-                    created_at, updated_at
+                    experience_investissement, created_at, updated_at
              FROM documents";
 
 impl super::Database {
@@ -61,8 +62,8 @@ impl super::Database {
         self.conn.execute(
             "INSERT INTO documents (contact_id, foyer_id, type_document, nom_fichier, chemin_fichier,
                                    taille_fichier, mime_type, date_document, notes,
-                                   sensibilite_extra_financiere) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                                   sensibilite_extra_financiere, experience_investissement) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 &document.contact_id,
                 &document.foyer_id,
@@ -74,6 +75,7 @@ impl super::Database {
                 &document.date_document,
                 &document.notes,
                 &document.sensibilite_extra_financiere,
+                &document.experience_investissement,
             ],
         )?;
 
@@ -103,8 +105,9 @@ impl super::Database {
                 date_document = ?5,
                 notes = ?6,
                 sensibilite_extra_financiere = ?7,
+                experience_investissement = ?8,
                 updated_at = unixepoch()
-            WHERE id = ?8",
+            WHERE id = ?9",
             params![
                 &document.contact_id,
                 &document.foyer_id,
@@ -113,6 +116,7 @@ impl super::Database {
                 &document.date_document,
                 &document.notes,
                 &document.sensibilite_extra_financiere,
+                &document.experience_investissement,
                 id
             ],
         )?;

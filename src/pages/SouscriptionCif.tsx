@@ -118,6 +118,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     () => initialDraft?.selectedContactId
   );
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [contactDocuments, setContactDocuments] = useState<Document[]>([]);
   const [dossiersByContactId, setDossiersByContactId] = useState<
     Record<string, SouscriptionDossierFields>
   >(() => initialDraft?.dossiersByContactId ?? {});
@@ -260,6 +261,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   useEffect(() => {
     const selection = getReadyContactSelection(selectedContactId, selectedContact);
     if (!selection || !isCifProductTypeAvailable(productType)) {
+      setContactDocuments([]);
       return;
     }
 
@@ -343,6 +345,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
           ? await loadFoyerInvestissements(contact.foyer_id, foyerMembers)
           : await getInvestissementsByContact(contactId);
         if (!cancelled && selectedContactIdRef.current === contactId) {
+          setContactDocuments(documents);
           syncDossierFromContact(foyer, documents, foyerMembers, investissements);
         }
       });
@@ -368,8 +371,8 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   );
 
   const variables = useMemo(
-    () => buildSouscriptionVariables(selectedContact, cgp, dossier),
-    [selectedContact, cgp, dossier]
+    () => buildSouscriptionVariables(selectedContact, cgp, dossier, contactDocuments),
+    [selectedContact, cgp, dossier, contactDocuments]
   );
 
   const lettreMissionPreview = useMemo(

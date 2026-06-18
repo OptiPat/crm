@@ -171,7 +171,6 @@ export function ExtractedDataPreviewAdvanced({
     (formData.profilRisque !== undefined ||
       Boolean(
         formData.sensibiliteExtraFinanciere ||
-          formData.connaissancesFinancieres ||
           formData.experienceInvestissement
       ));
 
@@ -1259,12 +1258,10 @@ export function ExtractedDataPreviewAdvanced({
                   </div>
                 )}
                 {(formData.sensibiliteExtraFinanciere ||
-                  formData.connaissancesFinancieres ||
                   formData.experienceInvestissement) && (
                   <div className="space-y-2 md:col-span-2 rounded-lg border bg-muted/40 p-3">
                     <p className="text-xs text-muted-foreground">
-                      Durabilité enregistrée sur le document QPI. Connaissances / expérience :
-                      lecture indicative uniquement.
+                      Durabilité et expérience enregistrées sur le document QPI.
                     </p>
                     {formData.sensibiliteExtraFinanciere && (
                       <p className="text-sm">
@@ -1272,17 +1269,10 @@ export function ExtractedDataPreviewAdvanced({
                         {formData.sensibiliteExtraFinanciere}
                       </p>
                     )}
-                    {(formData.connaissancesFinancieres ||
-                      formData.experienceInvestissement) && (
-                      <p className="text-sm text-muted-foreground">
-                        {[
-                          formData.connaissancesFinancieres &&
-                            `Connaissances : ${formData.connaissancesFinancieres}`,
-                          formData.experienceInvestissement &&
-                            `Expérience : ${formData.experienceInvestissement}`,
-                        ]
-                          .filter(Boolean)
-                          .join(" • ")}
+                    {formData.experienceInvestissement && (
+                      <p className="text-sm">
+                        <span className="font-medium">Expérience :</span>{" "}
+                        {formData.experienceInvestissement}
                       </p>
                     )}
                   </div>

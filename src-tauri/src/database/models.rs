@@ -187,6 +187,8 @@ pub struct Document {
     pub notes: Option<String>,
     /// Résumé durabilité / ESG extrait du QPI (section « Sensibilité extra-financière »).
     pub sensibilite_extra_financiere: Option<String>,
+    /// Niveau QPI extrait du document (Novice, Informé, Expérimenté).
+    pub experience_investissement: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -203,6 +205,7 @@ pub struct NewDocument {
     pub date_document: Option<String>,
     pub notes: Option<String>,
     pub sensibilite_extra_financiere: Option<String>,
+    pub experience_investissement: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

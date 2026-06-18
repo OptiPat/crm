@@ -1,5 +1,7 @@
-﻿import type { Contact } from "@/lib/api/tauri-contacts";
+import type { Contact } from "@/lib/api/tauri-contacts";
+import type { Document } from "@/lib/api/tauri-documents";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import { latestQpiExperienceInvestissement } from "@/lib/documents/qpi-document-utils";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatDateInputFr } from "@/lib/souscription-cif/format-date-input-fr";
 import { normalizeRappelSituationClient } from "@/lib/souscription-cif/build-rappel-situation-default";
@@ -38,7 +40,8 @@ function cgpFormulePolitesse(cgp: CgpConfig | null): string | null {
 export function buildSouscriptionVariables(
   contact: Contact | null,
   cgp: CgpConfig | null,
-  dossier: SouscriptionDossierFields
+  dossier: SouscriptionDossierFields,
+  documents: readonly Document[] = []
 ): Record<string, string | null> {
   const sirenRaw = cgp?.cif_siren?.trim() || null;
   const sirenCompact = sirenRaw ? sirenRaw.replace(/\s+/g, "") : null;
@@ -59,6 +62,7 @@ export function buildSouscriptionVariables(
     date_der: formatDateInputFr(dossier.dateDer),
     date_rio: formatDateInputFr(dossier.dateRio),
     date_qpi: formatDateInputFr(dossier.dateQpi),
+    niveau_experience_qpi: latestQpiExperienceInvestissement(documents),
     objectifs_client: dossier.objectifsClient.trim() || null,
     rappel_demande: dossier.rappelDemande.trim() || null,
     rappel_situation_client:

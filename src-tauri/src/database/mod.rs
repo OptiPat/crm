@@ -520,6 +520,8 @@ impl Database {
         self.migrate_add_lieu_naissance()?;
         self.migrate_add_contact_rio_financial_fields()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
+        self.migrate_documents_connaissances_financieres()?;
+        self.migrate_documents_experience_investissement()?;
         self.migrate_contacts_profil_risque_echelle_5()?;
         self.migrate_drop_contacts_date_expiration_identite()?;
 
@@ -536,6 +538,41 @@ impl Database {
             [],
         )?;
         println!("✅ Migration sensibilite_extra_financiere appliquée");
+        Ok(())
+    }
+
+    fn migrate_documents_connaissances_financieres(&self) -> Result<()> {
+        if self.table_has_column("documents", "connaissances_financieres")? {
+            return Ok(());
+        }
+        println!("🔄 Migration : connaissances_financieres sur documents...");
+        self.conn.execute(
+            "ALTER TABLE documents ADD COLUMN connaissances_financieres TEXT",
+            [],
+        )?;
+        println!("✅ Migration connaissances_financieres appliquée");
+        Ok(())
+    }
+
+    fn migrate_documents_experience_investissement(&self) -> Result<()> {
+        if self.table_has_column("documents", "experience_investissement")? {
+            return Ok(());
+        }
+        if self.table_has_column("documents", "connaissances_financieres")? {
+            println!("🔄 Migration : renommage connaissances_financieres → experience_investissement...");
+            self.conn.execute(
+                "ALTER TABLE documents RENAME COLUMN connaissances_financieres TO experience_investissement",
+                [],
+            )?;
+            println!("✅ Migration experience_investissement appliquée (rename)");
+            return Ok(());
+        }
+        println!("🔄 Migration : experience_investissement sur documents...");
+        self.conn.execute(
+            "ALTER TABLE documents ADD COLUMN experience_investissement TEXT",
+            [],
+        )?;
+        println!("✅ Migration experience_investissement appliquée");
         Ok(())
     }
 

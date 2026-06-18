@@ -85,6 +85,7 @@ export async function applyQpiImport(
           : undefined,
       notes: options.formNotes,
       sensibilite_extra_financiere: data.sensibiliteExtraFinanciere?.trim() || undefined,
+      experience_investissement: data.experienceInvestissement?.trim() || undefined,
     };
     await createDocument(doc);
   }

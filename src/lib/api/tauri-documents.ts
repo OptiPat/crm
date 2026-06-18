@@ -17,6 +17,8 @@ export interface Document {
   notes?: string;
   /** Résumé durabilité / ESG extrait du QPI. */
   sensibilite_extra_financiere?: string;
+  /** Niveau QPI extrait du document (Novice, Informé, Expérimenté). */
+  experience_investissement?: string;
   created_at: number;
   updated_at: number;
 }
@@ -32,6 +34,7 @@ export interface NewDocument {
   date_document?: string;
   notes?: string;
   sensibilite_extra_financiere?: string;
+  experience_investissement?: string;
 }
 
 export async function getAllDocuments(): Promise<Document[]> {

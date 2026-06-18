@@ -47,12 +47,20 @@ function shouldShowFinancialNomProduit(typeProduit: string): boolean {
 function formatFinancierEntry(inv: Investissement): string {
   const typeLabel = formatNomProduit(inv.type_produit);
   const name = inv.nom_produit?.trim();
-  const label =
-    shouldShowFinancialNomProduit(inv.type_produit) && name ? `${typeLabel} (${name})` : typeLabel;
+  const dureeDemembrement = formatDemembrementDureeLabel(inv);
+  const showNom = shouldShowFinancialNomProduit(inv.type_produit) && name;
+
+  let label: string;
+  if (showNom && dureeDemembrement) {
+    label = `${typeLabel} ${dureeDemembrement} (${name})`;
+  } else if (showNom) {
+    label = `${typeLabel} (${name})`;
+  } else {
+    label = typeLabel;
+  }
 
   const parts = [label];
-  const dureeDemembrement = formatDemembrementDureeLabel(inv);
-  if (dureeDemembrement) parts.push(dureeDemembrement);
+  if (dureeDemembrement && !showNom) parts.push(dureeDemembrement);
   const amount = primaryAmountCentimes(inv);
   if (amount != null) {
     parts.push(formatEuroCentimes(amount));

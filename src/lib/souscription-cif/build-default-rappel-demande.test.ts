@@ -29,6 +29,8 @@ describe("buildDefaultRappelDemande", () => {
         },
         null
       )
-    ).toBe("Le client souhaite compléter ses revenus ; Préparer sa retraite");
+    ).toBe(
+      "Le client souhaite compléter ses revenus et préparer sa retraite"
+    );
   });
 });

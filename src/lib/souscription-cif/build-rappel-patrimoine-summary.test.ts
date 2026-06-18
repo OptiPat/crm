@@ -109,8 +109,8 @@ describe("build-rappel-patrimoine-summary", () => {
     ];
 
     const text = resolveRappelValeursMobilieresLine(investissements);
-    expect(text).toContain("SCPI Démembrement (Transitions Europe) viager");
-    expect(text).toContain("SCPI Démembrement (Epargne Pierre Europe) temporaire 8 ans");
+    expect(text).toContain("SCPI Démembrement viager (Transitions Europe)");
+    expect(text).toContain("SCPI Démembrement temporaire 8 ans (Epargne Pierre Europe)");
     expect(text).toContain("SCPI (Alta Convictions)");
     expect(text).toContain("FIP/FCPI (Fonds Innov)");
     expect(text).toContain("FCPR / FPCI (Private Equity X)");
