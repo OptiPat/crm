@@ -20,14 +20,13 @@ import {
   AlertCircle,
   CheckCircle2,
   Wallet,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import type { Investissement, NewInvestissement, OrigineInvestissement } from "@/lib/api/tauri-investissements";
 import { getInvestissementsByContact, updateInvestissement, createInvestissement } from "@/lib/api/tauri-investissements";
 import { createInvestissementValorisation } from "@/lib/api/tauri-investissement-valorisations";
-import {
-  getEffectiveEncoursCentimes,
-} from "@/lib/investissements/investissement-encours";
 import { formatNomProduit } from "@/lib/investissements/investissement-display";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { getContactById, getContactsByFoyer } from "@/lib/api/tauri-contacts";
@@ -43,6 +42,13 @@ import {
   usesRioEncoursMontant,
 } from "@/lib/documents/rio-investissement-extras";
 import { isImmobilierFinancingType } from "@/lib/investissements/investissement-immo-financing";
+import {
+  findCompatibleExistingInvestissements,
+  matchRioExtractedInvestissements,
+  buildRioMatchContext,
+  referenceMontantEuro,
+} from "@/lib/documents/rio-investissement-match";
+import { resolvePartenaireIdForRioLabel } from "@/lib/documents/rio-product-partenaire";
 import { toast } from "sonner";
 import { RioImportStepper } from "./RioImportStepper";
 
@@ -117,13 +123,6 @@ function usesRioEncoursField(type: string): boolean {
   return usesRioEncoursMontant(type);
 }
 
-function referenceMontantEuro(inv: Investissement, type: string): number {
-  if (usesRioEncoursField(type)) {
-    return getEffectiveEncoursCentimes(inv) / 100;
-  }
-  return inv.montant_initial ? inv.montant_initial / 100 : 0;
-}
-
 function buildComparisonImmoExtras(comp: InvestissementComparison): Partial<NewInvestissement> {
   return buildImmoInvestissementExtras({
     editedType: comp.editedType,
@@ -169,15 +168,6 @@ const PRODUCT_TYPES = [
   { value: "AUTRE", label: "Autre" },
 ];
 
-function normalizeForComparison(str: string): string {
-  return str
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]/g, "")
-    .trim();
-}
-
 function extractInvestissementsFromRIO(data: ExtractedData): ExtractedInvestissement[] {
   return extractPatrimoineItemsFromRio(data).map((item) => ({
       id: item.id,
@@ -190,76 +180,6 @@ function extractInvestissementsFromRIO(data: ExtractedData): ExtractedInvestisse
       loyerAnnuel: item.loyerAnnuel,
       dateFinCredit: item.dateFinCredit,
     }));
-}
-
-const COMPATIBLE_TYPES: Record<string, string[]> = {
-  IMMOBILIER: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "RP", "RS", "LOCATIF", "RESIDENCE_PRINCIPALE"],
-  LOCATIF: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "LOCATIF"],
-  PINEL: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "LOCATIF"],
-  LMNP: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "LOCATIF"],
-  LMP: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "LOCATIF"],
-  RP: ["IMMOBILIER", "RP", "RESIDENCE_PRINCIPALE"],
-  RESIDENCE_PRINCIPALE: ["IMMOBILIER", "RP", "RESIDENCE_PRINCIPALE"],
-  ASSURANCE_VIE: ["ASSURANCE_VIE"],
-  PER: ["PER"],
-  SCPI: ["SCPI", "SCPI_DEMEMBREMENT"],
-  SCPI_DEMEMBREMENT: ["SCPI", "SCPI_DEMEMBREMENT"],
-  EPARGNE_BANCAIRE: ["EPARGNE_BANCAIRE"],
-};
-
-function findCompatibleExisting(
-  extractedType: string,
-  existingInvestissements: Investissement[]
-): Investissement[] {
-  const compatibleTypes = COMPATIBLE_TYPES[extractedType] || [extractedType];
-  return existingInvestissements.filter(inv => 
-    compatibleTypes.includes(inv.type_produit) || 
-    Object.values(COMPATIBLE_TYPES).some(types => 
-      types.includes(extractedType) && types.includes(inv.type_produit)
-    )
-  );
-}
-
-function findBestMatch(
-  extracted: ExtractedInvestissement,
-  existingInvestissements: Investissement[]
-): Investissement | undefined {
-  const extractedNormalized = normalizeForComparison(extracted.label);
-  const extractedType = extracted.type;
-
-  let bestMatch: Investissement | undefined;
-  let bestScore = 0;
-
-  for (const existing of existingInvestissements) {
-    let score = 0;
-    const existingNomNormalized = normalizeForComparison(existing.nom_produit);
-    const existingType = existing.type_produit;
-
-    if (extractedNormalized === existingNomNormalized) {
-      score += 100;
-    } else if (extractedNormalized.includes(existingNomNormalized) || 
-               existingNomNormalized.includes(extractedNormalized)) {
-      score += 50;
-    } else if (extractedNormalized.substring(0, 6) === existingNomNormalized.substring(0, 6)) {
-      score += 30;
-    }
-
-    if (extractedType === existingType) {
-      score += 40;
-    } else if (
-      (extractedType === "IMMOBILIER" && ["LMNP", "LMP", "PINEL", "RP", "RS", "LOCATIF"].includes(existingType)) ||
-      (["LMNP", "LMP", "PINEL", "RP", "RS", "LOCATIF"].includes(extractedType) && existingType === "IMMOBILIER")
-    ) {
-      score += 20;
-    }
-
-    if (score > bestScore && score >= 50) {
-      bestScore = score;
-      bestMatch = existing;
-    }
-  }
-
-  return bestMatch;
 }
 
 function formatEuro(montant: number): string {
@@ -315,6 +235,9 @@ export function RioUpdateComparisonDialog({
   const [existingInvestissements, setExistingInvestissements] = useState<Investissement[]>([]);
   const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [comparisons, setComparisons] = useState<InvestissementComparison[]>([]);
+  const [listFilter, setListFilter] = useState<"action" | "all">("action");
+  const [showUnchanged, setShowUnchanged] = useState(false);
+  const [expandedAdvanced, setExpandedAdvanced] = useState<Set<string>>(new Set());
   const completingRef = useRef(false);
 
   const handleDialogOpenChange = (next: boolean) => {
@@ -360,16 +283,15 @@ export function RioUpdateComparisonDialog({
       setExistingInvestissements(invs);
       
       const extracted = extractInvestissementsFromRIO(extractedData);
-      const usedExistingIds = new Set<number>();
+      const matchContext = buildRioMatchContext(parts);
+      const matches = matchRioExtractedInvestissements(extracted, invs, matchContext);
       const newComparisons: InvestissementComparison[] = [];
 
       for (const ext of extracted) {
-        const availableInvs = invs.filter(i => !usedExistingIds.has(i.id));
-        const match = findBestMatch(ext, availableInvs);
-        const compatibleExisting = findCompatibleExisting(ext.type, invs);
+        const match = matches.get(ext.id) ?? null;
+        const compatibleExisting = findCompatibleExistingInvestissements(ext.type, invs);
         
         if (match) {
-          usedExistingIds.add(match.id);
           const oldMontant = referenceMontantEuro(match, ext.type);
           const isChanged = Math.abs(oldMontant - ext.montant) > 1;
 
@@ -408,7 +330,7 @@ export function RioUpdateComparisonDialog({
             label: ext.label,
             editedLabel: ext.label,
             editedType: ext.type,
-            selectedPartenaireId: null,
+            selectedPartenaireId: resolvePartenaireIdForRioLabel(ext.label, parts),
             linkedToExistingId: null,
             newMontant: ext.montant,
             editedMontant: ext.montant,
@@ -463,6 +385,24 @@ export function RioUpdateComparisonDialog({
     
     return { toUpdate, toAdd, unchanged, avecMoi, patrimoineAvant, patrimoineApres, difference, pourcentage, byCategory };
   }, [comparisons]);
+
+  const unchangedCount = stats.unchanged.length;
+  const actionCount = stats.toUpdate.length + stats.toAdd.length;
+
+  const shouldShowComparison = (comp: InvestissementComparison): boolean => {
+    if (listFilter === "all") return true;
+    if (!comp.isNew && !comp.isChanged) return showUnchanged;
+    return true;
+  };
+
+  const toggleAdvanced = (id: string) => {
+    setExpandedAdvanced((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handleToggleUpdate = (id: string) => {
     setComparisons(prev => prev.map(c => 
@@ -743,10 +683,35 @@ export function RioUpdateComparisonDialog({
   };
 
   // Fonction de rendu d'un item d'investissement (pour éviter la duplication)
-  const renderInvestissementItem = (comp: InvestissementComparison) => (
+  const renderCompactUnchangedItem = (comp: InvestissementComparison) => (
+    <div
+      key={comp.id}
+      className="flex items-center gap-2 p-2 border rounded-lg bg-gray-50/80 text-sm opacity-80"
+    >
+      <Checkbox
+        checked={comp.selectedForUpdate}
+        onCheckedChange={() => handleToggleUpdate(comp.id)}
+      />
+      {getTypeIcon(comp.type)}
+      <span className="font-medium flex-1 truncate">{comp.label}</span>
+      <span className="text-muted-foreground shrink-0">{formatEuro(comp.editedMontant)}</span>
+      <Badge variant="outline" className="text-xs shrink-0">
+        Inchangé
+      </Badge>
+    </div>
+  );
+
+  const renderInvestissementItem = (comp: InvestissementComparison) => {
+    if (!comp.isNew && !comp.isChanged) {
+      return renderCompactUnchangedItem(comp);
+    }
+
+    const showAdvanced = expandedAdvanced.has(comp.id);
+
+    return (
     <div 
       key={comp.id}
-      className={`p-3 border rounded-lg ${
+      className={`p-3 border rounded-lg min-w-0 max-w-full overflow-hidden ${
         !comp.selectedForUpdate 
           ? "bg-gray-50 border-gray-200 opacity-60"
           : comp.linkedToExistingId === null
@@ -761,7 +726,7 @@ export function RioUpdateComparisonDialog({
             checked={comp.selectedForUpdate}
             onCheckedChange={() => handleToggleUpdate(comp.id)}
           />
-          <div className="flex-1 flex items-center gap-2 flex-wrap">
+          <div className="flex-1 flex items-center gap-2 flex-wrap min-w-0">
             {getTypeIcon(comp.type)}
             <span className="font-medium text-sm">{comp.label}</span>
             {usesRioEncoursField(comp.editedType) && (
@@ -777,7 +742,7 @@ export function RioUpdateComparisonDialog({
                   type="number"
                   value={comp.editedMontant}
                   onChange={(e) => handleChangeMontant(comp.id, parseFloat(e.target.value) || 0)}
-                  className="h-8 text-sm text-right w-28"
+                  className="h-8 text-sm text-right w-full max-w-[7rem] shrink-0"
                   disabled={!comp.selectedForUpdate}
                 />
                 <span className="text-sm text-muted-foreground">€</span>
@@ -802,7 +767,7 @@ export function RioUpdateComparisonDialog({
                   type="number"
                   value={comp.editedMontant}
                   onChange={(e) => handleChangeMontant(comp.id, parseFloat(e.target.value) || 0)}
-                  className="h-8 text-sm text-right w-28"
+                  className="h-8 text-sm text-right w-full max-w-[7rem] shrink-0"
                   disabled={!comp.selectedForUpdate}
                 />
                 <span className="text-sm text-muted-foreground">€</span>
@@ -814,16 +779,16 @@ export function RioUpdateComparisonDialog({
         
         {/* Ligne 2 : Dropdown associer à */}
         {comp.selectedForUpdate && (
-          <div className="ml-8 space-y-2">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground w-20">Associer à :</span>
+          <div className="ml-0 sm:ml-8 space-y-2 min-w-0">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 min-w-0">
+              <span className="text-xs text-muted-foreground shrink-0 sm:w-20">Associer à :</span>
               <select
                 value={comp.linkedToExistingId === null ? "new" : comp.linkedToExistingId.toString()}
                 onChange={(e) => {
                   const val = e.target.value;
                   handleChangeLinkToExisting(comp.id, val === "new" ? null : parseInt(val));
                 }}
-                className="text-sm border rounded px-2 py-1 flex-1"
+                className="text-sm border rounded px-2 py-1 flex-1 min-w-0 w-full"
               >
                 <option value="new">Créer nouvel investissement</option>
                 {comp.compatibleExisting.length > 0 && (
@@ -850,9 +815,9 @@ export function RioUpdateComparisonDialog({
               
               {/* Badge */}
               {comp.linkedToExistingId === null ? (
-                <Badge className="bg-green-600 text-xs">Nouveau</Badge>
+                <Badge className="bg-green-600 text-xs shrink-0 self-start sm:self-center">Nouveau</Badge>
               ) : (
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-xs shrink-0 self-start sm:self-center">
                   MAJ {comp.oldMontant ? `(${formatEuro(comp.oldMontant)} → ${formatEuro(comp.editedMontant)})` : ""}
                 </Badge>
               )}
@@ -860,10 +825,10 @@ export function RioUpdateComparisonDialog({
             
             {/* Détails du nouvel investissement */}
             {comp.linkedToExistingId === null && (
-              <div className="p-3 bg-green-50/50 border border-green-200 rounded-lg space-y-3">
+              <div className="p-3 bg-green-50/50 border border-green-200 rounded-lg space-y-3 min-w-0">
                 <div className="text-xs font-medium text-green-700">Détails du nouvel investissement</div>
                 
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
                   <div>
                     <label className="text-xs text-muted-foreground">Nom</label>
                     <Input
@@ -898,15 +863,15 @@ export function RioUpdateComparisonDialog({
                       ))}
                     </select>
                   </div>
-                  <div>
+                  <div className="min-w-0 sm:col-span-2">
                     <label className="text-xs text-muted-foreground">Origine</label>
                     {unifiedTriUx && comp.linkedToExistingId === null ? (
-                      <div className="flex gap-1 mt-1">
+                      <div className="grid grid-cols-2 gap-1 mt-1 w-full">
                         <Button
                           type="button"
                           variant={comp.selectedOrigine === "MON_CONSEIL" ? "default" : "outline"}
                           size="sm"
-                          className={`flex-1 h-8 text-xs ${comp.selectedOrigine === "MON_CONSEIL" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                          className={`h-8 text-xs px-2 ${comp.selectedOrigine === "MON_CONSEIL" ? "bg-green-600 hover:bg-green-700" : ""}`}
                           onClick={() => handleChangeOrigine(comp.id, "MON_CONSEIL")}
                         >
                           Avec moi
@@ -915,7 +880,7 @@ export function RioUpdateComparisonDialog({
                           type="button"
                           variant={comp.selectedOrigine === "EXISTANT_CLIENT" ? "default" : "outline"}
                           size="sm"
-                          className={`flex-1 h-8 text-xs ${comp.selectedOrigine === "EXISTANT_CLIENT" ? "bg-gray-600 hover:bg-gray-700" : ""}`}
+                          className={`h-8 text-xs px-2 ${comp.selectedOrigine === "EXISTANT_CLIENT" ? "bg-gray-600 hover:bg-gray-700" : ""}`}
                           onClick={() => handleChangeOrigine(comp.id, "EXISTANT_CLIENT")}
                         >
                           À côté
@@ -937,7 +902,23 @@ export function RioUpdateComparisonDialog({
                 {/* Options avancées conditionnelles selon le type (sauf épargne bancaire hors PEL) */}
                 {!["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL", "CSL"].includes(comp.editedType) && (
                 <div className="pt-2 border-t border-green-200">
-                  <div className="text-xs font-medium text-green-700 mb-2">Options avancées</div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-green-800"
+                    onClick={() => toggleAdvanced(comp.id)}
+                  >
+                    {showAdvanced ? (
+                      <ChevronDown className="h-3.5 w-3.5 mr-1" aria-hidden />
+                    ) : (
+                      <ChevronRight className="h-3.5 w-3.5 mr-1" aria-hidden />
+                    )}
+                    {showAdvanced ? "Masquer les options" : "Options avancées"}
+                  </Button>
+                  {showAdvanced && (
+                  <>
+                  <div className="text-xs font-medium text-green-700 mb-2 mt-1">Options avancées</div>
                   
                   {/* === OPTIONS IMMOBILIER === */}
                   {isImmobilierFinancingType(comp.editedType) && (
@@ -1141,6 +1122,8 @@ export function RioUpdateComparisonDialog({
                       </div>
                     </div>
                   )}
+                </>
+                )}
                 </div>
                 )}
               </div>
@@ -1149,6 +1132,22 @@ export function RioUpdateComparisonDialog({
             {/* Options avancées pour les MISES À JOUR d'existants */}
             {comp.linkedToExistingId !== null && !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL", "CSL"].includes(comp.editedType) && (
               <div className="p-3 bg-blue-50/50 border border-blue-200 rounded-lg space-y-2 mt-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-blue-800"
+                  onClick={() => toggleAdvanced(comp.id)}
+                >
+                  {showAdvanced ? (
+                    <ChevronDown className="h-3.5 w-3.5 mr-1" aria-hidden />
+                  ) : (
+                    <ChevronRight className="h-3.5 w-3.5 mr-1" aria-hidden />
+                  )}
+                  {showAdvanced ? "Masquer les options" : "Options avancées"}
+                </Button>
+                {showAdvanced && (
+                <>
                 <div className="text-xs font-medium text-blue-700">Options (valeurs actuelles pré-remplies)</div>
                 
                 {/* === OPTIONS IMMOBILIER === */}
@@ -1333,6 +1332,8 @@ export function RioUpdateComparisonDialog({
                     )}
                   </div>
                 )}
+                </>
+                )}
               </div>
             )}
           </div>
@@ -1340,6 +1341,7 @@ export function RioUpdateComparisonDialog({
       </div>
     </div>
   );
+  };
 
   const reviewContent = (
     <>
@@ -1368,7 +1370,7 @@ export function RioUpdateComparisonDialog({
         </p>
       )}
 
-      <div className={`${embedded ? "overflow-y-auto space-y-4 py-2 flex-1 min-h-0" : "flex-1 overflow-y-auto space-y-4 py-2"}`}>
+      <div className={`${embedded ? "space-y-4 py-2 min-w-0" : "flex-1 overflow-y-auto space-y-4 py-2"}`}>
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <RefreshCw className="h-6 w-6 animate-spin mr-2" />
@@ -1401,7 +1403,7 @@ export function RioUpdateComparisonDialog({
                 </div>
                 
                 {/* Compteurs */}
-                <div className="grid grid-cols-4 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                   <div className="flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-blue-500"></span>
                     <span>{stats.toUpdate.length} MAJ</span>
@@ -1424,6 +1426,38 @@ export function RioUpdateComparisonDialog({
               {/* Investissements par catégorie */}
               {comparisons.length > 0 && (
                 <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant={listFilter === "action" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setListFilter("action");
+                        setShowUnchanged(false);
+                      }}
+                    >
+                      À traiter ({actionCount})
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={listFilter === "all" ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setListFilter("all")}
+                    >
+                      Tout ({comparisons.length})
+                    </Button>
+                    {listFilter === "action" && unchangedCount > 0 && !showUnchanged && (
+                      <Button
+                        type="button"
+                        variant="link"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => setShowUnchanged(true)}
+                      >
+                        Afficher {unchangedCount} inchangé{unchangedCount > 1 ? "s" : ""}
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground">
                     Pour chaque élément, choisissez s'il s'agit d'un nouvel investissement ou s'il correspond à un existant.
                   </p>
@@ -1437,7 +1471,7 @@ export function RioUpdateComparisonDialog({
                         <Badge variant="outline" className="text-xs">{stats.byCategory.immobilier.length}</Badge>
                       </div>
                       <div className="space-y-2">
-                        {stats.byCategory.immobilier.map(comp => renderInvestissementItem(comp))}
+                        {stats.byCategory.immobilier.filter(shouldShowComparison).map(comp => renderInvestissementItem(comp))}
                       </div>
                     </div>
                   )}
@@ -1451,7 +1485,7 @@ export function RioUpdateComparisonDialog({
                         <Badge variant="outline" className="text-xs">{stats.byCategory.scpi.length}</Badge>
                       </div>
                       <div className="space-y-2">
-                        {stats.byCategory.scpi.map(comp => renderInvestissementItem(comp))}
+                        {stats.byCategory.scpi.filter(shouldShowComparison).map(comp => renderInvestissementItem(comp))}
                       </div>
                     </div>
                   )}
@@ -1465,7 +1499,7 @@ export function RioUpdateComparisonDialog({
                         <Badge variant="outline" className="text-xs">{stats.byCategory.assuranceViePer.length}</Badge>
                       </div>
                       <div className="space-y-2">
-                        {stats.byCategory.assuranceViePer.map(comp => renderInvestissementItem(comp))}
+                        {stats.byCategory.assuranceViePer.filter(shouldShowComparison).map(comp => renderInvestissementItem(comp))}
                       </div>
                     </div>
                   )}
@@ -1479,7 +1513,7 @@ export function RioUpdateComparisonDialog({
                         <Badge variant="outline" className="text-xs">{stats.byCategory.epargne.length}</Badge>
                       </div>
                       <div className="space-y-2">
-                        {stats.byCategory.epargne.map(comp => renderInvestissementItem(comp))}
+                        {stats.byCategory.epargne.filter(shouldShowComparison).map(comp => renderInvestissementItem(comp))}
                       </div>
                     </div>
                   )}
@@ -1493,7 +1527,7 @@ export function RioUpdateComparisonDialog({
                         <Badge variant="outline" className="text-xs">{stats.byCategory.autres.length}</Badge>
                       </div>
                       <div className="space-y-2">
-                        {stats.byCategory.autres.map(comp => renderInvestissementItem(comp))}
+                        {stats.byCategory.autres.filter(shouldShowComparison).map(comp => renderInvestissementItem(comp))}
                       </div>
                     </div>
                   )}
@@ -1511,8 +1545,8 @@ export function RioUpdateComparisonDialog({
           )}
         </div>
 
-      <div className={`flex items-center justify-between gap-2 ${embedded ? "pt-4 border-t mt-4" : "border-t pt-4"}`}>
-        <div className="flex gap-2">
+      <div className={`flex flex-wrap items-center justify-between gap-2 shrink-0 ${embedded ? "pt-4 border-t mt-4" : "border-t pt-4"}`}>
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={handleSelectAll} disabled={loading}>
             Tout sélectionner
           </Button>
@@ -1544,8 +1578,8 @@ export function RioUpdateComparisonDialog({
 
   if (embedded) {
     return (
-      <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
-        {reviewContent}
+      <div className="flex flex-col min-h-0 flex-1 overflow-hidden min-w-0">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1">{reviewContent}</div>
       </div>
     );
   }

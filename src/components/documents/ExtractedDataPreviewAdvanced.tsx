@@ -54,6 +54,14 @@ import {
 } from "@/lib/contacts/rio-contact-fields";
 import { RioImportStepper } from "./RioImportStepper";
 import { RioPreviewSummaryBar } from "./RioPreviewSummaryBar";
+import { RioImportGuardBanner } from "./RioImportGuardBanner";
+import { RioPatrimoineOverview } from "./RioPatrimoineOverview";
+import {
+  assessRioPreviewTabStatus,
+  formatPatrimoineCoherenceMessage,
+  patrimoineCoherenceGap,
+  type RioPreviewTab,
+} from "@/lib/documents/rio-preview-tab-status";
 
 interface ExtractedDataPreviewAdvancedProps {
   open: boolean;
@@ -154,6 +162,7 @@ export function ExtractedDataPreviewAdvanced({
     new Set(["identite", "revenus", "patrimoine"])
   );
   const [guidedTab, setGuidedTab] = useState("contact");
+  const [patrimoineDetailOpen, setPatrimoineDetailOpen] = useState(false);
 
   const guidedMode = isGuidedStelliumPreview(formData.typeDocument);
   const isQpiPreview = formData.typeDocument === "QPI";
@@ -163,6 +172,40 @@ export function ExtractedDataPreviewAdvanced({
     return assessRioImport(formData);
   }, [formData, guidedMode]);
   const applyBlocked = stelliumApplyAssessment?.canProceed === false;
+
+  const navigatePreviewTab = (tab: RioPreviewTab) => {
+    setGuidedTab(tab);
+  };
+
+  const tabStatusBadge = (tab: RioPreviewTab) => {
+    if (!guidedMode || isQpiPreview) return null;
+    const status = assessRioPreviewTabStatus(
+      formData,
+      tab,
+      stelliumApplyAssessment?.missingConfidenceFields ?? []
+    );
+    if (status === "ok") {
+      return (
+        <span className="ml-1.5 inline-flex h-4 w-4 items-center justify-center rounded-full bg-green-100 text-green-700">
+          <CheckCircle2 className="h-3 w-3" aria-hidden />
+        </span>
+      );
+    }
+    if (status === "warn") {
+      return (
+        <span className="ml-1.5 inline-flex h-4 min-w-4 px-1 items-center justify-center rounded-full bg-amber-100 text-[10px] font-semibold text-amber-800">
+          !
+        </span>
+      );
+    }
+    return null;
+  };
+
+  const patrimoineGap = useMemo(
+    () => (guidedMode && !isQpiPreview ? patrimoineCoherenceGap(formData) : null),
+    [formData, guidedMode, isQpiPreview]
+  );
+
   const hasRioObjectifs = (formData.objectifsPrincipaux?.length ?? 0) > 0;
   const showRioObjectifsSection = formData.typeDocument === "RIO";
   const showRioRevenusSection = formData.typeDocument === "RIO";
@@ -391,19 +434,43 @@ export function ExtractedDataPreviewAdvanced({
               />
             )}
             <RioPreviewSummaryBar data={formData} />
+            {stelliumApplyAssessment && (
+              <RioImportGuardBanner
+                assessment={stelliumApplyAssessment}
+                className="mt-3"
+                onNavigateToTab={navigatePreviewTab}
+              />
+            )}
             <Tabs value={guidedTab} onValueChange={setGuidedTab} className="mt-4">
               <TabsList
                 className={`grid w-full ${isQpiPreview ? "grid-cols-2" : "grid-cols-4"}`}
               >
-                <TabsTrigger value="contact">Contact</TabsTrigger>
+                <TabsTrigger value="contact" className="gap-0.5">
+                  Contact
+                  {tabStatusBadge("contact")}
+                </TabsTrigger>
                 {!isQpiPreview && (
                   <>
-                    <TabsTrigger value="revenus">Revenus</TabsTrigger>
-                    <TabsTrigger value="patrimoine">Patrimoine</TabsTrigger>
-                    <TabsTrigger value="objectifs">Objectifs</TabsTrigger>
+                    <TabsTrigger value="revenus" className="gap-0.5">
+                      Revenus
+                      {tabStatusBadge("revenus")}
+                    </TabsTrigger>
+                    <TabsTrigger value="patrimoine" className="gap-0.5">
+                      Patrimoine
+                      {tabStatusBadge("patrimoine")}
+                    </TabsTrigger>
+                    <TabsTrigger value="objectifs" className="gap-0.5">
+                      Objectifs
+                      {tabStatusBadge("objectifs")}
+                    </TabsTrigger>
                   </>
                 )}
-                {isQpiPreview && <TabsTrigger value="profil">Profil investisseur</TabsTrigger>}
+                {isQpiPreview && (
+                  <TabsTrigger value="profil" className="gap-0.5">
+                    Profil
+                    {tabStatusBadge("profil")}
+                  </TabsTrigger>
+                )}
               </TabsList>
             </Tabs>
           </>
@@ -946,6 +1013,33 @@ export function ExtractedDataPreviewAdvanced({
               hidden={!isSectionVisible("patrimoine")}
               forceExpanded={guidedMode}
             >
+              {guidedMode && (
+                <>
+                  <RioPatrimoineOverview data={formData} />
+                  {patrimoineGap != null && (
+                    <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 mb-4">
+                      <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" aria-hidden />
+                      <p>{formatPatrimoineCoherenceMessage(patrimoineGap)}</p>
+                    </div>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mb-4 gap-2"
+                    onClick={() => setPatrimoineDetailOpen((open) => !open)}
+                  >
+                    {patrimoineDetailOpen ? (
+                      <ChevronDown className="h-4 w-4" aria-hidden />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" aria-hidden />
+                    )}
+                    {patrimoineDetailOpen ? "Masquer les corrections détaillées" : "Corrections détaillées"}
+                  </Button>
+                </>
+              )}
+
+              {( !guidedMode || patrimoineDetailOpen) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Patrimoine total */}
                 {formData.patrimoineTotal !== undefined && (
@@ -1306,10 +1400,10 @@ export function ExtractedDataPreviewAdvanced({
                   </>
                 )}
               </div>
+              )}
             </PreviewSection>
           )}
 
-          {/* Objectifs patrimoniaux (RIO uniquement — section Objectifs du recueil) */}
           {showRioObjectifsSection && (
             <PreviewSection {...sectionProps}
               id="objectifs"

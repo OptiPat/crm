@@ -1,12 +1,41 @@
 import { AlertCircle, CheckCircle2, Info } from "lucide-react";
 import type { RioImportAssessment } from "@/lib/documents/rio-import-guard";
+import { missingFieldToTab, type RioPreviewTab } from "@/lib/documents/rio-preview-tab-status";
 
 interface RioImportGuardBannerProps {
   assessment: RioImportAssessment | null;
   className?: string;
+  /** Clic sur un champ manquant → navigation vers l'onglet correspondant. */
+  onNavigateToTab?: (tab: RioPreviewTab) => void;
 }
 
-export function RioImportGuardBanner({ assessment, className }: RioImportGuardBannerProps) {
+function MissingFieldChip({
+  field,
+  onNavigate,
+}: {
+  field: string;
+  onNavigate?: (tab: RioPreviewTab) => void;
+}) {
+  const tab = missingFieldToTab(field);
+  if (tab && onNavigate) {
+    return (
+      <button
+        type="button"
+        className="underline underline-offset-2 hover:text-foreground font-medium"
+        onClick={() => onNavigate(tab)}
+      >
+        {field}
+      </button>
+    );
+  }
+  return <span>{field}</span>;
+}
+
+export function RioImportGuardBanner({
+  assessment,
+  className,
+  onNavigateToTab,
+}: RioImportGuardBannerProps) {
   if (!assessment) return null;
 
   const hasIssues = assessment.issues.length > 0;
@@ -22,7 +51,13 @@ export function RioImportGuardBanner({ assessment, className }: RioImportGuardBa
           <p className="font-medium">Document détecté : {assessment.formatLabel}</p>
           {assessment.missingConfidenceFields.length > 0 && (
             <p className="text-xs mt-0.5 text-green-800">
-              Champs non détectés : {assessment.missingConfidenceFields.join(", ")}
+              Champs non détectés :{" "}
+              {assessment.missingConfidenceFields.map((field, index) => (
+                <span key={field}>
+                  {index > 0 ? ", " : ""}
+                  <MissingFieldChip field={field} onNavigate={onNavigateToTab} />
+                </span>
+              ))}
             </p>
           )}
         </div>
@@ -59,6 +94,18 @@ export function RioImportGuardBanner({ assessment, className }: RioImportGuardBa
             ))}
           </ul>
         </div>
+      )}
+
+      {assessment.missingConfidenceFields.length > 0 && (hasIssues || hasWarnings) && (
+        <p className="text-xs text-muted-foreground px-1">
+          Champs à vérifier :{" "}
+          {assessment.missingConfidenceFields.map((field, index) => (
+            <span key={field}>
+              {index > 0 ? ", " : ""}
+              <MissingFieldChip field={field} onNavigate={onNavigateToTab} />
+            </span>
+          ))}
+        </p>
       )}
     </div>
   );

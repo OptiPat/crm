@@ -363,6 +363,9 @@ export function ContactForm({
   // rechargement (événement contacts/foyers) n'écrase une saisie en cours.
   const foyerFiscalInitRef = useRef<number | null>(null);
   const initialSnapshot = useRef("");
+  // Référence de la fiscalité foyer à l'init : sert au calcul de `dirty`
+  // (une modif fiscalité seule ne touche pas `formData`).
+  const initialFoyerFiscalSnapshot = useRef("{}");
 
   useEffect(() => {
     let retryCount = 0;
@@ -414,6 +417,7 @@ export function ContactForm({
       setFoyerContext({ foyer: null, members: [], loading: false });
       setFoyerFiscal({});
       foyerFiscalInitRef.current = null;
+      initialFoyerFiscalSnapshot.current = "{}";
       return;
     }
 
@@ -448,12 +452,14 @@ export function ContactForm({
       // si le foyer n'a pas pu être relu (foyer === null).
       if (foyer && foyerFiscalInitRef.current !== foyer.id) {
         foyerFiscalInitRef.current = foyer.id;
-        setFoyerFiscal({
+        const initialFiscal = {
           tranche_imposition: foyer.tranche_imposition ?? undefined,
           revenu_fiscal_reference: foyer.revenu_fiscal_reference ?? undefined,
           ir_net_a_payer: foyer.ir_net_a_payer ?? undefined,
           nombre_parts_fiscales: foyer.nombre_parts_fiscales ?? undefined,
-        });
+        };
+        setFoyerFiscal(initialFiscal);
+        initialFoyerFiscalSnapshot.current = JSON.stringify(initialFiscal);
       }
     };
 
@@ -508,8 +514,12 @@ export function ContactForm({
 
   useEffect(() => {
     if (!open) return;
-    setDirty(serializeFormSnapshot(formData) !== initialSnapshot.current);
-  }, [formData, open]);
+    const formChanged =
+      serializeFormSnapshot(formData) !== initialSnapshot.current;
+    const fiscalChanged =
+      JSON.stringify(foyerFiscal) !== initialFoyerFiscalSnapshot.current;
+    setDirty(formChanged || fiscalChanged);
+  }, [formData, foyerFiscal, open]);
 
   useEffect(() => {
     if (!formData.parrain_id) {
@@ -654,6 +664,7 @@ export function ContactForm({
           return;
         }
         initialSnapshot.current = serializeFormSnapshot(contactToFormData(updated));
+        initialFoyerFiscalSnapshot.current = JSON.stringify(foyerFiscal);
         toast.success("Contact modifié");
       } else {
         const created = await createContact(dataToSubmit);
@@ -1032,13 +1043,12 @@ export function ContactForm({
                   id="foyer_tranche_imposition"
                   value={foyerFiscal.tranche_imposition ?? ""}
                   placeholder="Ex : 30 %"
-                  onChange={(e) => {
-                    setDirty(true);
+                  onChange={(e) =>
                     setFoyerFiscal((prev) => ({
                       ...prev,
                       tranche_imposition: e.target.value || undefined,
-                    }));
-                  }}
+                    }))
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -1049,15 +1059,14 @@ export function ContactForm({
                   min={0}
                   step={0.5}
                   value={foyerFiscal.nombre_parts_fiscales ?? ""}
-                  onChange={(e) => {
-                    setDirty(true);
+                  onChange={(e) =>
                     setFoyerFiscal((prev) => ({
                       ...prev,
                       nombre_parts_fiscales: e.target.value
                         ? parseFloat(e.target.value)
                         : undefined,
-                    }));
-                  }}
+                    }))
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -1068,15 +1077,14 @@ export function ContactForm({
                   min={0}
                   step={1}
                   value={foyerFiscal.revenu_fiscal_reference ?? ""}
-                  onChange={(e) => {
-                    setDirty(true);
+                  onChange={(e) =>
                     setFoyerFiscal((prev) => ({
                       ...prev,
                       revenu_fiscal_reference: e.target.value
                         ? parseFloat(e.target.value)
                         : undefined,
-                    }));
-                  }}
+                    }))
+                  }
                 />
               </div>
               <div className="space-y-2">
@@ -1087,15 +1095,14 @@ export function ContactForm({
                   min={0}
                   step={1}
                   value={foyerFiscal.ir_net_a_payer ?? ""}
-                  onChange={(e) => {
-                    setDirty(true);
+                  onChange={(e) =>
                     setFoyerFiscal((prev) => ({
                       ...prev,
                       ir_net_a_payer: e.target.value
                         ? parseFloat(e.target.value)
                         : undefined,
-                    }));
-                  }}
+                    }))
+                  }
                 />
               </div>
             </>

@@ -22,6 +22,8 @@ import {
   HelpCircle,
   Target,
   ClipboardList,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import type { OrigineInvestissement, NewInvestissement } from "@/lib/api/tauri-investissements";
@@ -132,6 +134,14 @@ function isResidencePrincipaleType(type: string): boolean {
   return type === "RP" || type === "RESIDENCE_PRINCIPALE";
 }
 
+function hasPatrimoineCredit(item: Pick<PatrimoineItem, "creditCRD" | "mensualiteCredit" | "dateFinCredit">): boolean {
+  return (
+    (item.creditCRD != null && item.creditCRD > 0) ||
+    (item.mensualiteCredit != null && item.mensualiteCredit > 0) ||
+    Boolean(item.dateFinCredit?.trim())
+  );
+}
+
 export function PatrimoineTriDialog({
   open,
   onOpenChange,
@@ -158,6 +168,7 @@ export function PatrimoineTriDialog({
   const [items, setItems] = useState<PatrimoineItem[]>(() => 
     extractPatrimoineItems(extractedData)
   );
+  const [autoEpargneOpen, setAutoEpargneOpen] = useState(false);
   const completingRef = useRef(false);
 
   useEffect(() => {
@@ -290,7 +301,14 @@ export function PatrimoineTriDialog({
           </div>
           <div>
             <p className="font-semibold">{item.label}</p>
-            <p className="text-lg font-bold text-primary">{formatEuro(item.montant)}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-lg font-bold text-primary">{formatEuro(item.montant)}</p>
+              {hasPatrimoineCredit(item) && (
+                <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900 text-[10px]">
+                  Crédit
+                </Badge>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -406,7 +424,7 @@ export function PatrimoineTriDialog({
       )}
 
       {items.length > 0 && (
-          <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur border-b">
+          <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur border-b space-y-2">
             <div className="grid grid-cols-3 gap-2 text-center text-sm">
               <div className="rounded-lg bg-green-50 border border-green-200 p-2">
                 <div className="text-xs text-green-700">Avec moi</div>
@@ -423,6 +441,16 @@ export function PatrimoineTriDialog({
                 </div>
               </div>
             </div>
+            {toTriItems.length > 0 && (
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Button type="button" variant="outline" size="sm" onClick={() => setAllOrigine("MON_CONSEIL")}>
+                  Tout « avec moi »
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => setAllOrigine("EXISTANT_CLIENT")}>
+                  Tout « à côté »
+                </Button>
+              </div>
+            )}
           </div>
         )}
 
@@ -430,10 +458,20 @@ export function PatrimoineTriDialog({
           {/* Épargne bancaire (automatique) */}
           {autoItems.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-gray-400" />
-                Épargne bancaire (stockée automatiquement "À côté")
-              </h3>
+              <button
+                type="button"
+                className="flex w-full items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+                onClick={() => setAutoEpargneOpen((open) => !open)}
+              >
+                {autoEpargneOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0" aria-hidden />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0" aria-hidden />
+                )}
+                <CheckCircle2 className="h-4 w-4 text-gray-400 shrink-0" aria-hidden />
+                Épargne bancaire — {autoItems.length} classée{autoItems.length > 1 ? "s" : ""} « à côté »
+              </button>
+              {autoEpargneOpen && (
               <div className="space-y-2 pl-6">
                 {autoItems.map(item => (
                   <div
@@ -456,25 +494,16 @@ export function PatrimoineTriDialog({
                   </div>
                 ))}
               </div>
+              )}
             </div>
           )}
 
           {toTriItems.length > 0 && (
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                  <HelpCircle className="h-4 w-4 text-blue-500" />
-                  Investissements à trier ({toTriItems.filter((i) => i.origine).length}/{toTriItems.length})
-                </h3>
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setAllOrigine("MON_CONSEIL")}>
-                    Tout « avec moi »
-                  </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={() => setAllOrigine("EXISTANT_CLIENT")}>
-                    Tout « à côté »
-                  </Button>
-                </div>
-              </div>
+              <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+                <HelpCircle className="h-4 w-4 text-blue-500" />
+                Investissements à trier ({toTriItems.filter((i) => i.origine).length}/{toTriItems.length})
+              </h3>
 
               {(Object.keys(CATEGORY_LABELS) as RioPatrimoineCategory[]).map((category) => {
                 const categoryItems = groupedToTriItems[category];
@@ -542,7 +571,11 @@ export function PatrimoineTriDialog({
   );
 
   if (embedded) {
-    return <div className="flex flex-col min-h-0 flex-1 overflow-y-auto">{triContent}</div>;
+    return (
+      <div className="flex flex-col min-h-0 flex-1 overflow-hidden min-w-0">
+        <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1">{triContent}</div>
+      </div>
+    );
   }
 
   return (

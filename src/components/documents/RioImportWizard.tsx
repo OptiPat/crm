@@ -466,7 +466,7 @@ export function RioImportWizard({
         showPatrimoineStep={showPatrimoineStep}
       />
 
-      {importAssessment && (step === 1 || step === 2) && (
+      {importAssessment && step === 1 && (
         <RioImportGuardBanner assessment={importAssessment} className="mt-3 shrink-0" />
       )}
 
@@ -614,6 +614,7 @@ export function RioImportWizard({
           {step === 2 && extractedData && uploadedFile && (
             <div className="grid lg:grid-cols-2 gap-4 flex-1 min-h-0 overflow-hidden">
               <RioPdfPreviewPanel pdfPath={uploadedFile.path} active={open && step === 2} />
+              <div className="min-w-0 flex flex-col min-h-0 overflow-hidden">
               <ExtractedDataPreviewAdvanced
                 variant="panel"
                 hideStepper
@@ -626,24 +627,30 @@ export function RioImportWizard({
                 }}
                 onIgnore={() => setStep(1)}
               />
+              </div>
             </div>
           )}
 
-          {step === 3 && patrimoineState && (
-            <RioPatrimoineReviewStep
-              extractedData={patrimoineState.data}
-              contactId={patrimoineState.contactId}
-              contactNom={patrimoineState.ownerLabel}
-              foyerId={patrimoineState.foyerId ?? undefined}
-              coupleMemberIds={
-                patrimoineState.coupleMemberIds.length
-                  ? patrimoineState.coupleMemberIds
-                  : undefined
-              }
-              hasExistingInvestments={patrimoineState.hasExistingInvestments}
-              onComplete={handlePatrimoineComplete}
-              onCancel={() => setStep(2)}
-            />
+          {step === 3 && patrimoineState && uploadedFile && (
+            <div className="grid lg:grid-cols-2 gap-4 flex-1 min-h-0 overflow-hidden">
+              <RioPdfPreviewPanel pdfPath={uploadedFile.path} active={open && step === 3} />
+              <div className="min-w-0 flex flex-col min-h-0 overflow-hidden">
+                <RioPatrimoineReviewStep
+                extractedData={patrimoineState.data}
+                contactId={patrimoineState.contactId}
+                contactNom={patrimoineState.ownerLabel}
+                foyerId={patrimoineState.foyerId ?? undefined}
+                coupleMemberIds={
+                  patrimoineState.coupleMemberIds.length
+                    ? patrimoineState.coupleMemberIds
+                    : undefined
+                }
+                hasExistingInvestments={patrimoineState.hasExistingInvestments}
+                onComplete={handlePatrimoineComplete}
+                onCancel={() => setStep(2)}
+              />
+              </div>
+            </div>
           )}
 
         {loading && step === 2 && (
