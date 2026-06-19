@@ -344,6 +344,8 @@ pub struct Investissement {
     pub encours_actuel: Option<i64>,
     /// Date de la dernière valorisation (timestamp Unix).
     pub encours_date: Option<i64>,
+    /// Souscription initiale + versements complémentaires (centimes).
+    pub montant_investi_total: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -403,6 +405,7 @@ pub struct InvestissementWithDetails {
     pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
     pub encours_actuel: Option<i64>,
     pub encours_date: Option<i64>,
+    pub montant_investi_total: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }

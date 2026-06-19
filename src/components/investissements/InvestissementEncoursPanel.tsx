@@ -30,6 +30,7 @@ import {
   type EncoursChartPoint,
 } from "@/lib/investissements/investissement-encours-chart";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
+import { getMontantInvestiCentimes } from "@/lib/investissements/investissement-versements";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import {
   CHART_AXIS_STROKE,
@@ -115,6 +116,14 @@ export function InvestissementEncoursPanel({
     () => buildEncoursChartPoints(montantInitial, dateSouscription, valorisations, versements),
     [montantInitial, dateSouscription, valorisations, versements]
   );
+
+  const montantInvesti = useMemo(() => {
+    const complementTotal = versements.reduce((sum, v) => sum + v.montant, 0);
+    return getMontantInvestiCentimes({
+      montant_initial: montantInitial,
+      montant_investi_total: (montantInitial ?? 0) + complementTotal,
+    });
+  }, [montantInitial, versements]);
 
   const hasComplements = versements.length > 0;
 
@@ -326,9 +335,9 @@ export function InvestissementEncoursPanel({
         </Button>
       </div>
 
-      {montantInitial != null && montantInitial > 0 && (
+      {montantInvesti > 0 && (
         <p className="text-xs text-muted-foreground">
-          Montant investi (souscription) : {formatEuroCentimes(montantInitial)}
+          Montant investi : {formatEuroCentimes(montantInvesti)}
         </p>
       )}
 

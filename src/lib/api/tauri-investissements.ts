@@ -26,6 +26,8 @@ export interface Investissement {
   origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
   encours_actuel?: number;
   encours_date?: number;
+  /** Souscription initiale + versements complémentaires (centimes). */
+  montant_investi_total?: number;
   created_at: number;
   updated_at: number;
 }
@@ -77,6 +79,7 @@ export interface InvestissementWithDetails {
   origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
   encours_actuel?: number;
   encours_date?: number;
+  montant_investi_total?: number;
   created_at: number;
   updated_at: number;
 }

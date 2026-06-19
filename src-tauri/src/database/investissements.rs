@@ -41,6 +41,7 @@ impl super::Database {
             updated_at: row.get(20)?,
             encours_actuel: row.get(21)?,
             encours_date: row.get(22)?,
+            montant_investi_total: row.get(23)?,
         })
     }
 
@@ -197,6 +198,7 @@ impl super::Database {
                 updated_at: row.get(24)?,
                 encours_actuel: row.get(25)?,
                 encours_date: row.get(26)?,
+                montant_investi_total: row.get(27)?,
             })
         })?;
 

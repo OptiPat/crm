@@ -29,6 +29,9 @@ dist-ssr
 # --- Données sensibles (ne jamais committer) ---
 _fixtures/identity/*
 !_fixtures/identity/.gitkeep
+# RIO clients déposés localement pour diagnostic (jamais committer)
+_rio_local/*
+!_rio_local/.gitkeep
 .cursor/mcp.json
 scripts/invoke-n8n-mcp*.ps1
 scripts/n8n-*.json

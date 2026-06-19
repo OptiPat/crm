@@ -14,6 +14,7 @@ export interface PatrimoineExtractItem {
 }
 
 function mapImmoTypeToProduct(type: string): string {
+  if (type === "SCPI") return "SCPI";
   if (type === "RESIDENCE_PRINCIPALE") return "RP";
   if (type === "RESIDENCE_SECONDAIRE") return "RS";
   if (type === "PINEL") return "PINEL";
@@ -21,6 +22,83 @@ function mapImmoTypeToProduct(type: string): string {
   if (type === "LMP") return "LMP";
   if (type === "LOCATIF" || type === "CLASSIQUE") return "LOCATIF";
   return "IMMOBILIER";
+}
+
+function normalizeScpiLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/^scpi\s*[-–—]\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Propage crédit SCPI des biens immo vers les contrats financiers (souvent sans passifs). */
+function enrichScpiCreditsFromBiens(
+  items: PatrimoineExtractItem[],
+  data: ExtractedData
+): void {
+  const scpiBiensWithCredit = (data.biensImmobiliers ?? []).filter(
+    (b) =>
+      b.type === "SCPI" &&
+      (b.creditCRD != null ||
+        b.mensualiteCredit != null ||
+        (b.dateFinCredit != null && b.dateFinCredit !== ""))
+  );
+  if (scpiBiensWithCredit.length === 0) return;
+
+  const copyCredit = (
+    target: PatrimoineExtractItem,
+    source: (typeof scpiBiensWithCredit)[number]
+  ) => {
+    if (target.creditCRD == null && source.creditCRD != null) {
+      target.creditCRD = source.creditCRD;
+    }
+    if (target.mensualiteCredit == null && source.mensualiteCredit != null) {
+      target.mensualiteCredit = source.mensualiteCredit;
+    }
+    if (!target.dateFinCredit && source.dateFinCredit) {
+      target.dateFinCredit = source.dateFinCredit;
+    }
+  };
+
+  const scpiItemsNeedingCredit = items.filter(
+    (item) =>
+      item.type === "SCPI" &&
+      item.creditCRD == null &&
+      item.mensualiteCredit == null &&
+      !item.dateFinCredit
+  );
+
+  for (const item of scpiItemsNeedingCredit) {
+    const itemKey = normalizeScpiLabel(item.label);
+    for (const bien of scpiBiensWithCredit) {
+      const bienKey = normalizeScpiLabel(bien.nom);
+      const valueClose =
+        bien.valeur != null &&
+        bien.valeur > 0 &&
+        Math.abs(item.montant - bien.valeur) <= bien.valeur * 0.25;
+      if (
+        (itemKey && bienKey && (itemKey.includes(bienKey) || bienKey.includes(itemKey))) ||
+        valueClose
+      ) {
+        copyCredit(item, bien);
+        break;
+      }
+    }
+  }
+
+  const stillWithoutCredit = items.filter(
+    (item) =>
+      item.type === "SCPI" &&
+      item.creditCRD == null &&
+      item.mensualiteCredit == null &&
+      !item.dateFinCredit
+  );
+  if (stillWithoutCredit.length === 1 && scpiBiensWithCredit.length === 1) {
+    copyCredit(stillWithoutCredit[0], scpiBiensWithCredit[0]);
+  }
 }
 
 function pushFinancialFallbacks(data: ExtractedData, items: PatrimoineExtractItem[]): void {
@@ -114,6 +192,7 @@ export function extractPatrimoineItemsFromRio(data: ExtractedData): PatrimoineEx
   }
 
   pushFinancialFallbacks(data, items);
+  enrichScpiCreditsFromBiens(items, data);
 
   return items;
 }

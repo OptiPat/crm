@@ -28,6 +28,7 @@ import { createInvestissementValorisation } from "@/lib/api/tauri-investissement
 import {
   getEffectiveEncoursCentimes,
 } from "@/lib/investissements/investissement-encours";
+import { formatNomProduit } from "@/lib/investissements/investissement-display";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { getContactById, getContactsByFoyer } from "@/lib/api/tauri-contacts";
 import { loadFoyerInvestissements } from "@/lib/foyers/foyer-utils";
@@ -155,6 +156,16 @@ const PRODUCT_TYPES = [
   { value: "RS", label: "Résidence Secondaire" },
   { value: "LOCATIF", label: "Locatif" },
   { value: "EPARGNE_BANCAIRE", label: "Épargne Bancaire" },
+  { value: "LIVRET_A", label: "Livret A" },
+  { value: "LDDS", label: "LDD / LDDS" },
+  { value: "LEP", label: "LEP" },
+  { value: "PEL", label: "PEL" },
+  { value: "CEL", label: "CEL" },
+  { value: "CSL", label: "Compte sur livret (CSL)" },
+  { value: "COMPTE_COURANT", label: "Compte courant" },
+  { value: "PEA", label: "PEA" },
+  { value: "COMPTE_TITRE", label: "Compte-titres" },
+  { value: "PERP", label: "PERP" },
   { value: "AUTRE", label: "Autre" },
 ];
 
@@ -446,8 +457,8 @@ export function RioUpdateComparisonDialog({
       immobilier: comparisons.filter(c => isImmobilierFinancingType(c.editedType)),
       scpi: comparisons.filter(c => ["SCPI", "SCPI_DEMEMBREMENT"].includes(c.editedType)),
       assuranceViePer: comparisons.filter(c => ["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(c.editedType)),
-      epargne: comparisons.filter(c => ["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(c.editedType)),
-      autres: comparisons.filter(c => !["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP", "SCPI", "SCPI_DEMEMBREMENT", "ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE", "EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(c.editedType)),
+      epargne: comparisons.filter(c => ["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(c.editedType)),
+      autres: comparisons.filter(c => !["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP", "SCPI", "SCPI_DEMEMBREMENT", "ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE", "EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(c.editedType)),
     };
     
     return { toUpdate, toAdd, unchanged, avecMoi, patrimoineAvant, patrimoineApres, difference, pourcentage, byCategory };
@@ -826,7 +837,7 @@ export function RioUpdateComparisonDialog({
                         : null;
                       return (
                         <option key={existing.id} value={existing.id.toString()}>
-                          {existing.type_produit} - {existing.nom_produit} ({formatEuro(referenceMontantEuro(existing, existing.type_produit))})
+                          {formatNomProduit(existing.type_produit)} - {existing.nom_produit} ({formatEuro(referenceMontantEuro(existing, existing.type_produit))})
                           {partenaireNom ? ` | ${partenaireNom}` : ""}
                           {dateStr ? ` | ${dateStr}` : ""}
                           {existing.origine === "MON_CONSEIL" ? " · Avec moi" : " · À côté"}
@@ -924,7 +935,7 @@ export function RioUpdateComparisonDialog({
                 </div>
                 
                 {/* Options avancées conditionnelles selon le type (sauf épargne bancaire hors PEL) */}
-                {!["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL"].includes(comp.editedType) && (
+                {!["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL", "CSL"].includes(comp.editedType) && (
                 <div className="pt-2 border-t border-green-200">
                   <div className="text-xs font-medium text-green-700 mb-2">Options avancées</div>
                   
@@ -1136,7 +1147,7 @@ export function RioUpdateComparisonDialog({
             )}
             
             {/* Options avancées pour les MISES À JOUR d'existants */}
-            {comp.linkedToExistingId !== null && !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL"].includes(comp.editedType) && (
+            {comp.linkedToExistingId !== null && !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "CEL", "CSL"].includes(comp.editedType) && (
               <div className="p-3 bg-blue-50/50 border border-blue-200 rounded-lg space-y-2 mt-2">
                 <div className="text-xs font-medium text-blue-700">Options (valeurs actuelles pré-remplies)</div>
                 

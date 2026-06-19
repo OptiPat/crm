@@ -21,7 +21,13 @@ function parseFrDateToIso(date?: string): string | undefined {
 export function buildImmoInvestissementExtras(
   input: RioImmoInvestissementInput
 ): Partial<NewInvestissement> {
-  if (!isImmobilierFinancingType(input.editedType)) {
+  const acceptsFinancing =
+    isImmobilierFinancingType(input.editedType) ||
+    input.editedType === "SCPI" ||
+    input.editedType === "SCPI_FISCALE" ||
+    input.editedType === "SCPI_DEMEMBREMENT";
+
+  if (!acceptsFinancing) {
     return input.notes ? { notes: input.notes } : {};
   }
 

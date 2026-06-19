@@ -23,6 +23,47 @@ import {
 
 const TYPE_PRODUIT_GROUP_LABEL =
   "py-2.5 pl-6 pr-2 text-base font-bold uppercase tracking-wide text-foreground";
+
+/** Valeurs proposées dans le menu « Type de produit ». Tout type hors de cette
+ *  liste (ex. type importé du RIO : LIVRET_A, EPARGNE_BANCAIRE, LOCATIF…) est
+ *  ajouté dynamiquement pour rester affichable et modifiable. */
+const KNOWN_TYPE_PRODUITS = new Set<string>([
+  "ASSURANCE_VIE",
+  "CONTRAT_CAPITALISATION",
+  "PER",
+  "EPARGNE_SALARIALE",
+  "FIP_FCPI",
+  "FCPR",
+  "G3F",
+  "SCPI",
+  "SCPI_DEMEMBREMENT",
+  "SCPI_FISCALE",
+  "PINEL",
+  "DENORMANDIE",
+  "JEANBRUN",
+  "MALRAUX",
+  "MONUMENT_HISTORIQUE",
+  "DEFICIT_FONCIER",
+  "LMNP",
+  "LMP",
+  "NUE_PROPRIETE",
+  "RESIDENCE_PRINCIPALE",
+  "LOCATIF_CLASSIQUE",
+  "LOCATIF",
+  "IMMOBILIER",
+  "LIVRET_A",
+  "LDDS",
+  "LEP",
+  "PEL",
+  "CEL",
+  "CSL",
+  "COMPTE_COURANT",
+  "EPARGNE_BANCAIRE",
+  "PEA",
+  "COMPTE_TITRE",
+  "PERP",
+  "AUTRE",
+]);
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers } from "@/lib/api/tauri-foyers";
 import { getAllPartenaires } from "@/lib/api/tauri-partenaires";
@@ -38,6 +79,7 @@ import {
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { formatNomProduit } from "@/lib/investissements/investissement-display";
 import { isVersementComplementaireEligible } from "@/lib/investissements/investissement-versements";
 import {
   ContactFormExceltisSection,
@@ -64,7 +106,9 @@ import {
 } from "@/lib/investissements/investissement-demembrement";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import {
+  acceptsInvestissementFinancingFields,
   isImmobilierFinancingType,
+  isScpiFinancingType,
   euroToFinancingCentimes,
   financingCentimesToEuro,
 } from "@/lib/investissements/investissement-immo-financing";
@@ -154,6 +198,8 @@ export function InvestissementForm({
   
   // SCPI accepte le réinvestissement des dividendes
   const accepteReinvestissement = ["SCPI", "SCPI_FISCALE"].includes(typeProduit);
+  const immoFinancing = isImmobilierFinancingType(typeProduit);
+  const scpiFinancing = isScpiFinancingType(typeProduit);
 
   // Réinitialiser les champs incompatibles quand on change de type de produit
   useEffect(() => {
@@ -406,7 +452,8 @@ export function InvestissementForm({
             : dateFieldToIso(dateFinDemembrement)
           : undefined;
 
-      const immoFinancing = isImmobilierFinancingType(typeProduit);
+      const immoFinancingSave = isImmobilierFinancingType(typeProduit);
+      const acceptsFinancingFields = acceptsInvestissementFinancingFields(typeProduit);
 
       const newInvestissement: NewInvestissement = {
         contact_id: contactId ? parseInt(contactId) : undefined,
@@ -417,12 +464,12 @@ export function InvestissementForm({
         montant_initial: montantInitial ? Math.round(parseFloat(montantInitial) * 100) : undefined,
         date_souscription: dateFieldToIso(dateSouscription),
         date_fin_demembrement: dateFinDemembrementIso,
-        date_fin_pret: immoFinancing || ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT"].includes(typeProduit)
-          ? dateFieldToIso(dateFinPret)
+        date_fin_pret: acceptsFinancingFields ? dateFieldToIso(dateFinPret) : undefined,
+        mensualite_credit: acceptsFinancingFields
+          ? euroToFinancingCentimes(mensualiteCredit)
           : undefined,
-        mensualite_credit: immoFinancing ? euroToFinancingCentimes(mensualiteCredit) : undefined,
-        credit_crd: immoFinancing ? euroToFinancingCentimes(creditCrd) : undefined,
-        loyer_mensuel: immoFinancing ? euroToFinancingCentimes(loyerMensuel) : undefined,
+        credit_crd: acceptsFinancingFields ? euroToFinancingCentimes(creditCrd) : undefined,
+        loyer_mensuel: immoFinancingSave ? euroToFinancingCentimes(loyerMensuel) : undefined,
         versement_programme: accepteVersementProgramme ? versementProgramme : false,
         montant_versement_programme: montantVersementProgramme ? Math.round(parseFloat(montantVersementProgramme) * 100) : undefined,
         frequence_versement: frequenceVersement || undefined,
@@ -536,6 +583,12 @@ export function InvestissementForm({
                 <SelectValue placeholder="Sélectionnez un type" />
               </SelectTrigger>
               <SelectContent>
+                {typeProduit && !KNOWN_TYPE_PRODUITS.has(typeProduit) && (
+                  <SelectGroup>
+                    <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Type importé</SelectLabel>
+                    <SelectItem value={typeProduit}>{formatNomProduit(typeProduit)}</SelectItem>
+                  </SelectGroup>
+                )}
                 <SelectGroup>
                   <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Placement</SelectLabel>
                   <SelectItem value="ASSURANCE_VIE">Assurance Vie</SelectItem>
@@ -565,7 +618,22 @@ export function InvestissementForm({
                   <SelectItem value="NUE_PROPRIETE">Nue-Propriété</SelectItem>
                   <SelectItem value="RESIDENCE_PRINCIPALE">Résidence Principale</SelectItem>
                   <SelectItem value="LOCATIF_CLASSIQUE">Locatif Classique</SelectItem>
+                  <SelectItem value="LOCATIF">Locatif</SelectItem>
                   <SelectItem value="IMMOBILIER">Immobilier (ancien)</SelectItem>
+                </SelectGroup>
+                <SelectGroup>
+                  <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Épargne / Banque</SelectLabel>
+                  <SelectItem value="LIVRET_A">Livret A</SelectItem>
+                  <SelectItem value="LDDS">LDD / LDDS</SelectItem>
+                  <SelectItem value="LEP">LEP</SelectItem>
+                  <SelectItem value="PEL">PEL</SelectItem>
+                  <SelectItem value="CEL">CEL</SelectItem>
+                  <SelectItem value="CSL">Compte sur livret (CSL)</SelectItem>
+                  <SelectItem value="COMPTE_COURANT">Compte courant</SelectItem>
+                  <SelectItem value="EPARGNE_BANCAIRE">Épargne bancaire</SelectItem>
+                  <SelectItem value="PEA">PEA</SelectItem>
+                  <SelectItem value="COMPTE_TITRE">Compte-titres</SelectItem>
+                  <SelectItem value="PERP">PERP</SelectItem>
                 </SelectGroup>
                 <SelectGroup>
                   <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Autre</SelectLabel>
@@ -745,17 +813,47 @@ export function InvestissementForm({
             </div>
           )}
 
-          {/* Date fin de prêt SCPI (hors patrimoine immobilier) */}
-          {["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT"].includes(typeProduit) &&
-            !isImmobilierFinancingType(typeProduit) && (
-            <div className="space-y-2">
-              <Label htmlFor="date-fin-pret-scpi">Date de fin de prêt</Label>
-              <Input
-                id="date-fin-pret-scpi"
-                type="date"
-                value={dateFinPret}
-                onChange={(e) => setDateFinPret(e.target.value)}
-              />
+          {/* Financement SCPI (crédit lié au placement) */}
+          {scpiFinancing && !immoFinancing && (
+            <div className="space-y-4 border-t pt-4">
+              <p className="text-sm font-medium text-muted-foreground">
+                Financement SCPI
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="mensualite-credit-scpi">Mensualité crédit (€/mois)</Label>
+                  <Input
+                    id="mensualite-credit-scpi"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={mensualiteCredit}
+                    onChange={(e) => setMensualiteCredit(e.target.value)}
+                    placeholder="Ex. 650"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="credit-crd-scpi">Capital restant dû (€)</Label>
+                  <Input
+                    id="credit-crd-scpi"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={creditCrd}
+                    onChange={(e) => setCreditCrd(e.target.value)}
+                    placeholder="Ex. 45000"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2 sm:col-span-1">
+                  <Label htmlFor="date-fin-pret-scpi">Date de fin de prêt</Label>
+                  <Input
+                    id="date-fin-pret-scpi"
+                    type="date"
+                    value={dateFinPret}
+                    onChange={(e) => setDateFinPret(e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
           )}
 

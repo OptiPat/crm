@@ -10,7 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { Plus, Search, Filter, Trash2, Pencil, TrendingUp, CalendarClock, Download } from "lucide-react";
+import { Plus, Search, Filter, Trash2, Pencil, TrendingUp, CalendarClock, Download, Percent, RefreshCw } from "lucide-react";
 import { rowsToCsv, downloadCsvFile } from "@/lib/export/csv-export";
 import {
   getInvestissementsWithDetails,
@@ -26,7 +26,17 @@ import {
   computeEncoursPlacementsStats,
   isPlacementEncoursEligible,
 } from "@/lib/investissements/investissement-encours";
-import { computeVersementsProgrammesAnnuelStats } from "@/lib/investissements/investissement-versements";
+import {
+  computeAvPerVersementProgrammeCoverageStats,
+  computeVersementsProgrammesAnnuelStats,
+  filterAvPerSansVersementProgramme,
+} from "@/lib/investissements/investissement-versements";
+import {
+  computeScpiReinvestissementCoverageStats,
+  compareInvestissementsScpiCreditFirst,
+  filterScpiSansReinvestissementDividendes,
+  hasScpiCredit,
+} from "@/lib/investissements/investissement-scpi-reinvest";
 import {
   computePatrimoineStats,
   investissementMatchesSearch,
@@ -88,6 +98,8 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
   const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
   const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [partenaireFilter, setPartenaireFilter] = useState<string>("ALL");
+  const [sansVpFilter, setSansVpFilter] = useState(false);
+  const [sansReinvestFilter, setSansReinvestFilter] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [selectedInvestissement, setSelectedInvestissement] = useState<InvestissementWithDetails | null>(null);
   const [encoursInvestissement, setEncoursInvestissement] =
@@ -144,6 +156,71 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
     [investissements]
   );
 
+  const avPerVpStats = useMemo(
+    () => computeAvPerVersementProgrammeCoverageStats(investissements),
+    [investissements]
+  );
+
+  const avPerVpPercentLabel =
+    avPerVpStats.percentWithVp == null
+      ? "—"
+      : `${Math.round(avPerVpStats.percentWithVp)}\u00a0%`;
+
+  const avPerVpDescription =
+    avPerVpStats.total === 0
+      ? "Aucun contrat AV/PER — avec moi"
+      : sansVpFilter
+        ? `${avPerVpStats.withoutVp} sans VP — filtre actif`
+        : `${avPerVpStats.withVp}/${avPerVpStats.total} avec VP — AV & PER`;
+
+  const scpiReinvestStats = useMemo(
+    () => computeScpiReinvestissementCoverageStats(investissements),
+    [investissements]
+  );
+
+  const scpiReinvestCreditCount = useMemo(() => {
+    if (sansReinvestFilter) {
+      return filterScpiSansReinvestissementDividendes(investissements).filter(hasScpiCredit)
+        .length;
+    }
+    return scpiReinvestStats.withCredit;
+  }, [investissements, sansReinvestFilter, scpiReinvestStats.withCredit]);
+
+  const scpiReinvestPercentLabel =
+    scpiReinvestStats.percentWithReinvest == null
+      ? "—"
+      : `${Math.round(scpiReinvestStats.percentWithReinvest)}\u00a0%`;
+
+  const scpiCreditHint =
+    scpiReinvestCreditCount > 0
+      ? ` · ${scpiReinvestCreditCount} crédit${scpiReinvestCreditCount > 1 ? "s" : ""}`
+      : "";
+
+  const scpiReinvestDescription =
+    scpiReinvestStats.total === 0
+      ? "Aucune SCPI pleine propriété — avec moi"
+      : sansReinvestFilter
+        ? `${scpiReinvestStats.withoutReinvest} sans réinv.${scpiCreditHint} — filtre actif`
+        : `${scpiReinvestStats.withReinvest}/${scpiReinvestStats.total} avec réinv.${scpiCreditHint} — SCPI`;
+
+  const toggleSansVpFilter = () => {
+    setSansReinvestFilter(false);
+    setSansVpFilter((active) => {
+      const next = !active;
+      if (next) setTypeFilter("ALL");
+      return next;
+    });
+  };
+
+  const toggleSansReinvestFilter = () => {
+    setSansVpFilter(false);
+    setSansReinvestFilter((active) => {
+      const next = !active;
+      if (next) setTypeFilter("ALL");
+      return next;
+    });
+  };
+
   const countByOrigine = useMemo(
     () => ({
       all: investissements.length,
@@ -155,7 +232,12 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
 
   const filteredInvestissements = useMemo(() => {
     let list = investissements;
-    if (origineFilter === "avec_moi") {
+
+    if (sansReinvestFilter) {
+      list = filterScpiSansReinvestissementDividendes(list);
+    } else if (sansVpFilter) {
+      list = filterAvPerSansVersementProgramme(list);
+    } else if (origineFilter === "avec_moi") {
       list = list.filter((i) => i.origine === "MON_CONSEIL");
     } else if (origineFilter === "a_cote") {
       list = list.filter((i) => i.origine !== "MON_CONSEIL");
@@ -163,21 +245,25 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
 
     list = list.filter((inv) => {
       const matchesSearch = investissementMatchesSearch(searchQuery, inv);
-      const matchesType = matchesInvestissementTypeFilter(
-        inv.type_produit,
-        typeFilter
-      );
+      const matchesType =
+        sansReinvestFilter || sansVpFilter
+          ? true
+          : matchesInvestissementTypeFilter(inv.type_produit, typeFilter);
       const matchesPartenaire =
         partenaireFilter === "ALL" || inv.partenaire_nom === partenaireFilter;
       return matchesSearch && matchesType && matchesPartenaire;
     });
 
     return list.sort((a, b) => {
+      if (sansReinvestFilter) {
+        const creditOrder = compareInvestissementsScpiCreditFirst(a, b);
+        if (creditOrder !== 0) return creditOrder;
+      }
       if (!a.date_souscription) return 1;
       if (!b.date_souscription) return -1;
       return b.date_souscription - a.date_souscription;
     });
-  }, [investissements, origineFilter, searchQuery, typeFilter, partenaireFilter]);
+  }, [investissements, origineFilter, searchQuery, typeFilter, partenaireFilter, sansVpFilter, sansReinvestFilter]);
 
   const filteredTotalCentimes = filteredInvestissements.reduce(
     (s, i) => s + (i.montant_initial ?? 0),
@@ -188,13 +274,17 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
     origineFilter !== "all" ||
     searchQuery.trim() !== "" ||
     typeFilter !== "ALL" ||
-    partenaireFilter !== "ALL";
+    partenaireFilter !== "ALL" ||
+    sansVpFilter ||
+    sansReinvestFilter;
 
   const resetFilters = () => {
     setOrigineFilter("all");
     setSearchQuery("");
     setTypeFilter("ALL");
     setPartenaireFilter("ALL");
+    setSansVpFilter(false);
+    setSansReinvestFilter(false);
   };
 
   const handleExportCsv = () => {
@@ -267,7 +357,7 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
           Synthèse — clic sur une carte pour filtrer la liste
         </p>
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           <StatCard
             title="Avec moi"
             value={formatEuroCentimes(stats.avecMoiCentimes)}
@@ -298,6 +388,34 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
             accentColor="#3B82F6"
             iconColor="text-blue-600"
             iconBgColor="bg-blue-50"
+          />
+          <StatCard
+            title="Couverture VP"
+            value={avPerVpPercentLabel}
+            description={avPerVpDescription}
+            icon={Percent}
+            accentColor="#059669"
+            iconColor="text-emerald-600"
+            iconBgColor="bg-emerald-50"
+            highlight={sansVpFilter}
+            onClick={
+              avPerVpStats.total > 0 || sansVpFilter ? toggleSansVpFilter : undefined
+            }
+          />
+          <StatCard
+            title="Réinv. dividendes"
+            value={scpiReinvestPercentLabel}
+            description={scpiReinvestDescription}
+            icon={RefreshCw}
+            accentColor="#7C3AED"
+            iconColor="text-violet-600"
+            iconBgColor="bg-violet-50"
+            highlight={sansReinvestFilter}
+            onClick={
+              scpiReinvestStats.total > 0 || sansReinvestFilter
+                ? toggleSansReinvestFilter
+                : undefined
+            }
           />
         </div>
       </section>
@@ -416,7 +534,11 @@ export function Investissements({ onOpenContact }: InvestissementsProps) {
           ) : filteredInvestissements.length === 0 ? (
             <div className="text-center py-8 space-y-3">
               <p className="text-sm text-muted-foreground">
-                Aucun investissement pour ces filtres.
+                {sansReinvestFilter
+                  ? "Aucune SCPI pleine propriété « avec moi » sans réinvestissement des dividendes."
+                  : sansVpFilter
+                    ? "Aucun contrat AV/PER « avec moi » sans versement programmé."
+                    : "Aucun investissement pour ces filtres."}
               </p>
               <Button type="button" variant="outline" size="sm" onClick={resetFilters}>
                 Tout afficher

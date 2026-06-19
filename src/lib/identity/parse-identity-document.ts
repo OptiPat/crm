@@ -5,6 +5,7 @@ import type {
 } from "@/lib/documents/extraction/types";
 import {
   extractVisualIdentityFields,
+  isPlausibleExpiryDate,
   normalizeIdentityDate,
 } from "@/lib/identity/visual-identity-parser";
 import {
@@ -41,7 +42,11 @@ export function isLikelyIdentityFileName(fileName: string): boolean {
   return /cni|passeport|passport|identit[eé]|carte.?nationale/i.test(fileName);
 }
 
-export type FieldProvenance = "mrz_verified" | "visual_suggestion" | "none";
+export type FieldProvenance =
+  | "mrz_verified"
+  | "mrz_unverified"
+  | "visual_suggestion"
+  | "none";
 
 export type IdentityExtractResult = {
   nom?: string;
@@ -168,15 +173,27 @@ export function parseIdentityFromRegions(input: {
     provenance.dateNaissance = "visual_suggestion";
   }
 
-  // Expiration : MRZ uniquement si son checksum ICAO est valide, sinon
-  // suggestion visuelle validée. Jamais une date MRZ au checksum invalide
-  // (mieux vaut un champ vide qu'une fausse date affichée avec assurance).
+  // Expiration, par ordre de confiance :
+  //  1. MRZ avec checksum ICAO valide → fiable.
+  //  2. Suggestion visuelle plausible (libellé lu sur la pièce).
+  //  3. MRZ au checksum d'expiration invalide MAIS dont la ligne porteuse est
+  //     fiable (checksum naissance OK = même ligne bien lue) et dont la date
+  //     reste plausible. Un seul caractère mal lu (souvent le chiffre de
+  //     contrôle) ne doit plus vider le champ : on remplit en marquant
+  //     « mrz_unverified » pour que l'UI invite à vérifier.
   if (mrz?.dateExpiration && mrz.checksVerified.expiryDate) {
     dateExpirationFr = mrz.dateExpiration;
     provenance.dateExpiration = "mrz_verified";
   } else if (visual.dateExpiration) {
     dateExpirationFr = visual.dateExpiration;
     provenance.dateExpiration = "visual_suggestion";
+  } else if (
+    mrz?.dateExpiration &&
+    mrz.checksVerified.birthDate &&
+    isPlausibleExpiryDate(mrz.dateExpiration, dateNaissanceFr)
+  ) {
+    dateExpirationFr = mrz.dateExpiration;
+    provenance.dateExpiration = "mrz_unverified";
   }
 
   if (visual.lieuNaissance) {
@@ -199,6 +216,7 @@ export function parseIdentityFromRegions(input: {
   else if (mrz) confidence = 35;
   if (provenance.dateNaissance === "visual_suggestion") confidence = Math.max(confidence, 30);
   if (provenance.dateExpiration === "visual_suggestion") confidence = Math.max(confidence, 20);
+  if (provenance.dateExpiration === "mrz_unverified") confidence = Math.max(confidence, 25);
   if (provenance.lieuNaissance === "visual_suggestion") confidence = Math.max(confidence, 25);
 
   const source: IdentityExtractResult["source"] = mrzVerified

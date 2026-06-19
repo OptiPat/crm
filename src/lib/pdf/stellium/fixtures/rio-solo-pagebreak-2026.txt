@@ -1,0 +1,68 @@
+Recueil d'informations
+Consultant : DUPONT Jean
+Investisseur : DUPONT Jean
+Date d'entrée en relation : 01/01/2020
+Identité
+Civilité	Monsieur
+Nom d'usage / prénom	DUPONT Jean
+Nom de naissance	DUPONT
+Né(e) le	01/01/1980 à PARIS - France
+Nationalité	Française
+Coordonnées
+Adresse e-mail	jean.dupont@example.com
+Téléphone mobile	+33600000001
+Adresse postale
+75000 PARIS - France
+Relations
+Situation matrimoniale	Célibataire
+Régime	-
+ 	Nombre d'enfants à charge : 0
+Professionnel
+Catégorie socio-professionnelle	Cadres
+Profession (ou dernière profession)	Ingénieur
+Nom de la société	ACME
+Réglementaire
+Patrimoine
+Recueil d'informations - DUPONT Jean et - 01/01/2026	2/6
+
+Actifs
+Désignation	-
+Immobilier	500000 €
+Immobilier de jouissance	300000 €
+Résidence principale - Maison	300000 €
+Immobilier locatif	200000 €
+Classique - Studio	200000 €
+Financier	100000 €
+Épargne immobilière	30000 €
+SCPI - Pierre	30000 €
+Épargne bancaire	40000 €
+Compte courant - CC	20000 €
+Livret classique - Tresor	20000 €
+Épargne financière	30000 €
+Assurance vie - Contrat	30000 €
+TOTAL	600000 €
+Passifs
+Désignation	Emprunteur	Echéance par an	CRD   Date d'échéance
+Crédits immobilier	30000 €	400000 €
+Crédit immobilier - Amortissable -
+12000 €	250000 €	10/10/2045
+Maison	Jean DUPONT
+Crédit immobilier - Amortissable -
+6000 €	150000 €	20/02/2046
+Crédits immobilier - Studio LOC	Jean DUPONT
+TOTAL	30000 €	400000 €
+Revenus et charges
+Revenus
+Désignation	Jean DUPONT	Total
+Immobilier	12000 €	12000 €
+Revenu foncier ou BIC - Studio	12000 €	12000 €
+TOTAL	12000 €	12000 €
+Charges
+Désignation	Jean DUPONT	Total
+Charges fixes	18000 €	18000 €
+Mensualité de crédit - Maison	12000 €	12000 €
+Mensualité de crédit - Studio	6000 €	6000 €
+TOTAL	18000 €	18000 €
+Fiscalité
+Impôt sur le revenu (IR)	Jean DUPONT
+Revenu brut global	40000 €

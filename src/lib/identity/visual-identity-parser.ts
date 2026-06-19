@@ -234,10 +234,16 @@ export function isPlausibleExpiryDate(dateFr: string, birthDateFr?: string): boo
 
 function extractVisualExpiryDate(text: string, birthDateFr?: string): string | undefined {
   const expiryPatterns = [
-    new RegExp(`Carte\\s+valable\\s+jusqu['']?au\\s*:?\\s*(${DATE_TOKEN})`, "i"),
-    new RegExp(`Valable\\s+jusqu['']?au\\s*:?\\s*(${DATE_TOKEN})`, "i"),
-    new RegExp(`Date\\s+d['']expiration\\s*:?\\s*(${DATE_TOKEN})`, "i"),
-    new RegExp(`Expiry\\s+date\\s*:?\\s*(${DATE_TOKEN})`, "i"),
+    // « Carte valable jusqu'au », « Valab. jusqu au » (OCR abrégé).
+    new RegExp(`Carte\\s+valab\\w*\\s+jusqu['']?\\s*au\\s*:?\\s*(${DATE_TOKEN})`, "i"),
+    new RegExp(`Valab\\w*\\s+jusqu['']?\\s*au\\s*:?\\s*(${DATE_TOKEN})`, "i"),
+    // « Date d'expiration », « DATE D'EXPIR. », bilingue « … / Date of expiry ».
+    new RegExp(
+      `Date\\s+d['']?\\s*expir\\w*\\.?\\s*(?:/\\s*Date\\s+of\\s+expiry\\s*)?:?\\s*(${DATE_TOKEN})`,
+      "i"
+    ),
+    new RegExp(`Date\\s+of\\s+expiry\\s*:?\\s*(${DATE_TOKEN})`, "i"),
+    new RegExp(`Expir\\w*\\s+date\\s*:?\\s*(${DATE_TOKEN})`, "i"),
   ];
 
   for (const pattern of expiryPatterns) {

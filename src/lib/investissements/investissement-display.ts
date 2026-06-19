@@ -39,10 +39,27 @@ const PRODUCT_TYPE_LABELS: Record<string, string> = {
   LMP: "LMP",
   NUE_PROPRIETE: "Nue-Propriété",
   RESIDENCE_PRINCIPALE: "Résidence Principale",
+  RP: "Résidence Principale",
+  RESIDENCE_SECONDAIRE: "Résidence Secondaire",
+  RS: "Résidence Secondaire",
+  LOCATIF: "Locatif",
   LOCATIF_CLASSIQUE: "Locatif Classique",
   SCPI_FISCALE: "SCPI Fiscale",
   CONTRAT_CAPITALISATION: "Contrat de Capitalisation",
   EPARGNE_SALARIALE: "Épargne Salariale",
+  EPARGNE_BANCAIRE: "Épargne Bancaire",
+  COMPTE_COURANT: "Compte Courant",
+  LIVRET_A: "Livret A",
+  LDD: "LDD / LDDS",
+  LDDS: "LDD / LDDS",
+  LEP: "LEP",
+  PEL: "PEL",
+  CEL: "CEL",
+  CSL: "Compte sur Livret",
+  PEA: "PEA",
+  PERP: "PERP",
+  COMPTE_TITRE: "Compte-Titres",
+  COMPTE_TITRES: "Compte-Titres",
   AUTRE: "Autre",
 };
 
@@ -135,7 +152,8 @@ export type InvestissementMetaTone =
   | "vp"
   | "tag"
   | "term"
-  | "growth";
+  | "growth"
+  | "credit";
 
 export function formatEuroCentimes(centimes?: number): string {
   if (centimes == null || centimes === 0) return "-";
@@ -160,4 +178,6 @@ export const INVESTISSEMENT_META_TONE_CLASS: Record<
     "inline-flex items-center gap-1.5 flex-nowrap whitespace-nowrap rounded-md border border-violet-200/70 bg-violet-50/80 px-2 py-0.5 text-violet-950 [&>svg]:text-violet-600",
   growth:
     "inline-flex items-center gap-1.5 flex-nowrap whitespace-nowrap rounded-md border border-emerald-200/70 bg-emerald-50/80 px-2 py-0.5 text-emerald-900 [&>svg]:text-emerald-600",
+  credit:
+    "inline-flex items-center gap-1.5 flex-nowrap whitespace-nowrap rounded-md border border-orange-300 bg-orange-100 px-2 py-0.5 font-medium text-orange-950 [&>svg]:text-orange-700",
 };

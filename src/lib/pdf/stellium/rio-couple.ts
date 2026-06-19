@@ -16,7 +16,7 @@ export interface CoupleInvestisseurs {
 }
 
 const ACTIF_CATEGORIES =
-  "Résidence principale|Résidence secondaire|Assurance vie|Compte courant|Livret A|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|Classique|Pinel|LMNP|LMP|Denormandie|Malraux";
+  "Résidence principale|Résidence secondaire|Assurance vie|Compte courant|Compte sur livret|Livret A|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|Classique|Pinel|LMNP|LMP|Denormandie|Malraux";
 
 export function detectCoupleRio(header: string): CoupleInvestisseurs | null {
   const match = header.match(
@@ -340,6 +340,28 @@ function slugify(value: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/**
+ * Retire les colonnes « détenteur / quote-part » vides (« \t-\t- ») absorbées
+ * par la capture du nom dans un tableau couple, et normalise les espaces.
+ */
+function cleanCoupleNom(value: string): string {
+  return value
+    .replace(/(?:[\t ]*[-–—])+[\t ]*$/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Génère un id unique dans la liste de biens (deux biens homonymes possibles). */
+function uniqueBienId(baseLabel: string, biens: BienImmobilier[]): string {
+  const base = `immo-${slugify(baseLabel)}`;
+  let id = base;
+  let suffix = 2;
+  while (biens.some((b) => b.id === id)) {
+    id = `${base}-${suffix++}`;
+  }
+  return id;
+}
+
 function mapImmoType(label: string): BienImmobilier["type"] {
   const lower = label.toLowerCase();
   if (lower.includes("résidence principale") || lower.includes("residence principale")) {
@@ -418,16 +440,15 @@ export function parseCouplePatrimoine(
   let match: RegExpExecArray | null;
   while ((match = linePattern.exec(actifsBlock)) !== null) {
     const category = match[1].trim();
-    const nom = match[2].trim();
+    const nom = cleanCoupleNom(match[2]);
     const amounts = parseTrailingAmounts(match[3]);
     const montant = pickFoyerAmount(amounts, hasCommunColumn, true);
     if (!montant || montant <= 0) continue;
 
     if (isImmoActifCategory(category)) {
       const type = mapImmoType(category);
-      const label = `${category} - ${nom}`;
       biens.push({
-        id: `immo-${slugify(label)}`,
+        id: uniqueBienId(`${category} - ${nom}`, biens),
         type,
         nom,
         valeur: montant,
@@ -449,13 +470,13 @@ export function parseCouplePatrimoine(
   }
 
   const bankPattern = new RegExp(
-    `(Compte courant|Livret A|LDD|LDDS|PEL|CEL)\\s*(?:[-–—]\\s*(.+?)\\s+)?((?:(?:-|[\\d\\s,]+)\\s*€\\s*)+)`,
+    `(Compte courant|Compte sur livret|Livret A|LDD|LDDS|PEL|CEL)\\s*(?:[-–—]\\s*(.+?)\\s+)?((?:(?:-|[\\d\\s,]+)\\s*€\\s*)+)`,
     "gi"
   );
   while ((match = bankPattern.exec(actifsBlock)) !== null) {
     if (match[2]?.trim()) continue;
     const category = match[1].trim();
-    const nom = match[2]?.trim() || category;
+    const nom = cleanCoupleNom(match[2] ?? "") || category;
     const amounts = parseTrailingAmounts(match[3]);
     const montant = pickFoyerAmount(amounts, hasCommunColumn, true);
     if (!montant || montant <= 0) continue;

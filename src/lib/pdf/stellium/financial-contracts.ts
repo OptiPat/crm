@@ -14,7 +14,8 @@ export function mapActifCategoryToProductType(category: string): string | null {
   const lower = category.toLowerCase();
   if (lower.includes("assurance vie")) return "ASSURANCE_VIE";
   if (lower.includes("compte courant")) return "EPARGNE_BANCAIRE";
-  if (lower.includes("livret a")) return "LIVRET_A";
+  if (lower.includes("compte sur livret") || lower === "csl") return "CSL";
+  if (lower.includes("livret")) return "LIVRET_A";
   if (lower.includes("ldd") || lower.includes("ldds")) return "LDDS";
   if (lower === "pel") return "PEL";
   if (lower === "cel") return "CEL";
@@ -28,6 +29,8 @@ export function mapActifCategoryToProductType(category: string): string | null {
 
 export function isImmoActifCategory(category: string): boolean {
   const lower = category.toLowerCase();
+  // « Livret classique » est de l'épargne, pas de l'immobilier « Classique ».
+  if (lower.includes("livret")) return false;
   return (
     lower.includes("résidence") ||
     lower.includes("residence") ||
@@ -50,25 +53,39 @@ export function appendContratFinancier(
   if (!type || montant <= 0) return;
 
   const label = nom.trim() || category.trim();
-  const contrat: ContratFinancier = {
-    id: `fin-${slugify(`${type}-${label}`)}`,
-    type,
-    nom: label,
-    montant,
-    autoOrigine: ["LIVRET_A", "LDDS", "EPARGNE_BANCAIRE", "PEL", "CEL"].includes(type)
-      ? "EXISTANT_CLIENT"
-      : undefined,
-  };
 
   if (!data.contratsFinanciers) {
     data.contratsFinanciers = [];
   }
-  const exists = data.contratsFinanciers.some(
-    (c) => c.type === contrat.type && c.nom.toLowerCase() === contrat.nom.toLowerCase()
+
+  // Vrai doublon (même ligne relue) = type + nom + montant identiques. On ne
+  // déduplique PAS sur le seul couple type/nom : les deux conjoints peuvent
+  // détenir un contrat homonyme (ex. « Livret A - LA » des deux membres).
+  const isDuplicate = data.contratsFinanciers.some(
+    (c) =>
+      c.type === type &&
+      c.nom.toLowerCase() === label.toLowerCase() &&
+      c.montant === montant
   );
-  if (!exists) {
-    data.contratsFinanciers.push(contrat);
+  if (isDuplicate) return;
+
+  const baseId = `fin-${slugify(`${type}-${label}`)}`;
+  let id = baseId;
+  let suffix = 2;
+  while (data.contratsFinanciers.some((c) => c.id === id)) {
+    id = `${baseId}-${suffix++}`;
   }
+
+  const contrat: ContratFinancier = {
+    id,
+    type,
+    nom: label,
+    montant,
+    autoOrigine: ["LIVRET_A", "LDDS", "EPARGNE_BANCAIRE", "PEL", "CEL", "CSL"].includes(type)
+      ? "EXISTANT_CLIENT"
+      : undefined,
+  };
+  data.contratsFinanciers.push(contrat);
 }
 
 /** Totaux agrégés (rétrocompat tests / preview). */
@@ -86,7 +103,11 @@ export function applyFinancialProductAggregate(
     data.compteCourant = (data.compteCourant ?? 0) + montant;
     return;
   }
-  if (lower.includes("livret a")) {
+  if (lower.includes("compte sur livret") || lower === "csl") {
+    data.csl = (data.csl ?? 0) + montant;
+    return;
+  }
+  if (lower.includes("livret")) {
     data.livretA = (data.livretA ?? 0) + montant;
     return;
   }
@@ -140,9 +161,10 @@ export function hasEpargneBancaireDetail(data: ExtractedData): boolean {
     (data.ldd ?? 0) > 0 ||
     (data.pel ?? 0) > 0 ||
     (data.cel ?? 0) > 0 ||
+    (data.csl ?? 0) > 0 ||
     Boolean(
       data.contratsFinanciers?.some((c) =>
-        ["LIVRET_A", "EPARGNE_BANCAIRE", "LDDS", "PEL", "CEL"].includes(c.type)
+        ["LIVRET_A", "EPARGNE_BANCAIRE", "LDDS", "PEL", "CEL", "CSL"].includes(c.type)
       )
     )
   );

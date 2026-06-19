@@ -1,6 +1,7 @@
 import { Building2, Home, PiggyBank } from "lucide-react";
 import type { ExtractedData } from "@/lib/pdf";
 import { formatEuroCompact } from "@/lib/documents/rio-import-preview";
+import { formatNomProduit } from "@/lib/investissements/investissement-display";
 
 interface RioPatrimoineOverviewProps {
   data: ExtractedData;
@@ -98,7 +99,7 @@ export function RioPatrimoineOverview({ data }: RioPatrimoineOverviewProps) {
                 <div key={contrat.id} className="rounded-lg border p-3 text-sm">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium">{contrat.nom}</span>
-                    <span className="text-muted-foreground">({contrat.type})</span>
+                    <span className="text-muted-foreground">({formatNomProduit(contrat.type)})</span>
                     {origine && (
                       <span className="text-xs bg-muted px-2 py-0.5 rounded">{origine}</span>
                     )}

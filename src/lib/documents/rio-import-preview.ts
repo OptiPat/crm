@@ -8,7 +8,7 @@ export type RioImportStep = 1 | 2 | 3;
 
 export function categorizePatrimoineType(type: string): RioPatrimoineCategory {
   if (isImmobilierFinancingType(type) || type === "RS") return "immobilier";
-  if (["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(type)) return "epargne";
+  if (["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(type)) return "epargne";
   return "placements";
 }
 
@@ -51,7 +51,7 @@ export function buildRioPreviewSummary(data: ExtractedData): RioPreviewSummary {
     items.some(
       (item) =>
         item.montant > 0 &&
-        !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(item.type)
+        !["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(item.type)
     );
 
   return {

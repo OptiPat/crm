@@ -62,4 +62,51 @@ describe("extractPatrimoineItemsFromRio", () => {
     expect(items.find((i) => i.type === "RS")?.montant).toBe(200_000);
     expect(items.find((i) => i.label === "Actions / Obligations")?.montant).toBe(50_000);
   });
+
+  it("conserve le type SCPI pour les biens immobiliers (pas IMMOBILIER)", () => {
+    const items = extractPatrimoineItemsFromRio({
+      biensImmobiliers: [
+        {
+          id: "scpi-euro",
+          type: "SCPI",
+          nom: "SCPI - Eurovalys",
+          valeur: 40_600,
+          creditCRD: 45_000,
+          mensualiteCredit: 650,
+          dateFinCredit: "10/11/2046",
+        },
+      ],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("SCPI");
+    expect(items[0].creditCRD).toBe(45_000);
+  });
+
+  it("propage le crédit SCPI des biens immo vers un contrat financier homonyme", () => {
+    const items = extractPatrimoineItemsFromRio({
+      contratsFinanciers: [
+        {
+          id: "fin-scpi-euro",
+          type: "SCPI",
+          nom: "Eurovalys",
+          montant: 40_600,
+        },
+      ],
+      biensImmobiliers: [
+        {
+          id: "scpi-euro",
+          type: "SCPI",
+          nom: "SCPI - Eurovalys",
+          valeur: 40_600,
+          creditCRD: 45_000,
+          mensualiteCredit: 650,
+          dateFinCredit: "10/11/2046",
+        },
+      ],
+    });
+    const scpi = items.find((i) => i.type === "SCPI" && i.label === "Eurovalys");
+    expect(scpi?.creditCRD).toBe(45_000);
+    expect(scpi?.mensualiteCredit).toBe(650);
+    expect(scpi?.dateFinCredit).toBe("10/11/2046");
+  });
 });

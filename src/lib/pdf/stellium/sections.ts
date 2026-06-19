@@ -11,7 +11,10 @@ const SECTION_MARKERS: readonly { key: string; pattern: RegExp }[] = [
   { key: "testament", pattern: /Testament\s/i },
   { key: "professionnel", pattern: /Professionnel\s/i },
   { key: "reglementaire", pattern: /Réglementaire\s/i },
-  { key: "patrimoine", pattern: /Patrimoine\s+Actifs/i },
+  // « Actifs » peut être séparé de « Patrimoine » par un pied de page PDF
+  // (« Recueil d'informations - … - JJ/MM/AAAA  N/N »). On tolère une ligne
+  // intercalée pour ne pas perdre toute la section patrimoine.
+  { key: "patrimoine", pattern: /Patrimoine\s+(?:[^\n]*[\r\n]+)?Actifs\b/i },
   { key: "revenusCharges", pattern: /Revenus et charges\s/i },
   { key: "fiscalite", pattern: /Fiscalité\s/i },
   { key: "objectifs", pattern: /Objectifs\s/i },

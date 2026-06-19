@@ -5,7 +5,7 @@ import { extractPatrimoineItemsFromRio } from "./extract-patrimoine-items";
 export function hasPatrimoineToTri(data: ExtractedData): boolean {
   const items = extractPatrimoineItemsFromRio(data);
   return items.some((item) => {
-    if (["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL"].includes(item.type)) {
+    if (["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(item.type)) {
       return false;
     }
     return item.montant > 0;

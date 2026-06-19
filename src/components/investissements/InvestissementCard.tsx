@@ -12,6 +12,12 @@ import {
   getEffectiveEncoursCentimes,
   isPlacementEncoursEligible,
 } from "@/lib/investissements/investissement-encours";
+import { getMontantInvestiCentimes } from "@/lib/investissements/investissement-versements";
+import {
+  formatScpiCreditLabel,
+  hasScpiCredit,
+  isScpiCreditEligibleType,
+} from "@/lib/investissements/investissement-scpi-reinvest";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import {
   parseDemembrementDuree,
@@ -19,6 +25,7 @@ import {
 } from "@/lib/investissements/investissement-demembrement";
 import { cn } from "@/lib/utils";
 import {
+  Landmark,
   ArrowRight,
   Building2,
   Calendar,
@@ -79,6 +86,14 @@ export function InvestissementCard({
   const hasEncoursReleve =
     inv.encours_actuel != null && inv.encours_actuel > 0;
   const effectiveEncours = getEffectiveEncoursCentimes(inv);
+  const montantInvesti = getMontantInvestiCentimes(inv);
+  const scpiHasCredit =
+    isScpiCreditEligibleType(inv.type_produit) && hasScpiCredit(inv);
+  const scpiCreditLabel =
+    scpiHasCredit &&
+    formatScpiCreditLabel(inv, formatEuroCentimes, (ts) =>
+      ts != null ? formatCalendarDateFr(ts) : ""
+    );
 
   return (
     <div
@@ -115,6 +130,12 @@ export function InvestissementCard({
             >
               {formatNomProduit(inv.type_produit || "AUTRE")}
             </Badge>
+            {scpiHasCredit && (
+              <Badge className="text-xs font-semibold px-2 py-0.5 gap-1 border-transparent inline-flex items-center bg-orange-500 text-white">
+                <Landmark className="h-3 w-3 shrink-0" aria-hidden />
+                Crédit
+              </Badge>
+            )}
             {inv.origine === "EXISTANT_CLIENT" && (
               <span className="text-xs text-gray-500 italic">à côté</span>
             )}
@@ -168,16 +189,18 @@ export function InvestissementCard({
                     <> · {formatCalendarDateFr(inv.encours_date)}</>
                   )}
                 </InvestissementMetaRow>
-                {(inv.montant_initial ?? 0) > 0 && (
+                {(montantInvesti > 0) && (
                   <InvestissementMetaRow tone="amount">
-                    Investi : {formatEuroCentimes(inv.montant_initial)}
+                    Investi : {formatEuroCentimes(montantInvesti)}
                   </InvestissementMetaRow>
                 )}
               </>
             ) : (
+              montantInvesti > 0 && (
               <InvestissementMetaRow tone="amount">
-                {formatEuroCentimes(inv.montant_initial)}
+                {formatEuroCentimes(montantInvesti)}
               </InvestissementMetaRow>
+              )
             )}
             {inv.date_souscription && (
               <InvestissementMetaRow icon={Calendar}>
@@ -248,6 +271,11 @@ export function InvestissementCard({
                   const match = inv.notes?.match(/(\d+)%/);
                   return match?.[1] ? `${match[1]}%` : "100%";
                 })()}
+              </InvestissementMetaRow>
+            )}
+            {scpiCreditLabel && (
+              <InvestissementMetaRow icon={Landmark} tone="credit">
+                {scpiCreditLabel}
               </InvestissementMetaRow>
             )}
           </div>

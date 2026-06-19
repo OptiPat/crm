@@ -89,8 +89,11 @@ function parseActifLines(patrimoineSection: string): ParsedActifLine[] {
     lines.push({ category, nom, montant });
   };
 
+  // « Livret(?: …)? » capture « Livret A » comme « Livret classique » d'un bloc
+  // pour éviter que le mot « classique » de « Livret classique » soit pris pour
+  // de l'immobilier locatif « Classique ».
   const patternWithDash =
-    /(Résidence principale|Résidence secondaire|Assurance vie|Compte courant|Livret A|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|Classique|Pinel|LMNP|LMP|Denormandie|Malraux)\s*[-–—]\s*(.+?)\s+([\d\s,]+)\s*€/gi;
+    /(Résidence principale|Résidence secondaire|Assurance vie|Compte courant|Compte sur livret|Livret(?:\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|Classique|Pinel|LMNP|LMP|Denormandie|Malraux)\s*[-–—]\s*(.+?)\s+([\d\s,]+)\s*€/gi;
 
   let match: RegExpExecArray | null;
   while ((match = patternWithDash.exec(actifsBlock)) !== null) {
@@ -138,9 +141,14 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
   for (const line of actifLines) {
     if (isImmoActifCategory(line.category)) {
       const type = mapImmoType(line.category);
-      const label = `${line.category} - ${line.nom}`;
+      const baseId = `immo-${slugify(`${line.category} - ${line.nom}`)}`;
+      let id = baseId;
+      let suffix = 2;
+      while (biens.some((b) => b.id === id)) {
+        id = `${baseId}-${suffix++}`;
+      }
       const bien: BienImmobilier = {
-        id: `immo-${slugify(label)}`,
+        id,
         type,
         nom: line.nom,
         valeur: line.montant,

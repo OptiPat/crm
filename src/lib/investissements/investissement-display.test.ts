@@ -19,6 +19,14 @@ describe("formatNomProduit", () => {
   it("formate les codes techniques", () => {
     expect(formatNomProduit("ASSURANCE_VIE")).toBe("Assurance Vie");
   });
+
+  it("libelle proprement les types RIO (accents, pas de code brut)", () => {
+    expect(formatNomProduit("LOCATIF")).toBe("Locatif");
+    expect(formatNomProduit("EPARGNE_BANCAIRE")).toBe("Épargne Bancaire");
+    expect(formatNomProduit("LIVRET_A")).toBe("Livret A");
+    expect(formatNomProduit("COMPTE_TITRE")).toBe("Compte-Titres");
+    expect(formatNomProduit("RP")).toBe("Résidence Principale");
+  });
 });
 
 describe("getTypeProduitBgColor", () => {

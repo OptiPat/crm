@@ -48,6 +48,25 @@ pub(crate) const EFFECTIVE_ENCOURS_DATE_SQL: &str = "COALESCE(
     investissements.date_souscription
 )";
 
+/// Montant investi = souscription initiale + somme des versements complémentaires.
+pub(crate) const MONTANT_INVESTI_TOTAL_SQL: &str = "(
+    COALESCE(investissements.montant_initial, 0)
+    + COALESCE(
+        (SELECT SUM(vr.montant) FROM investissement_versements vr
+         WHERE vr.investissement_id = investissements.id),
+        0
+    )
+)";
+
+pub(crate) const MONTANT_INVESTI_TOTAL_SQL_I: &str = "(
+    COALESCE(i.montant_initial, 0)
+    + COALESCE(
+        (SELECT SUM(vr.montant) FROM investissement_versements vr
+         WHERE vr.investissement_id = i.id),
+        0
+    )
+)";
+
 pub(crate) const EFFECTIVE_ENCOURS_DATE_SQL_I: &str = "COALESCE(
     (SELECT vr.date_versement FROM investissement_versements vr
      WHERE vr.investissement_id = i.id
@@ -62,11 +81,15 @@ pub(crate) const EFFECTIVE_ENCOURS_DATE_SQL_I: &str = "COALESCE(
 
 // Colonnes encours effectif (montant + date) pour les SELECT investissements.
 pub(crate) fn investissement_encours_select_cols() -> String {
-    format!("{EFFECTIVE_ENCOURS_SQL}, {EFFECTIVE_ENCOURS_DATE_SQL}")
+    format!(
+        "{EFFECTIVE_ENCOURS_SQL}, {EFFECTIVE_ENCOURS_DATE_SQL}, {MONTANT_INVESTI_TOTAL_SQL}"
+    )
 }
 
 pub(crate) fn investissement_encours_select_cols_i() -> String {
-    format!("{EFFECTIVE_ENCOURS_SQL_I}, {EFFECTIVE_ENCOURS_DATE_SQL_I}")
+    format!(
+        "{EFFECTIVE_ENCOURS_SQL_I}, {EFFECTIVE_ENCOURS_DATE_SQL_I}, {MONTANT_INVESTI_TOTAL_SQL_I}"
+    )
 }
 
 impl Database {
@@ -331,6 +354,7 @@ mod database_integration_tests {
 
         let refreshed = db.get_investissement_by_id(inv.id).unwrap();
         assert_eq!(refreshed.encours_actuel, Some(12_500_00));
+        assert_eq!(refreshed.montant_investi_total, Some(12_500_00));
 
         let yearly = db.get_yearly_activity_stats().unwrap();
         let y2025 = yearly.iter().find(|s| s.year == 2025).unwrap();

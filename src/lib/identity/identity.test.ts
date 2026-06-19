@@ -196,7 +196,10 @@ describe("parse-identity-document regions", () => {
 });
 
 describe("parse-identity-document expiration", () => {
-  it("n'affiche pas une date d'expiration MRZ au checksum invalide", () => {
+  it("récupère l'expiration MRZ plausible (checksum invalide) si la ligne naissance est fiable, marquée à vérifier", () => {
+    // Un seul caractère mal lu sur le bloc expiration (souvent le chiffre de
+    // contrôle) ne doit plus vider le champ : la ligne porteuse est fiable
+    // (checksum naissance OK), donc on remplit en signalant « mrz_unverified ».
     const result = parseIdentityFromRegions({
       rectoText: `
         Nom: ERIKSSON
@@ -208,8 +211,17 @@ describe("parse-identity-document expiration", () => {
       `,
     });
     expect(result.mrz?.checksVerified.expiryDate).toBe(false);
-    expect(result.dateExpirationFr).toBeUndefined();
-    expect(result.provenance.dateExpiration).toBe("none");
+    expect(result.mrz?.checksVerified.birthDate).toBe(true);
+    expect(result.dateExpirationFr).toBe("23/06/2046");
+    expect(result.provenance.dateExpiration).toBe("mrz_unverified");
+  });
+
+  it("lit l'abréviation « DATE D'EXPIR. » de la nouvelle CNI", () => {
+    const fields = extractVisualIdentityFields(`
+      Né(e) le : 15.03.1985
+      DATE D'EXPIR. 10/01/2031
+    `);
+    expect(fields.dateExpiration).toBe("10/01/2031");
   });
 
   it("rejette une date d'expiration visuelle implausible (= naissance)", () => {

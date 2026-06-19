@@ -18,14 +18,17 @@ function parseAmounts(text: string): {
   crdRaw: string;
   dateFinCredit?: string;
   beforeAmounts: string;
+  afterAmounts: string;
 } | undefined {
   const cleaned = text.replace(/\s+TOTAL\b[\s\S]*$/i, "").trim();
   const match = cleaned.match(
     /([\d\s,]+)\s*€\s+([\d\s,]+)\s*€(?:\s+(\d{2}\/\d{2}\/\d{4}))?/
   );
   if (!match) return undefined;
+  const afterIndex = (match.index ?? 0) + match[0].length;
   return {
     beforeAmounts: cleaned.slice(0, match.index).trim(),
+    afterAmounts: cleaned.slice(afterIndex).trim(),
     echeanceRaw: match[1],
     crdRaw: match[2],
     dateFinCredit: match[3],
@@ -56,14 +59,40 @@ function stripBorrowerSuffix(name: string): string {
   return trimmed;
 }
 
-function parseCreditDesignation(body: string): {
+/**
+ * Retire l'emprunteur final (« … Prénom NOM ») et renvoie le résidu = nom du
+ * bien. Si la chaîne est uniquement « Prénom NOM » (aucun résidu), renvoie "".
+ */
+function stripTrailingBorrower(value: string): string {
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+  const withResidue = trimmed.match(
+    /^(.*?)\s+[A-ZÀ-Ü][a-zà-üéèê'ô.-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'-]+$/
+  );
+  if (withResidue) return withResidue[1].trim();
+  if (/^[A-ZÀ-Ü][a-zà-üéèê'ô.-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'-]+$/.test(trimmed)) return "";
+  return trimmed;
+}
+
+function parseCreditDesignation(
+  before: string,
+  after: string
+): {
   designation: string;
   productType: string;
   propertyName: string;
 } {
-  const { productType, propertyName: rawPropertyName } = parseDesignationTail(body);
-  const propertyName = stripBorrowerSuffix(rawPropertyName);
-  const designation = propertyName || rawPropertyName || body;
+  const { productType, propertyName: beforeName } = parseDesignationTail(before);
+
+  let propertyName = stripBorrowerSuffix(beforeName);
+  // Stellium reporte souvent le nom du bien APRÈS les montants (ligne PDF
+  // suivante : « 9454 € 166183 € 10/11/2046 Primo MTP Nicolas PLAZA »).
+  if (!propertyName) {
+    const afterName = stripTrailingBorrower(after);
+    if (afterName) propertyName = afterName;
+  }
+
+  const designation = propertyName || beforeName || before || productType;
   return { designation, productType, propertyName };
 }
 
@@ -81,7 +110,8 @@ function parseCreditRow(row: string): StelliumMortgageCredit | undefined {
   if (!echeanceAnnuelle || !crd) return undefined;
 
   const body = amounts.beforeAmounts.replace(/\s+/g, " ").trim();
-  const { designation, productType, propertyName } = parseCreditDesignation(body);
+  const afterBody = amounts.afterAmounts.replace(/\s+/g, " ").trim();
+  const { designation, productType, propertyName } = parseCreditDesignation(body, afterBody);
 
   return {
     designation,
@@ -125,10 +155,11 @@ function flattenPassifsLines(block: string): string[] {
     if (/^TOTAL\b/i.test(line)) continue;
 
     if (/^Cr[ée]dits immobilier\b/i.test(line) && !/Amortissable/i.test(line)) {
-      if (current && /Amortissable\s*[-–—]?\s*$/i.test(current.trim())) {
-        current += ` ${line}`;
-        continue;
-      }
+      // Sous-total « Crédits immobilier  24045 €  410881 € » (montant juste après) → ignorer.
+      if (/^Cr[ée]dits immobilier\s+[\d]/i.test(line)) continue;
+      // Sinon c'est la désignation d'un bien (« Crédits immobilier - LMNP AIRBNB »)
+      // reportée sous les montants : la rattacher au crédit courant.
+      if (current) current += ` ${line}`;
       continue;
     }
 
