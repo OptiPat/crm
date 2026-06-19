@@ -13,6 +13,10 @@ describe("getScpiEmtProductCostRate", () => {
   it("additionne les lignes EMT pour NCAP Régions", () => {
     expect(getScpiEmtProductCostRate("ncap_regions")).toBeCloseTo(0.020401398);
   });
+
+  it("additionne les lignes EMT pour Épargne Pierre", () => {
+    expect(getScpiEmtProductCostRate("epargne_pierre")).toBeCloseTo(0.0217);
+  });
 });
 
 describe("computeProductCostsPercentRatio", () => {

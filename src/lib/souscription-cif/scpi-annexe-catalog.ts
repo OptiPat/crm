@@ -72,6 +72,25 @@ Principaux frais :
 - Réalisation et suivi des travaux : 2,5% HT si travaux > 250 000€%;`,
   },
   {
+    key: "epargne_pierre",
+    label: "Épargne Pierre",
+    partPriceEur: 208,
+    description: `— ÉPARGNE PIERRE —
+
+Épargne Pierre déploie une stratégie recherchant le rendement en se positionnant sur toutes les typologies d'actifs : bureaux, commerces et locaux d'activités pour profiter des opportunités de marché. La stratégie privilégie les grandes métropoles régionales afin de bénéficier d'un bon mix géographique sur le territoire et cible des actifs d'une valeur unitaire entre 1 et 50 M€. Epargne Pierre bénéficie du label ISR et prend en compte les critères environnementaux, sociétaux et de gouvernance (ESG) dans le cadre de la mise en œuvre de sa stratégie d'investissement et dans sa gestion des actifs. La capitalisation importante permet une large diversification et mutualisation du risque immobilier grâce à la variété d'actifs et des locataires (principalement grands utilisateurs publics ou privés).
+
+Données clés 2025
+Capitalisation : 2 811 M€ ; Actifs : 414 ; Baux : 1020 ; Taux de distribution : 5,28% ; TOF : 94,41% ; Durée min : 10 ans ; Risque : 3/7
+Les performances du passé ne préjugent pas des performances futures.
+
+Principaux frais :
+- Souscription : 10%
+- Gestion : 10% HT (12% TTC) du montant des recettes brutes
+- Acquisition d'actifs : 0%
+- Cession d'actifs : 0%
+- Réalisation et suivi des travaux : 0%;`,
+  },
+  {
     key: "alta_convictions",
     label: "Alta Convictions",
     partPriceEur: 308,

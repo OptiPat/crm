@@ -17,12 +17,13 @@ describe("scpi-annexe-catalog", () => {
     expect(text.indexOf("COMÈTE")).toBeLessThan(text.indexOf("CORUM ORIGIN"));
   });
 
-  it("expose 7 fiches SCPI de rendement", () => {
-    expect(SCPI_ANNEXE_PRODUCT_FICHES).toHaveLength(7);
+  it("expose 8 fiches SCPI de rendement", () => {
+    expect(SCPI_ANNEXE_PRODUCT_FICHES).toHaveLength(8);
     expect(SCPI_ANNEXE_PRODUCT_FICHES.map((p) => p.key)).toEqual([
       "comete",
       "transitions_europe",
       "epargne_pierre_europe",
+      "epargne_pierre",
       "alta_convictions",
       "osmo_energie",
       "ncap_regions",
