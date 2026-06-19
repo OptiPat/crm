@@ -34,7 +34,12 @@ impl Database {
                 .unwrap()
                 .as_secs() as i64
         });
-        let email_date_prevue = resolve_email_date_prevue_for_contact(&etiquette, eligible_at);
+        let email_date_prevue =
+            if crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&etiquette.nom) {
+                self.resolve_exceltis_contact_email_date_prevue(&etiquette, etiquette_id)?
+            } else {
+                resolve_email_date_prevue_for_contact(&etiquette, eligible_at)
+            };
 
         self.conn.execute(
             "INSERT INTO contact_etiquettes (contact_id, etiquette_id, attribue_par, email_date_prevue) 

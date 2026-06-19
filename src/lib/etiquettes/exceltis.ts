@@ -123,7 +123,7 @@ export async function ensureExceltisEtiquetteAndAssign(
       nom,
       couleur: "#EAB308",
       description:
-        "Clients avec position Exceltis sur ce millésime (attribution manuelle ou à la création).",
+        "Clients avec position Exceltis sur ce millésime. Campagne email déclenchée à la réception du mail Stellium « Remboursement Exceltis ».",
       priorite: 50,
       actif: true,
       email_actif: false,

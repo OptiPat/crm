@@ -168,6 +168,37 @@ pub fn format_exceltis_etiquette_nom(month: u32, year: u32) -> Option<String> {
     Some(format!("{EXCELITIS_ETIQUETTE_PREFIX}{} {year}", MOIS_FR[idx - 1]))
 }
 
+pub fn is_exceltis_etiquette_nom(nom: &str) -> bool {
+    nom.trim()
+        .to_lowercase()
+        .starts_with(&EXCELITIS_ETIQUETTE_PREFIX.to_lowercase())
+}
+
+fn normalize_etiquette_nom(nom: &str) -> String {
+    nom.trim().to_lowercase()
+}
+
+/// Date du mail Stellium le plus récent pour cette étiquette millésime (si signal connu).
+pub fn stellium_signal_received_at_for_etiquette(
+    db: &crate::database::Database,
+    etiquette_id: i64,
+) -> Result<Option<i64>, String> {
+    let etiquette = db
+        .get_etiquette_by_id(etiquette_id)
+        .map_err(|e| e.to_string())?;
+    let state = load_state(db)?;
+    let target = normalize_etiquette_nom(&etiquette.nom);
+    let mut best: Option<i64> = None;
+    for signal in &state.signals {
+        let matches_id = signal.etiquette_id == Some(etiquette_id);
+        let matches_nom = normalize_etiquette_nom(&signal.etiquette_nom) == target;
+        if matches_id || matches_nom {
+            best = Some(best.map_or(signal.received_at, |b| b.max(signal.received_at)));
+        }
+    }
+    Ok(best)
+}
+
 fn month_search_keys(month: u32) -> &'static [&'static str] {
     match month {
         1 => &["janvier"],
@@ -549,6 +580,14 @@ pub fn scan_stellium_exceltis_emails(
             refresh_signal_counts(db, signal);
         }
 
+        if let Ok(etiquettes) = db.get_all_etiquettes() {
+            for etiquette in etiquettes {
+                if is_exceltis_etiquette_nom(&etiquette.nom) {
+                    let _ = db.sync_exceltis_etiquette_email_schedule(etiquette.id);
+                }
+            }
+        }
+
         save_state(db, &state)?;
         Ok(StelliumExceltisScanResult {
             scanned,
@@ -561,6 +600,12 @@ pub fn scan_stellium_exceltis_emails(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_exceltis_etiquette_nom_matches_prefix() {
+        assert!(is_exceltis_etiquette_nom("Exceltis — Août 2026"));
+        assert!(!is_exceltis_etiquette_nom("Suivi > 1 an"));
+    }
 
     #[test]
     fn parse_subject_fevrier_2025() {

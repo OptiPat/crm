@@ -190,7 +190,9 @@ Tests frontend : `src/lib/etiquettes/etiquettes-filter.test.ts`, `etiquette-emai
 | Étape | Comportement |
 |-------|----------------|
 | **Création client** | Question Exceltis → millésimes M+1…M+3 → étiquette `Exceltis — {Mois} {Année}` (manuelle). |
+| **Attribution étiquette** | Pose le tag client ; **aucun envoi email** tant que Stellium n'a pas signalé le remboursement. |
 | **Mail Stellium** | Gmail `marketplacement@stellium.fr`, sujet contenant **Remboursement Exceltis** (un signal **par message**). |
+| **Déclenchement campagne** | À la détection du mail Stellium pour ce millésime → les clients portant l'étiquette passent en **Prêt à envoyer** (selon créneau / délai de l'étiquette). |
 | **Millésime** | Parsé depuis le sujet ou le corps (mot « Rendement » optionnel). |
 | **Date « à partir du … »** | Indique quand le fond se désinvestit ; ensuite arbitrage / réinvestissement possible. Affichée dans Suivi et notifications. |
 | **Fin de cycle** | Retrait d’étiquette **manuel** ; le mail ne retire rien automatiquement. |

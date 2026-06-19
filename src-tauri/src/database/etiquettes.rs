@@ -80,6 +80,11 @@ impl Database {
             return Ok(());
         }
 
+        if crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&etiquette.nom) {
+            self.sync_exceltis_etiquette_email_schedule(etiquette_id)?;
+            return Ok(());
+        }
+
         if etiquette.email_envoi_prevu.is_some() {
             let fixed = etiquette.email_envoi_prevu;
             self.conn.execute(
@@ -119,6 +124,73 @@ impl Database {
             }
         }
         Ok(())
+    }
+
+    /// Planifie ou déplanifie la campagne email Exceltis selon un signal Stellium connu.
+    pub(crate) fn sync_exceltis_etiquette_email_schedule(
+        &self,
+        etiquette_id: i64,
+    ) -> Result<u32> {
+        let etiquette = self.get_etiquette_by_id(etiquette_id)?;
+        if !crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&etiquette.nom) {
+            return Ok(0);
+        }
+
+        let trigger_at = match crate::email::stellium_exceltis::stellium_signal_received_at_for_etiquette(
+            self, etiquette_id,
+        )
+        .map_err(|e| {
+            rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e,
+            )))
+        })? {
+            Some(ts) => ts,
+            None => {
+                self.conn.execute(
+                    "UPDATE contact_etiquettes SET email_date_prevue = NULL
+                     WHERE etiquette_id = ?1 AND email_envoye = 0
+                       AND COALESCE(email_annule, 0) = 0
+                       AND COALESCE(email_suivi_ignore, 0) = 0",
+                    params![etiquette_id],
+                )?;
+                return Ok(0);
+            }
+        };
+
+        let prevue = resolve_email_date_prevue_for_contact(&etiquette, trigger_at);
+        let updated = self.conn.execute(
+            "UPDATE contact_etiquettes SET email_date_prevue = ?1
+             WHERE etiquette_id = ?2 AND email_envoye = 0
+               AND COALESCE(email_annule, 0) = 0
+               AND COALESCE(email_suivi_ignore, 0) = 0",
+            params![prevue, etiquette_id],
+        )?;
+        Ok(updated as u32)
+    }
+
+    pub(crate) fn resolve_exceltis_contact_email_date_prevue(
+        &self,
+        etiquette: &Etiquette,
+        etiquette_id: i64,
+    ) -> Result<Option<i64>> {
+        if !crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&etiquette.nom) {
+            return Ok(None);
+        }
+        let Some(trigger_at) =
+            crate::email::stellium_exceltis::stellium_signal_received_at_for_etiquette(
+                self, etiquette_id,
+            )
+            .map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            })?
+        else {
+            return Ok(None);
+        };
+        Ok(resolve_email_date_prevue_for_contact(etiquette, trigger_at))
     }
 
     /// Associe un template aux étiquettes choisies (vue « template → étiquettes »).

@@ -1676,6 +1676,98 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn exceltis_etiquette_waits_for_stellium_before_email_ready() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+        use crate::email::stellium_exceltis::format_exceltis_etiquette_nom;
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Exceltis tpl".into(),
+                sujet: "Exceltis {{millesime}}".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let nom = format_exceltis_etiquette_nom(8, 2026).unwrap();
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: nom.clone(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(50),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: Some("09:30".into()),
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("exceltis@example.com".into()),
+                ..sample_contact("SEKKAI", "Maelys")
+            })
+            .unwrap();
+
+        db.attribuer_etiquette(
+            contact.id.unwrap(),
+            etiqu.id,
+            Some("MANUEL".into()),
+            None,
+        )
+        .unwrap();
+
+        assert!(
+            db.get_etiquette_email_queue("ready").unwrap().is_empty(),
+            "sans signal Stellium, pas d'envoi Exceltis en file prête"
+        );
+
+        let state_json = serde_json::json!({
+            "signals": [{
+                "gmailMessageId": "test-msg-aout-2026",
+                "subject": "Remboursement Exceltis Rendement Août 2026",
+                "millesimeLabel": "Août 2026",
+                "etiquetteNom": nom,
+                "etiquetteId": etiqu.id,
+                "contactCount": 0,
+                "receivedAt": now - 120,
+            }]
+        });
+        db.set_setting(
+            "stellium_exceltis_signals_v1",
+            &state_json.to_string(),
+        )
+        .unwrap();
+
+        db.sync_exceltis_etiquette_email_schedule(etiqu.id).unwrap();
+        assert_eq!(
+            db.get_etiquette_email_queue("ready").unwrap().len(),
+            1,
+            "après signal Stellium, l'envoi Exceltis doit être planifié"
+        );
+    }
+
+    #[test]
     fn auto_recalc_keeps_cancelled_suivi_out_of_ready_queue() {
         use crate::database::models::{NewEtiquette, NewTemplateEmail};
 

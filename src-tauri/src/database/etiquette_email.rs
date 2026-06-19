@@ -104,7 +104,10 @@ impl Database {
                    AND (
                      c.email IS NULL OR TRIM(c.email) = ''
                      OR e.email_template_id IS NULL
-                     OR ce.email_date_prevue IS NULL
+                     OR (
+                       ce.email_date_prevue IS NULL
+                       AND e.nom NOT LIKE 'Exceltis — %'
+                     )
                    )
                    AND ?1 IS NOT NULL
                  ORDER BY ce.email_date_prevue ASC, c.nom, c.prenom"
