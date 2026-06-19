@@ -120,6 +120,12 @@ export function FoyerSummaryCard({
             {foyer.tranche_imposition && (
               <span>TMI {foyer.tranche_imposition}</span>
             )}
+            {foyer.ir_net_a_payer != null && foyer.ir_net_a_payer > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Coins className="h-3 w-3" />
+                IR {formatFoyerCurrencyEur(foyer.ir_net_a_payer)}
+              </span>
+            )}
           </div>
         </div>
 

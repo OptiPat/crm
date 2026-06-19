@@ -110,6 +110,7 @@ impl Database {
                 nombre_parts_fiscales REAL,
                 tranche_imposition TEXT,
                 revenu_fiscal_reference REAL,
+                ir_net_a_payer REAL,
                 situation_patrimoniale TEXT,
                 objectifs_patrimoniaux TEXT,
                 notes TEXT,
@@ -520,6 +521,7 @@ impl Database {
         self.migrate_add_lieu_naissance()?;
         self.migrate_add_contact_pays()?;
         self.migrate_add_contact_rio_financial_fields()?;
+        self.migrate_add_foyer_ir_net()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
         self.migrate_documents_connaissances_financieres()?;
         self.migrate_documents_experience_investissement()?;
@@ -638,11 +640,12 @@ impl Database {
     }
 
     fn migrate_add_contact_rio_financial_fields(&self) -> Result<()> {
-        let columns: [(&str, &str); 4] = [
+        let columns: [(&str, &str); 5] = [
             ("regime_matrimonial", "TEXT"),
             ("revenus_annuels", "REAL"),
             ("charges_emprunts", "REAL"),
             ("objectifs_patrimoniaux", "TEXT"),
+            ("epargne_precaution_souhaitee", "REAL"),
         ];
         let mut added = false;
         for (name, sql_type) in columns {
@@ -660,6 +663,15 @@ impl Database {
         }
         if added {
             println!("✅ Migration champs RIO contacts appliquée");
+        }
+        Ok(())
+    }
+
+    fn migrate_add_foyer_ir_net(&self) -> Result<()> {
+        if !self.table_has_column("foyers", "ir_net_a_payer")? {
+            self.conn
+                .execute("ALTER TABLE foyers ADD COLUMN ir_net_a_payer REAL", [])?;
+            println!("✅ Migration : ir_net_a_payer sur foyers");
         }
         Ok(())
     }

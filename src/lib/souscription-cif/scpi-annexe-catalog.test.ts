@@ -17,8 +17,8 @@ describe("scpi-annexe-catalog", () => {
     expect(text.indexOf("COMÈTE")).toBeLessThan(text.indexOf("CORUM ORIGIN"));
   });
 
-  it("expose 8 fiches SCPI de rendement", () => {
-    expect(SCPI_ANNEXE_PRODUCT_FICHES).toHaveLength(8);
+  it("expose 12 fiches SCPI de rendement", () => {
+    expect(SCPI_ANNEXE_PRODUCT_FICHES).toHaveLength(12);
     expect(SCPI_ANNEXE_PRODUCT_FICHES.map((p) => p.key)).toEqual([
       "comete",
       "transitions_europe",
@@ -28,6 +28,10 @@ describe("scpi-annexe-catalog", () => {
       "osmo_energie",
       "ncap_regions",
       "corum_origin",
+      "corum_eurion",
+      "immorente",
+      "activimmo",
+      "lf_avenir_sante",
     ]);
   });
 });

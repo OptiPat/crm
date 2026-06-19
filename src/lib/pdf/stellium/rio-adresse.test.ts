@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAdressesPostales } from "./rio-adresse";
+import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
 
 describe("parseAdressesPostales", () => {
   it("layout inline (solo)", () => {
@@ -8,7 +8,7 @@ describe("parseAdressesPostales", () => {
       "Adresse postale\t12 rue des Acacias\t75001 Paris - France\n";
     const [adr] = parseAdressesPostales(coordonnees);
     expect(adr).toEqual({
-      adresse: "12 rue des Acacias",
+      adresse: "12 Rue des Acacias",
       codePostal: "75001",
       ville: "Paris",
     });
@@ -24,7 +24,7 @@ describe("parseAdressesPostales", () => {
       "Pays de résidence fiscale\tFrance\n";
     const [adr] = parseAdressesPostales(coordonnees);
     expect(adr).toEqual({
-      adresse: "7 rue des Lilas",
+      adresse: "7 Rue des Lilas",
       codePostal: "34000",
       ville: "Montpellier",
     });
@@ -42,12 +42,12 @@ describe("parseAdressesPostales", () => {
     const adresses = parseAdressesPostales(coordonnees);
     expect(adresses).toHaveLength(2);
     expect(adresses[0]).toEqual({
-      adresse: "8 place du Marché",
+      adresse: "8 Place du Marché",
       codePostal: "69001",
       ville: "Lyon",
     });
     expect(adresses[1]).toEqual({
-      adresse: "8 place du Marché",
+      adresse: "8 Place du Marché",
       codePostal: "69001",
       ville: "Lyon",
     });
@@ -58,7 +58,7 @@ describe("parseAdressesPostales", () => {
       "Adresse postale\t3 allée des Ormes\t33000 Bordeaux - France\t3 allée des Ormes\t33000 Bordeaux - France\n";
     const adresses = parseAdressesPostales(coordonnees);
     expect(adresses).toHaveLength(2);
-    expect(adresses[0].adresse).toBe("3 allée des Ormes");
+    expect(adresses[0].adresse).toBe("3 Allée des Ormes");
     expect(adresses[0].codePostal).toBe("33000");
     expect(adresses[1].ville).toBe("Bordeaux");
   });
@@ -74,6 +74,17 @@ describe("parseAdressesPostales", () => {
     expect(adr.adresse).toBeUndefined();
   });
 
+  it("normalise la casse (ville en MAJ, rue en min, particules conservées)", () => {
+    const coordonnees =
+      "Autre téléphone\t-\n" +
+      "11 BIS avenue DE LA RÉPUBLIQUE\n" +
+      "Adresse postale\n" +
+      "13100 AIX-EN-PROVENCE - France\n";
+    const [adr] = parseAdressesPostales(coordonnees);
+    expect(adr.adresse).toBe("11 bis Avenue de la République");
+    expect(adr.ville).toBe("Aix-en-Provence");
+  });
+
   it("ne confond pas une ligne de libellé avec une rue", () => {
     const coordonnees =
       "Téléphone mobile\t+33600000001\n" +
@@ -81,5 +92,37 @@ describe("parseAdressesPostales", () => {
       "75000 Paris - France\n";
     const [adr] = parseAdressesPostales(coordonnees);
     expect(adr.adresse).toBeUndefined();
+  });
+});
+
+describe("parsePaysResidenceFiscale", () => {
+  it("solo (valeur inline avec tabulation)", () => {
+    const coordonnees =
+      "75000 Paris - France\n" +
+      "Pays de résidence fiscale\tFrance\n" +
+      "Statut d'occupation du logement\tPropriétaire\n";
+    expect(parsePaysResidenceFiscale(coordonnees)).toEqual(["France"]);
+  });
+
+  it("couple (deux colonnes)", () => {
+    const coordonnees =
+      "Pays de résidence fiscale\tFrance\tBelgique\n" +
+      "Statut d'occupation du logement\tPropriétaire\tPropriétaire\n";
+    expect(parsePaysResidenceFiscale(coordonnees)).toEqual([
+      "France",
+      "Belgique",
+    ]);
+  });
+
+  it("layout aplati (séparateurs à espaces multiples, libellé suivant collé)", () => {
+    const coordonnees =
+      "Pays de résidence fiscale   France   France  Statut d'occupation du  logement   Propriétaire";
+    expect(parsePaysResidenceFiscale(coordonnees)).toEqual(["France", "France"]);
+  });
+
+  it("absent → tableau vide", () => {
+    expect(parsePaysResidenceFiscale("Téléphone mobile\t+33600000001\n")).toEqual(
+      []
+    );
   });
 });

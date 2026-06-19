@@ -43,7 +43,7 @@ describe("Stellium — RIO solo Legrand 2026", () => {
     expect(data.nationalite).toBe("Française");
     expect(data.email).toBe("paul.legrand@example.com");
     expect(data.telephone).toBe("+33600000001");
-    expect(data.adresse).toBe("12 rue des Acacias");
+    expect(data.adresse).toBe("12 Rue des Acacias");
     expect(data.codePostal).toBe("75001");
     expect(data.ville).toBe("Paris");
   });
@@ -67,9 +67,6 @@ describe("Stellium — RIO solo Legrand 2026", () => {
   it("extrait la situation professionnelle", () => {
     expect(data.profession).toBe("Directeur Commercial");
     expect(data.employeur).toBe("AGILITEAM");
-    expect(data.secteurActivite).toBe(
-      "Cadres et professions intellectuelles supérieures"
-    );
   });
 
   it("extrait le patrimoine", () => {
@@ -167,6 +164,27 @@ describe("Stellium — RIO solo Legrand 2026", () => {
     ]);
   });
 
+  it("recolle les libellés coupés quand priorité/horizon est sur une ligne séparée (layout réel Stellium)", () => {
+    const section = [
+      "Objectif(s)\tAttribué à\tPriorité\tHorizon",
+      "Accompagner vos enfants\tJean DUPONT\t1\t-",
+      "Préparer votre retraite\tJean DUPONT\t2\t-",
+      "Disposer de revenus ponctuellement (en\tJean DUPONT",
+      "3\t-",
+      "cas de besoin)",
+      "Optimiser la rentabilité de vos\tJean DUPONT",
+      "4\t-",
+      "placements financiers",
+      "Epargne de précaution souhaitée\t20000 €",
+    ].join("\n");
+    expect(parseRioObjectifsSection(section)).toEqual([
+      "Accompagner vos enfants",
+      "Préparer votre retraite",
+      "Disposer de revenus ponctuellement (en cas de besoin)",
+      "Optimiser la rentabilité de vos placements financiers",
+    ]);
+  });
+
   it("retrouve la table Objectifs après une coupure de page", () => {
     const text =
       "Fiscalité IR net à payer 1000 € Objectifs Recueil d'informations - Nicolas PLAZA - 15/06/2026 3/6 " +
@@ -221,7 +239,7 @@ describe("Stellium — RIO couple ROUSSEAU 2026", () => {
   it("extrait situation, enfants et adresse commune", () => {
     expect(data.situationFamiliale).toBe("MARIE");
     expect(data.regimeMatrimonial).toBe("Communauté réduite aux acquets");
-    expect(data.adresse).toBe("3 allée des Ormes");
+    expect(data.adresse).toBe("3 Allée des Ormes");
     expect(data.codePostal).toBe("33000");
     expect(data.ville).toBe("Bordeaux");
     expect(data.nombreEnfants).toBe(2);

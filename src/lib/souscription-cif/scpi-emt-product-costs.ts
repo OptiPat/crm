@@ -16,10 +16,14 @@ export const SCPI_EMT_PRODUCT_COST_COEFFICIENTS: Readonly<
   Record<string, ScpiEmtCostCoefficients>
 > = {
   alta_convictions: { line07110: 0.0011, line07130: 0.0049, line07140: 0 },
+  activimmo: { line07110: 0.00553, line07130: 0.0239, line07140: 0 },
   comete: { line07110: 0.0066, line07130: 0.0267, line07140: 0 },
   corum_origin: { line07110: 0.0089, line07130: 0.0073, line07140: 0 },
+  corum_eurion: { line07110: 0.0104, line07130: 0.0065, line07140: 0 },
   epargne_pierre_europe: { line07110: 0, line07130: 0.0145, line07140: 0 },
   epargne_pierre: { line07110: 0.0052, line07130: 0.0165, line07140: 0 },
+  immorente: { line07110: 0.00656, line07130: 0.00308, line07140: 0 },
+  lf_avenir_sante: { line07110: 0, line07130: 0.0166, line07140: 0 },
   ncap_regions: { line07110: 0.005901398, line07130: 0.0145, line07140: 0 },
   osmo_energie: { line07110: 0.0059, line07130: 0.0273, line07140: 0 },
   transitions_europe: { line07110: 0, line07130: 0.0147, line07140: 0 },

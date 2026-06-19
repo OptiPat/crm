@@ -1122,6 +1122,7 @@ mod tests {
             regime_matrimonial: None,
             revenus_annuels: None,
             charges_emprunts: None,
+            epargne_precaution_souhaitee: None,
             objectifs_patrimoniaux: None,
             source_lead: None,
             profil_risque_sri: None,

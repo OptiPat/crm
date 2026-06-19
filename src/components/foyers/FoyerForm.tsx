@@ -45,6 +45,7 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
     nombre_parts_fiscales: undefined,
     tranche_imposition: undefined,
     revenu_fiscal_reference: undefined,
+    ir_net_a_payer: undefined,
     situation_patrimoniale: "",
     objectifs_patrimoniaux: "",
     notes: "",
@@ -58,6 +59,7 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
       nombre_parts_fiscales: foyer?.nombre_parts_fiscales || undefined,
       tranche_imposition: foyer?.tranche_imposition || undefined,
       revenu_fiscal_reference: foyer?.revenu_fiscal_reference || undefined,
+      ir_net_a_payer: foyer?.ir_net_a_payer || undefined,
       situation_patrimoniale: foyer?.situation_patrimoniale || "",
       objectifs_patrimoniaux: foyer?.objectifs_patrimoniaux || "",
       notes: foyer?.notes || "",
@@ -84,6 +86,7 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
         nombre_parts_fiscales: undefined,
         tranche_imposition: undefined,
         revenu_fiscal_reference: undefined,
+        ir_net_a_payer: undefined,
         situation_patrimoniale: "",
         objectifs_patrimoniaux: "",
         notes: "",
@@ -201,6 +204,23 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
                 })
               }
               placeholder="Ex: 65000"
+            />
+          </div>
+
+          {/* IR net à payer */}
+          <div className="space-y-2">
+            <Label htmlFor="ir_net_a_payer">IR net à payer (€)</Label>
+            <Input
+              id="ir_net_a_payer"
+              type="number"
+              value={formData.ir_net_a_payer || ""}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  ir_net_a_payer: e.target.value ? parseFloat(e.target.value) : undefined,
+                })
+              }
+              placeholder="Ex: 4350"
             />
           </div>
 

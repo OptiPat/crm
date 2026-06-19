@@ -217,6 +217,7 @@ const BASE_EMPTY: NewContact = {
   regime_matrimonial: "",
   revenus_annuels: undefined,
   charges_emprunts: undefined,
+  epargne_precaution_souhaitee: undefined,
   objectifs_patrimoniaux: "",
   source_lead: "",
   profil_risque_sri: undefined,
@@ -297,6 +298,7 @@ export function contactToFormData(contact: Contact): NewContact {
     regime_matrimonial: contact.regime_matrimonial || "",
     revenus_annuels: contact.revenus_annuels ?? undefined,
     charges_emprunts: contact.charges_emprunts ?? undefined,
+    epargne_precaution_souhaitee: contact.epargne_precaution_souhaitee ?? undefined,
     objectifs_patrimoniaux: contact.objectifs_patrimoniaux || "",
     source_lead: contact.source_lead || "",
     profil_risque_sri: contact.profil_risque_sri || undefined,
@@ -356,6 +358,7 @@ export function buildSubmitPayload(formData: NewContact): NewContact {
     regime_matrimonial: formData.regime_matrimonial?.trim() || undefined,
     revenus_annuels: formData.revenus_annuels,
     charges_emprunts: formData.charges_emprunts,
+    epargne_precaution_souhaitee: formData.epargne_precaution_souhaitee,
     objectifs_patrimoniaux: formData.objectifs_patrimoniaux?.trim() || undefined,
     registre: formData.registre?.trim().toUpperCase() === "TU" ? "TU" : "VOUS",
   };

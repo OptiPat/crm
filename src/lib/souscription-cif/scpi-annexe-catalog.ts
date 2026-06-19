@@ -166,6 +166,82 @@ Principaux frais :
 - Cession d'actifs : 5% TTI du prix de vente net vendeur, si la plus value est supérieure à 5%
 - Réalisation et suivi de travaux : 0%;`,
   },
+  {
+    key: "corum_eurion",
+    label: "Corum Eurion",
+    partPriceEur: 215,
+    description: `— CORUM EURION —
+
+La SCPI Corum Eurion investit dans un patrimoine immobilier récent et durable (bureaux, logistique) répondant aux dernières normes environnementales. Sa stratégie mise sur des locataires solides à travers toute la zone euro. Elle vise un rendement attractif en conciliant performance financière et critères socialement responsables (ISR).
+
+Données clés 2025
+Capitalisation : 1,507 Milliards € ; Actifs : 52 ; Baux : 120 ; Taux de distribution : 5,73 % ; TOF : 99,92% ; Durée min : 10 ans ; Risque : 3/7
+Les performances du passé ne préjugent pas des performances futures.
+
+Principaux frais :
+- Souscription : 12 % TTC
+- Gestion : 12,4% HT loyers encaissés
+- Acquisition d'actifs : 0%
+- Cession d'actifs : 5 % TTI du prix de vente net vendeur, si la plus-value est supérieure à 5 %
+- Réalisation et suivi des travaux : 0%;`,
+  },
+  {
+    key: "immorente",
+    label: "Immorente",
+    partPriceEur: 340,
+    description: `— IMMORENTE —
+
+Immorente a pour objet l'acquisition d'un parc immobilier locatif, situé principalement dans les grandes métropoles françaises, de l'Espace Economique Européen, du Royaume-Uni et de la Suisse, et à titre accessoire dans les autres villes de la même zone. Elle investit de manière diversifiée dans les principales typologies d'actifs immobiliers : bureaux, murs de commerces, hôtellerie et loisirs, logistique et activités, santé et résidentiel. Cette SCPI attache une importance à la diversification et mutualisation du risque, notamment en diversifiant le secteur géographique (25% à l'étranger), la typologie d'actifs, les secteurs d'activité et la qualité des locataires.
+
+Données clés 2025
+Capitalisation : 4 391M€ ; Actifs : 994 ; Baux : 2963 ; Taux de distribution : 5,00% ; TOF : 91,21% ; Durée min : 10 ans ; Risque : 3/7
+Les performances du passé ne préjugent pas des performances futures.
+
+Principaux frais :
+- Souscription : 10%
+- Gestion : 10% HT (12% TTC) des produits locatifs HT et des produits financiers nets encaissés
+- Acquisition d'actifs : 0%
+- Cession d'actifs : 2,5% HT (3% TTC) du prix de vente du bien immobilier
+- Réalisation et suivi des travaux : 0%;`,
+  },
+  {
+    key: "activimmo",
+    label: "Activimmo",
+    partPriceEur: 610,
+    description: `— ACTIVIMMO —
+
+Activimmo est une SCPI spécialisée ciblant les actifs à usage de locaux d'activités, d'entrepôts et de logistique urbaine ou du « dernier kilomètre », situés en périphéries des villes, à proximité des axes routiers ou au sein même des bassins d'emploi et de consommation. Les locaux pourront abriter diverses activités permettant de répondre aux besoins immobiliers : des PME / PMI et ETI, jusqu'aux filiales de grands groupes, ou encore des entreprises à la recherche de bâtiments pour assurer leur service de logistique notamment du dernier kilomètre, dernier ou avant-dernier maillon précédant la livraison au consommateur final. A titre de diversification, la SCPI pourra investir en bureaux et commerces.
+
+Données clés 2025
+Capitalisation : 1 400 M€ ; Actifs : 179 ; Baux : 463 ; Taux de distribution : 5,50% ; TOF : 92,6% ; Durée min : 10 ans ; Risque : 3/7
+Les performances du passé ne préjugent pas des performances futures.
+
+Principaux frais :
+- Souscription : 10,6%
+- Gestion : 10% HT (12% TTC) des produits locatifs HT et des produits financiers nets encaissés
+- Acquisition d'actifs : 1% HT (1,2% TTC) du prix d'achat net vendeur
+- Cession d'actifs : 1% HT (1,2% TTC) du prix de vente net vendeur
+- Réalisation et suivi des travaux : 3% HT Max (3,6% TTC) sur les travaux immobilisés et relatifs aux gros entretiens;`,
+  },
+  {
+    key: "lf_avenir_sante",
+    label: "LF Avenir Santé",
+    partPriceEur: 300,
+    description: `— LF AVENIR SANTÉ —
+
+LF Avenir Santé est une SCPI spécialisée dans l'immobilier de santé, centrée sur la médecine de proximité (médecins généralistes, ophtalmologues, dentistes, radiologues, etc.). Elle bénéficie de tendances démographiques favorables, notamment le vieillissement de la population et la forte demande d'accès aux soins dans les secteurs public et privé. À titre de diversification, elle investit également dans les soins alternatifs (cures thermales, balnéothérapie) et l'habitat senior (résidences seniors et coliving). La répartition géographique vise un partage 50/50 entre la France et l'étranger (Allemagne, Royaume-Uni, Irlande, Belgique, Pays-Bas, Luxembourg et Espagne).
+
+Données clés 2025
+Capitalisation : 273,4 M€ ; Actifs : 33 ; Baux : NC ; Taux de distribution : 5,05% ; TOF : 100% ; Durée min : 10 ans ; Risque : 3/7
+Les performances du passé ne préjugent pas des performances futures.
+
+Principaux frais :
+- Souscription : 9%
+- Gestion : 10% HT (12% TTC) des produits locatifs HT et des produits financiers nets encaissés
+- Acquisition d'actifs : 1,25% HT Max du montant de la transaction
+- Cession d'actifs : 1,25% HT Max du montant de la transaction
+- Réalisation et suivi des travaux : 3% HT Max du montant TTC des travaux réalisés;`,
+  },
 ];
 
 /** Prix de part catalogue (€) — valeur par défaut, surchargeable par dossier. */

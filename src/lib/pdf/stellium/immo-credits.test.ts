@@ -73,3 +73,43 @@ describe("immo-credits — Dupont solo 2026", () => {
     });
   });
 });
+
+describe("immo-credits — crédit couple à emprunteurs scindés (layout TOME)", () => {
+  it("rattache l'échéance/mensualité à l'unique RP via le libellé « Crédit achat RP »", () => {
+    // Désignation reportée sur une ligne séparée + crédit scindé entre conjoints :
+    // le crédit parsé serait partiel, on s'appuie sur la ligne Charges (échéance totale).
+    const text = [
+      "Passifs",
+      "Désignation\tEmprunteur\tEchéance par an\tCRD   Date d'échéance",
+      "Crédits immobilier\t15014 €\t260556 €",
+      "7507 €\t130278 €",
+      "Crédit immobilier - Amortissable -",
+      "Marine DUPONT\t01/08/2045",
+      "Crédit achat RP",
+      "Nelson DUPONT\t7507 €\t130278 €",
+      "TOTAL\t15014 €\t260556 €",
+      "Revenus et charges",
+      "Charges",
+      "Désignation\tMarine DUPONT\tNelson DUPONT\tCommun\tTotal",
+      "Charges fixes\t0 €\t0 €\t15014 €\t15014 €",
+      "Mensualité de crédit - Crédit achat RP\t-\t-\t15014 €\t15014 €",
+      "TOTAL\t0 €\t0 €\t15014 €\t15014 €",
+    ].join("\n");
+
+    const biens: BienImmobilier[] = [
+      {
+        id: "rp",
+        type: "RESIDENCE_PRINCIPALE",
+        nom: "La Ville Du Bois",
+        valeur: 550000,
+      },
+    ];
+    enrichBiensImmobiliersWithCredits(text, biens);
+    expect(biens[0]).toMatchObject({
+      echeanceAnnuelle: 15014,
+      creditCRD: 260556,
+      mensualiteCredit: 1251,
+      dateFinCredit: "01/08/2045",
+    });
+  });
+});

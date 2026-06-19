@@ -27,6 +27,8 @@ pub struct Contact {
     pub regime_matrimonial: Option<String>,
     pub revenus_annuels: Option<f64>,
     pub charges_emprunts: Option<f64>,
+    /// Épargne de précaution souhaitée (RIO, par personne).
+    pub epargne_precaution_souhaitee: Option<f64>,
     pub objectifs_patrimoniaux: Option<String>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
@@ -79,6 +81,8 @@ pub struct NewContact {
     pub regime_matrimonial: Option<String>,
     pub revenus_annuels: Option<f64>,
     pub charges_emprunts: Option<f64>,
+    #[serde(default)]
+    pub epargne_precaution_souhaitee: Option<f64>,
     pub objectifs_patrimoniaux: Option<String>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
@@ -119,6 +123,8 @@ pub struct Foyer {
     pub nombre_parts_fiscales: Option<f64>,
     pub tranche_imposition: Option<String>,
     pub revenu_fiscal_reference: Option<f64>,
+    /// IR net à payer du foyer fiscal (RIO ; somme des déclarants pour un couple).
+    pub ir_net_a_payer: Option<f64>,
     pub situation_patrimoniale: Option<String>,
     pub objectifs_patrimoniaux: Option<String>,
     pub notes: Option<String>,
@@ -133,6 +139,8 @@ pub struct NewFoyer {
     pub nombre_parts_fiscales: Option<f64>,
     pub tranche_imposition: Option<String>,
     pub revenu_fiscal_reference: Option<f64>,
+    #[serde(default)]
+    pub ir_net_a_payer: Option<f64>,
     pub situation_patrimoniale: Option<String>,
     pub objectifs_patrimoniaux: Option<String>,
     pub notes: Option<String>,

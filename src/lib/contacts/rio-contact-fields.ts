@@ -141,6 +141,10 @@ export function buildSoloRioFinancialContactFields(data: ExtractedData): Partial
   const charges = resolveChargesEmprunts(data);
   if (charges != null) fields.charges_emprunts = charges;
 
+  if (data.epargnePrecautionSouhaitee != null && data.epargnePrecautionSouhaitee > 0) {
+    fields.epargne_precaution_souhaitee = data.epargnePrecautionSouhaitee;
+  }
+
   const objectifs = formatRioObjectifs(data.objectifsPrincipaux);
   if (objectifs) fields.objectifs_patrimoniaux = objectifs;
 
@@ -164,6 +168,7 @@ export function buildCoupleMemberRioFinancialFields(
             data.chargesEmprunts,
             data.chargesEmpruntsPassifs
           ),
+          epargnePrecaution: data.epargnePrecautionSouhaitee,
         }
       : {
           revenusTotal: data.conjoint?.revenusTotal,
@@ -171,6 +176,7 @@ export function buildCoupleMemberRioFinancialFields(
             data.conjoint?.chargesEmprunts,
             data.conjoint?.chargesEmpruntsPassifs
           ),
+          epargnePrecaution: data.conjoint?.epargnePrecautionSouhaitee,
         };
 
   if (base.revenusTotal != null && base.revenusTotal > 0) {
@@ -178,6 +184,9 @@ export function buildCoupleMemberRioFinancialFields(
   }
   if (base.chargesEmprunts != null && base.chargesEmprunts > 0) {
     partial.charges_emprunts = base.chargesEmprunts;
+  }
+  if (base.epargnePrecaution != null && base.epargnePrecaution > 0) {
+    partial.epargne_precaution_souhaitee = base.epargnePrecaution;
   }
 
   if (member === "person1") {
@@ -317,6 +326,8 @@ export function mergeRioFieldsOntoContact(
     ),
     revenus_annuels: rio.revenus_annuels ?? existing.revenus_annuels,
     charges_emprunts: rio.charges_emprunts ?? existing.charges_emprunts,
+    epargne_precaution_souhaitee:
+      rio.epargne_precaution_souhaitee ?? existing.epargne_precaution_souhaitee,
     objectifs_patrimoniaux: rio.objectifs_patrimoniaux ?? existing.objectifs_patrimoniaux,
     profil_risque_sri: rio.profil_risque_sri ?? existing.profil_risque_sri,
   };

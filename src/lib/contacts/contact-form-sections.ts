@@ -36,7 +36,7 @@ export const CONTACT_FORM_SECTION_META: Record<
   identite: { label: "Identité", navLabel: "Identité", icon: UserCircle },
   coordonnees: { label: "Coordonnées", navLabel: "Coordonnées", icon: AtSign },
   viePro: {
-    label: "Vie pro & patrimoine",
+    label: "Vie pro & fiscalité",
     navLabel: "Vie pro",
     icon: Briefcase,
   },

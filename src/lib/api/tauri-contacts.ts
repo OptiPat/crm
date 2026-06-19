@@ -28,6 +28,8 @@ export interface Contact {
   regime_matrimonial?: string;
   revenus_annuels?: number;
   charges_emprunts?: number;
+  /** Épargne de précaution souhaitée (RIO, par personne). */
+  epargne_precaution_souhaitee?: number;
   objectifs_patrimoniaux?: string;
   source_lead?: string;
   profil_risque_sri?: number;
@@ -72,6 +74,7 @@ export interface NewContact {
   regime_matrimonial?: string;
   revenus_annuels?: number;
   charges_emprunts?: number;
+  epargne_precaution_souhaitee?: number;
   objectifs_patrimoniaux?: string;
   source_lead?: string;
   profil_risque_sri?: number;

@@ -10,6 +10,7 @@ import {
 import {
   RM_HINT_IMMOBILIER_BULLET_LABEL,
   RM_PANEL_IMMOBILIER_BULLET_LABEL,
+  RM_PANEL_EPARGNE_BULLET_LABEL,
   RM_PANEL_REVENUS_BULLET_LABEL,
   RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL,
 } from "@/lib/souscription-cif/rapport-mission-recap-table";
@@ -52,12 +53,14 @@ describe("buildDefaultRappelSituation", () => {
     const contact: Contact = {
       ...baseContact,
       revenus_annuels: 85_000,
+      epargne_precaution_souhaitee: 15_000,
     };
     const foyer: Foyer = {
       id: 1,
       nom: "BERNARD",
       type_foyer: "COUPLE",
       revenu_fiscal_reference: 85000,
+      ir_net_a_payer: 12_500,
       tranche_imposition: "30%",
       nombre_parts_fiscales: 2.5,
       situation_patrimoniale: "RP + locatif",
@@ -67,13 +70,14 @@ describe("buildDefaultRappelSituation", () => {
 
     const text = buildDefaultRappelSituation(contact, foyer);
     expect(text).toContain("➞ Âge :");
-    expect(text).toContain("➞ Nombre d'enfants :");
+    expect(text).toContain("➞ Nombre d'enfants : 0");
     expect(text).toContain(`➞ ${RM_PANEL_REVENUS_BULLET_LABEL} :`);
     expect(text).toContain("85");
-    expect(text).not.toContain("RFR");
+    expect(text).not.toContain("RBG");
     expect(text).toContain("TMI : 30%");
+    expect(text).toContain("IR 12");
     expect(text).toContain(`➞ ${RM_PANEL_IMMOBILIER_BULLET_LABEL} :`);
-    expect(text).toContain("➞ Épargne de précaution :");
+    expect(text).toContain(`➞ ${RM_PANEL_EPARGNE_BULLET_LABEL} : 15`);
     expect(text).toContain("➞ Endettement :");
     expect(text).toContain("Marié(e)");
     expect(text).toContain("Profil de risque investisseur (SRI + définition)");

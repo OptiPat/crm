@@ -27,6 +27,7 @@ import {
   X,
   LayoutGrid,
   History,
+  FileUp,
 } from "lucide-react";
 import { type Contact, getContactById, getFilleulsByParrain, getAllContacts, getContactsByFoyer } from "@/lib/api/tauri-contacts";
 import {
@@ -35,6 +36,7 @@ import {
   getClientLabel,
   getFilleulLabel,
   isClientActif,
+  formatStatutSuiviLabel,
 } from "@/lib/contacts/contact-form-utils";
 import type { ContactFormSectionId } from "@/lib/contacts/contact-form-sections";
 import { ContactForm } from "./ContactForm";
@@ -75,6 +77,7 @@ import { ContactInteractionsPanel } from "@/components/interactions/ContactInter
 import { ContactTachesPanel } from "@/components/taches/ContactTachesPanel";
 import { ContactCustomFieldsPanel } from "@/components/contacts/ContactCustomFieldsPanel";
 import { ContactPatrimoinePanel } from "@/components/contacts/ContactPatrimoinePanel";
+import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import {
   getClientRoleBadgeClass,
   getFilleulRoleBadgeClass,
@@ -153,6 +156,7 @@ export function ContactDetail({
   const [etiquettes, setEtiquettes] = useState<ContactEtiquetteDetails[]>([]);
   const [showDeleteContactDialog, setShowDeleteContactDialog] = useState(false);
   const [etiquetteSelectorOpen, setEtiquetteSelectorOpen] = useState(false);
+  const [showDocUpload, setShowDocUpload] = useState(false);
   const [foyerRenamePrompt, setFoyerRenamePrompt] = useState<{
     foyer: Foyer;
     suggestedNom: string;
@@ -588,6 +592,7 @@ export function ContactDetail({
         nombre_parts_fiscales: foyer.nombre_parts_fiscales,
         tranche_imposition: foyer.tranche_imposition,
         revenu_fiscal_reference: foyer.revenu_fiscal_reference,
+        ir_net_a_payer: foyer.ir_net_a_payer,
         situation_patrimoniale: foyer.situation_patrimoniale ?? "",
         objectifs_patrimoniaux: foyer.objectifs_patrimoniaux ?? "",
         notes: foyer.notes ?? "",
@@ -680,14 +685,17 @@ export function ContactDetail({
     switch (statut) {
       case "ACTIF":
         return "bg-green-100 text-green-800";
-      case "INACTIF":
-        return "bg-red-100 text-red-800";
-      case "EN_ATTENTE":
-        return "bg-yellow-100 text-yellow-800";
+      case "EN_PAUSE":
+        return "bg-amber-100 text-amber-900";
+      case "ARCHIVE":
+        return "bg-gray-100 text-gray-700";
       default:
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  const statutSuivi = contact.statut_suivi || "ACTIF";
+  const showStatutBadge = statutSuivi !== "ACTIF";
 
   const confirmDeleteContact = () => {
     if (!contact?.id) return;
@@ -733,125 +741,145 @@ export function ContactDetail({
     : `${contact.prenom} ${contact.nom}`;
 
   const headerBlock = (
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        {embedded ? (
-          <h2 className="text-xl font-serif font-bold text-primary leading-tight">{titleText}</h2>
-        ) : (
-          <DialogTitle className="text-2xl">{titleText}</DialogTitle>
-        )}
-        {(formatSituationLabel(contact.situation_familiale) ||
-          formatCiviliteLabel(contact.civilite)) && (
-          <p className="text-sm text-muted-foreground mt-1">
-            {[formatCiviliteLabel(contact.civilite), formatSituationLabel(contact.situation_familiale)]
-              .filter(Boolean)
-              .join(" · ")}
-          </p>
-        )}
-        {!embedded && (
-          <DialogDescription className="sr-only">
-            Détails du contact et informations personnelles
-          </DialogDescription>
-        )}
-        <div className="flex flex-wrap gap-2 mt-2">
-          {isClientActif(contact.categorie) && clientRoleLabel && (
-            <Badge className={getClientRoleBadgeClass(contact.categorie)}>
-              {clientRoleLabel}
-            </Badge>
+    <div className="space-y-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          {embedded ? (
+            <h2 className="text-xl font-serif font-bold text-primary leading-tight">{titleText}</h2>
+          ) : (
+            <DialogTitle className="text-2xl leading-tight">{titleText}</DialogTitle>
           )}
-          {filleulRoleLabel && contact.filleul_categorie && (
-            <Badge className={getFilleulRoleBadgeClass(contact.filleul_categorie)}>
-              {filleulRoleLabel}
-            </Badge>
+          {!embedded && (
+            <DialogDescription className="sr-only">
+              Détails du contact et informations personnelles
+            </DialogDescription>
           )}
-          {!clientRoleLabel && !filleulRoleLabel && contact.categorie !== "AUCUN" && (
-            <Badge className={getClientRoleBadgeClass(contact.categorie)}>
-              {contact.categorie}
-            </Badge>
-          )}
-          <Badge className={getStatutColor(contact.statut_suivi)}>{contact.statut_suivi}</Badge>
         </div>
-        <div className="flex flex-wrap items-center gap-2 mt-3">
-          <EtiquetteList
-            etiquettes={etiquettes.map((e) => ({
-              id: e.etiquette_id,
-              nom: e.etiquette_nom,
-              couleur: e.etiquette_couleur,
-              attribue_par: e.attribue_par,
-            }))}
-            onRemove={handleRemoveEtiquetteClick}
-            size="sm"
-          />
-          <EtiquetteSelector
-            selectedIds={etiquettes.map((e) => e.etiquette_id)}
-            onAdd={handleAddEtiquette}
-            onRemove={handleRemoveEtiquetteClick}
-            open={etiquetteSelectorOpen}
-            onOpenChange={setEtiquetteSelectorOpen}
-          />
-          <ContactRegistreSwitch
-            contact={contact}
-            onUpdated={(updated) => {
-              onContactRefreshed?.(updated);
-              onUpdate?.();
-            }}
-          />
-          {contact.id != null && <ContactAutoEtiquetteLog contactId={contact.id} />}
-          {excludedEtiquettes.length > 0 && (
-            <p className="text-xs text-muted-foreground w-full mt-1">
-              Exclues du calcul auto :{" "}
-              {excludedEtiquettes.map((e) => (
-                <button
-                  key={e.id}
-                  type="button"
-                  className="text-primary hover:underline mr-2"
-                  title="Réautoriser l'application automatique"
-                  onClick={() => void handleClearAutoExclusion(e.id)}
-                >
-                  {e.nom} (réactiver)
-                </button>
-              ))}
-            </p>
+        <div className="flex shrink-0 flex-wrap justify-end gap-1">
+          {contact.id != null && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowDocUpload(true)}
+                title="Importer un document (RIO, CNI, QPI…)"
+              >
+                <FileUp className="h-4 w-4" />
+                <span className="sr-only md:not-sr-only">Importer</span>
+              </Button>
+              <ContactCreateMenu
+                contactId={contact.id}
+                onCreated={() => void refreshContactAfterMutation()}
+                onOpenEtiquettes={() => setEtiquetteSelectorOpen(true)}
+              />
+            </>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => openEditForm()}
+            title="Modifier"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            onClick={() => setShowDeleteContactDialog(true)}
+            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+            title="Supprimer le contact"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+          {embedded && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => onOpenChange(false)}
+              title="Fermer la fiche"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           )}
         </div>
       </div>
-      <div className="flex shrink-0 gap-1">
-        {contact.id != null && (
-          <ContactCreateMenu
-            contactId={contact.id}
-            onCreated={() => void refreshContactAfterMutation()}
-            onOpenEtiquettes={() => setEtiquetteSelectorOpen(true)}
-          />
+
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground">
+        {(formatCiviliteLabel(contact.civilite) ||
+          formatSituationLabel(contact.situation_familiale)) && (
+          <span>
+            {[formatCiviliteLabel(contact.civilite), formatSituationLabel(contact.situation_familiale)]
+              .filter(Boolean)
+              .join(" · ")}
+          </span>
         )}
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={() => openEditForm()}
-          title="Modifier"
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={() => setShowDeleteContactDialog(true)}
-          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-          title="Supprimer le contact"
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-        {embedded && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={() => onOpenChange(false)}
-            title="Fermer la fiche"
+        {isClientActif(contact.categorie) && clientRoleLabel && (
+          <Badge className={getClientRoleBadgeClass(contact.categorie)}>{clientRoleLabel}</Badge>
+        )}
+        {filleulRoleLabel && contact.filleul_categorie && (
+          <Badge className={getFilleulRoleBadgeClass(contact.filleul_categorie)}>
+            {filleulRoleLabel}
+          </Badge>
+        )}
+        {!clientRoleLabel && !filleulRoleLabel && contact.categorie !== "AUCUN" && (
+          <Badge className={getClientRoleBadgeClass(contact.categorie)}>{contact.categorie}</Badge>
+        )}
+        {showStatutBadge && (
+          <Badge
+            className={getStatutColor(statutSuivi)}
+            title="Statut de suivi"
           >
-            <X className="h-4 w-4" />
-          </Button>
+            {formatStatutSuiviLabel(statutSuivi)}
+          </Badge>
+        )}
+        <ContactRegistreSwitch
+          contact={contact}
+          onUpdated={(updated) => {
+            onContactRefreshed?.(updated);
+            onUpdate?.();
+          }}
+        />
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <EtiquetteList
+          etiquettes={etiquettes.map((e) => ({
+            id: e.etiquette_id,
+            nom: e.etiquette_nom,
+            couleur: e.etiquette_couleur,
+            attribue_par: e.attribue_par,
+          }))}
+          onRemove={handleRemoveEtiquetteClick}
+          size="sm"
+        />
+        <EtiquetteSelector
+          selectedIds={etiquettes.map((e) => e.etiquette_id)}
+          onAdd={handleAddEtiquette}
+          onRemove={handleRemoveEtiquetteClick}
+          open={etiquetteSelectorOpen}
+          onOpenChange={setEtiquetteSelectorOpen}
+        />
+        {contact.id != null && <ContactAutoEtiquetteLog contactId={contact.id} />}
+        {excludedEtiquettes.length > 0 && (
+          <p className="text-xs text-muted-foreground w-full">
+            Exclues du calcul auto :{" "}
+            {excludedEtiquettes.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                className="text-primary hover:underline mr-2"
+                title="Réautoriser l'application automatique"
+                onClick={() => void handleClearAutoExclusion(e.id)}
+              >
+                {e.nom} (réactiver)
+              </button>
+            ))}
+          </p>
         )}
       </div>
     </div>
@@ -941,8 +969,6 @@ export function ContactDetail({
                 contactId={contact.id}
                 contactPrenom={contact.prenom}
                 contactNom={contact.nom}
-                contactDateNaissance={contact.date_naissance}
-                contactLieuNaissance={contact.lieu_naissance}
                 hasFoyer={Boolean(contact.foyer_id)}
                 investissements={investissements}
                 loading={loadingInvestissements}
@@ -965,6 +991,7 @@ export function ContactDetail({
                       }
                     : undefined
                 }
+                onImportDocument={() => setShowDocUpload(true)}
               />
             </TabsContent>
 
@@ -1118,6 +1145,23 @@ export function ContactDetail({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {contact.id != null && (
+        <DocumentUpload
+          open={showDocUpload}
+          onOpenChange={setShowDocUpload}
+          contactId={contact.id}
+          defaultTypeDocument="PATRIMOINE"
+          contactNom={contact.nom}
+          contactPrenom={contact.prenom}
+          contactDateNaissance={contact.date_naissance}
+          contactLieuNaissance={contact.lieu_naissance}
+          onSuccess={() => {
+            setShowDocUpload(false);
+            void refreshContactAfterMutation();
+          }}
+        />
+      )}
 
       <AlertDialog
         open={showDeleteContactDialog}

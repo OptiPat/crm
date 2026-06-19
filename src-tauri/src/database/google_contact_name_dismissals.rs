@@ -66,6 +66,7 @@ mod tests {
             notes: None,
             registre: None,
             famille_regroupement_exclu: None,
+            epargne_precaution_souhaitee: None,
         })
         .unwrap()
         .id

@@ -567,6 +567,18 @@ export function ExtractedDataPreviewAdvanced({
                     />
                   </div>
                 )}
+
+                {formData.pays !== undefined && (
+                  <div className="space-y-2">
+                    <Label>Pays</Label>
+                    <Input
+                      value={formData.pays || ""}
+                      onChange={(e) =>
+                        setFormData({ ...formData, pays: e.target.value })
+                      }
+                    />
+                  </div>
+                )}
               </div>
             </PreviewSection>
           )}
@@ -577,6 +589,7 @@ export function ExtractedDataPreviewAdvanced({
             formData.profession,
             formData.regimeMatrimonial,
             formData.employeur,
+            formData.enfants?.length,
           ]) && (
             <PreviewSection {...sectionProps}
               id="situation"
@@ -635,6 +648,35 @@ export function ExtractedDataPreviewAdvanced({
                     }
                   />
                 </div>
+
+                {(formData.enfants?.length ?? 0) > 0 && (
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Enfants détectés</Label>
+                    <ul className="rounded-md border divide-y text-sm">
+                      {formData.enfants!.map((enfant, idx) => {
+                        const prenomNom = [enfant.prenom, enfant.nom]
+                          .filter(Boolean)
+                          .join(" ");
+                        return (
+                          <li
+                            key={`${prenomNom}-${enfant.dateNaissance ?? idx}`}
+                            className="flex items-center justify-between px-3 py-2"
+                          >
+                            <span>{prenomNom || "Enfant"}</span>
+                            {enfant.dateNaissance && (
+                              <span className="text-muted-foreground">
+                                {enfant.dateNaissance}
+                              </span>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p className="text-xs text-muted-foreground">
+                      Créés comme contacts liés (rôle « enfant ») à l'import.
+                    </p>
+                  </div>
+                )}
 
                 {formData.profession !== undefined && (
                   <div className="space-y-2">
@@ -805,6 +847,82 @@ export function ExtractedDataPreviewAdvanced({
                         )}
                       </div>
                     )}
+                  </>
+                )}
+
+                {/* Fiscalité (foyer) — appliquée au foyer fiscal à l'import */}
+                {showRioRevenusSection && (
+                  <>
+                    <div className="md:col-span-2 mt-4">
+                      <h4 className="font-medium text-sm mb-1">Fiscalité (foyer)</h4>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        Appliquée au foyer fiscal (couple : valeurs cumulées).
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>TMI</Label>
+                      <Input
+                        value={formData.trancheImposition ?? ""}
+                        placeholder="Ex : 30 %"
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            trancheImposition: e.target.value || undefined,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Nombre de parts fiscales</Label>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        value={formData.nombrePartsFiscales ?? ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            nombrePartsFiscales: e.target.value
+                              ? parseFloat(e.target.value)
+                              : undefined,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>Revenu brut global</Label>
+                      <Input
+                        type="number"
+                        value={formData.revenuBrutGlobal ?? ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            revenuBrutGlobal: e.target.value
+                              ? parseInt(e.target.value, 10)
+                              : undefined,
+                          })
+                        }
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label>IR net à payer</Label>
+                      <Input
+                        type="number"
+                        value={formData.irNetAPayer ?? ""}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            irNetAPayer: e.target.value
+                              ? parseInt(e.target.value, 10)
+                              : undefined,
+                          })
+                        }
+                      />
+                    </div>
                   </>
                 )}
               </div>

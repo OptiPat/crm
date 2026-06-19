@@ -72,7 +72,6 @@ export interface ExtractedData {
   profession?: string;
   statutProfessionnel?: string; // Salarié, Indépendant, Retraité, Sans emploi
   employeur?: string;
-  secteurActivite?: string;
   anciennete?: string;
   
   // === REVENUS ANNUELS ===
@@ -183,6 +182,10 @@ export interface ExtractedData {
   trancheImposition?: string;
   nombrePartsFiscales?: number;
   revenuBrutGlobal?: number;
+  /** IR net à payer du foyer fiscal (somme des déclarants pour un couple). */
+  irNetAPayer?: number;
+  /** Épargne de précaution souhaitée (RIO, par personne). */
+  epargnePrecautionSouhaitee?: number;
   
   // === COUPLE (RIO Stellium 2 investisseurs) ===
   isCouple?: boolean;
@@ -205,6 +208,7 @@ export interface ExtractedData {
     chargesEmprunts?: number;
     chargesEmpruntsPassifs?: number;
     patrimoineTotal?: number;
+    epargnePrecautionSouhaitee?: number;
   };
   
   // === MÉTADONNÉES ===

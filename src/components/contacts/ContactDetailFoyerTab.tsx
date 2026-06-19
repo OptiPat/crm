@@ -136,12 +136,14 @@ function FoyerMemberRow({
 
 function FoyerFiscalSummary({ foyer }: { foyer: Foyer }) {
   const rfr = formatFoyerCurrencyEur(foyer.revenu_fiscal_reference);
+  const irNet = formatFoyerCurrencyEur(foyer.ir_net_a_payer);
   const parts = [
     foyer.nombre_parts_fiscales != null
       ? `${foyer.nombre_parts_fiscales} part${foyer.nombre_parts_fiscales > 1 ? "s" : ""}`
       : null,
     foyer.tranche_imposition ? `TMI ${foyer.tranche_imposition}` : null,
     rfr ? `RBG ${rfr}` : null,
+    irNet ? `IR ${irNet}` : null,
   ].filter(Boolean);
 
   if (parts.length === 0 && !foyer.situation_patrimoniale && !foyer.objectifs_patrimoniaux) {

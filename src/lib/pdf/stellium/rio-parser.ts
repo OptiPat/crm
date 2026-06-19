@@ -1,7 +1,7 @@
 import type { BienImmobilier, ExtractedData } from "../types";
 import { extractAmountAfterLabel, parseStelliumAmount, AMOUNT_CAPTURE } from "./amounts";
 import { computeStelliumConfidence } from "./confidence";
-import { parseAdressesPostales } from "./rio-adresse";
+import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
 import { normalizeStelliumText, sanitizeStelliumFieldValue } from "./normalize";
 import {
   detectCoupleRio,
@@ -19,6 +19,7 @@ import {
 } from "./financial-contracts";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { applyFiscaliteToExtractedData, parseStelliumFiscalite } from "./fiscalite";
+import { parseEpargnePrecaution } from "./rio-epargne-precaution";
 import { extractFieldValue, getSection, splitStelliumSections } from "./sections";
 import { extractStelliumSignatureDate } from "./signature-date";
 
@@ -255,6 +256,15 @@ function normalizeRioObjectifLabel(value: string): string {
   return value.replace(/\s+/g, " ").trim();
 }
 
+/** Une ligne uniquement composée de noms d'assignés (« Prénom NOM [Prénom NOM] »). */
+const RIO_ASSIGNEE_NAMES_LINE = new RegExp(
+  `^${RIO_OBJECTIF_ASSIGNEE.source}$`
+);
+
+function isRioAssigneeNamesLine(value: string): boolean {
+  return RIO_ASSIGNEE_NAMES_LINE.test(value.trim());
+}
+
 function isRioObjectifLabelNoise(label: string): boolean {
   return (
     !label ||
@@ -332,6 +342,15 @@ function parseRioObjectifsTableBody(tableBody: string): string[] {
       pendingPrefix = nextRowPrefix ? `${nextRowPrefix} ` : "";
       pos = anchors[i + 1].assigneeStart;
     } else {
+      // Dernier objectif : sa continuation éventuelle est APRÈS l'ancrage
+      // (ex. « Optimiser la rentabilité de vos » + ligne suivante
+      // « placements financiers »). On la recolle, sauf si le texte qui suit
+      // est une ligne d'en-têtes de noms (couple : « Marine TOME  Nelson TOME »
+      // précédant l'épargne par personne), qui n'est pas une continuation.
+      const { continuation } = splitRioObjectifGap(body.slice(end));
+      if (continuation && !isRioAssigneeNamesLine(continuation)) {
+        label = normalizeRioObjectifLabel(`${label} ${continuation}`);
+      }
       pos = end;
     }
 
@@ -497,7 +516,7 @@ function parseStelliumRioSolo(
     if (adressePrincipale.adresse) data.adresse = adressePrincipale.adresse;
     if (adressePrincipale.codePostal) data.codePostal = adressePrincipale.codePostal;
     if (adressePrincipale.ville) data.ville = adressePrincipale.ville;
-    data.pays = "France";
+    data.pays = parsePaysResidenceFiscale(coordonnees)[0] ?? "France";
   }
 
   const situation = extractFieldValue(relations, ["Situation matrimoniale"], ["Régime"]);
@@ -538,12 +557,6 @@ function parseStelliumRioSolo(
     "Origine des revenus",
     "Réglementaire",
   ]);
-  data.secteurActivite = extractFieldValue(
-    professionnel,
-    ["Catégorie socio-professionnelle", "Sous-catégorie"],
-    ["Sous-catégorie", "Profession (ou dernière profession)", "Nom de la société"]
-  );
-
   if (patrimoine) {
     parsePatrimoine(patrimoine, data);
     enrichBiensImmobiliersWithCredits(text, data.biensImmobiliers);
@@ -560,6 +573,11 @@ function parseStelliumRioSolo(
 
   if (fiscalite) {
     applyFiscaliteToExtractedData(data, parseStelliumFiscalite(fiscalite));
+  }
+
+  const epargnePrecaution = parseEpargnePrecaution(text);
+  if (epargnePrecaution.person1 != null) {
+    data.epargnePrecautionSouhaitee = epargnePrecaution.person1;
   }
 
   const dateEntree = header.match(
@@ -654,6 +672,14 @@ function parseStelliumRioCouple(
 
   if (fiscalite) {
     applyFiscaliteToExtractedData(data, parseStelliumFiscalite(fiscalite));
+  }
+
+  const epargnePrecaution = parseEpargnePrecaution(text);
+  if (epargnePrecaution.person1 != null) {
+    data.epargnePrecautionSouhaitee = epargnePrecaution.person1;
+  }
+  if (data.conjoint && epargnePrecaution.person2 != null) {
+    data.conjoint.epargnePrecautionSouhaitee = epargnePrecaution.person2;
   }
 
   const dateEntree = header.match(/Date d'entrée en relation\s*:?\s*(\d{2}\/\d{2}\/\d{4})/i);

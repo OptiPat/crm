@@ -27,7 +27,7 @@ export const RM_RECAP_SITUATION_SRI_BULLET_LABEL =
 
 /** Précisions affichées sous le panneau de saisie (pas dans les puces). */
 export const RM_HINT_REVENUS_BULLET_LABEL =
-  "Revenus ; Imposition ; Nombre de parts fiscales ; TMI ou taux de prélèvement";
+  "Revenus ; Imposition ; Nombre de parts fiscales ; TMI ; IR net";
 
 export const RM_HINT_IMMOBILIER_BULLET_LABEL =
   "Immobilier (à détailler si besoin : résidence principale, secondaire, locative avec revenus associés, appétence, objectif : diversification, rééquilibrage)";

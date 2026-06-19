@@ -230,12 +230,22 @@ export function FoyerDetail({
                     </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">
-                    Revenu brut global
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Revenu brut global
+                    </div>
+                    <div className="text-lg font-semibold">
+                      {formatCurrency(foyer.revenu_fiscal_reference)}
+                    </div>
                   </div>
-                  <div className="text-lg font-semibold">
-                    {formatCurrency(foyer.revenu_fiscal_reference)}
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      IR net à payer
+                    </div>
+                    <div className="text-lg font-semibold">
+                      {formatCurrency(foyer.ir_net_a_payer)}
+                    </div>
                   </div>
                 </div>
               </CardContent>

@@ -48,7 +48,8 @@ import {
   type NewContact,
   type Contact,
 } from "@/lib/api/tauri-contacts";
-import { getFoyerById, type Foyer } from "@/lib/api/tauri-foyers";
+import { getFoyerById, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
+import { ensureDeclarantFoyer } from "@/lib/contacts/rio-foyer-ensure";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -351,6 +352,16 @@ export function ContactForm({
     members: Contact[];
     loading: boolean;
   }>({ foyer: null, members: [], loading: false });
+  // Fiscalité éditée depuis la fiche contact mais stockée sur le foyer (source unique).
+  const [foyerFiscal, setFoyerFiscal] = useState<{
+    tranche_imposition?: string;
+    revenu_fiscal_reference?: number;
+    ir_net_a_payer?: number;
+    nombre_parts_fiscales?: number;
+  }>({});
+  // Id du foyer dont la fiscalité a déjà initialisé `foyerFiscal` : évite qu'un
+  // rechargement (événement contacts/foyers) n'écrase une saisie en cours.
+  const foyerFiscalInitRef = useRef<number | null>(null);
   const initialSnapshot = useRef("");
 
   useEffect(() => {
@@ -401,27 +412,48 @@ export function ContactForm({
   useEffect(() => {
     if (!open || !contact?.foyer_id) {
       setFoyerContext({ foyer: null, members: [], loading: false });
+      setFoyerFiscal({});
+      foyerFiscalInitRef.current = null;
       return;
     }
 
     let cancelled = false;
     const loadFoyerContext = async () => {
       setFoyerContext((prev) => ({ ...prev, loading: true }));
+      // Le foyer est critique (fiscalité) : on le charge en priorité. Les membres
+      // sont best-effort — une erreur dessus ne doit pas masquer la fiscalité.
+      let foyer: Foyer | null = null;
       try {
-        const [foyer, members] = await Promise.all([
-          getFoyerById(contact.foyer_id!),
-          getContactsByFoyer(contact.foyer_id!),
-        ]);
-        if (cancelled) return;
-        setFoyerContext({
-          foyer,
-          members: members.filter((m) => m.id !== contact.id),
-          loading: false,
-        });
+        foyer = await getFoyerById(contact.foyer_id!);
       } catch {
-        if (!cancelled) {
-          setFoyerContext({ foyer: null, members: [], loading: false });
-        }
+        foyer = null;
+      }
+      if (cancelled) return;
+
+      let members: Contact[] = [];
+      try {
+        members = await getContactsByFoyer(contact.foyer_id!);
+      } catch {
+        members = [];
+      }
+      if (cancelled) return;
+
+      setFoyerContext({
+        foyer,
+        members: members.filter((m) => m.id !== contact.id),
+        loading: false,
+      });
+      // Initialise la fiscalité éditable UNE fois par foyer chargé : les
+      // rechargements ne doivent ni écraser une saisie en cours, ni l'effacer
+      // si le foyer n'a pas pu être relu (foyer === null).
+      if (foyer && foyerFiscalInitRef.current !== foyer.id) {
+        foyerFiscalInitRef.current = foyer.id;
+        setFoyerFiscal({
+          tranche_imposition: foyer.tranche_imposition ?? undefined,
+          revenu_fiscal_reference: foyer.revenu_fiscal_reference ?? undefined,
+          ir_net_a_payer: foyer.ir_net_a_payer ?? undefined,
+          nombre_parts_fiscales: foyer.nombre_parts_fiscales ?? undefined,
+        });
       }
     };
 
@@ -546,6 +578,54 @@ export function ContactForm({
     toast.success("Prescripteur créé");
   };
 
+  /**
+   * Sauvegarde la fiscalité (foyer) saisie dans la fiche contact.
+   * La donnée vit sur le foyer (source unique, partagée par le couple) :
+   * - foyer chargé dans le formulaire → on écrit l'état édité tel quel
+   *   (les champs vidés effacent bien la valeur) ;
+   * - pas de foyer mais une valeur saisie → on crée/rattache un foyer ;
+   * - foyer existant mais NON chargé (erreur réseau) → on n'écrit rien pour
+   *   ne pas écraser une fiscalité qu'on n'a pas pu lire.
+   */
+  const persistFoyerFiscal = async (savedContact: Contact): Promise<void> => {
+    const writeFiscal = async (foyer: Foyer) => {
+      await updateFoyer(foyer.id, {
+        nom: foyer.nom,
+        type_foyer: foyer.type_foyer,
+        nombre_parts_fiscales: foyerFiscal.nombre_parts_fiscales,
+        tranche_imposition: foyerFiscal.tranche_imposition,
+        revenu_fiscal_reference: foyerFiscal.revenu_fiscal_reference,
+        ir_net_a_payer: foyerFiscal.ir_net_a_payer,
+        situation_patrimoniale: foyer.situation_patrimoniale,
+        objectifs_patrimoniaux: foyer.objectifs_patrimoniaux,
+        notes: foyer.notes,
+      });
+    };
+
+    // Cas 1 : foyer chargé → on persiste l'édition (mirroir fidèle, effacement OK).
+    if (foyerContext.foyer) {
+      await writeFiscal(foyerContext.foyer);
+      return;
+    }
+
+    // Cas 2 : foyer existant mais non chargé → ne rien écraser.
+    if (savedContact.foyer_id) return;
+
+    // Cas 3 : aucun foyer → en créer un seulement si une valeur est saisie.
+    const hasAnyFiscal =
+      (foyerFiscal.tranche_imposition?.trim() ?? "") !== "" ||
+      foyerFiscal.revenu_fiscal_reference != null ||
+      foyerFiscal.ir_net_a_payer != null ||
+      foyerFiscal.nombre_parts_fiscales != null;
+    if (!hasAnyFiscal) return;
+
+    const ensured = await ensureDeclarantFoyer(savedContact, {
+      hasEnfants: false,
+      hasFiscalData: true,
+    });
+    await writeFiscal(await getFoyerById(ensured.foyerId));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const errors = getFieldErrors(formData);
@@ -561,6 +641,18 @@ export function ContactForm({
       const dataToSubmit = buildSubmitPayload(formData);
       if (contact) {
         const updated = await updateContact(contact.id, dataToSubmit);
+        // Le contact est déjà enregistré : un échec de la fiscalité (foyer) ne
+        // doit pas être présenté comme un échec total. On garde le formulaire
+        // ouvert pour réessayer la seule partie fiscalité.
+        try {
+          await persistFoyerFiscal(updated);
+        } catch (fiscalError) {
+          toast.error(
+            "Contact enregistré, mais la fiscalité du foyer n'a pas pu être sauvegardée : " +
+              String(fiscalError)
+          );
+          return;
+        }
         initialSnapshot.current = serializeFormSnapshot(contactToFormData(updated));
         toast.success("Contact modifié");
       } else {
@@ -928,6 +1020,102 @@ export function ContactForm({
                 setFormData((prev) => ({
                   ...prev,
                   charges_emprunts: e.target.value ? parseFloat(e.target.value) : undefined,
+                }))
+              }
+            />
+          </div>
+          {isEdit && (foyerContext.foyer || !contact?.foyer_id) && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="foyer_tranche_imposition">TMI (foyer)</Label>
+                <Input
+                  id="foyer_tranche_imposition"
+                  value={foyerFiscal.tranche_imposition ?? ""}
+                  placeholder="Ex : 30 %"
+                  onChange={(e) => {
+                    setDirty(true);
+                    setFoyerFiscal((prev) => ({
+                      ...prev,
+                      tranche_imposition: e.target.value || undefined,
+                    }));
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="foyer_nombre_parts">Nombre de parts fiscales (foyer)</Label>
+                <Input
+                  id="foyer_nombre_parts"
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={foyerFiscal.nombre_parts_fiscales ?? ""}
+                  onChange={(e) => {
+                    setDirty(true);
+                    setFoyerFiscal((prev) => ({
+                      ...prev,
+                      nombre_parts_fiscales: e.target.value
+                        ? parseFloat(e.target.value)
+                        : undefined,
+                    }));
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="foyer_rbg">Revenu brut global (€, foyer)</Label>
+                <Input
+                  id="foyer_rbg"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={foyerFiscal.revenu_fiscal_reference ?? ""}
+                  onChange={(e) => {
+                    setDirty(true);
+                    setFoyerFiscal((prev) => ({
+                      ...prev,
+                      revenu_fiscal_reference: e.target.value
+                        ? parseFloat(e.target.value)
+                        : undefined,
+                    }));
+                  }}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="foyer_ir_net">IR net à payer (€, foyer)</Label>
+                <Input
+                  id="foyer_ir_net"
+                  type="number"
+                  min={0}
+                  step={1}
+                  value={foyerFiscal.ir_net_a_payer ?? ""}
+                  onChange={(e) => {
+                    setDirty(true);
+                    setFoyerFiscal((prev) => ({
+                      ...prev,
+                      ir_net_a_payer: e.target.value
+                        ? parseFloat(e.target.value)
+                        : undefined,
+                    }));
+                  }}
+                />
+              </div>
+            </>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="epargne_precaution_souhaitee">
+              Épargne de précaution souhaitée (€)
+            </Label>
+            <Input
+              id="epargne_precaution_souhaitee"
+              type="number"
+              min={0}
+              step={1}
+              value={formData.epargne_precaution_souhaitee ?? ""}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  epargne_precaution_souhaitee: e.target.value
+                    ? parseFloat(e.target.value)
+                    : undefined,
                 }))
               }
             />

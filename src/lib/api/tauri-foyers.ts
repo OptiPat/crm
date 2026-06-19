@@ -8,6 +8,8 @@ export interface Foyer {
   nombre_parts_fiscales?: number;
   tranche_imposition?: string;
   revenu_fiscal_reference?: number;
+  /** IR net à payer du foyer fiscal (RIO ; somme des déclarants pour un couple). */
+  ir_net_a_payer?: number;
   situation_patrimoniale?: string;
   objectifs_patrimoniaux?: string;
   notes?: string;
@@ -21,6 +23,7 @@ export interface NewFoyer {
   nombre_parts_fiscales?: number;
   tranche_imposition?: string;
   revenu_fiscal_reference?: number;
+  ir_net_a_payer?: number;
   situation_patrimoniale?: string;
   objectifs_patrimoniaux?: string;
   notes?: string;

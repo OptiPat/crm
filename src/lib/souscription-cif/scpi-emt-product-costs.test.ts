@@ -17,6 +17,22 @@ describe("getScpiEmtProductCostRate", () => {
   it("additionne les lignes EMT pour Épargne Pierre", () => {
     expect(getScpiEmtProductCostRate("epargne_pierre")).toBeCloseTo(0.0217);
   });
+
+  it("additionne les lignes EMT pour Corum Eurion", () => {
+    expect(getScpiEmtProductCostRate("corum_eurion")).toBeCloseTo(0.0169);
+  });
+
+  it("additionne les lignes EMT pour Immorente", () => {
+    expect(getScpiEmtProductCostRate("immorente")).toBeCloseTo(0.00964);
+  });
+
+  it("additionne les lignes EMT pour Activimmo", () => {
+    expect(getScpiEmtProductCostRate("activimmo")).toBeCloseTo(0.02943);
+  });
+
+  it("additionne les lignes EMT pour LF Avenir Santé", () => {
+    expect(getScpiEmtProductCostRate("lf_avenir_sante")).toBeCloseTo(0.0166);
+  });
 });
 
 describe("computeProductCostsPercentRatio", () => {

@@ -7,7 +7,7 @@ impl super::Database {
         let mut stmt = self.conn.prepare(
             "SELECT id, nom, type_foyer, nombre_parts_fiscales, tranche_imposition, 
                     revenu_fiscal_reference, situation_patrimoniale, objectifs_patrimoniaux, 
-                    notes, created_at, updated_at 
+                    notes, created_at, updated_at, ir_net_a_payer 
              FROM foyers 
              ORDER BY nom",
         )?;
@@ -25,6 +25,7 @@ impl super::Database {
                 notes: row.get(8)?,
                 created_at: row.get(9)?,
                 updated_at: row.get(10)?,
+                ir_net_a_payer: row.get(11)?,
             })
         })?;
 
@@ -38,8 +39,8 @@ impl super::Database {
     pub fn create_foyer(&self, foyer: super::models::NewFoyer) -> Result<super::models::Foyer> {
         self.conn.execute(
             "INSERT INTO foyers (nom, type_foyer, nombre_parts_fiscales, tranche_imposition, 
-                                revenu_fiscal_reference, situation_patrimoniale, objectifs_patrimoniaux, notes) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                                revenu_fiscal_reference, situation_patrimoniale, objectifs_patrimoniaux, notes, ir_net_a_payer) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 &foyer.nom,
                 &foyer.type_foyer,
@@ -49,6 +50,7 @@ impl super::Database {
                 &foyer.situation_patrimoniale,
                 &foyer.objectifs_patrimoniaux,
                 &foyer.notes,
+                &foyer.ir_net_a_payer,
             ],
         )?;
 
@@ -60,7 +62,7 @@ impl super::Database {
         self.conn.query_row(
             "SELECT id, nom, type_foyer, nombre_parts_fiscales, tranche_imposition, 
                     revenu_fiscal_reference, situation_patrimoniale, objectifs_patrimoniaux, 
-                    notes, created_at, updated_at 
+                    notes, created_at, updated_at, ir_net_a_payer 
              FROM foyers 
              WHERE id = ?1",
             params![id],
@@ -77,6 +79,7 @@ impl super::Database {
                     notes: row.get(8)?,
                     created_at: row.get(9)?,
                     updated_at: row.get(10)?,
+                    ir_net_a_payer: row.get(11)?,
                 })
             },
         )
@@ -97,8 +100,9 @@ impl super::Database {
                 situation_patrimoniale = ?6,
                 objectifs_patrimoniaux = ?7,
                 notes = ?8,
+                ir_net_a_payer = ?9,
                 updated_at = unixepoch()
-            WHERE id = ?9",
+            WHERE id = ?10",
             params![
                 &foyer.nom,
                 &foyer.type_foyer,
@@ -108,6 +112,7 @@ impl super::Database {
                 &foyer.situation_patrimoniale,
                 &foyer.objectifs_patrimoniaux,
                 &foyer.notes,
+                &foyer.ir_net_a_payer,
                 id
             ],
         )?;

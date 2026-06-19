@@ -201,6 +201,7 @@ mod tests {
             registre: None,
             notes: None,
             famille_regroupement_exclu: None,
+            epargne_precaution_souhaitee: None,
         })
         .unwrap()
         .id

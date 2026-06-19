@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
-import { DocumentUpload } from "@/components/documents/DocumentUpload";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { computeEncoursPlacementsStats, isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
@@ -217,8 +216,6 @@ export function ContactPatrimoinePanel({
   contactId,
   contactPrenom,
   contactNom,
-  contactDateNaissance,
-  contactLieuNaissance,
   hasFoyer,
   investissements,
   loading,
@@ -229,12 +226,11 @@ export function ContactPatrimoinePanel({
   onRefresh,
   onOpenOwnerContact,
   onNavigateDocuments,
+  onImportDocument,
 }: {
   contactId: number;
   contactPrenom: string;
   contactNom: string;
-  contactDateNaissance?: number;
-  contactLieuNaissance?: string;
   hasFoyer: boolean;
   investissements: InvestissementWithOwner[];
   loading: boolean;
@@ -245,11 +241,11 @@ export function ContactPatrimoinePanel({
   onRefresh: () => void;
   onOpenOwnerContact?: (contactId: number) => void;
   onNavigateDocuments?: () => void;
+  onImportDocument?: () => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
   const [ownerFilter, setOwnerFilter] = useState<PatrimoineOwnerFilter>("all");
-  const [showDocUpload, setShowDocUpload] = useState(false);
   const [encoursInvestissement, setEncoursInvestissement] =
     useState<Investissement | null>(null);
 
@@ -390,16 +386,6 @@ export function ContactPatrimoinePanel({
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setShowDocUpload(true)}
-              >
-                <FileUp className="h-4 w-4" />
-                Importer un document
-              </Button>
               <Button type="button" size="sm" className="gap-1.5" onClick={onAdd}>
                 <Plus className="h-4 w-4" />
                 Ajouter
@@ -508,16 +494,18 @@ export function ContactPatrimoinePanel({
                 ou saisissez un placement manuellement.
               </p>
               <div className="flex flex-wrap justify-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="gap-1"
-                  onClick={() => setShowDocUpload(true)}
-                >
-                  <FileUp className="h-4 w-4" />
-                  Importer un document
-                </Button>
+                {onImportDocument && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={onImportDocument}
+                  >
+                    <FileUp className="h-4 w-4" />
+                    Importer
+                  </Button>
+                )}
                 <Button type="button" size="sm" className="gap-1" onClick={onAdd}>
                   <Plus className="h-4 w-4" />
                   Ajouter un placement
@@ -659,21 +647,6 @@ export function ContactPatrimoinePanel({
         }}
         investissement={encoursInvestissement}
         onUpdated={onRefresh}
-      />
-
-      <DocumentUpload
-        open={showDocUpload}
-        onOpenChange={setShowDocUpload}
-        contactId={contactId}
-        defaultTypeDocument="PATRIMOINE"
-        contactNom={contactNom}
-        contactPrenom={contactPrenom}
-        contactDateNaissance={contactDateNaissance}
-        contactLieuNaissance={contactLieuNaissance}
-        onSuccess={() => {
-          setShowDocUpload(false);
-          onRefresh();
-        }}
       />
     </div>
   );

@@ -310,6 +310,60 @@ function applyMortgageCredit(bien: BienImmobilier, credit: StelliumMortgageCredi
   if (credit.dateFinCredit) bien.dateFinCredit = credit.dateFinCredit;
 }
 
+/**
+ * Repli par mot-clé de type quand le libellé ne matche aucun nom de bien
+ * (ex. « Crédit achat RP » sur un couple à emprunteurs scindés). Ne s'active
+ * que s'il existe exactement UN bien du type visé encore sans financement.
+ */
+function findBienByTypeKeyword(
+  label: string,
+  biens: BienImmobilier[]
+): BienImmobilier | undefined {
+  const words = label.split(/[\s-]+/).map((w) => w.toLowerCase());
+  const single = (types: string[]) => {
+    const matches = biens.filter(
+      (b) =>
+        types.includes((b.type ?? "").toUpperCase()) &&
+        !b.creditCRD &&
+        !b.echeanceAnnuelle
+    );
+    return matches.length === 1 ? matches[0] : undefined;
+  };
+  if (words.includes("rp")) return single(["RESIDENCE_PRINCIPALE", "RP"]);
+  if (words.includes("pinel")) return single(["PINEL"]);
+  return undefined;
+}
+
+/**
+ * Crédit immobilier COMMUN unique : un seul « Crédit immobilier - Amortissable »
+ * dans les Passifs, dont les colonnes par emprunteur ne sont que des parts. Le
+ * total (= sous-total puisqu'unique) donne l'échéance/CRD réels du crédit.
+ */
+function parseSingleCommonMortgage(
+  fullText: string
+): { echeance: number; crd: number; dateFinCredit?: string } | undefined {
+  const block = extractPassifsBlock(fullText);
+  if (!block) return undefined;
+  const normalized = block.replace(/\t+/g, " ");
+
+  const amortBlocks = normalized.match(
+    /Cr[ée]dit\s+immobilier\s*[-–—]\s*Amortissable/gi
+  );
+  if (!amortBlocks || amortBlocks.length !== 1) return undefined;
+
+  const totals =
+    normalized.match(/\bTOTAL\b[^\d]*([\d\s,]+)\s*€\s+([\d\s,]+)\s*€/i) ??
+    normalized.match(/Cr[ée]dits immobilier\s+([\d\s,]+)\s*€\s+([\d\s,]+)\s*€/i);
+  if (!totals) return undefined;
+
+  const echeance = parseEuroAmount(totals[1]);
+  const crd = parseEuroAmount(totals[2]);
+  if (!echeance || !crd) return undefined;
+
+  const date = normalized.match(/(\d{2}\/\d{2}\/\d{4})/);
+  return { echeance, crd, dateFinCredit: date?.[1] };
+}
+
 /** Secours : section Charges « Mensualité de crédit - Primo MTP » (libellé fiable). */
 function applyCreditsFromMensualiteLines(
   fullText: string,
@@ -321,25 +375,49 @@ function applyCreditsFromMensualiteLines(
 
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(fullText)) !== null) {
-    const label = match[1].replace(/\s+/g, " ").trim();
+    const label = match[1]
+      .replace(/[\s\t-]+$/u, "")
+      .replace(/\s+/g, " ")
+      .trim();
     if (!label || /^(Cr[ée]dits immobilier|SCPI)\b/i.test(label)) continue;
 
     const bien = findBienForLabel(
       label,
       biens.filter((b) => !b.creditCRD)
     );
-    if (!bien || bien.creditCRD) continue;
-
-    const credit = findCreditForLabel(label, credits);
-    if (credit) {
-      applyMortgageCredit(bien, credit);
+    if (bien && !bien.creditCRD) {
+      const credit = findCreditForLabel(label, credits);
+      if (credit) {
+        applyMortgageCredit(bien, credit);
+        continue;
+      }
+      const echeance = parseEuroAmount(match[2]);
+      if (echeance) {
+        bien.echeanceAnnuelle = echeance;
+        bien.mensualiteCredit = Math.round(echeance / 12);
+      }
       continue;
     }
 
-    const echeance = parseEuroAmount(match[2]);
-    if (echeance) {
-      bien.echeanceAnnuelle = echeance;
-      bien.mensualiteCredit = Math.round(echeance / 12);
+    // Repli par type : crédit nommé d'après le type (« Crédit achat RP ») dont
+    // le crédit parsé serait partiel (emprunteurs scindés). Si un unique crédit
+    // commun figure dans les Passifs, on en pose le total (échéance + CRD + date) ;
+    // sinon on se rabat sur l'échéance fiable de la ligne Charges.
+    const typedBien = findBienByTypeKeyword(label, biens);
+    if (typedBien) {
+      const common = parseSingleCommonMortgage(fullText);
+      if (common) {
+        typedBien.echeanceAnnuelle = common.echeance;
+        typedBien.creditCRD = common.crd;
+        typedBien.mensualiteCredit = Math.round(common.echeance / 12);
+        if (common.dateFinCredit) typedBien.dateFinCredit = common.dateFinCredit;
+      } else {
+        const echeance = parseEuroAmount(match[2]);
+        if (echeance) {
+          typedBien.echeanceAnnuelle = echeance;
+          typedBien.mensualiteCredit = Math.round(echeance / 12);
+        }
+      }
     }
   }
 }

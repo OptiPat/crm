@@ -72,7 +72,8 @@ async function finalizeSoloContact(
   const hasFiscalData = Boolean(
     data.trancheImposition?.trim() ||
       data.nombrePartsFiscales != null ||
-      data.revenuBrutGlobal != null
+      data.revenuBrutGlobal != null ||
+      data.irNetAPayer != null
   );
   let resolvedContact = contact;
   let resolvedFoyerId = ctx.foyerId ?? contact.foyer_id;

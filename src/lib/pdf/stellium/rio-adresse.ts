@@ -23,8 +23,35 @@ export interface AdressePostaleParsed {
 const FIELD_LABEL_START_RE =
   /^(Adresse|Téléphone|Autre|E-?mail|Coordonnées|Pays\b|Statut|Civilité|Nationalité|Mesure|Né\(e\)|Profession|Catégorie|Sous-catégorie|Régime|Situation|Origine|Nom\b|Date\b)/i;
 
+/** Particules françaises gardées en minuscules (sauf en début de libellé). */
+const LOWER_PARTICLES = new Set([
+  "de", "du", "des", "d", "l", "la", "le", "les", "et", "en", "au", "aux",
+  "à", "sur", "sous", "lès", "bis", "ter", "quater",
+]);
+
+/**
+ * Met en casse « titre » à la française une adresse / une ville lue du PDF
+ * (souvent tout en majuscules ou tout en minuscules).
+ * Ex. « MONTPELLIER » → « Montpellier », « 8 place du marché » → « 8 Place du Marché ».
+ */
+function toTitleCaseFr(value: string): string {
+  const lower = value.replace(/\s+/g, " ").trim().toLocaleLowerCase("fr-FR");
+  if (!lower) return "";
+  let first = true;
+  return lower.replace(/[\p{L}\p{N}]+/gu, (word) => {
+    const keepLower = !first && LOWER_PARTICLES.has(word);
+    first = false;
+    if (keepLower) return word;
+    return word.charAt(0).toLocaleUpperCase("fr-FR") + word.slice(1);
+  });
+}
+
 function cleanVille(value: string): string {
-  return value.replace(/\s+/g, " ").trim();
+  return toTitleCaseFr(value);
+}
+
+function cleanRue(value: string): string {
+  return toTitleCaseFr(value);
 }
 
 function splitColumns(line: string): string[] {
@@ -35,7 +62,7 @@ function splitColumns(line: string): string[] {
 }
 
 function parseCpVille(segment: string): { codePostal?: string; ville?: string } {
-  const withCountry = segment.match(/(\d{5})\s+(.+?)\s*-\s*[A-Za-zÀ-ÿ' -]+\s*$/);
+  const withCountry = segment.match(/(\d{5})\s+(.+?)\s+-\s+[A-Za-zÀ-ÿ' -]+\s*$/);
   if (withCountry) {
     return { codePostal: withCountry[1], ville: cleanVille(withCountry[2]) };
   }
@@ -54,7 +81,7 @@ function parseInlineAddresses(text: string): AdressePostaleParsed[] {
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
     out.push({
-      adresse: match[1].trim(),
+      adresse: cleanRue(match[1]),
       codePostal: match[2],
       ville: cleanVille(match[3]),
     });
@@ -102,11 +129,26 @@ export function parseAdressesPostales(coordonnees: string): AdressePostaleParsed
       const entry: AdressePostaleParsed = cpVilleCols[c]
         ? parseCpVille(cpVilleCols[c])
         : {};
-      if (streetCols[c]) entry.adresse = streetCols[c];
+      if (streetCols[c]) entry.adresse = cleanRue(streetCols[c]);
       if (entry.adresse || entry.codePostal || entry.ville) result.push(entry);
     }
     if (result.length > 0) return result;
   }
 
   return parseInlineAddresses(coordonnees);
+}
+
+/**
+ * Extrait le « Pays de résidence fiscale » de la section Coordonnées.
+ * Renvoie une colonne par personne (solo → 1, couple → 2). Ignore les « - ».
+ */
+export function parsePaysResidenceFiscale(coordonnees: string): string[] {
+  const match = coordonnees.match(
+    /Pays de r[ée]sidence fiscale\s*:?\s*(.+?)(?=\s*Statut|\n|$)/is
+  );
+  if (!match) return [];
+  return match[1]
+    .split(/\t|\s{2,}/)
+    .map((s) => s.replace(/\s+/g, " ").trim())
+    .filter((s) => s.length > 0 && s !== "-");
 }

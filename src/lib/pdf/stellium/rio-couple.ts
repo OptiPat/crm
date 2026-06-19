@@ -1,6 +1,6 @@
 import type { BienImmobilier, ExtractedData } from "../types";
 import { parseStelliumAmount } from "./amounts";
-import { parseAdressesPostales } from "./rio-adresse";
+import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import {
   isImmoActifCategory,
@@ -93,6 +93,26 @@ function parseNaissance(value: string | undefined): {
     dateNaissance: match[1],
     lieuNaissance: match[2].replace(/\s+-\s+France$/i, "").trim(),
   };
+}
+
+/**
+ * Nettoie une cellule « Nom de naissance » d'un RIO couple. Le layout PDF peut
+ * y replier la naissance du conjoint (ex. « TOME\n03/06/1990 à Nogent sur marne -»).
+ * Renvoie le nom de naissance seul + la naissance éventuellement récupérée
+ * (utilisée en repli si la colonne « Né(e) le » est elle-même décalée).
+ */
+function cleanNomNaissanceCell(raw: string | undefined): {
+  nomNaissance?: string;
+  naissance: { dateNaissance?: string; lieuNaissance?: string };
+} {
+  if (!raw) return { naissance: {} };
+  const lines = raw
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const nomNaissance = lines[0] ? cleanCoupleNom(lines[0]) || undefined : undefined;
+  const rest = lines.slice(1).join(" ").replace(/\s+-\s*$/u, "").trim();
+  return { nomNaissance, naissance: parseNaissance(rest) };
 }
 
 export function parseCoupleIdentite(
@@ -189,7 +209,13 @@ function buildCoupleIdentity(
   const split1 = nomPrenom1 ? splitNomPrenom(nomPrenom1) : {};
   const split2 = nomPrenom2 ? splitNomPrenom(nomPrenom2) : {};
 
-  const [nomNaissance1, nomNaissance2] = extractPair(identite, "Nom de naissance", ["Né(e) le"]);
+  const [rawNomNaissance1, rawNomNaissance2] = extractPair(identite, "Nom de naissance", [
+    "Né(e) le",
+  ]);
+  const cleanedNaissance1 = cleanNomNaissanceCell(rawNomNaissance1);
+  const cleanedNaissance2 = cleanNomNaissanceCell(rawNomNaissance2);
+  const nomNaissance1 = cleanedNaissance1.nomNaissance;
+  const nomNaissance2 = cleanedNaissance2.nomNaissance;
   const [naissance1, naissance2] = extractPair(identite, "Né(e) le", ["Nationalité"]);
   const [nationalite1, nationalite2] = extractPair(identite, "Nationalité", [
     "Mesure de protection",
@@ -210,6 +236,7 @@ function buildCoupleIdentity(
 
   const adressesPostales = parseAdressesPostales(coordonnees);
   const adresse1 = adressesPostales[0];
+  const paysFiscal = parsePaysResidenceFiscale(coordonnees);
 
   const [profession1, profession2] = extractPair(
     professionnel,
@@ -227,8 +254,8 @@ function buildCoupleIdentity(
     nom: split1.nom,
     prenom: split1.prenom,
     nomNaissance: nomNaissance1,
-    dateNaissance: naissanceParsed1.dateNaissance,
-    lieuNaissance: naissanceParsed1.lieuNaissance,
+    dateNaissance: naissanceParsed1.dateNaissance ?? cleanedNaissance1.naissance.dateNaissance,
+    lieuNaissance: naissanceParsed1.lieuNaissance ?? cleanedNaissance1.naissance.lieuNaissance,
     nationalite: nationalite1,
     email: email1,
     telephone: tel1,
@@ -236,7 +263,7 @@ function buildCoupleIdentity(
     adresse: adresse1?.adresse,
     codePostal: adresse1?.codePostal,
     ville: adresse1?.ville,
-    pays: "France",
+    pays: paysFiscal[0] ?? "France",
     profession: profession1,
     employeur: employeur1 && employeur1 !== "-" ? employeur1 : undefined,
   };
@@ -246,8 +273,8 @@ function buildCoupleIdentity(
     nom: split2.nom,
     prenom: split2.prenom,
     nomNaissance: nomNaissance2,
-    dateNaissance: naissanceParsed2.dateNaissance,
-    lieuNaissance: naissanceParsed2.lieuNaissance,
+    dateNaissance: naissanceParsed2.dateNaissance ?? cleanedNaissance2.naissance.dateNaissance,
+    lieuNaissance: naissanceParsed2.lieuNaissance ?? cleanedNaissance2.naissance.lieuNaissance,
     nationalite: nationalite2,
     email: email2,
     telephone: tel2,

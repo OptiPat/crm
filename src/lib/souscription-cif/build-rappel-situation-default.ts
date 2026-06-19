@@ -43,9 +43,8 @@ function formatSituationMatrimonialeLine(contact: Contact | null): string | null
   return situation ?? regime ?? null;
 }
 
-function formatNombreEnfants(count: number | null | undefined): string | null {
-  if (count == null || count <= 0) return null;
-  return String(count);
+function formatNombreEnfants(count: number | null | undefined): string {
+  return String(Math.max(0, count ?? 0));
 }
 
 /** Dernier QPI importé avec résumé durabilité / ESG. */
@@ -65,9 +64,8 @@ export function buildRappelSituationSupplement(
   documents: readonly Document[],
   investissements: readonly Investissement[] = []
 ): RappelSituationSupplement {
-  const nombreEnfants = countEnfantsFoyer(foyerMembers);
   return {
-    nombreEnfants: nombreEnfants > 0 ? nombreEnfants : null,
+    nombreEnfants: countEnfantsFoyer(foyerMembers),
     appetencesEsg: latestQpiAppetencesEsg(documents),
     investissements,
   };
@@ -101,7 +99,17 @@ function formatRevenusLine(contact: Contact | null, foyer: Foyer | null): string
       `${foyer.nombre_parts_fiscales} part${foyer.nombre_parts_fiscales > 1 ? "s" : ""}`
     );
   }
+  if (foyer?.ir_net_a_payer != null && foyer.ir_net_a_payer > 0) {
+    const ir = formatFoyerCurrencyEur(foyer.ir_net_a_payer);
+    if (ir) parts.push(`IR ${ir}`);
+  }
   return parts.length > 0 ? parts.join(" ; ") : null;
+}
+
+function formatEpargnePrecautionLine(contact: Contact | null): string | null {
+  const amount = contact?.epargne_precaution_souhaitee;
+  if (amount == null || amount <= 0) return null;
+  return formatFoyerCurrencyEur(amount);
 }
 
 function replaceBulletLabel(text: string, panelLabel: string, rapportLabel: string): string {
@@ -154,6 +162,7 @@ const CONTACT_SYNC_RAPPEL_LABELS = [
   "Nombre d'enfants",
   RM_PANEL_REVENUS_BULLET_LABEL,
   RM_RECAP_SITUATION_SRI_BULLET_LABEL,
+  RM_PANEL_EPARGNE_BULLET_LABEL,
   "Appétences ESG",
 ] as const;
 
@@ -313,7 +322,7 @@ export function buildDefaultRappelSituation(
     [RM_PANEL_REVENUS_BULLET_LABEL]: formatRevenusLine(contact, foyer),
     [RM_PANEL_IMMOBILIER_BULLET_LABEL]: immobilier,
     [RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL]: valeursMobilieres,
-    [RM_PANEL_EPARGNE_BULLET_LABEL]: null,
+    [RM_PANEL_EPARGNE_BULLET_LABEL]: formatEpargnePrecautionLine(contact),
     [RM_PANEL_ENDETTEMENT_BULLET_LABEL]: null,
     [RM_PANEL_MONTANT_INVESTISSEMENT_BULLET_LABEL]: null,
     [RM_RECAP_SITUATION_SRI_BULLET_LABEL]: sriLine,

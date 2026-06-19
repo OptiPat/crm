@@ -15,6 +15,7 @@ import { getInvestissementsByContact, type Investissement } from "@/lib/api/taur
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
 import { loadFoyerInvestissements } from "@/lib/foyers/foyer-utils";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
@@ -355,11 +356,15 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     loadAndSyncDossier();
     const unsubDocuments = subscribeDocumentsChanged(loadAndSyncDossier);
     const unsubInvestissements = subscribeInvestissementsChanged(loadAndSyncDossier);
+    const unsubFoyers = subscribeFoyersChanged(loadAndSyncDossier);
+    const unsubContacts = subscribeContactsChanged(loadAndSyncDossier);
 
     return () => {
       cancelled = true;
       unsubDocuments();
       unsubInvestissements();
+      unsubFoyers();
+      unsubContacts();
     };
   }, [selectedContactId, selectedContact, productType]);
 

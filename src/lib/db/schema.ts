@@ -76,6 +76,7 @@ export const contacts = sqliteTable("contacts", {
   regimeMatrimonial: text("regime_matrimonial"),
   revenusAnnuels: real("revenus_annuels"),
   chargesEmprunts: real("charges_emprunts"),
+  epargnePrecautionSouhaitee: real("epargne_precaution_souhaitee"),
   objectifsPatrimoniaux: text("objectifs_patrimoniaux"),
   
   // Informations commerciales

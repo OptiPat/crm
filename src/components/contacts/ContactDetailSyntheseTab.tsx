@@ -97,8 +97,20 @@ function hasVieProContent(contact: ContactRecord): boolean {
     contact.profession ||
     (contact.revenus_annuels != null && contact.revenus_annuels > 0) ||
     (contact.charges_emprunts != null && contact.charges_emprunts > 0) ||
+    (contact.epargne_precaution_souhaitee != null &&
+      contact.epargne_precaution_souhaitee > 0) ||
     contact.objectifs_patrimoniaux ||
     contact.profil_risque_sri
+  );
+}
+
+function hasFoyerFiscalContent(foyer?: Foyer | null): boolean {
+  return !!(
+    foyer &&
+    (foyer.tranche_imposition ||
+      foyer.nombre_parts_fiscales != null ||
+      (foyer.revenu_fiscal_reference != null && foyer.revenu_fiscal_reference > 0) ||
+      (foyer.ir_net_a_payer != null && foyer.ir_net_a_payer > 0))
   );
 }
 
@@ -357,7 +369,7 @@ export function ContactDetailSyntheseTab({
         </CardContent>
       </Card>
 
-      {hasVieProContent(contact) && (
+      {(hasVieProContent(contact) || hasFoyerFiscalContent(foyer)) && (
         <Card>
           <SyntheseCardHeader
             sectionKey="viePro"
@@ -391,6 +403,19 @@ export function ContactDetailSyntheseTab({
                 <span className="text-muted-foreground text-sm"> / an</span>
               </div>
             )}
+            {contact.epargne_precaution_souhaitee != null &&
+              contact.epargne_precaution_souhaitee > 0 && (
+                <div>
+                  <span className="text-muted-foreground text-sm">
+                    Épargne de précaution souhaitée :{" "}
+                  </span>
+                  {new Intl.NumberFormat("fr-FR", {
+                    style: "currency",
+                    currency: "EUR",
+                    maximumFractionDigits: 0,
+                  }).format(contact.epargne_precaution_souhaitee)}
+                </div>
+              )}
             {contact.objectifs_patrimoniaux && (
               <div>
                 <span className="text-muted-foreground text-sm">Objectifs : </span>
@@ -405,6 +430,52 @@ export function ContactDetailSyntheseTab({
                   <p className="mt-1 text-xs text-muted-foreground">
                     {getSriDefinition(contact.profil_risque_sri)}
                   </p>
+                )}
+              </div>
+            )}
+            {hasFoyerFiscalContent(foyer) && (
+              <div className="space-y-1 border-t pt-3">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Fiscalité (foyer)
+                </p>
+                {foyer?.tranche_imposition && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">TMI : </span>
+                    {foyer.tranche_imposition}
+                  </div>
+                )}
+                {foyer?.revenu_fiscal_reference != null &&
+                  foyer.revenu_fiscal_reference > 0 && (
+                    <div>
+                      <span className="text-muted-foreground text-sm">
+                        Revenu brut global :{" "}
+                      </span>
+                      {new Intl.NumberFormat("fr-FR", {
+                        style: "currency",
+                        currency: "EUR",
+                        maximumFractionDigits: 0,
+                      }).format(foyer.revenu_fiscal_reference)}
+                    </div>
+                  )}
+                {foyer?.nombre_parts_fiscales != null && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">
+                      Nombre de parts fiscales :{" "}
+                    </span>
+                    {foyer.nombre_parts_fiscales}
+                  </div>
+                )}
+                {foyer?.ir_net_a_payer != null && foyer.ir_net_a_payer > 0 && (
+                  <div>
+                    <span className="text-muted-foreground text-sm">
+                      IR net à payer :{" "}
+                    </span>
+                    {new Intl.NumberFormat("fr-FR", {
+                      style: "currency",
+                      currency: "EUR",
+                      maximumFractionDigits: 0,
+                    }).format(foyer.ir_net_a_payer)}
+                  </div>
                 )}
               </div>
             )}

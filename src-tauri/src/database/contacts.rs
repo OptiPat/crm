@@ -91,8 +91,8 @@ impl Database {
                 regime_matrimonial, revenus_annuels, charges_emprunts, objectifs_patrimoniaux,
                 source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                 date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                statut_suivi, registre, notes
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34)",
+                statut_suivi, registre, notes, epargne_precaution_souhaitee
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35)",
             params![
                 new_contact.famille_id,
                 new_contact.foyer_id,
@@ -128,6 +128,7 @@ impl Database {
                 statut,
                 registre,
                 new_contact.notes,
+                new_contact.epargne_precaution_souhaitee,
             ],
         )?;
 
@@ -371,8 +372,9 @@ impl Database {
                 role_foyer = ?33,
                 role_famille = ?34,
                 famille_regroupement_exclu = ?35,
+                epargne_precaution_souhaitee = ?36,
                 updated_at = unixepoch()
-            WHERE id = ?36",
+            WHERE id = ?37",
             params![
                 &contact.famille_id,
                 &contact.foyer_id,
@@ -413,6 +415,7 @@ impl Database {
                 } else {
                     0i64
                 },
+                &contact.epargne_precaution_souhaitee,
                 id
             ],
         )?;
