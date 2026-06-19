@@ -1,6 +1,7 @@
 import type { BienImmobilier, ExtractedData } from "../types";
 import { extractAmountAfterLabel, parseStelliumAmount, AMOUNT_CAPTURE } from "./amounts";
 import { computeStelliumConfidence } from "./confidence";
+import { parseAdressesPostales } from "./rio-adresse";
 import { normalizeStelliumText, sanitizeStelliumFieldValue } from "./normalize";
 import {
   detectCoupleRio,
@@ -491,13 +492,11 @@ function parseStelliumRioSolo(
   ]);
   data.telephoneMobile = data.telephone;
 
-  const adresseMatch = coordonnees.match(
-    /Adresse postale\s*:?\s+(.+?)\s+(\d{5})\s+([A-Za-zÀ-ÿ\s'-]+)\s*-\s+France/i
-  );
-  if (adresseMatch) {
-    data.adresse = adresseMatch[1].trim();
-    data.codePostal = adresseMatch[2];
-    data.ville = adresseMatch[3].trim();
+  const [adressePrincipale] = parseAdressesPostales(coordonnees);
+  if (adressePrincipale) {
+    if (adressePrincipale.adresse) data.adresse = adressePrincipale.adresse;
+    if (adressePrincipale.codePostal) data.codePostal = adressePrincipale.codePostal;
+    if (adressePrincipale.ville) data.ville = adressePrincipale.ville;
     data.pays = "France";
   }
 
@@ -542,7 +541,7 @@ function parseStelliumRioSolo(
   data.secteurActivite = extractFieldValue(
     professionnel,
     ["Catégorie socio-professionnelle", "Sous-catégorie"],
-    ["Profession", "Nom de la société"]
+    ["Sous-catégorie", "Profession (ou dernière profession)", "Nom de la société"]
   );
 
   if (patrimoine) {

@@ -1,5 +1,6 @@
 import type { BienImmobilier, ExtractedData } from "../types";
 import { parseStelliumAmount } from "./amounts";
+import { parseAdressesPostales } from "./rio-adresse";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import {
   isImmoActifCategory,
@@ -207,9 +208,8 @@ function buildCoupleIdentity(
     "Adresse postale",
   ]);
 
-  const adresseMatch = coordonnees.match(
-    /Adresse postale\s*:?\s+(.+?)\s+(\d{5})\s+([A-Za-zÀ-ÿ\s'-]+)\s*-\s+France/i
-  );
+  const adressesPostales = parseAdressesPostales(coordonnees);
+  const adresse1 = adressesPostales[0];
 
   const [profession1, profession2] = extractPair(
     professionnel,
@@ -233,9 +233,9 @@ function buildCoupleIdentity(
     email: email1,
     telephone: tel1,
     telephoneMobile: tel1,
-    adresse: adresseMatch?.[1]?.trim(),
-    codePostal: adresseMatch?.[2],
-    ville: adresseMatch?.[3]?.trim(),
+    adresse: adresse1?.adresse,
+    codePostal: adresse1?.codePostal,
+    ville: adresse1?.ville,
     pays: "France",
     profession: profession1,
     employeur: employeur1 && employeur1 !== "-" ? employeur1 : undefined,

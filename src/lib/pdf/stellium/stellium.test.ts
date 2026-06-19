@@ -67,6 +67,9 @@ describe("Stellium — RIO solo Legrand 2026", () => {
   it("extrait la situation professionnelle", () => {
     expect(data.profession).toBe("Directeur Commercial");
     expect(data.employeur).toBe("AGILITEAM");
+    expect(data.secteurActivite).toBe(
+      "Cadres et professions intellectuelles supérieures"
+    );
   });
 
   it("extrait le patrimoine", () => {
