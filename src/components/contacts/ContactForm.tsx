@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,9 +44,14 @@ import {
   getAllContacts,
   getFilleulsByParrain,
   getContactById,
+  getContactsByFoyer,
   type NewContact,
   type Contact,
 } from "@/lib/api/tauri-contacts";
+import { getFoyerById, type Foyer } from "@/lib/api/tauri-foyers";
+import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import {
   ContactFormInvestissementSection,
   type InvestissementFormChoice,
@@ -85,8 +90,18 @@ import {
   isPrescripteurCategorie,
   todayLocal,
 } from "@/lib/contacts/contact-form-utils";
+import {
+  CONTACT_FORM_SECTIONS,
+  CONTACT_FORM_SECTION_META,
+  CONTACT_FORM_SECTION_ICON_CLASS,
+  CONTACT_FORM_EDIT_SECTION_KEYS,
+  CONTACT_FORM_PRESCRIPTEUR_SECTION_KEYS,
+  type ContactFormSectionId,
+  type ContactFormSectionKey,
+} from "@/lib/contacts/contact-form-sections";
+import type { LucideIcon } from "lucide-react";
 
-export type { ContactFormContext };
+export type { ContactFormContext, ContactFormSectionId, ContactFormSectionKey };
 
 interface ContactFormProps {
   open: boolean;
@@ -102,16 +117,77 @@ interface ContactFormProps {
   /** Préremplit le champ prescripteur à la création (page Prescripteurs). */
   defaultPrescripteurId?: number;
   onOpenContact?: (contact: Contact) => void;
+  /** Scroll vers une section à l'ouverture (depuis Synthèse). */
+  initialSectionId?: ContactFormSectionId | null;
+  /** Raccourcis foyer (fiche contact uniquement). */
+  foyerActions?: ContactFoyerRelationsActions;
 }
 
-function FormSection({ title, children }: { title: string; children: ReactNode }) {
+function FormSection({
+  sectionKey,
+  title,
+  children,
+}: {
+  sectionKey?: ContactFormSectionKey;
+  /** Section hors métadonnées partagées (ex. Patrimoine à la création). */
+  title?: string;
+  children: ReactNode;
+}) {
+  if (sectionKey) {
+    const meta = CONTACT_FORM_SECTION_META[sectionKey];
+    const Icon = meta.icon;
+    return (
+      <div id={CONTACT_FORM_SECTIONS[sectionKey]} className="space-y-3 scroll-mt-20">
+        <h3 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          <Icon className={CONTACT_FORM_SECTION_ICON_CLASS} aria-hidden />
+          {meta.label}
+        </h3>
+        {children}
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-3">
-      <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+    <div className="space-y-3 scroll-mt-20">
+      <h3 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h3>
       {children}
     </div>
+  );
+}
+
+function ContactFormSectionNav({
+  sections,
+}: {
+  sections: readonly { id: string; label: string; icon: LucideIcon }[];
+}) {
+  return (
+    <nav
+      aria-label="Sections du formulaire"
+      className="sticky top-0 z-10 -mx-1 mb-1 flex flex-wrap gap-1 border-b border-border/80 bg-background/95 pb-2 backdrop-blur-sm"
+    >
+      {sections.map((section) => {
+        const Icon = section.icon;
+        return (
+          <Button
+            key={section.id}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() =>
+              document
+                .getElementById(section.id)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            {section.label}
+          </Button>
+        );
+      })}
+    </nav>
   );
 }
 
@@ -172,11 +248,13 @@ function ContactFormSummary({
   contact,
   mesFilleulsCount,
   parrainContact,
+  prescripteurContact,
 }: {
   formData: NewContact;
   contact?: Contact | null;
   mesFilleulsCount: number;
   parrainContact: Contact | null;
+  prescripteurContact?: Contact | null;
 }) {
   const clientLabel = getClientLabel(formData.categorie || "AUCUN");
   const prescripteurRole = isPrescripteurCategorie(formData.categorie);
@@ -222,12 +300,20 @@ function ContactFormSummary({
             {" · "}
           </>
         )}
+        {prescripteurContact && (
+          <>
+            Prescripteur : {prescripteurContact.prenom} {prescripteurContact.nom}
+            {" · "}
+          </>
+        )}
         {mesFilleulsCount > 0 && (
           <>
             Parrain de {mesFilleulsCount} filleul{mesFilleulsCount > 1 ? "s" : ""}
           </>
         )}
-        {!parrainContact && mesFilleulsCount === 0 && contact && "Aucun lien réseau affiché"}
+        {!parrainContact && !prescripteurContact && mesFilleulsCount === 0 && contact && (
+          "Aucun lien réseau affiché"
+        )}
       </p>
     </div>
   );
@@ -242,12 +328,15 @@ export function ContactForm({
   createContext = "clients",
   defaultPrescripteurId,
   onOpenContact,
+  initialSectionId,
+  foyerActions,
 }: ContactFormProps) {
   const isEdit = !!contact;
   const [loading, setLoading] = useState(false);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
   const [mesFilleulsCount, setMesFilleulsCount] = useState(0);
   const [parrainContact, setParrainContact] = useState<Contact | null>(null);
+  const [prescripteurContact, setPrescripteurContact] = useState<Contact | null>(null);
   const [formData, setFormData] = useState<NewContact>(getEmptyForm(createContext));
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [dirty, setDirty] = useState(false);
@@ -257,6 +346,11 @@ export function ContactForm({
   const foyerAddressAppliedRef = useRef(false);
   const [investissementChoice, setInvestissementChoice] =
     useState<InvestissementFormChoice>({ addAfterCreate: false });
+  const [foyerContext, setFoyerContext] = useState<{
+    foyer: Foyer | null;
+    members: Contact[];
+    loading: boolean;
+  }>({ foyer: null, members: [], loading: false });
   const initialSnapshot = useRef("");
 
   useEffect(() => {
@@ -289,7 +383,7 @@ export function ContactForm({
     initialSnapshot.current = serializeFormSnapshot(data);
     setDirty(false);
     setFieldErrors({});
-    setShowAddress(!!(data.adresse || data.code_postal || data.ville));
+    setShowAddress(!!(data.adresse || data.code_postal || data.ville || data.pays));
     setAddressFromFoyer(false);
     setInvestissementChoice({ addAfterCreate: false });
     foyerAddressAppliedRef.current = false;
@@ -303,6 +397,58 @@ export function ContactForm({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- (ré)initialise le formulaire à l'ouverture / changement d'id, pas pendant la saisie
   }, [open, contact?.id, createContext, defaultPrescripteurId]);
+
+  useEffect(() => {
+    if (!open || !contact?.foyer_id) {
+      setFoyerContext({ foyer: null, members: [], loading: false });
+      return;
+    }
+
+    let cancelled = false;
+    const loadFoyerContext = async () => {
+      setFoyerContext((prev) => ({ ...prev, loading: true }));
+      try {
+        const [foyer, members] = await Promise.all([
+          getFoyerById(contact.foyer_id!),
+          getContactsByFoyer(contact.foyer_id!),
+        ]);
+        if (cancelled) return;
+        setFoyerContext({
+          foyer,
+          members: members.filter((m) => m.id !== contact.id),
+          loading: false,
+        });
+      } catch {
+        if (!cancelled) {
+          setFoyerContext({ foyer: null, members: [], loading: false });
+        }
+      }
+    };
+
+    void loadFoyerContext();
+    const reload = () => void loadFoyerContext();
+    const unsubContacts = subscribeContactsChanged(reload);
+    const unsubFoyers = subscribeFoyersChanged(reload);
+    return () => {
+      cancelled = true;
+      unsubContacts();
+      unsubFoyers();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recharge à l'ouverture / changement de foyer
+  }, [open, contact?.foyer_id, contact?.id]);
+
+  useEffect(() => {
+    if (!open || !initialSectionId) return;
+    if (initialSectionId === CONTACT_FORM_SECTIONS.coordonnees) {
+      setShowAddress(true);
+    }
+    const timer = window.setTimeout(() => {
+      document
+        .getElementById(initialSectionId)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [open, initialSectionId, contact?.id]);
 
   useEffect(() => {
     if (!open || foyerAddressAppliedRef.current) return;
@@ -325,6 +471,7 @@ export function ContactForm({
     formData.adresse,
     formData.code_postal,
     formData.ville,
+    formData.pays,
   ]);
 
   useEffect(() => {
@@ -346,6 +493,21 @@ export function ContactForm({
       .then(setParrainContact)
       .catch(() => setParrainContact(null));
   }, [formData.parrain_id, allContacts]);
+
+  useEffect(() => {
+    if (!formData.prescripteur_id) {
+      setPrescripteurContact(null);
+      return;
+    }
+    const local = allContacts.find((c) => c.id === formData.prescripteur_id);
+    if (local) {
+      setPrescripteurContact(local);
+      return;
+    }
+    getContactById(formData.prescripteur_id)
+      .then(setPrescripteurContact)
+      .catch(() => setPrescripteurContact(null));
+  }, [formData.prescripteur_id, allContacts]);
 
   const handleOpenChange = (next: boolean) => {
     if (!next && dirty) {
@@ -425,6 +587,17 @@ export function ContactForm({
   const isClientStatut = formData.categorie === "CLIENT";
   const isPrescripteurForm = createContext === "prescripteurs" && !isEdit;
 
+  const editSections = useMemo(() => {
+    const keys = isPrescripteurForm
+      ? CONTACT_FORM_PRESCRIPTEUR_SECTION_KEYS
+      : CONTACT_FORM_EDIT_SECTION_KEYS;
+    return keys.map((key) => ({
+      id: CONTACT_FORM_SECTIONS[key],
+      label: CONTACT_FORM_SECTION_META[key].navLabel,
+      icon: CONTACT_FORM_SECTION_META[key].icon,
+    }));
+  }, [isPrescripteurForm]);
+
   const setFilleulStatut = (value: string) => {
     if (value === "AUCUN") {
       setFormData((prev) => ({
@@ -471,18 +644,49 @@ export function ContactForm({
     }
   };
 
-  const formBody = (
-    <form onSubmit={handleSubmit} className="space-y-6">
+  const formFields = (
+    <>
+      {isEdit && <ContactFormSectionNav sections={editSections} />}
+
       {(isEdit || (formData.nom && formData.prenom)) && (
         <ContactFormSummary
           formData={formData}
           contact={contact}
           mesFilleulsCount={mesFilleulsCount}
           parrainContact={parrainContact}
+          prescripteurContact={prescripteurContact}
         />
       )}
 
-      <FormSection title="Identité">
+      <FormSection sectionKey="identite">
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="nom">Nom *</Label>
+            <Input
+              id="nom"
+              value={formData.nom}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, nom: e.target.value }));
+                if (fieldErrors.nom) setFieldErrors((prev) => ({ ...prev, nom: undefined }));
+              }}
+              className={fieldErrors.nom ? "border-destructive" : ""}
+            />
+            <FieldHint error={fieldErrors.nom} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="prenom">Prénom *</Label>
+            <Input
+              id="prenom"
+              value={formData.prenom}
+              onChange={(e) => {
+                setFormData((prev) => ({ ...prev, prenom: e.target.value }));
+                if (fieldErrors.prenom) setFieldErrors((prev) => ({ ...prev, prenom: undefined }));
+              }}
+              className={fieldErrors.prenom ? "border-destructive" : ""}
+            />
+            <FieldHint error={fieldErrors.prenom} />
+          </div>
+        </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="civilite">Civilité</Label>
@@ -505,29 +709,6 @@ export function ContactForm({
                 <SelectItem value="AUTRE">Autre</SelectItem>
               </SelectContent>
             </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="registre">Registre (emails)</Label>
-            <Select
-              value={formData.registre === "TU" ? "TU" : "VOUS"}
-              onValueChange={(value) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  registre: value as "TU" | "VOUS",
-                }))
-              }
-            >
-              <SelectTrigger id="registre">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="VOUS">Vouvoiement</SelectItem>
-                <SelectItem value="TU">Tutoiement</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              Choix du modèle lié (tu) lors des campagnes email.
-            </p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="situation_familiale">Situation familiale</Label>
@@ -559,34 +740,6 @@ export function ContactForm({
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label htmlFor="nom">Nom *</Label>
-            <Input
-              id="nom"
-              value={formData.nom}
-              onChange={(e) => {
-                setFormData((prev) => ({ ...prev, nom: e.target.value }));
-                if (fieldErrors.nom) setFieldErrors((prev) => ({ ...prev, nom: undefined }));
-              }}
-              className={fieldErrors.nom ? "border-destructive" : ""}
-            />
-            <FieldHint error={fieldErrors.nom} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="prenom">Prénom *</Label>
-            <Input
-              id="prenom"
-              value={formData.prenom}
-              onChange={(e) => {
-                setFormData((prev) => ({ ...prev, prenom: e.target.value }));
-                if (fieldErrors.prenom) setFieldErrors((prev) => ({ ...prev, prenom: undefined }));
-              }}
-              className={fieldErrors.prenom ? "border-destructive" : ""}
-            />
-            <FieldHint error={fieldErrors.prenom} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
             <Label htmlFor="date_naissance">Date de naissance</Label>
             <Input
               id="date_naissance"
@@ -605,11 +758,22 @@ export function ContactForm({
             />
           </div>
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="regime_matrimonial">Régime matrimonial</Label>
+          <Input
+            id="regime_matrimonial"
+            value={formData.regime_matrimonial || ""}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, regime_matrimonial: e.target.value }))
+            }
+            placeholder="Ex. Communauté réduite aux acquêts"
+          />
+        </div>
       </FormSection>
 
       <Separator />
 
-      <FormSection title="Coordonnées">
+      <FormSection sectionKey="coordonnees">
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
@@ -688,33 +852,52 @@ export function ContactForm({
                 />
               </div>
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="pays">Pays</Label>
+              <Input
+                id="pays"
+                value={formData.pays || ""}
+                onChange={(e) => setFormData((prev) => ({ ...prev, pays: e.target.value }))}
+                placeholder="France"
+              />
+            </div>
           </div>
         )}
+        <div className="space-y-2">
+          <Label htmlFor="registre">Registre (emails)</Label>
+          <Select
+            value={formData.registre === "TU" ? "TU" : "VOUS"}
+            onValueChange={(value) =>
+              setFormData((prev) => ({
+                ...prev,
+                registre: value as "TU" | "VOUS",
+              }))
+            }
+          >
+            <SelectTrigger id="registre">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="VOUS">Vouvoiement</SelectItem>
+              <SelectItem value="TU">Tutoiement</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Choix du modèle lié (tu) lors des campagnes email.
+          </p>
+        </div>
       </FormSection>
 
       <Separator />
 
-      <FormSection title="Situation professionnelle et patrimoine">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="profession">Profession</Label>
-            <Input
-              id="profession"
-              value={formData.profession || ""}
-              onChange={(e) => setFormData((prev) => ({ ...prev, profession: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="regime_matrimonial">Régime matrimonial</Label>
-            <Input
-              id="regime_matrimonial"
-              value={formData.regime_matrimonial || ""}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, regime_matrimonial: e.target.value }))
-              }
-              placeholder="Ex. Communauté réduite aux acquêts"
-            />
-          </div>
+      <FormSection sectionKey="viePro">
+        <div className="space-y-2">
+          <Label htmlFor="profession">Profession</Label>
+          <Input
+            id="profession"
+            value={formData.profession || ""}
+            onChange={(e) => setFormData((prev) => ({ ...prev, profession: e.target.value }))}
+          />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
@@ -762,11 +945,39 @@ export function ContactForm({
             placeholder="Ex. Préparer la retraite ; Accompagner les enfants"
           />
         </div>
+        {clientActif && (
+          <div className="space-y-2">
+            <Label htmlFor="profil_risque_sri">{PROFIL_RISQUE_SRI_FIELD_LABEL}</Label>
+            <Input
+              id="profil_risque_sri"
+              type="number"
+              min={1}
+              max={PROFIL_RISQUE_MAX}
+              value={formData.profil_risque_sri ?? ""}
+              onChange={(e) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  profil_risque_sri: e.target.value ? parseInt(e.target.value, 10) : undefined,
+                }));
+                if (fieldErrors.profil_risque_sri) {
+                  setFieldErrors((prev) => ({ ...prev, profil_risque_sri: undefined }));
+                }
+              }}
+              className={fieldErrors.profil_risque_sri ? "border-destructive" : ""}
+            />
+            <FieldHint error={fieldErrors.profil_risque_sri} />
+            {formData.profil_risque_sri != null && formatSriWithDefinition(formData.profil_risque_sri) && (
+              <p className="text-xs text-muted-foreground">
+                {formatSriWithDefinition(formData.profil_risque_sri)}
+              </p>
+            )}
+          </div>
+        )}
       </FormSection>
 
       <Separator />
 
-      <FormSection title="Rôles">
+      <FormSection sectionKey="roles">
         {isPrescripteurForm ? (
           <p className="text-sm text-muted-foreground rounded-md border border-purple-200 bg-purple-50/80 px-3 py-2">
             Ce contact est enregistré comme <strong>prescripteur</strong>. Assignez-le ensuite
@@ -832,105 +1043,6 @@ export function ContactForm({
                 </SelectContent>
               </Select>
             </div>
-          </>
-        )}
-      </FormSection>
-
-      <Separator />
-
-      <FormSection title="Reseau">
-        {filleulActif && (
-          <ContactPersonSearch
-            label="Mon parrain"
-            hint="Personne qui vous a parrainé dans le réseau filleul"
-            placeholder="Rechercher un parrain..."
-            contacts={allContacts}
-            excludeId={contact?.id}
-            value={formData.parrain_id}
-            onChange={(id) => setFormData((prev) => ({ ...prev, parrain_id: id }))}
-            onOpenContact={onOpenContact}
-            badgeFn={(c) => c.filleul_categorie || c.categorie}
-            allowCreate
-            createTitle="Créer un nouveau parrain"
-            onCreate={handleCreateParrain}
-          />
-        )}
-        {contact && mesFilleulsCount > 0 && (
-          <p className="text-sm text-muted-foreground rounded-md border px-3 py-2 bg-muted/20">
-            Ce contact est parrain de {mesFilleulsCount} filleul
-            {mesFilleulsCount > 1 ? "s" : ""}. Modifier le lien depuis la fiche de chaque filleul.
-          </p>
-        )}
-        {!filleulActif && !mesFilleulsCount && (
-          <p className="text-sm text-muted-foreground">
-            Choisissez un statut filleul pour renseigner un parrain.
-          </p>
-        )}
-      </FormSection>
-
-      {clientActif && (
-        <>
-          <Separator />
-          <FormSection title="Commercial">
-            <ContactPersonSearch
-              label="Prescripteur"
-              hint="Personne qui vous a recommandé comme client CGP"
-              placeholder="Rechercher un prescripteur..."
-              contacts={allContacts}
-              excludeId={contact?.id}
-              value={formData.prescripteur_id}
-              onChange={(id) => setFormData((prev) => ({ ...prev, prescripteur_id: id }))}
-              onOpenContact={onOpenContact}
-              badgeFn={(c) => c.categorie}
-              allowCreate
-              createTitle="Créer un nouveau prescripteur"
-              onCreate={handleCreatePrescripteur}
-            />
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="source_lead">Source / Lead</Label>
-                <Input
-                  id="source_lead"
-                  value={formData.source_lead || ""}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, source_lead: e.target.value }))}
-                  placeholder="Recommandation, site web..."
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="profil_risque_sri">{PROFIL_RISQUE_SRI_FIELD_LABEL}</Label>
-                <Input
-                  id="profil_risque_sri"
-                  type="number"
-                  min={1}
-                  max={PROFIL_RISQUE_MAX}
-                  value={formData.profil_risque_sri ?? ""}
-                  onChange={(e) => {
-                    setFormData((prev) => ({
-                      ...prev,
-                      profil_risque_sri: e.target.value ? parseInt(e.target.value, 10) : undefined,
-                    }));
-                    if (fieldErrors.profil_risque_sri) {
-                      setFieldErrors((prev) => ({ ...prev, profil_risque_sri: undefined }));
-                    }
-                  }}
-                  className={fieldErrors.profil_risque_sri ? "border-destructive" : ""}
-                />
-                <FieldHint error={fieldErrors.profil_risque_sri} />
-                {formData.profil_risque_sri != null && formatSriWithDefinition(formData.profil_risque_sri) && (
-                  <p className="text-xs text-muted-foreground">
-                    {formatSriWithDefinition(formData.profil_risque_sri)}
-                  </p>
-                )}
-              </div>
-            </div>
-          </FormSection>
-        </>
-      )}
-
-      {(clientActif || filleulActif) && (
-        <>
-          <Separator />
-          <FormSection title="Suivi">
             {clientActif && (
               <div className="grid grid-cols-2 gap-4">
                 <DateFieldWithShortcuts
@@ -971,13 +1083,88 @@ export function ContactForm({
                 />
               </div>
             )}
+          </>
+        )}
+      </FormSection>
+
+      {!isPrescripteurForm && (
+        <>
+          <Separator />
+          <FormSection sectionKey="relations">
+            {isEdit && contact && (
+              <ContactFoyerRelationsBlock
+                contact={contact}
+                foyer={foyerContext.foyer}
+                foyerMembers={foyerContext.members}
+                loading={foyerContext.loading}
+                onOpenMember={onOpenContact}
+                actions={foyerActions}
+              />
+            )}
+            {filleulActif && (
+              <ContactPersonSearch
+                label="Mon parrain"
+                hint="Personne qui vous a parrainé dans le réseau filleul"
+                placeholder="Rechercher un parrain..."
+                contacts={allContacts}
+                excludeId={contact?.id}
+                value={formData.parrain_id}
+                onChange={(id) => setFormData((prev) => ({ ...prev, parrain_id: id }))}
+                onOpenContact={onOpenContact}
+                badgeFn={(c) => c.filleul_categorie || c.categorie}
+                allowCreate
+                createTitle="Créer un nouveau parrain"
+                onCreate={handleCreateParrain}
+              />
+            )}
+            {contact && mesFilleulsCount > 0 && (
+              <p className="text-sm text-muted-foreground rounded-md border px-3 py-2 bg-muted/20">
+                Ce contact est parrain de {mesFilleulsCount} filleul
+                {mesFilleulsCount > 1 ? "s" : ""}. Modifier le lien depuis la fiche de chaque filleul.
+              </p>
+            )}
+            {clientActif && (
+              <>
+                <ContactPersonSearch
+                  label="Prescripteur"
+                  hint="Personne qui vous a recommandé comme client CGP"
+                  placeholder="Rechercher un prescripteur..."
+                  contacts={allContacts}
+                  excludeId={contact?.id}
+                  value={formData.prescripteur_id}
+                  onChange={(id) => setFormData((prev) => ({ ...prev, prescripteur_id: id }))}
+                  onOpenContact={onOpenContact}
+                  badgeFn={(c) => c.categorie}
+                  allowCreate
+                  createTitle="Créer un nouveau prescripteur"
+                  onCreate={handleCreatePrescripteur}
+                />
+                <div className="space-y-2">
+                  <Label htmlFor="source_lead">Source / Lead</Label>
+                  <Input
+                    id="source_lead"
+                    value={formData.source_lead || ""}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, source_lead: e.target.value }))}
+                    placeholder="Recommandation, site web..."
+                  />
+                </div>
+              </>
+            )}
+            {!filleulActif &&
+              !clientActif &&
+              !(contact && mesFilleulsCount > 0) &&
+              !(isEdit && contact?.foyer_id) && (
+              <p className="text-sm text-muted-foreground">
+                Renseignez un statut client ou filleul pour lier un prescripteur ou un parrain.
+              </p>
+            )}
           </FormSection>
         </>
       )}
 
       <Separator />
 
-      <FormSection title="Notes">
+      <FormSection sectionKey="notes">
         <Textarea
           id="notes"
           value={formData.notes || ""}
@@ -997,25 +1184,32 @@ export function ContactForm({
           </FormSection>
         </>
       )}
+    </>
+  );
 
+  const formFooter = (
+    <>
+      <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
+        Annuler
+      </Button>
+      <Button type="submit" disabled={loading}>
+        {loading ? "Enregistrement..." : isEdit ? "Enregistrer" : "Créer"}
+      </Button>
+    </>
+  );
+
+  const formBody = (
+    <form
+      onSubmit={handleSubmit}
+      className={isEdit ? "flex min-h-0 flex-1 flex-col" : "space-y-6"}
+    >
+      <div className={isEdit ? "min-h-0 flex-1 space-y-6 overflow-y-auto pr-1" : "contents"}>
+        {formFields}
+      </div>
       {isEdit ? (
-        <SheetFooter className="pt-2">
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-            Annuler
-          </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Enregistrement..." : "Enregistrer"}
-          </Button>
-        </SheetFooter>
+        <SheetFooter className="mt-0 shrink-0 border-t bg-background pt-4">{formFooter}</SheetFooter>
       ) : (
-        <DialogFooter className="pt-2">
-          <Button type="button" variant="outline" onClick={() => handleOpenChange(false)}>
-            Annuler
-          </Button>
-          <Button type="submit" disabled={loading}>
-            {loading ? "Enregistrement..." : "Créer"}
-          </Button>
-        </DialogFooter>
+        <DialogFooter className="pt-2">{formFooter}</DialogFooter>
       )}
     </form>
   );
@@ -1039,12 +1233,17 @@ export function ContactForm({
     <>
       {isEdit ? (
         <Sheet open={open} onOpenChange={handleOpenChange}>
-          <SheetContent side="right" className="w-full sm:max-w-xl overflow-y-auto">
-            <SheetHeader>
-              <SheetTitle>{title}</SheetTitle>
-              <SheetDescription>{description}</SheetDescription>
-            </SheetHeader>
-            <div className="mt-6">{formBody}</div>
+          <SheetContent
+            side="right"
+            className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
+          >
+            <div className="shrink-0 border-b px-6 py-4">
+              <SheetHeader>
+                <SheetTitle>{title}</SheetTitle>
+                <SheetDescription>{description}</SheetDescription>
+              </SheetHeader>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
           </SheetContent>
         </Sheet>
       ) : (

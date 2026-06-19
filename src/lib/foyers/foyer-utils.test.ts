@@ -7,6 +7,8 @@ import {
   getContactsForFoyer,
   sumPatrimoineCentimes,
   buildFoyerNomFromMembers,
+  countEnfantsFoyer,
+  mergeFoyerMembers,
 } from "./foyer-utils";
 
 function contact(partial: Partial<Contact> & Pick<Contact, "id">): Contact {
@@ -70,6 +72,28 @@ describe("findExistingFoyerByFamilleName", () => {
 
   it("match par nom nu", () => {
     expect(findExistingFoyerByFamilleName(foyers, "B")?.id).toBe(2);
+  });
+});
+
+describe("countEnfantsFoyer", () => {
+  it("compte les membres avec rôle ENFANT", () => {
+    const members = [
+      contact({ id: 1, role_foyer: "DECLARANT_1" }),
+      contact({ id: 2, role_foyer: "ENFANT" }),
+      contact({ id: 3, role_foyer: "ENFANT" }),
+    ];
+    expect(countEnfantsFoyer(members)).toBe(2);
+  });
+});
+
+describe("mergeFoyerMembers", () => {
+  it("inclut le contact courant sans doublon", () => {
+    const self = contact({ id: 1, role_foyer: "DECLARANT_1" });
+    const others = [
+      contact({ id: 1, role_foyer: "DECLARANT_1" }),
+      contact({ id: 2, role_foyer: "ENFANT" }),
+    ];
+    expect(mergeFoyerMembers(self, others).map((m) => m.id)).toEqual([1, 2]);
   });
 });
 

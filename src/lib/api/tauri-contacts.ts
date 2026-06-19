@@ -20,6 +20,7 @@ export interface Contact {
   adresse?: string;
   code_postal?: string;
   ville?: string;
+  pays?: string;
   date_naissance?: number;
   lieu_naissance?: string;
   profession?: string;
@@ -63,6 +64,7 @@ export interface NewContact {
   adresse?: string;
   code_postal?: string;
   ville?: string;
+  pays?: string;
   date_naissance?: string;
   lieu_naissance?: string;
   profession?: string;

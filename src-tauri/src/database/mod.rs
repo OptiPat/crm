@@ -518,6 +518,7 @@ impl Database {
         self.migrate_contacts_google_sync()?;
         self.migrate_google_contact_name_proposal_dismissals()?;
         self.migrate_add_lieu_naissance()?;
+        self.migrate_add_contact_pays()?;
         self.migrate_add_contact_rio_financial_fields()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
         self.migrate_documents_connaissances_financieres()?;
@@ -622,6 +623,17 @@ impl Database {
         self.conn
             .execute("ALTER TABLE contacts ADD COLUMN lieu_naissance TEXT", [])?;
         println!("✅ Migration lieu_naissance appliquée");
+        Ok(())
+    }
+
+    fn migrate_add_contact_pays(&self) -> Result<()> {
+        if self.table_has_column("contacts", "pays")? {
+            return Ok(());
+        }
+        println!("🔄 Migration : Ajout de pays aux contacts...");
+        self.conn
+            .execute("ALTER TABLE contacts ADD COLUMN pays TEXT", [])?;
+        println!("✅ Migration pays appliquée");
         Ok(())
     }
 

@@ -6,8 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   AlertTriangle,
   Briefcase,
+  Edit,
   Home,
   UserCheck,
   UserPlus,
@@ -17,6 +25,15 @@ import {
 import { type Contact } from "@/lib/api/tauri-contacts";
 import { type Foyer } from "@/lib/api/tauri-foyers";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
+import {
+  FOYER_ROLE_OPTIONS,
+} from "@/lib/foyers/foyer-utils";
+import {
+  formatFoyerCurrencyEur,
+  getFoyerTypeBadgeClass,
+  getFoyerTypeLabel,
+} from "@/lib/foyers/foyer-display";
+import { cn } from "@/lib/utils";
 
 interface ContactDetailFoyerTabProps {
   contact: Contact;
@@ -32,19 +49,127 @@ interface ContactDetailFoyerTabProps {
   loadingFilleuls: boolean;
   onOpenLinkedContact: (contact: Contact) => void;
   onOpenMemberDetail: (member: Contact) => void;
-  onDissocierFoyer: () => void;
+  onEditFoyer: () => void;
+  onChangeMemberRole: (member: Contact, role: string) => void;
+  onRemoveMemberFromFoyer: (member: Contact) => void;
   onAddFoyerMember: () => void;
   onCreateFoyer: () => void;
 }
 
-const roleFoyerLabel = (role?: string | null): string =>
-  role === "DECLARANT_1"
-    ? "Déclarant 1"
-    : role === "DECLARANT_2"
-      ? "Déclarant 2"
-      : role === "ENFANT"
-        ? "Enfant"
-        : "Autre membre";
+function FoyerMemberRow({
+  member,
+  isSelf,
+  onOpen,
+  onRoleChange,
+  onRemove,
+}: {
+  member: Contact;
+  isSelf?: boolean;
+  onOpen: () => void;
+  onRoleChange: (role: string) => void;
+  onRemove: () => void;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-3 rounded-lg border p-3 transition-colors sm:flex-row sm:items-center",
+        "hover:bg-accent/40 cursor-pointer"
+      )}
+      onClick={onOpen}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      role="button"
+      tabIndex={0}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="font-medium">
+            {member.prenom} {member.nom}
+          </p>
+          {isSelf && (
+            <Badge variant="outline" className="text-[10px] h-5">
+              Ce contact
+            </Badge>
+          )}
+        </div>
+        {member.email && (
+          <p className="text-xs text-muted-foreground truncate">{member.email}</p>
+        )}
+      </div>
+      <div
+        className="flex flex-wrap items-center gap-2 shrink-0"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        <Select
+          value={member.role_foyer || "AUTRE"}
+          onValueChange={onRoleChange}
+        >
+          <SelectTrigger className="h-8 w-[140px] text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FOYER_ROLE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 text-xs text-destructive hover:text-destructive"
+          onClick={onRemove}
+        >
+          {isSelf ? "Quitter" : "Retirer"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function FoyerFiscalSummary({ foyer }: { foyer: Foyer }) {
+  const rfr = formatFoyerCurrencyEur(foyer.revenu_fiscal_reference);
+  const parts = [
+    foyer.nombre_parts_fiscales != null
+      ? `${foyer.nombre_parts_fiscales} part${foyer.nombre_parts_fiscales > 1 ? "s" : ""}`
+      : null,
+    foyer.tranche_imposition ? `TMI ${foyer.tranche_imposition}` : null,
+    rfr ? `RBG ${rfr}` : null,
+  ].filter(Boolean);
+
+  if (parts.length === 0 && !foyer.situation_patrimoniale && !foyer.objectifs_patrimoniaux) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Informations fiscales non renseignées — utilisez « Modifier le foyer ».
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-2 text-sm">
+      {parts.length > 0 && (
+        <p className="text-muted-foreground">{parts.join(" · ")}</p>
+      )}
+      {foyer.situation_patrimoniale && (
+        <p className="text-xs text-muted-foreground line-clamp-2">
+          {foyer.situation_patrimoniale}
+        </p>
+      )}
+      {foyer.objectifs_patrimoniaux && (
+        <p className="text-xs text-muted-foreground line-clamp-2">
+          Objectifs : {foyer.objectifs_patrimoniaux}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function ContactDetailFoyerTab({
   contact,
@@ -60,79 +185,79 @@ export function ContactDetailFoyerTab({
   loadingFilleuls,
   onOpenLinkedContact,
   onOpenMemberDetail,
-  onDissocierFoyer,
+  onEditFoyer,
+  onChangeMemberRole,
+  onRemoveMemberFromFoyer,
   onAddFoyerMember,
   onCreateFoyer,
 }: ContactDetailFoyerTabProps) {
+  const allMembers = [contact, ...foyerMembers.filter((m) => m.id !== contact.id)];
+
   return (
     <>
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
           <CardTitle className="text-lg flex items-center gap-2">
-            <Home className="h-5 w-5" />
+            <Home className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />
             Couple / foyer
           </CardTitle>
+          {foyer && (
+            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={onEditFoyer}>
+              <Edit className="h-4 w-4" />
+              Modifier le foyer
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {loadingFoyer ? (
             <div className="text-sm text-muted-foreground">Chargement...</div>
           ) : foyer ? (
             <div className="space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <h3 className="font-semibold text-lg">{foyer.nom}</h3>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {contact.prenom} {contact.nom}
-                    {contact.role_foyer && <> · {roleFoyerLabel(contact.role_foyer)}</>}
+                  <Badge className={cn("border", getFoyerTypeBadgeClass(foyer.type_foyer))}>
+                    {getFoyerTypeLabel(foyer.type_foyer)}
+                  </Badge>
+                </div>
+                <FoyerFiscalSummary foyer={foyer} />
+                {foyerPatrimoine > 0 && (
+                  <p className="text-sm text-primary font-medium">
+                    Patrimoine commun : {foyerPatrimoine.toLocaleString("fr-FR")} €
                   </p>
-                  {foyerPatrimoine > 0 && (
-                    <p className="text-sm text-primary font-medium mt-2">
-                      Patrimoine commun : {foyerPatrimoine.toLocaleString("fr-FR")} €
-                    </p>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2 shrink-0">
-                  <Button size="sm" className="gap-1.5" onClick={onAddFoyerMember}>
-                    <UserPlus className="h-4 w-4" />
-                    Ajouter un membre
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={onDissocierFoyer}>
-                    Retirer du foyer
-                  </Button>
-                </div>
+                )}
               </div>
-              {foyerMembers.length > 0 ? (
-                <div>
-                  <h4 className="text-sm font-medium mb-2">Autres membres du foyer</h4>
-                  <div className="space-y-2">
-                    {foyerMembers.map((member) => (
-                      <div
-                        key={member.id}
-                        className="p-3 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                        onClick={() => onOpenMemberDetail(member)}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="font-medium">
-                              {member.prenom} {member.nom}
-                            </p>
-                            {member.role_foyer && (
-                              <p className="text-xs text-muted-foreground">
-                                {roleFoyerLabel(member.role_foyer)}
-                              </p>
-                            )}
-                          </div>
-                          <Badge className="bg-blue-50 text-blue-700">{member.categorie}</Badge>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" className="gap-1.5" onClick={onAddFoyerMember}>
+                  <UserPlus className="h-4 w-4" />
+                  Ajouter un membre
+                </Button>
+              </div>
+
+              <div>
+                <h4 className="text-sm font-medium mb-2">
+                  Membres ({allMembers.length})
+                </h4>
+                <div className="space-y-2">
+                  {allMembers.map((member) => (
+                    <FoyerMemberRow
+                      key={member.id}
+                      member={member}
+                      isSelf={member.id === contact.id}
+                      onOpen={() => {
+                        if (member.id !== contact.id) onOpenMemberDetail(member);
+                      }}
+                      onRoleChange={(role) => onChangeMemberRole(member, role)}
+                      onRemove={() => onRemoveMemberFromFoyer(member)}
+                    />
+                  ))}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  Seul(e) dans ce foyer pour l’instant — ajoutez conjoint ou enfant.
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Cliquez sur un membre pour ouvrir sa fiche. Modifiez le rôle ou retirez un
+                  membre sans quitter l&apos;onglet.
                 </p>
-              )}
+              </div>
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-primary/25 bg-primary/5 p-4 space-y-3">
@@ -323,7 +448,8 @@ export function ContactDetailFoyerTab({
                         </p>
                         {filleul.date_dernier_contact_filleul && (
                           <p className="text-xs text-muted-foreground">
-                            Dernier suivi : {formatCalendarDateFr(filleul.date_dernier_contact_filleul)}
+                            Dernier suivi :{" "}
+                            {formatCalendarDateFr(filleul.date_dernier_contact_filleul)}
                           </p>
                         )}
                       </div>

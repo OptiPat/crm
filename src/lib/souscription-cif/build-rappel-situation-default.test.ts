@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildDefaultRappelSituation,
   buildRappelSituationSupplement,
-  countEnfantsFoyer,
   latestQpiAppetencesEsg,
   migrateRappelSituationPanelLabels,
   normalizeRappelSituationClient,
@@ -18,6 +17,7 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Document } from "@/lib/api/tauri-documents";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { Foyer } from "@/lib/api/tauri-foyers";
+import { countEnfantsFoyer } from "@/lib/foyers/foyer-utils";
 
 const baseInvestissement = (overrides: Partial<Investissement>): Investissement =>
   ({

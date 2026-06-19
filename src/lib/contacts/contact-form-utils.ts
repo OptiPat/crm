@@ -153,10 +153,15 @@ export function formatPhoneInput(value: string): string {
   return formatPhoneFR(sanitized);
 }
 
-export type ContactAddressFields = Pick<NewContact, "adresse" | "code_postal" | "ville">;
+export type ContactAddressFields = Pick<NewContact, "adresse" | "code_postal" | "ville" | "pays">;
 
 export function isContactAddressEmpty(fields: ContactAddressFields): boolean {
-  return !(fields.adresse?.trim() || fields.code_postal?.trim() || fields.ville?.trim());
+  return !(
+    fields.adresse?.trim() ||
+    fields.code_postal?.trim() ||
+    fields.ville?.trim() ||
+    fields.pays?.trim()
+  );
 }
 
 export function pickFoyerMemberAddress(
@@ -177,6 +182,7 @@ export function pickFoyerMemberAddress(
     adresse: donor.adresse || "",
     code_postal: donor.code_postal || "",
     ville: donor.ville || "",
+    pays: donor.pays || "",
   };
 }
 
@@ -204,6 +210,7 @@ const BASE_EMPTY: NewContact = {
   adresse: "",
   code_postal: "",
   ville: "",
+  pays: "",
   date_naissance: "",
   lieu_naissance: "",
   profession: "",
@@ -283,6 +290,7 @@ export function contactToFormData(contact: Contact): NewContact {
     adresse: contact.adresse || "",
     code_postal: contact.code_postal || "",
     ville: contact.ville || "",
+    pays: contact.pays || "",
     date_naissance: toDateInput(contact.date_naissance),
     lieu_naissance: contact.lieu_naissance || "",
     profession: contact.profession || "",
@@ -344,6 +352,7 @@ export function buildSubmitPayload(formData: NewContact): NewContact {
       : undefined,
     date_naissance: dateFieldToIso(formData.date_naissance),
     lieu_naissance: formData.lieu_naissance?.trim() || undefined,
+    pays: formData.pays?.trim() || undefined,
     regime_matrimonial: formData.regime_matrimonial?.trim() || undefined,
     revenus_annuels: formData.revenus_annuels,
     charges_emprunts: formData.charges_emprunts,
@@ -466,4 +475,10 @@ export function formatSituationLabel(situation?: string | null): string | null {
     AUTRE: "Autre",
   };
   return situation ? labels[situation] || situation : null;
+}
+
+export function formatStatutSuiviLabel(statut?: string | null): string {
+  if (statut === "EN_PAUSE") return "En pause";
+  if (statut === "ARCHIVE") return "Archivé";
+  return "Actif";
 }

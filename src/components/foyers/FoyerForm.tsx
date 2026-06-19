@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { createFoyer, updateFoyer, type NewFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
+import { toast } from "sonner";
 
 const FOYER_TYPE_OPTIONS = [
   "CELIBATAIRE",
@@ -39,15 +40,30 @@ interface FoyerFormProps {
 export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<NewFoyer>({
-    nom: foyer?.nom || "",
-    type_foyer: foyer?.type_foyer || "COUPLE",
-    nombre_parts_fiscales: foyer?.nombre_parts_fiscales || undefined,
-    tranche_imposition: foyer?.tranche_imposition || undefined,
-    revenu_fiscal_reference: foyer?.revenu_fiscal_reference || undefined,
-    situation_patrimoniale: foyer?.situation_patrimoniale || "",
-    objectifs_patrimoniaux: foyer?.objectifs_patrimoniaux || "",
-    notes: foyer?.notes || "",
+    nom: "",
+    type_foyer: "COUPLE",
+    nombre_parts_fiscales: undefined,
+    tranche_imposition: undefined,
+    revenu_fiscal_reference: undefined,
+    situation_patrimoniale: "",
+    objectifs_patrimoniaux: "",
+    notes: "",
   });
+
+  useEffect(() => {
+    if (!open) return;
+    setFormData({
+      nom: foyer?.nom || "",
+      type_foyer: foyer?.type_foyer || "COUPLE",
+      nombre_parts_fiscales: foyer?.nombre_parts_fiscales || undefined,
+      tranche_imposition: foyer?.tranche_imposition || undefined,
+      revenu_fiscal_reference: foyer?.revenu_fiscal_reference || undefined,
+      situation_patrimoniale: foyer?.situation_patrimoniale || "",
+      objectifs_patrimoniaux: foyer?.objectifs_patrimoniaux || "",
+      notes: foyer?.notes || "",
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- réinitialise à l'ouverture / changement de foyer
+  }, [open, foyer?.id, foyer?.updated_at]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +90,7 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
       });
     } catch (error) {
       console.error("Error saving foyer:", error);
-      alert("Erreur lors de l'enregistrement: " + String(error));
+      toast.error("Erreur lors de l'enregistrement: " + String(error));
     } finally {
       setLoading(false);
     }
@@ -171,9 +187,9 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
             </div>
           </div>
 
-          {/* Revenu fiscal */}
+          {/* Revenu brut global */}
           <div className="space-y-2">
-            <Label htmlFor="revenu_fiscal_reference">Revenu fiscal de référence (€)</Label>
+            <Label htmlFor="revenu_fiscal_reference">Revenu brut global (€)</Label>
             <Input
               id="revenu_fiscal_reference"
               type="number"

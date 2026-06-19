@@ -114,7 +114,7 @@ export function FoyerSummaryCard({
             {foyer.revenu_fiscal_reference != null && (
               <span className="inline-flex items-center gap-1">
                 <Coins className="h-3 w-3" />
-                RFR {formatFoyerCurrencyEur(foyer.revenu_fiscal_reference)}
+                RBG {formatFoyerCurrencyEur(foyer.revenu_fiscal_reference)}
               </span>
             )}
             {foyer.tranche_imposition && (

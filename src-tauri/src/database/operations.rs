@@ -204,6 +204,7 @@ mod database_integration_tests {
             adresse: None,
             code_postal: None,
             ville: None,
+            pays: None,
             date_naissance: None,
             lieu_naissance: None,
             profession: None,

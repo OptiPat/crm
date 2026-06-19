@@ -64,6 +64,7 @@ export const contacts = sqliteTable("contacts", {
   adresse: text("adresse"),
   codePostal: text("code_postal"),
   ville: text("ville"),
+  pays: text("pays"),
   
   // Informations personnelles
   dateNaissance: integer("date_naissance", { mode: "timestamp" }),

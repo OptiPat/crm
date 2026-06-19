@@ -43,6 +43,7 @@ export async function linkContactToFoyer(
       payloadOverrides.adresse = picked.adresse;
       payloadOverrides.code_postal = picked.code_postal;
       payloadOverrides.ville = picked.ville;
+      payloadOverrides.pays = picked.pays;
     }
   }
 
@@ -51,6 +52,51 @@ export async function linkContactToFoyer(
     contactToUpdatePayload(contact, payloadOverrides),
     options
   );
+}
+
+/** Rôle du contact dans le foyer (déclarant, enfant…). */
+export const FOYER_ROLE_OPTIONS = [
+  { value: "DECLARANT_1", label: "Déclarant 1" },
+  { value: "DECLARANT_2", label: "Déclarant 2" },
+  { value: "ENFANT", label: "Enfant" },
+  { value: "AUTRE", label: "Autre membre" },
+] as const;
+
+export async function updateContactFoyerRole(
+  contact: Contact,
+  roleFoyer: string
+): Promise<Contact> {
+  if (!contact.id) throw new Error("Contact invalide");
+  return updateContact(
+    contact.id,
+    contactToUpdatePayload(contact, { role_foyer: roleFoyer })
+  );
+}
+
+export async function dissociateContactFromFoyer(contact: Contact): Promise<Contact> {
+  if (!contact.id) throw new Error("Contact invalide");
+  return updateContact(
+    contact.id,
+    contactToUpdatePayload(contact, { foyer_id: null, role_foyer: null })
+  );
+}
+
+/** Membres du foyer avec le rôle « Enfant » (RIO / fiche contact). */
+export function getEnfantsFoyer(members: readonly Contact[]): Contact[] {
+  return members.filter((c) => c.role_foyer === "ENFANT");
+}
+
+export function countEnfantsFoyer(members: readonly Contact[]): number {
+  return getEnfantsFoyer(members).length;
+}
+
+/** Tous les membres du foyer incluant le contact courant (sans doublon). */
+export function mergeFoyerMembers(
+  contact: Contact,
+  otherMembers: readonly Contact[]
+): Contact[] {
+  const others = otherMembers.filter((m) => m.id !== contact.id);
+  return [contact, ...others];
 }
 
 const ROLE_FOYER_LABELS: Record<string, string> = {

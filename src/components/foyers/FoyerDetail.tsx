@@ -232,7 +232,7 @@ export function FoyerDetail({
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">
-                    Revenu fiscal de référence
+                    Revenu brut global
                   </div>
                   <div className="text-lg font-semibold">
                     {formatCurrency(foyer.revenu_fiscal_reference)}

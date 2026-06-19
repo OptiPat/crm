@@ -24,7 +24,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   Building2,
-  Edit,
   FileUp,
   Home,
   Plus,
@@ -76,6 +75,52 @@ function FilterPill({
         </span>
       )}
     </button>
+  );
+}
+
+function InvestissementPatrimoineActions({
+  inv,
+  onEdit,
+  onDelete,
+  onEncours,
+}: {
+  inv: Investissement;
+  onEdit: (inv: Investissement) => void;
+  onDelete: (inv: Investissement) => void;
+  onEncours?: (inv: Investissement) => void;
+}) {
+  return (
+    <div
+      className="flex shrink-0 items-center gap-1"
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      {onEncours && isPlacementEncoursEligible(inv.type_produit) && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-amber-700 hover:text-amber-800"
+          onClick={() => onEncours(inv)}
+          aria-label="Encours"
+          title="Mettre à jour l'encours"
+        >
+          <TrendingUp className="h-4 w-4" />
+        </Button>
+      )}
+      <Button type="button" variant="outline" size="sm" onClick={() => onEdit(inv)}>
+        Modifier
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8 text-destructive hover:text-destructive"
+        onClick={() => onDelete(inv)}
+        aria-label="Supprimer"
+        title="Supprimer"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </div>
   );
 }
 
@@ -151,39 +196,14 @@ function PatrimoineSection({
                 ? () => onOpenOwnerContact(ownerContactId)
                 : undefined
             }
+            onOpenContactClick={() => onEdit(inv)}
             actions={
-              <>
-                {onEncours && isPlacementEncoursEligible(inv.type_produit) && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-amber-700 hover:text-amber-800"
-                    onClick={() => onEncours(inv)}
-                    aria-label="Encours"
-                    title="Mettre à jour l'encours"
-                  >
-                    <TrendingUp className="h-4 w-4" />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => onEdit(inv)}
-                  aria-label="Modifier"
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => onDelete(inv)}
-                  aria-label="Supprimer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </>
+              <InvestissementPatrimoineActions
+                inv={inv}
+                onEdit={onEdit}
+                onDelete={onDelete}
+                onEncours={onEncours}
+              />
             }
           />
           );
@@ -509,9 +529,7 @@ export function ContactPatrimoinePanel({
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-muted/30 px-3 py-2">
                 <p className="text-sm font-medium text-foreground">
                   <span className="tabular-nums">{filtered.length}</span> placement
-                  {filtered.length > 1 ? "s" : ""} affiché
-                  {filtered.length > 1 ? "s" : ""}
-                  {" "}
+                  {filtered.length > 1 ? "s" : ""} affiché{filtered.length > 1 ? "s" : ""}
                   {hasActiveFilters && (
                     <span className="text-muted-foreground font-normal">
                       {" "}
@@ -613,39 +631,14 @@ export function ContactPatrimoinePanel({
                               ? () => onOpenOwnerContact(ownerContactId)
                               : undefined
                           }
+                          onOpenContactClick={() => onEdit(inv)}
                           actions={
-                            <>
-                              {isPlacementEncoursEligible(inv.type_produit) && (
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-amber-700 hover:text-amber-800"
-                                  onClick={() => setEncoursInvestissement(inv)}
-                                  aria-label="Encours"
-                                  title="Mettre à jour l'encours"
-                                >
-                                  <TrendingUp className="h-4 w-4" />
-                                </Button>
-                              )}
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                onClick={() => onEdit(inv)}
-                                aria-label="Modifier"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-destructive hover:text-destructive"
-                                onClick={() => onDelete(inv)}
-                                aria-label="Supprimer"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
+                            <InvestissementPatrimoineActions
+                              inv={inv}
+                              onEdit={onEdit}
+                              onDelete={onDelete}
+                              onEncours={(item) => setEncoursInvestissement(item)}
+                            />
                           }
                         />
                         );

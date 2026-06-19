@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,19 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -113,6 +123,14 @@ import {
   financingCentimesToEuro,
 } from "@/lib/investissements/investissement-immo-financing";
 import { toast } from "sonner";
+import type { LucideIcon } from "lucide-react";
+import {
+  getVisibleInvestissementFormSections,
+  INVESTISSEMENT_FORM_SECTION_ICON_CLASS,
+  INVESTISSEMENT_FORM_SECTION_META,
+  INVESTISSEMENT_FORM_SECTIONS,
+  type InvestissementFormSectionKey,
+} from "@/lib/investissements/investissement-form-sections";
 
 interface InvestissementFormProps {
   open: boolean;
@@ -122,6 +140,60 @@ interface InvestissementFormProps {
   defaultContactId?: number;
   defaultFoyerId?: number;
   onEncoursUpdated?: () => void;
+}
+
+function InvestissementFormSection({
+  sectionKey,
+  children,
+}: {
+  sectionKey: InvestissementFormSectionKey;
+  children: ReactNode;
+}) {
+  const meta = INVESTISSEMENT_FORM_SECTION_META[sectionKey];
+  const Icon = meta.icon;
+  return (
+    <div id={INVESTISSEMENT_FORM_SECTIONS[sectionKey]} className="space-y-4 scroll-mt-20">
+      <h3 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        <Icon className={INVESTISSEMENT_FORM_SECTION_ICON_CLASS} aria-hidden />
+        {meta.label}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function InvestissementFormSectionNav({
+  sections,
+}: {
+  sections: readonly { id: string; label: string; icon: LucideIcon }[];
+}) {
+  return (
+    <nav
+      aria-label="Sections du formulaire placement"
+      className="sticky top-0 z-10 -mx-1 mb-1 flex flex-wrap gap-1 border-b border-border/80 bg-background/95 pb-2 backdrop-blur-sm"
+    >
+      {sections.map((section) => {
+        const Icon = section.icon;
+        return (
+          <Button
+            key={section.id}
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 px-2 text-xs"
+            onClick={() =>
+              document
+                .getElementById(section.id)
+                ?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+          >
+            <Icon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+            {section.label}
+          </Button>
+        );
+      })}
+    </nav>
+  );
 }
 
 export function InvestissementForm({
@@ -400,7 +472,7 @@ export function InvestissementForm({
     // Pour un investissement de foyer, contactId n'est pas obligatoire
     const hasOwner = investissementCommun ? !!foyerId : !!contactId;
     if (!hasOwner || !typeProduit || !nomProduit) {
-      alert("Veuillez remplir tous les champs obligatoires");
+      toast.error("Veuillez remplir tous les champs obligatoires");
       return;
     }
 
@@ -500,59 +572,130 @@ export function InvestissementForm({
       resetForm();
     } catch (error) {
       console.error("Error saving investissement:", error);
-      alert("Erreur lors de l'enregistrement: " + String(error));
+      toast.error("Erreur lors de l'enregistrement: " + String(error));
     } finally {
       setLoading(false);
     }
   };
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>
-            {investissement ? "Modifier l'investissement" : "Nouvel investissement"}
-          </DialogTitle>
-          <DialogDescription>
-            {investissement
-              ? "Modifiez les informations de l'investissement"
-              : "Ajoutez un nouvel investissement pour un client"}
-          </DialogDescription>
-        </DialogHeader>
+  const isEdit = !!investissement;
+  const useSheet = isEdit || !!defaultContactId || !!defaultFoyerId;
+  const lockedContactContext = Boolean(defaultContactId && !investissementCommun);
+  const defaultContact = defaultContactId
+    ? contacts.find((c) => c.id === defaultContactId)
+    : undefined;
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Client (non obligatoire si investissement de foyer) */}
-          {!investissementCommun && (
-            <div className="space-y-2">
-              <Label htmlFor="contact">
-                Client <span className="text-red-500">*</span>
-              </Label>
-              <Select value={contactId} onValueChange={setContactId} required>
-                <SelectTrigger>
-                  <SelectValue placeholder="Sélectionnez un client" />
-                </SelectTrigger>
-                <SelectContent>
-                  {contacts.map((contact) => (
-                    <SelectItem key={contact.id} value={contact.id!.toString()}>
-                      {contact.prenom} {contact.nom}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+  const sectionVisibility = useMemo(
+    () => ({
+      financement: scpiFinancing || immoFinancing,
+      versements: accepteVersementProgramme || accepteReinvestissement,
+      suivi: showEncoursSection || showVersementsSection,
+    }),
+    [
+      scpiFinancing,
+      immoFinancing,
+      accepteVersementProgramme,
+      accepteReinvestissement,
+      showEncoursSection,
+      showVersementsSection,
+    ]
+  );
+
+  const navSections = useMemo(
+    () =>
+      getVisibleInvestissementFormSections(sectionVisibility).map((key) => ({
+        id: INVESTISSEMENT_FORM_SECTIONS[key],
+        label: INVESTISSEMENT_FORM_SECTION_META[key].navLabel,
+        icon: INVESTISSEMENT_FORM_SECTION_META[key].icon,
+      })),
+    [sectionVisibility]
+  );
+
+  const formTitle = useMemo(() => {
+    if (investissement) {
+      const label = nomProduit.trim() || formatNomProduit(typeProduit || "AUTRE");
+      return `Modifier — ${label}`;
+    }
+    if (defaultContact) {
+      return `Nouveau placement — ${defaultContact.prenom} ${defaultContact.nom}`;
+    }
+    if (defaultFoyerId) {
+      const foyer = foyers.find((f) => f.id === defaultFoyerId);
+      return foyer ? `Nouveau placement — ${foyer.nom}` : "Nouveau placement";
+    }
+    return "Nouvel investissement";
+  }, [investissement, nomProduit, typeProduit, defaultContact, defaultFoyerId, foyers]);
+
+  const formDescription = isEdit
+    ? "Modifiez les informations du placement."
+    : lockedContactContext && defaultContact
+      ? `Placement pour ${defaultContact.prenom} ${defaultContact.nom}.`
+      : "Ajoutez un placement pour un client ou un foyer.";
+
+  const formFooter = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={() => onOpenChange(false)}
+        disabled={loading}
+      >
+        Annuler
+      </Button>
+      <Button type="submit" disabled={loading}>
+        {loading ? "Enregistrement..." : investissement ? "Enregistrer" : "Créer"}
+      </Button>
+    </>
+  );
+
+  const formFields = (
+    <>
+      {useSheet && <InvestissementFormSectionNav sections={navSections} />}
+
+      <InvestissementFormSection sectionKey="identification">
+          {/* Client (masqué si ouvert depuis la fiche contact) */}
+          {lockedContactContext && defaultContact ? (
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Client : </span>
+              <span className="font-medium">
+                {defaultContact.prenom} {defaultContact.nom}
+              </span>
             </div>
+          ) : (
+            !investissementCommun && (
+              <div className="space-y-2">
+                <Label htmlFor="contact">
+                  Client <span className="text-red-500">*</span>
+                </Label>
+                <Select value={contactId} onValueChange={setContactId} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Sélectionnez un client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contacts.map((contact) => (
+                      <SelectItem key={contact.id} value={contact.id!.toString()}>
+                        {contact.prenom} {contact.nom}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )
           )}
 
-          {/* Investissement commun */}
-          <div className="flex items-center space-x-2">
-            <input
-              type="checkbox"
-              id="investissement-commun"
-              checked={investissementCommun}
-              onChange={(e) => setInvestissementCommun(e.target.checked)}
-              className="h-4 w-4"
-            />
-            <Label htmlFor="investissement-commun">Investissement commun (foyer)</Label>
-          </div>
+          {/* Investissement commun — masqué si contact verrouillé sans édition foyer */}
+          {!lockedContactContext && (
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="investissement-commun"
+                checked={investissementCommun}
+                onChange={(e) => setInvestissementCommun(e.target.checked)}
+                className="h-4 w-4"
+              />
+              <Label htmlFor="investissement-commun">Investissement commun (foyer)</Label>
+            </div>
+          )}
 
           {/* Foyer (si investissement commun) */}
           {investissementCommun && (
@@ -695,7 +838,11 @@ export function InvestissementForm({
               </datalist>
             )}
           </div>
+      </InvestissementFormSection>
 
+      <Separator />
+
+      <InvestissementFormSection sectionKey="montants">
           {/* Montant initial */}
           <div className="space-y-2">
             <Label htmlFor="montant">Montant initial (€)</Label>
@@ -812,7 +959,12 @@ export function InvestissementForm({
               )}
             </div>
           )}
+      </InvestissementFormSection>
 
+      {(scpiFinancing || immoFinancing) && (
+        <>
+          <Separator />
+          <InvestissementFormSection sectionKey="financement">
           {/* Financement SCPI (crédit lié au placement) */}
           {scpiFinancing && !immoFinancing && (
             <div className="space-y-4 border-t pt-4">
@@ -912,7 +1064,14 @@ export function InvestissementForm({
               </div>
             </div>
           )}
+          </InvestissementFormSection>
+        </>
+      )}
 
+      {(accepteVersementProgramme || accepteReinvestissement) && (
+        <>
+          <Separator />
+          <InvestissementFormSection sectionKey="versements">
           {/* Versement programmé (uniquement AV, PER, SCPI) */}
           {accepteVersementProgramme && (
             <div className="space-y-4 border-t pt-4">
@@ -998,7 +1157,14 @@ export function InvestissementForm({
               )}
             </div>
           )}
+          </InvestissementFormSection>
+        </>
+      )}
 
+      {(showVersementsSection || showEncoursSection) && investissement && (
+        <>
+          <Separator />
+          <InvestissementFormSection sectionKey="suivi">
           {showVersementsSection && investissement && (
             <InvestissementVersementsPanel
               investissementId={investissement.id}
@@ -1038,7 +1204,13 @@ export function InvestissementForm({
               }}
             />
           )}
+          </InvestissementFormSection>
+        </>
+      )}
 
+      <Separator />
+
+      <InvestissementFormSection sectionKey="notes">
           {/* Notes */}
           <div className="space-y-2">
             <Label htmlFor="notes">Notes</Label>
@@ -1050,22 +1222,51 @@ export function InvestissementForm({
               rows={3}
             />
           </div>
+      </InvestissementFormSection>
+    </>
+  );
 
-          {/* Boutons */}
-          <div className="flex justify-end gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
-              Annuler
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Enregistrement..." : investissement ? "Modifier" : "Créer"}
-            </Button>
-          </div>
-        </form>
+  const formBody = (
+    <form
+      onSubmit={handleSubmit}
+      className={useSheet ? "flex min-h-0 flex-1 flex-col" : "space-y-4"}
+    >
+      <div className={useSheet ? "min-h-0 flex-1 space-y-4 overflow-y-auto pr-1" : "contents"}>
+        {formFields}
+      </div>
+      {useSheet ? (
+        <SheetFooter className="mt-0 shrink-0 border-t bg-background pt-4">
+          {formFooter}
+        </SheetFooter>
+      ) : (
+        <DialogFooter className="pt-4">{formFooter}</DialogFooter>
+      )}
+    </form>
+  );
+
+  return useSheet ? (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
+      >
+        <div className="shrink-0 border-b px-6 py-4">
+          <SheetHeader>
+            <SheetTitle>{formTitle}</SheetTitle>
+            <SheetDescription>{formDescription}</SheetDescription>
+          </SheetHeader>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+      </SheetContent>
+    </Sheet>
+  ) : (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{formTitle}</DialogTitle>
+          <DialogDescription>{formDescription}</DialogDescription>
+        </DialogHeader>
+        {formBody}
       </DialogContent>
     </Dialog>
   );

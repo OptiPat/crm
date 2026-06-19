@@ -4,6 +4,7 @@ import type { Foyer } from "@/lib/api/tauri-foyers";
 import { computeAgeAtDate, formatAgeLabel } from "@/lib/contacts/contact-birthday";
 import { formatSituationLabel } from "@/lib/contacts/contact-form-utils";
 import { formatFoyerCurrencyEur } from "@/lib/foyers/foyer-display";
+import { countEnfantsFoyer } from "@/lib/foyers/foyer-utils";
 import { formatSriWithDefinition } from "@/lib/contacts/investisseur-sri";
 import {
   RM_LEGACY_PANEL_BULLET_LABEL_ALIASES,
@@ -40,11 +41,6 @@ function formatSituationMatrimonialeLine(contact: Contact | null): string | null
   const regime = contact?.regime_matrimonial?.trim();
   if (situation && regime) return `${situation} — ${regime}`;
   return situation ?? regime ?? null;
-}
-
-/** Membres du foyer avec le rôle « Enfant » (RIO / fiche contact). */
-export function countEnfantsFoyer(members: readonly Contact[]): number {
-  return members.filter((c) => c.role_foyer === "ENFANT").length;
 }
 
 function formatNombreEnfants(count: number | null | undefined): string | null {
