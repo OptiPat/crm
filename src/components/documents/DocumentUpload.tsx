@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,6 +44,8 @@ interface DocumentUploadProps {
   defaultContactId?: number;
   /** Type de document présélectionné (ex. PATRIMOINE depuis l’onglet Patrimoine). */
   defaultTypeDocument?: string;
+  /** Fichier déjà copié (drag & drop page Documents). */
+  initialUploadedFile?: PickedFile;
   foyerId?: number;
   /** Affichage dialogue identité (fiche contact). */
   contactNom?: string;
@@ -64,6 +66,7 @@ export function DocumentUpload({
   contactId,
   defaultContactId,
   defaultTypeDocument,
+  initialUploadedFile,
   foyerId,
   contactNom,
   contactPrenom,
@@ -136,6 +139,39 @@ export function DocumentUpload({
       type_document: defaultTypeDocument ?? prev.type_document ?? "AUTRE",
     }));
   }, [open, contactId, defaultContactId, foyerId, defaultTypeDocument]);
+
+  const initialFileProcessedRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      initialFileProcessedRef.current = false;
+      return;
+    }
+    if (!initialUploadedFile || initialFileProcessedRef.current) return;
+    initialFileProcessedRef.current = true;
+
+    const file = initialUploadedFile;
+    const nextType =
+      isImageFile(file.name) && (defaultTypeDocument ?? "AUTRE") === "AUTRE"
+        ? "IDENTITE"
+        : defaultTypeDocument ?? "AUTRE";
+
+    setUploadedFile(file);
+    setFormData((prev) => ({
+      ...prev,
+      nom_fichier: file.name,
+      type_document: nextType,
+    }));
+
+    void (async () => {
+      if (identityImport.shouldUseIdentityPipeline(file.name, nextType)) {
+        if (!isIdentityFilePath(file.path)) return;
+        await identityImport.extractIdentity(file.path, identityTextCallbacks);
+      } else if (file.name.toLowerCase().endsWith(".pdf")) {
+        await handleExtractText(file.path);
+      }
+    })();
+  }, [open, initialUploadedFile, defaultTypeDocument]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!open || contactLocked) return;

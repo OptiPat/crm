@@ -28,6 +28,7 @@ import { useRioSoloImport } from "@/hooks/useRioSoloImport";
 import { useRioPatrimoineFlow } from "@/hooks/useRioPatrimoineFlow";
 import { hasPatrimoineToTri } from "@/lib/documents/rio-patrimoine-flow";
 import { applyQpiImport } from "@/lib/contacts/apply-qpi-import";
+import { resolveExistingContactForRio } from "@/lib/contacts/rio-solo-apply";
 import { PROFIL_RISQUE_SRI_FIELD_LABEL } from "@/lib/contacts/investisseur-sri";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
@@ -65,6 +66,8 @@ export interface RioImportWizardProps {
   /** Reprise depuis DocumentUpload (type basculé ou fichier déjà analysé). */
   initialUploadedFile?: PickedFile;
   initialExtractedData?: ExtractedData;
+  /** Relance depuis la bibliothèque : ne pas recréer l'entrée document. */
+  existingDocumentId?: number;
   initialStep?: RioImportStep;
   initialFormDate?: string;
   initialFormNotes?: string;
@@ -86,6 +89,7 @@ export function RioImportWizard({
   contactPrenom,
   initialUploadedFile,
   initialExtractedData,
+  existingDocumentId,
   initialStep,
   initialFormDate,
   initialFormNotes,
@@ -146,6 +150,7 @@ export function RioImportWizard({
     defaultContactId,
     foyerId,
     defaultTypeDocument: initialTypeDocument,
+    existingDocumentId,
     onSuccess,
     onOpenChange,
   });
@@ -249,15 +254,31 @@ export function RioImportWizard({
     }
     if (patrimoineState?.ownerLabel) return patrimoineState.ownerLabel;
     if (extractedData?.prenom || extractedData?.nom) {
-      return [extractedData.prenom, extractedData.nom].filter(Boolean).join(" ");
+      const detected = [extractedData.prenom, extractedData.nom].filter(Boolean).join(" ");
+      if (effectiveContactId) return detected;
+      return `${detected} (PDF — choisir le client en base si besoin)`;
     }
     return "Client non sélectionné";
-  }, [contactLocked, contactPrenom, contactNom, linkedContact, patrimoineState, extractedData]);
+  }, [contactLocked, contactPrenom, contactNom, linkedContact, patrimoineState, extractedData, effectiveContactId]);
 
   const previewSummary = extractedData ? buildRioPreviewSummary(extractedData) : null;
   const showPatrimoineStep = previewSummary?.hasPatrimoineStep ?? true;
 
-  const handleExtractText = async (filePath: string) => {
+  const syncContactLinkFromExtractedData = useCallback(
+    async (data: ExtractedData) => {
+      if (contactLocked || contactId != null || selectedContactId != null) return;
+      const found = await resolveExistingContactForRio(data, undefined);
+      if (found?.id) {
+        setSelectedContactId(found.id);
+        toast.info(`Client détecté en base : ${found.prenom} ${found.nom}`);
+      }
+    },
+    [contactLocked, contactId, selectedContactId]
+  );
+
+  const initialExtractTriggeredRef = useRef(false);
+
+  const handleExtractText = useCallback(async (filePath: string) => {
     setExtracting(true);
     try {
       const result = await extractTextFromPDFPath(filePath);
@@ -286,13 +307,44 @@ export function RioImportWizard({
 
       setExtractedData(parsedData);
       setStep(2);
+      void syncContactLinkFromExtractedData(parsedData);
     } catch (error) {
       console.error("Erreur extraction RIO:", error);
       toast.error("Erreur lors de l'extraction : " + String(error));
     } finally {
       setExtracting(false);
     }
-  };
+  }, [formData.type_document, syncContactLinkFromExtractedData]);
+
+  useEffect(() => {
+    if (!open || !extractedData || contactLocked || contactId != null) return;
+    void syncContactLinkFromExtractedData(extractedData);
+  }, [open, extractedData, contactLocked, contactId, syncContactLinkFromExtractedData]);
+
+  useEffect(() => {
+    if (!open) {
+      initialExtractTriggeredRef.current = false;
+      return;
+    }
+    if (
+      initialExtractTriggeredRef.current ||
+      !initialUploadedFile ||
+      initialExtractedData ||
+      !uploadedFile ||
+      extractedData
+    ) {
+      return;
+    }
+    initialExtractTriggeredRef.current = true;
+    void handleExtractText(uploadedFile.path);
+  }, [
+    open,
+    initialUploadedFile,
+    initialExtractedData,
+    uploadedFile,
+    extractedData,
+    handleExtractText,
+  ]);
 
   const handleFileSelect = async () => {
     try {
@@ -335,11 +387,6 @@ export function RioImportWizard({
   };
 
   const handleApplyData = async (data: ExtractedData) => {
-    if (!effectiveContactId) {
-      toast.error("Sélectionnez un client avant d'appliquer.");
-      return;
-    }
-
     const assessment = assessRioImport(data, { requestedType: formData.type_document });
     setImportAssessment(assessment);
     if (!assessment.canProceed) {
@@ -356,6 +403,7 @@ export function RioImportWizard({
           effectiveContactId,
           uploadedFile: uploadedFile ?? undefined,
           formNotes: formData.notes,
+          skipDocumentCreation: existingDocumentId != null,
         });
         if (qpiResult) {
           toast.success(qpiResult.successMessage);
@@ -612,6 +660,21 @@ export function RioImportWizard({
           )}
 
           {step === 2 && extractedData && uploadedFile && (
+            <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
+              {!contactLocked && (
+                <ContactPersonSearch
+                  label="Client en base"
+                  hint={
+                    effectiveContactId
+                      ? "Client associé — modifiable avant d'appliquer"
+                      : "Recherche par nom ou sélection manuelle si la détection auto a échoué"
+                  }
+                  placeholder="Rechercher un client…"
+                  contacts={importContacts}
+                  value={selectedContactId}
+                  onChange={(id) => setSelectedContactId(id)}
+                />
+              )}
             <div className="grid lg:grid-cols-2 gap-4 flex-1 min-h-0 overflow-hidden">
               <RioPdfPreviewPanel pdfPath={uploadedFile.path} active={open && step === 2} />
               <div className="min-w-0 flex flex-col min-h-0 overflow-hidden">
@@ -628,6 +691,7 @@ export function RioImportWizard({
                 onIgnore={() => setStep(1)}
               />
               </div>
+            </div>
             </div>
           )}
 

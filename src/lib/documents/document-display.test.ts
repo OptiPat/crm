@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   documentTimelineSortDate,
   getDocumentMetaLines,
+  getStelliumReimportActionLabel,
+  isDocumentPreviewable,
 } from "./document-display";
 import type { Document } from "@/lib/api/tauri-documents";
 
@@ -45,6 +47,21 @@ describe("getDocumentMetaLines", () => {
   it("sans date_document : ajouté le seulement", () => {
     const lines = getDocumentMetaLines(baseDoc({ type_document: "FISCAL" }));
     expect(lines).toEqual([{ label: "Ajouté le", value: expect.any(String) }]);
+  });
+});
+
+describe("document display helpers", () => {
+  it("isDocumentPreviewable — PDF et images", () => {
+    expect(
+      isDocumentPreviewable({ nom_fichier: "a.pdf", mime_type: "application/pdf" })
+    ).toBe(true);
+    expect(isDocumentPreviewable({ nom_fichier: "scan.jpg" })).toBe(true);
+    expect(isDocumentPreviewable({ nom_fichier: "doc.docx" })).toBe(false);
+  });
+
+  it("getStelliumReimportActionLabel — RIO vs QPI", () => {
+    expect(getStelliumReimportActionLabel("PATRIMOINE")).toContain("RIO");
+    expect(getStelliumReimportActionLabel("QPI")).toContain("QPI");
   });
 });
 

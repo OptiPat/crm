@@ -1,7 +1,33 @@
 import type { Document } from "@/lib/api/tauri-documents";
+import { isPatrimoineDocument } from "@/lib/documents/documents-page-stats";
 
 export function isIdentityDocument(type: string): boolean {
   return type === "IDENTITE";
+}
+
+export function isDocumentPreviewable(
+  doc: Pick<Document, "mime_type" | "nom_fichier">
+): boolean {
+  const name = doc.nom_fichier.toLowerCase();
+  if (doc.mime_type?.includes("pdf") || name.endsWith(".pdf")) return true;
+  if (doc.mime_type?.includes("image") || /\.(png|jpe?g|webp)$/i.test(name)) return true;
+  return false;
+}
+
+export function canReimportStelliumDocument(
+  doc: Pick<Document, "type_document" | "mime_type" | "nom_fichier" | "contact_id">
+): boolean {
+  const isPdf =
+    doc.mime_type?.includes("pdf") ||
+    doc.nom_fichier.toLowerCase().endsWith(".pdf");
+  return isPatrimoineDocument(doc) && isPdf && doc.contact_id != null;
+}
+
+/** Libellé menu ⋮ selon le type Stellium. */
+export function getStelliumReimportActionLabel(typeDocument: string): string {
+  if (typeDocument === "QPI") return "Mettre à jour le profil (QPI)";
+  if (typeDocument === "PATRIMOINE") return "Mettre à jour le patrimoine (RIO)";
+  return "Relancer l'extraction";
 }
 
 export function formatUnixDateFr(timestamp: number): string {

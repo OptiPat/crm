@@ -27,6 +27,8 @@ export async function applyQpiImport(
     effectiveContactId?: number;
     uploadedFile?: { path: string; name: string; size: number };
     formNotes?: string;
+    /** Relance depuis la bibliothèque : ne pas dupliquer l'entrée document. */
+    skipDocumentCreation?: boolean;
   }
 ): Promise<QpiApplyResult | null> {
   if (data.profilRisque == null || data.profilRisque < 1 || data.profilRisque > PROFIL_RISQUE_MAX) {
@@ -70,7 +72,7 @@ export async function applyQpiImport(
     contactId = created.id;
   }
 
-  if (options.uploadedFile && contactId) {
+  if (options.uploadedFile && contactId && !options.skipDocumentCreation) {
     const doc: NewDocument = {
       contact_id: contactId,
       type_document: "QPI",

@@ -20,7 +20,8 @@ import { cn } from "@/lib/utils";
 import type { Contact } from "@/lib/api/tauri-contacts";
 
 interface ContactPersonSearchProps {
-  label: string;
+  /** Omis en barre de filtres compacte (le placeholder suffit). */
+  label?: string;
   hint?: string;
   placeholder?: string;
   contacts: Contact[];
@@ -74,9 +75,9 @@ export function ContactPersonSearch({
   };
 
   return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      {hint && <p className="text-xs text-muted-foreground -mt-1">{hint}</p>}
+    <div className={label || hint ? "space-y-2" : undefined}>
+      {label ? <Label>{label}</Label> : null}
+      {hint ? <p className="text-xs text-muted-foreground -mt-1">{hint}</p> : null}
 
       <div className="flex gap-2">
         <Popover open={open} onOpenChange={setOpen}>

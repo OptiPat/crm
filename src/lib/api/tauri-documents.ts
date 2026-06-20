@@ -66,10 +66,45 @@ export async function deleteDocument(id: number): Promise<void> {
   notifyDocumentsChanged();
 }
 
+async function copyFileIntoDocumentsDir(
+  sourcePath: string
+): Promise<{ path: string; name: string; size: number }> {
+  const appData = await appDataDir();
+  const documentsDir = await join(appData, "documents");
+
+  const dirExists = await exists(documentsDir);
+  if (!dirExists) {
+    await mkdir(documentsDir, { recursive: true });
+  }
+
+  const fileName = sourcePath.split(/[\\/]/).pop() || "document";
+  const destinationPath = await join(documentsDir, `${Date.now()}_${fileName}`);
+
+  await copyFile(sourcePath, destinationPath);
+
+  const fileStats = await stat(destinationPath);
+  return {
+    path: destinationPath,
+    name: fileName,
+    size: fileStats.size,
+  };
+}
+
+/** Copie un fichier déposé (drag & drop Tauri) dans le dossier documents de l'app. */
+export async function stageDocumentFromPath(
+  sourcePath: string
+): Promise<{ path: string; name: string; size: number }> {
+  try {
+    return await copyFileIntoDocumentsDir(sourcePath);
+  } catch (error) {
+    console.error("Error staging document:", error);
+    throw error;
+  }
+}
+
 // Fonction pour uploader un fichier
 export async function uploadDocument(): Promise<{ path: string; name: string; size: number } | null> {
   try {
-    // Ouvrir le sélecteur de fichiers
     const selected = await open({
       multiple: false,
       filters: [
@@ -84,32 +119,7 @@ export async function uploadDocument(): Promise<{ path: string; name: string; si
       return null;
     }
 
-    // Créer le dossier documents dans appData si nécessaire
-    const appData = await appDataDir();
-    const documentsDir = await join(appData, "documents");
-    
-    // Vérifier si le dossier existe, sinon le créer
-    const dirExists = await exists(documentsDir);
-    if (!dirExists) {
-      await mkdir(documentsDir, { recursive: true });
-    }
-
-    // Extraire le nom du fichier
-    const fileName = selected.split(/[\\/]/).pop() || "document";
-    const destinationPath = await join(documentsDir, `${Date.now()}_${fileName}`);
-
-    // Copier le fichier
-    await copyFile(selected, destinationPath);
-
-    // Obtenir la taille du fichier après copie
-    const fileStats = await stat(destinationPath);
-    const size = fileStats.size;
-
-    return {
-      path: destinationPath,
-      name: fileName,
-      size,
-    };
+    return await copyFileIntoDocumentsDir(selected);
   } catch (error) {
     console.error("Error uploading document:", error);
     throw error;

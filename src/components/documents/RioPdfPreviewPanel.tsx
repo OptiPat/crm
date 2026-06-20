@@ -48,7 +48,7 @@ export function RioPdfPreviewPanel({ pdfPath, active = true }: RioPdfPreviewPane
   return (
     <div className="flex min-h-0 flex-col gap-2 lg:max-h-[calc(90vh-12rem)]">
       <p className="text-xs text-muted-foreground">
-        Document source — faites défiler pour vérifier les données extraites.
+        Aperçu du document — faites défiler pour parcourir les pages.
       </p>
 
       {loading && (

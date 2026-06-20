@@ -35,6 +35,8 @@ export function useRioPatrimoineFlow(options: {
   defaultContactId?: number;
   foyerId?: number;
   defaultTypeDocument?: string;
+  /** Relance depuis la bibliothèque : le PDF est déjà enregistré. */
+  existingDocumentId?: number;
   onSuccess: () => void;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -95,7 +97,7 @@ export function useRioPatrimoineFlow(options: {
       const { data, result, uploadedFile, formData, coupleMemberIds, onClosePreview, onClearExtractedData, onResetUpload, onWizardPatrimoineStep } =
         params;
 
-      if (uploadedFile && result.finalContactId) {
+      if (uploadedFile && result.finalContactId && options.existingDocumentId == null) {
         await createDocument(
           buildRioPatrimoineDocument({
             data,
