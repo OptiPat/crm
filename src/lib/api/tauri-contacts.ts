@@ -31,6 +31,11 @@ export interface Contact {
   /** Épargne de précaution souhaitée (RIO, par personne). */
   epargne_precaution_souhaitee?: number;
   objectifs_patrimoniaux?: string;
+  // 🔥 Fiscalité : portée par le contact (célibataire) OU synchronisée depuis le foyer.
+  tranche_imposition?: string;
+  nombre_parts_fiscales?: number;
+  revenu_fiscal_reference?: number;
+  ir_net_a_payer?: number;
   source_lead?: string;
   profil_risque_sri?: number;
   // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
@@ -140,6 +145,31 @@ export async function updateContact(
   if (!options?.skipPostSaveHooks) {
     notifyContactsChanged({ patchedContact: updated });
     notifyEtiquettesChanged();
+  }
+  return updated;
+}
+
+/** Champs fiscaux éditables d'un contact (TMI, parts, RBG, IR net). */
+export interface ContactFiscal {
+  tranche_imposition?: string;
+  nombre_parts_fiscales?: number;
+  revenu_fiscal_reference?: number;
+  ir_net_a_payer?: number;
+}
+
+/**
+ * Met à jour uniquement la fiscalité d'un contact (sans toucher au reste).
+ * Utilisé pour une personne seule (sans foyer) et pour synchroniser chaque membre
+ * quand la fiscalité est éditée au niveau du foyer.
+ */
+export async function updateContactFiscal(
+  id: number,
+  fiscal: ContactFiscal,
+  options?: { silent?: boolean }
+): Promise<Contact> {
+  const updated = await invoke<Contact>("update_contact_fiscal", { id, fiscal });
+  if (!options?.silent) {
+    notifyContactsChanged({ patchedContact: updated });
   }
   return updated;
 }

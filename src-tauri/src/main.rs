@@ -62,6 +62,7 @@ fn main() {
             delete_all_contacts,
             cleanup_orphaned_data,
             update_contact,
+            update_contact_fiscal,
             find_contact_by_email,
             get_filleuls_by_parrain,
             find_contact_by_name,

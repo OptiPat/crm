@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { type Contact as ContactRecord } from "@/lib/api/tauri-contacts";
 import { type Foyer } from "@/lib/api/tauri-foyers";
+import { resolveContactFiscal, type FiscalFields } from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
 import {
   syncContactGoogle,
@@ -104,13 +105,12 @@ function hasVieProContent(contact: ContactRecord): boolean {
   );
 }
 
-function hasFoyerFiscalContent(foyer?: Foyer | null): boolean {
+function hasFiscalDisplayContent(fiscal: FiscalFields): boolean {
   return !!(
-    foyer &&
-    (foyer.tranche_imposition ||
-      foyer.nombre_parts_fiscales != null ||
-      (foyer.revenu_fiscal_reference != null && foyer.revenu_fiscal_reference > 0) ||
-      (foyer.ir_net_a_payer != null && foyer.ir_net_a_payer > 0))
+    fiscal.tranche_imposition ||
+    fiscal.nombre_parts_fiscales != null ||
+    (fiscal.revenu_fiscal_reference != null && fiscal.revenu_fiscal_reference > 0) ||
+    (fiscal.ir_net_a_payer != null && fiscal.ir_net_a_payer > 0)
   );
 }
 
@@ -221,6 +221,8 @@ export function ContactDetailSyntheseTab({
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const showGoogleSync = contact.id != null && canSyncContactToGoogle(contact);
 
+  // Fiscalité affichée : valeur du contact (personne seule) sinon fallback foyer.
+  const fiscal = resolveContactFiscal(contact, foyer);
   const clientLabel = getClientLabel(contact.categorie || "AUCUN");
   const filleulLabel = getFilleulLabel(contact.filleul_categorie);
   const showRolesCard =
@@ -369,7 +371,7 @@ export function ContactDetailSyntheseTab({
         </CardContent>
       </Card>
 
-      {(hasVieProContent(contact) || hasFoyerFiscalContent(foyer)) && (
+      {(hasVieProContent(contact) || hasFiscalDisplayContent(fiscal)) && (
         <Card>
           <SyntheseCardHeader
             sectionKey="viePro"
@@ -433,19 +435,19 @@ export function ContactDetailSyntheseTab({
                 )}
               </div>
             )}
-            {hasFoyerFiscalContent(foyer) && (
+            {hasFiscalDisplayContent(fiscal) && (
               <div className="space-y-1 border-t pt-3">
                 <p className="text-xs font-medium text-muted-foreground">
-                  Fiscalité (foyer)
+                  Fiscalité{foyer ? " (foyer)" : ""}
                 </p>
-                {foyer?.tranche_imposition && (
+                {fiscal.tranche_imposition && (
                   <div>
                     <span className="text-muted-foreground text-sm">TMI : </span>
-                    {foyer.tranche_imposition}
+                    {fiscal.tranche_imposition}
                   </div>
                 )}
-                {foyer?.revenu_fiscal_reference != null &&
-                  foyer.revenu_fiscal_reference > 0 && (
+                {fiscal.revenu_fiscal_reference != null &&
+                  fiscal.revenu_fiscal_reference > 0 && (
                     <div>
                       <span className="text-muted-foreground text-sm">
                         Revenu brut global :{" "}
@@ -454,18 +456,18 @@ export function ContactDetailSyntheseTab({
                         style: "currency",
                         currency: "EUR",
                         maximumFractionDigits: 0,
-                      }).format(foyer.revenu_fiscal_reference)}
+                      }).format(fiscal.revenu_fiscal_reference)}
                     </div>
                   )}
-                {foyer?.nombre_parts_fiscales != null && (
+                {fiscal.nombre_parts_fiscales != null && (
                   <div>
                     <span className="text-muted-foreground text-sm">
                       Nombre de parts fiscales :{" "}
                     </span>
-                    {foyer.nombre_parts_fiscales}
+                    {fiscal.nombre_parts_fiscales}
                   </div>
                 )}
-                {foyer?.ir_net_a_payer != null && foyer.ir_net_a_payer > 0 && (
+                {fiscal.ir_net_a_payer != null && fiscal.ir_net_a_payer > 0 && (
                   <div>
                     <span className="text-muted-foreground text-sm">
                       IR net à payer :{" "}
@@ -474,7 +476,7 @@ export function ContactDetailSyntheseTab({
                       style: "currency",
                       currency: "EUR",
                       maximumFractionDigits: 0,
-                    }).format(foyer.ir_net_a_payer)}
+                    }).format(fiscal.ir_net_a_payer)}
                   </div>
                 )}
               </div>

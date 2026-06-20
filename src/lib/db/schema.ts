@@ -78,6 +78,12 @@ export const contacts = sqliteTable("contacts", {
   chargesEmprunts: real("charges_emprunts"),
   epargnePrecautionSouhaitee: real("epargne_precaution_souhaitee"),
   objectifsPatrimoniaux: text("objectifs_patrimoniaux"),
+
+  // Fiscalité : portée par le contact (personne seule) OU synchronisée depuis le foyer.
+  trancheImposition: text("tranche_imposition"),
+  nombrePartsFiscales: real("nombre_parts_fiscales"),
+  revenuFiscalReference: real("revenu_fiscal_reference"),
+  irNetAPayer: real("ir_net_a_payer"),
   
   // Informations commerciales
   sourceLead: text("source_lead"),

@@ -424,6 +424,36 @@ impl Database {
         self.get_contact_by_id(id)
     }
 
+    /// Met à jour uniquement la fiscalité d'un contact (TMI, parts, RBG, IR net).
+    /// Utilisé pour la fiscalité d'une personne seule (sans foyer) et pour
+    /// synchroniser chaque membre quand la fiscalité est éditée sur le foyer.
+    pub fn update_contact_fiscal(
+        &self,
+        id: i64,
+        tranche_imposition: Option<String>,
+        nombre_parts_fiscales: Option<f64>,
+        revenu_fiscal_reference: Option<f64>,
+        ir_net_a_payer: Option<f64>,
+    ) -> Result<Contact> {
+        self.conn.execute(
+            "UPDATE contacts SET
+                tranche_imposition = ?1,
+                nombre_parts_fiscales = ?2,
+                revenu_fiscal_reference = ?3,
+                ir_net_a_payer = ?4,
+                updated_at = unixepoch()
+            WHERE id = ?5",
+            params![
+                tranche_imposition,
+                nombre_parts_fiscales,
+                revenu_fiscal_reference,
+                ir_net_a_payer,
+                id
+            ],
+        )?;
+        self.get_contact_by_id(id)
+    }
+
     pub fn set_google_contact_link(&self, contact_id: i64, resource_name: &str) -> Result<()> {
         self.conn.execute(
             "UPDATE contacts SET google_contact_resource_name = ?1, google_synced_at = unixepoch(), updated_at = unixepoch() WHERE id = ?2",
@@ -446,5 +476,44 @@ impl Database {
             params![telephone.trim(), contact_id],
         )?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Database;
+    use rusqlite::params;
+
+    fn insert_contact(db: &Database, nom: &str) -> i64 {
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, statut_suivi) VALUES ('CLIENT', ?1, 'Jean', 'ACTIF')",
+                params![nom],
+            )
+            .unwrap();
+        db.get_connection().last_insert_rowid()
+    }
+
+    #[test]
+    fn update_contact_fiscal_persists_and_is_isolated() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let id = insert_contact(&db, "Dupont");
+
+        let updated = db
+            .update_contact_fiscal(id, Some("30 %".into()), Some(2.0), Some(50_000.0), Some(1_200.0))
+            .unwrap();
+        assert_eq!(updated.tranche_imposition.as_deref(), Some("30 %"));
+        assert_eq!(updated.nombre_parts_fiscales, Some(2.0));
+        assert_eq!(updated.revenu_fiscal_reference, Some(50_000.0));
+        assert_eq!(updated.ir_net_a_payer, Some(1_200.0));
+
+        // Relecture indépendante
+        let reread = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reread.tranche_imposition.as_deref(), Some("30 %"));
+
+        // Effacement possible (None remet à NULL)
+        let cleared = db.update_contact_fiscal(id, None, None, None, None).unwrap();
+        assert_eq!(cleared.tranche_imposition, None);
+        assert_eq!(cleared.nombre_parts_fiscales, None);
     }
 }

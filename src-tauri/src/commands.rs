@@ -161,6 +161,38 @@ pub fn update_contact(
         .map_err(|e| format!("Failed to update contact: {}", e))
 }
 
+/// Fiscalité éditable d'un contact (personne seule, ou copie synchronisée depuis le foyer).
+#[derive(serde::Deserialize)]
+pub struct ContactFiscalPayload {
+    #[serde(default)]
+    pub tranche_imposition: Option<String>,
+    #[serde(default)]
+    pub nombre_parts_fiscales: Option<f64>,
+    #[serde(default)]
+    pub revenu_fiscal_reference: Option<f64>,
+    #[serde(default)]
+    pub ir_net_a_payer: Option<f64>,
+}
+
+#[tauri::command]
+pub fn update_contact_fiscal(
+    db: State<'_, DbState>,
+    id: i64,
+    fiscal: ContactFiscalPayload,
+) -> Result<Contact, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_contact_fiscal(
+            id,
+            fiscal.tranche_imposition,
+            fiscal.nombre_parts_fiscales,
+            fiscal.revenu_fiscal_reference,
+            fiscal.ir_net_a_payer,
+        )
+        .map_err(|e| format!("Failed to update contact fiscal: {}", e))
+}
+
 #[tauri::command]
 pub fn find_contact_by_email(
     db: State<'_, DbState>,

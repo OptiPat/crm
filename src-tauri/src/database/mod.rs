@@ -8,6 +8,7 @@ pub mod etiquette_assignments;
 pub mod etiquette_email;
 pub mod etiquettes;
 pub mod etiquettes_auto_engine;
+pub mod etiquette_fiscal;
 pub mod alertes;
 pub mod contact_row;
 pub mod contacts;
@@ -521,6 +522,7 @@ impl Database {
         self.migrate_add_lieu_naissance()?;
         self.migrate_add_contact_pays()?;
         self.migrate_add_contact_rio_financial_fields()?;
+        self.migrate_add_contact_fiscal_fields()?;
         self.migrate_add_foyer_ir_net()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
         self.migrate_documents_connaissances_financieres()?;
@@ -663,6 +665,36 @@ impl Database {
         }
         if added {
             println!("✅ Migration champs RIO contacts appliquée");
+        }
+        Ok(())
+    }
+
+    /// Fiscalité au niveau du CONTACT (personne seule sans foyer, ou copie synchronisée
+    /// d'un membre de foyer). Mêmes champs que `foyers`, pour ne pas forcer la création
+    /// d'un foyer quand on saisit la TMI d'un célibataire.
+    fn migrate_add_contact_fiscal_fields(&self) -> Result<()> {
+        let columns: [(&str, &str); 4] = [
+            ("tranche_imposition", "TEXT"),
+            ("nombre_parts_fiscales", "REAL"),
+            ("revenu_fiscal_reference", "REAL"),
+            ("ir_net_a_payer", "REAL"),
+        ];
+        let mut added = false;
+        for (name, sql_type) in columns {
+            if self.table_has_column("contacts", name)? {
+                continue;
+            }
+            if !added {
+                println!("🔄 Migration : fiscalité sur contacts (TMI, parts, RBG, IR net)...");
+                added = true;
+            }
+            self.conn.execute(
+                &format!("ALTER TABLE contacts ADD COLUMN {name} {sql_type}"),
+                [],
+            )?;
+        }
+        if added {
+            println!("✅ Migration fiscalité contacts appliquée");
         }
         Ok(())
     }

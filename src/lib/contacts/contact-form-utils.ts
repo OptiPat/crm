@@ -398,11 +398,84 @@ export function serializeFormSnapshot(data: NewContact): string {
   return JSON.stringify(data);
 }
 
-/** Catégories client/filleul pour l'import Excel général (colonne « Prospects Filleuls »). */
+/**
+ * Normalise une valeur de colonne « Statut » d'import (ex. modèle Finzzle :
+ * Client / Prospect / Contact) vers une catégorie client CRM. Accepte aussi
+ * directement les codes CRM. Renvoie `undefined` si la valeur n'est pas reconnue,
+ * pour laisser la logique d'inférence par défaut s'appliquer.
+ */
+export function normalizeImportStatut(value: unknown): ClientStatut | undefined {
+  if (value == null) return undefined;
+  const key = String(value).trim().toUpperCase();
+  if (!key) return undefined;
+  switch (key) {
+    case "CLIENT":
+      return "CLIENT";
+    case "PROSPECT":
+    case "PROSPECT_CLIENT":
+      return "PROSPECT_CLIENT";
+    case "CONTACT":
+    case "SUSPECT":
+    case "SUSPECT_CLIENT":
+      return "SUSPECT_CLIENT";
+    case "AUCUN":
+      return "AUCUN";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Normalise une civilité d'import (ex. modèle Finzzle : « Madame » / « Monsieur »)
+ * vers le code CRM (M / MME / AUTRE). Renvoie `undefined` si vide/non reconnu.
+ */
+export function normalizeImportCivilite(value: unknown): Civilite | undefined {
+  if (value == null) return undefined;
+  const key = String(value).trim().toUpperCase().replace(/\./g, "");
+  if (!key) return undefined;
+  switch (key) {
+    case "M":
+    case "MR":
+    case "MONSIEUR":
+      return "M";
+    case "MME":
+    case "MRS":
+    case "MADAME":
+    case "MLLE":
+    case "MADEMOISELLE":
+      return "MME";
+    case "AUTRE":
+      return "AUTRE";
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Normalise une TMI importée (modèle Finzzle : nombre brut « 11 », « 30 », « - »)
+ * vers le format affiché par le CRM (« 30 % »). Renvoie `undefined` si vide,
+ * « - » ou non exploitable. 0 est traité comme non renseigné.
+ */
+export function normalizeImportTmi(value: unknown): string | undefined {
+  if (value == null) return undefined;
+  const raw = String(value).replace(/%/g, "").replace(",", ".").trim();
+  if (!raw || raw === "-") return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  const display = Number.isInteger(n) ? String(n) : String(n).replace(".", ",");
+  return `${display} %`;
+}
+
+/**
+ * Catégories client/filleul pour l'import Excel général (colonne « Prospects Filleuls »).
+ * Si `explicitStatut` est fourni et reconnu (colonne « Statut » mappée), il prime sur
+ * l'inférence par défaut pour la catégorie client — sauf produit (toujours CLIENT) ou filleul.
+ */
 export function resolveImportContactCategories(
   hasProduit: boolean,
   hasContact: boolean,
-  isFilleul: boolean
+  isFilleul: boolean,
+  explicitStatut?: unknown
 ): { categorie: string; filleul_categorie?: string } {
   if (hasProduit) {
     return {
@@ -416,8 +489,9 @@ export function resolveImportContactCategories(
       filleul_categorie: hasContact ? "PROSPECT_FILLEUL" : "SUSPECT_FILLEUL",
     };
   }
+  const statut = normalizeImportStatut(explicitStatut);
   return {
-    categorie: hasContact ? "PROSPECT_CLIENT" : "SUSPECT_CLIENT",
+    categorie: statut ?? (hasContact ? "PROSPECT_CLIENT" : "SUSPECT_CLIENT"),
     filleul_categorie: undefined,
   };
 }

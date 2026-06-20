@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { createFoyer, updateFoyer, type NewFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
+import { pickFiscal, propagateFiscalToFoyerMembers } from "@/lib/foyers/foyer-fiscal-sync";
 import { toast } from "sonner";
 
 const FOYER_TYPE_OPTIONS = [
@@ -74,6 +75,8 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
     try {
       if (foyer) {
         await updateFoyer(foyer.id, formData);
+        // Synchroniser la fiscalité sur les fiches contacts des membres.
+        await propagateFiscalToFoyerMembers(foyer.id, pickFiscal(formData));
       } else {
         await createFoyer(formData);
       }

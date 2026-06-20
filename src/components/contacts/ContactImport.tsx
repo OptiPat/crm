@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Upload, FileSpreadsheet, AlertCircle, CheckCircle, X, Target, Phone, Sparkles, Users2, Gift, Lightbulb, Check, CheckCircle2 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { createContact, getAllContacts, updateContact, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
+import { createContact, getAllContacts, updateContact, updateContactFiscal, type NewContact, type Contact } from "@/lib/api/tauri-contacts";
 import { notifyContactsChanged, suppressContactsChangedNotify } from "@/lib/contacts/contact-events";
 import {
   notifyInvestissementsChanged,
@@ -32,7 +32,8 @@ import {
   type Investissement,
 } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, createPartenaire, type Partenaire, type NewPartenaire } from "@/lib/api/tauri-partenaires";
-import { createFoyer, getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
+import { createFoyer, getAllFoyers, getFoyerById, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
+import { pickFiscal, propagateFiscalToFoyerMembers } from "@/lib/foyers/foyer-fiscal-sync";
 import {
   analyzeCoupleContact,
   extractCompositeName,
@@ -65,6 +66,8 @@ import {
 } from "@/lib/api/tauri-import-transaction";
 import {
   contactToUpdatePayload,
+  normalizeImportCivilite,
+  normalizeImportTmi,
   resolveImportContactCategories,
 } from "@/lib/contacts/contact-form-utils";
 import {
@@ -74,11 +77,51 @@ import {
 import {
   getMostRecentDate,
   markImportRowsCancelled,
+  unwrapImportCell,
   type ImportRow,
 } from "@/lib/contacts/import-row";
 
 /** Pendant l'import : pas de recalc étiquettes ni sync Google par ligne. */
 const IMPORT_SAVE_OPTS = { skipPostSaveHooks: true } as const;
+
+/**
+ * Applique la TMI importée au bon niveau :
+ * - contact membre d'un foyer → écrit sur le foyer + propage aux fiches des membres
+ *   (la fiscalité reste pilotée par le foyer) ;
+ * - personne seule → écrit directement sur la fiche contact (aucun foyer créé).
+ * Ne fait rien si la TMI est vide / « - » / 0.
+ */
+async function applyImportTmi(
+  target: { contactId?: number; foyerId?: number | null },
+  tmiRaw: unknown
+): Promise<void> {
+  const tmi = normalizeImportTmi(tmiRaw);
+  if (!tmi) return;
+  if (target.foyerId) {
+    const foyer = await getFoyerById(target.foyerId);
+    await updateFoyer(foyer.id, {
+      nom: foyer.nom,
+      type_foyer: foyer.type_foyer,
+      nombre_parts_fiscales: foyer.nombre_parts_fiscales,
+      tranche_imposition: tmi,
+      revenu_fiscal_reference: foyer.revenu_fiscal_reference,
+      ir_net_a_payer: foyer.ir_net_a_payer,
+      situation_patrimoniale: foyer.situation_patrimoniale,
+      objectifs_patrimoniaux: foyer.objectifs_patrimoniaux,
+      notes: foyer.notes,
+    });
+    await propagateFiscalToFoyerMembers(
+      foyer.id,
+      pickFiscal({ ...foyer, tranche_imposition: tmi })
+    );
+  } else if (target.contactId) {
+    await updateContactFiscal(
+      target.contactId,
+      { tranche_imposition: tmi },
+      { silent: true }
+    );
+  }
+}
 
 interface ContactImportProps {
   open: boolean;
@@ -104,11 +147,14 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     { value: "SKIP", label: "Ne pas importer" },
     { value: "nom", label: "Nom" },
     { value: "prenom", label: "Prénom" },
+    { value: "civilite", label: "Civilité (Madame / Monsieur)" },
     { value: "email", label: "Email" },
     { value: "telephone", label: "Téléphone" },
     { value: "adresse", label: "Adresse" },
     { value: "code_postal", label: "Code postal" },
     { value: "ville", label: "Ville" },
+    { value: "pays", label: "Pays" },
+    { value: "tmi", label: "TMI (tranche marginale d'imposition)" },
     { value: "date_naissance", label: "Date de naissance" },
     { value: "profession", label: "Profession" },
     { value: "categorie", label: "Catégorie" },
@@ -145,6 +191,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         detectedMapping[col] = "nom";
       } else if (colLower.includes("prenom") || colLower.includes("prénom")) {
         detectedMapping[col] = "prenom";
+      } else if (colLower.includes("civilité") || colLower.includes("civilite")) {
+        detectedMapping[col] = "civilite";
       } else if (
         colLower.includes("mail") || 
         colLower.includes("email") || 
@@ -183,6 +231,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         detectedMapping[col] = "code_postal";
       } else if (colLower.includes("ville") || colLower.includes("city")) {
         detectedMapping[col] = "ville";
+      } else if (colLower === "pays" || colLower.includes("country")) {
+        detectedMapping[col] = "pays";
+      } else if (
+        colLower === "tmi" ||
+        (colLower.includes("tranche") && colLower.includes("imposition"))
+      ) {
+        detectedMapping[col] = "tmi";
       } else if (colLower.includes("date") && colLower.includes("naissance")) {
         detectedMapping[col] = "date_naissance";
       } else if (colLower.includes("profession") || colLower.includes("metier") || colLower.includes("métier")) {
@@ -190,7 +245,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         if (!colLower.includes("investisseur") && !colLower.includes("risque")) {
           detectedMapping[col] = "profession";
         }
-      } else if (colLower.includes("categorie") || colLower.includes("catégorie") || colLower.includes("type")) {
+      } else if (
+        colLower.includes("categorie") ||
+        colLower.includes("catégorie") ||
+        colLower.includes("type") ||
+        colLower === "statut" // modèle Finzzle : Client / Prospect / Contact (≠ "Statut DER")
+      ) {
         detectedMapping[col] = "categorie";
       } else if (
         colLower.includes("commentaire") || 
@@ -205,7 +265,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         detectedMapping[col] = "produit";
       } else if (colLower.includes("partenaire")) {
         detectedMapping[col] = "partenaire";
-      } else if (colLower.includes("source")) {
+      } else if (colLower.includes("source") || colLower.includes("origine")) {
         detectedMapping[col] = "source_lead";
       } else if (
         (colLower.includes("profil") && (colLower.includes("investisseur") || colLower.includes("risque"))) ||
@@ -280,7 +340,11 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
     
     try {
       const data = await selectedFile.arrayBuffer();
-      const workbook = XLSX.read(data);
+      // CSV : lecture en mode brut pour éviter que SheetJS ne réinterprète les dates
+      // texte « JJ/MM/AAAA » au format US (MM/JJ) — sinon jour et mois sont inversés.
+      // Les valeurs forcées en texte (ex. téléphone `="+33..."`) sont nettoyées plus bas.
+      const isCsv = selectedFile.name.toLowerCase().endsWith(".csv");
+      const workbook = isCsv ? XLSX.read(data, { raw: true }) : XLSX.read(data);
       
       if (workbook.SheetNames.length === 0) {
         alert("Le fichier ne contient aucune feuille");
@@ -357,7 +421,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         // Mapper les colonnes
         Object.entries(mapping).forEach(([sourceCol, targetField]) => {
           if (targetField && targetField !== "SKIP") {
-            const value = row[sourceCol] !== undefined ? row[sourceCol] : null;
+            const value =
+              row[sourceCol] !== undefined ? unwrapImportCell(row[sourceCol]) : null;
             
             // Cas spécial : fusionner les colonnes de commentaires au lieu d'écraser
             if (targetField === "commentaires") {
@@ -983,6 +1048,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           // CAS 1 : Foyer existant → Stocker l'investissement
           if (coupleAnalysis.foyerId && row.data.produit) {
             lastDetectedFoyerId = coupleAnalysis.foyerId; // 🔥 Mettre à jour le tracker
+            // TMI du foyer (couple) : écrite sur le foyer + propagée aux membres.
+            await applyImportTmi({ foyerId: coupleAnalysis.foyerId }, row.data.tmi);
             couplesLines.push({ rowIndex: i, row, foyerId: coupleAnalysis.foyerId });
             updatedRows[i] = { ...row, status: "success", message: "Investissement de foyer" };
             setImportRows([...updatedRows]);
@@ -1044,7 +1111,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               const wasExisting = !!existingFoyer;
               
               lastDetectedFoyerId = foyerToUse.id; // 🔥 Mettre à jour le tracker
-              
+
+              // TMI du foyer (couple) : écrite sur le foyer + propagée aux membres.
+              await applyImportTmi({ foyerId: foyerToUse.id }, row.data.tmi);
+
               // Stocker l'investissement
               if (row.data.produit) {
                 couplesLines.push({ rowIndex: i, row, foyerId: foyerToUse.id });
@@ -1091,11 +1161,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               }
               
               // 🔥 Déterminer la catégorie selon la logique métier (produit = CLIENT, contact = PROSPECT, sinon SUSPECT)
-              const categorieCouple = row.data.produit 
-                ? "CLIENT" 
-                : row.data.dernier_rdv 
-                  ? "PROSPECT_CLIENT" 
-                  : "SUSPECT_CLIENT";
+              const categorieCouple = resolveImportContactCategories(
+                !!row.data.produit,
+                !!row.data.dernier_rdv,
+                false,
+                row.data.categorie
+              ).categorie;
               
               // Créer le contact manquant
               if (coupleAnalysis.shouldCreateContact1 && coupleAnalysis.contact2) {
@@ -1153,7 +1224,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               }
               
               lastDetectedFoyerId = foyerToUse.id;
-              
+
+              // TMI du foyer (couple) : écrite sur le foyer + propagée aux membres.
+              await applyImportTmi({ foyerId: foyerToUse.id }, row.data.tmi);
+
               // Stocker l'investissement
               if (row.data.produit) {
                 couplesLines.push({ rowIndex: i, row, foyerId: foyerToUse.id });
@@ -1203,11 +1277,12 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 : nomFamille;
               
               // 🔥 Déterminer la catégorie selon la logique métier (produit = CLIENT, contact = PROSPECT, sinon SUSPECT)
-              const categorieCoupleNew = row.data.produit 
-                ? "CLIENT" 
-                : row.data.dernier_rdv 
-                  ? "PROSPECT_CLIENT" 
-                  : "SUSPECT_CLIENT";
+              const categorieCoupleNew = resolveImportContactCategories(
+                !!row.data.produit,
+                !!row.data.dernier_rdv,
+                false,
+                row.data.categorie
+              ).categorie;
               
               // Créer contact 1 (famille_id n'est plus utilisé - groupement dynamique par nom)
               const newContact1: NewContact = {
@@ -1235,7 +1310,10 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               allContactsCache.push(createdContact1, createdContact2);
               
               lastDetectedFoyerId = newFoyer.id; // 🔥 Mettre à jour le tracker
-              
+
+              // TMI du foyer (couple) : écrite sur le foyer + propagée aux membres.
+              await applyImportTmi({ foyerId: newFoyer.id }, row.data.tmi);
+
               // Stocker l'investissement
               if (row.data.produit) {
                 couplesLines.push({ rowIndex: i, row, foyerId: newFoyer.id });
@@ -1329,7 +1407,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         const { categorie, filleul_categorie } = resolveImportContactCategories(
           !!hasProduit,
           hasContactDate,
-          isFilleul
+          isFilleul,
+          row.data.categorie
         );
 
         const dateDernierContactISO = dateDernierContact
@@ -1358,11 +1437,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             const updatePayload = contactToUpdatePayload(existingInCache, {
               nom: row.data.nom || existingInCache.nom,
               prenom: row.data.prenom || existingInCache.prenom,
+              civilite: normalizeImportCivilite(row.data.civilite) || existingInCache.civilite,
               email: cleanString(row.data.email) || existingInCache.email,
               telephone: cleanString(row.data.telephone) || existingInCache.telephone,
               adresse: cleanString(row.data.adresse) || existingInCache.adresse,
               code_postal: cleanString(row.data.code_postal) || existingInCache.code_postal,
               ville: cleanString(row.data.ville) || existingInCache.ville,
+              pays: cleanString(row.data.pays) || existingInCache.pays,
               profession: cleanString(row.data.profession) || existingInCache.profession,
               source_lead: cleanString(row.data.source_lead) || existingInCache.source_lead,
               profil_risque_sri: profilRisque || existingInCache.profil_risque_sri,
@@ -1392,7 +1473,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             });
 
             await updateContact(existingInCache.id, updatePayload, IMPORT_SAVE_OPTS);
-            
+
+            // TMI : foyer si membre d'un foyer (propagée), sinon fiche contact.
+            await applyImportTmi(
+              { contactId: existingInCache.id, foyerId: existingInCache.foyer_id },
+              row.data.tmi
+            );
+
             // Mettre à jour le cache aussi
             const cacheIdx = allContactsCache.findIndex(c => c.id === existingInCache.id);
             if (cacheIdx !== -1) {
@@ -1619,11 +1706,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         const newContact: NewContact = {
           nom: row.data.nom || "",
           prenom: row.data.prenom || "",
+          civilite: normalizeImportCivilite(row.data.civilite),
           email: cleanString(row.data.email),
           telephone: cleanString(row.data.telephone),
           adresse: cleanString(row.data.adresse),
           code_postal: cleanString(row.data.code_postal),
           ville: cleanString(row.data.ville),
+          pays: cleanString(row.data.pays),
           date_naissance: dateNaissance,
           profession: cleanString(row.data.profession),
           source_lead: cleanString(row.data.source_lead),
@@ -1637,7 +1726,17 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         };
         
         const createdContact = await createContact(newContact, IMPORT_SAVE_OPTS);
-        
+
+        // TMI : foyer si membre d'un foyer (propagée aux membres), sinon fiche contact.
+        await applyImportTmi(
+          { contactId: createdContact.id, foyerId: createdContact.foyer_id },
+          row.data.tmi
+        );
+        const tmiImport = normalizeImportTmi(row.data.tmi);
+        if (tmiImport && !createdContact.foyer_id) {
+          createdContact.tranche_imposition = tmiImport;
+        }
+
         // 🔥 FIX: Mettre à jour le cache pour que les lignes "couple" trouvent ces contacts
         allContactsCache.push(createdContact);
         

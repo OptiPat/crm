@@ -32,6 +32,9 @@ _fixtures/identity/*
 # RIO clients déposés localement pour diagnostic (jamais committer)
 _rio_local/*
 !_rio_local/.gitkeep
+# Modèles Excel clients réels déposés localement pour adaptation (jamais committer)
+_import_local/*
+!_import_local/.gitkeep
 .cursor/mcp.json
 scripts/invoke-n8n-mcp*.ps1
 scripts/n8n-*.json

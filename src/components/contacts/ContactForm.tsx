@@ -41,6 +41,7 @@ import {
 import {
   createContact,
   updateContact,
+  updateContactFiscal,
   getAllContacts,
   getFilleulsByParrain,
   getContactById,
@@ -49,7 +50,12 @@ import {
   type Contact,
 } from "@/lib/api/tauri-contacts";
 import { getFoyerById, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
-import { ensureDeclarantFoyer } from "@/lib/contacts/rio-foyer-ensure";
+import {
+  hasAnyFiscal,
+  pickFiscal,
+  propagateFiscalToFoyerMembers,
+  resolveContactFiscal,
+} from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -415,9 +421,12 @@ export function ContactForm({
   useEffect(() => {
     if (!open || !contact?.foyer_id) {
       setFoyerContext({ foyer: null, members: [], loading: false });
-      setFoyerFiscal({});
+      // Personne seule (sans foyer) : la fiscalité éditable vient directement de
+      // la fiche contact (aucun foyer n'est créé pour la stocker).
+      const own = open && contact ? pickFiscal(contact) : {};
+      setFoyerFiscal(own);
       foyerFiscalInitRef.current = null;
-      initialFoyerFiscalSnapshot.current = "{}";
+      initialFoyerFiscalSnapshot.current = JSON.stringify(own);
       return;
     }
 
@@ -452,12 +461,8 @@ export function ContactForm({
       // si le foyer n'a pas pu être relu (foyer === null).
       if (foyer && foyerFiscalInitRef.current !== foyer.id) {
         foyerFiscalInitRef.current = foyer.id;
-        const initialFiscal = {
-          tranche_imposition: foyer.tranche_imposition ?? undefined,
-          revenu_fiscal_reference: foyer.revenu_fiscal_reference ?? undefined,
-          ir_net_a_payer: foyer.ir_net_a_payer ?? undefined,
-          nombre_parts_fiscales: foyer.nombre_parts_fiscales ?? undefined,
-        };
+        // Fallback : valeur du contact, sinon valeur du foyer (existant non backfillé).
+        const initialFiscal = resolveContactFiscal(contact, foyer);
         setFoyerFiscal(initialFiscal);
         initialFoyerFiscalSnapshot.current = JSON.stringify(initialFiscal);
       }
@@ -598,42 +603,35 @@ export function ContactForm({
    *   ne pas écraser une fiscalité qu'on n'a pas pu lire.
    */
   const persistFoyerFiscal = async (savedContact: Contact): Promise<void> => {
-    const writeFiscal = async (foyer: Foyer) => {
+    const fiscal = pickFiscal(foyerFiscal);
+
+    // Cas 1 : foyer chargé → on persiste sur le foyer ET on synchronise tous
+    // les membres (chaque fiche contact reçoit la même fiscalité).
+    if (foyerContext.foyer) {
+      const foyer = foyerContext.foyer;
       await updateFoyer(foyer.id, {
         nom: foyer.nom,
         type_foyer: foyer.type_foyer,
-        nombre_parts_fiscales: foyerFiscal.nombre_parts_fiscales,
-        tranche_imposition: foyerFiscal.tranche_imposition,
-        revenu_fiscal_reference: foyerFiscal.revenu_fiscal_reference,
-        ir_net_a_payer: foyerFiscal.ir_net_a_payer,
+        nombre_parts_fiscales: fiscal.nombre_parts_fiscales,
+        tranche_imposition: fiscal.tranche_imposition,
+        revenu_fiscal_reference: fiscal.revenu_fiscal_reference,
+        ir_net_a_payer: fiscal.ir_net_a_payer,
         situation_patrimoniale: foyer.situation_patrimoniale,
         objectifs_patrimoniaux: foyer.objectifs_patrimoniaux,
         notes: foyer.notes,
       });
-    };
-
-    // Cas 1 : foyer chargé → on persiste l'édition (mirroir fidèle, effacement OK).
-    if (foyerContext.foyer) {
-      await writeFiscal(foyerContext.foyer);
+      await propagateFiscalToFoyerMembers(foyer.id, fiscal);
       return;
     }
 
-    // Cas 2 : foyer existant mais non chargé → ne rien écraser.
+    // Cas 2 : foyer existant mais non chargé (erreur réseau) → ne rien écraser.
     if (savedContact.foyer_id) return;
 
-    // Cas 3 : aucun foyer → en créer un seulement si une valeur est saisie.
-    const hasAnyFiscal =
-      (foyerFiscal.tranche_imposition?.trim() ?? "") !== "" ||
-      foyerFiscal.revenu_fiscal_reference != null ||
-      foyerFiscal.ir_net_a_payer != null ||
-      foyerFiscal.nombre_parts_fiscales != null;
-    if (!hasAnyFiscal) return;
-
-    const ensured = await ensureDeclarantFoyer(savedContact, {
-      hasEnfants: false,
-      hasFiscalData: true,
-    });
-    await writeFiscal(await getFoyerById(ensured.foyerId));
+    // Cas 3 : personne seule sans foyer → la fiscalité reste sur la FICHE CONTACT
+    // (on ne crée plus de foyer « célibataire »). On évite une écriture inutile
+    // si rien n'était renseigné avant et que rien n'est saisi.
+    if (!hasAnyFiscal(fiscal) && !hasAnyFiscal(contact ?? undefined)) return;
+    await updateContactFiscal(savedContact.id, fiscal);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1038,7 +1036,9 @@ export function ContactForm({
           {isEdit && (foyerContext.foyer || !contact?.foyer_id) && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="foyer_tranche_imposition">TMI (foyer)</Label>
+                <Label htmlFor="foyer_tranche_imposition">
+                  TMI{foyerContext.foyer ? " (foyer)" : ""}
+                </Label>
                 <Input
                   id="foyer_tranche_imposition"
                   value={foyerFiscal.tranche_imposition ?? ""}
@@ -1052,7 +1052,9 @@ export function ContactForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="foyer_nombre_parts">Nombre de parts fiscales (foyer)</Label>
+                <Label htmlFor="foyer_nombre_parts">
+                  Nombre de parts fiscales{foyerContext.foyer ? " (foyer)" : ""}
+                </Label>
                 <Input
                   id="foyer_nombre_parts"
                   type="number"
@@ -1070,7 +1072,9 @@ export function ContactForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="foyer_rbg">Revenu brut global (€, foyer)</Label>
+                <Label htmlFor="foyer_rbg">
+                  Revenu brut global (€){foyerContext.foyer ? " — foyer" : ""}
+                </Label>
                 <Input
                   id="foyer_rbg"
                   type="number"
@@ -1088,7 +1092,9 @@ export function ContactForm({
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="foyer_ir_net">IR net à payer (€, foyer)</Label>
+                <Label htmlFor="foyer_ir_net">
+                  IR net à payer (€){foyerContext.foyer ? " — foyer" : ""}
+                </Label>
                 <Input
                   id="foyer_ir_net"
                   type="number"

@@ -91,16 +91,20 @@ function formatRevenusLine(contact: Contact | null, foyer: Foyer | null): string
     const formatted = formatFoyerCurrencyEur(revenus);
     if (formatted) parts.push(formatted);
   }
-  if (foyer?.tranche_imposition?.trim()) {
-    parts.push(formatTrancheImpositionForRappel(foyer.tranche_imposition));
+  // Fiscalité : valeur du contact (personne seule) sinon repli foyer.
+  const trancheImposition =
+    contact?.tranche_imposition ?? foyer?.tranche_imposition;
+  const nombreParts =
+    contact?.nombre_parts_fiscales ?? foyer?.nombre_parts_fiscales;
+  const irNet = contact?.ir_net_a_payer ?? foyer?.ir_net_a_payer;
+  if (trancheImposition?.trim()) {
+    parts.push(formatTrancheImpositionForRappel(trancheImposition));
   }
-  if (foyer?.nombre_parts_fiscales != null) {
-    parts.push(
-      `${foyer.nombre_parts_fiscales} part${foyer.nombre_parts_fiscales > 1 ? "s" : ""}`
-    );
+  if (nombreParts != null) {
+    parts.push(`${nombreParts} part${nombreParts > 1 ? "s" : ""}`);
   }
-  if (foyer?.ir_net_a_payer != null && foyer.ir_net_a_payer > 0) {
-    const ir = formatFoyerCurrencyEur(foyer.ir_net_a_payer);
+  if (irNet != null && irNet > 0) {
+    const ir = formatFoyerCurrencyEur(irNet);
     if (ir) parts.push(`IR ${ir}`);
   }
   return parts.length > 0 ? parts.join(" ; ") : null;

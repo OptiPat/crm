@@ -8,6 +8,18 @@ export interface ImportRow {
 }
 
 /**
+ * Certains exports (ex. modèle Finzzle en CSV) forcent le format texte d'une cellule
+ * avec la syntaxe Excel `="..."` (typique des téléphones `="+33..."`). Lus en mode brut,
+ * ces littéraux arrivent tels quels : on retire le wrapper pour récupérer la vraie valeur.
+ * Toute valeur non concernée est renvoyée inchangée.
+ */
+export function unwrapImportCell<T>(value: T): T | string {
+  if (typeof value !== "string") return value;
+  const match = value.match(/^="(.*)"$/s);
+  return match ? match[1] : value;
+}
+
+/**
  * Après un rollback SQLite, le rapport ne doit plus afficher de lignes « succès » :
  * on les requalifie en erreur explicite.
  */

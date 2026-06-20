@@ -9,6 +9,9 @@ import {
   applyFoyerAddressIfEmpty,
   getEmptyForm,
   isAlerteSuiviFilleul,
+  normalizeImportCivilite,
+  normalizeImportStatut,
+  normalizeImportTmi,
   resolveImportContactCategories,
   suiviDatesOverrides,
 } from "./contact-form-utils";
@@ -55,6 +58,82 @@ describe("resolveImportContactCategories", () => {
       categorie: "AUCUN",
       filleul_categorie: "PROSPECT_FILLEUL",
     });
+  });
+
+  it("respecte le statut explicite Finzzle (sans produit ni filleul)", () => {
+    expect(resolveImportContactCategories(false, false, false, "Client").categorie).toBe("CLIENT");
+    expect(resolveImportContactCategories(false, false, false, "Prospect").categorie).toBe(
+      "PROSPECT_CLIENT"
+    );
+    expect(resolveImportContactCategories(false, false, false, "Contact").categorie).toBe(
+      "SUSPECT_CLIENT"
+    );
+  });
+
+  it("le produit prime sur le statut explicite (toujours CLIENT)", () => {
+    expect(resolveImportContactCategories(true, false, false, "Contact").categorie).toBe("CLIENT");
+  });
+
+  it("retombe sur l'inférence par défaut si statut inconnu/absent", () => {
+    expect(resolveImportContactCategories(false, true, false, "Bizarre").categorie).toBe(
+      "PROSPECT_CLIENT"
+    );
+    expect(resolveImportContactCategories(false, false, false).categorie).toBe("SUSPECT_CLIENT");
+  });
+});
+
+describe("normalizeImportStatut", () => {
+  it("mappe les libellés Finzzle vers les catégories CRM", () => {
+    expect(normalizeImportStatut("Client")).toBe("CLIENT");
+    expect(normalizeImportStatut("prospect")).toBe("PROSPECT_CLIENT");
+    expect(normalizeImportStatut("  Contact ")).toBe("SUSPECT_CLIENT");
+  });
+
+  it("accepte aussi les codes CRM directs", () => {
+    expect(normalizeImportStatut("SUSPECT_CLIENT")).toBe("SUSPECT_CLIENT");
+    expect(normalizeImportStatut("AUCUN")).toBe("AUCUN");
+  });
+
+  it("renvoie undefined pour vide ou inconnu", () => {
+    expect(normalizeImportStatut("")).toBeUndefined();
+    expect(normalizeImportStatut(null)).toBeUndefined();
+    expect(normalizeImportStatut("Partenaire")).toBeUndefined();
+  });
+});
+
+describe("normalizeImportCivilite", () => {
+  it("mappe Madame/Monsieur vers les codes CRM", () => {
+    expect(normalizeImportCivilite("Madame")).toBe("MME");
+    expect(normalizeImportCivilite("Monsieur")).toBe("M");
+    expect(normalizeImportCivilite("M.")).toBe("M");
+    expect(normalizeImportCivilite("Mme")).toBe("MME");
+  });
+
+  it("renvoie undefined pour vide ou inconnu", () => {
+    expect(normalizeImportCivilite("")).toBeUndefined();
+    expect(normalizeImportCivilite(null)).toBeUndefined();
+    expect(normalizeImportCivilite("Docteur")).toBeUndefined();
+  });
+});
+
+describe("normalizeImportTmi", () => {
+  it("formate un nombre brut en pourcentage", () => {
+    expect(normalizeImportTmi("11")).toBe("11 %");
+    expect(normalizeImportTmi("30")).toBe("30 %");
+    expect(normalizeImportTmi(41)).toBe("41 %");
+  });
+
+  it("tolère un % ou une virgule décimale déjà présents", () => {
+    expect(normalizeImportTmi("30 %")).toBe("30 %");
+    expect(normalizeImportTmi("11,5")).toBe("11,5 %");
+  });
+
+  it("renvoie undefined pour vide, « - » ou 0", () => {
+    expect(normalizeImportTmi("")).toBeUndefined();
+    expect(normalizeImportTmi("-")).toBeUndefined();
+    expect(normalizeImportTmi("0")).toBeUndefined();
+    expect(normalizeImportTmi(null)).toBeUndefined();
+    expect(normalizeImportTmi("abc")).toBeUndefined();
   });
 });
 

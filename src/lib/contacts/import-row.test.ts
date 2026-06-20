@@ -1,5 +1,34 @@
 import { describe, it, expect } from "vitest";
-import { getMostRecentDate, markImportRowsCancelled, type ImportRow } from "./import-row";
+import {
+  getMostRecentDate,
+  markImportRowsCancelled,
+  unwrapImportCell,
+  type ImportRow,
+} from "./import-row";
+
+describe("unwrapImportCell", () => {
+  it("retire le wrapper texte Excel =\"...\" (téléphone forcé en texte)", () => {
+    expect(unwrapImportCell('="+33600000001"')).toBe("+33600000001");
+    expect(unwrapImportCell('="0612345678"')).toBe("0612345678");
+  });
+
+  it("gère le contenu vide entre guillemets", () => {
+    expect(unwrapImportCell('=""')).toBe("");
+  });
+
+  it("laisse les chaînes normales inchangées", () => {
+    expect(unwrapImportCell("DUPONT")).toBe("DUPONT");
+    expect(unwrapImportCell("a@b.fr")).toBe("a@b.fr");
+    expect(unwrapImportCell("08/04/1992")).toBe("08/04/1992");
+    expect(unwrapImportCell("=SOMME(A1)")).toBe("=SOMME(A1)");
+  });
+
+  it("laisse les valeurs non chaîne inchangées", () => {
+    expect(unwrapImportCell(42)).toBe(42);
+    expect(unwrapImportCell(null)).toBeNull();
+    expect(unwrapImportCell(undefined)).toBeUndefined();
+  });
+});
 
 describe("getMostRecentDate", () => {
   it("renvoie undefined si aucune date", () => {

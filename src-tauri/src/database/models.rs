@@ -30,6 +30,11 @@ pub struct Contact {
     /// Épargne de précaution souhaitée (RIO, par personne).
     pub epargne_precaution_souhaitee: Option<f64>,
     pub objectifs_patrimoniaux: Option<String>,
+    // 🔥 Fiscalité : portée par le contact (célibataire) OU synchronisée depuis le foyer.
+    pub tranche_imposition: Option<String>,
+    pub nombre_parts_fiscales: Option<f64>,
+    pub revenu_fiscal_reference: Option<f64>,
+    pub ir_net_a_payer: Option<f64>,
     pub source_lead: Option<String>,
     pub profil_risque_sri: Option<i64>,
     // 🔥 Dates de suivi CLIENT (indépendantes des filleuls)
