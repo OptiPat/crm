@@ -58,13 +58,34 @@ pub fn normalize_batch_key(periode: &str) -> String {
     normalize_match_key(periode)
 }
 
+const MIN_PRODUIT_MATCH_LEN: usize = 4;
+
+fn produit_tokens(value: &str) -> Vec<String> {
+    value
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|s| !s.is_empty())
+        .map(|s| normalize_match_key(s))
+        .filter(|s| s.len() >= MIN_PRODUIT_MATCH_LEN)
+        .collect()
+}
+
 fn nom_produit_matches(investissement_nom: &str, bulletin_key: &str) -> bool {
-    let inv = normalize_match_key(investissement_nom);
-    let key = normalize_match_key(bulletin_key);
-    if inv.is_empty() || key.is_empty() {
+    let key_norm = normalize_match_key(bulletin_key);
+    if key_norm.len() < MIN_PRODUIT_MATCH_LEN {
         return false;
     }
-    inv.contains(&key) || key.contains(&inv)
+    let inv_norm = normalize_match_key(investissement_nom);
+    if inv_norm == key_norm {
+        return true;
+    }
+    let bulletin_tokens = produit_tokens(bulletin_key);
+    if bulletin_tokens.is_empty() {
+        return false;
+    }
+    let inv_tokens = produit_tokens(investissement_nom);
+    bulletin_tokens
+        .iter()
+        .all(|bt| inv_tokens.iter().any(|it| it == bt))
 }
 
 fn build_bulletin_resume(bulletins: &[ScpiBulletinInput], periode: &str) -> String {
@@ -365,7 +386,10 @@ mod tests {
     fn nom_produit_matches_fuzzy() {
         assert!(nom_produit_matches("SCPI Comète", "Comète"));
         assert!(nom_produit_matches("Comete", "Comète"));
+        assert!(nom_produit_matches("Corum Origin", "Corum"));
         assert!(!nom_produit_matches("Primovie", "Comète"));
+        assert!(!nom_produit_matches("Primovie", "Vie"));
+        assert!(!nom_produit_matches("Primovie", "vie"));
     }
 
     #[test]

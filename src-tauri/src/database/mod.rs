@@ -94,6 +94,7 @@ impl Database {
     pub fn open_at_path(db_path: &std::path::Path) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
+        conn.execute("PRAGMA busy_timeout = 10000", [])?;
         let db = Database { conn };
         db.init_tables()?;
         Ok(db)

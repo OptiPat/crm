@@ -158,7 +158,7 @@ const mistralSummary = node({
       genericAuthType: 'httpHeaderAuth',
       sendBody: true,
       specifyBody: 'json',
-      jsonBody: expr('{{ JSON.stringify($json.mistralBody) }}'),
+      jsonBody: expr('={{ $json.mistralBody }}'),
       options: {
         response: { response: { responseFormat: 'json' } },
       },
