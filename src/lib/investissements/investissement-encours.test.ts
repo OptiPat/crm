@@ -3,6 +3,7 @@ import {
   computeEncoursPlacementsStats,
   getEffectiveEncoursCentimes,
   isPlacementEncoursEligible,
+  listEncoursPlacementsAvecMoi,
 } from "@/lib/investissements/investissement-encours";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 
@@ -64,5 +65,20 @@ describe("investissement-encours", () => {
     const stats = computeEncoursPlacementsStats([inv, { ...inv }]);
     expect(stats.encoursCentimes).toBe(1_500_000);
     expect(stats.count).toBe(1);
+  });
+
+  it("liste les placements encours avec moi triés par montant", () => {
+    const list = listEncoursPlacementsAvecMoi([
+      sampleInv({ id: 1, montant_initial: 100_000 }),
+      sampleInv({ id: 2, type_produit: "PER", montant_initial: 500_000 }),
+      sampleInv({ id: 3, type_produit: "SCPI", montant_initial: 900_000 }),
+      sampleInv({
+        id: 4,
+        type_produit: "FIP_FCPI",
+        montant_initial: 200_000,
+        origine: "EXISTANT_CLIENT",
+      }),
+    ]);
+    expect(list.map((i) => i.id)).toEqual([2, 1]);
   });
 });

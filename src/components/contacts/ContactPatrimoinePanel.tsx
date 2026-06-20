@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
+import { InvestissementPatrimoineActions } from "@/components/investissements/InvestissementPatrimoineActions";
+import { PatrimoineCategoryBlock } from "@/components/investissements/PatrimoineCategoryBlock";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
-import { computeEncoursPlacementsStats, isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { computeEncoursPlacementsStats } from "@/lib/investissements/investissement-encours";
 import { computeVersementsProgrammesAnnuelStats } from "@/lib/investissements/investissement-versements";
 import { InvestissementEncoursDialog } from "@/components/investissements/InvestissementEncoursDialog";
 import {
@@ -27,7 +28,6 @@ import {
   Home,
   Plus,
   Search,
-  Trash2,
   TrendingUp,
   CalendarClock,
   Wallet,
@@ -77,52 +77,6 @@ function FilterPill({
   );
 }
 
-function InvestissementPatrimoineActions({
-  inv,
-  onEdit,
-  onDelete,
-  onEncours,
-}: {
-  inv: Investissement;
-  onEdit: (inv: Investissement) => void;
-  onDelete: (inv: Investissement) => void;
-  onEncours?: (inv: Investissement) => void;
-}) {
-  return (
-    <div
-      className="flex shrink-0 items-center gap-1"
-      onClick={(e) => e.stopPropagation()}
-      onKeyDown={(e) => e.stopPropagation()}
-    >
-      {onEncours && isPlacementEncoursEligible(inv.type_produit) && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8 text-amber-700 hover:text-amber-800"
-          onClick={() => onEncours(inv)}
-          aria-label="Encours"
-          title="Mettre à jour l'encours"
-        >
-          <TrendingUp className="h-4 w-4" />
-        </Button>
-      )}
-      <Button type="button" variant="outline" size="sm" onClick={() => onEdit(inv)}>
-        Modifier
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-8 w-8 text-destructive hover:text-destructive"
-        onClick={() => onDelete(inv)}
-        aria-label="Supprimer"
-        title="Supprimer"
-      >
-        <Trash2 className="h-4 w-4" />
-      </Button>
-    </div>
-  );
-}
-
 function PatrimoineSection({
   title,
   icon: Icon,
@@ -151,23 +105,14 @@ function PatrimoineSection({
   if (items.length === 0) return null;
 
   return (
-    <section className="space-y-2">
-      <div className="flex items-center justify-between gap-2 px-0.5">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={cn("p-1.5 rounded-md", accentClass)}>
-            <Icon className="h-4 w-4" aria-hidden />
-          </span>
-          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-          <Badge variant="secondary" className="text-[10px] h-5">
-            {items.length}
-          </Badge>
-        </div>
-        <p className="text-sm font-medium tabular-nums text-foreground shrink-0">
-          {formatEuroCentimes(totalCentimes)}
-        </p>
-      </div>
-      <div className="space-y-2">
-        {items.map((inv) => {
+    <PatrimoineCategoryBlock
+      title={title}
+      icon={Icon}
+      accentClass={accentClass}
+      totalCentimes={totalCentimes}
+      count={items.length}
+    >
+      {items.map((inv) => {
           const ownerContactId =
             inv._proprietaireId != null &&
             inv._proprietaireId > 0 &&
@@ -202,13 +147,13 @@ function PatrimoineSection({
                 onEdit={onEdit}
                 onDelete={onDelete}
                 onEncours={onEncours}
+                compact
               />
             }
           />
           );
         })}
-      </div>
-    </section>
+    </PatrimoineCategoryBlock>
   );
 }
 
@@ -308,6 +253,11 @@ export function ContactPatrimoinePanel({
   const filteredTotalCentimes = filtered.reduce(
     (s, i) => s + (i.montant_initial ?? 0),
     0
+  );
+  const filteredEncoursTotal = useMemo(
+    () =>
+      computeEncoursPlacementsStats(filtered, { avecMoiOnly: false }).encoursCentimes,
+    [filtered]
   );
   const showFlatList =
     filtered.length > 0 && immobilier.length === 0 && financier.length === 0;
@@ -525,7 +475,13 @@ export function ContactPatrimoinePanel({
                     </span>
                   )}
                   <span className="text-muted-foreground font-normal ml-2 tabular-nums">
-                    {formatEuroCentimes(filteredTotalCentimes)}
+                    souscrit {formatEuroCentimes(filteredTotalCentimes)}
+                    {filteredEncoursTotal > 0 && (
+                      <>
+                        {" "}
+                        · encours {formatEuroCentimes(filteredEncoursTotal)}
+                      </>
+                    )}
                   </span>
                 </p>
                 {hasActiveFilters && (
@@ -626,6 +582,7 @@ export function ContactPatrimoinePanel({
                               onEdit={onEdit}
                               onDelete={onDelete}
                               onEncours={(item) => setEncoursInvestissement(item)}
+                              compact
                             />
                           }
                         />

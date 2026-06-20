@@ -175,6 +175,7 @@ function App() {
         return (
           <Investissements
             onOpenContact={(contactId) => openContact(contactId, "patrimoine")}
+            onNavigate={setCurrentPage}
           />
         );
       case "interactions":

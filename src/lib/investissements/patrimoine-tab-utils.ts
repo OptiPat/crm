@@ -102,6 +102,29 @@ export function matchesInvestissementTypeFilter(
   return typeProduit === typeFilter;
 }
 
+/** Au moins un type sélectionné (liste vide = tous). */
+export function matchesAnyInvestissementTypeFilter(
+  typeProduit: string | undefined,
+  typeFilters: string[]
+): boolean {
+  if (typeFilters.length === 0) return true;
+  return typeFilters.some((f) => matchesInvestissementTypeFilter(typeProduit, f));
+}
+
+export type OrigineFilterChip = "avec_moi" | "a_cote";
+
+/** Origines cochées (liste vide = toutes). */
+export function matchesOrigineFilters(
+  origine: string | undefined,
+  filters: OrigineFilterChip[]
+): boolean {
+  if (filters.length === 0) return true;
+  const isAvecMoi = origine === "MON_CONSEIL";
+  if (filters.includes("avec_moi") && isAvecMoi) return true;
+  if (filters.includes("a_cote") && !isAvecMoi) return true;
+  return false;
+}
+
 export function investissementSearchValues(
   inv: {
     nom_produit?: string | null;
@@ -195,13 +218,14 @@ export function mergeContactPatrimoineRows(
 }
 
 export function groupPatrimoineByCategory(
-  investissements: InvestissementWithOwner[]
+  investissements: Investissement[],
+  options?: { preserveOrder?: boolean }
 ): {
-  immobilier: InvestissementWithOwner[];
-  financier: InvestissementWithOwner[];
+  immobilier: Investissement[];
+  financier: Investissement[];
 } {
-  const immobilier: InvestissementWithOwner[] = [];
-  const financier: InvestissementWithOwner[] = [];
+  const immobilier: Investissement[] = [];
+  const financier: Investissement[] = [];
   for (const inv of investissements) {
     if (isImmobilierType(inv.type_produit)) {
       immobilier.push(inv);
@@ -209,9 +233,11 @@ export function groupPatrimoineByCategory(
       financier.push(inv);
     }
   }
-  const byAmount = (a: Investissement, b: Investissement) =>
-    (b.montant_initial ?? 0) - (a.montant_initial ?? 0);
-  immobilier.sort(byAmount);
-  financier.sort(byAmount);
+  if (!options?.preserveOrder) {
+    const byAmount = (a: Investissement, b: Investissement) =>
+      (b.montant_initial ?? 0) - (a.montant_initial ?? 0);
+    immobilier.sort(byAmount);
+    financier.sort(byAmount);
+  }
   return { immobilier, financier };
 }

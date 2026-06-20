@@ -204,7 +204,7 @@ export function InvestissementCard({
             )}
             {inv.date_souscription && (
               <InvestissementMetaRow icon={Calendar}>
-                {formatCalendarDateFr(inv.date_souscription)}
+                Souscr. {formatCalendarDateFr(inv.date_souscription)}
               </InvestissementMetaRow>
             )}
             {inv.montant_versement_programme &&

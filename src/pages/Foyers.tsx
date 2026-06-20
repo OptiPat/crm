@@ -35,6 +35,7 @@ import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { peekOpenFoyerId, clearOpenFoyerId } from "@/lib/foyers/foyer-navigation";
 import { cn } from "@/lib/utils";
 import {
   SplitDetailLayout,
@@ -107,6 +108,16 @@ export function Foyers({ onNavigate }: FoyersProps) {
   useEffect(() => {
     void loadFoyers();
   }, [loadFoyers]);
+
+  useEffect(() => {
+    if (loading) return;
+    const foyerId = peekOpenFoyerId();
+    if (foyerId != null && foyers.some((f) => f.id === foyerId)) {
+      setSelectedFoyerId(foyerId);
+      setSelectedContact(null);
+      clearOpenFoyerId();
+    }
+  }, [loading, foyers]);
 
   useEventAutoRefresh(loadFoyers, subscribeContactsChanged, subscribeFoyersChanged);
 

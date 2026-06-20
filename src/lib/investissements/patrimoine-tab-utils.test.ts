@@ -7,6 +7,8 @@ import {
   investissementMatchesSearch,
   isImmobilierType,
   matchesInvestissementTypeFilter,
+  matchesAnyInvestissementTypeFilter,
+  matchesOrigineFilters,
   mergeContactPatrimoineRows,
 } from "@/lib/investissements/patrimoine-tab-utils";
 
@@ -59,6 +61,7 @@ describe("patrimoine-tab-utils", () => {
     ]);
     expect(immobilier).toHaveLength(1);
     expect(financier).toHaveLength(1);
+    expect(isImmobilierType("SCPI")).toBe(false);
     expect(isImmobilierType("PINEL")).toBe(true);
   });
 
@@ -76,5 +79,20 @@ describe("patrimoine-tab-utils", () => {
 
     const pinel = base({ id: 2, type_produit: "PINEL", nom_produit: "Lyon T3" });
     expect(investissementMatchesSearch("pinel", pinel)).toBe(true);
+  });
+
+  it("filtre plusieurs types (OU logique)", () => {
+    expect(matchesAnyInvestissementTypeFilter("SCPI", ["SCPI", "PER"])).toBe(true);
+    expect(matchesAnyInvestissementTypeFilter("ASSURANCE_VIE", ["SCPI", "PER"])).toBe(false);
+    expect(matchesAnyInvestissementTypeFilter("PINEL", ["IMMOBILIER"])).toBe(true);
+    expect(matchesAnyInvestissementTypeFilter("SCPI", [])).toBe(true);
+  });
+
+  it("filtre origines multiples (OU logique)", () => {
+    expect(matchesOrigineFilters("MON_CONSEIL", ["avec_moi"])).toBe(true);
+    expect(matchesOrigineFilters("EXISTANT_CLIENT", ["avec_moi"])).toBe(false);
+    expect(matchesOrigineFilters("EXISTANT_CLIENT", ["a_cote"])).toBe(true);
+    expect(matchesOrigineFilters("MON_CONSEIL", ["avec_moi", "a_cote"])).toBe(true);
+    expect(matchesOrigineFilters("MON_CONSEIL", [])).toBe(true);
   });
 });

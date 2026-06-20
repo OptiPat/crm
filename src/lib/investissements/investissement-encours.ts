@@ -47,3 +47,25 @@ export function computeEncoursPlacementsStats(
   }
   return { encoursCentimes, count };
 }
+
+export function isEncoursAvecMoiEligible(
+  inv: Pick<Investissement, "origine" | "type_produit">
+): boolean {
+  return inv.origine === "MON_CONSEIL" && isPlacementEncoursEligible(inv.type_produit);
+}
+
+export function filterEncoursPlacementsAvecMoi<T extends Investissement>(items: T[]): T[] {
+  return items.filter(isEncoursAvecMoiEligible);
+}
+
+export function sortEncoursPlacementsByEncoursDesc<
+  T extends Pick<Investissement, "encours_actuel" | "montant_initial">,
+>(items: T[]): T[] {
+  return [...items].sort(
+    (a, b) => getEffectiveEncoursCentimes(b) - getEffectiveEncoursCentimes(a)
+  );
+}
+
+export function listEncoursPlacementsAvecMoi<T extends Investissement>(items: T[]): T[] {
+  return sortEncoursPlacementsByEncoursDesc(filterEncoursPlacementsAvecMoi(items));
+}
