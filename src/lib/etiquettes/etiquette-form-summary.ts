@@ -28,6 +28,9 @@ export interface EtiquetteRuleSummaryInput {
   invChampDate: string;
   invJoursAvant: number;
   invTypesProduitCount: number;
+  tmiTranches: number[];
+  irNetOperator: string;
+  irNetMontant: number | null;
   categories: string[];
 }
 
@@ -103,6 +106,30 @@ export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): st
           ? ` (${input.invTypesProduitCount} type${input.invTypesProduitCount > 1 ? "s" : ""} limités)`
           : "";
       detail = `${INV_CHAMP_LABELS[input.invChampDate] ?? input.invChampDate} dans les ${input.invJoursAvant} prochains jours${types} — contact ou foyer`;
+      break;
+    }
+    case "TMI":
+      detail =
+        input.tmiTranches.length > 0
+          ? input.tmiTranches.map((r) => `${r} %`).join(" ou ")
+          : "aucune tranche sélectionnée";
+      break;
+    case "IR_NET": {
+      const op =
+        input.irNetOperator === "lte"
+          ? "≤"
+          : input.irNetOperator === "eq"
+            ? "="
+            : "≥";
+      const m =
+        input.irNetMontant != null
+          ? new Intl.NumberFormat("fr-FR", {
+              style: "currency",
+              currency: "EUR",
+              maximumFractionDigits: 0,
+            }).format(input.irNetMontant)
+          : "…";
+      detail = `IR net ${op} ${m}`;
       break;
     }
     default:

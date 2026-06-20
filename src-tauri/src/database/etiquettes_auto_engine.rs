@@ -372,6 +372,12 @@ impl Database {
                     false
                 }
             }
+            "TMI" => self
+                .contact_matches_tmi_condition(contact, config)
+                .unwrap_or(false),
+            "IR_NET" => self
+                .contact_matches_ir_net_condition(contact, config)
+                .unwrap_or(false),
             _ => false,
         };
         Ok(should_assign)

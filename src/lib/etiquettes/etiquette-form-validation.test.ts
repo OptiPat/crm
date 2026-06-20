@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   validateEtiquetteForm,
+  validateEtiquetteFormDetailed,
   type EtiquetteFormValidationInput,
 } from "./etiquette-form-validation";
 
@@ -14,11 +15,14 @@ const base: EtiquetteFormValidationInput = {
   actif: true,
   isAuto: false,
   segmentId: null,
+  useGroupRule: false,
   useComboRule: false,
   categoriesSelectionnees: ["CLIENT"],
   ruleChildren: [],
   conditionType: "DELAI_SANS_CONTACT",
   typesProduitSelectionnes: [],
+  tmiTranchesSelectionnees: [],
+  irNetMontant: null,
 };
 
 describe("validateEtiquetteForm", () => {
@@ -88,6 +92,7 @@ describe("validateEtiquetteForm", () => {
       validateEtiquetteForm({
         ...base,
         isAuto: true,
+        useGroupRule: false,
         useComboRule: true,
         ruleChildren: [{ categories: ["CLIENT"] }, { categories: [] }],
       })
@@ -110,9 +115,42 @@ describe("validateEtiquetteForm", () => {
       validateEtiquetteForm({
         ...base,
         isAuto: true,
+        useGroupRule: true,
         segmentId: 5,
         categoriesSelectionnees: [],
       })
     ).toBeNull();
+  });
+
+  it("mode groupe sans sélection", () => {
+    expect(
+      validateEtiquetteForm({
+        ...base,
+        isAuto: true,
+        useGroupRule: true,
+        segmentId: null,
+      })
+    ).toMatch(/groupe de contacts/i);
+  });
+
+  it("combo TMI sans tranche", () => {
+    expect(
+      validateEtiquetteForm({
+        ...base,
+        isAuto: true,
+        useComboRule: true,
+        ruleChildren: [{ type: "TMI", config: { tranches: [] }, categories: ["CLIENT"] }],
+      })
+    ).toMatch(/tranche TMI/i);
+  });
+
+  it("detailed : email sans template → onglet email", () => {
+    const err = validateEtiquetteFormDetailed({
+      ...base,
+      emailActif: true,
+      emailTemplateId: null,
+    });
+    expect(err?.tab).toBe("email");
+    expect(err?.fieldId).toBe("email-template");
   });
 });

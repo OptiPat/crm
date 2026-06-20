@@ -16,6 +16,9 @@ const base = {
   invChampDate: "date_fin_demembrement",
   invJoursAvant: 180,
   invTypesProduitCount: 0,
+  tmiTranches: [],
+  irNetOperator: "gte",
+  irNetMontant: null,
   categories: ["CLIENT"],
 };
 
@@ -25,6 +28,19 @@ describe("formatEtiquetteRuleSummary", () => {
     expect(s).toContain("Avril");
     expect(s).toContain("Mai");
     expect(s).toContain("Clients");
+  });
+
+  it("décrit TMI et IR net", () => {
+    expect(
+      formatEtiquetteRuleSummary({ ...base, conditionType: "TMI", tmiTranches: [11, 30] })
+    ).toContain("11 %");
+    expect(
+      formatEtiquetteRuleSummary({
+        ...base,
+        conditionType: "IR_NET",
+        irNetMontant: 4000,
+      })
+    ).toContain("4");
   });
 
   it("manuel si pas de règle auto", () => {

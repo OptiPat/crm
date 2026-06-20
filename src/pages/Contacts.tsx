@@ -866,10 +866,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   <Select value={segmentFilter} onValueChange={setSegmentFilter}>
                     <SelectTrigger className="w-[200px]">
                       <Filter className="h-4 w-4 mr-2 shrink-0" />
-                      <SelectValue placeholder="Segment" />
+                      <SelectValue placeholder="Groupe de contacts" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ALL">Tous segments</SelectItem>
+                      <SelectItem value="ALL">Tous les groupes</SelectItem>
                       {segmentsDisponibles.map((s) => (
                         <SelectItem key={s.id} value={s.id.toString()}>
                           {s.nom}
@@ -904,7 +904,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 onClearEtiquette={() => setEtiquetteFilter("ALL")}
                 segmentFilter={segmentFilter}
                 segmentLabel={
-                  selectedSegment ? `Segment : ${selectedSegment.nom}` : undefined
+                  selectedSegment ? `Groupe : ${selectedSegment.nom}` : undefined
                 }
                 onClearSegment={() => setSegmentFilter("ALL")}
                 needsFollowupOnly={needsFollowupOnly}

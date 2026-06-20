@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import {
   createSegment,
   updateSegment,
+  type Segment,
   type SegmentWithCount,
   type NewSegment,
 } from "@/lib/api/tauri-segments";
@@ -35,7 +36,7 @@ interface SegmentFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   segment?: SegmentWithCount | null;
-  onSuccess: () => void;
+  onSuccess?: (segment?: Segment) => void;
 }
 
 export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentFormProps) {
@@ -99,12 +100,13 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
       };
       if (segment) {
         await updateSegment(segment.id, payload);
-        toast.success("Segment modifié");
+        toast.success("Groupe de contacts modifié");
+        onSuccess?.();
       } else {
-        await createSegment(payload);
-        toast.success("Segment créé");
+        const created = await createSegment(payload);
+        toast.success("Groupe de contacts créé");
+        onSuccess?.(created);
       }
-      onSuccess();
       onOpenChange(false);
     } catch (err) {
       console.error(err);
@@ -119,7 +121,9 @@ export function SegmentForm({ open, onOpenChange, segment, onSuccess }: SegmentF
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>{segment ? "Modifier le segment" : "Nouveau segment"}</DialogTitle>
+            <DialogTitle>
+              {segment ? "Modifier le groupe de contacts" : "Nouveau groupe de contacts"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">

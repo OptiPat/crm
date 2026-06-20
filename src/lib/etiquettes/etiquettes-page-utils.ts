@@ -8,6 +8,8 @@ export type EtiquettePageFilter =
   | "email"
   | "inactive";
 
+export type EtiquetteSort = "contacts" | "nom" | "priorite" | "recent";
+
 export interface EtiquettesPageStats {
   totalEtiquettes: number;
   activeCount: number;
@@ -81,13 +83,37 @@ export function filterEtiquettesSearch(
   );
 }
 
+export function sortEtiquettesList(
+  etiquettes: EtiquetteWithCount[],
+  sort: EtiquetteSort
+): EtiquetteWithCount[] {
+  const list = [...etiquettes];
+  switch (sort) {
+    case "nom":
+      return list.sort((a, b) =>
+        a.nom.localeCompare(b.nom, "fr", { sensitivity: "base" })
+      );
+    case "priorite":
+      return list.sort(
+        (a, b) => b.priorite - a.priorite || b.contact_count - a.contact_count
+      );
+    case "recent":
+      return list.sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0));
+    case "contacts":
+    default:
+      return list.sort(
+        (a, b) => b.contact_count - a.contact_count || b.priorite - a.priorite
+      );
+  }
+}
+
 export function countEtiquettesByFilter(
   etiquettes: EtiquetteWithCount[]
 ): Record<EtiquettePageFilter, number> {
   return {
     all: etiquettes.length,
-    auto: etiquettes.filter((e) => e.auto_condition_type).length,
-    manual: etiquettes.filter((e) => !e.auto_condition_type).length,
+    auto: etiquettes.filter((e) => Boolean(e.auto_condition_type) || e.segment_id != null).length,
+    manual: etiquettes.filter((e) => !e.auto_condition_type && e.segment_id == null).length,
     email: etiquettes.filter((e) => e.email_actif).length,
     inactive: etiquettes.filter((e) => e.actif === false).length,
   };

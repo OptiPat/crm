@@ -48,16 +48,16 @@ describe("hasAnyFiscal", () => {
 });
 
 describe("resolveContactFiscal", () => {
-  it("privilégie la valeur du contact", () => {
+  it("privilégie la valeur du foyer (source de vérité couple)", () => {
     const result = resolveContactFiscal(
       { tranche_imposition: "41 %", nombre_parts_fiscales: 1 },
       { tranche_imposition: "30 %", nombre_parts_fiscales: 2 }
     );
-    expect(result.tranche_imposition).toBe("41 %");
-    expect(result.nombre_parts_fiscales).toBe(1);
+    expect(result.tranche_imposition).toBe("30 %");
+    expect(result.nombre_parts_fiscales).toBe(2);
   });
 
-  it("retombe sur le foyer si le contact n'a pas la valeur (existant non backfillé)", () => {
+  it("retombe sur le contact si le foyer n'a pas la valeur (existant non backfillé)", () => {
     const result = resolveContactFiscal(
       {},
       { tranche_imposition: "30 %", revenu_fiscal_reference: 60000 }

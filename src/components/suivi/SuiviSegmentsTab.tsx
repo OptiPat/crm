@@ -40,7 +40,7 @@ export function SuiviSegmentsTab({ onOpenContact }: SuiviSegmentsTabProps) {
         return actifs.length > 0 ? String(actifs[0].id) : "";
       });
     } catch {
-      toast.error("Impossible de charger les segments");
+      toast.error("Impossible de charger les groupes de contacts");
     } finally {
       setLoading(false);
     }
@@ -74,15 +74,15 @@ export function SuiviSegmentsTab({ onOpenContact }: SuiviSegmentsTabProps) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Filter className="h-5 w-5" />
-          Par segment
+          Par groupe de contacts
         </CardTitle>
         <CardDescription>
-          Tous les contacts qui correspondent à la règle du segment (avec ou sans étiquette posée).
+          Tous les contacts qui correspondent à la règle du groupe (avec ou sans étiquette posée).
         </CardDescription>
         <div className="pt-3 max-w-md">
           <Select value={selectedId} onValueChange={setSelectedId}>
             <SelectTrigger>
-              <SelectValue placeholder="Choisir un segment" />
+              <SelectValue placeholder="Choisir un groupe de contacts" />
             </SelectTrigger>
             <SelectContent>
               {segments.map((s) => (
@@ -99,7 +99,7 @@ export function SuiviSegmentsTab({ onOpenContact }: SuiviSegmentsTabProps) {
           <p className="text-sm text-muted-foreground py-6 text-center">Chargement…</p>
         ) : segments.length === 0 ? (
           <p className="text-sm text-muted-foreground py-6 text-center">
-            Aucun segment actif. Créez-en sur la page Étiquettes.
+            Aucun groupe actif. Créez-en sur Étiquettes → Groupes de contacts.
           </p>
         ) : loadingContacts ? (
           <p className="text-sm text-muted-foreground py-6 text-center">Chargement des contacts…</p>

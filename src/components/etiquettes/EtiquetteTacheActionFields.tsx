@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/select";
 import { EtiquetteFormPanel } from "@/components/etiquettes/etiquette-form-ui";
 import type { TacheActionPriorite } from "@/lib/api/tauri-etiquettes";
+import type { EtiquetteFormFieldId } from "@/lib/etiquettes/etiquette-form-validation";
+import { cn } from "@/lib/utils";
 
 interface EtiquetteTacheActionFieldsProps {
   isAuto: boolean;
@@ -21,6 +23,7 @@ interface EtiquetteTacheActionFieldsProps {
   onTachePrioriteChange: (value: TacheActionPriorite) => void;
   tacheDelaiJours: number;
   onTacheDelaiJoursChange: (value: number) => void;
+  highlightField?: EtiquetteFormFieldId | null;
 }
 
 const PRIORITES: { value: TacheActionPriorite; label: string }[] = [
@@ -43,6 +46,7 @@ export function EtiquetteTacheActionFields({
   onTachePrioriteChange,
   tacheDelaiJours,
   onTacheDelaiJoursChange,
+  highlightField = null,
 }: EtiquetteTacheActionFieldsProps) {
   return (
     <EtiquetteFormPanel
@@ -76,6 +80,10 @@ export function EtiquetteTacheActionFields({
               value={tacheTitre}
               onChange={(e) => onTacheTitreChange(e.target.value)}
               placeholder="Ex. Appeler {prenom} {nom} pour le suivi"
+              className={cn(
+                highlightField === "tache-titre" &&
+                  "ring-2 ring-destructive ring-offset-2 ring-offset-background"
+              )}
             />
             <p className="text-xs text-muted-foreground">
               Variables disponibles : <code>{"{prenom}"}</code> et <code>{"{nom}"}</code>{" "}

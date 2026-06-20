@@ -26,6 +26,7 @@ import {
   type EmailEnvoiMode,
 } from "@/lib/etiquettes/email-campaign-summary";
 import { isExceltisEtiquetteNom } from "@/lib/etiquettes/exceltis";
+import type { EtiquetteFormFieldId } from "@/lib/etiquettes/etiquette-form-validation";
 import { cn } from "@/lib/utils";
 import { CalendarClock, Clock, Mail, Sparkles, Wand2 } from "lucide-react";
 import { useMemo } from "react";
@@ -51,7 +52,11 @@ type Props = {
   nom: string;
   isAuto: boolean;
   isEventSouscription?: boolean;
+  highlightField?: EtiquetteFormFieldId | null;
 };
+
+const fieldRing = (active: boolean) =>
+  cn(active && "ring-2 ring-destructive ring-offset-2 ring-offset-background rounded-md");
 
 export function EtiquetteEmailCampaignFields({
   actif,
@@ -73,6 +78,7 @@ export function EtiquetteEmailCampaignFields({
   nom,
   isAuto,
   isEventSouscription = false,
+  highlightField = null,
 }: Props) {
   const selectedTemplate = templates.find((t) => t.id === emailTemplateId) ?? null;
   const isExceltis = isExceltisEtiquetteNom(nom);
@@ -181,7 +187,10 @@ export function EtiquetteEmailCampaignFields({
               value={emailTemplateId?.toString() || ""}
               onValueChange={(v) => onTemplateIdChange(v ? parseInt(v, 10) : null)}
             >
-              <SelectTrigger className="h-10">
+              <SelectTrigger
+                id="email-template"
+                className={cn("h-10", fieldRing(highlightField === "email-template"))}
+              >
                 <SelectValue placeholder="Choisir un modèle…" />
               </SelectTrigger>
               <SelectContent className="max-h-[280px]">
@@ -319,7 +328,7 @@ export function EtiquetteEmailCampaignFields({
                           type="time"
                           value={emailEnvoiHeure}
                           onChange={(e) => onEnvoiHeureChange(e.target.value)}
-                          className="w-[160px]"
+                          className={cn("w-[160px]", fieldRing(highlightField === "email-heure"))}
                           required
                         />
                       </div>
@@ -341,7 +350,7 @@ export function EtiquetteEmailCampaignFields({
                       type="datetime-local"
                       value={emailEnvoiLocal}
                       onChange={(e) => onEnvoiLocalChange(e.target.value)}
-                      className="max-w-[280px]"
+                      className={cn("max-w-[280px]", fieldRing(highlightField === "email-date"))}
                       required
                     />
                     <p className="text-xs text-muted-foreground">

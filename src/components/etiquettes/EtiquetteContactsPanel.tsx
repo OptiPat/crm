@@ -125,10 +125,10 @@ export function EtiquetteContactsPanel({
       <CardHeader className="pb-3 shrink-0">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <CardTitle className="text-lg flex items-center gap-2 flex-wrap">
-              <Users className="h-5 w-5 shrink-0 text-primary" />
+            <CardTitle className="text-lg flex items-start gap-2">
+              <Users className="h-5 w-5 shrink-0 text-primary mt-0.5" />
               <span
-                className="inline-flex items-center px-2.5 py-1 rounded-full text-sm font-medium truncate max-w-full"
+                className="flex-1 min-w-0 px-2.5 py-1 rounded-xl text-sm font-medium leading-snug break-words"
                 style={{
                   backgroundColor: etiquette.couleur,
                   color: getContrastColor(etiquette.couleur),
@@ -172,7 +172,14 @@ export function EtiquetteContactsPanel({
       </CardHeader>
       <CardContent className="flex-1 min-h-0 overflow-y-auto pt-0">
         {loading ? (
-          <p className="text-sm text-muted-foreground text-center py-8">Chargement…</p>
+          <div className="space-y-2" aria-busy="true">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[60px] rounded-lg border border-border/60 bg-muted/40 animate-pulse"
+              />
+            ))}
+          </div>
         ) : contacts.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-8">
             Aucun contact avec cette étiquette

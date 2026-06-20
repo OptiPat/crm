@@ -27,25 +27,44 @@ export function hasAnyFiscal(fiscal: FiscalFields | null | undefined): boolean {
   );
 }
 
+function resolveFiscalField<T extends string | number | undefined>(
+  foyerValue: T,
+  contactValue: T
+): T {
+  if (typeof foyerValue === "string") {
+    return (foyerValue.trim().length > 0 ? foyerValue : contactValue) as T;
+  }
+  return (foyerValue ?? contactValue) as T;
+}
+
 /**
- * Fiscalité à afficher pour un contact : valeur du contact, sinon fallback foyer.
- *
- * Après n'importe quelle édition (fiche contact ou fiche foyer), contact et foyer
- * sont synchronisés à l'identique — il n'y a donc pas de conflit. Le fallback ne
- * sert que pour l'existant non rétro-rempli (foyer renseigné, copie contact vide).
+ * Fiscalité à afficher pour un contact rattaché à un foyer : le foyer prime
+ * champ par champ (source de vérité couple). Fallback contact si le foyer n'a
+ * pas encore la valeur (existant non rétro-rempli).
  */
 export function resolveContactFiscal(
   contact: Partial<FiscalFields> | null | undefined,
   foyer: Partial<FiscalFields> | null | undefined
 ): FiscalFields {
+  const fromFoyer = pickFiscal(foyer);
+  const fromContact = pickFiscal(contact);
   return {
-    tranche_imposition:
-      contact?.tranche_imposition ?? foyer?.tranche_imposition,
-    nombre_parts_fiscales:
-      contact?.nombre_parts_fiscales ?? foyer?.nombre_parts_fiscales,
-    revenu_fiscal_reference:
-      contact?.revenu_fiscal_reference ?? foyer?.revenu_fiscal_reference,
-    ir_net_a_payer: contact?.ir_net_a_payer ?? foyer?.ir_net_a_payer,
+    tranche_imposition: resolveFiscalField(
+      fromFoyer.tranche_imposition,
+      fromContact.tranche_imposition
+    ),
+    nombre_parts_fiscales: resolveFiscalField(
+      fromFoyer.nombre_parts_fiscales,
+      fromContact.nombre_parts_fiscales
+    ),
+    revenu_fiscal_reference: resolveFiscalField(
+      fromFoyer.revenu_fiscal_reference,
+      fromContact.revenu_fiscal_reference
+    ),
+    ir_net_a_payer: resolveFiscalField(
+      fromFoyer.ir_net_a_payer,
+      fromContact.ir_net_a_payer
+    ),
   };
 }
 

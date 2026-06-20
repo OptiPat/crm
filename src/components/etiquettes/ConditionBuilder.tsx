@@ -24,6 +24,8 @@ const CONDITION_TYPES: ConditionType[] = [
   "TYPE_PRODUIT",
   "DATE_APPROCHE_INVESTISSEMENT",
   "AGE_APPROCHE",
+  "TMI",
+  "IR_NET",
   "JAMAIS_CONTACT",
   "A_ETIQUETTE",
 ];
@@ -53,7 +55,11 @@ function newLeaf(
                     }
                   : type === "AGE_APPROCHE"
                     ? { age: 69, jours_avant: 30 }
-                    : type === "CHAMP_PERSO"
+                    : type === "TMI"
+                      ? { tranches: [11] }
+                      : type === "IR_NET"
+                        ? { operator: "gte", montant: 4000 }
+                        : type === "CHAMP_PERSO"
                       ? {
                           field_key: customFieldsOptions[0]?.field_key ?? "",
                           operator: "rempli",
@@ -91,9 +97,9 @@ export function ConditionBuilder({
       ? [...CONDITION_TYPES, "CHAMP_PERSO"]
       : CONDITION_TYPES;
   return (
-    <div className="space-y-3 rounded-lg border p-3 bg-muted/20">
-      <div className="flex flex-wrap items-center gap-2">
-        <Label className="text-sm">Combiner avec</Label>
+    <div className="space-y-4 rounded-xl border p-4 sm:p-5 bg-muted/20">
+      <div className="flex flex-wrap items-center gap-3">
+        <Label className="text-sm shrink-0">Combiner avec</Label>
         <Select value={op} onValueChange={(v) => onOpChange(v as RuleOp)}>
           <SelectTrigger className="w-[120px]">
             <SelectValue />
@@ -116,7 +122,7 @@ export function ConditionBuilder({
       </div>
 
       {children.map((leaf, index) => (
-        <div key={index} className="space-y-2 rounded-md border bg-background p-3">
+        <div key={index} className="space-y-3 rounded-lg border bg-background p-4 sm:p-5">
           <div className="flex items-center justify-between gap-2">
             <Select
               value={leaf.type}

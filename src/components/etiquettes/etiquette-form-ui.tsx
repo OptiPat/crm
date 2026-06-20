@@ -21,13 +21,13 @@ export function EtiquetteFormPanel({
         className
       )}
     >
-      <div className="border-b border-border/60 px-4 py-3 bg-muted/20">
+      <div className="border-b border-border/60 px-5 py-4 sm:px-6 sm:py-5 bg-muted/20">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {description && (
-          <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1 leading-relaxed">{description}</p>
         )}
       </div>
-      <div className="p-4 space-y-4">{children}</div>
+      <div className="p-5 sm:p-6 space-y-5">{children}</div>
     </section>
   );
 }

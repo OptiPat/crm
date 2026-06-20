@@ -11,6 +11,10 @@ import {
 import type { RuleLeaf } from "@/lib/etiquettes/rule-ast";
 import { MOIS_LABELS } from "@/lib/api/tauri-etiquettes";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
+import { IrNetConditionFields, TmiTranchePicker } from "@/components/etiquettes/FiscalRuleFields";
+import {
+  type IrNetOperator,
+} from "@/lib/etiquettes/fiscal-tmi";
 import { CategoryTogglePills } from "@/components/etiquettes/etiquette-form-ui";
 import {
   parseSelectOptions,
@@ -231,6 +235,35 @@ export function RuleLeafFields({
             />
           </div>
         </div>
+      )}
+
+      {leaf.type === "TMI" && (
+        <div className="space-y-2">
+          <Label className="text-xs">Tranche(s) TMI</Label>
+          <TmiTranchePicker
+            selected={((leaf.config.tranches as number[] | undefined) ?? []).map(Number)}
+            onToggle={(rate) => {
+              const current = ((leaf.config.tranches as number[] | undefined) ?? []).map(Number);
+              const next = current.includes(rate)
+                ? current.filter((r) => r !== rate)
+                : [...current, rate];
+              setConfig({ tranches: next.sort((a, b) => a - b) });
+            }}
+          />
+        </div>
+      )}
+
+      {leaf.type === "IR_NET" && (
+        <IrNetConditionFields
+          operator={(leaf.config.operator as IrNetOperator) ?? "gte"}
+          onOperatorChange={(op) => setConfig({ operator: op })}
+          montant={
+            leaf.config.montant != null && leaf.config.montant !== ""
+              ? Number(leaf.config.montant)
+              : ""
+          }
+          onMontantChange={(v) => setConfig({ montant: v === "" ? "" : v })}
+        />
       )}
 
       {leaf.type === "TYPE_PRODUIT" && (

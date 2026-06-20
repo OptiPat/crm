@@ -170,6 +170,7 @@ export async function updateContactFiscal(
   const updated = await invoke<Contact>("update_contact_fiscal", { id, fiscal });
   if (!options?.silent) {
     notifyContactsChanged({ patchedContact: updated });
+    notifyEtiquettesChanged();
   }
   return updated;
 }

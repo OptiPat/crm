@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -66,13 +66,30 @@ import {
   type ConditionType,
 } from "@/lib/etiquettes/etiquette-condition-labels";
 import { formatEtiquetteRuleSummary } from "@/lib/etiquettes/etiquette-form-summary";
-import { validateEtiquetteForm } from "@/lib/etiquettes/etiquette-form-validation";
+import {
+  validateEtiquetteFormDetailed,
+  validateEtiquetteTacheAction,
+  type EtiquetteFormFieldId,
+} from "@/lib/etiquettes/etiquette-form-validation";
+import { buildEtiquetteRulePreviewJson } from "@/lib/etiquettes/etiquette-rule-preview";
 import {
   formatSouscriptionDuplicateWarning,
   templateHasSouscriptionTrigger,
 } from "@/lib/emails/template-etiquette-duplicate";
 import { EtiquetteSouscriptionGuide } from "@/components/etiquettes/EtiquetteSouscriptionGuide";
 import { SouscriptionRepeatModeRadios } from "@/components/etiquettes/SouscriptionRepeatModeRadios";
+import {
+  EtiquetteCreationPicker,
+  type EtiquetteCreationIntent,
+} from "@/components/etiquettes/EtiquetteCreationPicker";
+import { SegmentForm } from "@/components/etiquettes/SegmentForm";
+import { SegmentRulePreview } from "@/components/etiquettes/SegmentRulePreview";
+import { IrNetConditionFields, TmiTranchePicker } from "@/components/etiquettes/FiscalRuleFields";
+import {
+  parseConditionIrNetConfig,
+  parseConditionTmiConfig,
+  type IrNetOperator,
+} from "@/lib/etiquettes/fiscal-tmi";
 import { getAllSegments, type Segment } from "@/lib/api/tauri-segments";
 import { getCustomFieldDefs, type CustomFieldDef } from "@/lib/api/tauri-custom-fields";
 import { ConditionBuilder } from "@/components/etiquettes/ConditionBuilder";
@@ -91,12 +108,20 @@ import {
 } from "@/components/etiquettes/etiquette-form-ui";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { Plus, Tag, Users } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface EtiquetteFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   etiquette?: EtiquetteWithCount | null;
+  /** Préremplit le formulaire pour une création (copie d’une étiquette existante). */
+  duplicateFrom?: EtiquetteWithCount | null;
+  createIntent?: EtiquetteCreationIntent | null;
   onSuccess: () => void;
+  onSegmentsChanged?: () => void;
+  /** Ferme le dialog et ouvre l’onglet Segments de la page Étiquettes. */
+  onOpenSegmentsTab?: () => void;
 }
 
 const CATEGORIES_CONTACTS = [
@@ -114,14 +139,29 @@ const CONDITION_TYPES_ORDER: ConditionType[] = [
   "TYPE_PRODUIT",
   "DATE_APPROCHE_INVESTISSEMENT",
   "AGE_APPROCHE",
+  "TMI",
+  "IR_NET",
 ];
 
 type FormTab = "general" | "rule" | "email" | "action";
 
-export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: EtiquetteFormProps) {
+export function EtiquetteForm({
+  open,
+  onOpenChange,
+  etiquette,
+  duplicateFrom,
+  createIntent,
+  onSuccess,
+  onSegmentsChanged,
+  onOpenSegmentsTab,
+}: EtiquetteFormProps) {
   const [loading, setLoading] = useState(false);
   const [templates, setTemplates] = useState<TemplateEmail[]>([]);
   const [formTab, setFormTab] = useState<FormTab>("general");
+  const [creationType, setCreationType] = useState<EtiquetteCreationIntent | null>(null);
+  const [creationPickerExpanded, setCreationPickerExpanded] = useState(false);
+  const [fieldHighlight, setFieldHighlight] = useState<EtiquetteFormFieldId | null>(null);
+  const [segmentFormOpen, setSegmentFormOpen] = useState(false);
   
   // État du formulaire
   const [nom, setNom] = useState("");
@@ -145,11 +185,15 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const [invChampDate, setInvChampDate] = useState("date_fin_demembrement");
   const [invJoursAvant, setInvJoursAvant] = useState(180);
   const [invTypesProduit, setInvTypesProduit] = useState<string[]>([]);
+  const [tmiTranchesSelectionnees, setTmiTranchesSelectionnees] = useState<number[]>([]);
+  const [irNetOperator, setIrNetOperator] = useState<IrNetOperator>("gte");
+  const [irNetMontant, setIrNetMontant] = useState<number | "">("");
   const [categoriesSelectionnees, setCategoriesSelectionnees] = useState<string[]>(["CLIENT"]);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [allEtiquettes, setAllEtiquettes] = useState<{ id: number; nom: string }[]>([]);
   const [customFields, setCustomFields] = useState<CustomFieldDef[]>([]);
   const [segmentId, setSegmentId] = useState<number | null>(null);
+  const [useGroupRule, setUseGroupRule] = useState(false);
   const [useComboRule, setUseComboRule] = useState(false);
   const [ruleOp, setRuleOp] = useState<RuleOp>("and");
   const [ruleChildren, setRuleChildren] = useState<RuleLeaf[]>([]);
@@ -197,6 +241,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         invChampDate,
         invJoursAvant,
         invTypesProduitCount: invTypesProduit.length,
+        tmiTranches: tmiTranchesSelectionnees,
+        irNetOperator,
+        irNetMontant: irNetMontant === "" ? null : Number(irNetMontant),
         categories: categoriesSelectionnees,
       }),
     [
@@ -216,6 +263,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       invChampDate,
       invJoursAvant,
       invTypesProduit.length,
+      tmiTranchesSelectionnees,
+      irNetOperator,
+      irNetMontant,
       categoriesSelectionnees,
     ]
   );
@@ -229,15 +279,35 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
     return formatSouscriptionDuplicateWarning(tpl?.nom ?? "ce modèle", [nom.trim() || "cette étiquette"]);
   }, [conditionType, emailTemplateId, templates, nom]);
 
+  const reloadSegments = useCallback(() => {
+    return getAllSegments()
+      .then(setSegments)
+      .catch(console.error);
+  }, []);
+
+  const applyCreationIntent = useCallback((intent: EtiquetteCreationIntent) => {
+    setCreationType(intent);
+    if (intent === "manual") {
+      setIsAuto(false);
+      setEmailActif(false);
+      setFormTab("general");
+    } else if (intent === "auto") {
+      setIsAuto(true);
+      setFormTab("rule");
+    } else {
+      setIsAuto(true);
+      setEmailActif(true);
+      setFormTab("email");
+    }
+  }, []);
+
   // Charger les templates email
   useEffect(() => {
     if (open) {
       getAllTemplatesEmail()
         .then(setTemplates)
         .catch(console.error);
-      getAllSegments()
-        .then(setSegments)
-        .catch(console.error);
+      void reloadSegments();
       getAllEtiquettes()
         .then((list) => setAllEtiquettes(list.map((e) => ({ id: e.id, nom: e.nom }))))
         .catch(console.error);
@@ -245,25 +315,31 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         .then(setCustomFields)
         .catch(console.error);
     }
-  }, [open]);
+  }, [open, reloadSegments]);
 
   // Initialiser le formulaire quand on ouvre/change d'étiquette
   useEffect(() => {
     if (open) {
-      setFormTab(etiquette?.auto_condition_type ? "rule" : "general");
-      if (etiquette) {
-        // Mode édition
-        setNom(etiquette.nom);
-        setCouleur(etiquette.couleur);
-        setDescription(etiquette.description || "");
-        setPriorite(etiquette.priorite);
-        setActif(etiquette.actif !== false);
-        setPipelineActif(etiquette.pipeline_actif === true);
+      setFieldHighlight(null);
+      setCreationPickerExpanded(false);
+      const source = etiquette ?? duplicateFrom;
+      if (source) {
+        setCreationType(null);
+        setFormTab(
+          source.auto_condition_type || source.segment_id ? "rule" : "general"
+        );
+        setNom(duplicateFrom && !etiquette ? `Copie de ${source.nom}` : source.nom);
+        setCouleur(source.couleur);
+        setDescription(source.description || "");
+        setPriorite(source.priorite);
+        setActif(source.actif !== false);
+        setPipelineActif(source.pipeline_actif === true);
 
         // Attribution automatique
-        setSegmentId(etiquette.segment_id ?? null);
-        const tree = parseRuleTree(etiquette.auto_condition_config);
-        if (etiquette.segment_id) {
+        setSegmentId(source.segment_id ?? null);
+        setUseGroupRule(!!source.segment_id);
+        const tree = parseRuleTree(source.auto_condition_config);
+        if (source.segment_id) {
           setIsAuto(true);
           setUseComboRule(false);
         } else if (tree && tree.children.length > 0) {
@@ -272,76 +348,85 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
           setRuleOp(tree.op);
           setRuleChildren(tree.children);
         } else {
-        setIsAuto(!!etiquette.auto_condition_type);
+        setIsAuto(!!source.auto_condition_type);
         setUseComboRule(false);
-        if (etiquette.auto_condition_type && etiquette.auto_condition_type !== "RULE_TREE") {
-          setConditionType(etiquette.auto_condition_type);
+        if (source.auto_condition_type && source.auto_condition_type !== "RULE_TREE") {
+          setConditionType(source.auto_condition_type);
           
           // Parser la config selon le type
-          if (etiquette.auto_condition_type === "DELAI_SANS_CONTACT") {
-            const config = parseConditionConfig<ConditionDelaiSansContact>(etiquette.auto_condition_config);
+          if (source.auto_condition_type === "DELAI_SANS_CONTACT") {
+            const config = parseConditionConfig<ConditionDelaiSansContact>(source.auto_condition_config);
             if (config) {
               setDelaiJours(config.jours);
               setInclureSansDate(config.inclure_sans_date !== false);
             }
-          } else if (etiquette.auto_condition_type === "AGE_APPROCHE") {
-            const config = parseConditionConfig<ConditionAgeApproche>(etiquette.auto_condition_config);
+          } else if (source.auto_condition_type === "AGE_APPROCHE") {
+            const config = parseConditionConfig<ConditionAgeApproche>(source.auto_condition_config);
             if (config) {
               setAgeCible(config.age);
               setAgeJoursAvant(config.jours_avant);
             }
-          } else if (etiquette.auto_condition_type === "DATE_APPROCHE") {
-            const config = parseConditionConfig<ConditionDateApproche>(etiquette.auto_condition_config);
+          } else if (source.auto_condition_type === "DATE_APPROCHE") {
+            const config = parseConditionConfig<ConditionDateApproche>(source.auto_condition_config);
             if (config) {
               setChampDate(config.champ);
               setJoursAvant(config.jours_avant);
             }
-          } else if (etiquette.auto_condition_type === "PERIODE_ANNEE") {
-            const config = parseConditionConfig<ConditionPeriodeAnnee>(etiquette.auto_condition_config);
+          } else if (source.auto_condition_type === "PERIODE_ANNEE") {
+            const config = parseConditionConfig<ConditionPeriodeAnnee>(source.auto_condition_config);
             if (config) {
               setMoisDebut(config.mois_debut);
               setMoisFin(config.mois_fin);
             }
-          } else if (etiquette.auto_condition_type === "TYPE_PRODUIT") {
-            const config = parseConditionConfig<ConditionTypeProduit>(etiquette.auto_condition_config);
+          } else if (source.auto_condition_type === "TYPE_PRODUIT") {
+            const config = parseConditionConfig<ConditionTypeProduit>(source.auto_condition_config);
             if (config) setTypesProduitSelectionnes(config.types);
-          } else if (etiquette.auto_condition_type === "DATE_APPROCHE_INVESTISSEMENT") {
+          } else if (source.auto_condition_type === "DATE_APPROCHE_INVESTISSEMENT") {
             const config = parseConditionConfig<ConditionDateApprocheInvestissement>(
-              etiquette.auto_condition_config
+              source.auto_condition_config
             );
             if (config) {
               setInvChampDate(config.champ);
               setInvJoursAvant(config.jours_avant);
               setInvTypesProduit(config.types_produit ?? []);
             }
-          } else if (etiquette.auto_condition_type === "EVENEMENT_SOUSCRIPTION") {
+          } else if (source.auto_condition_type === "EVENEMENT_SOUSCRIPTION") {
             const config = parseConditionConfig<ConditionEvenementSouscription>(
-              etiquette.auto_condition_config
+              source.auto_condition_config
             );
             if (config) {
               setEventTypesProduit(config.types ?? []);
               setEventAChaqueSouscription(config.a_chaque_souscription ?? true);
             }
+          } else if (source.auto_condition_type === "TMI") {
+            const config = parseConditionTmiConfig(source.auto_condition_config);
+            if (config) setTmiTranchesSelectionnees(config.tranches);
+          } else if (source.auto_condition_type === "IR_NET") {
+            const config = parseConditionIrNetConfig(source.auto_condition_config);
+            if (config) {
+              setIrNetOperator(config.operator);
+              setIrNetMontant(config.montant);
+            }
           }
           
-          setCategoriesSelectionnees(parseCategories(etiquette.auto_categories));
+          setCategoriesSelectionnees(parseCategories(source.auto_categories));
         }
         }
         
         // Email
-        setEmailActif(etiquette.email_actif);
-        setEmailDelaiJours(etiquette.email_delai_jours ?? 0);
-        setEmailTemplateId(etiquette.email_template_id);
-        if (etiquette.email_envoi_heure) {
+        setEmailActif(source.email_actif);
+        setEmailDelaiJours(source.email_delai_jours ?? 0);
+        setEmailTemplateId(source.email_template_id);
+        if (source.email_envoi_heure) {
           setEmailEnvoiMode("eligibility");
-          setEmailEnvoiHeure(etiquette.email_envoi_heure);
-          setEmailEnvoiJours(parseEmailEnvoiJoursSemaine(etiquette.email_envoi_jours_semaine));
+          setEmailEnvoiHeure(source.email_envoi_heure);
+          setEmailEnvoiJours(parseEmailEnvoiJoursSemaine(source.email_envoi_jours_semaine));
           setEmailEnvoiLocal("");
-        } else if (etiquette.email_envoi_prevu) {
+        } else if (source.email_envoi_prevu) {
           setEmailEnvoiMode("fixed");
-          setEmailEnvoiLocal(unixToLocalDatetime(etiquette.email_envoi_prevu));
+          setEmailEnvoiLocal(unixToLocalDatetime(source.email_envoi_prevu));
         } else {
-          setEmailEnvoiMode(etiquette.auto_condition_type ? "eligibility" : "fixed");
+          setEmailEnvoiMode(source.auto_condition_type ? "eligibility" : "fixed");
           setEmailEnvoiHeure("09:00");
           setEmailEnvoiJours(null);
           setEmailEnvoiLocal("");
@@ -367,8 +452,12 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setInvChampDate("date_fin_demembrement");
         setInvJoursAvant(180);
         setInvTypesProduit([]);
+        setTmiTranchesSelectionnees([]);
+        setIrNetOperator("gte");
+        setIrNetMontant("");
         setCategoriesSelectionnees(["CLIENT"]);
         setSegmentId(null);
+        setUseGroupRule(false);
         setUseComboRule(false);
         setRuleChildren([]);
         setEmailActif(false);
@@ -385,15 +474,107 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
         setTachePriorite("NORMALE");
         setTacheDelaiJours(0);
         setPipelineActif(false);
+        setCreationType(createIntent ?? null);
+        if (createIntent) {
+          applyCreationIntent(createIntent);
+        }
       }
     }
-  }, [open, etiquette]);
+  }, [open, etiquette, duplicateFrom, createIntent, applyCreationIntent]);
 
-  // Charger l'action « tâche » existante (édition).
+  const selectedSegmentRuleJson =
+    segmentId != null ? segments.find((s) => s.id === segmentId)?.rule_json : undefined;
+
+  const effectiveCreationIntent = useMemo((): EtiquetteCreationIntent => {
+    if (emailActif) return "campaign";
+    if (isAuto) return "auto";
+    return "manual";
+  }, [emailActif, isAuto]);
+
+  const rulePreviewJson = useMemo(
+    () =>
+      buildEtiquetteRulePreviewJson({
+        isAuto,
+        segmentId,
+        segmentRuleJson: selectedSegmentRuleJson,
+        useComboRule,
+        ruleOp,
+        ruleChildren,
+        conditionType,
+        categoriesSelectionnees,
+        delaiJours,
+        inclureSansDate,
+        ageCible,
+        ageJoursAvant,
+        champDate,
+        joursAvant,
+        moisDebut,
+        moisFin,
+        typesProduitSelectionnes,
+        invChampDate,
+        invJoursAvant,
+        invTypesProduit,
+        tmiTranchesSelectionnees,
+        irNetOperator,
+        irNetMontant,
+      }),
+    [
+      isAuto,
+      segmentId,
+      selectedSegmentRuleJson,
+      useComboRule,
+      ruleOp,
+      ruleChildren,
+      conditionType,
+      categoriesSelectionnees,
+      delaiJours,
+      inclureSansDate,
+      ageCible,
+      ageJoursAvant,
+      champDate,
+      joursAvant,
+      moisDebut,
+      moisFin,
+      typesProduitSelectionnes,
+      invChampDate,
+      invJoursAvant,
+      invTypesProduit,
+      tmiTranchesSelectionnees,
+      irNetOperator,
+      irNetMontant,
+    ]
+  );
+
+  const formUnlocked = Boolean(etiquette) || Boolean(duplicateFrom) || creationType != null;
+  const showFullFormHeader =
+    Boolean(etiquette) || Boolean(duplicateFrom) || formTab === "general";
+
   useEffect(() => {
-    if (!open || !etiquette?.id) return;
+    if (!open || !fieldHighlight) return;
+    const id =
+      fieldHighlight === "email-template"
+        ? "email-template"
+        : fieldHighlight === "email-heure"
+          ? "email-envoi-heure"
+          : fieldHighlight === "email-date"
+            ? "email-envoi-prevu"
+            : fieldHighlight === "rule-ir-net"
+              ? "ir-net-montant"
+              : fieldHighlight;
+    const t = window.setTimeout(() => {
+      const el = document.getElementById(id);
+      el?.scrollIntoView({ block: "center", behavior: "smooth" });
+      el?.focus();
+    }, 80);
+    return () => window.clearTimeout(t);
+  }, [open, fieldHighlight, formTab]);
+
+  // Charger l'action « tâche » existante (édition ou duplication).
+  useEffect(() => {
+    const actionSourceId = etiquette?.id ?? duplicateFrom?.id;
+    if (!open || !actionSourceId) return;
     let cancelled = false;
-    void getEtiquetteAction(etiquette.id)
+    void getEtiquetteAction(actionSourceId)
       .then((action) => {
         if (cancelled) return;
         if (action) {
@@ -412,7 +593,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
     return () => {
       cancelled = true;
     };
-  }, [open, etiquette?.id]);
+  }, [open, etiquette?.id, duplicateFrom?.id]);
 
   // Rafraîchir le modèle email depuis la base (liaison faite côté Templates email).
   useEffect(() => {
@@ -432,7 +613,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const validationError = validateEtiquetteForm({
+    const validationError = validateEtiquetteFormDetailed({
       nom,
       emailActif,
       emailTemplateId,
@@ -442,19 +623,26 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
       actif,
       isAuto,
       segmentId,
+      useGroupRule,
       useComboRule,
       categoriesSelectionnees,
       ruleChildren,
       conditionType,
       typesProduitSelectionnes,
+      tmiTranchesSelectionnees,
+      irNetMontant: irNetMontant === "" ? null : Number(irNetMontant),
     });
     if (validationError) {
-      toast.error(validationError);
+      toast.error(validationError.message);
+      setFormTab(validationError.tab);
+      setFieldHighlight(validationError.fieldId ?? null);
       return;
     }
-    if (tacheActif && !tacheTitre.trim()) {
-      toast.error("Indiquez un titre pour la tâche à créer");
-      setFormTab("action");
+    const tacheError = validateEtiquetteTacheAction(tacheTitre, tacheActif);
+    if (tacheError) {
+      toast.error(tacheError.message);
+      setFormTab(tacheError.tab);
+      setFieldHighlight(tacheError.fieldId ?? null);
       return;
     }
 
@@ -502,6 +690,15 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             types: eventTypesProduit.length > 0 ? eventTypesProduit : undefined,
             a_chaque_souscription: eventAChaqueSouscription,
           });
+        } else if (conditionType === "TMI") {
+          autoConditionConfig = stringifyConditionConfig({
+            tranches: tmiTranchesSelectionnees,
+          });
+        } else if (conditionType === "IR_NET") {
+          autoConditionConfig = stringifyConditionConfig({
+            operator: irNetOperator,
+            montant: Number(irNetMontant),
+          });
         }
         autoCategories = stringifyCategories(categoriesSelectionnees);
       }
@@ -530,7 +727,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             ? serializeEmailEnvoiJoursSemaine(emailEnvoiJours)
             : null,
         email_actif: emailActif,
-        is_default: etiquette?.is_default || false,
+        is_default: duplicateFrom ? false : etiquette?.is_default || false,
         actif,
       };
 
@@ -565,7 +762,15 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
     }
   };
 
+  const handleTmiToggle = (rate: number) => {
+    if (fieldHighlight === "rule-tmi") setFieldHighlight(null);
+    setTmiTranchesSelectionnees((prev) =>
+      prev.includes(rate) ? prev.filter((r) => r !== rate) : [...prev, rate].sort((a, b) => a - b)
+    );
+  };
+
   const handleCategoryToggle = (category: string) => {
+    if (fieldHighlight === "rule-categories") setFieldHighlight(null);
     setCategoriesSelectionnees(prev => 
       prev.includes(category)
         ? prev.filter(c => c !== category)
@@ -583,21 +788,39 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+      <DialogContent className="max-w-3xl sm:max-w-4xl h-[min(92vh,860px)] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>
-            {etiquette ? "Modifier l'étiquette" : "Nouvelle étiquette"}
+            {duplicateFrom && !etiquette
+              ? "Dupliquer l'étiquette"
+              : etiquette
+                ? "Modifier l'étiquette"
+                : "Nouvelle étiquette"}
           </DialogTitle>
           <DialogDescription>
-            Apparence, règle automatique et campagne email — un onglet par thème
+            {duplicateFrom && !etiquette
+              ? "Copie de la règle et de la campagne — modifiez le nom puis enregistrez"
+              : etiquette
+                ? "Apparence, règle automatique et campagne email — un onglet par thème"
+                : "Commencez par choisir le type, puis complétez le formulaire"}
           </DialogDescription>
         </DialogHeader>
 
-        <div className="px-6 py-4 border-b bg-muted/30 shrink-0 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div
+          className={cn(
+            "px-6 sm:px-8 border-b bg-muted/30 shrink-0",
+            showFullFormHeader ? "py-4 space-y-3" : "py-2.5"
+          )}
+        >
+          {formUnlocked && (
+            <>
+          {showFullFormHeader ? (
+          <>
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 min-w-0">
             <span
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium shadow-md self-center sm:self-auto"
+              className="inline-block max-w-full px-4 py-2 rounded-xl text-sm font-medium shadow-md leading-snug break-words self-center sm:self-auto"
               style={{
                 backgroundColor: couleur,
                 color: getContrastColor(couleur),
@@ -623,29 +846,78 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             emailActif={emailActif}
             isSystem={etiquette?.is_default}
           />
+          </>
+          ) : (
+            <div className="flex flex-wrap items-start justify-between gap-3 min-w-0">
+              <span
+                className="inline-block max-w-full px-3 py-1.5 rounded-xl text-sm font-medium shadow-sm leading-snug break-words"
+                style={{
+                  backgroundColor: couleur,
+                  color: getContrastColor(couleur),
+                }}
+              >
+                {nom || "Aperçu"}
+              </span>
+              <EtiquetteFormStatusBadges
+                actif={actif}
+                isAuto={isAuto}
+                emailActif={emailActif}
+                isSystem={etiquette?.is_default}
+              />
+            </div>
+          )}
+            </>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+          {!etiquette && !duplicateFrom && (
+            <div
+              className={cn(
+                "px-6 sm:px-8 shrink-0",
+                formUnlocked ? "pt-3 border-b pb-3" : "py-10"
+              )}
+            >
+              <EtiquetteCreationPicker
+                value={
+                  formUnlocked && !creationPickerExpanded
+                    ? effectiveCreationIntent
+                    : creationType
+                }
+                onChange={(intent) => {
+                  applyCreationIntent(intent);
+                  setCreationType((prev) => prev ?? intent);
+                  setCreationPickerExpanded(false);
+                }}
+                onReset={formUnlocked ? () => setCreationPickerExpanded(true) : undefined}
+                showExpanded={!formUnlocked || creationPickerExpanded}
+                requiredHint
+              />
+            </div>
+          )}
+          {formUnlocked ? (
           <Tabs
             value={formTab}
             onValueChange={(v) => setFormTab(v as FormTab)}
             className="flex flex-col flex-1 min-h-0"
           >
-            <TabsList className="mx-6 mt-4 grid w-auto grid-cols-4 shrink-0">
-              <TabsTrigger value="general">Général</TabsTrigger>
-              <TabsTrigger value="rule">
+            <TabsList className="mx-6 sm:mx-8 mt-4 grid w-auto grid-cols-2 sm:grid-cols-4 shrink-0 h-auto p-1.5 gap-1">
+              <TabsTrigger value="general" className="py-2.5 text-sm">
+                Général
+              </TabsTrigger>
+              <TabsTrigger value="rule" className="py-2.5 text-sm">
                 Règle auto
                 {isAuto && (
                   <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="email">
-                Email
+              <TabsTrigger value="email" className="py-2.5 text-sm">
+                Campagne email
                 {emailActif && (
                   <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="action">
+              <TabsTrigger value="action" className="py-2.5 text-sm">
                 Action
                 {tacheActif && (
                   <span className="ml-1.5 hidden sm:inline text-[10px] text-primary">●</span>
@@ -653,18 +925,25 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
               </TabsTrigger>
             </TabsList>
 
-            <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
-              <TabsContent value="general" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+            <div className="flex-1 overflow-y-auto px-6 sm:px-8 py-5 sm:py-6 min-h-0">
+              <TabsContent value="general" className="mt-0 space-y-6 data-[state=inactive]:hidden">
                 <EtiquetteFormPanel title="Identité" description="Nom, couleur et ordre d'affichage sur les fiches">
                   <div className="space-y-2">
                     <Label htmlFor="nom">Nom de l&apos;étiquette *</Label>
                     <Input
                       id="nom"
                       value={nom}
-                      onChange={(e) => setNom(e.target.value)}
+                      onChange={(e) => {
+                        setNom(e.target.value);
+                        if (fieldHighlight === "nom") setFieldHighlight(null);
+                      }}
                       placeholder="Ex. Déclaration IR, Suivi urgent…"
                       required
                       autoFocus={formTab === "general"}
+                      className={cn(
+                        fieldHighlight === "nom" &&
+                          "ring-2 ring-destructive ring-offset-2 ring-offset-background"
+                      )}
                     />
                   </div>
 
@@ -728,7 +1007,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                 )}
               </TabsContent>
 
-              <TabsContent value="rule" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+              <TabsContent value="rule" className="mt-0 space-y-6 data-[state=inactive]:hidden">
                 {!actif && (
                   <p className="text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2">
                     Étiquette inactive : configurez la règle ici ; elle ne s&apos;appliquera qu&apos;à la réactivation.
@@ -749,110 +1028,172 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   {isAuto && (
                     <>
                       <div className="space-y-2">
-                        <Label>Segment réutilisable (optionnel)</Label>
-                        <Select
-                          value={segmentId != null ? String(segmentId) : "_none"}
-                          onValueChange={(v) => {
-                            if (v === "_none") {
+                        <Label className="text-sm font-medium">Qui reçoit l&apos;étiquette ?</Label>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setUseGroupRule(false);
                               setSegmentId(null);
-                            } else {
-                              setSegmentId(parseInt(v, 10));
-                              setUseComboRule(false);
-                            }
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Règle sur l'étiquette" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="_none">Règle définie ci-dessous</SelectItem>
-                            {segments.map((s) => (
-                              <SelectItem key={s.id} value={String(s.id)}>
-                                {s.nom}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                            }}
+                            className={cn(
+                              "rounded-lg border p-3 text-left transition-colors",
+                              "hover:border-primary/40 hover:bg-muted/40",
+                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                              !useGroupRule &&
+                                "border-primary bg-primary/5 ring-1 ring-primary/20"
+                            )}
+                          >
+                            <Tag className="h-4 w-4 mb-1.5 text-primary" />
+                            <p className="text-sm font-medium">Sur cette étiquette</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                              Recommandé — délai, dates, catégories…
+                            </p>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setUseGroupRule(true)}
+                            className={cn(
+                              "rounded-lg border p-3 text-left transition-colors",
+                              "hover:border-primary/40 hover:bg-muted/40",
+                              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+                              useGroupRule &&
+                                "border-primary bg-primary/5 ring-1 ring-primary/20"
+                            )}
+                          >
+                            <Users className="h-4 w-4 mb-1.5 text-muted-foreground" />
+                            <p className="text-sm font-medium">Groupe de contacts</p>
+                            <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                              Liste filtrée partagée entre plusieurs étiquettes
+                            </p>
+                          </button>
+                        </div>
                       </div>
 
-                      {!segmentId && (
-                        <div className="flex items-center justify-between">
-                          <Label htmlFor="combo-rule" className="text-sm">
-                            Combiner plusieurs conditions (ET / OU)
-                          </Label>
-                          <Switch
-                            id="combo-rule"
-                            checked={useComboRule}
-                            onCheckedChange={(c) => {
-                              setUseComboRule(c);
-                              if (c && ruleChildren.length === 0) {
-                                setRuleChildren([
-                                  leafFromLegacy(
-                                    conditionType,
-                                    JSON.parse(
-                                      stringifyConditionConfig(
-                                        conditionType === "DELAI_SANS_CONTACT"
-                                          ? { jours: delaiJours, inclure_sans_date: inclureSansDate }
-                                          : { types: typesProduitSelectionnes }
-                                      ) || "{}"
-                                    ) as Record<string, unknown>,
-                                    categoriesSelectionnees
-                                  ),
-                                ]);
-                              }
-                            }}
+                      {useGroupRule ? (
+                        <div className="space-y-4">
+                          <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200/80 rounded-lg px-3 py-2 leading-relaxed">
+                            La règle est <strong>définie dans le groupe</strong>, pas sur cette
+                            fiche. Cette étiquette ne fait que poser le badge sur les contacts du
+                            groupe — pour créer ou modifier la règle, utilisez l&apos;onglet{" "}
+                            <strong>Groupes de contacts</strong>.
+                          </p>
+                          <div className="space-y-2">
+                            <Label htmlFor="rule-group">Groupe à utiliser</Label>
+                            <div className="flex gap-2">
+                              <Select
+                                value={segmentId != null ? String(segmentId) : ""}
+                                onValueChange={(v) => {
+                                  setSegmentId(parseInt(v, 10));
+                                  setUseComboRule(false);
+                                  if (fieldHighlight === "rule-group") setFieldHighlight(null);
+                                }}
+                              >
+                                <SelectTrigger
+                                  id="rule-group"
+                                  className={cn(
+                                    "flex-1",
+                                    fieldHighlight === "rule-group" &&
+                                      "ring-2 ring-destructive ring-offset-2 ring-offset-background"
+                                  )}
+                                >
+                                  <SelectValue placeholder="Choisir un groupe…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {segments.length === 0 ? (
+                                    <p className="px-2 py-3 text-xs text-muted-foreground text-center">
+                                      Aucun groupe — créez-en un avec le bouton +
+                                    </p>
+                                  ) : (
+                                    segments.map((s) => (
+                                      <SelectItem key={s.id} value={String(s.id)}>
+                                        {s.nom}
+                                      </SelectItem>
+                                    ))
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                title="Créer un groupe de contacts"
+                                onClick={() => setSegmentFormOpen(true)}
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          {onOpenSegmentsTab && (
+                            <Button
+                              type="button"
+                              variant="link"
+                              className="h-auto p-0 text-xs font-normal"
+                              onClick={onOpenSegmentsTab}
+                            >
+                              Gérer les groupes de contacts →
+                            </Button>
+                          )}
+                          {selectedSegmentRuleJson && (
+                            <SegmentRulePreview ruleJson={selectedSegmentRuleJson} />
+                          )}
+                        </div>
+                      ) : useComboRule ? (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2.5">
+                            <div>
+                              <p className="text-sm font-medium">Règle combinée (ET / OU)</p>
+                              <p className="text-xs text-muted-foreground">
+                                Désactivez pour revenir à une condition simple.
+                              </p>
+                            </div>
+                            <Switch
+                              id="combo-rule"
+                              checked={useComboRule}
+                              onCheckedChange={(c) => setUseComboRule(c)}
+                            />
+                          </div>
+                          <ConditionBuilder
+                            op={ruleOp}
+                            onOpChange={setRuleOp}
+                            children={ruleChildren}
+                            onChange={setRuleChildren}
+                            etiquettesOptions={allEtiquettes}
+                            customFieldsOptions={customFields}
+                            showPreview
                           />
                         </div>
-                      )}
-
-                      {useComboRule && !segmentId ? (
-                        <ConditionBuilder
-                          op={ruleOp}
-                          onOpChange={setRuleOp}
-                          children={ruleChildren}
-                          onChange={setRuleChildren}
-                          etiquettesOptions={allEtiquettes}
-                          customFieldsOptions={customFields}
-                          showPreview
-                        />
-                      ) : !segmentId ? (
-                    <>
-                      <EtiquetteRuleSummaryCard summary={ruleSummary} />
-                      {templateSouscriptionDuplicateWarning && (
-                        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                          {templateSouscriptionDuplicateWarning}
-                        </p>
-                      )}
-
-                      <div className="space-y-2">
-                        <Label>Type de condition</Label>
-                        <Select
-                          value={conditionType}
-                          onValueChange={(v) => {
-                            setConditionType(v);
-                            if (v === "EVENEMENT_SOUSCRIPTION") {
-                              setIsAuto(true);
-                              if (emailActif) setEmailEnvoiMode("eligibility");
-                            }
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Choisir une condition" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CONDITION_TYPES_ORDER.map((t) => (
-                              <SelectItem key={t} value={t}>
-                                {CONDITION_TYPE_LABELS[t]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        {conditionType === "DATE_APPROCHE_INVESTISSEMENT" && (
-                          <p className="text-xs text-muted-foreground">
-                            Produits du contact et du foyer commun pris en compte.
-                          </p>
-                        )}
-                      </div>
+                      ) : (
+                        <>
+                          <div className="space-y-2">
+                            <Label>Type de condition</Label>
+                            <Select
+                              value={conditionType}
+                              onValueChange={(v) => {
+                                setConditionType(v);
+                                if (v === "EVENEMENT_SOUSCRIPTION") {
+                                  setIsAuto(true);
+                                  if (emailActif) setEmailEnvoiMode("eligibility");
+                                }
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Choisir une condition" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {CONDITION_TYPES_ORDER.map((t) => (
+                                  <SelectItem key={t} value={t}>
+                                    {CONDITION_TYPE_LABELS[t]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {conditionType === "DATE_APPROCHE_INVESTISSEMENT" && (
+                              <p className="text-xs text-muted-foreground">
+                                Produits du contact et du foyer commun pris en compte.
+                              </p>
+                            )}
+                          </div>
 
                 {/* Paramètres selon le type */}
                 {conditionType === "EVENEMENT_SOUSCRIPTION" && (
@@ -970,7 +1311,14 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                 {conditionType === "TYPE_PRODUIT" && (
                   <div className="space-y-2">
                     <Label>Types de produits détenus (au moins un)</Label>
-                    <div className="max-h-48 overflow-y-auto border rounded-md p-3 space-y-3">
+                    <div
+                      id="rule-types-produit"
+                      className={cn(
+                        "max-h-48 overflow-y-auto border rounded-md p-3 space-y-3",
+                        fieldHighlight === "rule-types-produit" &&
+                          "ring-2 ring-destructive ring-offset-2 ring-offset-background"
+                      )}
+                    >
                       {INVESTISSEMENT_TYPE_GROUPS.map((group) => (
                         <div key={group.label}>
                           <p className="text-xs font-semibold text-muted-foreground mb-1">
@@ -1054,6 +1402,44 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   </div>
                 )}
 
+                {conditionType === "TMI" && (
+                  <div className="space-y-2">
+                    <Label>Tranche(s) TMI</Label>
+                    <p className="text-xs text-muted-foreground">
+                      « 11 », « 11 % » et « 11% » sur la fiche sont reconnus comme équivalents.
+                    </p>
+                    <div id="rule-tmi">
+                      <TmiTranchePicker
+                        selected={tmiTranchesSelectionnees}
+                        onToggle={handleTmiToggle}
+                        highlight={fieldHighlight === "rule-tmi"}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {conditionType === "IR_NET" && (
+                  <div className="space-y-2">
+                    <Label>IR net à payer</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Compare le montant renseigné sur la fiche contact (ou le foyer).
+                    </p>
+                    <IrNetConditionFields
+                      operator={irNetOperator}
+                      onOperatorChange={(op) => {
+                        setIrNetOperator(op);
+                        if (fieldHighlight === "rule-ir-net") setFieldHighlight(null);
+                      }}
+                      montant={irNetMontant}
+                      onMontantChange={(v) => {
+                        setIrNetMontant(v);
+                        if (fieldHighlight === "rule-ir-net") setFieldHighlight(null);
+                      }}
+                      highlight={fieldHighlight === "rule-ir-net"}
+                    />
+                  </div>
+                )}
+
                 {conditionType === "PERIODE_ANNEE" && (
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
@@ -1091,18 +1477,64 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
 
                       <div className="space-y-2">
                         <Label>Catégories de contacts concernées</Label>
-                        <CategoryTogglePills
-                          categories={[...CATEGORIES_CONTACTS]}
-                          selected={categoriesSelectionnees}
-                          onToggle={handleCategoryToggle}
+                        <div
+                          id="rule-categories"
+                          className={cn(
+                            fieldHighlight === "rule-categories" &&
+                              "rounded-lg ring-2 ring-destructive ring-offset-2 ring-offset-background p-1 -m-1"
+                          )}
+                        >
+                          <CategoryTogglePills
+                            categories={[...CATEGORIES_CONTACTS]}
+                            selected={categoriesSelectionnees}
+                            onToggle={handleCategoryToggle}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed bg-muted/20 px-3 py-2.5">
+                        <div>
+                          <Label htmlFor="combo-rule" className="text-sm font-normal">
+                            Avancé — combiner plusieurs conditions (ET / OU)
+                          </Label>
+                          <p className="text-xs text-muted-foreground">
+                            Remplace la condition simple ci-dessus.
+                          </p>
+                        </div>
+                        <Switch
+                          id="combo-rule"
+                          checked={useComboRule}
+                          onCheckedChange={(c) => {
+                            setUseComboRule(c);
+                            if (c && ruleChildren.length === 0) {
+                              setRuleChildren([
+                                leafFromLegacy(
+                                  conditionType,
+                                  JSON.parse(
+                                    stringifyConditionConfig(
+                                      conditionType === "DELAI_SANS_CONTACT"
+                                        ? { jours: delaiJours, inclure_sans_date: inclureSansDate }
+                                        : { types: typesProduitSelectionnes }
+                                    ) || "{}"
+                                  ) as Record<string, unknown>,
+                                  categoriesSelectionnees
+                                ),
+                              ]);
+                            }
+                          }}
                         />
                       </div>
-                    </>
-                      ) : (
-                        <p className="text-xs text-muted-foreground border rounded-lg px-3 py-2">
-                          Règle fournie par le segment «{" "}
-                          {segments.find((s) => s.id === segmentId)?.nom ?? "…"} ».
+
+                      <EtiquetteRuleSummaryCard summary={ruleSummary} />
+                      {templateSouscriptionDuplicateWarning && (
+                        <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                          {templateSouscriptionDuplicateWarning}
                         </p>
+                      )}
+                      {rulePreviewJson && (
+                        <SegmentRulePreview ruleJson={rulePreviewJson} />
+                      )}
+                        </>
                       )}
                     </>
                   )}
@@ -1115,7 +1547,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                 )}
               </TabsContent>
 
-              <TabsContent value="email" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+              <TabsContent value="email" className="mt-0 space-y-6 data-[state=inactive]:hidden">
                 <EtiquetteEmailCampaignFields
                   actif={actif}
                   emailActif={emailActif}
@@ -1143,10 +1575,11 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   nom={nom}
                   isAuto={isAuto}
                   isEventSouscription={conditionType === "EVENEMENT_SOUSCRIPTION"}
+                  highlightField={fieldHighlight}
                 />
               </TabsContent>
 
-              <TabsContent value="action" className="mt-0 space-y-4 data-[state=inactive]:hidden">
+              <TabsContent value="action" className="mt-0 space-y-6 data-[state=inactive]:hidden">
                 <EtiquetteTacheActionFields
                   isAuto={isAuto}
                   tacheActif={tacheActif}
@@ -1157,6 +1590,7 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
                   onTachePrioriteChange={setTachePriorite}
                   tacheDelaiJours={tacheDelaiJours}
                   onTacheDelaiJoursChange={setTacheDelaiJours}
+                  highlightField={fieldHighlight}
                 />
                 <div className="flex items-center justify-between rounded-lg border px-4 py-3">
                   <div>
@@ -1170,6 +1604,9 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
               </TabsContent>
             </div>
           </Tabs>
+          ) : (
+            <div className="flex-1 min-h-[8rem]" aria-hidden />
+          )}
 
           <DialogFooter className="px-6 py-4 border-t bg-background shrink-0 gap-2 sm:gap-0">
             <Button
@@ -1179,12 +1616,30 @@ export function EtiquetteForm({ open, onOpenChange, etiquette, onSuccess }: Etiq
             >
               Annuler
             </Button>
+            {formUnlocked && (
             <Button type="submit" disabled={loading}>
               {loading ? "Enregistrement..." : etiquette ? "Enregistrer" : "Créer"}
             </Button>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+
+      <SegmentForm
+        open={segmentFormOpen}
+        onOpenChange={setSegmentFormOpen}
+        onSuccess={async (created) => {
+          await reloadSegments();
+          onSegmentsChanged?.();
+          if (created?.id) {
+            setSegmentId(created.id);
+            setUseGroupRule(true);
+            setUseComboRule(false);
+            setIsAuto(true);
+          }
+        }}
+      />
+    </>
   );
 }

@@ -25,6 +25,12 @@ import { EtiquetteContactsPanel } from "@/components/etiquettes/EtiquetteContact
 import { EtiquetteListCard } from "@/components/etiquettes/EtiquetteListCard";
 import { SegmentsSection } from "@/components/etiquettes/SegmentsSection";
 import { StatCard } from "@/components/dashboard/StatCard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getAllSegments } from "@/lib/api/tauri-segments";
+import {
+  buildSegmentLookup,
+  type SegmentLookup,
+} from "@/lib/etiquettes/etiquette-card-summary";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -42,8 +48,17 @@ import {
   countEtiquettesByFilter,
   filterEtiquettesByType,
   filterEtiquettesSearch,
+  sortEtiquettesList,
   type EtiquettePageFilter,
+  type EtiquetteSort,
 } from "@/lib/etiquettes/etiquettes-page-utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { countUniqueTaggedContacts } from "@/lib/etiquettes/etiquettes-unique-count";
 import {
@@ -60,6 +75,13 @@ const PAGE_FILTERS: { id: EtiquettePageFilter; label: string }[] = [
   { id: "manual", label: "Manuelles" },
   { id: "email", label: "Campagne email" },
   { id: "inactive", label: "Désactivées" },
+];
+
+const SORT_OPTIONS: { id: EtiquetteSort; label: string }[] = [
+  { id: "contacts", label: "Plus de contacts" },
+  { id: "nom", label: "Nom (A→Z)" },
+  { id: "priorite", label: "Priorité" },
+  { id: "recent", label: "Plus récentes" },
 ];
 
 function FilterPill({
@@ -109,6 +131,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [pageFilter, setPageFilter] = useState<EtiquettePageFilter>("all");
+  const [sortBy, setSortBy] = useState<EtiquetteSort>("contacts");
   const [showForm, setShowForm] = useState(false);
   const [showExceltisForm, setShowExceltisForm] = useState(false);
   const [selectedEtiquette, setSelectedEtiquette] = useState<EtiquetteWithCount | null>(null);
@@ -117,12 +140,25 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
   const [etiquetteToDelete, setEtiquetteToDelete] = useState<EtiquetteWithCount | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [uniqueContactsTagged, setUniqueContactsTagged] = useState(0);
+  const [pageTab, setPageTab] = useState<"etiquettes" | "segments">("etiquettes");
+  const [segmentLookup, setSegmentLookup] = useState<SegmentLookup>(new Map());
+  const [createIntent, setCreateIntent] = useState<"manual" | "auto" | "campaign" | null>(null);
+  const [duplicateFrom, setDuplicateFrom] = useState<EtiquetteWithCount | null>(null);
 
   const sortEtiquettes = useCallback((data: EtiquetteWithCount[]) => {
     return [...data].sort((a, b) => {
       if (b.contact_count !== a.contact_count) return b.contact_count - a.contact_count;
       return b.priorite - a.priorite;
     });
+  }, []);
+
+  const refreshSegmentLookup = useCallback(async () => {
+    try {
+      const segments = await getAllSegments();
+      setSegmentLookup(buildSegmentLookup(segments));
+    } catch {
+      /* segments optionnels pour l'affichage */
+    }
   }, []);
 
   const refreshEtiquetteCounts = useCallback(async () => {
@@ -137,10 +173,11 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
         if (!prev) return prev;
         return data.find((e) => e.id === prev.id) ?? prev;
       });
+      await refreshSegmentLookup();
     } catch (error) {
       console.error("Error refreshing etiquette counts:", error);
     }
-  }, [sortEtiquettes]);
+  }, [sortEtiquettes, refreshSegmentLookup]);
 
   const loadEtiquettes = async () => {
     try {
@@ -171,6 +208,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
       } catch {
         setUniqueContactsTagged(0);
       }
+      await refreshSegmentLookup();
     } catch (error) {
       console.error("Error loading etiquettes:", error);
       toast.error("Erreur lors du chargement des étiquettes");
@@ -205,8 +243,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
   const filteredEtiquettes = useMemo(() => {
     let list = filterEtiquettesByType(etiquettes, pageFilter);
     list = filterEtiquettesSearch(list, searchQuery, getConditionTypeLabel);
-    return list;
-  }, [etiquettes, pageFilter, searchQuery]);
+    return sortEtiquettesList(list, sortBy);
+  }, [etiquettes, pageFilter, searchQuery, sortBy]);
 
   const hasActiveFilters =
     pageFilter !== "all" || searchQuery.trim() !== "";
@@ -216,8 +254,21 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     setSearchQuery("");
   };
 
+  const applyStatFilter = (filter: EtiquettePageFilter) => {
+    setPageTab("etiquettes");
+    setPageFilter(filter);
+  };
+
   const handleEditEtiquette = (etiquette: EtiquetteWithCount) => {
+    setDuplicateFrom(null);
     setSelectedEtiquette(etiquette);
+    setShowForm(true);
+  };
+
+  const handleDuplicateEtiquette = (etiquette: EtiquetteWithCount) => {
+    setSelectedEtiquette(null);
+    setCreateIntent(null);
+    setDuplicateFrom(etiquette);
     setShowForm(true);
   };
 
@@ -250,7 +301,9 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
   };
 
   const openClassicForm = () => {
+    setCreateIntent(null);
     setSelectedEtiquette(null);
+    setDuplicateFrom(null);
     setShowForm(true);
   };
 
@@ -261,6 +314,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
   const handleFormClose = () => {
     setShowForm(false);
     setSelectedEtiquette(null);
+    setDuplicateFrom(null);
+    setCreateIntent(null);
   };
 
   const handleSync = async () => {
@@ -318,39 +373,70 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             </Button>
           )}
         </div>
-        <div className="relative pt-2">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground mt-1" />
-          <Input
-            placeholder="Rechercher par nom, règle, description…"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
-          {searchQuery && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 mt-0.5"
-              onClick={() => setSearchQuery("")}
-              aria-label="Effacer"
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          )}
+        <div className="pt-2">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Rechercher par nom, règle, description…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9"
+            />
+            {searchQuery && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                onClick={() => setSearchQuery("")}
+                aria-label="Effacer"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
         </div>
         {!loading && etiquettes.length > 0 && (
-          <p className="text-sm font-medium text-foreground pt-2 tabular-nums">
-            {filteredEtiquettes.length} / {etiquettes.length} étiquette
-            {filteredEtiquettes.length > 1 ? "s" : ""}
-          </p>
+          <div className="flex items-center justify-between gap-2 pt-2">
+            <p className="text-sm font-medium text-foreground tabular-nums">
+              {filteredEtiquettes.length} / {etiquettes.length} étiquette
+              {filteredEtiquettes.length > 1 ? "s" : ""}
+            </p>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => setSortBy(v as EtiquetteSort)}
+            >
+              <SelectTrigger className="h-8 w-auto gap-1.5 text-xs" aria-label="Trier les étiquettes">
+                <span className="text-muted-foreground">Trier&nbsp;:</span>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORT_OPTIONS.map((o) => (
+                  <SelectItem key={o.id} value={o.id} className="text-xs">
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         )}
       </CardHeader>
       <CardContent className="flex-1 min-h-0 overflow-y-auto">
         {loading ? (
-          <p className="text-center py-8 text-muted-foreground text-sm">
-            Chargement…
-          </p>
+          <div
+            className={cn(
+              "grid gap-3 sm:grid-cols-2",
+              viewingContacts ? "lg:grid-cols-1 xl:grid-cols-2" : "lg:grid-cols-3"
+            )}
+            aria-busy="true"
+          >
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="h-[120px] rounded-xl border border-border/60 bg-muted/40 animate-pulse"
+              />
+            ))}
+          </div>
         ) : filteredEtiquettes.length === 0 ? (
           <div className="text-center py-10 px-4">
             <Tag className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
@@ -387,9 +473,11 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
               <EtiquetteListCard
                 key={etiquette.id}
                 etiquette={etiquette}
+                segments={segmentLookup}
                 selected={viewingContacts?.id === etiquette.id}
                 onSelect={() => setViewingContacts(etiquette)}
                 onEdit={() => handleEditEtiquette(etiquette)}
+                onDuplicate={() => handleDuplicateEtiquette(etiquette)}
                 onDelete={() => handleDeleteClick(etiquette)}
               />
             ))}
@@ -422,6 +510,11 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             Règles automatiques, tags manuels et campagnes email. Les attributions se
             mettent à jour à chaque modification ; recalcul complet après import massif.
           </p>
+          <p className="text-sm text-foreground/85 border-l-2 border-primary/35 pl-3 mt-3 max-w-2xl leading-snug">
+            <span className="font-medium">Groupe de contacts</span> = liste filtrée réutilisable
+            {" · "}
+            <span className="font-medium">Étiquette</span> = badge sur la fiche (+ email optionnel)
+          </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
           <Button
@@ -429,6 +522,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             className="gap-2"
             onClick={() => void handleSync()}
             disabled={syncing}
+            title="Après import massif ou si les compteurs semblent incohérents"
           >
             <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
             Recalculer les règles
@@ -437,9 +531,20 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
         </div>
       </div>
 
+      <Tabs
+        value={pageTab}
+        onValueChange={(v) => setPageTab(v as "etiquettes" | "segments")}
+        className="space-y-4"
+      >
+        <TabsList>
+          <TabsTrigger value="etiquettes">Étiquettes</TabsTrigger>
+          <TabsTrigger value="segments">Groupes de contacts</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="etiquettes" className="mt-0 space-y-6">
       <section className="space-y-2" aria-label="Synthèse des étiquettes">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-          Synthèse — clic pour filtrer la liste
+          Synthèse — cliquer pour filtrer
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
@@ -450,6 +555,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             accentColor="#1e3a5f"
             iconColor="text-slate-700"
             iconBgColor="bg-slate-50"
+            onClick={() => applyStatFilter("all")}
+            highlight={pageFilter === "all" && pageTab === "etiquettes"}
           />
           <StatCard
             title="Règles auto"
@@ -459,10 +566,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             accentColor="#d97706"
             iconColor="text-amber-700"
             iconBgColor="bg-amber-50"
+            onClick={() => applyStatFilter("auto")}
             highlight={pageFilter === "auto"}
-            onClick={() =>
-              setPageFilter((f) => (f === "auto" ? "all" : "auto"))
-            }
           />
           <StatCard
             title="Manuelles"
@@ -472,10 +577,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             accentColor="#6b7280"
             iconColor="text-gray-600"
             iconBgColor="bg-gray-50"
+            onClick={() => applyStatFilter("manual")}
             highlight={pageFilter === "manual"}
-            onClick={() =>
-              setPageFilter((f) => (f === "manual" ? "all" : "manual"))
-            }
           />
           <StatCard
             title="Campagnes email"
@@ -485,10 +588,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             accentColor="#2563eb"
             iconColor="text-blue-700"
             iconBgColor="bg-blue-50"
+            onClick={() => applyStatFilter("email")}
             highlight={pageFilter === "email"}
-            onClick={() =>
-              setPageFilter((f) => (f === "email" ? "all" : "email"))
-            }
           />
         </div>
       </section>
@@ -510,14 +611,25 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
       ) : (
         listBlock
       )}
+        </TabsContent>
 
-      <SegmentsSection />
+        <TabsContent value="segments" className="mt-0">
+          <SegmentsSection etiquettes={etiquettes} />
+        </TabsContent>
+      </Tabs>
 
       <EtiquetteForm
         open={showForm}
         onOpenChange={handleFormClose}
         etiquette={selectedEtiquette}
+        duplicateFrom={duplicateFrom}
+        createIntent={createIntent}
         onSuccess={loadEtiquettes}
+        onSegmentsChanged={refreshSegmentLookup}
+        onOpenSegmentsTab={() => {
+          handleFormClose();
+          setPageTab("segments");
+        }}
       />
 
       <ExceltisEtiquetteCreateDialog

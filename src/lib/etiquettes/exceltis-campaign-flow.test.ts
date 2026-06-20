@@ -60,11 +60,14 @@ describe("exceltis campaign flow (simulation frontend)", () => {
         actif: true,
         isAuto: false,
         segmentId: null,
+        useGroupRule: false,
         useComboRule: false,
         categoriesSelectionnees: [],
         ruleChildren: [],
         conditionType: "",
         typesProduitSelectionnes: [],
+        tmiTranchesSelectionnees: [],
+        irNetMontant: null,
       })
     ).toBeNull();
   });

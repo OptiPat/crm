@@ -221,7 +221,7 @@ export function ContactDetailSyntheseTab({
   const [syncingGoogle, setSyncingGoogle] = useState(false);
   const showGoogleSync = contact.id != null && canSyncContactToGoogle(contact);
 
-  // Fiscalité affichée : valeur du contact (personne seule) sinon fallback foyer.
+  // Fiscalité affichée : foyer prime champ par champ, sinon copie contact.
   const fiscal = resolveContactFiscal(contact, foyer);
   const clientLabel = getClientLabel(contact.categorie || "AUCUN");
   const filleulLabel = getFilleulLabel(contact.filleul_categorie);

@@ -1,10 +1,15 @@
 import { Button } from "@/components/ui/button";
 import { getContrastColor, type EtiquetteWithCount } from "@/lib/api/tauri-etiquettes";
-import { getConditionTypeLabel } from "@/lib/etiquettes/etiquette-condition-labels";
+import {
+  formatEtiquetteAutoBadgeLabel,
+  formatEtiquetteRuleHint,
+  type SegmentLookup,
+} from "@/lib/etiquettes/etiquette-card-summary";
 import { etiquetteHasAutoRule } from "@/lib/etiquettes/etiquette-auto-rule";
 import { cn } from "@/lib/utils";
 import {
   ChevronRight,
+  Copy,
   Edit,
   Mail,
   Tag,
@@ -15,22 +20,25 @@ import {
 
 export function EtiquetteListCard({
   etiquette,
+  segments,
   selected,
   onSelect,
   onEdit,
+  onDuplicate,
   onDelete,
 }: {
   etiquette: EtiquetteWithCount;
+  segments: SegmentLookup;
   selected: boolean;
   onSelect: () => void;
   onEdit: () => void;
+  onDuplicate: () => void;
   onDelete: () => void;
 }) {
   const hasContacts = etiquette.contact_count > 0;
   const isAuto = etiquetteHasAutoRule(etiquette);
-  const autoLabel = etiquette.segment_id
-    ? "Segment"
-    : getConditionTypeLabel(etiquette.auto_condition_type);
+  const autoLabel = formatEtiquetteAutoBadgeLabel(etiquette, segments);
+  const ruleHint = formatEtiquetteRuleHint(etiquette, segments);
 
   return (
     <div
@@ -50,9 +58,9 @@ export function EtiquetteListCard({
         etiquette.actif === false && "opacity-65 bg-muted/20"
       )}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
+      <div className="flex items-start gap-2 mb-2">
         <span
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium shadow-sm max-w-[85%] truncate"
+          className="flex-1 min-w-0 px-3 py-1.5 rounded-xl text-sm font-medium shadow-sm leading-snug break-words"
           style={{
             backgroundColor: etiquette.couleur,
             color: getContrastColor(etiquette.couleur),
@@ -75,6 +83,17 @@ export function EtiquetteListCard({
           >
             <Edit className="h-4 w-4" />
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={onDuplicate}
+            aria-label="Dupliquer"
+            title="Dupliquer (même règle, nouveau nom)"
+          >
+            <Copy className="h-4 w-4" />
+          </Button>
           {!etiquette.is_default && (
             <Button
               type="button"
@@ -91,8 +110,14 @@ export function EtiquetteListCard({
       </div>
 
       {etiquette.description && (
-        <p className="text-sm text-muted-foreground mb-3 line-clamp-2">
+        <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
           {etiquette.description}
+        </p>
+      )}
+
+      {ruleHint && (
+        <p className="text-xs text-muted-foreground mb-3 line-clamp-2 leading-relaxed" title={ruleHint}>
+          {ruleHint}
         </p>
       )}
 
@@ -166,8 +191,7 @@ export function EtiquetteListCard({
           selected ? "text-primary font-medium" : "text-muted-foreground"
         )}
       >
-        Voir les contacts
-        {hasContacts ? ` (${etiquette.contact_count})` : " — liste vide"}
+        {hasContacts ? "Voir les contacts" : "Liste vide"}
         <ChevronRight
           className={cn(
             "h-3.5 w-3.5 transition-transform",

@@ -461,7 +461,7 @@ export function ContactForm({
       // si le foyer n'a pas pu être relu (foyer === null).
       if (foyer && foyerFiscalInitRef.current !== foyer.id) {
         foyerFiscalInitRef.current = foyer.id;
-        // Fallback : valeur du contact, sinon valeur du foyer (existant non backfillé).
+        // Foyer = source de vérité ; fallback contact si champ foyer vide.
         const initialFiscal = resolveContactFiscal(contact, foyer);
         setFoyerFiscal(initialFiscal);
         initialFoyerFiscalSnapshot.current = JSON.stringify(initialFiscal);
@@ -603,6 +603,10 @@ export function ContactForm({
    *   ne pas écraser une fiscalité qu'on n'a pas pu lire.
    */
   const persistFoyerFiscal = async (savedContact: Contact): Promise<void> => {
+    const fiscalChanged =
+      JSON.stringify(pickFiscal(foyerFiscal)) !== initialFoyerFiscalSnapshot.current;
+    if (!fiscalChanged) return;
+
     const fiscal = pickFiscal(foyerFiscal);
 
     // Cas 1 : foyer chargé → on persiste sur le foyer ET on synchronise tous

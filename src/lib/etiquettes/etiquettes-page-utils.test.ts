@@ -4,6 +4,7 @@ import {
   computeEtiquettesPageStats,
   filterEtiquettesByType,
   countEtiquettesByFilter,
+  sortEtiquettesList,
 } from "@/lib/etiquettes/etiquettes-page-utils";
 
 const base = (overrides: Partial<EtiquetteWithCount>): EtiquetteWithCount =>
@@ -53,5 +54,32 @@ describe("etiquettes-page-utils", () => {
     expect(filterEtiquettesByType(list, "auto")).toHaveLength(1);
     expect(filterEtiquettesByType(list, "manual")).toHaveLength(1);
     expect(countEtiquettesByFilter(list).email).toBe(0);
+  });
+
+  it("compte les étiquettes de segment comme auto, cohérent avec le filtre", () => {
+    const list = [
+      base({ id: 1, auto_condition_type: "DELAI_SANS_CONTACT", segment_id: null }),
+      base({ id: 2, auto_condition_type: null, segment_id: 7 }),
+      base({ id: 3, auto_condition_type: null, segment_id: null }),
+    ];
+    const counts = countEtiquettesByFilter(list);
+    expect(counts.auto).toBe(filterEtiquettesByType(list, "auto").length);
+    expect(counts.manual).toBe(filterEtiquettesByType(list, "manual").length);
+    expect(counts.auto).toBe(2);
+    expect(counts.manual).toBe(1);
+  });
+
+  it("trie selon le critère choisi sans muter l'entrée", () => {
+    const list = [
+      base({ id: 1, nom: "Bêta", contact_count: 1, priorite: 5, created_at: 100 }),
+      base({ id: 2, nom: "alpha", contact_count: 9, priorite: 1, created_at: 300 }),
+      base({ id: 3, nom: "Gamma", contact_count: 9, priorite: 8, created_at: 200 }),
+    ];
+
+    expect(sortEtiquettesList(list, "contacts").map((e) => e.id)).toEqual([3, 2, 1]);
+    expect(sortEtiquettesList(list, "nom").map((e) => e.id)).toEqual([2, 1, 3]);
+    expect(sortEtiquettesList(list, "priorite").map((e) => e.id)).toEqual([3, 1, 2]);
+    expect(sortEtiquettesList(list, "recent").map((e) => e.id)).toEqual([2, 3, 1]);
+    expect(list.map((e) => e.id)).toEqual([1, 2, 3]);
   });
 });

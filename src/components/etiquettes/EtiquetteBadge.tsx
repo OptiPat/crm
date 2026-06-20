@@ -50,7 +50,7 @@ export function EtiquetteBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full font-medium shadow-sm transition-all",
+        "inline-flex items-center rounded-xl font-medium shadow-sm transition-all max-w-full min-w-0",
         sizeClasses[size],
         clickable && "cursor-pointer",
         onRemove && "pr-1.5",
@@ -63,8 +63,9 @@ export function EtiquetteBadge({
       onClick={clickable ? onClick : undefined}
       role={clickable ? "button" : undefined}
       tabIndex={clickable ? 0 : undefined}
+      title={nom}
     >
-      <span>
+      <span className="min-w-0 whitespace-normal break-words text-left leading-snug">
         {nom}
         {attribuePar && (
           <span className="opacity-75 font-normal text-[10px] ml-1">

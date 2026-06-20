@@ -624,7 +624,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           </TabsTrigger>
           <TabsTrigger value="segments" className="gap-2">
             <Filter className="h-4 w-4" />
-            Par segment
+            Par groupe de contacts
           </TabsTrigger>
           <TabsTrigger value="envois" className="gap-2">
             <Mail className="h-4 w-4" />

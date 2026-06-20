@@ -190,7 +190,11 @@ pub fn update_contact_fiscal(
             fiscal.revenu_fiscal_reference,
             fiscal.ir_net_a_payer,
         )
-        .map_err(|e| format!("Failed to update contact fiscal: {}", e))
+        .map_err(|e| format!("Failed to update contact fiscal: {}", e))?;
+    let _ = database.check_auto_etiquettes_for_contact(id);
+    database
+        .get_contact_by_id(id)
+        .map_err(|e| format!("Failed to get contact after fiscal update: {}", e))
 }
 
 #[tauri::command]

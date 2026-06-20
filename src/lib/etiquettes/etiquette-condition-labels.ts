@@ -8,6 +8,8 @@ export type ConditionType =
   | "TYPE_PRODUIT"
   | "DATE_APPROCHE_INVESTISSEMENT"
   | "AGE_APPROCHE"
+  | "TMI"
+  | "IR_NET"
   | "JAMAIS_CONTACT"
   | "A_ETIQUETTE"
   | "CHAMP_PERSO"
@@ -21,6 +23,8 @@ export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
   TYPE_PRODUIT: "Détient un type de produit",
   DATE_APPROCHE_INVESTISSEMENT: "Date sur un investissement",
   AGE_APPROCHE: "Âge approchant",
+  TMI: "TMI (tranche marginale d'imposition)",
+  IR_NET: "IR net à payer",
   JAMAIS_CONTACT: "Jamais contacté (catégories cochées)",
   A_ETIQUETTE: "Possède une étiquette",
   CHAMP_PERSO: "Champ personnalisé",

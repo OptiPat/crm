@@ -3,6 +3,20 @@
 
 import { isExceltisEtiquetteNom } from "@/lib/etiquettes/exceltis";
 
+export type EtiquetteFormTab = "general" | "rule" | "email" | "action";
+
+export type EtiquetteFormFieldId =
+  | "nom"
+  | "email-template"
+  | "email-heure"
+  | "email-date"
+  | "tache-titre"
+  | "rule-categories"
+  | "rule-types-produit"
+  | "rule-group"
+  | "rule-tmi"
+  | "rule-ir-net";
+
 export interface EtiquetteFormValidationInput {
   nom: string;
   emailActif: boolean;
@@ -13,24 +27,47 @@ export interface EtiquetteFormValidationInput {
   actif: boolean;
   isAuto: boolean;
   segmentId: number | null;
+  useGroupRule: boolean;
   useComboRule: boolean;
   categoriesSelectionnees: string[];
-  ruleChildren: Array<{ categories: string[] }>;
+  ruleChildren: Array<{
+    categories: string[];
+    type?: string;
+    config?: Record<string, unknown>;
+  }>;
   conditionType: string;
   typesProduitSelectionnes: string[];
+  tmiTranchesSelectionnees: number[];
+  irNetMontant: number | null;
 }
 
-export function validateEtiquetteForm(i: EtiquetteFormValidationInput): string | null {
+export interface EtiquetteFormValidationError {
+  message: string;
+  tab: EtiquetteFormTab;
+  fieldId?: EtiquetteFormFieldId;
+}
+
+export function validateEtiquetteFormDetailed(
+  i: EtiquetteFormValidationInput
+): EtiquetteFormValidationError | null {
   if (!i.nom.trim()) {
-    return "Le nom est obligatoire";
+    return { message: "Le nom est obligatoire", tab: "general", fieldId: "nom" };
   }
 
   if (i.emailActif) {
     if (!i.emailTemplateId) {
-      return "Sélectionnez un template d'email";
+      return {
+        message: "Sélectionnez un template d'email",
+        tab: "email",
+        fieldId: "email-template",
+      };
     }
     if (i.emailEnvoiMode === "eligibility" && !i.emailEnvoiHeure.trim()) {
-      return "Indiquez l'heure d'envoi (éligibilité)";
+      return {
+        message: "Indiquez l'heure d'envoi (éligibilité)",
+        tab: "email",
+        fieldId: "email-heure",
+      };
     }
     const exceltisCampaign = isExceltisEtiquetteNom(i.nom);
     if (
@@ -38,14 +75,30 @@ export function validateEtiquetteForm(i: EtiquetteFormValidationInput): string |
       !i.emailEnvoiLocal.trim() &&
       !exceltisCampaign
     ) {
-      return "Indiquez la date et l'heure de la campagne";
+      return {
+        message: "Indiquez la date et l'heure de la campagne",
+        tab: "email",
+        fieldId: "email-date",
+      };
     }
   }
 
-  const autoSansSegmentNiCombo = i.actif && i.isAuto && !i.segmentId && !i.useComboRule;
+  if (i.actif && i.isAuto && i.useGroupRule && !i.segmentId) {
+    return {
+      message: "Choisissez un groupe de contacts ou repassez sur « Sur cette étiquette »",
+      tab: "rule",
+      fieldId: "rule-group",
+    };
+  }
+
+  const autoSansSegmentNiCombo = i.actif && i.isAuto && !i.useGroupRule && !i.useComboRule;
 
   if (autoSansSegmentNiCombo && i.categoriesSelectionnees.length === 0) {
-    return "Sélectionnez au moins une catégorie de contact";
+    return {
+      message: "Sélectionnez au moins une catégorie de contact",
+      tab: "rule",
+      fieldId: "rule-categories",
+    };
   }
 
   if (
@@ -54,7 +107,36 @@ export function validateEtiquetteForm(i: EtiquetteFormValidationInput): string |
     i.useComboRule &&
     i.ruleChildren.some((c) => c.categories.length === 0)
   ) {
-    return "Chaque condition combinée doit avoir une catégorie";
+    return {
+      message: "Chaque condition combinée doit avoir une catégorie",
+      tab: "rule",
+      fieldId: "rule-categories",
+    };
+  }
+
+  if (i.actif && i.isAuto && i.useComboRule) {
+    for (const child of i.ruleChildren) {
+      if (child.type === "TMI") {
+        const tranches = (child.config?.tranches as unknown[] | undefined) ?? [];
+        if (tranches.length === 0) {
+          return {
+            message: "Sélectionnez au moins une tranche TMI",
+            tab: "rule",
+            fieldId: "rule-tmi",
+          };
+        }
+      }
+      if (child.type === "IR_NET") {
+        const montant = child.config?.montant;
+        if (montant == null || montant === "" || !Number.isFinite(Number(montant))) {
+          return {
+            message: "Indiquez le montant d'IR net à comparer",
+            tab: "rule",
+            fieldId: "rule-ir-net",
+          };
+        }
+      }
+    }
   }
 
   if (
@@ -62,8 +144,47 @@ export function validateEtiquetteForm(i: EtiquetteFormValidationInput): string |
     i.conditionType === "TYPE_PRODUIT" &&
     i.typesProduitSelectionnes.length === 0
   ) {
-    return "Sélectionnez au moins un type de produit";
+    return {
+      message: "Sélectionnez au moins un type de produit",
+      tab: "rule",
+      fieldId: "rule-types-produit",
+    };
   }
 
+  if (autoSansSegmentNiCombo && i.conditionType === "TMI" && i.tmiTranchesSelectionnees.length === 0) {
+    return {
+      message: "Sélectionnez au moins une tranche TMI",
+      tab: "rule",
+      fieldId: "rule-tmi",
+    };
+  }
+
+  if (
+    autoSansSegmentNiCombo &&
+    i.conditionType === "IR_NET" &&
+    (i.irNetMontant == null || !Number.isFinite(i.irNetMontant))
+  ) {
+    return {
+      message: "Indiquez le montant d'IR net à comparer",
+      tab: "rule",
+      fieldId: "rule-ir-net",
+    };
+  }
+
+  return null;
+}
+
+export function validateEtiquetteForm(i: EtiquetteFormValidationInput): string | null {
+  return validateEtiquetteFormDetailed(i)?.message ?? null;
+}
+
+export function validateEtiquetteTacheAction(titre: string, tacheActif: boolean): EtiquetteFormValidationError | null {
+  if (tacheActif && !titre.trim()) {
+    return {
+      message: "Indiquez un titre pour la tâche à créer",
+      tab: "action",
+      fieldId: "tache-titre",
+    };
+  }
   return null;
 }
