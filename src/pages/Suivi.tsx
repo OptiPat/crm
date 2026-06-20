@@ -56,6 +56,8 @@ import {
 import { EtiquetteEnvoisTab } from "@/components/etiquettes/EtiquetteEnvoisTab";
 import { EtiquettePipelineBoard } from "@/components/etiquettes/EtiquettePipelineBoard";
 import { PlanifierRdvDialog } from "@/components/calendar/PlanifierRdvDialog";
+import { TacheForm } from "@/components/taches/TacheForm";
+import { buildTacheDraftFromAlerte } from "@/lib/taches/tache-from-alerte";
 import { StelliumExceltisAlerts } from "@/components/etiquettes/StelliumExceltisAlerts";
 import {
   isAutoEtiquetteAttribution,
@@ -123,6 +125,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   const [alerteCategoryFilter, setAlerteCategoryFilter] =
     useState<AlerteCategoryFilter>("all");
   const [rdvAlerte, setRdvAlerte] = useState<AlerteWithContact | null>(null);
+  const [tacheFromAlerte, setTacheFromAlerte] = useState<AlerteWithContact | null>(null);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const alertesTabLoadedRef = useRef(false);
@@ -587,6 +590,11 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     }
   };
 
+  const tacheDraftFromAlerte = useMemo(
+    () => (tacheFromAlerte ? buildTacheDraftFromAlerte(tacheFromAlerte) : null),
+    [tacheFromAlerte]
+  );
+
   return (
     <div className="space-y-6">
       <SuiviPageHeader
@@ -701,6 +709,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
                             void handleEnvoyerEmailDepuisAlerte(alerte)
                           }
                           onPlanifierRdv={() => setRdvAlerte(alerte)}
+                          onCreateTache={() => setTacheFromAlerte(alerte)}
                           onSupprimer={() => void handleSupprimer(alerte.alerte_id)}
                           onOpenEtiquettesTab={() => setActiveTab("etiquettes")}
                         />
@@ -938,6 +947,20 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
         alerteId={rdvAlerte?.alerte_id}
         onCreated={() => void fetchAlertesList({ silent: true })}
       />
+
+      {tacheDraftFromAlerte && (
+        <TacheForm
+          open
+          onOpenChange={(o) => !o && setTacheFromAlerte(null)}
+          fixedContactIds={tacheDraftFromAlerte.contactIds}
+          defaultTitle={tacheDraftFromAlerte.titre}
+          defaultDateEcheance={tacheDraftFromAlerte.dateEcheance}
+          onSuccess={() => {
+            setTacheFromAlerte(null);
+            toast.success("Tâche créée");
+          }}
+        />
+      )}
 
       <RemoveAutoEtiquetteDialog
         target={etiquetteRemoveTarget}

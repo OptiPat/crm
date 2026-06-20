@@ -17,7 +17,7 @@ import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import {
-  isScpiBulletinContentMissing,
+  getScpiBulletinSendBlockReason,
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { buildEditedHtmlEmailSendBodies } from "@/lib/etiquettes/etiquette-email-send-bodies";
@@ -81,7 +81,10 @@ export function EtiquetteEmailSendDialog({
 
   const batchLocked =
     item != null && isEtiquetteQueueItemBatchLocked(item);
-  const sendBlocked = batchLocked || isEtiquetteEmailSendActive();
+  const scpiSendBlockReason =
+    item != null ? getScpiBulletinSendBlockReason(item) : null;
+  const sendBlocked =
+    batchLocked || isEtiquetteEmailSendActive() || scpiSendBlockReason != null;
 
   const messageReady = htmlMode ? bodyHtml.trim().length > 0 : bodyPlain.trim().length > 0;
 
@@ -93,6 +96,10 @@ export function EtiquetteEmailSendDialog({
     }
     if (isEtiquetteEmailSendActive()) {
       toast.warning("Un envoi est déjà en cours.");
+      return;
+    }
+    if (scpiSendBlockReason) {
+      toast.warning(scpiSendBlockReason);
       return;
     }
 
@@ -163,12 +170,11 @@ export function EtiquetteEmailSendDialog({
             />
           </div>
 
-          {item && isScpiBulletinContentMissing(item) && (
+          {scpiSendBlockReason ? (
             <p className="text-xs text-amber-800 dark:text-amber-200 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-2">
-              Résumé bulletins absent pour ce contact — relancez la préparation campagne n8n
-              avant envoi.
+              {scpiSendBlockReason}
             </p>
-          )}
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor={htmlMode ? "confirm-body-html" : "confirm-body"}>Message</Label>

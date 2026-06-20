@@ -16,6 +16,10 @@ import {
   startEtiquetteBatchSend,
   subscribeEtiquetteBatchSend,
 } from "@/lib/etiquettes/etiquette-email-send-runner";
+import {
+  getScpiBulletinSendBlockReason,
+  isScpiBulletinSendBlocked,
+} from "@/lib/etiquettes/etiquette-email-preview";
 import { toast } from "sonner";
 
 export function EtiquetteBatchSendDialog({
@@ -43,8 +47,13 @@ export function EtiquetteBatchSendDialog({
     });
   }, []);
 
+  const blockedItems = items.filter((i) => isScpiBulletinSendBlocked(i));
+  const sendBlocked = blockedItems.length > 0;
+  const blockReason =
+    blockedItems.map((i) => getScpiBulletinSendBlockReason(i)).find(Boolean) ?? null;
+
   const start = async () => {
-    if (items.length === 0 || running || isEtiquetteEmailSendActive()) return;
+    if (items.length === 0 || running || isEtiquetteEmailSendActive() || sendBlocked) return;
     onOpenChange(false);
     toast.info("Envoi en arrière-plan — vous pouvez continuer à utiliser le CRM.");
     try {
@@ -88,17 +97,29 @@ export function EtiquetteBatchSendDialog({
             </p>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground py-2">
-            Chaque destinataire recevra son email personnalisé. L&apos;envoi se poursuit en
-            arrière-plan — barre de progression visible dans la file d&apos;envoi.
-          </p>
+          <div className="space-y-2 py-2">
+            <p className="text-sm text-muted-foreground">
+              Chaque destinataire recevra son email personnalisé. L&apos;envoi se poursuit en
+              arrière-plan — barre de progression visible dans la file d&apos;envoi.
+            </p>
+            {sendBlocked ? (
+              <p className="text-xs text-amber-800 dark:text-amber-200 rounded-md border border-amber-200 bg-amber-50 dark:bg-amber-950/30 p-2">
+                {blockedItems.length} email
+                {blockedItems.length > 1 ? "s" : ""} bloqué
+                {blockedItems.length > 1 ? "s" : ""}
+                {blockReason ? ` — ${blockReason}` : ""}.
+              </p>
+            ) : null}
+          </div>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
           <Button
-            disabled={running || items.length === 0 || isEtiquetteEmailSendActive()}
+            disabled={
+              running || items.length === 0 || isEtiquetteEmailSendActive() || sendBlocked
+            }
             onClick={() => void start()}
           >
             {running ? "Envoi en cours…" : `Envoyer ${items.length} email${items.length > 1 ? "s" : ""}`}

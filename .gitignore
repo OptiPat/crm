@@ -38,6 +38,9 @@ _import_local/*
 .cursor/mcp.json
 scripts/invoke-n8n-mcp*.ps1
 scripts/n8n-*.json
+scripts/_tmp-creds.json
+scripts/_wf-out.txt
+scripts/_wf.json
 *.db
 *.db-journal
 *.db-wal

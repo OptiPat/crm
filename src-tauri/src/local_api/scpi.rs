@@ -1,8 +1,45 @@
 use super::config::LocalApiConfig;
-use crate::database::scpi_campaigns::PrepareScpiCampaignInput;
+use crate::database::scpi_campaigns::{PrepareScpiCampaignInput, ScpiProductsListResponse};
 use crate::database::Database;
 use std::io::Result as IoResult;
 use tiny_http::{Request, StatusCode};
+
+pub fn handle_list_products(request: Request, config: &LocalApiConfig) -> IoResult<()> {
+    let db = match Database::open_at_path(&config.db_path) {
+        Ok(db) => db,
+        Err(e) => {
+            return super::json_response(
+                request,
+                StatusCode(500),
+                &format!(r#"{{"error":"{e}"}}"#),
+            );
+        }
+    };
+
+    let products = match db.list_scpi_product_names() {
+        Ok(list) => list,
+        Err(e) => {
+            return super::json_response(
+                request,
+                StatusCode(500),
+                &format!(r#"{{"error":"{e}"}}"#),
+            );
+        }
+    };
+    let count = products.len();
+    let payload = ScpiProductsListResponse { count, products };
+    let body = match serde_json::to_string(&payload) {
+        Ok(s) => s,
+        Err(e) => {
+            return super::json_response(
+                request,
+                StatusCode(500),
+                &format!(r#"{{"error":"{e}"}}"#),
+            );
+        }
+    };
+    super::json_response(request, StatusCode(200), &body)
+}
 
 pub fn handle_prepare_campaign(
     mut request: Request,

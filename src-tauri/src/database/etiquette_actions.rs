@@ -260,6 +260,7 @@ mod tests {
         assert_eq!(taches[0].priorite, "HAUTE");
         assert_eq!(taches[0].statut, "A_FAIRE");
         assert_eq!(taches[0].date_echeance, Some(tache_echeance(1_700_000_000, 7)));
+        assert!(taches[0].from_etiquette_auto);
     }
 
     #[test]

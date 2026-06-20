@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
   buildTemplateVariables,
+  getScpiBulletinSendBlockReason,
+  isScpiBulletinContentMissing,
+  isScpiBulletinSendBlocked,
   localDatetimeToUnix,
   renderEtiquetteEmailPreview,
   unixToLocalDatetime,
 } from "./etiquette-email-preview";
+import { CURRENT_SCPI_DIGEST_VERSION } from "@/lib/emails/scpi-digest-stale";
 import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 
@@ -184,5 +188,64 @@ describe("etiquette-email-preview", () => {
     const rendered = renderEtiquetteEmailPreview(item, null);
     expect(rendered.body_html).toContain("132 M€");
     expect(rendered.body_html).toContain("<ul");
+  });
+
+  it("isScpiBulletinContentMissing si modèle SCPI sans bulletin_resume", () => {
+    const base: EtiquetteEmailQueueItem = {
+      contact_etiquette_id: 1,
+      contact_id: 2,
+      contact_nom: "Dupont",
+      contact_prenom: "Jean",
+      contact_email: "j.dupont@example.com",
+      contact_telephone: null,
+      etiquette_id: 42,
+      etiquette_nom: "Bulletin SCPI trimestriel",
+      etiquette_couleur: "#6366F1",
+      email_date_prevue: null,
+      email_date_envoi: null,
+      template_sujet: "Bulletins",
+      template_corps: "{{scpi_intro_vous}} {{bulletin_resume}}",
+      template_agenda_link_id: null,
+      template_categorie: null,
+      template_variables: null,
+      campaign_variables: JSON.stringify({ periode: "T1 2026", bulletin_resume: "1. Comète" }),
+      queue_issue: null,
+    };
+    expect(isScpiBulletinContentMissing(base)).toBe(false);
+    expect(
+      isScpiBulletinContentMissing({
+        ...base,
+        campaign_variables: JSON.stringify({ periode: "T1 2026" }),
+      })
+    ).toBe(true);
+  });
+
+  it("isScpiBulletinSendBlocked si digest périmé", () => {
+    const base: EtiquetteEmailQueueItem = {
+      contact_etiquette_id: 1,
+      contact_id: 2,
+      contact_nom: "Dupont",
+      contact_prenom: "Jean",
+      contact_email: "j.dupont@example.com",
+      contact_telephone: null,
+      etiquette_id: 42,
+      etiquette_nom: "Bulletin SCPI trimestriel",
+      etiquette_couleur: "#6366F1",
+      email_date_prevue: null,
+      email_date_envoi: null,
+      template_sujet: "Bulletins",
+      template_corps: "{{bulletin_resume}}",
+      template_agenda_link_id: null,
+      template_categorie: null,
+      template_variables: null,
+      campaign_variables: JSON.stringify({
+        periode: "T1 2026",
+        bulletin_resume: "1. Comète",
+        digest_version: CURRENT_SCPI_DIGEST_VERSION - 1,
+      }),
+      queue_issue: null,
+    };
+    expect(isScpiBulletinSendBlocked(base)).toBe(true);
+    expect(getScpiBulletinSendBlockReason(base)).toContain("Digest périmé");
   });
 });

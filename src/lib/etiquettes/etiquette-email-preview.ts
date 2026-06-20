@@ -16,9 +16,11 @@ import { parseMillesimeLabelFromEtiquetteNom } from "@/lib/etiquettes/exceltis";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import {
+  isScpiBulletinQueueItem,
   parseScpiCampaignVariables,
   templateUsesScpiBulletinVariables,
 } from "@/lib/emails/scpi-bulletin-preview-vars";
+import { isScpiDigestStale } from "@/lib/emails/scpi-digest-stale";
 
 function parseCampaignVariables(raw: string | null | undefined): Record<string, string> {
   return parseScpiCampaignVariables(raw);
@@ -118,6 +120,24 @@ export function isScpiBulletinContentMissing(item: EtiquetteEmailQueueItem): boo
   if (!templateUsesScpiBulletinVariables(hay)) return false;
   const campaign = parseCampaignVariables(item.campaign_variables);
   return !campaign.bulletin_resume?.trim();
+}
+
+/** Raison de blocage envoi SCPI (null = envoi autorisé pour ce contrôle). */
+export function getScpiBulletinSendBlockReason(
+  item: EtiquetteEmailQueueItem
+): string | null {
+  if (!isScpiBulletinQueueItem(item)) return null;
+  if (isScpiBulletinContentMissing(item)) {
+    return "Résumé bulletins absent — relancez n8n prepare";
+  }
+  if (isScpiDigestStale(item.campaign_variables)) {
+    return "Digest périmé — relancez n8n prepare (ne pas renvoyer tel quel)";
+  }
+  return null;
+}
+
+export function isScpiBulletinSendBlocked(item: EtiquetteEmailQueueItem): boolean {
+  return getScpiBulletinSendBlockReason(item) != null;
 }
 
 export function formatEtiquetteSendDatetime(ts: number | null | undefined): string {

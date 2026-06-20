@@ -25,7 +25,7 @@ import {
   getEtiquetteNomForAlerte,
 } from "@/lib/alertes/alerte-etiquette-links";
 import { getAlerteTraceInfo } from "@/lib/alertes/alerte-trace";
-import { Calendar, Check, Clock, ExternalLink, History, Info, Mail, X } from "lucide-react";
+import { Calendar, Check, Clock, ExternalLink, History, Info, ListTodo, Mail, X } from "lucide-react";
 
 function formatLastContact(timestamp: number | null) {
   if (!timestamp) return null;
@@ -59,6 +59,7 @@ export function SuiviAlerteCard({
   onReporter,
   onEnvoyerEmail,
   onPlanifierRdv,
+  onCreateTache,
   onSupprimer,
   onOpenEtiquettesTab,
 }: {
@@ -73,6 +74,7 @@ export function SuiviAlerteCard({
   onReporter: (mois: number) => void;
   onEnvoyerEmail: () => void;
   onPlanifierRdv?: () => void;
+  onCreateTache?: () => void;
   onSupprimer: () => void;
   onOpenEtiquettesTab: () => void;
 }) {
@@ -228,6 +230,19 @@ export function SuiviAlerteCard({
           >
             <Calendar className="h-4 w-4" />
             Planifier RDV
+          </Button>
+        )}
+
+        {onCreateTache && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={onCreateTache}
+          >
+            <ListTodo className="h-4 w-4" />
+            Créer une tâche
           </Button>
         )}
 

@@ -12,6 +12,7 @@ export type AppNotificationKind =
   | "emails_incomplete"
   | "emails_sent"
   | "alertes_suivi"
+  | "taches_urgent"
   | "exceltis_stellium";
 
 export type AppNotificationItem = {
@@ -19,11 +20,15 @@ export type AppNotificationItem = {
   label: string;
   count: number;
   severity: NotificationSeverity;
-  suiviTab: SuiviMainTab;
+  /** Cible Suivi (défaut historique). */
+  suiviTab?: SuiviMainTab;
   envoisSubTab?: EtiquetteEmailQueueStatus;
   focusContactId?: number;
   focusEtiquetteId?: number;
   stelliumMessageId?: string;
+  /** Cible page Tâches. */
+  targetPage?: "taches";
+  tachesEcheanceFilter?: "urgent";
 };
 
 export type AppNotificationsSummary = {
@@ -42,6 +47,7 @@ export type AppNotificationsSummaryDto = {
   incomplete: NotificationQueueBucketDto;
   sent: NotificationQueueBucketDto;
   alertes: NotificationQueueBucketDto;
+  taches_urgent: NotificationQueueBucketDto;
   stellium_signals: StelliumExceltisSignal[];
 };
 
@@ -87,6 +93,21 @@ export function buildAppNotificationsSummary(
       focusContactId:
         dto.alertes.count === 1 && dto.alertes.focus_contact_id != null
           ? dto.alertes.focus_contact_id
+          : undefined,
+    });
+  }
+
+  if (dto.taches_urgent.count > 0) {
+    items.push({
+      id: "taches_urgent",
+      label: "Aujourd'hui / en retard",
+      count: dto.taches_urgent.count,
+      severity: "urgent",
+      targetPage: "taches",
+      tachesEcheanceFilter: "urgent",
+      focusContactId:
+        dto.taches_urgent.count === 1 && dto.taches_urgent.focus_contact_id != null
+          ? dto.taches_urgent.focus_contact_id
           : undefined,
     });
   }

@@ -1,7 +1,7 @@
 //! Tâches / rappels (liés ou non à un contact). Module de domaine dédié.
 
 use super::models::{NewTache, Tache, TacheContactRef};
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 
 fn normalize_priorite(value: Option<String>) -> String {
     match value.as_deref() {
@@ -19,18 +19,21 @@ fn normalize_statut(value: Option<String>) -> String {
 }
 
 impl super::Database {
+    const TACHE_SELECT_COLS: &'static str = "id, titre, description, date_echeance, priorite,
+                    statut, completed_at, created_at, updated_at,
+                    EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = taches.id) AS from_etiquette_auto";
+
     /// Toutes les tâches (page Tâches), chacune avec ses contacts liés.
     /// Tri : à faire d'abord, puis échéance la plus proche (sans date en dernier).
     pub fn get_all_taches_with_contact(&self) -> Result<Vec<Tache>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, titre, description, date_echeance, priorite,
-                    statut, completed_at, created_at, updated_at
-             FROM taches
-             ORDER BY (statut = 'FAIT'),
+        let sql = format!(
+            "SELECT {} FROM taches ORDER BY (statut = 'FAIT'),
                       (date_echeance IS NULL),
                       date_echeance ASC,
                       created_at DESC",
-        )?;
+            Self::TACHE_SELECT_COLS
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let mut result = Vec::new();
         let rows = stmt.query_map([], Self::map_tache_base)?;
         for row in rows {
@@ -42,17 +45,19 @@ impl super::Database {
 
     /// Tâches rattachées à un contact donné (encart fiche contact).
     pub fn get_taches_by_contact(&self, contact_id: i64) -> Result<Vec<Tache>> {
-        let mut stmt = self.conn.prepare(
+        let sql = format!(
             "SELECT t.id, t.titre, t.description, t.date_echeance, t.priorite,
-                    t.statut, t.completed_at, t.created_at, t.updated_at
+                    t.statut, t.completed_at, t.created_at, t.updated_at,
+                    EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = t.id) AS from_etiquette_auto
              FROM taches t
              JOIN tache_contacts tc ON tc.tache_id = t.id
              WHERE tc.contact_id = ?1
              ORDER BY (t.statut = 'FAIT'),
                       (t.date_echeance IS NULL),
                       t.date_echeance ASC,
-                      t.created_at DESC",
-        )?;
+                      t.created_at DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let mut result = Vec::new();
         let rows = stmt.query_map(params![contact_id], Self::map_tache_base)?;
         for row in rows {
@@ -63,13 +68,11 @@ impl super::Database {
     }
 
     pub fn get_tache_by_id(&self, id: i64) -> Result<Tache> {
-        let mut tache = self.conn.query_row(
-            "SELECT id, titre, description, date_echeance, priorite,
-                    statut, completed_at, created_at, updated_at
-             FROM taches WHERE id = ?1",
-            params![id],
-            Self::map_tache_base,
-        )?;
+        let sql = format!(
+            "SELECT {} FROM taches WHERE id = ?1",
+            Self::TACHE_SELECT_COLS
+        );
+        let mut tache = self.conn.query_row(&sql, params![id], Self::map_tache_base)?;
         tache.contacts = self.load_tache_contacts(id)?;
         Ok(tache)
     }
@@ -215,8 +218,47 @@ impl super::Database {
             created_at: row.get(7)?,
             updated_at: row.get(8)?,
             contacts: Vec::new(),
+            from_etiquette_auto: row.get::<_, i64>(9)? != 0,
         })
     }
+
+    /// Tâches actives dont l'échéance est aujourd'hui ou en retard (exclut sans date et à venir).
+    pub fn count_taches_urgent_echeance(&self) -> Result<(u32, Option<i64>)> {
+        let tomorrow = start_of_today_unix() + 86400;
+        let count: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM taches
+             WHERE statut != 'FAIT'
+               AND date_echeance IS NOT NULL
+               AND date_echeance < ?1",
+            params![tomorrow],
+            |row| row.get(0),
+        )?;
+        let focus_contact_id = if count == 1 {
+            self.conn
+                .query_row(
+                    "SELECT tc.contact_id FROM taches t
+                     LEFT JOIN tache_contacts tc ON tc.tache_id = t.id
+                     WHERE t.statut != 'FAIT'
+                       AND t.date_echeance IS NOT NULL
+                       AND t.date_echeance < ?1
+                     ORDER BY t.date_echeance ASC, t.id ASC
+                     LIMIT 1",
+                    params![tomorrow],
+                    |row| row.get::<_, Option<i64>>(0),
+                )
+                .optional()?
+                .flatten()
+        } else {
+            None
+        };
+        Ok((count as u32, focus_contact_id))
+    }
+}
+
+fn start_of_today_unix() -> i64 {
+    let now = now_unix();
+    let secs_per_day = 86400_i64;
+    (now / secs_per_day) * secs_per_day
 }
 
 fn now_unix() -> i64 {
@@ -354,5 +396,28 @@ mod tests {
         assert_eq!(updated.contacts.len(), 2);
         assert_eq!(db.get_taches_by_contact(c1).unwrap().len(), 0);
         assert_eq!(db.get_taches_by_contact(c3).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn count_taches_urgent_echeance_includes_overdue_and_today_only() {
+        let db = mem_db();
+        let today = start_of_today_unix();
+
+        let mut overdue = new_tache("Retard");
+        overdue.date_echeance = Some(today - 86400);
+        db.create_tache(overdue).unwrap();
+
+        let mut today_task = new_tache("Aujourd'hui");
+        today_task.date_echeance = Some(today);
+        db.create_tache(today_task).unwrap();
+
+        let mut future = new_tache("Semaine prochaine");
+        future.date_echeance = Some(today + 86400 * 5);
+        db.create_tache(future).unwrap();
+
+        db.create_tache(new_tache("Sans date")).unwrap();
+
+        let (count, _) = db.count_taches_urgent_echeance().unwrap();
+        assert_eq!(count, 2);
     }
 }

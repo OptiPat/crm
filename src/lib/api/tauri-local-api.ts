@@ -6,7 +6,9 @@ export interface LocalApiSettings {
   token: string;
   birthdaysUrl: string;
   scpiCampaignsUrl: string;
+  scpiProductsUrl: string;
   healthUrl: string;
+  scpiN8nWebhookUrl: string;
 }
 
 export async function getLocalApiSettings(): Promise<LocalApiSettings> {
@@ -15,9 +17,14 @@ export async function getLocalApiSettings(): Promise<LocalApiSettings> {
 
 export async function saveLocalApiSettings(
   enabled: boolean,
-  port: number
+  port: number,
+  scpiN8nWebhookUrl?: string
 ): Promise<LocalApiSettings> {
-  return invoke<LocalApiSettings>("save_local_api_settings_cmd", { enabled, port });
+  return invoke<LocalApiSettings>("save_local_api_settings_cmd", {
+    enabled,
+    port,
+    scpiN8nWebhookUrl: scpiN8nWebhookUrl ?? null,
+  });
 }
 
 export async function regenerateLocalApiToken(): Promise<LocalApiSettings> {

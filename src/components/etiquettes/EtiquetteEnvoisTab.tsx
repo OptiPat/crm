@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,7 @@ import {
   History,
 } from "lucide-react";
 import { EmailSendLogTab } from "@/components/etiquettes/EmailSendLogTab";
+import { ScpiCampaignChecklist } from "@/components/etiquettes/ScpiCampaignChecklist";
 import { EtiquetteBatchSendDialog } from "@/components/etiquettes/EtiquetteBatchSendDialog";
 import { EtiquetteEnvoisSelectionBar } from "@/components/etiquettes/EtiquetteEnvoisSelectionBar";
 import {
@@ -44,7 +45,8 @@ import {
   formatEtiquetteSendDatetime,
   getIncompleteQueueLabel,
   hasContactActivityAfterEmailSend,
-  isScpiBulletinContentMissing,
+  getScpiBulletinSendBlockReason,
+  isScpiBulletinSendBlocked,
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
@@ -98,6 +100,8 @@ import {
   subscribeEtiquetteEmailSendActivity,
 } from "@/lib/etiquettes/etiquette-email-send-runner";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
+import { isScpiDigestStale } from "@/lib/emails/scpi-digest-stale";
+import { isScpiBulletinQueueItem } from "@/lib/emails/scpi-bulletin-preview-vars";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -240,6 +244,16 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     }
   }, [onQueueChanged]);
 
+  const scpiStaleReadyCount = useMemo(
+    () =>
+      ready.filter(
+        (item) =>
+          isScpiBulletinQueueItem(item) &&
+          isScpiDigestStale(item.campaign_variables)
+      ).length,
+    [ready]
+  );
+
   useEffect(() => {
     return subscribeEtiquetteEmailSendActivity((activity) => {
       setBatchSendRunning(activity.batchRunning);
@@ -369,6 +383,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   };
 
   const selectedReadyItems = ready.filter((i) => selectedIds.has(getEtiquetteQueueItemKey(i)));
+  const selectedReadySendBlocked = selectedReadyItems.some((i) =>
+    isScpiBulletinSendBlocked(i)
+  );
+  const selectedReadySendBlockReason = selectedReadyItems
+    .map((i) => getScpiBulletinSendBlockReason(i))
+    .find(Boolean);
   const selectedFollowupRelanceItems = followup.filter(
     (i) =>
       selectedIds.has(getEtiquetteQueueItemKey(i)) &&
@@ -586,8 +606,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             options.mode === "ready"
               ? renderEtiquetteEmailPreview(item, cgpConfig)
               : null;
-          const scpiBulletinMissing =
-            options.mode === "ready" && isScpiBulletinContentMissing(item);
+          const scpiSendBlockReason =
+            options.mode === "ready" ? getScpiBulletinSendBlockReason(item) : null;
+          const scpiDigestStale =
+            options.mode === "ready" &&
+            isScpiBulletinQueueItem(item) &&
+            isScpiDigestStale(item.campaign_variables);
           const batchLocked =
             options.mode === "ready" &&
             isEtiquetteQueueItemBatchLocked(item);
@@ -671,14 +695,23 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                     Relance (2e email)
                   </Badge>
                 )}
+                {scpiDigestStale ? (
+                  <Badge
+                    variant="outline"
+                    className="text-xs border-amber-300 text-amber-900 bg-amber-50"
+                    title="Digest préparé avant une mise à jour CRM ou du modèle — relancez n8n prepare, ne renvoyez pas tel quel."
+                  >
+                    Régénérer via n8n
+                  </Badge>
+                ) : null}
                 {options.mode === "ready" && preview && (
                   <>
                     <p className="text-xs text-muted-foreground truncate">
                       Objet : {preview.subject}
                     </p>
-                    {scpiBulletinMissing ? (
+                    {scpiSendBlockReason ? (
                       <p className="text-xs text-amber-800 dark:text-amber-200">
-                        Résumé bulletins absent — relancez la préparation campagne n8n.
+                        {scpiSendBlockReason}
                       </p>
                     ) : null}
                   </>
@@ -694,7 +727,8 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   <>
                     <Button
                       size="sm"
-                      disabled={batchLocked}
+                      disabled={batchLocked || scpiSendBlockReason != null}
+                      title={scpiSendBlockReason ?? undefined}
                       onClick={() => openConfirm(item)}
                     >
                       <Send className="h-4 w-4 mr-1" />
@@ -823,6 +857,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
           email={emailStatus.email}
         />
       )}
+      <ScpiCampaignChecklist
+        staleReadyCount={scpiStaleReadyCount}
+        onRefreshQueue={() => loadQueue({ silent: true })}
+      />
       <EnvoisQueueStats
         ready={ready.length}
         scheduled={scheduled.length}
@@ -942,9 +980,16 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                       size="sm"
                       disabled={
                         selectedReadyItems.length === 0 ||
+                        selectedReadySendBlocked ||
                         loading ||
                         batchSendRunning ||
                         isEtiquetteEmailSendActive()
+                      }
+                      title={
+                        selectedReadySendBlockReason ??
+                        (selectedReadySendBlocked
+                          ? "Sélection avec envoi SCPI bloqué — relancez n8n prepare"
+                          : undefined)
                       }
                       onClick={() => setBatchOpen(true)}
                     >

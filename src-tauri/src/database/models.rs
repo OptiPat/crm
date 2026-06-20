@@ -826,6 +826,9 @@ pub struct Tache {
     pub updated_at: i64,
     /// Contacts liés (vide = tâche libre).
     pub contacts: Vec<TacheContactRef>,
+    /// Créée automatiquement par une action étiquette (`contact_etiquettes.tache_id`).
+    #[serde(default)]
+    pub from_etiquette_auto: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

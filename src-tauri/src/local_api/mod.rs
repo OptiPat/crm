@@ -19,7 +19,10 @@ static SERVER_PORT: AtomicU16 = AtomicU16::new(0);
 static SERVER_HANDLE: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
 static RUNTIME_TOKEN: Mutex<Option<Arc<RwLock<String>>>> = Mutex::new(None);
 
-pub use commands::{get_local_api_settings_cmd, regenerate_local_api_token_cmd, save_local_api_settings_cmd};
+pub use commands::{
+    get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
+    save_local_api_settings_cmd, trigger_scpi_n8n_workflow_cmd,
+};
 
 pub fn start_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {
     stop();
@@ -159,6 +162,11 @@ fn handle_request(request: Request, config: &LocalApiConfig) -> IoResult<()> {
         return request.respond(response);
     }
 
+    // Ping local sans auth — ne renvoie aucune donnée métier.
+    if request.method() == &Method::Get && request.url() == "/api/health" {
+        return json_response(request, StatusCode(200), r#"{"status":"ok"}"#);
+    }
+
     if !authorize(&request, &config.token) {
         return json_response(
             request,
@@ -168,10 +176,10 @@ fn handle_request(request: Request, config: &LocalApiConfig) -> IoResult<()> {
     }
 
     match (request.method(), request.url()) {
-        (&Method::Get, "/api/health") => {
-            json_response(request, StatusCode(200), r#"{"status":"ok"}"#)
-        }
         (&Method::Get, "/api/birthdays/today") => handle_birthdays_today(request, config),
+        (&Method::Get, path) if path.split('?').next() == Some("/api/scpi/products") => {
+            scpi::handle_list_products(request, config)
+        }
         (&Method::Post, "/api/scpi/campaigns/prepare") => {
             scpi::handle_prepare_campaign(request, config)
         }

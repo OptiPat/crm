@@ -11,8 +11,10 @@ import {
   type NotificationSeverity,
 } from "@/lib/notifications/app-notifications";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
+import { navigateToTaches } from "@/lib/navigation/taches-navigation";
 import { STELLIUM_EXCELTIS_CHANGED_EVENT } from "@/lib/api/tauri-stellium-exceltis";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
+import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   subscribeEtiquettesChanged,
@@ -90,6 +92,7 @@ export function AppNotificationsBar({
     };
 
     const unsubAlertes = subscribeAlertesChanged(schedule);
+    const unsubTaches = subscribeTachesChanged(schedule);
     const unsubContacts = subscribeContactsChanged(schedule);
     const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
     const unsubRelation = subscribeRelationChanged(schedule);
@@ -102,6 +105,7 @@ export function AppNotificationsBar({
 
     return () => {
       unsubAlertes();
+      unsubTaches();
       unsubContacts();
       unsubEtiquettes();
       unsubRelation();
@@ -169,16 +173,24 @@ export function AppNotificationsBar({
             <NotificationPill
               key={item.id}
               item={item}
-              onClick={() =>
+              onClick={() => {
+                if (item.targetPage === "taches") {
+                  navigateToTaches(
+                    onPageChange,
+                    item.tachesEcheanceFilter ?? "urgent",
+                    currentPage
+                  );
+                  return;
+                }
                 navigateToSuivi(
                   onPageChange,
-                  item.suiviTab,
+                  item.suiviTab ?? "alertes",
                   item.envoisSubTab,
                   item.focusContactId,
                   currentPage,
                   item.focusEtiquetteId
-                )
-              }
+                );
+              }}
               onDismiss={
                 item.stelliumMessageId
                   ? async () => {

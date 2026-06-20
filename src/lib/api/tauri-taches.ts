@@ -24,6 +24,8 @@ export interface Tache {
   updated_at: number;
   /** Contacts liés (vide = tâche libre). */
   contacts: TacheContactRef[];
+  /** Créée automatiquement par une action étiquette. */
+  from_etiquette_auto?: boolean;
 }
 
 /** Conservé pour compat : une tâche porte désormais directement ses contacts. */

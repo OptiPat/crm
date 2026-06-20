@@ -17,6 +17,7 @@ export function ParametresIntegrationsSection() {
   const [settings, setSettings] = useState<LocalApiSettings | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [port, setPort] = useState("3001");
+  const [scpiN8nWebhookUrl, setScpiN8nWebhookUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -27,6 +28,7 @@ export function ParametresIntegrationsSection() {
       setSettings(data);
       setEnabled(data.enabled);
       setPort(String(data.port));
+      setScpiN8nWebhookUrl(data.scpiN8nWebhookUrl ?? "");
     } catch (error) {
       console.error(error);
       toast.error("Impossible de charger l'intégration n8n.");
@@ -56,7 +58,7 @@ export function ParametresIntegrationsSection() {
     }
     setSaving(true);
     try {
-      const data = await saveLocalApiSettings(enabled, parsedPort);
+      const data = await saveLocalApiSettings(enabled, parsedPort, scpiN8nWebhookUrl);
       setSettings(data);
       toast.success("Intégration n8n enregistrée.");
     } catch (error) {
@@ -138,6 +140,26 @@ export function ParametresIntegrationsSection() {
               </div>
 
               <div className="grid gap-2">
+                <Label>URL produits SCPI (GET, n8n Docker)</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={settings.scpiProductsUrl} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => void copy(settings.scpiProductsUrl, "URL produits SCPI")}
+                    aria-label="Copier l'URL produits SCPI"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Liste des <code className="text-[11px]">nom_produit</code> SCPI du portefeuille — pour
+                  aligner les bulletins n8n avant le POST prepare.
+                </p>
+              </div>
+
+              <div className="grid gap-2">
                 <Label>URL campagnes SCPI (POST, n8n Docker)</Label>
                 <div className="flex gap-2">
                   <Input readOnly value={settings.scpiCampaignsUrl} />
@@ -151,6 +173,22 @@ export function ParametresIntegrationsSection() {
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
+              </div>
+
+              <div className="grid gap-2">
+                <Label htmlFor="scpi-n8n-webhook">URL webhook n8n — campagne SCPI (production)</Label>
+                <Input
+                  id="scpi-n8n-webhook"
+                  value={scpiN8nWebhookUrl}
+                  onChange={(e) => setScpiN8nWebhookUrl(e.target.value)}
+                  placeholder="http://localhost:5678/webhook/scpi-campagne-trimestre"
+                  className="font-mono text-xs"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Nœud Webhook en début de workflow (URL production). Bouton « Lancer workflow n8n »
+                  dans Suivi → Envois. n8n doit tourner (service/Docker) et le workflow être activé —
+                  la page n8n dans le navigateur n&apos;est pas nécessaire.
+                </p>
               </div>
 
               <div className="grid gap-2">

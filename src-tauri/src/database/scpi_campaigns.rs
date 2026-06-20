@@ -12,9 +12,8 @@ pub const SCPI_BULLETIN_TEMPLATE_TU_NOM: &str = "Bulletin SCPI trimestriel (tu)"
 pub struct ScpiBulletinInput {
     pub nom_produit: String,
     pub summary_markdown: String,
-    /// Chemin source n8n (audit / traçabilité, non requis pour le matching).
+    /// Nom de fichier PDF source (n8n) — secours si le titre Mistral est ambigu.
     #[serde(default)]
-    #[allow(dead_code)]
     pub fichier_source: Option<String>,
 }
 
@@ -106,6 +105,106 @@ fn pick_display_produit_nom(investissement_noms: &[String], bulletin_key: &str) 
         .max_by_key(|nom| nom.len())
         .cloned()
         .unwrap_or_else(|| bulletin_key.trim().to_string())
+}
+
+fn clean_inferred_produit_name(name: &str) -> String {
+    let name = name.trim().trim_matches('*').trim();
+    let lower = name.to_lowercase();
+    if let Some(rest) = lower.strip_prefix("scpi ") {
+        return name[name.len() - rest.len()..].trim().to_string();
+    }
+    name.to_string()
+}
+
+/// Extrait le nom SCPI depuis la ligne « 1. Nom – période » du résumé Mistral.
+fn infer_produit_from_summary(summary: &str) -> Option<String> {
+    for line in summary.lines() {
+        let mut t = line.trim().trim_start_matches('#').trim();
+        t = t.trim_matches('*').trim();
+        let rest = t.strip_prefix("1.")?.trim();
+        let name = if let Some(dash_idx) = rest.find('–').or_else(|| rest.find('-')) {
+            rest[..dash_idx].trim()
+        } else {
+            rest
+        };
+        let name = clean_inferred_produit_name(name);
+        if name.len() >= MIN_PRODUIT_MATCH_LEN {
+            return Some(name);
+        }
+    }
+    None
+}
+
+const FICHIER_SKIP_TOKENS: &[&str] = &[
+    "bti", "bulletin", "trimestre", "trim", "scpi", "t1", "t2", "t3", "t4", "1er", "2e", "3e",
+    "4e",
+];
+
+fn is_skipped_fichier_token(part: &str) -> bool {
+    let lower = part.to_lowercase();
+    if FICHIER_SKIP_TOKENS.contains(&lower.as_str()) {
+        return true;
+    }
+    if lower.len() == 2
+        && lower.starts_with('t')
+        && lower.chars().nth(1).is_some_and(|c| c.is_ascii_digit())
+    {
+        return true;
+    }
+    lower.len() == 4
+        && lower.starts_with("20")
+        && lower.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Extrait le nom SCPI depuis le nom de fichier PDF (ex. « BTI Transitions Europe T1 2026.pdf »).
+fn infer_produit_from_fichier(fichier: &str) -> Option<String> {
+    let base = fichier
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or(fichier)
+        .trim();
+    let base = base
+        .strip_suffix(".pdf")
+        .or_else(|| base.strip_suffix(".PDF"))
+        .unwrap_or(base)
+        .trim();
+    if base.is_empty() {
+        return None;
+    }
+    let kept: Vec<&str> = base
+        .split(|c: char| {
+            c.is_whitespace() || c == '_' || c == '-' || c == '–' || c == '—'
+        })
+        .filter(|s| !s.is_empty())
+        .filter(|part| !is_skipped_fichier_token(part))
+        .collect();
+    if kept.is_empty() {
+        return Some(base.to_string());
+    }
+    Some(kept.join(" "))
+}
+
+fn pick_longer_produit_name(a: &str, b: &str) -> String {
+    if a.len() >= b.len() {
+        a.to_string()
+    } else {
+        b.to_string()
+    }
+}
+
+fn bulletin_match_key(bulletin: &ScpiBulletinInput) -> String {
+    let from_summary = infer_produit_from_summary(&bulletin.summary_markdown);
+    let from_fichier = bulletin
+        .fichier_source
+        .as_deref()
+        .and_then(infer_produit_from_fichier);
+    match (from_summary, from_fichier) {
+        (Some(summary), Some(fichier)) if !nom_produit_matches(&fichier, &summary) => fichier,
+        (Some(summary), Some(fichier)) => pick_longer_produit_name(&summary, &fichier),
+        (Some(summary), None) => summary,
+        (None, Some(fichier)) => fichier,
+        (None, None) => bulletin.nom_produit.trim().to_string(),
+    }
 }
 
 const SUBSECTION_TITLES: &[&str] = &["Chiffres clés", "Ce trimestre", "Acquisitions"];
@@ -262,7 +361,16 @@ fn scpi_intro_phrases(count: usize) -> (String, String) {
     }
 }
 
-fn build_scpi_campaign_variables_json(bulletins: &[ScpiBulletinInput], periode: &str) -> String {
+const SCPI_TEMPLATE_VERSION: i64 = 4;
+/// Version du JSON `campaign_variables` (digest). Incrémenter si le format change.
+pub const SCPI_CAMPAIGN_DIGEST_VERSION: i64 = 1;
+pub const SCPI_LAST_PREPARE_SETTING: &str = "scpi_last_campaign_prepare";
+
+fn build_scpi_campaign_variables_json(
+    bulletins: &[ScpiBulletinInput],
+    periode: &str,
+    prepared_at: i64,
+) -> String {
     let count = bulletins.len();
     let (intro_tu, intro_vous) = scpi_intro_phrases(count);
     let bulletin_resume = build_bulletin_resume(bulletins, periode);
@@ -272,11 +380,11 @@ fn build_scpi_campaign_variables_json(bulletins: &[ScpiBulletinInput], periode: 
         "scpi_intro_tu": intro_tu,
         "scpi_intro_vous": intro_vous,
         "bulletin_resume": bulletin_resume,
+        "prepared_at": prepared_at,
+        "digest_version": SCPI_CAMPAIGN_DIGEST_VERSION,
     })
     .to_string()
 }
-
-const SCPI_TEMPLATE_VERSION: i64 = 4;
 
 const SCPI_VOUS_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour {{prenom}} {{nom}},</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{scpi_intro_vous}} (<strong>{{periode}}</strong>) :</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{bulletin_resume_html}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">—</div><div style="line-height:1.5;margin:0;padding:0">Résumé informatif — se référer aux bulletins officiels. Ce texte ne constitue pas un conseil en investissement.</div></div>"#;
 
@@ -333,7 +441,26 @@ fn scpi_tu_corps_plain() -> &'static str {
 Résumé informatif — se référer aux bulletins officiels. Ce texte ne constitue pas un conseil en investissement."
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScpiProductsListResponse {
+    pub count: usize,
+    pub products: Vec<String>,
+}
+
 impl Database {
+    /// Noms SCPI distincts en portefeuille (matching campagnes n8n ↔ investissements).
+    pub fn list_scpi_product_names(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT TRIM(nom_produit) FROM investissements
+             WHERE type_produit IN ('SCPI', 'SCPI_DEMEMBREMENT', 'SCPI_FISCALE')
+               AND TRIM(COALESCE(nom_produit, '')) != ''
+             ORDER BY nom_produit COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        rows.collect()
+    }
+
     pub fn migrate_scpi_campaign_envois(&self) -> Result<()> {
         let mut needs_index = false;
         if !self.table_has_column("contact_template_envois", "campaign_batch_key")? {
@@ -540,12 +667,10 @@ impl Database {
 
         let mut matched = Vec::new();
         for bulletin in bulletins {
-            if noms
-                .iter()
-                .any(|nom| nom_produit_matches(nom, &bulletin.nom_produit))
-            {
+            let key = bulletin_match_key(bulletin);
+            if noms.iter().any(|nom| nom_produit_matches(nom, &key)) {
                 matched.push(ScpiBulletinInput {
-                    nom_produit: pick_display_produit_nom(&noms, &bulletin.nom_produit),
+                    nom_produit: pick_display_produit_nom(&noms, &key),
                     ..bulletin.clone()
                 });
             }
@@ -659,7 +784,8 @@ impl Database {
             }
             contacts_matched += 1;
 
-            let campaign_variables = build_scpi_campaign_variables_json(&matched, periode);
+            let campaign_variables =
+                build_scpi_campaign_variables_json(&matched, periode, now);
 
             let has_email = email
                 .as_deref()
@@ -695,6 +821,19 @@ impl Database {
             periode, contacts_matched, contacts_queued, contacts_no_email, contacts_skipped_already_sent
         );
 
+        let snapshot = ScpiLastPrepareSnapshot {
+            periode: periode.to_string(),
+            batch_key: batch_key.clone(),
+            prepared_at: now,
+            bulletins_count,
+            contacts_matched,
+            contacts_queued,
+            contacts_no_email,
+            contacts_skipped_already_sent,
+            digest_version: SCPI_CAMPAIGN_DIGEST_VERSION,
+        };
+        self.save_scpi_last_prepare_snapshot(&snapshot)?;
+
         Ok(PrepareScpiCampaignResult {
             periode: periode.to_string(),
             batch_key,
@@ -707,6 +846,110 @@ impl Database {
             message,
         })
     }
+
+    fn save_scpi_last_prepare_snapshot(&self, snapshot: &ScpiLastPrepareSnapshot) -> Result<()> {
+        let json = serde_json::to_string(snapshot).map_err(|e| {
+            rusqlite::Error::InvalidParameterName(format!("JSON serialize error: {e}"))
+        })?;
+        self.set_setting(SCPI_LAST_PREPARE_SETTING, &json)
+    }
+
+    fn load_scpi_last_prepare_snapshot(&self) -> Result<Option<ScpiLastPrepareSnapshot>> {
+        match self.get_setting(SCPI_LAST_PREPARE_SETTING)? {
+            Some(raw) => {
+                let parsed = serde_json::from_str(&raw).map_err(|e| {
+                    rusqlite::Error::InvalidParameterName(format!("JSON parse error: {e}"))
+                })?;
+                Ok(Some(parsed))
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn count_scpi_ready_for_batch(&self, batch_key: &str) -> Result<u64> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_template_envois cte
+             INNER JOIN templates_email t ON t.id = cte.template_id
+             INNER JOIN contacts c ON c.id = cte.contact_id
+             WHERE t.nom IN (?1, ?2)
+               AND cte.campaign_batch_key = ?3
+               AND cte.email_envoye = 0
+               AND COALESCE(cte.email_annule, 0) = 0
+               AND COALESCE(cte.email_suivi_ignore, 0) = 0
+               AND cte.email_date_prevue IS NOT NULL
+               AND cte.email_date_prevue <= ?4
+               AND c.email IS NOT NULL AND TRIM(c.email) != ''",
+            params![
+                SCPI_BULLETIN_TEMPLATE_NOM,
+                SCPI_BULLETIN_TEMPLATE_TU_NOM,
+                batch_key,
+                now,
+            ],
+            |row| row.get(0),
+        )
+    }
+
+    /// Envois réussis du batch trimestre courant (file modèle), pas le journal global.
+    fn count_scpi_sent_for_batch(&self, batch_key: &str) -> Result<u64> {
+        self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_template_envois cte
+             INNER JOIN templates_email t ON t.id = cte.template_id
+             WHERE t.nom IN (?1, ?2)
+               AND COALESCE(cte.campaign_batch_key, '') = ?3
+               AND cte.email_envoye = 1",
+            params![
+                SCPI_BULLETIN_TEMPLATE_NOM,
+                SCPI_BULLETIN_TEMPLATE_TU_NOM,
+                batch_key,
+            ],
+            |row| row.get(0),
+        )
+    }
+
+    pub fn get_scpi_campaign_dashboard(&self) -> Result<ScpiCampaignDashboard> {
+        let last_prepare = self.load_scpi_last_prepare_snapshot()?;
+        let ready_count = match last_prepare.as_ref() {
+            Some(snap) => self.count_scpi_ready_for_batch(&snap.batch_key)?,
+            None => 0,
+        };
+        let sent_since_prepare = match last_prepare.as_ref() {
+            Some(snap) => self.count_scpi_sent_for_batch(&snap.batch_key)?,
+            None => 0,
+        };
+        Ok(ScpiCampaignDashboard {
+            last_prepare,
+            ready_count,
+            sent_since_prepare,
+            current_digest_version: SCPI_CAMPAIGN_DIGEST_VERSION,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScpiLastPrepareSnapshot {
+    pub periode: String,
+    pub batch_key: String,
+    pub prepared_at: i64,
+    pub bulletins_count: usize,
+    pub contacts_matched: u64,
+    pub contacts_queued: u64,
+    pub contacts_no_email: u64,
+    pub contacts_skipped_already_sent: u64,
+    pub digest_version: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScpiCampaignDashboard {
+    pub last_prepare: Option<ScpiLastPrepareSnapshot>,
+    pub ready_count: u64,
+    pub sent_since_prepare: u64,
+    pub current_digest_version: i64,
 }
 
 #[cfg(test)]
@@ -721,6 +964,119 @@ mod tests {
         let db = Database { conn };
         db.init_tables().unwrap();
         db
+    }
+
+    #[test]
+    fn list_scpi_product_names_distinct_sorted() {
+        let db = mem_db();
+        let cid = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                email: Some("j@example.com".into()),
+                famille_id: None,
+                foyer_id: None,
+                role_foyer: None,
+                role_famille: None,
+                filleul_categorie: None,
+                parrain_id: None,
+                prescripteur_id: None,
+                civilite: None,
+                telephone: None,
+                adresse: None,
+                code_postal: None,
+                ville: None,
+                pays: None,
+                date_naissance: None,
+                lieu_naissance: None,
+                profession: None,
+                situation_familiale: None,
+                regime_matrimonial: None,
+                revenus_annuels: None,
+                charges_emprunts: None,
+                epargne_precaution_souhaitee: None,
+                objectifs_patrimoniaux: None,
+                source_lead: None,
+                profil_risque_sri: None,
+                date_dernier_contact: None,
+                date_prochain_suivi: None,
+                date_dernier_contact_filleul: None,
+                date_prochain_suivi_filleul: None,
+                registre: None,
+                notes: None,
+                famille_regroupement_exclu: None,
+                statut_suivi: None,
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Comète".into(),
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        })
+        .unwrap();
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Comète".into(),
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        })
+        .unwrap();
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Transitions Europe".into(),
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        })
+        .unwrap();
+
+        let names = db.list_scpi_product_names().unwrap();
+        assert_eq!(names, vec!["Comète", "Transitions Europe"]);
     }
 
     #[test]
@@ -766,6 +1122,67 @@ mod tests {
         assert_eq!(
             pick_display_produit_nom(&noms, "Europe"),
             "Transitions Europe"
+        );
+    }
+
+    #[test]
+    fn bulletin_match_key_uses_summary_title_not_ambiguous_filename_token() {
+        let bulletin = ScpiBulletinInput {
+            nom_produit: "Europe".into(),
+            summary_markdown:
+                "1. Transitions Europe – 1er trimestre 2026**\n\n2. Chiffres clés\n- Collecte : 147 M€".into(),
+            fichier_source: Some("BTI 2026 Transitions Europe.pdf".into()),
+        };
+        assert_eq!(bulletin_match_key(&bulletin), "Transitions Europe");
+
+        let noms = vec![
+            "Transitions Europe".into(),
+            "Epargne Pierre Europe".into(),
+        ];
+        assert_eq!(
+            pick_display_produit_nom(&noms, &bulletin_match_key(&bulletin)),
+            "Transitions Europe"
+        );
+
+        let bulletin2 = ScpiBulletinInput {
+            nom_produit: "Europe".into(),
+            summary_markdown:
+                "1. Epargne Pierre Europe – 1er trimestre 2026**\n\n2. Chiffres clés\n- Capitalisation : 635 M€"
+                    .into(),
+            fichier_source: Some("BTI Epargne Pierre Europe.pdf".into()),
+        };
+        assert_eq!(bulletin_match_key(&bulletin2), "Epargne Pierre Europe");
+        assert_eq!(
+            pick_display_produit_nom(&noms, &bulletin_match_key(&bulletin2)),
+            "Epargne Pierre Europe"
+        );
+    }
+
+    #[test]
+    fn bulletin_match_key_prefers_fichier_when_summary_title_conflicts() {
+        let bulletin = ScpiBulletinInput {
+            nom_produit: "Europe".into(),
+            summary_markdown:
+                "1. Transitions Europe – 1er trimestre 2026**\n\n2. Chiffres clés\n- Capitalisation : 635 M€"
+                    .into(),
+            fichier_source: Some("BTI Epargne Pierre Europe T1 2026.pdf".into()),
+        };
+        assert_eq!(bulletin_match_key(&bulletin), "Epargne Pierre Europe");
+    }
+
+    #[test]
+    fn infer_produit_from_fichier_strips_bti_and_period() {
+        assert_eq!(
+            infer_produit_from_fichier("BTI Transitions Europe T1 2026.pdf"),
+            Some("Transitions Europe".into())
+        );
+    }
+
+    #[test]
+    fn infer_produit_from_summary_strips_scpi_prefix() {
+        assert_eq!(
+            infer_produit_from_summary("1. SCPI Comète – T1 2026\n\n2. Chiffres clés"),
+            Some("Comète".into())
         );
     }
 
@@ -1538,5 +1955,211 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn prepare_campaign_stores_digest_version_and_dashboard_snapshot() {
+        use crate::database::models::{NewContact, NewInvestissement};
+
+        let db = mem_db();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("client@example.com".into()),
+                categorie: "CLIENT".into(),
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                statut_suivi: Some("ACTIF".into()),
+                famille_id: None,
+                foyer_id: None,
+                role_foyer: None,
+                role_famille: None,
+                filleul_categorie: None,
+                parrain_id: None,
+                prescripteur_id: None,
+                civilite: None,
+                telephone: None,
+                adresse: None,
+                code_postal: None,
+                ville: None,
+                pays: None,
+                date_naissance: None,
+                lieu_naissance: None,
+                profession: None,
+                situation_familiale: None,
+                regime_matrimonial: None,
+                revenus_annuels: None,
+                charges_emprunts: None,
+                epargne_precaution_souhaitee: None,
+                objectifs_patrimoniaux: None,
+                source_lead: None,
+                profil_risque_sri: None,
+                date_dernier_contact: None,
+                date_prochain_suivi: None,
+                date_dernier_contact_filleul: None,
+                date_prochain_suivi_filleul: None,
+                registre: None,
+                notes: None,
+                famille_regroupement_exclu: None,
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Comète".into(),
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        })
+        .unwrap();
+
+        db.prepare_scpi_bulletin_campaign(PrepareScpiCampaignInput {
+            periode: "T1 2026".into(),
+            bulletins: vec![ScpiBulletinInput {
+                nom_produit: "Comète".into(),
+                summary_markdown: "1. SCPI Comète – T1 2026\n\n2. Chiffres clés\n- Collecte".into(),
+                fichier_source: None,
+            }],
+        })
+        .unwrap();
+
+        let vars: String = db
+            .conn
+            .query_row(
+                "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                params![cid],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(vars.contains(&format!("\"digest_version\":{}", SCPI_CAMPAIGN_DIGEST_VERSION)));
+        assert!(vars.contains("\"prepared_at\":"));
+
+        let dash = db.get_scpi_campaign_dashboard().unwrap();
+        assert!(dash.last_prepare.is_some());
+        assert_eq!(dash.last_prepare.as_ref().unwrap().periode, "T1 2026");
+        assert_eq!(dash.ready_count, 1);
+        assert_eq!(dash.sent_since_prepare, 0);
+    }
+
+    #[test]
+    fn dashboard_sent_count_follows_batch_not_journal() {
+        use crate::database::models::{NewContact, NewInvestissement};
+
+        let db = mem_db();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("client@example.com".into()),
+                categorie: "CLIENT".into(),
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                statut_suivi: Some("ACTIF".into()),
+                famille_id: None,
+                foyer_id: None,
+                role_foyer: None,
+                role_famille: None,
+                filleul_categorie: None,
+                parrain_id: None,
+                prescripteur_id: None,
+                civilite: None,
+                telephone: None,
+                adresse: None,
+                code_postal: None,
+                ville: None,
+                pays: None,
+                date_naissance: None,
+                lieu_naissance: None,
+                profession: None,
+                situation_familiale: None,
+                regime_matrimonial: None,
+                revenus_annuels: None,
+                charges_emprunts: None,
+                epargne_precaution_souhaitee: None,
+                objectifs_patrimoniaux: None,
+                source_lead: None,
+                profil_risque_sri: None,
+                date_dernier_contact: None,
+                date_prochain_suivi: None,
+                date_dernier_contact_filleul: None,
+                date_prochain_suivi_filleul: None,
+                registre: None,
+                notes: None,
+                famille_regroupement_exclu: None,
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Comète".into(),
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        })
+        .unwrap();
+
+        db.prepare_scpi_bulletin_campaign(PrepareScpiCampaignInput {
+            periode: "T1 2026".into(),
+            bulletins: vec![ScpiBulletinInput {
+                nom_produit: "Comète".into(),
+                summary_markdown: "1. Comète – T1 2026\n\n2. Chiffres clés".into(),
+                fichier_source: None,
+            }],
+        })
+        .unwrap();
+
+        let _ = db
+            .insert_email_send_log(
+                cid,
+                None,
+                None,
+                None,
+                Some(SCPI_BULLETIN_TEMPLATE_NOM),
+                Some("Sujet journal orphelin"),
+                "success",
+                None,
+                None,
+                None,
+                "individual",
+            )
+            .unwrap();
+
+        let dash = db.get_scpi_campaign_dashboard().unwrap();
+        assert_eq!(dash.sent_since_prepare, 0);
+
+        let row_id = db.get_etiquette_email_queue("ready").unwrap()[0].contact_etiquette_id;
+        db.mark_template_email_sent(row_id, None, None, Some("Sujet"), None, None, None)
+            .unwrap();
+
+        let dash = db.get_scpi_campaign_dashboard().unwrap();
+        assert_eq!(dash.sent_since_prepare, 1);
+        assert_eq!(dash.ready_count, 0);
     }
 }

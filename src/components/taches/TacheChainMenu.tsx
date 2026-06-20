@@ -113,6 +113,7 @@ export function TacheChainMenu({ tache }: TacheChainMenuProps) {
         open={tacheOpen}
         onOpenChange={setTacheOpen}
         fixedContactIds={contactIds}
+        creationContext="chain"
         onSuccess={() => setTacheOpen(false)}
       />
       {singleContactId != null && (
