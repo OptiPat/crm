@@ -62,8 +62,8 @@ export function useBackgroundSync(enabled = true): void {
 
         const result = await scanStelliumExceltisEmails();
         lastStelliumScanRef.current = Date.now();
+        notifyStelliumExceltisChanged();
         if (result.new_signals > 0) {
-          notifyStelliumExceltisChanged();
           const label =
             result.signals[result.signals.length - 1]?.millesime_label ?? "millésime";
           toast.info(

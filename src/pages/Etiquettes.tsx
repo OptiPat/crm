@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Plus,
   Search,
   Tag,
   RefreshCw,
@@ -20,6 +19,8 @@ import {
   type EtiquetteWithCount,
 } from "@/lib/api/tauri-etiquettes";
 import { EtiquetteForm } from "@/components/etiquettes/EtiquetteForm";
+import { EtiquetteCreateMenu } from "@/components/etiquettes/EtiquetteCreateMenu";
+import { ExceltisEtiquetteCreateDialog } from "@/components/etiquettes/ExceltisEtiquetteCreateDialog";
 import { EtiquetteContactsPanel } from "@/components/etiquettes/EtiquetteContactsPanel";
 import { EtiquetteListCard } from "@/components/etiquettes/EtiquetteListCard";
 import { SegmentsSection } from "@/components/etiquettes/SegmentsSection";
@@ -109,6 +110,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [pageFilter, setPageFilter] = useState<EtiquettePageFilter>("all");
   const [showForm, setShowForm] = useState(false);
+  const [showExceltisForm, setShowExceltisForm] = useState(false);
   const [selectedEtiquette, setSelectedEtiquette] = useState<EtiquetteWithCount | null>(null);
   const [viewingContacts, setViewingContacts] = useState<EtiquetteWithCount | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -247,6 +249,15 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     }
   };
 
+  const openClassicForm = () => {
+    setSelectedEtiquette(null);
+    setShowForm(true);
+  };
+
+  const openExceltisForm = () => {
+    setShowExceltisForm(true);
+  };
+
   const handleFormClose = () => {
     setShowForm(false);
     setSelectedEtiquette(null);
@@ -357,10 +368,12 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
                 Tout afficher
               </Button>
             ) : (
-              <Button type="button" size="sm" className="mt-3 gap-1" onClick={() => setShowForm(true)}>
-                <Plus className="h-4 w-4" />
-                Créer une étiquette
-              </Button>
+              <EtiquetteCreateMenu
+                size="sm"
+                className="mt-3"
+                onClassic={openClassicForm}
+                onExceltis={openExceltisForm}
+              />
             )}
           </div>
         ) : (
@@ -420,10 +433,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
             <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
             Recalculer les règles
           </Button>
-          <Button className="gap-2" onClick={() => setShowForm(true)}>
-            <Plus className="h-4 w-4" />
-            Nouvelle étiquette
-          </Button>
+          <EtiquetteCreateMenu onClassic={openClassicForm} onExceltis={openExceltisForm} />
         </div>
       </div>
 
@@ -507,6 +517,12 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
         open={showForm}
         onOpenChange={handleFormClose}
         etiquette={selectedEtiquette}
+        onSuccess={loadEtiquettes}
+      />
+
+      <ExceltisEtiquetteCreateDialog
+        open={showExceltisForm}
+        onOpenChange={setShowExceltisForm}
         onSuccess={loadEtiquettes}
       />
 

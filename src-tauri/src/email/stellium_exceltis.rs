@@ -11,6 +11,14 @@ use tauri::AppHandle;
 const STATE_SETTING_KEY: &str = "stellium_exceltis_signals_v1";
 const GMAIL_FROM: &str = "marketplacement@stellium.fr";
 const EXCELITIS_ETIQUETTE_PREFIX: &str = "Exceltis — ";
+/// Alias Stellium → libellé CRM (Patrimoine Taux → Patrimoine).
+const GAMME_PARSE_ALIASES: [(&str, &str); 5] = [
+    ("patrimoine taux", "Patrimoine"),
+    ("sérénité", "Sérénité"),
+    ("serenite", "Sérénité"),
+    ("rendement", "Rendement"),
+    ("patrimoine", "Patrimoine"),
+];
 /// Fenêtre Gmail (`newer_than:400d`) — seuls ces messages sont listés.
 const GMAIL_QUERY_RECENCY_DAYS: u32 = 400;
 /// Plafond de sécurité par scan (pagination Gmail jusqu’à épuisement ou ce plafond).
@@ -120,13 +128,277 @@ struct GmailHeader {
 }
 
 fn header_value(headers: Option<&[GmailHeader]>, name: &str) -> String {
-    headers
+    let raw = headers
         .and_then(|hs| {
             hs.iter()
                 .find(|h| h.name.eq_ignore_ascii_case(name))
                 .map(|h| h.value.trim().to_string())
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    decode_mime_header(&raw)
+}
+
+/// Décode les sujets Gmail RFC 2047 (=?UTF-8?Q?F=C3=A9vrier?= …).
+fn decode_mime_header(value: &str) -> String {
+    let trimmed = value.trim();
+    if !trimmed.contains("=?") {
+        return trimmed.to_string();
+    }
+    let mut out = String::new();
+    let mut rest = trimmed;
+    while !rest.is_empty() {
+        let Some(start) = rest.find("=?") else {
+            out.push_str(rest);
+            break;
+        };
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let Some(end_rel) = rest[2..].find("?=") else {
+            out.push_str(rest);
+            break;
+        };
+        let end = end_rel + 2;
+        let token = &rest[..end + 2];
+        if let Some(decoded) = decode_encoded_word(token) {
+            out.push_str(&decoded);
+        } else {
+            out.push_str(token);
+        }
+        rest = &rest[end + 2..];
+        if rest.starts_with(' ') {
+            out.push(' ');
+            rest = &rest[1..];
+        }
+    }
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn decode_encoded_word(token: &str) -> Option<String> {
+    let inner = token.strip_prefix("=?")?.strip_suffix("?=")?;
+    let mut parts = inner.splitn(3, '?');
+    let charset = parts.next()?.to_lowercase();
+    let encoding = parts.next()?.to_uppercase();
+    let data = parts.next()?;
+    let bytes = match encoding.as_str() {
+        "Q" => decode_q_encoding(data)?,
+        "B" => base64::Engine::decode(&base64::engine::general_purpose::STANDARD, data).ok()?,
+        _ => return None,
+    };
+    decode_header_bytes(&bytes, &charset)
+}
+
+fn decode_q_encoding(data: &str) -> Option<Vec<u8>> {
+    let mut bytes = Vec::new();
+    let chars: Vec<char> = data.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '=' && i + 2 < chars.len() {
+            let hex: String = chars[i + 1..i + 3].iter().collect();
+            if hex.chars().all(|c| c.is_ascii_hexdigit()) {
+                if let Ok(b) = u8::from_str_radix(&hex, 16) {
+                    bytes.push(b);
+                    i += 3;
+                    continue;
+                }
+            }
+        }
+        bytes.push(if chars[i] == '_' { b' ' } else { chars[i] as u8 });
+        i += 1;
+    }
+    Some(bytes)
+}
+
+fn decode_header_bytes(bytes: &[u8], charset: &str) -> Option<String> {
+    if charset.contains("utf") {
+        return String::from_utf8(bytes.to_vec()).ok();
+    }
+    Some(bytes.iter().map(|&b| b as char).collect())
+}
+
+fn subject_looks_like_exceltis_remboursement(subject: &str) -> bool {
+    let lower = subject.to_lowercase();
+    lower.contains("remboursement") && lower.contains("exceltis")
+}
+
+/// Mails « Informations complémentaires … » : pas de déclenchement campagne.
+fn is_complementaires_subject(subject: &str) -> bool {
+    let lower = subject.to_lowercase();
+    lower.contains("informations complementaires")
+        || lower.contains("informations complémentaires")
+}
+
+/// Newsletter « Bonne nouvelle … remboursements à venir » (plusieurs millésimes possibles).
+fn subject_is_announcement_newsletter(subject: &str) -> bool {
+    let lower = normalize_for_gamme_match(subject);
+    if !lower.contains("exceltis") {
+        return false;
+    }
+    lower.contains("a venir")
+        || lower.contains("bonne nouvelle")
+        || lower.contains("bonnes nouvelles")
+}
+
+/// Mail unitaire « Remboursement Exceltis {Gamme} {Mois} {Année} » — millésime = sujet seul.
+fn subject_is_direct_remboursement(subject: &str) -> bool {
+    if is_complementaires_subject(subject) || subject_is_announcement_newsletter(subject) {
+        return false;
+    }
+    let lower = normalize_for_gamme_match(subject);
+    lower.contains("remboursement exceltis") && parse_exceltis_key_from_text(subject).is_some()
+}
+
+const REMBOURSEMENT_BLOCK_WINDOW: usize = 500;
+const MILLESIME_MAX_GAP_FROM_EXCELTIS: usize = 400;
+/// Plafond corps mail / HTML — au-delà, troncature (newsletter Stellium tient en quelques Ko).
+const MAX_STELLIUM_PARSE_CHARS: usize = 64_000;
+
+/// Mentions produit (Extranet, fermeture souscription…) — pas un signal remboursement.
+fn is_excluded_exceltis_mention(normalized_window: &str) -> bool {
+    const PATTERNS: &[&str] = &[
+        "est desormais accessible",
+        "desormais accessible sur",
+        "extranet placement",
+        "sur votre extranet",
+        "fermeture imminente",
+        "fermeture prochaine",
+        "derniers jours pour souscrire",
+        "plus disponible a la souscription",
+        "accessibilite sur l extranet",
+    ];
+    PATTERNS.iter().any(|p| normalized_window.contains(p))
+}
+
+/// Preuve forte qu'un bloc est un vrai remboursement (et pas une annonce de disponibilité).
+/// Prime sur l'exclusion « Extranet/accessible » qui peut traîner dans la même fenêtre (pied de mail).
+fn window_has_strong_remboursement_evidence(normalized_window: &str) -> bool {
+    normalized_window.contains("remboursement :")
+        || normalized_window.contains("date d observation")
+        || normalized_window.contains("performance indice")
+}
+
+/// Bloc fiche produit Stellium (ligne « Remboursement : … », coupon, etc.) — pas de table ISIN.
+fn window_looks_like_remboursement_block(normalized_window: &str) -> bool {
+    if window_has_strong_remboursement_evidence(normalized_window) {
+        return true;
+    }
+    if is_excluded_exceltis_mention(normalized_window) {
+        return false;
+    }
+    normalized_window.contains("remboursement")
+        || normalized_window.contains("coupon")
+        || normalized_window.contains("indice de reference")
+        || normalized_window.contains("air bag")
+}
+
+fn is_month_at_word_boundary(text: &str, pos: usize, key: &str) -> bool {
+    if !text.is_char_boundary(pos) {
+        return false;
+    }
+    let after_pos = pos + key.len();
+    if after_pos < text.len() && !text.is_char_boundary(after_pos) {
+        return false;
+    }
+    let before_ok = text[..pos]
+        .chars()
+        .last()
+        .map(|c| !c.is_alphabetic())
+        .unwrap_or(true);
+    let after_ok = text[after_pos..]
+        .chars()
+        .next()
+        .map(|c| !c.is_alphabetic())
+        .unwrap_or(true);
+    before_ok && after_ok
+}
+
+/// Frontière de caractère ≤ `idx` (les espaces insécables `\u{a0}` font 2 octets).
+fn floor_char_boundary(text: &str, mut idx: usize) -> usize {
+    if idx >= text.len() {
+        return text.len();
+    }
+    while idx > 0 && !text.is_char_boundary(idx) {
+        idx -= 1;
+    }
+    idx
+}
+
+/// Frontière de caractère ≥ `idx`.
+fn ceil_char_boundary(text: &str, mut idx: usize) -> usize {
+    let len = text.len();
+    if idx >= len {
+        return len;
+    }
+    while idx < len && !text.is_char_boundary(idx) {
+        idx += 1;
+    }
+    idx
+}
+
+fn find_millesime_after_pos(text: &str, anchor_pos: usize, max_gap: usize) -> Option<(u32, u32)> {
+    // Recherche insensible à la casse : les clés de mois sont en minuscules.
+    let lowered = text.to_lowercase();
+    let text = lowered.as_str();
+    let anchor_pos = floor_char_boundary(text, anchor_pos.min(text.len()));
+    let search_end = floor_char_boundary(text, anchor_pos.saturating_add(max_gap).min(text.len()));
+    if anchor_pos >= search_end {
+        return None;
+    }
+    let mut best: Option<(usize, u32, u32)> = None;
+    for month in 1..=12u32 {
+        for key in month_search_keys(month) {
+            let mut start = anchor_pos;
+            while start < search_end {
+                let Some(rel) = text[start..search_end].find(key) else {
+                    break;
+                };
+                let pos = start + rel;
+                if !is_month_at_word_boundary(text, pos, key) {
+                    start = ceil_char_boundary(text, pos.saturating_add(1));
+                    continue;
+                }
+                if let Some(year) = extract_year_after_month(&text[pos..], key.len()) {
+                    if best.map(|(p, _, _)| pos < p).unwrap_or(true) {
+                        best = Some((pos, month, year));
+                    }
+                }
+                start = ceil_char_boundary(text, pos.saturating_add(1));
+            }
+        }
+    }
+    best.map(|(_, m, y)| (m, y))
+}
+
+fn push_unique_exceltis_key(
+    keys: &mut Vec<ExceltisEtiquetteKey>,
+    seen: &mut HashSet<(Option<String>, u32, u32)>,
+    key: ExceltisEtiquetteKey,
+) {
+    let dedupe = (key.gamme.clone(), key.month, key.year);
+    if seen.insert(dedupe) {
+        keys.push(key);
+    }
+}
+
+fn clip_parse_text(text: &str) -> &str {
+    if text.len() <= MAX_STELLIUM_PARSE_CHARS {
+        return text;
+    }
+    let mut end = MAX_STELLIUM_PARSE_CHARS;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    text.get(..end).unwrap_or(text)
+}
+
+fn parse_surface(text: &str) -> String {
+    normalize_for_gamme_match(clip_parse_text(text))
+}
+
+fn build_parse_text(subject: &str, snippet: &str, body: Option<&str>) -> String {
+    match body.filter(|b| !b.is_empty()) {
+        Some(full) => format!("{subject}\n{snippet}\n{}", clip_parse_text(full)),
+        None => format!("{subject}\n{snippet}"),
+    }
 }
 
 fn normalize_month_key(name: &str) -> String {
@@ -160,22 +432,139 @@ fn month_name_to_number(name: &str) -> Option<u32> {
     }
 }
 
-pub fn format_exceltis_etiquette_nom(month: u32, year: u32) -> Option<String> {
+pub fn format_exceltis_etiquette_nom(gamme: Option<&str>, month: u32, year: u32) -> Option<String> {
     let idx = month as usize;
     if idx < 1 || idx > 12 {
         return None;
     }
-    Some(format!("{EXCELITIS_ETIQUETTE_PREFIX}{} {year}", MOIS_FR[idx - 1]))
+    let millesime = format!("{} {year}", MOIS_FR[idx - 1]);
+    let gamme = gamme.map(str::trim).filter(|g| !g.is_empty());
+    Some(match gamme {
+        Some(g) => format!("Exceltis {g} — {millesime}"),
+        None => format!("{EXCELITIS_ETIQUETTE_PREFIX}{millesime}"),
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ExceltisEtiquetteKey {
+    gamme: Option<String>,
+    month: u32,
+    year: u32,
+}
+
+fn normalize_for_gamme_match(text: &str) -> String {
+    normalize_month_key(text)
+}
+
+fn parse_exceltis_gamme_from_text(text: &str) -> Option<String> {
+    let normalized = normalize_for_gamme_match(text);
+    let mut aliases: Vec<(&str, &str)> = GAMME_PARSE_ALIASES.to_vec();
+    aliases.sort_by_key(|(pattern, _)| std::cmp::Reverse(pattern.len()));
+    for (pattern, canonical) in aliases {
+        if normalized.contains(&normalize_for_gamme_match(pattern)) {
+            return Some((*canonical).to_string());
+        }
+    }
+    None
+}
+
+fn parse_exceltis_key_from_text(text: &str) -> Option<ExceltisEtiquetteKey> {
+    let (month, year) = parse_millesime_from_text(text)?;
+    let trimmed = text.trim();
+    let lower = trimmed.to_lowercase();
+    let exceltis_pos = lower.find("exceltis")?;
+    let mut month_pos: Option<usize> = None;
+    for m in 1..=12u32 {
+        if m != month {
+            continue;
+        }
+        for key in month_search_keys(m) {
+            if let Some(pos) = lower.find(key) {
+                if pos < exceltis_pos || pos > exceltis_pos.saturating_add(120) {
+                    continue;
+                }
+                let slice = trimmed.get(pos..)?;
+                if extract_year_after_month(slice, key.len()) != Some(year) {
+                    continue;
+                }
+                month_pos = Some(month_pos.map_or(pos, |best| best.min(pos)));
+            }
+        }
+    }
+    let gamme = month_pos
+        .and_then(|pos| {
+            let fragment = trimmed.get(exceltis_pos + "exceltis".len()..pos)?;
+            parse_exceltis_gamme_from_text(fragment)
+        })
+        .or_else(|| parse_exceltis_gamme_from_text(text));
+    Some(ExceltisEtiquetteKey {
+        gamme,
+        month,
+        year,
+    })
+}
+
+fn millesime_label_from_key(key: &ExceltisEtiquetteKey) -> String {
+    format!("{} {}", MOIS_FR[key.month as usize - 1], key.year)
+}
+
+/// Match millésime + gamme. Une clé **sans gamme** (étiquette ou signal legacy
+/// « Exceltis — {Mois} {Année} ») agit comme joker et matche n'importe quelle
+/// gamme du même millésime ; deux gammes explicites doivent être identiques.
+fn exceltis_keys_match(a: &ExceltisEtiquetteKey, b: &ExceltisEtiquetteKey) -> bool {
+    if a.month != b.month || a.year != b.year {
+        return false;
+    }
+    match (&a.gamme, &b.gamme) {
+        (Some(ga), Some(gb)) => ga == gb,
+        _ => true,
+    }
+}
+
+/// Clé effective d'un signal : le sujet complète la gamme si `etiquette_nom` est legacy.
+fn effective_exceltis_key_from_signal(signal: &StelliumExceltisSignal) -> Option<ExceltisEtiquetteKey> {
+    let from_subject = parse_exceltis_key_from_text(&signal.subject);
+    let from_nom = parse_exceltis_key_from_text(&signal.etiquette_nom);
+    match (from_nom, from_subject) {
+        (Some(mut nom_key), Some(subj_key)) => {
+            if nom_key.gamme.is_none() {
+                nom_key.gamme = subj_key.gamme;
+            }
+            Some(nom_key)
+        }
+        (Some(k), None) => Some(k),
+        (None, Some(k)) => Some(k),
+        (None, None) => None,
+    }
 }
 
 pub fn is_exceltis_etiquette_nom(nom: &str) -> bool {
-    nom.trim()
-        .to_lowercase()
-        .starts_with(&EXCELITIS_ETIQUETTE_PREFIX.to_lowercase())
+    parse_exceltis_key_from_text(nom).is_some()
 }
 
-fn normalize_etiquette_nom(nom: &str) -> String {
-    nom.trim().to_lowercase()
+fn find_etiquette_id_by_exceltis_key(
+    db: &crate::database::Database,
+    key: &ExceltisEtiquetteKey,
+) -> Option<i64> {
+    db.get_all_etiquettes()
+        .ok()?
+        .into_iter()
+        .find_map(|e| {
+            parse_exceltis_key_from_text(&e.nom)
+                .filter(|candidate| exceltis_keys_match(candidate, key))
+                .map(|_| e.id)
+        })
+}
+
+fn resolve_etiquette_id_for_exceltis_key(
+    db: &crate::database::Database,
+    key: &ExceltisEtiquetteKey,
+    canonical_nom: &str,
+) -> Option<i64> {
+    db.get_etiquette_id_by_nom_insensitive(canonical_nom)
+        .ok()
+        .flatten()
+        .or_else(|| find_etiquette_id_by_exceltis_key(db, key))
 }
 
 /// Date du mail Stellium le plus récent pour cette étiquette millésime (si signal connu).
@@ -187,12 +576,15 @@ pub fn stellium_signal_received_at_for_etiquette(
         .get_etiquette_by_id(etiquette_id)
         .map_err(|e| e.to_string())?;
     let state = load_state(db)?;
-    let target = normalize_etiquette_nom(&etiquette.nom);
+    let etiquette_key = parse_exceltis_key_from_text(&etiquette.nom);
     let mut best: Option<i64> = None;
     for signal in &state.signals {
         let matches_id = signal.etiquette_id == Some(etiquette_id);
-        let matches_nom = normalize_etiquette_nom(&signal.etiquette_nom) == target;
-        if matches_id || matches_nom {
+        let matches_key = match (etiquette_key.as_ref(), effective_exceltis_key_from_signal(signal)) {
+            (Some(ek), Some(sk)) => exceltis_keys_match(ek, &sk),
+            _ => false,
+        };
+        if matches_id || matches_key {
             best = Some(best.map_or(signal.received_at, |b| b.max(signal.received_at)));
         }
     }
@@ -237,59 +629,134 @@ fn find_millesime_near_exceltis(text: &str) -> Option<(u32, u32)> {
     if !lower.contains("exceltis") {
         return None;
     }
-    let anchors = ["exceltis rendement", "remboursement exceltis", "exceltis"];
+    let anchors = [
+        "remboursements exceltis",
+        "exceltis rendement",
+        "remboursement exceltis",
+        "exceltis",
+    ];
     let anchor_pos = anchors
         .iter()
         .filter_map(|a| lower.find(a))
         .min()
         .unwrap_or(0);
+    find_millesime_after_pos(text, anchor_pos, 200)
+}
 
-    let mut best: Option<(usize, u32, u32)> = None;
-    for month in 1..=12u32 {
-        for key in month_search_keys(month) {
-            if let Some(pos) = lower.find(key) {
-                if pos < anchor_pos || pos > anchor_pos.saturating_add(120) {
-                    continue;
-                }
-                if let Some(year) = extract_year_after_month(&text[pos..], key.len()) {
-                    let rank = pos;
-                    if best.map(|(p, _, _)| rank < p).unwrap_or(true) {
-                        best = Some((rank, month, year));
-                    }
-                }
+/// Millésimes repérés dans des blocs « Exceltis … Remboursement : … » (newsletter).
+fn parse_remboursement_blocks_from_text(text: &str) -> Vec<ExceltisEtiquetteKey> {
+    let surface = parse_surface(text);
+    if !surface.contains("exceltis") {
+        return vec![];
+    }
+    let mut keys = Vec::new();
+    let mut seen: HashSet<(Option<String>, u32, u32)> = HashSet::new();
+    let mut search_start = 0;
+    while search_start < surface.len() {
+        let Some(rel) = surface[search_start..].find("exceltis") else {
+            break;
+        };
+        let exceltis_pos = search_start + rel;
+        let next_pos = surface[exceltis_pos + "exceltis".len()..]
+            .find("exceltis")
+            .map(|p| exceltis_pos + "exceltis".len() + p);
+        // Borner sur une frontière UTF-8 : `exceltis_pos + 500` peut tomber au milieu d'un
+        // caractère multi-octets (espace insécable, emoji…), et `surface.get(..)` renverrait
+        // alors `None` → le bloc serait silencieusement sauté.
+        // Borner sur une frontière UTF-8 : `exceltis_pos + 500` peut tomber au milieu d'un
+        // caractère multi-octets (espace insécable, emoji…), et `surface.get(..)` renverrait
+        // alors `None` → le bloc serait silencieusement sauté.
+        let window_end = floor_char_boundary(
+            &surface,
+            next_pos
+                .unwrap_or(surface.len())
+                .min(exceltis_pos + REMBOURSEMENT_BLOCK_WINDOW),
+        );
+        if let Some(fragment) = surface.get(exceltis_pos..window_end) {
+            // `window_looks_like_remboursement_block` intègre déjà l'exclusion
+            // (avec priorité à la preuve forte « Remboursement : … / Date d'observation »).
+            if !window_looks_like_remboursement_block(fragment) {
+                search_start = exceltis_pos + "exceltis".len();
+                continue;
+            }
+            if let Some((month, year)) =
+                find_millesime_after_pos(fragment, 0, MILLESIME_MAX_GAP_FROM_EXCELTIS)
+            {
+                let gamme = parse_exceltis_gamme_from_text(fragment);
+                push_unique_exceltis_key(
+                    &mut keys,
+                    &mut seen,
+                    ExceltisEtiquetteKey {
+                        gamme,
+                        month,
+                        year,
+                    },
+                );
             }
         }
+        search_start = exceltis_pos + "exceltis".len();
     }
-    best.map(|(_, m, y)| (m, y))
+    keys
+}
+
+fn keys_for_stellium_message(
+    subject: &str,
+    parse_text: &str,
+    body_only: Option<&str>,
+) -> Vec<ExceltisEtiquetteKey> {
+    if subject_is_direct_remboursement(subject) {
+        if let Some(k) = parse_exceltis_key_from_text(subject) {
+            return vec![k];
+        }
+    }
+    if subject_is_announcement_newsletter(subject) {
+        let src = body_only
+            .filter(|b| !b.is_empty())
+            .map(clip_parse_text)
+            .unwrap_or_else(|| clip_parse_text(parse_text));
+        return parse_remboursement_blocks_from_text(src);
+    }
+    if let Some(k) = parse_exceltis_key_from_text(subject) {
+        return vec![k];
+    }
+    if let Some(body) = body_only.filter(|b| !b.is_empty()) {
+        let body = clip_parse_text(body);
+        if let Some(k) = parse_exceltis_key_from_text(body) {
+            return vec![k];
+        }
+        let from_body = parse_remboursement_blocks_from_text(body);
+        if !from_body.is_empty() {
+            return from_body;
+        }
+    }
+    parse_remboursement_blocks_from_text(clip_parse_text(parse_text))
+}
+
+fn format_signal_id(message_id: &str, key: &ExceltisEtiquetteKey) -> String {
+    let gamme = key.gamme.as_deref().unwrap_or("legacy");
+    format!("{message_id}::{gamme}::{}::{}", key.month, key.year)
 }
 
 /// Extrait le millésime depuis le sujet ou le corps (ex. « Remboursement Exceltis Février 2025 »).
 pub fn parse_millesime_from_text(text: &str) -> Option<(u32, u32)> {
-    find_millesime_near_exceltis(text).or_else(|| {
-        let lower = text.to_lowercase();
-        if !lower.contains("exceltis") {
+    let clipped = clip_parse_text(text);
+    find_millesime_near_exceltis(clipped).or_else(|| {
+        let surface = parse_surface(clipped);
+        if !surface.contains("exceltis") {
             return None;
         }
-        for month in 1..=12u32 {
-            for key in month_search_keys(month) {
-                if let Some(pos) = lower.find(key) {
-                    if let Some(year) = extract_year_after_month(&text[pos..], key.len()) {
-                        return Some((month, year));
-                    }
-                }
-            }
-        }
-        None
+        find_millesime_after_pos(&surface, 0, MILLESIME_MAX_GAP_FROM_EXCELTIS.saturating_mul(2))
     })
 }
 
 /// « À partir du 06 mars 2026 » → libellé « 6 mars 2026 ».
 pub fn parse_operation_from_date(text: &str) -> Option<String> {
-    let lower = text.to_lowercase();
+    let clipped = clip_parse_text(text);
+    let lower = clipped.to_lowercase();
     let idx = lower
         .find("a partir du")
         .or_else(|| lower.find("à partir du"))?;
-    let slice = text.get(idx..)?;
+    let slice = clipped.get(idx..)?;
     let du_idx = slice.to_lowercase().find(" du ")?;
     let after_du = slice.get(du_idx + 4..)?.trim();
     let parts: Vec<&str> = after_du.split_whitespace().take(4).collect();
@@ -312,7 +779,7 @@ pub fn parse_operation_from_date(text: &str) -> Option<String> {
 
 fn gmail_stellium_query() -> String {
     format!(
-        "from:{GMAIL_FROM} subject:\"Remboursement Exceltis\" newer_than:{GMAIL_QUERY_RECENCY_DAYS}d -in:spam -in:trash"
+        "from:{GMAIL_FROM} (subject:\"Remboursement Exceltis\" OR subject:\"Remboursements Exceltis\") -subject:\"Informations complémentaires\" newer_than:{GMAIL_QUERY_RECENCY_DAYS}d -in:spam -in:trash"
     )
 }
 
@@ -369,7 +836,15 @@ fn refresh_signal_counts(db: &crate::database::Database, signal: &mut StelliumEx
         signal.contact_count = db.count_contacts_for_etiquette(id).unwrap_or(0);
         return;
     }
-    if let Ok(Some(id)) = db.get_etiquette_id_by_nom_insensitive(&signal.etiquette_nom) {
+    let resolved = db
+        .get_etiquette_id_by_nom_insensitive(&signal.etiquette_nom)
+        .ok()
+        .flatten()
+        .or_else(|| {
+            effective_exceltis_key_from_signal(signal)
+                .and_then(|key| find_etiquette_id_by_exceltis_key(db, &key))
+        });
+    if let Some(id) = resolved {
         signal.etiquette_id = Some(id);
         signal.contact_count = db.count_contacts_for_etiquette(id).unwrap_or(0);
     }
@@ -377,42 +852,35 @@ fn refresh_signal_counts(db: &crate::database::Database, signal: &mut StelliumEx
 
 /// Répare les signaux persistés avant correction snake_case (champs vides côté UI).
 fn repair_signal_metadata(signal: &mut StelliumExceltisSignal) {
-    if signal.millesime_label.trim().is_empty() || signal.etiquette_nom.trim().is_empty() {
-        if let Some((month, year)) = parse_millesime_from_text(&signal.subject) {
-            if let Some(etiquette_nom) = format_exceltis_etiquette_nom(month, year) {
-                if let Some(label) = etiquette_nom.strip_prefix(EXCELITIS_ETIQUETTE_PREFIX) {
-                    signal.millesime_label = label.to_string();
-                    signal.etiquette_nom = etiquette_nom;
-                }
-            }
-        }
+    let Some(key) = effective_exceltis_key_from_signal(signal) else {
+        return;
+    };
+    if let Some(etiquette_nom) =
+        format_exceltis_etiquette_nom(key.gamme.as_deref(), key.month, key.year)
+    {
+        signal.millesime_label = millesime_label_from_key(&key);
+        signal.etiquette_nom = etiquette_nom;
     }
 }
 
-fn resolve_signal(
+fn build_signal_for_key(
     db: &crate::database::Database,
-    message_id: String,
-    subject: String,
-    parse_text: &str,
+    message_id: &str,
+    subject: &str,
+    key: &ExceltisEtiquetteKey,
     received_at: i64,
+    operation_from_label: Option<String>,
 ) -> Option<StelliumExceltisSignal> {
-    let (month, year) = parse_millesime_from_text(&subject)
-        .or_else(|| parse_millesime_from_text(parse_text))?;
-    let etiquette_nom = format_exceltis_etiquette_nom(month, year)?;
-    let millesime_label = etiquette_nom.strip_prefix(EXCELITIS_ETIQUETTE_PREFIX)?.to_string();
-    let operation_from_label = parse_operation_from_date(parse_text);
-
-    let etiquette_id = db
-        .get_etiquette_id_by_nom_insensitive(&etiquette_nom)
-        .ok()
-        .flatten();
+    let etiquette_nom = format_exceltis_etiquette_nom(key.gamme.as_deref(), key.month, key.year)?;
+    let millesime_label = millesime_label_from_key(key);
+    let signal_id = format_signal_id(message_id, key);
+    let etiquette_id = resolve_etiquette_id_for_exceltis_key(db, key, &etiquette_nom);
     let contact_count = etiquette_id
         .map(|id| db.count_contacts_for_etiquette(id).unwrap_or(0))
         .unwrap_or(0);
-
     Some(StelliumExceltisSignal {
-        gmail_message_id: message_id,
-        subject,
+        gmail_message_id: signal_id,
+        subject: subject.to_string(),
         millesime_label,
         etiquette_nom,
         etiquette_id,
@@ -422,10 +890,101 @@ fn resolve_signal(
     })
 }
 
+#[cfg(test)]
+fn resolve_signals_from_message(
+    db: &crate::database::Database,
+    message_id: String,
+    subject: String,
+    parse_text: &str,
+    body_only: Option<&str>,
+    received_at: i64,
+) -> Vec<StelliumExceltisSignal> {
+    if is_complementaires_subject(&subject) {
+        return vec![];
+    }
+    let operation_from_label = parse_operation_from_date(
+        body_only.filter(|b| !b.is_empty()).unwrap_or(parse_text),
+    );
+    keys_for_stellium_message(&subject, parse_text, body_only)
+        .into_iter()
+        .filter_map(|key| {
+            build_signal_for_key(
+                db,
+                &message_id,
+                &subject,
+                &key,
+                received_at,
+                operation_from_label.clone(),
+            )
+        })
+        .collect()
+}
+
+fn etiquette_nom_has_gamme(nom: &str) -> bool {
+    parse_exceltis_key_from_text(nom)
+        .and_then(|k| k.gamme)
+        .is_some()
+}
+
+fn upsert_signal_by_key(
+    signals: &mut Vec<StelliumExceltisSignal>,
+    incoming: StelliumExceltisSignal,
+) -> bool {
+    let Some(incoming_key) = effective_exceltis_key_from_signal(&incoming) else {
+        signals.push(incoming);
+        return true;
+    };
+    if let Some(existing) = signals.iter_mut().find(|s| {
+        effective_exceltis_key_from_signal(s)
+            .map(|k| exceltis_keys_match(&k, &incoming_key))
+            .unwrap_or(false)
+    }) {
+        if incoming.received_at >= existing.received_at {
+            existing.gmail_message_id = incoming.gmail_message_id;
+            existing.subject = incoming.subject;
+            existing.received_at = incoming.received_at;
+            if incoming.operation_from_label.is_some() {
+                existing.operation_from_label = incoming.operation_from_label;
+            }
+        }
+        if etiquette_nom_has_gamme(&incoming.etiquette_nom)
+            || !etiquette_nom_has_gamme(&existing.etiquette_nom)
+        {
+            existing.etiquette_nom = incoming.etiquette_nom.clone();
+            existing.millesime_label = incoming.millesime_label.clone();
+        }
+        false
+    } else {
+        signals.push(incoming);
+        true
+    }
+}
+
+fn sanitize_stellium_state(state: &mut StelliumExceltisState) -> bool {
+    let before = state.signals.len();
+    state
+        .signals
+        .retain(|s| !is_complementaires_subject(&s.subject));
+    let mut deduped: Vec<StelliumExceltisSignal> = Vec::new();
+    for signal in state.signals.drain(..) {
+        let _ = upsert_signal_by_key(&mut deduped, signal);
+    }
+    state.signals = deduped;
+    state.signals.len() != before
+}
+
+/// Supprime les signaux déjà enregistrés pour un message Gmail avant mise à jour.
+fn remove_signals_for_message(state: &mut StelliumExceltisState, message_id: &str) {
+    let prefix = format!("{message_id}::");
+    state.signals.retain(|s| {
+        s.gmail_message_id != message_id && !s.gmail_message_id.starts_with(&prefix)
+    });
+}
+
 pub fn get_stellium_exceltis_signals(db_state: &DbState) -> Result<Vec<StelliumExceltisSignal>, String> {
     with_db(db_state, |db| {
         let mut state = load_state(db)?;
-        let mut changed = false;
+        let mut changed = sanitize_stellium_state(&mut state);
         for signal in &mut state.signals {
             let before = (
                 signal.millesime_label.clone(),
@@ -459,6 +1018,113 @@ pub fn dismiss_stellium_exceltis_signal(
             state.dismissed_message_ids.push(id);
         }
         save_state(db, &state)
+    })
+}
+
+/// Ré-affiche toutes les annonces masquées : vide la liste des messages masqués
+/// et les compteurs d'échec de parsing. Le prochain scan repopule les signaux.
+pub fn reset_stellium_exceltis_dismissed(db_state: &DbState) -> Result<(), String> {
+    with_db(db_state, |db| {
+        let mut state = load_state(db)?;
+        state.dismissed_message_ids.clear();
+        state.parse_retry_by_message_id.clear();
+        save_state(db, &state)
+    })
+}
+
+/// Résultat intermédiaire : fetch Gmail hors verrou DB.
+struct StelliumFetchedMessage {
+    message_id: String,
+    subject: String,
+    received_at: i64,
+    keys: Vec<ExceltisEtiquetteKey>,
+    operation_from_label: Option<String>,
+    remboursement_unparsed: bool,
+    mark_dismissed: bool,
+}
+
+fn fetch_stellium_message_keys(
+    client: &reqwest::blocking::Client,
+    access_token: &str,
+    message_id: &str,
+    dismissed: &HashSet<String>,
+) -> Option<StelliumFetchedMessage> {
+    let meta = match fetch_message_meta(client, access_token, message_id) {
+        Ok(m) => m,
+        Err(e) => {
+            eprintln!("Stellium meta {message_id}: {e}");
+            return None;
+        }
+    };
+    let headers = meta.payload.as_ref().and_then(|p| p.headers.as_deref());
+    let subject = header_value(headers, "Subject");
+    if subject.is_empty() {
+        return None;
+    }
+    if is_complementaires_subject(&subject) {
+        return Some(StelliumFetchedMessage {
+            message_id: message_id.to_string(),
+            subject,
+            received_at: 0,
+            keys: vec![],
+            operation_from_label: None,
+            remboursement_unparsed: false,
+            mark_dismissed: true,
+        });
+    }
+    if dismissed.contains(message_id) && !subject_looks_like_exceltis_remboursement(&subject) {
+        return None;
+    }
+    let from = header_value(headers, "From").to_lowercase();
+    if !from.contains("stellium") && !from.contains(GMAIL_FROM) {
+        return None;
+    }
+    let received_at = meta
+        .internal_date
+        .as_deref()
+        .map(parse_internal_date_sec)
+        .unwrap_or(0);
+
+    let snippet = meta.snippet.unwrap_or_default();
+    let mut parse_text = build_parse_text(&subject, &snippet, None);
+    let mut body_owned: Option<String> = None;
+
+    let mut keys = keys_for_stellium_message(&subject, &parse_text, None);
+    if keys.is_empty() {
+        if let Ok(full) =
+            super::response_sync::gmail_fetch_message_body(client, access_token, message_id)
+        {
+            if !full.is_empty() {
+                body_owned = Some(full);
+            }
+        }
+    }
+    let body_ref = body_owned.as_deref();
+    if keys.is_empty() {
+        if let Some(body) = body_ref {
+            parse_text = build_parse_text(&subject, &snippet, Some(body));
+            keys = keys_for_stellium_message(&subject, &parse_text, Some(body));
+        }
+    }
+
+    let operation_from_label = parse_operation_from_date(
+        body_ref.filter(|b| !b.is_empty()).unwrap_or(&parse_text),
+    );
+
+    let remboursement_unparsed =
+        keys.is_empty() && subject_looks_like_exceltis_remboursement(&subject);
+    let mark_dismissed = keys.is_empty()
+        && !remboursement_unparsed
+        && !dismissed.contains(message_id);
+
+    Some(StelliumFetchedMessage {
+        message_id: message_id.to_string(),
+        subject,
+        received_at,
+        keys,
+        operation_from_label,
+        remboursement_unparsed,
+        mark_dismissed,
     })
 }
 
@@ -506,76 +1172,79 @@ pub fn scan_stellium_exceltis_emails(
     }
 
     let scanned = all_ids.len() as u32;
+
+    let dismissed: HashSet<String> = with_db(db_state, |db| {
+        let state = load_state(db)?;
+        Ok(state
+            .dismissed_message_ids
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>())
+    })?;
+
+    let fetched: Vec<StelliumFetchedMessage> = all_ids
+        .iter()
+        .filter_map(|message_id| {
+            fetch_stellium_message_keys(&client, &access_token, message_id, &dismissed)
+        })
+        .collect();
+
     let mut new_signals = 0u32;
 
     with_db(db_state, |db| {
         let mut state = load_state(db)?;
+        sanitize_stellium_state(&mut state);
         let dismissed: HashSet<String> = state.dismissed_message_ids.iter().cloned().collect();
-        let known: HashSet<String> = state
-            .signals
-            .iter()
-            .map(|s| s.gmail_message_id.clone())
-            .chain(dismissed.iter().cloned())
-            .collect();
 
-        for message_id in all_ids {
-            if known.contains(&message_id) {
-                continue;
-            }
-            let meta = match fetch_message_meta(&client, &access_token, &message_id) {
-                Ok(m) => m,
-                Err(e) => {
-                    eprintln!("Stellium meta {message_id}: {e}");
-                    continue;
+        for item in fetched {
+            if is_complementaires_subject(&item.subject) {
+                if !state.dismissed_message_ids.contains(&item.message_id) {
+                    state.dismissed_message_ids.push(item.message_id);
                 }
-            };
-            let headers = meta.payload.as_ref().and_then(|p| p.headers.as_deref());
-            let subject = header_value(headers, "Subject");
-            if subject.is_empty() {
                 continue;
             }
-            let from = header_value(headers, "From").to_lowercase();
-            if !from.contains("stellium") && !from.contains(GMAIL_FROM) {
-                continue;
+            if dismissed.contains(&item.message_id)
+                && subject_looks_like_exceltis_remboursement(&item.subject)
+            {
+                state.parse_retry_by_message_id.remove(&item.message_id);
             }
-            let received_at = meta
-                .internal_date
-                .as_deref()
-                .map(parse_internal_date_sec)
-                .unwrap_or(0);
-
-            let snippet = meta.snippet.unwrap_or_default();
-            let mut parse_text = format!("{subject}\n{snippet}");
-            if parse_operation_from_date(&parse_text).is_none() {
-                if let Ok(full) =
-                    super::response_sync::gmail_fetch_message_body(&client, &access_token, &message_id)
-                {
-                    if !full.is_empty() {
-                        parse_text = format!("{subject}\n{snippet}\n{full}");
+            if !item.keys.is_empty() {
+                state.parse_retry_by_message_id.remove(&item.message_id);
+                state
+                    .dismissed_message_ids
+                    .retain(|id| id != &item.message_id);
+                remove_signals_for_message(&mut state, &item.message_id);
+                for key in item.keys {
+                    if let Some(signal) = build_signal_for_key(
+                        db,
+                        &item.message_id,
+                        &item.subject,
+                        &key,
+                        item.received_at,
+                        item.operation_from_label.clone(),
+                    ) {
+                        if dismissed.contains(&signal.gmail_message_id) {
+                            continue;
+                        }
+                        if upsert_signal_by_key(&mut state.signals, signal) {
+                            new_signals += 1;
+                        }
                     }
                 }
-            }
-
-            if let Some(signal) = resolve_signal(
-                db,
-                message_id.clone(),
-                subject.clone(),
-                &parse_text,
-                received_at,
-            ) {
-                state.parse_retry_by_message_id.remove(&message_id);
-                state.signals.push(signal);
-                new_signals += 1;
-            } else {
-                let subj = subject.to_lowercase();
-                if subj.contains("remboursement") && subj.contains("exceltis") {
-                    record_parse_failure(&mut state, &message_id);
-                } else if !state.dismissed_message_ids.contains(&message_id) {
-                    state.dismissed_message_ids.push(message_id);
-                }
+            } else if item.remboursement_unparsed {
+                eprintln!(
+                    "Stellium Exceltis: sujet non parsé — {:?}",
+                    item.subject
+                );
+                record_parse_failure(&mut state, &item.message_id);
+            } else if item.mark_dismissed
+                && !state.dismissed_message_ids.contains(&item.message_id)
+            {
+                state.dismissed_message_ids.push(item.message_id);
             }
         }
 
+        sanitize_stellium_state(&mut state);
         for signal in &mut state.signals {
             refresh_signal_counts(db, signal);
         }
@@ -603,19 +1272,60 @@ mod tests {
 
     #[test]
     fn is_exceltis_etiquette_nom_matches_prefix() {
+        assert!(is_exceltis_etiquette_nom("Exceltis Rendement — Août 2026"));
         assert!(is_exceltis_etiquette_nom("Exceltis — Août 2026"));
+        assert!(is_exceltis_etiquette_nom("Exceltis Rendement - Août 2026"));
         assert!(!is_exceltis_etiquette_nom("Suivi > 1 an"));
+        assert!(!is_exceltis_etiquette_nom("Exceltis — remboursement et arbitrage"));
+    }
+
+    #[test]
+    fn parse_etiquette_nom_variants() {
+        let key = parse_exceltis_key_from_text("Exceltis Rendement - fevrier 2025").unwrap();
+        assert_eq!(key.gamme.as_deref(), Some("Rendement"));
+        assert_eq!(key.month, 2);
+        assert_eq!(key.year, 2025);
+    }
+
+    #[test]
+    fn parse_patrimoine_taux_maps_to_patrimoine() {
+        let key = parse_exceltis_key_from_text("Exceltis Patrimoine Taux Juin 2026").unwrap();
+        assert_eq!(key.gamme.as_deref(), Some("Patrimoine"));
+        assert_eq!(key.month, 6);
+        assert_eq!(key.year, 2026);
+    }
+
+    #[test]
+    fn decode_mime_subject_fevrier_partial() {
+        let raw = "Remboursement Exceltis Rendement =?UTF-8?Q?F=C3=A9vrier?= 2025";
+        let decoded = decode_mime_header(raw);
+        assert_eq!(decoded, "Remboursement Exceltis Rendement Février 2025");
+        let key = parse_exceltis_key_from_text(&decoded).unwrap();
+        assert_eq!(key.gamme.as_deref(), Some("Rendement"));
+        assert_eq!(key.month, 2);
+        assert_eq!(key.year, 2025);
+    }
+
+    #[test]
+    fn decode_mime_subject_aout_full() {
+        let raw = "=?UTF-8?Q?Remboursement_Exceltis_Rendement_Ao=C3=BBt_2026?=";
+        let decoded = decode_mime_header(raw);
+        assert_eq!(decoded, "Remboursement Exceltis Rendement Août 2026");
+        let key = parse_exceltis_key_from_text(&decoded).unwrap();
+        assert_eq!(key.month, 8);
+        assert_eq!(key.year, 2026);
     }
 
     #[test]
     fn parse_subject_fevrier_2025() {
         let s = "Remboursement Exceltis Rendement Février 2025";
-        let (m, y) = parse_millesime_from_text(s).unwrap();
-        assert_eq!(m, 2);
-        assert_eq!(y, 2025);
+        let key = parse_exceltis_key_from_text(s).unwrap();
+        assert_eq!(key.gamme.as_deref(), Some("Rendement"));
+        assert_eq!(key.month, 2);
+        assert_eq!(key.year, 2025);
         assert_eq!(
-            format_exceltis_etiquette_nom(m, y).as_deref(),
-            Some("Exceltis — Février 2025")
+            format_exceltis_etiquette_nom(key.gamme.as_deref(), key.month, key.year).as_deref(),
+            Some("Exceltis Rendement — Février 2025")
         );
     }
 
@@ -644,11 +1354,239 @@ mod tests {
     }
 
     #[test]
+    fn is_complementaires_subject_excluded() {
+        let s = "Informations complémentaires Remboursement Exceltis Rendement Octobre 2024";
+        assert!(is_complementaires_subject(s));
+        assert!(resolve_signals_from_message(
+            &crate::database::Database::open_in_memory_for_tests().unwrap(),
+            "msg".into(),
+            s.into(),
+            s,
+            None,
+            0,
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn newsletter_parsed_from_body_not_subject() {
+        let subject = "Bonne nouvelle 🤙 2 Remboursements Exceltis à venir !";
+        let body = r#"Exceltis Rendement
+Mai 2025
+💰 Remboursement : 111,0004%*
+Exceltis Sérénité
+Mai 2024
+💰 Remboursement : 111%*
+Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Placement"#;
+        let keys = parse_remboursement_blocks_from_text(body);
+        assert_eq!(keys.len(), 2);
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let signals = resolve_signals_from_message(
+            &db,
+            "msg".into(),
+            subject.into(),
+            subject,
+            Some(body),
+            0,
+        );
+        assert_eq!(signals.len(), 2);
+    }
+
+    #[test]
+    fn month_mai_not_matched_inside_email_word() {
+        let text = "contact email marketplacement@stellium.fr Exceltis Rendement Mai 2025 Remboursement : 111%";
+        let (m, y) = find_millesime_after_pos(text, 0, 500).unwrap();
+        assert_eq!(m, 5);
+        assert_eq!(y, 2025);
+    }
+
+    #[test]
+    fn real_newsletter_body_detects_two_millesimes() {
+        // Structure réelle Stellium (markdown) : 1er bloc > 500 octets avant le « Exceltis »
+        // suivant (lignes ◆, indice long, emojis 💰📈📅) → la borne de fenêtre tombe au milieu
+        // d'un caractère multi-octets ; sans clamp UTF-8 le bloc Rendement était sauté.
+        let subject = "Bonne nouvelle 🤙 2 Remboursements Exceltis à venir !";
+        let block_rendement = "Exceltis Rendement\u{a0}\r\n-------------------\r\n\r\nMai 2025\r\n--------\r\n\r\n+ 11,0004%*\r\n===========\r\n\r\n◆ ISIN : **FR001400WRY7**\r\n\r\n◆ Coupon avec effet mémoire : **11% /an**\r\n\r\n◆ Air bag : **- 30%**\r\n\r\n◆ Rappel : Mensuel\r\n\r\n◆ Protection en capital : ** -50%**\r\n\r\n◆ Durée max : **10 ans**\r\n\r\n◆ Indice de Référence : ** iEdge Transatlantic Leaders 20 Decrement 50 Points GTR**\r\n\r\n💰 Remboursement : **111,0004%***\r\n\r\n📈 Performance Indice de référence  : **29,32%**\r\n\r\n📅 Date d'observation : ** 01/06/2026**\r\n\r\n";
+        let block_serenite = "Exceltis Sérénité\u{a0}\r\n------------------\r\n\r\nMai 2024\r\n--------\r\n\r\n+ 11%*\r\n======\r\n\r\n◆ ISIN : **FR1459AB2429**\r\n\r\n◆ Coupon avec effet mémoire : **5,5% /an**\r\n\r\n◆ Air bag : **- 20%**\r\n\r\n◆ Rappel : Annuel\r\n\r\n◆ Protection en capital : **100%**\r\n\r\n◆ Durée max : **10 ans**\r\n\r\n◆ Indice de Référence : **Morningstar Eurozone 30 Decrement 50 Point GR EUR**\r\n\r\n💰 Remboursement : **111%***\r\n\r\n📈 Performance Indice de référence  : **57,11%**\r\n\r\n📅 Date d'observation :  **01/06/2026**\r\n\r\n";
+        let body = format!(
+            "[Ouvrir dans votre navigateur](https://example.com/x)\r\n\r\nBonne nouvelle 🤩\r\n----------------\r\n\r\n2 remboursements Exceltis à venir 🚀\r\n\r\nNous avons le plaisir de vous annoncer le déclenchement de la mécanique de remboursement par anticipation de deux millésimes Exceltis à la 1ère date de constatation 🤩\r\n\r\n{block_rendement}{block_serenite}**hors frais d'entrée**\r\n\r\n**pour en savoir plus sur les millésimes remboursés,**\r\n-------------------------------------------------------\r\n\r\n**retrouvez toutes les informations sur l'Extranet Placement**\r\n----------------------------------------------------------------\r\n\r\n◆ Exceltis Rendement\u{a0}\r\nMai 2025\r\n◆ Exceltis Sérénité\u{a0}\r\nMai 2024\r\n\r\n**À partir du 08 juin 2026**, les compagnies d'assurance vont désinvestir les sommes investies sur les lignes \"EXCELTIS Rendement Mai 2025\" et \"EXCELTIS Sérénité Mai 2024\".\r\n\r\nRappel 🔔 vos 2 millésimes à l'affiche\r\nExceltis Rendement\u{a0}\r\nAoût 2026\r\nExceltis Patrimoine Taux\r\nJuin 2026"
+        );
+        let body = body.as_str();
+        let keys = parse_remboursement_blocks_from_text(body);
+        assert_eq!(keys.len(), 2, "keys = {keys:?}");
+        assert!(
+            keys.iter().any(|k| k.gamme.as_deref() == Some("Rendement")
+                && k.month == 5
+                && k.year == 2025),
+            "Rendement Mai 2025 manquant : {keys:?}"
+        );
+        assert!(
+            keys.iter().any(|k| k.gamme.as_deref() == Some("Sérénité")
+                && k.month == 5
+                && k.year == 2024),
+            "Sérénité Mai 2024 manquant : {keys:?}"
+        );
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let signals = resolve_signals_from_message(
+            &db,
+            "msg-news".into(),
+            subject.into(),
+            &format!("{subject}\n{body}"),
+            Some(body),
+            0,
+        );
+        assert_eq!(signals.len(), 2, "signals = {signals:?}");
+    }
+
+    #[test]
+    fn block_window_boundary_in_multibyte_char_does_not_skip_block() {
+        // Le 2e « exceltis » est à > 500 octets et l'octet 500 tombe au milieu d'un « é »
+        // (2 octets) : sans clamp UTF-8, `surface.get(0..500)` = None → bloc Rendement sauté.
+        let pad = "x".repeat(452);
+        let body = format!(
+            "exceltis rendement mai 2025 remboursement : 1% {pad}\u{a0} exceltis serenite mai 2024 remboursement : 1%"
+        );
+        let keys = parse_remboursement_blocks_from_text(&body);
+        assert_eq!(keys.len(), 2, "keys = {keys:?}");
+        assert!(keys.iter().any(|k| k.month == 5 && k.year == 2025), "{keys:?}");
+        assert!(keys.iter().any(|k| k.month == 5 && k.year == 2024), "{keys:?}");
+    }
+
+    #[test]
+    fn real_direct_mail_detects_from_subject() {
+        let subject = "Remboursement Exceltis Rendement Février 2025";
+        let key = parse_exceltis_key_from_text(subject).unwrap();
+        assert_eq!(key.gamme.as_deref(), Some("Rendement"));
+        assert_eq!((key.month, key.year), (2, 2025));
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let signals = resolve_signals_from_message(
+            &db,
+            "msg-direct".into(),
+            subject.into(),
+            subject,
+            None,
+            0,
+        );
+        assert_eq!(signals.len(), 1, "signals = {signals:?}");
+    }
+
+    #[test]
+    fn find_millesime_no_panic_with_nbsp_at_window_edge() {
+        // `\u{a0}` fait 2 octets : on remplit pour qu'une coupe à 400 tombe au milieu.
+        let mut text = String::from("exceltis serenite mai 2024 ");
+        while text.len() < 400 {
+            text.push('\u{a0}');
+        }
+        let (m, y) = find_millesime_after_pos(&text, 0, 400).unwrap();
+        assert_eq!((m, y), (5, 2024));
+    }
+
+    #[test]
+    fn parse_newsletter_two_millesimes() {
+        let subject = "Bonne nouvelle 🤙 2 Remboursements Exceltis à venir !";
+        let body = r#"Exceltis Rendement 
+Mai 2025
+◆ ISIN : FR001400WRY7
+💰 Remboursement : 111,0004%*
+Exceltis Sérénité 
+Mai 2024
+◆ ISIN : FR1459AB2429
+💰 Remboursement : 111%*
+À partir du 08 juin 2026, les compagnies d'assurance vont désinvestir"#;
+        let parse_text = format!("{subject}\n{body}");
+        let keys = parse_remboursement_blocks_from_text(body);
+        assert_eq!(keys.len(), 2);
+        assert_eq!(keys[0].gamme.as_deref(), Some("Rendement"));
+        assert_eq!(keys[0].month, 5);
+        assert_eq!(keys[0].year, 2025);
+        assert_eq!(keys[1].gamme.as_deref(), Some("Sérénité"));
+        assert_eq!(keys[1].month, 5);
+        assert_eq!(keys[1].year, 2024);
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let signals = resolve_signals_from_message(
+            &db,
+            "msg".into(),
+            subject.into(),
+            &parse_text,
+            Some(body),
+            0,
+        );
+        assert_eq!(signals.len(), 2);
+        assert_eq!(
+            parse_operation_from_date(body).as_deref(),
+            Some("8 Juin 2026")
+        );
+    }
+
+    #[test]
+    fn newsletter_ignores_extranet_and_fermeture_mentions() {
+        let subject = "Bonne nouvelle 🤙 2 Remboursements Exceltis à venir !";
+        let body = r#"Exceltis Rendement Mai 2025
+💰 Remboursement : 111%
+Exceltis Sérénité Mai 2024
+💰 Remboursement : 111%
+Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Placement
+Fermeture imminente d'Exceltis Rendement Juin 2026"#;
+        let parse_text = format!("{subject}\n{body}");
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let signals = resolve_signals_from_message(
+            &db,
+            "msg".into(),
+            subject.into(),
+            &parse_text,
+            Some(body),
+            0,
+        );
+        assert_eq!(signals.len(), 2);
+        assert!(signals.iter().all(|s| {
+            s.millesime_label == "Mai 2025" || s.millesime_label == "Mai 2024"
+        }));
+    }
+
+    #[test]
+    fn direct_remboursement_uses_subject_only() {
+        let subject = "Remboursement Exceltis Rendement Février 2025";
+        let body = "Exceltis Rendement Août 2026 est désormais accessible sur votre Extranet Placement";
+        let parse_text = format!("{subject}\n{body}");
+        let db = crate::database::Database::open_in_memory_for_tests().unwrap();
+        let signals = resolve_signals_from_message(
+            &db,
+            "msg".into(),
+            subject.into(),
+            &parse_text,
+            Some(body),
+            0,
+        );
+        assert_eq!(signals.len(), 1);
+        assert_eq!(signals[0].millesime_label, "Février 2025");
+    }
+
+    #[test]
+    fn upsert_dedupes_same_millesime() {
+        let mut signals = Vec::new();
+        let mk = |id: &str, received: i64| StelliumExceltisSignal {
+            gmail_message_id: id.into(),
+            subject: "Remboursement Exceltis Rendement Octobre 2024".into(),
+            millesime_label: "Octobre 2024".into(),
+            etiquette_nom: "Exceltis Rendement — Octobre 2024".into(),
+            etiquette_id: None,
+            contact_count: 0,
+            received_at: received,
+            operation_from_label: None,
+        };
+        assert!(upsert_signal_by_key(&mut signals, mk("a", 100)));
+        assert!(!upsert_signal_by_key(&mut signals, mk("b", 200)));
+        assert_eq!(signals.len(), 1);
+        assert_eq!(signals[0].gmail_message_id, "b");
+    }
+
+    #[test]
     fn parse_subject_informations_complementaires() {
         let s = "Informations complémentaires Remboursement Exceltis Rendement Octobre 2024";
         let (m, y) = parse_millesime_from_text(s).unwrap();
         assert_eq!(m, 10);
         assert_eq!(y, 2024);
+        assert!(is_complementaires_subject(s));
     }
 
     #[test]
@@ -674,7 +1612,26 @@ mod tests {
         };
         repair_signal_metadata(&mut signal);
         assert_eq!(signal.millesime_label, "Octobre 2024");
-        assert_eq!(signal.etiquette_nom, "Exceltis — Octobre 2024");
+        assert_eq!(signal.etiquette_nom, "Exceltis Rendement — Octobre 2024");
+    }
+
+    #[test]
+    fn legacy_signal_nom_upgraded_from_subject_gamme() {
+        let mut signal = StelliumExceltisSignal {
+            gmail_message_id: "legacy".into(),
+            subject: "Remboursement Exceltis Rendement Août 2026".into(),
+            millesime_label: "Août 2026".into(),
+            etiquette_nom: "Exceltis — Août 2026".into(),
+            etiquette_id: None,
+            contact_count: 0,
+            received_at: 1,
+            operation_from_label: None,
+        };
+        repair_signal_metadata(&mut signal);
+        assert_eq!(signal.etiquette_nom, "Exceltis Rendement — Août 2026");
+        let etiquette_key = parse_exceltis_key_from_text("Exceltis Rendement — Août 2026").unwrap();
+        let signal_key = effective_exceltis_key_from_signal(&signal).unwrap();
+        assert!(exceltis_keys_match(&etiquette_key, &signal_key));
     }
 
     #[test]

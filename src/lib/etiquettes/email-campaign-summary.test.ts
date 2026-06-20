@@ -47,4 +47,20 @@ describe("formatEmailCampaignSummary", () => {
     expect(s).toContain("10:30");
     expect(s).toContain("Déclaration IR");
   });
+
+  it("Exceltis sans date — déclencheur Stellium", () => {
+    const s = formatEmailCampaignSummary({
+      active: true,
+      template: { ...template, nom: "Exceltis — remboursement et arbitrage", categorie: "ARBITRAGE" },
+      mode: "fixed",
+      envoiHeure: "09:00",
+      envoiLocal: "",
+      emailDelaiJours: 0,
+      hasAutoRule: false,
+      etiquetteNom: "Exceltis Rendement — Février 2025",
+    });
+    expect(s).toContain("aucune date à saisir");
+    expect(s).toContain("Stellium");
+    expect(s).not.toContain("date à définir");
+  });
 });

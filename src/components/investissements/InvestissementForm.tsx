@@ -555,10 +555,11 @@ export function InvestissementForm({
       } else {
         await createInvestissement(newInvestissement);
 
-        if (exceltisOption) {
+        if (exceltisOption && exceltisChoice.hasExceltis) {
           const etiquetteNom = await ensureExceltisEtiquetteAndAssign(
             parseInt(contactId, 10),
-            exceltisOption
+            exceltisOption,
+            exceltisChoice.gamme
           );
           notifyEtiquettesChanged();
           toast.success(`Investissement créé — étiquette « ${etiquetteNom} »`);

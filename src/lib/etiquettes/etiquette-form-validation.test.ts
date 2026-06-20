@@ -60,6 +60,19 @@ describe("validateEtiquetteForm", () => {
     ).toMatch(/date/i);
   });
 
+  it("Exceltis : email actif sans date fixe (déclencheur Stellium)", () => {
+    expect(
+      validateEtiquetteForm({
+        ...base,
+        nom: "Exceltis Rendement — Février 2025",
+        emailActif: true,
+        emailTemplateId: 1,
+        emailEnvoiMode: "fixed",
+        emailEnvoiLocal: "",
+      })
+    ).toBeNull();
+  });
+
   it("auto sans catégorie", () => {
     expect(
       validateEtiquetteForm({

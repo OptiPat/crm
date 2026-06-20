@@ -1,6 +1,7 @@
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
 import { emailEnvoiJoursSemaineLabel } from "@/lib/emails/email-envoi-schedule";
 import { getTemplateCategoryMeta } from "@/lib/emails/template-email-meta";
+import { isExceltisEtiquetteNom } from "@/lib/etiquettes/exceltis";
 
 export type EmailEnvoiMode = "eligibility" | "fixed";
 
@@ -15,6 +16,12 @@ export interface EmailCampaignSummaryInput {
   hasAutoRule: boolean;
   etiquetteNom: string;
   isEventSouscription?: boolean;
+  /** Déduit du nom si omis. */
+  isExceltisEtiquette?: boolean;
+}
+
+function isExceltisCampaign(input: EmailCampaignSummaryInput): boolean {
+  return input.isExceltisEtiquette ?? isExceltisEtiquetteNom(input.etiquetteNom);
 }
 
 export function formatEmailCampaignSummary(input: EmailCampaignSummaryInput): string {
@@ -27,6 +34,20 @@ export function formatEmailCampaignSummary(input: EmailCampaignSummaryInput): st
   }
 
   const tpl = `${input.template.nom} (${getTemplateCategoryMeta(input.template.categorie).label})`;
+
+  if (isExceltisCampaign(input)) {
+    if (input.envoiLocal.trim()) {
+      const dateLabel = new Date(input.envoiLocal).toLocaleString("fr-FR", {
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `Modèle : ${tpl}. Date fixe forcée le ${dateLabel} (ignore le mail Stellium).`;
+    }
+    return `Modèle : ${tpl}. Envoi proposé dès réception du mail Stellium « Remboursement Exceltis » pour ce millésime — aucune date à saisir.`;
+  }
 
   if (input.mode === "eligibility") {
     const heure = input.envoiHeure.trim() || "09:00";

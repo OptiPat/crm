@@ -1851,6 +1851,11 @@ pub fn dismiss_stellium_exceltis_signal(
     crate::email::stellium_exceltis::dismiss_stellium_exceltis_signal(&db, &gmail_message_id)
 }
 
+#[tauri::command]
+pub fn reset_stellium_exceltis_dismissed(db: State<'_, DbState>) -> Result<(), String> {
+    crate::email::stellium_exceltis::reset_stellium_exceltis_dismissed(&db)
+}
+
 // ========== SETTINGS ==========
 
 #[tauri::command]

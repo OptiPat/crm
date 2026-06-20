@@ -106,7 +106,7 @@ impl Database {
                      OR e.email_template_id IS NULL
                      OR (
                        ce.email_date_prevue IS NULL
-                       AND e.nom NOT LIKE 'Exceltis — %'
+                       AND LOWER(TRIM(e.nom)) NOT LIKE 'exceltis%'
                      )
                    )
                    AND ?1 IS NOT NULL

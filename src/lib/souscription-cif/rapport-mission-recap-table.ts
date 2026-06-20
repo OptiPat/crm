@@ -27,7 +27,7 @@ export const RM_RECAP_SITUATION_SRI_BULLET_LABEL =
 
 /** Précisions affichées sous le panneau de saisie (pas dans les puces). */
 export const RM_HINT_REVENUS_BULLET_LABEL =
-  "Revenus ; Imposition ; Nombre de parts fiscales ; TMI ; IR net";
+  "Revenus ; Nombre de parts fiscales ; TMI ; IR";
 
 export const RM_HINT_IMMOBILIER_BULLET_LABEL =
   "Immobilier (à détailler si besoin : résidence principale, secondaire, locative avec revenus associés, appétence, objectif : diversification, rééquilibrage)";
@@ -40,11 +40,11 @@ export const RM_RAPPEL_SITUATION_PANEL_HINTS: ReadonlyArray<{
   label: string;
   hint: string;
 }> = [
-  { label: RM_PANEL_REVENUS_BULLET_LABEL, hint: `${RM_HINT_REVENUS_BULLET_LABEL} :` },
-  { label: RM_PANEL_IMMOBILIER_BULLET_LABEL, hint: `${RM_HINT_IMMOBILIER_BULLET_LABEL} :` },
+  { label: RM_PANEL_REVENUS_BULLET_LABEL, hint: `${RM_HINT_REVENUS_BULLET_LABEL}.` },
+  { label: RM_PANEL_IMMOBILIER_BULLET_LABEL, hint: `${RM_HINT_IMMOBILIER_BULLET_LABEL}.` },
   {
     label: RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL,
-    hint: `${RM_HINT_VALEURS_MOBILIERES_BULLET_LABEL} :`,
+    hint: `${RM_HINT_VALEURS_MOBILIERES_BULLET_LABEL}.`,
   },
 ];
 
@@ -68,6 +68,10 @@ export const RM_RAPPORT_SRI_BULLET_LABEL = PROFIL_RISQUE_INVESTISSEUR_LABEL;
 /** Anciens libellés panneau (longs) → libellés courts. */
 export const RM_LEGACY_PANEL_BULLET_LABEL_ALIASES: ReadonlyArray<readonly [string, string]> = [
   [RM_HINT_REVENUS_BULLET_LABEL, RM_PANEL_REVENUS_BULLET_LABEL],
+  [
+    "Revenus ; Imposition ; Nombre de parts fiscales ; TMI ; IR net",
+    RM_PANEL_REVENUS_BULLET_LABEL,
+  ],
   [RM_HINT_IMMOBILIER_BULLET_LABEL, RM_PANEL_IMMOBILIER_BULLET_LABEL],
   [RM_HINT_VALEURS_MOBILIERES_BULLET_LABEL, RM_PANEL_VALEURS_MOBILIERES_BULLET_LABEL],
   [

@@ -338,11 +338,16 @@ impl Database {
                     "Un template d'email est requis pour la campagne".to_string(),
                 ));
             }
-            let (prevu, heure) = Self::normalized_email_campaign_fields(etiquette);
-            if prevu.is_none() && heure.is_none() {
-                return Err(rusqlite::Error::InvalidParameterName(
-                    "Indiquez une heure d'envoi (éligibilité) ou une date fixe de campagne".to_string(),
-                ));
+            let exceltis =
+                crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&etiquette.nom);
+            if !exceltis {
+                let (prevu, heure) = Self::normalized_email_campaign_fields(etiquette);
+                if prevu.is_none() && heure.is_none() {
+                    return Err(rusqlite::Error::InvalidParameterName(
+                        "Indiquez une heure d'envoi (éligibilité) ou une date fixe de campagne"
+                            .to_string(),
+                    ));
+                }
             }
         }
         Ok(())

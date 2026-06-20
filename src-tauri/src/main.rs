@@ -189,6 +189,7 @@ fn main() {
             scan_stellium_exceltis_emails,
             get_stellium_exceltis_signals,
             dismiss_stellium_exceltis_signal,
+            reset_stellium_exceltis_dismissed,
             // Settings
             get_setting,
             set_setting,

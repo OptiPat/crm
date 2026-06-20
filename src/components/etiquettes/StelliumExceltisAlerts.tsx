@@ -8,6 +8,7 @@ import {
   STELLIUM_EXCELTIS_CHANGED_EVENT,
   type StelliumExceltisSignal,
 } from "@/lib/api/tauri-stellium-exceltis";
+import { stelliumExceltisHeadline } from "@/lib/etiquettes/stellium-signal-ui";
 import { toast } from "sonner";
 
 type StelliumExceltisAlertsProps = {
@@ -38,7 +39,7 @@ export function StelliumExceltisAlerts({ onOpenEtiquette }: StelliumExceltisAler
       await dismissStelliumExceltisSignal(messageId);
       notifyStelliumExceltisChanged();
       await load();
-      toast.success("Signal masqué");
+      toast.success("Annonce masquée");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur");
     }
@@ -56,7 +57,7 @@ export function StelliumExceltisAlerts({ onOpenEtiquette }: StelliumExceltisAler
           <Mail className="h-5 w-5 text-amber-800 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-[200px] space-y-1">
             <p className="font-medium text-amber-950">
-              Remboursement Exceltis — {sig.millesime_label}
+              {stelliumExceltisHeadline(sig.subject, sig.millesime_label, sig.etiquette_nom)}
             </p>
             {sig.operation_from_label ? (
               <p className="text-xs font-medium text-amber-950">
@@ -87,7 +88,7 @@ export function StelliumExceltisAlerts({ onOpenEtiquette }: StelliumExceltisAler
               size="sm"
               variant="ghost"
               className="text-muted-foreground"
-              title="Masquer ce signal (ne supprime pas les étiquettes sur les contacts)"
+              title="Masquer cette annonce (ne supprime pas les étiquettes sur les contacts)"
               onClick={() => void handleDismiss(sig.gmail_message_id)}
             >
               <X className="h-4 w-4" />

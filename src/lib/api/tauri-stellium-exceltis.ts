@@ -75,3 +75,8 @@ export async function dismissStelliumExceltisSignal(
     gmailMessageId: id,
   });
 }
+
+/** Ré-affiche toutes les annonces masquées (vide la liste des messages masqués). */
+export async function resetStelliumExceltisDismissed(): Promise<void> {
+  return invoke<void>("reset_stellium_exceltis_dismissed");
+}

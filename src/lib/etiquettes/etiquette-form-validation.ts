@@ -1,6 +1,8 @@
 // Validation pure du formulaire d'étiquette (extraite de EtiquetteForm.handleSubmit).
 // Retourne le premier message d'erreur, ou null si le formulaire est valide.
 
+import { isExceltisEtiquetteNom } from "@/lib/etiquettes/exceltis";
+
 export interface EtiquetteFormValidationInput {
   nom: string;
   emailActif: boolean;
@@ -30,7 +32,12 @@ export function validateEtiquetteForm(i: EtiquetteFormValidationInput): string |
     if (i.emailEnvoiMode === "eligibility" && !i.emailEnvoiHeure.trim()) {
       return "Indiquez l'heure d'envoi (éligibilité)";
     }
-    if (i.emailEnvoiMode === "fixed" && !i.emailEnvoiLocal.trim()) {
+    const exceltisCampaign = isExceltisEtiquetteNom(i.nom);
+    if (
+      i.emailEnvoiMode === "fixed" &&
+      !i.emailEnvoiLocal.trim() &&
+      !exceltisCampaign
+    ) {
       return "Indiquez la date et l'heure de la campagne";
     }
   }

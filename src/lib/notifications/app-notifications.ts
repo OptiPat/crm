@@ -1,4 +1,5 @@
 import type { StelliumExceltisSignal } from "@/lib/api/tauri-stellium-exceltis";
+import { stelliumExceltisHeadline } from "@/lib/etiquettes/stellium-signal-ui";
 import type { EtiquetteEmailQueueStatus } from "@/lib/api/tauri-etiquettes";
 import type { SuiviMainTab } from "@/lib/navigation/suivi-navigation";
 import { invoke } from "@tauri-apps/api/core";
@@ -98,7 +99,7 @@ export function buildAppNotificationsSummary(
       : "";
     items.push({
       id: `exceltis_stellium:${sig.gmail_message_id}`,
-      label: `Exceltis remboursé — ${sig.millesime_label}${disinvestSuffix}`,
+      label: `${stelliumExceltisHeadline(sig.subject, sig.millesime_label, sig.etiquette_nom)}${disinvestSuffix}`,
       count: clients > 0 ? clients : 1,
       severity: clients > 0 ? "urgent" : "warning",
       suiviTab: "etiquettes",

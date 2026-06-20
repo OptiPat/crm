@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
@@ -25,9 +25,14 @@ import {
 import { GoogleContactBatchReportDialog } from "@/components/settings/GoogleContactBatchReportDialog";
 import { GoogleContactNameProposalsDialog } from "@/components/settings/GoogleContactNameProposalsDialog";
 import {
+  getStelliumExceltisSignals,
   notifyStelliumExceltisChanged,
+  resetStelliumExceltisDismissed,
   scanStelliumExceltisEmails,
+  STELLIUM_EXCELTIS_CHANGED_EVENT,
+  type StelliumExceltisSignal,
 } from "@/lib/api/tauri-stellium-exceltis";
+import { stelliumExceltisHeadline } from "@/lib/etiquettes/stellium-signal-ui";
 import { EmailOAuthConnect } from "@/components/emails/EmailOAuthConnect";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { getSetting, setSetting } from "@/lib/api/tauri-settings";
@@ -47,6 +52,24 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
   const [batchReport, setBatchReport] = useState<GoogleContactBatchSyncResult | null>(null);
   const [batchReportOpen, setBatchReportOpen] = useState(false);
   const [nameProposalsOpen, setNameProposalsOpen] = useState(false);
+  const [stelliumSignals, setStelliumSignals] = useState<StelliumExceltisSignal[]>([]);
+
+  const loadStelliumSignals = useCallback(async () => {
+    try {
+      setStelliumSignals(await getStelliumExceltisSignals());
+    } catch {
+      setStelliumSignals([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadStelliumSignals();
+    const onChanged = () => {
+      void loadStelliumSignals();
+    };
+    window.addEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onChanged);
+    return () => window.removeEventListener(STELLIUM_EXCELTIS_CHANGED_EVENT, onChanged);
+  }, [loadStelliumSignals]);
 
   useEffect(() => {
     getSetting(SETTING_CONTACT_MAIL_AUTO_SYNC)
@@ -191,48 +214,121 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
       />
 
       <SettingsPanel
-        title="Signaux Stellium / Exceltis"
-        description="Détection des emails « Remboursement Exceltis » (marketplacement@stellium.fr). Nécessite Gmail connecté et le CRM ouvert."
+        title="Exceltis — mails Stellium"
+        description="Détection automatique des emails Stellium (remboursements effectués ou annoncés à venir). Chaque ligne = un millésime repéré. Les « Informations complémentaires » sont ignorées. Gmail connecté requis."
       >
-        <Button
-          type="button"
-          variant="outline"
-          disabled={scanningStellium}
-          onClick={async () => {
-            setScanningStellium(true);
-            try {
-              const status = await getEmailConnectionStatus();
-              if (status.provider !== "google" || !status.connected) {
-                toast.error("Connectez Google dans la section Connexion.");
-                return;
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={scanningStellium}
+            onClick={async () => {
+              setScanningStellium(true);
+              try {
+                const status = await getEmailConnectionStatus();
+                if (status.provider !== "google" || !status.connected) {
+                  toast.error("Connectez Google dans la section Connexion.");
+                  return;
+                }
+                const result = await scanStelliumExceltisEmails();
+                notifyStelliumExceltisChanged();
+                if (result.new_signals > 0) {
+                  toast.success(
+                    `${result.new_signals} nouveau(x) millésime(s) Exceltis détecté(s).`
+                  );
+                } else if (result.signals.length > 0) {
+                  toast.success(
+                    `${result.scanned} mail(s) analysé(s) — ${result.signals.length} millésime(s) déjà connu(s). File Exceltis resynchronisée.`
+                  );
+                } else if (result.scanned > 0) {
+                  toast.warning(
+                    `${result.scanned} mail(s) trouvé(s) mais aucun millésime reconnu. S’ils ont été masqués, cliquez sur « Réafficher les annonces masquées ». Formats attendus : « Remboursement Exceltis {Gamme} {Mois} {Année} » ou newsletter « Remboursements Exceltis à venir ».`
+                  );
+                } else {
+                  toast.info(
+                    "Aucun mail Exceltis Stellium sur les 400 derniers jours."
+                  );
+                }
+              } catch (e) {
+                const msg =
+                  typeof e === "string"
+                    ? e
+                    : e instanceof Error
+                      ? e.message
+                      : "Scan Stellium impossible";
+                toast.error(msg);
+              } finally {
+                setScanningStellium(false);
               }
-              const result = await scanStelliumExceltisEmails();
-              notifyStelliumExceltisChanged();
-              if (result.new_signals > 0) {
-                toast.success(
-                  `${result.new_signals} nouveau(x) signal(aux) Exceltis détecté(s).`
-                );
-              } else {
-                toast.info(
-                  `Scan terminé (${result.scanned} mail(s) analysé(s), aucun nouveau signal).`
-                );
+            }}
+          >
+            {scanningStellium ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Vérification…
+              </>
+            ) : (
+              "Vérifier les mails Stellium (Exceltis)"
+            )}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={scanningStellium}
+            title="Annule les annonces que vous avez masquées (croix) et relance une détection complète."
+            onClick={async () => {
+              setScanningStellium(true);
+              try {
+                await resetStelliumExceltisDismissed();
+                const status = await getEmailConnectionStatus();
+                if (status.provider === "google" && status.connected) {
+                  await scanStelliumExceltisEmails();
+                }
+                notifyStelliumExceltisChanged();
+                toast.success("Annonces masquées réaffichées.");
+              } catch (e) {
+                const msg =
+                  typeof e === "string"
+                    ? e
+                    : e instanceof Error
+                      ? e.message
+                      : "Réinitialisation impossible";
+                toast.error(msg);
+              } finally {
+                setScanningStellium(false);
               }
-            } catch (e) {
-              toast.error(e instanceof Error ? e.message : "Scan Stellium impossible");
-            } finally {
-              setScanningStellium(false);
-            }
-          }}
-        >
-          {scanningStellium ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              Vérification…
-            </>
-          ) : (
-            "Vérifier les mails Stellium (Exceltis)"
-          )}
-        </Button>
+            }}
+          >
+            Réafficher les annonces masquées
+          </Button>
+        </div>
+        {stelliumSignals.length > 0 ? (
+          <div className="rounded-lg border border-amber-200/80 bg-amber-50/40 px-3 py-2.5 space-y-1.5 text-sm">
+            <p className="font-medium text-amber-950">
+              {stelliumSignals.length} millésime{stelliumSignals.length > 1 ? "s" : ""} connu
+              {stelliumSignals.length > 1 ? "s" : ""}
+            </p>
+            <ul className="text-xs text-muted-foreground space-y-1">
+              {stelliumSignals.map((sig) => (
+                <li key={sig.gmail_message_id} className="line-clamp-2">
+                  {stelliumExceltisHeadline(sig.subject, sig.millesime_label, sig.etiquette_nom)}
+                  {sig.contact_count > 0
+                    ? ` — ${sig.contact_count} client(s) tagué(s)`
+                    : " — aucun client tagué avec cette étiquette"}
+                  <span className="block text-[11px] opacity-80">{sig.subject}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground">
+              « Déjà connu » = ces millésimes étaient enregistrés. Bandeau détaillé sur Suivi.
+            </p>
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Aucun millésime Exceltis enregistré. Lancez un scan : les annonces Stellium apparaissent
+            ici et sur la page Suivi.
+          </p>
+        )}
       </SettingsPanel>
 
       <SettingsPanel

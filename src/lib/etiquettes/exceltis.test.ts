@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  exceltisEtiquetteKeysMatch,
   formatExceltisEtiquetteNom,
   getExceltisMillesimeProposals,
   isExceltisEligibleProductType,
   isExceltisEtiquetteNom,
+  parseExceltisGammeFromText,
+  parseExceltisKeyFromNom,
   parseMillesimeLabelFromEtiquetteNom,
 } from "./exceltis";
 
@@ -17,9 +20,9 @@ describe("exceltis", () => {
     expect(options[2]).toMatchObject({ label: "Août 2026", offset: 3, key: "2026-08" });
   });
 
-  it("formate le nom d'étiquette", () => {
-    expect(formatExceltisEtiquetteNom(8, 2026)).toBe("Exceltis — Août 2026");
-    expect(formatExceltisEtiquetteNom(2, 2025)).toBe("Exceltis — Février 2025");
+  it("formate le nom d'étiquette avec gamme", () => {
+    expect(formatExceltisEtiquetteNom("Rendement", 8, 2026)).toBe("Exceltis Rendement — Août 2026");
+    expect(formatExceltisEtiquetteNom("Patrimoine", 6, 2026)).toBe("Exceltis Patrimoine — Juin 2026");
   });
 
   it("identifie les types de produit éligibles Exceltis", () => {
@@ -28,9 +31,50 @@ describe("exceltis", () => {
     expect(isExceltisEligibleProductType("SCPI")).toBe(false);
   });
 
-  it("extrait le millésime depuis le nom d'étiquette", () => {
-    expect(parseMillesimeLabelFromEtiquetteNom("Exceltis — Février 2025")).toBe("Février 2025");
+  it("extrait gamme et millésime depuis le nom d'étiquette", () => {
+    expect(parseMillesimeLabelFromEtiquetteNom("Exceltis Rendement — Février 2025")).toBe(
+      "Février 2025"
+    );
+    expect(parseExceltisKeyFromNom("Exceltis Rendement — Octobre 2024")).toEqual({
+      gamme: "Rendement",
+      month: 10,
+      year: 2024,
+    });
     expect(parseMillesimeLabelFromEtiquetteNom("Suivi > 1 an")).toBeNull();
-    expect(isExceltisEtiquetteNom("Exceltis — Octobre 2024")).toBe(true);
+    expect(isExceltisEtiquetteNom("Exceltis Sérénité — Mai 2024")).toBe(true);
+  });
+
+  it("accepte les variantes de nom (tiret, casse, accents)", () => {
+    expect(parseExceltisKeyFromNom("Exceltis Rendement - Août 2026")).toEqual({
+      gamme: "Rendement",
+      month: 8,
+      year: 2026,
+    });
+    expect(parseExceltisKeyFromNom("exceltis patrimoine aout 2026")).toEqual({
+      gamme: "Patrimoine",
+      month: 8,
+      year: 2026,
+    });
+    expect(isExceltisEtiquetteNom("Exceltis — remboursement et arbitrage")).toBe(false);
+  });
+
+  it("mappe Patrimoine Taux (Stellium) vers Patrimoine", () => {
+    expect(parseExceltisGammeFromText("Exceltis Patrimoine Taux Juin 2026")).toBe("Patrimoine");
+    expect(parseExceltisGammeFromText("Remboursement Exceltis Rendement Février 2025")).toBe(
+      "Rendement"
+    );
+  });
+
+  it("matche par gamme + millésime", () => {
+    const rendement = { gamme: "Rendement" as const, month: 8, year: 2026 };
+    const patrimoine = { gamme: "Patrimoine" as const, month: 8, year: 2026 };
+    expect(exceltisEtiquetteKeysMatch(rendement, rendement)).toBe(true);
+    expect(exceltisEtiquetteKeysMatch(rendement, patrimoine)).toBe(false);
+  });
+
+  it("conserve le legacy sans gamme", () => {
+    const legacy = { month: 8, year: 2026 };
+    expect(exceltisEtiquetteKeysMatch(legacy, legacy)).toBe(true);
+    expect(isExceltisEtiquetteNom("Exceltis — Août 2026")).toBe(true);
   });
 });

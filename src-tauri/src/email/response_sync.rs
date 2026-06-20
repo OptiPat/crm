@@ -460,7 +460,7 @@ fn event_includes_contact(event: &CalendarEvent, contact_email: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn event_start_unix(event: &CalendarEvent) -> Option<i64> {
+fn event_start_unix(event: &CalendarEvent) -> Option<i64> {
     let start = event.start.as_ref()?;
     if let Some(ref dt) = start.date_time {
         if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(dt) {
