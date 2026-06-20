@@ -44,6 +44,7 @@ import {
   formatEtiquetteSendDatetime,
   getIncompleteQueueLabel,
   hasContactActivityAfterEmailSend,
+  isScpiBulletinContentMissing,
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
@@ -88,6 +89,10 @@ import {
   setEnvoisQueueCache,
 } from "@/lib/etiquettes/etiquette-envois-cache";
 import {
+  getEtiquetteQueueItemKey,
+  isSameEtiquetteQueueItem,
+} from "@/lib/etiquettes/etiquette-queue-item-key";
+import {
   isEtiquetteEmailSendActive,
   isEtiquetteQueueItemBatchLocked,
   subscribeEtiquetteEmailSendActivity,
@@ -121,7 +126,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     | "followup"
     | "journal"
   >("ready");
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchOpen, setBatchOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
   const [cancelConfirmItem, setCancelConfirmItem] =
@@ -141,7 +146,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   );
   const [syncing, setSyncing] = useState(false);
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
-  const [highlightRowKey, setHighlightRowKey] = useState<number | null>(null);
+  const [highlightRowKey, setHighlightRowKey] = useState<string | null>(null);
   const [batchSendRunning, setBatchSendRunning] = useState(false);
   const [, setSendUiPulse] = useState(0);
   const queueRefreshGenRef = useRef(0);
@@ -287,13 +292,12 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const applyLocalEmailSent = useCallback(
     (item: EtiquetteEmailQueueItem, subject: string, sentAtSec: number) => {
       const sentItem = buildSentQueueItem(item, sentAtSec, subject);
-      const id = item.contact_etiquette_id;
-      setReady((prev) => prev.filter((row) => row.contact_etiquette_id !== id));
-      setScheduled((prev) => prev.filter((row) => row.contact_etiquette_id !== id));
-      setSent((prev) => [sentItem, ...prev.filter((row) => row.contact_etiquette_id !== id)]);
+      setReady((prev) => prev.filter((row) => !isSameEtiquetteQueueItem(row, item)));
+      setScheduled((prev) => prev.filter((row) => !isSameEtiquetteQueueItem(row, item)));
+      setSent((prev) => [sentItem, ...prev.filter((row) => !isSameEtiquetteQueueItem(row, item))]);
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        next.delete(id);
+        next.delete(getEtiquetteQueueItemKey(item));
         return next;
       });
       onQueueChanged?.();
@@ -318,10 +322,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       const match = items.find((i) => i.contact_id === highlightContactId);
       if (match) {
         setSubTab(mode);
-        setHighlightRowKey(match.contact_etiquette_id);
+        setHighlightRowKey(getEtiquetteQueueItemKey(match));
         window.setTimeout(() => {
           document
-            .getElementById(`envoi-contact-${match.contact_etiquette_id}`)
+            .getElementById(`envoi-row-${getEtiquetteQueueItemKey(match)}`)
             ?.scrollIntoView({ behavior: "smooth", block: "center" });
         }, 150);
         if (mode === "ready") {
@@ -344,7 +348,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   ]);
 
   const openConfirm = (item: EtiquetteEmailQueueItem) => {
-    if (isEtiquetteQueueItemBatchLocked(item.contact_etiquette_id)) {
+    if (isEtiquetteQueueItemBatchLocked(item)) {
       toast.warning("Cet envoi fait partie d'une salve en cours.");
       return;
     }
@@ -355,19 +359,19 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     setSelectedIds(new Set());
   }, [subTab]);
 
-  const toggleSelected = (id: number, checked: boolean) => {
+  const toggleSelected = (key: string, checked: boolean) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (checked) next.add(id);
-      else next.delete(id);
+      if (checked) next.add(key);
+      else next.delete(key);
       return next;
     });
   };
 
-  const selectedReadyItems = ready.filter((i) => selectedIds.has(i.contact_etiquette_id));
+  const selectedReadyItems = ready.filter((i) => selectedIds.has(getEtiquetteQueueItemKey(i)));
   const selectedFollowupRelanceItems = followup.filter(
     (i) =>
-      selectedIds.has(i.contact_etiquette_id) &&
+      selectedIds.has(getEtiquetteQueueItemKey(i)) &&
       isTemplateEmailRelanceEnabledForQueue(i.template_variables)
   );
 
@@ -375,7 +379,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     action: EnvoisBulkRemoveAction,
     items: EtiquetteEmailQueueItem[]
   ) => {
-    const selected = items.filter((i) => selectedIds.has(i.contact_etiquette_id));
+    const selected = items.filter((i) => selectedIds.has(getEtiquetteQueueItemKey(i)));
     if (selected.length === 0) return;
     setBulkConfirm({ action, items: selected });
   };
@@ -435,7 +439,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   const handleDismissFollowup = async (item: EtiquetteEmailQueueItem) => {
     try {
-      await dismissEmailCampaignFollowup(item.contact_etiquette_id);
+      await dismissEmailCampaignFollowup(
+        item.contact_etiquette_id,
+        item.queue_row_kind ?? "etiquette"
+      );
       toast.success("Relance masquée pour cet envoi");
       await loadQueue();
     } catch (e) {
@@ -448,7 +455,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     if (!item) return;
     try {
       setCancelling(true);
-      await cancelPendingEmailCampaign(item.contact_etiquette_id);
+      await cancelPendingEmailCampaign(
+        item.contact_etiquette_id,
+        item.queue_row_kind ?? "etiquette"
+      );
       setCancelConfirmItem(null);
       toast.success("Envoi retiré de la file");
       await loadQueue({ silent: true });
@@ -462,13 +472,18 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
 
   const handleRestorePending = async (item: EtiquetteEmailQueueItem) => {
     try {
-      await restorePendingEmailCampaign(item.contact_etiquette_id);
+      await restorePendingEmailCampaign(
+        item.contact_etiquette_id,
+        item.queue_row_kind ?? "etiquette"
+      );
       toast.success("Contact remis dans « Prêts à envoyer »");
       setSubTab("ready");
       await loadQueue();
       onQueueChanged?.();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur");
+      const msg =
+        e instanceof Error ? e.message : typeof e === "string" ? e : "Erreur";
+      toast.error(msg.includes("Failed to") ? msg.replace(/^Failed to [^:]+: /, "") : msg);
     }
   };
 
@@ -477,7 +492,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     if (!item) return;
     try {
       setDismissing(true);
-      await dismissCancelledPendingEmailCampaign(item.contact_etiquette_id);
+      await dismissCancelledPendingEmailCampaign(
+        item.contact_etiquette_id,
+        item.queue_row_kind ?? "etiquette"
+      );
       setDismissConfirmItem(null);
       toast.success("Envoi retiré de la liste — ne sera plus reproposé");
       await loadQueue({ silent: true });
@@ -495,12 +513,15 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       setRelancing(true);
       let ok = 0;
       let failed = 0;
-      const succeededIds: number[] = [];
+      const succeededKeys: string[] = [];
       for (const item of items) {
         try {
-          await prepareEmailCampaignRelance(item.contact_etiquette_id);
+          await prepareEmailCampaignRelance(
+            item.contact_etiquette_id,
+            item.queue_row_kind ?? "etiquette"
+          );
           ok += 1;
-          succeededIds.push(item.contact_etiquette_id);
+          succeededKeys.push(getEtiquetteQueueItemKey(item));
         } catch {
           failed += 1;
         }
@@ -514,10 +535,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       } else {
         toast.warning(`${ok} relance${ok > 1 ? "s" : ""} OK, ${failed} en erreur`);
       }
-      if (succeededIds.length > 0) {
+      if (succeededKeys.length > 0) {
         setSelectedIds((prev) => {
           const next = new Set(prev);
-          for (const id of succeededIds) next.delete(id);
+          for (const key of succeededKeys) next.delete(key);
           return next;
         });
       }
@@ -560,34 +581,35 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     return (
       <div className="space-y-3">
         {items.map((item) => {
+          const rowKey = getEtiquetteQueueItemKey(item);
           const preview =
-            options.mode === "ready" && cgpConfig
+            options.mode === "ready"
               ? renderEtiquetteEmailPreview(item, cgpConfig)
               : null;
+          const scpiBulletinMissing =
+            options.mode === "ready" && isScpiBulletinContentMissing(item);
           const batchLocked =
             options.mode === "ready" &&
-            isEtiquetteQueueItemBatchLocked(item.contact_etiquette_id);
+            isEtiquetteQueueItemBatchLocked(item);
 
           return (
             <div
-              id={`envoi-contact-${item.contact_etiquette_id}`}
-              key={item.contact_etiquette_id}
+              id={`envoi-row-${rowKey}`}
+              key={rowKey}
               className={cn(
                 "p-4 border rounded-lg bg-card flex flex-col sm:flex-row sm:items-center gap-3 justify-between",
-                highlightRowKey === item.contact_etiquette_id && "ring-2 ring-primary/40",
+                highlightRowKey === rowKey && "ring-2 ring-primary/40",
                 batchLocked && "opacity-60"
               )}
             >
               {modeSupportsSelection(options.mode) && (
                 <Checkbox
-                  checked={selectedIds.has(item.contact_etiquette_id)}
+                  checked={selectedIds.has(rowKey)}
                   disabled={
                     (options.mode === "ready" && (batchLocked || batchSendRunning)) ||
                     bulkRemoving
                   }
-                  onCheckedChange={(v) =>
-                    toggleSelected(item.contact_etiquette_id, v === true)
-                  }
+                  onCheckedChange={(v) => toggleSelected(rowKey, v === true)}
                   className="shrink-0"
                   aria-label={`Sélectionner ${item.contact_prenom} ${item.contact_nom}`}
                 />
@@ -650,9 +672,16 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   </Badge>
                 )}
                 {options.mode === "ready" && preview && (
-                  <p className="text-xs text-muted-foreground truncate">
-                    Objet : {preview.subject}
-                  </p>
+                  <>
+                    <p className="text-xs text-muted-foreground truncate">
+                      Objet : {preview.subject}
+                    </p>
+                    {scpiBulletinMissing ? (
+                      <p className="text-xs text-amber-800 dark:text-amber-200">
+                        Résumé bulletins absent — relancez la préparation campagne n8n.
+                      </p>
+                    ) : null}
+                  </>
                 )}
                 {options.mode === "sent" && item.template_sujet && (
                   <p className="text-xs text-muted-foreground truncate">
@@ -1138,7 +1167,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                 )}
                 <ul className="max-h-40 overflow-y-auto text-xs space-y-1 border rounded-md p-2 bg-muted/30">
                   {bulkConfirm?.items.map((item) => (
-                    <li key={item.contact_etiquette_id}>
+                    <li key={getEtiquetteQueueItemKey(item)}>
                       {item.contact_prenom} {item.contact_nom} — {item.etiquette_nom}
                     </li>
                   ))}

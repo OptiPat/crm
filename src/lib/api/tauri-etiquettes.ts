@@ -424,35 +424,53 @@ export async function markEmailCampaignResponse(
 }
 
 export async function dismissEmailCampaignFollowup(
-  contactEtiquetteId: number
+  contactEtiquetteId: number,
+  queueRowKind?: string | null
 ): Promise<void> {
-  return invoke<void>("dismiss_email_campaign_followup", { contactEtiquetteId });
+  return invoke<void>("dismiss_email_campaign_followup", {
+    contactEtiquetteId,
+    queueRowKind: queueRowKind ?? "etiquette",
+  });
 }
 
 export async function cancelPendingEmailCampaign(
-  contactEtiquetteId: number
+  contactEtiquetteId: number,
+  queueRowKind?: string | null
 ): Promise<void> {
-  return invoke<void>("cancel_pending_email_campaign", { contactEtiquetteId });
+  return invoke<void>("cancel_pending_email_campaign", {
+    contactEtiquetteId,
+    queueRowKind: queueRowKind ?? "etiquette",
+  });
 }
 
 export async function restorePendingEmailCampaign(
-  contactEtiquetteId: number
+  contactEtiquetteId: number,
+  queueRowKind?: string | null
 ): Promise<void> {
-  return invoke<void>("restore_pending_email_campaign", { contactEtiquetteId });
+  return invoke<void>("restore_pending_email_campaign", {
+    contactEtiquetteId,
+    queueRowKind: queueRowKind ?? "etiquette",
+  });
 }
 
 export async function dismissCancelledPendingEmailCampaign(
-  contactEtiquetteId: number
+  contactEtiquetteId: number,
+  queueRowKind?: string | null
 ): Promise<void> {
   return invoke<void>("dismiss_cancelled_pending_email_campaign", {
     contactEtiquetteId,
+    queueRowKind: queueRowKind ?? "etiquette",
   });
 }
 
 export async function prepareEmailCampaignRelance(
-  contactEtiquetteId: number
+  contactEtiquetteId: number,
+  queueRowKind?: string | null
 ): Promise<void> {
-  return invoke<void>("prepare_email_campaign_relance", { contactEtiquetteId });
+  return invoke<void>("prepare_email_campaign_relance", {
+    contactEtiquetteId,
+    queueRowKind: queueRowKind ?? "etiquette",
+  });
 }
 
 // ==================== UTILITAIRES ====================

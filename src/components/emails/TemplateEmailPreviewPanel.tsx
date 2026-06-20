@@ -104,11 +104,15 @@ export function TemplateEmailPreviewPanel({
     }
     setSendingTest(true);
     try {
+      const testVariables = setTemplateCorpsHtmlInMeta(
+        templateVariables,
+        effectiveHtml?.trim() || null
+      );
       const to = await sendTemplateTestToSelf({
-        sujet,
-        corps,
-        corpsHtml,
-        templateVariables: mergedVariables,
+        sujet: effective.sujet,
+        corps: effective.corps,
+        corpsHtml: effectiveHtml,
+        templateVariables: testVariables,
         agendaLinkId,
         cgp,
         contact: sample,

@@ -15,6 +15,10 @@ import {
 } from "@/lib/etiquettes/etiquette-envois-cache";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { buildSentQueueItem } from "@/lib/etiquettes/etiquette-queue-incremental";
+import {
+  getEtiquetteQueueItemKey,
+  isSameEtiquetteQueueItem,
+} from "@/lib/etiquettes/etiquette-queue-item-key";
 import { toast } from "sonner";
 
 export type EtiquetteEmailSendActivity = {
@@ -36,7 +40,7 @@ let batchProgress: EtiquetteBatchSendProgress | null = null;
 let individualRunning = false;
 let individualLabel: string | null = null;
 let abortController: AbortController | null = null;
-const lockedContactEtiquetteIds = new Set<number>();
+const lockedQueueItemKeys = new Set<string>();
 const batchListeners = new Set<EtiquetteBatchSendListener>();
 const activityListeners = new Set<ActivityListener>();
 
@@ -67,17 +71,16 @@ function patchCacheAfterSent(
   const prev = getEnvoisQueueCache();
   if (!prev) return;
   const sentItem = buildSentQueueItem(item, sentAtSec, subject);
-  const id = item.contact_etiquette_id;
   setEnvoisQueueCache({
     ...prev,
-    ready: prev.ready.filter((row) => row.contact_etiquette_id !== id),
-    scheduled: prev.scheduled.filter((row) => row.contact_etiquette_id !== id),
-    sent: [sentItem, ...prev.sent.filter((row) => row.contact_etiquette_id !== id)],
+    ready: prev.ready.filter((row) => !isSameEtiquetteQueueItem(row, item)),
+    scheduled: prev.scheduled.filter((row) => !isSameEtiquetteQueueItem(row, item)),
+    sent: [sentItem, ...prev.sent.filter((row) => !isSameEtiquetteQueueItem(row, item))],
   });
 }
 
-function unlockContactEtiquette(id: number): void {
-  lockedContactEtiquetteIds.delete(id);
+function unlockQueueItem(item: Pick<EtiquetteEmailQueueItem, "queue_row_kind" | "contact_etiquette_id">): void {
+  lockedQueueItemKeys.delete(getEtiquetteQueueItemKey(item));
 }
 
 function assertNoConcurrentSend(): void {
@@ -102,8 +105,10 @@ export function isEtiquetteEmailSendActive(): boolean {
 }
 
 /** Ligne incluse dans une salve en cours (pas encore traitée) ou envoi individuel. */
-export function isEtiquetteQueueItemBatchLocked(contactEtiquetteId: number): boolean {
-  return lockedContactEtiquetteIds.has(contactEtiquetteId);
+export function isEtiquetteQueueItemBatchLocked(
+  item: Pick<EtiquetteEmailQueueItem, "queue_row_kind" | "contact_etiquette_id">
+): boolean {
+  return lockedQueueItemKeys.has(getEtiquetteQueueItemKey(item));
 }
 
 export function getEtiquetteBatchSendProgress(): EtiquetteBatchSendProgress | null {
@@ -140,7 +145,7 @@ export function startIndividualEtiquetteEmailSend(input: {
 
   const { item } = input;
   const name = `${item.contact_prenom} ${item.contact_nom}`.trim();
-  lockedContactEtiquetteIds.add(item.contact_etiquette_id);
+  lockedQueueItemKeys.add(getEtiquetteQueueItemKey(item));
   individualRunning = true;
   individualLabel = name;
   notifyListeners();
@@ -193,7 +198,7 @@ export function startIndividualEtiquetteEmailSend(input: {
       }).catch(() => {});
       toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Email)`);
     } finally {
-      unlockContactEtiquette(item.contact_etiquette_id);
+      unlockQueueItem(item);
       individualRunning = false;
       individualLabel = null;
       notifyListeners();
@@ -213,9 +218,9 @@ export async function startEtiquetteBatchSend(input: {
   abortController = controller;
   batchRunning = true;
   batchProgress = null;
-  lockedContactEtiquetteIds.clear();
+  lockedQueueItemKeys.clear();
   for (const item of input.items) {
-    lockedContactEtiquetteIds.add(item.contact_etiquette_id);
+    lockedQueueItemKeys.add(getEtiquetteQueueItemKey(item));
   }
   notifyListeners();
 
@@ -226,8 +231,8 @@ export async function startEtiquetteBatchSend(input: {
       signal: controller.signal,
       onProgress: (p) => {
         batchProgress = p;
-        if (p.lastProcessedContactEtiquetteId != null) {
-          unlockContactEtiquette(p.lastProcessedContactEtiquetteId);
+        if (p.lastProcessedItem) {
+          unlockQueueItem(p.lastProcessedItem);
         }
         notifyListeners();
         if (p.lastSent) {
@@ -268,7 +273,7 @@ export async function startEtiquetteBatchSend(input: {
     batchRunning = false;
     batchProgress = null;
     abortController = null;
-    lockedContactEtiquetteIds.clear();
+    lockedQueueItemKeys.clear();
     notifyListeners();
   }
 }

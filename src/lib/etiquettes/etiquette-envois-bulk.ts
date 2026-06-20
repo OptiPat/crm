@@ -17,12 +17,13 @@ export async function runEnvoisBulkRemove(
   for (const item of items) {
     try {
       const id = item.contact_etiquette_id;
+      const kind = item.queue_row_kind ?? "etiquette";
       if (action === "cancel") {
-        await cancelPendingEmailCampaign(id);
+        await cancelPendingEmailCampaign(id, kind);
       } else if (action === "dismiss") {
-        await dismissCancelledPendingEmailCampaign(id);
+        await dismissCancelledPendingEmailCampaign(id, kind);
       } else {
-        await dismissEmailCampaignFollowup(id);
+        await dismissEmailCampaignFollowup(id, kind);
       }
       succeeded += 1;
     } catch {

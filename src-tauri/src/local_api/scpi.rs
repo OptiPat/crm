@@ -1,7 +1,7 @@
 use super::config::LocalApiConfig;
 use crate::database::scpi_campaigns::PrepareScpiCampaignInput;
 use crate::database::Database;
-use std::io::{Read, Result as IoResult};
+use std::io::Result as IoResult;
 use tiny_http::{Request, StatusCode};
 
 pub fn handle_prepare_campaign(
@@ -9,7 +9,7 @@ pub fn handle_prepare_campaign(
     config: &LocalApiConfig,
 ) -> IoResult<()> {
     let mut body = String::new();
-    if let Err(e) = request.as_reader().read_to_string(&mut body) {
+    if let Err(e) = std::io::Read::read_to_string(&mut request.as_reader(), &mut body) {
         return super::json_response(
             request,
             StatusCode(400),

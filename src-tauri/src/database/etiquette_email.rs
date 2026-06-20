@@ -6,6 +6,10 @@ use super::template_email_relance::{
 use super::Database;
 use rusqlite::{params, OptionalExtension, Result};
 
+fn email_queue_row_is_template(queue_row_kind: Option<&str>) -> bool {
+    queue_row_kind == Some("template")
+}
+
 impl Database {
     pub fn get_etiquette_email_queue(
         &self,
@@ -739,16 +743,26 @@ impl Database {
     }
 
     /// Ne plus proposer de relance pour cet envoi.
-    pub fn dismiss_email_campaign_followup(&self, row_id: i64) -> Result<()> {
-        let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET email_suivi_ignore = 1 WHERE id = ?1",
-            params![row_id],
-        )?;
-        if updated > 0 {
+    pub fn dismiss_email_campaign_followup(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<()> {
+        if email_queue_row_is_template(queue_row_kind) {
+            let updated = self.conn.execute(
+                "UPDATE contact_template_envois SET email_suivi_ignore = 1 WHERE id = ?1",
+                params![row_id],
+            )?;
+            if updated == 0 {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "Envoi introuvable: {}",
+                    row_id
+                )));
+            }
             return Ok(());
         }
         let updated = self.conn.execute(
-            "UPDATE contact_template_envois SET email_suivi_ignore = 1 WHERE id = ?1",
+            "UPDATE contact_etiquettes SET email_suivi_ignore = 1 WHERE id = ?1",
             params![row_id],
         )?;
         if updated == 0 {
@@ -761,11 +775,18 @@ impl Database {
     }
 
     /// Remet en file un envoi retiré manuellement (email_annule = 1).
-    pub fn restore_pending_email_campaign(&self, row_id: i64) -> Result<()> {
-        use super::template_email_trigger::{
-            etiquette_schedule_from_trigger, parse_template_email_trigger,
-        };
+    pub fn restore_pending_email_campaign(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<()> {
+        if email_queue_row_is_template(queue_row_kind) {
+            return self.restore_template_pending_email_campaign(row_id);
+        }
+        self.restore_etiquette_pending_email_campaign(row_id)
+    }
 
+    fn restore_etiquette_pending_email_campaign(&self, row_id: i64) -> Result<()> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -794,21 +815,47 @@ impl Database {
             }
         }
 
-        let (template_id, trigger_event_at): (i64, i64) = self.conn.query_row(
-            "SELECT template_id, COALESCE(trigger_event_at, 0) FROM contact_template_envois WHERE id = ?1",
-            params![row_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?;
+        Err(rusqlite::Error::InvalidParameterName(format!(
+            "Envoi introuvable ou déjà en file: {}",
+            row_id
+        )))
+    }
+
+    fn restore_template_pending_email_campaign(&self, row_id: i64) -> Result<()> {
+        use super::template_email_trigger::{
+            etiquette_schedule_from_trigger, parse_template_email_trigger,
+        };
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let (template_id, trigger_event_at, campaign_batch_key): (i64, i64, Option<String>) =
+            self.conn.query_row(
+                "SELECT template_id, COALESCE(trigger_event_at, 0), campaign_batch_key
+                 FROM contact_template_envois WHERE id = ?1",
+                params![row_id],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )?;
         let tpl = self.get_template_email_by_id(template_id)?;
-        let trigger = parse_template_email_trigger(tpl.variables.as_deref());
-        if !trigger.is_active() {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "Déclencheur email inactif sur ce modèle".into(),
-            ));
-        }
-        let sched = etiquette_schedule_from_trigger(&trigger);
-        let prevue =
-            resolve_email_date_prevue_for_contact(&sched, trigger_event_at).unwrap_or(now);
+        let is_batch_campaign = campaign_batch_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .is_some();
+        let prevue = if is_batch_campaign {
+            now
+        } else {
+            let trigger = parse_template_email_trigger(tpl.variables.as_deref());
+            if !trigger.is_active() {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Déclencheur email inactif sur ce modèle".into(),
+                ));
+            }
+            let sched = etiquette_schedule_from_trigger(&trigger);
+            resolve_email_date_prevue_for_contact(&sched, trigger_event_at).unwrap_or(now)
+        };
         let updated = self.conn.execute(
             "UPDATE contact_template_envois SET email_annule = 0, email_suivi_ignore = 0, email_date_prevue = ?1
              WHERE id = ?2 AND email_envoye = 0 AND email_annule = 1",
@@ -825,18 +872,28 @@ impl Database {
 
     /// Retire définitivement un envoi de la file (onglet Retirés) sans remettre en Prêts.
     /// L'étiquette et l'alerte restent ; le recalcul auto ne reproposera plus cet envoi.
-    pub fn dismiss_cancelled_pending_email_campaign(&self, row_id: i64) -> Result<()> {
-        let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET email_suivi_ignore = 1, email_annule = 0
-             WHERE id = ?1 AND email_envoye = 0 AND email_annule = 1
-               AND COALESCE(email_suivi_ignore, 0) = 0",
-            params![row_id],
-        )?;
-        if updated > 0 {
+    pub fn dismiss_cancelled_pending_email_campaign(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<()> {
+        if email_queue_row_is_template(queue_row_kind) {
+            let updated = self.conn.execute(
+                "UPDATE contact_template_envois SET email_suivi_ignore = 1, email_annule = 0
+                 WHERE id = ?1 AND email_envoye = 0 AND email_annule = 1
+                   AND COALESCE(email_suivi_ignore, 0) = 0",
+                params![row_id],
+            )?;
+            if updated == 0 {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "Envoi retiré introuvable ou déjà ignoré: {}",
+                    row_id
+                )));
+            }
             return Ok(());
         }
         let updated = self.conn.execute(
-            "UPDATE contact_template_envois SET email_suivi_ignore = 1, email_annule = 0
+            "UPDATE contact_etiquettes SET email_suivi_ignore = 1, email_annule = 0
              WHERE id = ?1 AND email_envoye = 0 AND email_annule = 1
                AND COALESCE(email_suivi_ignore, 0) = 0",
             params![row_id],
@@ -851,17 +908,27 @@ impl Database {
     }
 
     /// Retire un envoi planifié de la file « Prêts à envoyer » sans l'envoyer.
-    pub fn cancel_pending_email_campaign(&self, row_id: i64) -> Result<()> {
-        let updated = self.conn.execute(
-            "UPDATE contact_etiquettes SET email_annule = 1
-             WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
-            params![row_id],
-        )?;
-        if updated > 0 {
+    pub fn cancel_pending_email_campaign(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<()> {
+        if email_queue_row_is_template(queue_row_kind) {
+            let updated = self.conn.execute(
+                "UPDATE contact_template_envois SET email_annule = 1
+                 WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
+                params![row_id],
+            )?;
+            if updated == 0 {
+                return Err(rusqlite::Error::InvalidParameterName(format!(
+                    "Envoi planifié introuvable ou déjà traité: {}",
+                    row_id
+                )));
+            }
             return Ok(());
         }
         let updated = self.conn.execute(
-            "UPDATE contact_template_envois SET email_annule = 1
+            "UPDATE contact_etiquettes SET email_annule = 1
              WHERE id = ?1 AND email_envoye = 0 AND COALESCE(email_annule, 0) = 0",
             params![row_id],
         )?;
@@ -1022,11 +1089,15 @@ impl Database {
     }
 
     /// Remet l'envoi en file « Prêts » pour une relance manuelle.
-    pub fn prepare_email_campaign_relance(&self, row_id: i64) -> Result<()> {
-        if self.prepare_contact_etiquette_relance(row_id).is_ok() {
-            return Ok(());
+    pub fn prepare_email_campaign_relance(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<()> {
+        if email_queue_row_is_template(queue_row_kind) {
+            return self.prepare_template_envoi_relance(row_id);
         }
-        self.prepare_template_envoi_relance(row_id)
+        self.prepare_contact_etiquette_relance(row_id)
     }
 
     fn prepare_contact_etiquette_relance(&self, contact_etiquette_id: i64) -> Result<()> {

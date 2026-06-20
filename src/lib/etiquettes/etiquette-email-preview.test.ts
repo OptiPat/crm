@@ -153,4 +153,36 @@ describe("etiquette-email-preview", () => {
     expect(rendered.body_html).toContain("<strong>Jean</strong>");
     expect(rendered.body_html).toContain("Signature");
   });
+
+  it("convertit bulletin_resume markdown en HTML pour l'envoi", () => {
+    const item: EtiquetteEmailQueueItem = {
+      contact_etiquette_id: 1,
+      contact_id: 2,
+      contact_nom: "Dupont",
+      contact_prenom: "Jean",
+      contact_email: "j.dupont@example.com",
+      contact_telephone: null,
+      etiquette_id: 42,
+      etiquette_nom: "Campagne SCPI",
+      etiquette_couleur: "#6366F1",
+      email_date_prevue: null,
+      email_date_envoi: null,
+      template_sujet: "Bulletins {{periode}}",
+      template_corps: "{{bulletin_resume}}",
+      template_agenda_link_id: null,
+      template_categorie: "NEWSLETTER",
+      template_variables: setTemplateCorpsHtmlInMeta(
+        null,
+        '<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">{{bulletin_resume_html}}</div></div>'
+      ),
+      campaign_variables: JSON.stringify({
+        periode: "T1 2026",
+        bulletin_resume: "## Comète\n\n- Collecte : 132 M€",
+      }),
+      queue_issue: null,
+    };
+    const rendered = renderEtiquetteEmailPreview(item, null);
+    expect(rendered.body_html).toContain("132 M€");
+    expect(rendered.body_html).toContain("<ul");
+  });
 });

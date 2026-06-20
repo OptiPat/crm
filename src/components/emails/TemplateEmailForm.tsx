@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from "react";
 import { flushSync } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +46,7 @@ import {
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { stampScpiBulletinTemplateMeta } from "@/lib/emails/scpi-template-meta";
 import {
   TemplateEmailRelancePanel,
   type TemplateRelanceDraft,
@@ -130,6 +131,7 @@ export function TemplateEmailForm({
     corpsHtml: "",
   });
   const [tutoiementTemplateId, setTutoiementTemplateId] = useState<number | null>(null);
+  const [tutoiementVariables, setTutoiementVariables] = useState<string | null>(null);
   const [relanceTuDraft, setRelanceTuDraft] = useState<TemplateTutoiementDraft>({
     enabled: false,
     sujet: "",
@@ -177,6 +179,7 @@ export function TemplateEmailForm({
     setEmailTrigger(parseTemplateEmailTrigger(source.variables));
     setRelanceTemplateId(source.relance_template_id);
     setTutoiementTemplateId(source.tutoiement_template_id ?? null);
+    setTutoiementVariables(null);
     const hasTu = source.tutoiement_template_id != null;
     setTutoiementDraft({
       enabled: hasTu,
@@ -187,6 +190,7 @@ export function TemplateEmailForm({
       void getTemplateEmailById(source.tutoiement_template_id)
         .then((tu) => {
           const tuHtml = getTemplateCorpsHtml(tu.variables);
+          setTutoiementVariables(tu.variables);
           setTutoiementDraft({
             enabled: true,
             sujet: tu.sujet,
@@ -267,6 +271,7 @@ export function TemplateEmailForm({
     setRelanceTemplateId(null);
     setTutoiementDraft({ enabled: false, sujet: "", corpsHtml: "" });
     setTutoiementTemplateId(null);
+    setTutoiementVariables(null);
     setRelanceTuDraft({ enabled: false, sujet: "", corpsHtml: "" });
     setRelanceTuTemplateId(null);
     setPreviewRegistre("VOUS");
@@ -282,7 +287,7 @@ export function TemplateEmailForm({
       .then((list) => setContacts(list.filter((c) => c.email?.trim())))
       .catch(() => setContacts([]));
     void getAllEtiquettes().then(setEtiquettes).catch(() => setEtiquettes([]));
-  }, [open]);
+  }, [open, template?.id]);
 
   useEffect(() => {
     if (!open) return;
@@ -360,7 +365,7 @@ export function TemplateEmailForm({
     etiquettes,
   ]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     const plainCorps = htmlToPlainEmail(corpsHtml) || formData.corps.trim();
     if (!formData.nom.trim() || !formData.sujet.trim() || !plainCorps) {
@@ -399,12 +404,19 @@ export function TemplateEmailForm({
       let linkedTuId = tutoiementTemplateId;
       if (tutoiementDraft.enabled) {
         const tuPlain = htmlToPlainEmail(tutoiementDraft.corpsHtml);
+        const tuNom = buildTutoiementTemplateNom(formData.nom);
         const tuPayload: NewTemplateEmail = {
-          nom: buildTutoiementTemplateNom(formData.nom),
+          nom: tuNom,
           sujet: tutoiementDraft.sujet.trim(),
           corps: tuPlain,
           categorie: formData.categorie,
-          variables: setTemplateCorpsHtmlInMeta(null, tutoiementDraft.corpsHtml.trim() || null),
+          variables: stampScpiBulletinTemplateMeta(
+            setTemplateCorpsHtmlInMeta(
+              tutoiementVariables,
+              tutoiementDraft.corpsHtml.trim() || null
+            ),
+            tuNom
+          ),
           agenda_link_id: formData.agenda_link_id,
           relance_template_id: null,
           tutoiement_template_id: null,
@@ -479,6 +491,7 @@ export function TemplateEmailForm({
       variables = setTemplateEmailSuiviReponseInMeta(variables, {
         attendre_reponse: relanceDraft.attendreReponse,
       });
+      variables = stampScpiBulletinTemplateMeta(variables, formData.nom);
 
       const payload: NewTemplateEmail = {
         ...formData,
@@ -607,7 +620,7 @@ export function TemplateEmailForm({
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>{template ? "Modifier le modèle" : "Nouveau modèle"}</DialogTitle>
           <DialogDescription>
-            Message, déclencheur (événement ou étiquettes) et mise en forme — aperçu à droite.
+            Message, déclencheur, étiquettes et mise en forme — aperçu à droite.
           </DialogDescription>
         </DialogHeader>
 

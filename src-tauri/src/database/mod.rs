@@ -90,14 +90,12 @@ impl Database {
         Ok(db)
     }
 
-    /// Ouverture secondaire (API locale n8n) — migrations idempotentes, sans backup.
+    /// Ouverture secondaire (API locale n8n) — sans migrations (déjà appliquées au déverrouillage).
     pub fn open_at_path(db_path: &std::path::Path) -> Result<Self> {
         let conn = Connection::open(db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
-        conn.execute("PRAGMA busy_timeout = 10000", [])?;
-        let db = Database { conn };
-        db.init_tables()?;
-        Ok(db)
+        conn.busy_timeout(std::time::Duration::from_secs(10))?;
+        Ok(Database { conn })
     }
 
     fn init_tables(&self) -> Result<()> {

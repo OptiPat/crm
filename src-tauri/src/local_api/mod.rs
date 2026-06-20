@@ -128,10 +128,13 @@ fn run_server(config: LocalApiConfig) {
     );
 
     for request in server.incoming_requests() {
-        let _ = handle_request(request, &config);
         if !SERVER_RUNNING.load(Ordering::SeqCst) {
             break;
         }
+        let config = config.clone();
+        thread::spawn(move || {
+            let _ = handle_request(request, &config);
+        });
     }
     if let Ok(mut guard) = RUNTIME_TOKEN.lock() {
         *guard = None;

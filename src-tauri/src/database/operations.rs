@@ -1669,7 +1669,7 @@ mod database_integration_tests {
         assert_eq!(ready.len(), 1);
         let row_id = ready[0].contact_etiquette_id;
 
-        db.cancel_pending_email_campaign(row_id).unwrap();
+        db.cancel_pending_email_campaign(row_id, None).unwrap();
         assert!(db.get_etiquette_email_queue("ready").unwrap().is_empty());
 
         db.sync_pending_email_dates_for_etiquette(etiqu.id).unwrap();
@@ -1678,8 +1678,139 @@ mod database_integration_tests {
             "un envoi annulé ne doit pas revenir après recalcul des dates seul"
         );
         assert_eq!(db.get_etiquette_email_queue("cancelled").unwrap().len(), 1);
-        db.restore_pending_email_campaign(row_id).unwrap();
+        db.restore_pending_email_campaign(row_id, None).unwrap();
         assert_eq!(db.get_etiquette_email_queue("ready").unwrap().len(), 1);
+    }
+
+    #[test]
+    fn cancel_template_envoi_does_not_cancel_etiquette_with_same_numeric_id() {
+        use crate::database::models::{NewEtiquette, NewInvestissement, NewTemplateEmail};
+        use crate::database::scpi_campaigns::{PrepareScpiCampaignInput, ScpiBulletinInput};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Tpl suivi".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Suivi 1 an".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+
+        let contact_etiq = db
+            .create_contact(NewContact {
+                email: Some("akim@example.com".into()),
+                ..sample_contact("SEKKAI", "Akim")
+            })
+            .unwrap();
+        db.attribuer_etiquette(contact_etiq.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+
+        let contact_scpi = db
+            .create_contact(NewContact {
+                email: Some("nicolas@example.com".into()),
+                ..sample_contact("CHOUX", "Nicolas")
+            })
+            .unwrap();
+        let scpi_cid = contact_scpi.id.unwrap();
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(scpi_cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Comète".into(),
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        })
+        .unwrap();
+        db.prepare_scpi_bulletin_campaign(PrepareScpiCampaignInput {
+            periode: "T1 2026".into(),
+            bulletins: vec![ScpiBulletinInput {
+                nom_produit: "Comète".into(),
+                summary_markdown: "Collecte stable".into(),
+                fichier_source: None,
+            }],
+        })
+        .unwrap();
+
+        let ready = db.get_etiquette_email_queue("ready").unwrap();
+        assert_eq!(ready.len(), 2);
+        let etiquette_row = ready
+            .iter()
+            .find(|r| r.queue_row_kind == "etiquette")
+            .expect("etiquette row");
+        let template_row = ready
+            .iter()
+            .find(|r| r.queue_row_kind == "template")
+            .expect("template row");
+        assert_eq!(
+            etiquette_row.contact_etiquette_id, template_row.contact_etiquette_id,
+            "test setup: même id numérique sur les deux tables"
+        );
+
+        db.cancel_pending_email_campaign(template_row.contact_etiquette_id, Some("template"))
+            .unwrap();
+
+        let ready_after = db.get_etiquette_email_queue("ready").unwrap();
+        assert_eq!(ready_after.len(), 1);
+        assert_eq!(ready_after[0].queue_row_kind, "etiquette");
+        assert_eq!(ready_after[0].contact_etiquette_id, etiquette_row.contact_etiquette_id);
+
+        let cancelled = db.get_etiquette_email_queue("cancelled").unwrap();
+        assert_eq!(cancelled.len(), 1);
+        assert_eq!(cancelled[0].queue_row_kind, "template");
+
+        db.restore_pending_email_campaign(template_row.contact_etiquette_id, Some("template"))
+            .unwrap();
+        let ready_restored = db.get_etiquette_email_queue("ready").unwrap();
+        assert_eq!(ready_restored.len(), 2);
+        assert!(
+            ready_restored
+                .iter()
+                .any(|r| r.queue_row_kind == "template" && r.contact_id == scpi_cid)
+        );
     }
 
     #[test]
@@ -2425,7 +2556,7 @@ mod database_integration_tests {
             .expect("contact en file prête")
             .contact_etiquette_id;
 
-        db.cancel_pending_email_campaign(row_id).unwrap();
+        db.cancel_pending_email_campaign(row_id, None).unwrap();
         assert!(db.get_etiquette_email_queue("ready").unwrap().iter().all(|q| q.contact_id != cid));
         assert_eq!(db.get_etiquette_email_queue("cancelled").unwrap().len(), 1);
 
@@ -2522,10 +2653,10 @@ mod database_integration_tests {
             .expect("contact en file prête")
             .contact_etiquette_id;
 
-        db.cancel_pending_email_campaign(row_id).unwrap();
+        db.cancel_pending_email_campaign(row_id, None).unwrap();
         assert_eq!(db.get_etiquette_email_queue("cancelled").unwrap().len(), 1);
 
-        db.dismiss_cancelled_pending_email_campaign(row_id).unwrap();
+        db.dismiss_cancelled_pending_email_campaign(row_id, None).unwrap();
         assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
         assert!(
             db.get_etiquette_email_queue("ready")
@@ -2604,13 +2735,13 @@ mod database_integration_tests {
         assert_eq!(incomplete[0].queue_issue.as_deref(), Some("NO_EMAIL"));
         let row_id = incomplete[0].contact_etiquette_id;
 
-        db.cancel_pending_email_campaign(row_id).unwrap();
+        db.cancel_pending_email_campaign(row_id, None).unwrap();
         assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
         let cancelled = db.get_etiquette_email_queue("cancelled").unwrap();
         assert_eq!(cancelled.len(), 1);
         assert_eq!(cancelled[0].contact_id, cid);
 
-        db.dismiss_cancelled_pending_email_campaign(row_id).unwrap();
+        db.dismiss_cancelled_pending_email_campaign(row_id, None).unwrap();
         assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
         assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
     }
@@ -2665,12 +2796,12 @@ mod database_integration_tests {
         assert_eq!(incomplete[0].queue_issue.as_deref(), Some("NO_EMAIL"));
         let row_id = incomplete[0].contact_etiquette_id;
 
-        db.cancel_pending_email_campaign(row_id).unwrap();
+        db.cancel_pending_email_campaign(row_id, Some("template")).unwrap();
         assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
         let cancelled = db.get_etiquette_email_queue("cancelled").unwrap();
         assert_eq!(cancelled.len(), 1);
 
-        db.dismiss_cancelled_pending_email_campaign(row_id).unwrap();
+        db.dismiss_cancelled_pending_email_campaign(row_id, Some("template")).unwrap();
         assert!(db.get_etiquette_email_queue("cancelled").unwrap().is_empty());
         assert!(db.get_etiquette_email_queue("incomplete").unwrap().is_empty());
     }
@@ -2978,7 +3109,7 @@ mod database_integration_tests {
         assert_eq!(sent_row.sent_body.as_deref(), Some("Corps test"));
         assert_eq!(sent_row.sent_subject.as_deref(), Some("Objet test"));
 
-        db.prepare_email_campaign_relance(ce_id).unwrap();
+        db.prepare_email_campaign_relance(ce_id, None).unwrap();
         let timeline_after_relance_prep = db.get_exchange_history_timeline(None).unwrap();
         assert!(
             timeline_after_relance_prep
@@ -3267,7 +3398,7 @@ mod database_integration_tests {
         assert_eq!(row_vous.template_sujet, "SUJET_VOUS_MAIN");
         assert_eq!(row_vous.template_corps, "CORPS_VOUS_MAIN");
 
-        db.prepare_email_campaign_relance(ce_tu).unwrap();
+        db.prepare_email_campaign_relance(ce_tu, None).unwrap();
         let relance_row = db
             .get_etiquette_email_queue("ready")
             .unwrap()

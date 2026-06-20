@@ -14,7 +14,7 @@ export interface EtiquetteBatchSendProgress {
   /** Ligne en cours d'envoi (verrou UI). */
   currentContactEtiquetteId?: number;
   /** Dernière ligne traitée (succès ou erreur). */
-  lastProcessedContactEtiquetteId?: number;
+  lastProcessedItem?: EtiquetteEmailQueueItem;
   errors: string[];
   batchId: string;
   /** Dernier envoi réussi (refresh incrémental UI). */
@@ -56,7 +56,7 @@ export async function sendEtiquetteBatch(input: {
     const name = `${item.contact_prenom} ${item.contact_nom}`.trim();
     progress.currentName = name;
     progress.currentContactEtiquetteId = item.contact_etiquette_id;
-    progress.lastProcessedContactEtiquetteId = undefined;
+    progress.lastProcessedItem = undefined;
     input.onProgress?.({ ...progress });
 
     if (!item.contact_email?.trim()) {
@@ -73,7 +73,7 @@ export async function sendEtiquetteBatch(input: {
         batchId,
         sendMode: "batch",
       }).catch(() => {});
-      progress.lastProcessedContactEtiquetteId = item.contact_etiquette_id;
+      progress.lastProcessedItem = item;
       progress.currentContactEtiquetteId = undefined;
       input.onProgress?.({ ...progress });
       continue;
@@ -120,7 +120,7 @@ export async function sendEtiquetteBatch(input: {
         sendMode: "batch",
       }).catch(() => {});
     }
-    progress.lastProcessedContactEtiquetteId = item.contact_etiquette_id;
+    progress.lastProcessedItem = item;
     progress.currentContactEtiquetteId = undefined;
     input.onProgress?.({ ...progress });
 

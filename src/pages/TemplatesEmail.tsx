@@ -2,7 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Plus, Search, Sparkles } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, Search, Sparkles, Tag, Zap, RefreshCw, Inbox } from "lucide-react";
+import { StatCard } from "@/components/dashboard/StatCard";
 import {
   getAllTemplatesEmail,
   deleteTemplateEmail,
@@ -10,13 +21,20 @@ import {
   seedDefaultEmailTemplates,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
+import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
+import { getEmailConnectionStatus, type EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { TemplateEmailForm } from "@/components/emails/TemplateEmailForm";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import {
+  TemplateActivationModeFilters,
   TemplateCategoryFilters,
   TemplateListRow,
   TemplatePreviewActions,
+  TemplatePreviewActivationStatus,
+  TemplatePreviewContactControls,
+  TemplatesEmailActiveFilterChips,
+  TemplatesEmailDeliveryBanner,
   TemplatesEmailHelp,
 } from "@/components/emails/templates-email-ui";
 import {
@@ -25,12 +43,33 @@ import {
 } from "@/lib/emails/template-email-meta";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
 import { filterLibraryTemplates } from "@/lib/emails/template-library";
+import {
+  computeTemplatesEmailPageStats,
+  getTemplateActivationFlags,
+  matchesTemplateActivationStatFilter,
+  type TemplateActivationStatFilter,
+} from "@/lib/emails/template-email-activation";
+import {
+  buildTemplatesEmailActiveFilterChips,
+  type TemplatesEmailActiveFilterId,
+} from "@/lib/emails/templates-email-active-filters";
+import type { ContactRegistre } from "@/lib/emails/template-email-formality";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { getTemplateCorpsHtml } from "@/lib/emails/template-email-html";
 import { useTemplatesEmailAutoRefresh } from "@/hooks/useTemplatesEmailAutoRefresh";
+import { navigateToEtiquetteEdit } from "@/lib/navigation/etiquettes-navigation";
+import { resolveTemplateSouscriptionDuplicateWarning } from "@/lib/emails/template-etiquette-duplicate";
+import {
+  loadTemplatesEmailPagePreferences,
+  saveTemplatesEmailPagePreferences,
+} from "@/lib/emails/templates-email-page-preferences";
 import { toast } from "sonner";
 
-export function TemplatesEmail() {
+type TemplatesEmailProps = {
+  onNavigate?: (page: string) => void;
+};
+
+export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
   const [templates, setTemplates] = useState<TemplateEmail[]>([]);
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
   const [loading, setLoading] = useState(true);
@@ -41,6 +80,16 @@ export function TemplatesEmail() {
   const [cgp, setCgp] = useState<Awaited<ReturnType<typeof getCgpConfig>> | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [activationFilter, setActivationFilter] = useState<TemplateActivationStatFilter | null>(
+    null
+  );
+  const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(null);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [previewContactId, setPreviewContactId] = useState("sample");
+  const [previewRegistre, setPreviewRegistre] = useState<ContactRegistre>("VOUS");
+  const [deleteTarget, setDeleteTarget] = useState<TemplateEmail | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const previewIdRef = useRef(previewId);
   previewIdRef.current = previewId;
 
@@ -80,9 +129,30 @@ export function TemplatesEmail() {
   });
 
   useEffect(() => {
+    const prefs = loadTemplatesEmailPagePreferences();
+    setSearchQuery(prefs.searchQuery);
+    setCategoryFilter(prefs.categoryFilter);
+    setActivationFilter(prefs.activationFilter);
+    setPrefsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!prefsLoaded) return;
+    saveTemplatesEmailPagePreferences({
+      searchQuery,
+      categoryFilter,
+      activationFilter,
+    });
+  }, [prefsLoaded, searchQuery, categoryFilter, activationFilter]);
+
+  useEffect(() => {
     void (async () => {
       await Promise.all([loadTemplates(), loadEtiquetteLinks()]);
       void getCgpConfig().then(setCgp).catch(() => setCgp(null));
+      void getEmailConnectionStatus().then(setEmailStatus).catch(() => setEmailStatus(null));
+      void getAllContacts()
+        .then((list) => setContacts(list.filter((c) => c.email?.trim())))
+        .catch(() => setContacts([]));
     })();
   }, [loadTemplates, loadEtiquetteLinks]);
 
@@ -109,17 +179,100 @@ export function TemplatesEmail() {
     return counts;
   }, [libraryTemplates]);
 
-  const filtered = useMemo(
-    () => filterTemplatesEmail(libraryTemplates, searchQuery, categoryFilter),
-    [libraryTemplates, searchQuery, categoryFilter]
+  const stats = useMemo(
+    () => computeTemplatesEmailPageStats(libraryTemplates, linkCountByTemplate),
+    [libraryTemplates, linkCountByTemplate]
   );
 
+  const souscriptionDuplicateByTemplateId = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const template of libraryTemplates) {
+      const warning = resolveTemplateSouscriptionDuplicateWarning(template, etiquettes);
+      if (warning) map.set(template.id, warning);
+    }
+    return map;
+  }, [libraryTemplates, etiquettes]);
+
+  const filtered = useMemo(() => {
+    const bySearchAndCategory = filterTemplatesEmail(
+      libraryTemplates,
+      searchQuery,
+      categoryFilter
+    );
+    return bySearchAndCategory.filter((template) =>
+      matchesTemplateActivationStatFilter(template, linkCountByTemplate, activationFilter)
+    );
+  }, [libraryTemplates, searchQuery, categoryFilter, activationFilter, linkCountByTemplate]);
+
   const previewTemplate = templates.find((t) => t.id === previewId) ?? null;
+
+  const previewDuplicateWarning = previewTemplate
+    ? souscriptionDuplicateByTemplateId.get(previewTemplate.id)
+    : undefined;
 
   const linkedEtiquettes = useMemo(() => {
     if (!previewTemplate) return [];
     return etiquettes.filter((e) => e.email_template_id === previewTemplate.id);
   }, [etiquettes, previewTemplate]);
+
+  const previewActivationFlags = useMemo(() => {
+    if (!previewTemplate) return null;
+    return getTemplateActivationFlags(
+      previewTemplate,
+      linkCountByTemplate.get(previewTemplate.id) ?? 0
+    );
+  }, [previewTemplate, linkCountByTemplate]);
+
+  const previewContact = useMemo(() => {
+    if (previewContactId === "sample") return null;
+    const id = parseInt(previewContactId, 10);
+    return contacts.find((c) => c.id === id) ?? null;
+  }, [previewContactId, contacts]);
+
+  const previewTutoiement = useMemo(() => {
+    if (!previewTemplate?.tutoiement_template_id) return null;
+    const tu = templates.find((t) => t.id === previewTemplate.tutoiement_template_id);
+    if (!tu) return null;
+    return {
+      sujet: tu.sujet,
+      corps: tu.corps,
+      corpsHtml: getTemplateCorpsHtml(tu.variables),
+    };
+  }, [previewTemplate, templates]);
+
+  const activeFilterChips = useMemo(
+    () =>
+      buildTemplatesEmailActiveFilterChips({
+        activationFilter,
+        categoryFilter,
+        searchQuery,
+      }),
+    [activationFilter, categoryFilter, searchQuery]
+  );
+
+  const applyActivationFilter = (filter: TemplateActivationStatFilter | null) => {
+    setActivationFilter((current) => (current === filter ? null : filter));
+  };
+
+  const resetFilters = () => {
+    setSearchQuery("");
+    setCategoryFilter("all");
+    setActivationFilter(null);
+  };
+
+  const removeActiveFilter = (id: TemplatesEmailActiveFilterId) => {
+    switch (id) {
+      case "activation":
+        setActivationFilter(null);
+        break;
+      case "category":
+        setCategoryFilter("all");
+        break;
+      case "search":
+        setSearchQuery("");
+        break;
+    }
+  };
 
   const handleSeedDefaults = async () => {
     setSeeding(true);
@@ -152,23 +305,25 @@ export function TemplatesEmail() {
     }
   };
 
-  const handleDelete = async (id: number) => {
-    if (
-      !confirm(
-        "Supprimer ce modèle ? Les étiquettes liées seront détachées ; les modèles qui l'utilisaient comme relance le seront aussi."
-      )
-    ) {
-      return;
-    }
+  const handleDeleteRequest = (template: TemplateEmail) => {
+    setDeleteTarget(template);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
     try {
-      await deleteTemplateEmail(id);
-      if (previewId === id) setPreviewId(null);
+      await deleteTemplateEmail(deleteTarget.id);
+      if (previewId === deleteTarget.id) setPreviewId(null);
       toast.success("Modèle supprimé");
+      setDeleteTarget(null);
       await loadTemplates();
     } catch (error) {
       console.error("Error deleting template:", error);
       const msg = error instanceof Error ? error.message : String(error);
       toast.error(msg.includes("Failed") ? "Erreur lors de la suppression" : msg);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -177,13 +332,22 @@ export function TemplatesEmail() {
     setSelectedTemplate(null);
   };
 
+  const handleOpenEtiquette = (etiquetteId: number) => {
+    if (!onNavigate) {
+      toast.info("Navigation indisponible — ouvrez l'étiquette depuis le menu Étiquettes.");
+      return;
+    }
+    navigateToEtiquetteEdit(onNavigate, etiquetteId, "templates-email");
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-serif font-bold text-primary mb-1">Templates email</h2>
+          <h2 className="text-3xl font-serif font-bold text-primary mb-1">Modèles email</h2>
           <p className="text-muted-foreground max-w-xl text-sm">
-            Bibliothèque de messages pour vos campagnes d&apos;étiquettes.
+            Bibliothèque de messages — déclencheur auto, campagnes étiquette ou relance, envoi
+            depuis Suivi → Envois.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -206,6 +370,60 @@ export function TemplatesEmail() {
 
       <TemplatesEmailHelp />
 
+      <TemplatesEmailDeliveryBanner emailStatus={emailStatus} onNavigate={onNavigate} />
+
+      <section className="space-y-2" aria-label="Synthèse des modèles">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          Synthèse — cliquer pour filtrer
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard
+            title="Déclencheur actif"
+            value={stats.trigger}
+            description="Envoi auto sans étiquette"
+            icon={Zap}
+            accentColor="#d97706"
+            iconColor="text-amber-700"
+            iconBgColor="bg-amber-50"
+            onClick={() => applyActivationFilter("trigger")}
+            highlight={activationFilter === "trigger"}
+          />
+          <StatCard
+            title="Liés étiquette"
+            value={stats.etiquette}
+            description="Campagnes classiques par tag"
+            icon={Tag}
+            accentColor="#2563eb"
+            iconColor="text-blue-700"
+            iconBgColor="bg-blue-50"
+            onClick={() => applyActivationFilter("etiquette")}
+            highlight={activationFilter === "etiquette"}
+          />
+          <StatCard
+            title="Relance configurée"
+            value={stats.relance}
+            description="2e email après le 1er envoi"
+            icon={RefreshCw}
+            accentColor="#ea580c"
+            iconColor="text-orange-700"
+            iconBgColor="bg-orange-50"
+            onClick={() => applyActivationFilter("relance")}
+            highlight={activationFilter === "relance"}
+          />
+          <StatCard
+            title="Sans canal"
+            value={stats.noChannel}
+            description="Message seul — à configurer"
+            icon={Inbox}
+            accentColor="#6b7280"
+            iconColor="text-gray-600"
+            iconBgColor="bg-gray-50"
+            onClick={() => applyActivationFilter("no_channel")}
+            highlight={activationFilter === "no_channel"}
+          />
+        </div>
+      </section>
+
       <div className="grid gap-5 lg:grid-cols-5 lg:items-start">
         <Card className="lg:col-span-3">
           <CardHeader className="pb-3 space-y-3">
@@ -214,7 +432,7 @@ export function TemplatesEmail() {
                 <CardTitle className="text-lg">Bibliothèque</CardTitle>
                 <CardDescription>
                   {filtered.length} modèle{filtered.length !== 1 ? "s" : ""}
-                  {searchQuery || categoryFilter !== "all"
+                  {searchQuery || categoryFilter !== "all" || activationFilter
                     ? ` (sur ${libraryTemplates.length})`
                     : ""}
                 </CardDescription>
@@ -238,6 +456,15 @@ export function TemplatesEmail() {
               counts={categoryCounts}
               onChange={setCategoryFilter}
             />
+            <TemplateActivationModeFilters
+              active={activationFilter}
+              onChange={setActivationFilter}
+            />
+            <TemplatesEmailActiveFilterChips
+              chips={activeFilterChips}
+              onRemove={removeActiveFilter}
+              onReset={resetFilters}
+            />
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -251,7 +478,7 @@ export function TemplatesEmail() {
               </div>
             ) : filtered.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-10">
-                Aucun résultat — modifiez la recherche ou le filtre.
+                Aucun résultat — modifiez la recherche, l&apos;intention ou la synthèse.
               </p>
             ) : (
               <div className="space-y-2 max-h-[min(65vh,640px)] overflow-y-auto pr-1">
@@ -260,11 +487,14 @@ export function TemplatesEmail() {
                     key={template.id}
                     template={template}
                     selected={previewId === template.id}
-                    linkedCount={linkCountByTemplate.get(template.id)}
+                    etiquetteLinkCount={linkCountByTemplate.get(template.id) ?? 0}
+                    souscriptionDuplicateWarning={souscriptionDuplicateByTemplateId.get(
+                      template.id
+                    )}
                     onSelect={() => setPreviewId(template.id)}
                     onEdit={() => handleEdit(template)}
                     onDuplicate={() => void handleDuplicate(template)}
-                    onDelete={() => void handleDelete(template.id)}
+                    onDeleteRequest={() => handleDeleteRequest(template)}
                   />
                 ))}
               </div>
@@ -275,39 +505,31 @@ export function TemplatesEmail() {
         <Card className="lg:col-span-2 lg:sticky lg:top-4">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Aperçu</CardTitle>
-            <CardDescription>Variables remplacées sur un exemple</CardDescription>
+            <CardDescription>
+              Variables remplacées sur un contact réel ou l&apos;exemple
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            {previewTemplate ? (
+            {previewTemplate && previewActivationFlags ? (
               <TemplatePreviewActions
                 onEdit={() => handleEdit(previewTemplate)}
                 onDuplicate={() => void handleDuplicate(previewTemplate)}
               >
-                {linkedEtiquettes.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {linkedEtiquettes.map((e) => (
-                      <span
-                        key={e.id}
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium border"
-                        style={{
-                          borderColor: `${e.couleur}55`,
-                          backgroundColor: `${e.couleur}18`,
-                        }}
-                      >
-                        <span
-                          className="w-1.5 h-1.5 rounded-full shrink-0"
-                          style={{ backgroundColor: e.couleur }}
-                        />
-                        {e.nom}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Non lié à une étiquette — cochez des étiquettes dans le modèle ou choisissez ce
-                    modèle sur l&apos;étiquette (onglet Email).
-                  </p>
-                )}
+                <TemplatePreviewActivationStatus
+                  template={previewTemplate}
+                  linkedEtiquettes={linkedEtiquettes}
+                  flags={previewActivationFlags}
+                  onOpenEtiquette={onNavigate ? handleOpenEtiquette : undefined}
+                  souscriptionDuplicateWarning={previewDuplicateWarning}
+                />
+                <TemplatePreviewContactControls
+                  contacts={contacts}
+                  previewContactId={previewContactId}
+                  onPreviewContactIdChange={setPreviewContactId}
+                  previewRegistre={previewRegistre}
+                  onPreviewRegistreChange={setPreviewRegistre}
+                  showRegistreToggle={!previewContact && previewTutoiement != null}
+                />
                 <TemplateEmailPreviewPanel
                   sujet={previewTemplate.sujet}
                   corps={previewTemplate.corps}
@@ -315,6 +537,10 @@ export function TemplatesEmail() {
                   templateVariables={previewTemplate.variables}
                   cgp={cgp}
                   agendaLinkId={previewTemplate.agenda_link_id}
+                  contact={previewContact}
+                  tutoiement={previewTutoiement}
+                  previewRegistre={previewContact ? undefined : previewRegistre}
+                  label=""
                   allowSendTest
                 />
               </TemplatePreviewActions>
@@ -336,6 +562,41 @@ export function TemplatesEmail() {
           handleFormClose();
         }}
       />
+
+      <AlertDialog
+        open={deleteTarget != null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Supprimer ce modèle ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget ? (
+                <>
+                  <strong>{deleteTarget.nom}</strong> sera définitivement supprimé. Les étiquettes
+                  liées seront détachées ; les modèles qui l&apos;utilisaient comme relance le
+                  seront aussi.
+                </>
+              ) : null}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteBusy}
+              onClick={(e) => {
+                e.preventDefault();
+                void handleDeleteConfirm();
+              }}
+            >
+              {deleteBusy ? "Suppression…" : "Supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

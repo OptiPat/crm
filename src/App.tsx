@@ -189,7 +189,7 @@ function App() {
       case "taches":
         return <Taches onNavigate={setCurrentPage} />;
       case "templates-email":
-        return <TemplatesEmail />;
+        return <TemplatesEmail onNavigate={setCurrentPage} />;
       case "newsletter":
         return <Newsletter onNavigate={setCurrentPage} />;
       case "suivi":

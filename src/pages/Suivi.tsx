@@ -441,7 +441,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
             onOpenContact?.(alerte.contact_id);
             return;
           }
-          if (isEtiquetteQueueItemBatchLocked(resolution.item.contact_etiquette_id)) {
+          if (isEtiquetteQueueItemBatchLocked(resolution.item)) {
             toast.warning("Envoi groupé en cours pour ce contact — patientez ou annulez la salve.");
             return;
           }

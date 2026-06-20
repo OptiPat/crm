@@ -12,7 +12,7 @@ export function EtiquetteSouscriptionGuide() {
         </p>
         <p>
           Pour un mail <strong>sans étiquette</strong> (ex. bienvenue J+3) :{" "}
-          <strong>Templates email</strong> → votre modèle → onglet <strong>Déclencheur</strong>{" "}
+          <strong>Modèles email</strong> → votre modèle → onglet <strong>Déclencheur</strong>{" "}
           « Nouvelle souscription ». Vous évitez une étiquette par campagne.
         </p>
       </div>

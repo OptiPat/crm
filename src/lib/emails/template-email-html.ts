@@ -1,4 +1,5 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import { buildSendEmailBodies } from "@/lib/emails/email-signature";
 
 /** Clé JSON dans `templates_email.variables` (compatible newsletter_html). */
@@ -289,18 +290,42 @@ export function injectTemplateSignatureHtml(
   return `${html}${gmailBlankLineHtml()}${sig}`;
 }
 
+/** Slot temporaire : le normaliseur Gmail ne doit pas repasser sur le HTML bulletin (blocs multiples). */
+export const BULLETIN_RESUME_HTML_PLACEHOLDER = "___CRM_BULLETIN_RESUME_HTML___";
+
+/** Remplace les variables, normalise le gabarit, puis injecte le HTML bulletin sans le tronquer. */
+export function prepareTemplateHtmlForSend(
+  corpsHtml: string,
+  vars: Record<string, string>
+): string {
+  const bulletinHtml = vars.bulletin_resume_html ?? "";
+  const slotVars = bulletinHtml
+    ? { ...vars, bulletin_resume_html: BULLETIN_RESUME_HTML_PLACEHOLDER }
+    : vars;
+  let html = replaceTemplateVariables(corpsHtml, slotVars);
+  html = normalizeTemplateEmailHtmlLikeGmail(html);
+  if (bulletinHtml) {
+    html = html.split(BULLETIN_RESUME_HTML_PLACEHOLDER).join(bulletinHtml);
+  }
+  return html;
+}
+
 /** Corps final pour l'envoi OAuth (texte + HTML optionnel du modèle). */
 export function buildTemplateSendBodies(
   plainWithSignature: string,
   messageHtml: string | null | undefined,
-  cgp: CgpConfig | null | undefined
+  cgp: CgpConfig | null | undefined,
+  options?: { htmlAlreadyNormalized?: boolean }
 ): { body: string; body_html: string | null } {
   const trimmedHtml = messageHtml?.trim();
   if (!trimmedHtml) {
     return buildSendEmailBodies(plainWithSignature, cgp);
   }
+  const normalized = options?.htmlAlreadyNormalized
+    ? trimmedHtml
+    : normalizeTemplateEmailHtmlLikeGmail(trimmedHtml);
   const body_html = injectTemplateSignatureHtml(
-    normalizeTemplateEmailHtmlLikeGmail(trimmedHtml),
+    normalized,
     cgp?.email_signature_html
   );
   return { body: plainWithSignature, body_html };

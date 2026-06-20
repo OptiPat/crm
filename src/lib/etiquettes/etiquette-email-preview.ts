@@ -3,6 +3,7 @@ import { appendEmailSignature } from "@/lib/emails/email-signature";
 import {
   buildTemplateSendBodies,
   getTemplateCorpsHtml,
+  prepareTemplateHtmlForSend,
 } from "@/lib/emails/template-email-html";
 import { buildVariablesFromContact } from "@/lib/emails/template-email-meta";
 import {
@@ -14,18 +15,13 @@ import {
 import { parseMillesimeLabelFromEtiquetteNom } from "@/lib/etiquettes/exceltis";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
+import {
+  parseScpiCampaignVariables,
+  templateUsesScpiBulletinVariables,
+} from "@/lib/emails/scpi-bulletin-preview-vars";
 
 function parseCampaignVariables(raw: string | null | undefined): Record<string, string> {
-  if (!raw?.trim()) return {};
-  try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      periode: typeof parsed.periode === "string" ? parsed.periode : "",
-      bulletin_resume: typeof parsed.bulletin_resume === "string" ? parsed.bulletin_resume : "",
-    };
-  } catch {
-    return {};
-  }
+  return parseScpiCampaignVariables(raw);
 }
 
 export function buildTemplateVariables(
@@ -70,9 +66,11 @@ export function renderEtiquetteEmailPreview(
 
   const corpsHtmlStored = getTemplateCorpsHtml(item.template_variables);
   const bodyHtmlCore = corpsHtmlStored
-    ? replaceTemplateVariables(corpsHtmlStored, vars)
+    ? prepareTemplateHtmlForSend(corpsHtmlStored, vars)
     : null;
-  const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp);
+  const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp, {
+    htmlAlreadyNormalized: Boolean(bodyHtmlCore),
+  });
   return { subject, body, body_html };
 }
 
@@ -112,6 +110,14 @@ const INCOMPLETE_LABELS: Record<string, string> = {
 export function getIncompleteQueueLabel(issue: string | null | undefined): string {
   if (!issue) return INCOMPLETE_LABELS.OTHER;
   return INCOMPLETE_LABELS[issue] ?? INCOMPLETE_LABELS.OTHER;
+}
+
+/** True si le mail SCPI n'a pas de résumé injecté (campagne n8n à relancer). */
+export function isScpiBulletinContentMissing(item: EtiquetteEmailQueueItem): boolean {
+  const hay = `${item.template_corps}\n${getTemplateCorpsHtml(item.template_variables) ?? ""}`;
+  if (!templateUsesScpiBulletinVariables(hay)) return false;
+  const campaign = parseCampaignVariables(item.campaign_variables);
+  return !campaign.bulletin_resume?.trim();
 }
 
 export function formatEtiquetteSendDatetime(ts: number | null | undefined): string {

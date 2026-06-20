@@ -7,7 +7,9 @@ import {
   setTemplateCorpsHtmlInMeta,
   buildTemplateSendBodies,
   sanitizeTemplateEmailHtml,
+  prepareTemplateHtmlForSend,
 } from "./template-email-html";
+import { buildScpiBulletinPreviewVariables } from "./scpi-bulletin-preview-vars";
 
 describe("template-email-html", () => {
   it("lit et écrit corps_html dans variables JSON", () => {
@@ -82,5 +84,15 @@ describe("template-email-html", () => {
   it("sanitize retire font-size hors plage", () => {
     const out = sanitizeTemplateEmailHtml('<span style="font-size:80px">X</span>');
     expect(out).not.toContain("font-size");
+  });
+
+  it("prepareTemplateHtmlForSend conserve tout le HTML bulletin", () => {
+    const scpiVars = buildScpiBulletinPreviewVariables();
+    const corpsHtml =
+      '<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Intro {{periode}}</div><div style="line-height:1.5;margin:0;padding:0">{{bulletin_resume_html}}</div></div>';
+    const out = prepareTemplateHtmlForSend(corpsHtml, scpiVars);
+    expect(out).toContain("Comète");
+    expect(out).toContain("Collecte nette");
+    expect(out).toContain("Collecte nette");
   });
 });

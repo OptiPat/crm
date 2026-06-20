@@ -118,7 +118,7 @@ export function EtiquetteEmailCampaignFields({
       onTemplateIdChange(id);
       toast.success("Modèle suggéré pour cette étiquette");
     } else {
-      toast.info("Aucun modèle correspondant — créez-en un dans Paramètres → Templates email");
+      toast.info("Aucun modèle correspondant — créez-en un dans Modèles email");
     }
   };
 
@@ -196,7 +196,7 @@ export function EtiquetteEmailCampaignFields({
               <SelectContent className="max-h-[280px]">
                 {templatesByCategory.length === 0 ? (
                   <p className="px-2 py-4 text-xs text-muted-foreground text-center">
-                    Aucun modèle — créez-en dans Paramètres → Templates email
+                    Aucun modèle — créez-en dans Modèles email
                   </p>
                 ) : (
                   templatesByCategory.map((group) => (

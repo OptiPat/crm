@@ -98,7 +98,7 @@ const patrimoineGroup: NavGroup = {
 const standaloneItems: NavItem[] = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
   { id: "etiquettes", label: "Étiquettes", icon: Tag },
-  { id: "templates-email", label: "Templates Email", icon: Mail },
+  { id: "templates-email", label: "Modèles email", icon: Mail },
   { id: "parametres", label: "Paramètres", icon: Settings },
 ];
 

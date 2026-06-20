@@ -36,3 +36,16 @@ export function formatSouscriptionDuplicateWarning(
     etiquetteNoms.length > 1 ? "les étiquettes" : "l'étiquette"
   } ${list} aussi : un contact peut apparaître deux fois dans Suivi → Envois. Désactivez l'un des deux chemins.`;
 }
+
+/** Avertissement si déclencheur souscription + étiquette(s) souscription sur le même modèle. */
+export function resolveTemplateSouscriptionDuplicateWarning(
+  template: Pick<TemplateEmail, "id" | "nom" | "variables">,
+  etiquettes: Etiquette[]
+): string {
+  if (!templateHasSouscriptionTrigger(template)) return "";
+  const dupes = etiquettesSouscriptionDuplicateForTemplate(template.id, etiquettes);
+  return formatSouscriptionDuplicateWarning(
+    template.nom,
+    dupes.map((e) => e.nom)
+  );
+}

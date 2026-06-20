@@ -68,6 +68,7 @@ import {
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
+import { consumeEtiquetteEditFocus } from "@/lib/navigation/etiquettes-navigation";
 
 const PAGE_FILTERS: { id: EtiquettePageFilter; label: string }[] = [
   { id: "all", label: "Toutes" },
@@ -221,6 +222,17 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     void loadEtiquettes();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement initial unique au montage
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const editId = consumeEtiquetteEditFocus();
+    if (editId == null) return;
+    const etiquette = etiquettes.find((e) => e.id === editId);
+    if (!etiquette) return;
+    setSelectedEtiquette(etiquette);
+    setShowForm(true);
+    setPageTab("etiquettes");
+  }, [loading, etiquettes]);
 
   useEffect(() => {
     return subscribeEtiquettesChanged(() => {

@@ -1803,11 +1803,15 @@ pub fn mark_email_campaign_response(
 pub fn dismiss_email_campaign_followup(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
+    queue_row_kind: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .dismiss_email_campaign_followup(contact_etiquette_id)
+        .dismiss_email_campaign_followup(
+            contact_etiquette_id,
+            queue_row_kind.as_deref(),
+        )
         .map_err(|e| format!("Failed to dismiss followup: {}", e))
 }
 
@@ -1815,11 +1819,12 @@ pub fn dismiss_email_campaign_followup(
 pub fn cancel_pending_email_campaign(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
+    queue_row_kind: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .cancel_pending_email_campaign(contact_etiquette_id)
+        .cancel_pending_email_campaign(contact_etiquette_id, queue_row_kind.as_deref())
         .map_err(|e| format!("Failed to cancel pending email: {}", e))
 }
 
@@ -1827,11 +1832,12 @@ pub fn cancel_pending_email_campaign(
 pub fn restore_pending_email_campaign(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
+    queue_row_kind: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .restore_pending_email_campaign(contact_etiquette_id)
+        .restore_pending_email_campaign(contact_etiquette_id, queue_row_kind.as_deref())
         .map_err(|e| format!("Failed to restore pending email: {}", e))
 }
 
@@ -1839,11 +1845,15 @@ pub fn restore_pending_email_campaign(
 pub fn dismiss_cancelled_pending_email_campaign(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
+    queue_row_kind: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .dismiss_cancelled_pending_email_campaign(contact_etiquette_id)
+        .dismiss_cancelled_pending_email_campaign(
+            contact_etiquette_id,
+            queue_row_kind.as_deref(),
+        )
         .map_err(|e| format!("Failed to dismiss cancelled pending email: {}", e))
 }
 
@@ -1851,11 +1861,12 @@ pub fn dismiss_cancelled_pending_email_campaign(
 pub fn prepare_email_campaign_relance(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,
+    queue_row_kind: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
-        .prepare_email_campaign_relance(contact_etiquette_id)
+        .prepare_email_campaign_relance(contact_etiquette_id, queue_row_kind.as_deref())
         .map_err(|e| format!("Failed to prepare relance: {}", e))
 }
 

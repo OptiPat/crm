@@ -1,11 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
+import { getEtiquetteQueueItemKey } from "@/lib/etiquettes/etiquette-queue-item-key";
 
 type EtiquetteEnvoisSelectionBarProps = {
   items: EtiquetteEmailQueueItem[];
-  selectedIds: Set<number>;
-  onSelectedIdsChange: (ids: Set<number>) => void;
+  selectedIds: Set<string>;
+  onSelectedIdsChange: (ids: Set<string>) => void;
   removeLabel: string;
   onRemoveSelection: () => void;
   removeDisabled?: boolean;
@@ -24,7 +25,7 @@ export function EtiquetteEnvoisSelectionBar({
   trailing,
 }: EtiquetteEnvoisSelectionBarProps) {
   const selectedCount = items.filter((i) =>
-    selectedIds.has(i.contact_etiquette_id)
+    selectedIds.has(getEtiquetteQueueItemKey(i))
   ).length;
   const allSelected = items.length > 0 && selectedCount === items.length;
 
@@ -35,7 +36,7 @@ export function EtiquetteEnvoisSelectionBar({
         disabled={selectDisabled || items.length === 0}
         onCheckedChange={(v) => {
           if (v === true) {
-            onSelectedIdsChange(new Set(items.map((i) => i.contact_etiquette_id)));
+            onSelectedIdsChange(new Set(items.map((i) => getEtiquetteQueueItemKey(i))));
           } else {
             onSelectedIdsChange(new Set());
           }

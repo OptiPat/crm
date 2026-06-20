@@ -4,6 +4,7 @@ import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import {
   buildTemplateSendBodies,
   getTemplateCorpsHtml,
+  prepareTemplateHtmlForSend,
 } from "@/lib/emails/template-email-html";
 import { appendEmailSignature } from "@/lib/emails/email-signature";
 import {
@@ -16,6 +17,10 @@ import {
   EXCELITIS_EMAIL_TEMPLATE_NOM,
   isExceltisEtiquetteNom,
 } from "@/lib/etiquettes/exceltis";
+import {
+  buildScpiBulletinPreviewVariables,
+  templateUsesScpiBulletinVariables,
+} from "@/lib/emails/scpi-bulletin-preview-vars";
 
 export type EmailTemplateCategory =
   | "RELANCE"
@@ -74,10 +79,28 @@ export const EMAIL_TEMPLATE_VARIABLES: {
     hint: "Ex. T1 2026 — campagne n8n",
   },
   {
+    token: "{{scpi_intro_tu}}",
+    key: "scpi_intro_tu",
+    label: "Intro bulletin (tu)",
+    hint: "Phrase d'accroche — ta SCPI / tes SCPI selon le contact",
+  },
+  {
+    token: "{{scpi_intro_vous}}",
+    key: "scpi_intro_vous",
+    label: "Intro bulletin (vous)",
+    hint: "Phrase d'accroche — votre SCPI / vos SCPI selon le contact",
+  },
+  {
     token: "{{bulletin_resume}}",
     key: "bulletin_resume",
-    label: "Résumé bulletins SCPI",
+    label: "Résumé bulletins SCPI (texte)",
     hint: "Contenu agrégé injecté par n8n",
+  },
+  {
+    token: "{{bulletin_resume_html}}",
+    key: "bulletin_resume_html",
+    label: "Résumé bulletins SCPI (HTML)",
+    hint: "Version HTML — modèles avec mise en forme",
   },
 ];
 
@@ -166,19 +189,27 @@ export function renderTemplatePreview(
   /** HTML en cours d’édition (prioritaire sur `variables.corps_html`). */
   corpsHtmlOverride?: string | null
 ): { subject: string; body: string; body_html: string | null } {
+  const corpsHtmlStored =
+    corpsHtmlOverride?.trim() || getTemplateCorpsHtml(templateVariables);
+  const usesScpiBulletin = templateUsesScpiBulletinVariables(
+    sujet,
+    corps,
+    corpsHtmlStored
+  );
   const vars = {
     ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
     ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
+    ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
   };
   const subject = replaceTemplateVariables(sujet, vars);
   const plainCore = replaceTemplateVariables(corps, vars);
   const body = appendEmailSignature(plainCore, cgp?.email_signature);
-  const corpsHtmlStored =
-    corpsHtmlOverride?.trim() || getTemplateCorpsHtml(templateVariables);
   const bodyHtmlCore = corpsHtmlStored
-    ? replaceTemplateVariables(corpsHtmlStored, vars)
+    ? prepareTemplateHtmlForSend(corpsHtmlStored, vars)
     : null;
-  const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp);
+  const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp, {
+    htmlAlreadyNormalized: Boolean(bodyHtmlCore),
+  });
   return { subject, body, body_html };
 }
 
