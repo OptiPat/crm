@@ -99,20 +99,149 @@ fn nom_produit_matches(investissement_nom: &str, bulletin_key: &str) -> bool {
         .all(|bt| inv_tokens.iter().any(|it| it == bt))
 }
 
-fn build_bulletin_resume(bulletins: &[ScpiBulletinInput], _periode: &str) -> String {
+fn pick_display_produit_nom(investissement_noms: &[String], bulletin_key: &str) -> String {
+    investissement_noms
+        .iter()
+        .filter(|nom| nom_produit_matches(nom, bulletin_key))
+        .max_by_key(|nom| nom.len())
+        .cloned()
+        .unwrap_or_else(|| bulletin_key.trim().to_string())
+}
+
+const SUBSECTION_TITLES: &[&str] = &["Chiffres clés", "Ce trimestre", "Acquisitions"];
+
+fn is_subsection_title(rest: &str) -> bool {
+    let r = rest.trim();
+    SUBSECTION_TITLES
+        .iter()
+        .any(|title| r.eq_ignore_ascii_case(title))
+}
+
+fn normalize_subsection_line(line: &str) -> String {
+    let trimmed = line.trim();
+    if let Some(dot_idx) = trimmed.find('.') {
+        let num_str = trimmed[..dot_idx].trim();
+        if let Ok(num) = num_str.parse::<u32>() {
+            if (2..=9).contains(&num) {
+                let rest = trimmed[dot_idx + 1..].trim();
+                if is_subsection_title(rest) {
+                    return format!("**{rest}**");
+                }
+            }
+        }
+    }
+    line.to_string()
+}
+
+fn fix_product_title_line(line: &str, display_name: &str) -> String {
+    let trimmed = line.trim();
+    if !trimmed.starts_with("1.") {
+        return line.to_string();
+    }
+    let rest = trimmed.strip_prefix("1.").unwrap_or(trimmed).trim();
+    if let Some(dash_idx) = rest.find('–').or_else(|| rest.find('-')) {
+        let period_clean = rest[dash_idx..]
+            .trim()
+            .trim_start_matches(['–', '-'])
+            .trim();
+        return format!("1. {} – {}", display_name.trim(), period_clean);
+    }
+    format!("1. {}", display_name.trim())
+}
+
+fn fix_glued_year_subsection(line: &str) -> String {
+    let mut result = line.to_string();
+    for title in SUBSECTION_TITLES {
+        for num in 2..=9 {
+            let needle = format!("{num}. {title}");
+            if let Some(pos) = result.find(&needle) {
+                if pos >= 4 {
+                    let before = &result[pos - 4..pos];
+                    if before.chars().all(|c| c.is_ascii_digit()) {
+                        result.insert(pos, '\n');
+                    }
+                }
+            }
+        }
+    }
+    result
+}
+
+fn normalize_bulletin_summary_markdown(
+    summary: &str,
+    display_name: &str,
+    periode: &str,
+) -> String {
+    let lines: Vec<String> = summary
+        .replace("\r\n", "\n")
+        .lines()
+        .map(|l| fix_glued_year_subsection(l))
+        .collect();
+
+    let has_numbered_title = lines.iter().any(|l| l.trim().starts_with("1."));
+    let mut start = 0usize;
+    if has_numbered_title {
+        while start < lines.len() && lines[start].trim().starts_with("## ") {
+            start += 1;
+        }
+        while start < lines.len() && lines[start].trim().is_empty() {
+            start += 1;
+        }
+    }
+
+    let mut out: Vec<String> = Vec::new();
+    let mut first_content = true;
+    for line in lines.into_iter().skip(start) {
+        if line.trim().is_empty() {
+            if out.last().is_some_and(|l| !l.trim().is_empty()) {
+                out.push(String::new());
+            }
+            continue;
+        }
+        let mut normalized = normalize_subsection_line(&line);
+        if first_content && normalized.trim().starts_with("1.") {
+            normalized = fix_product_title_line(&normalized, display_name);
+            first_content = false;
+        } else {
+            first_content = false;
+        }
+        out.push(normalized);
+    }
+
+    let body = out.join("\n")
+        .replace("\n\n\n", "\n\n")
+        .trim()
+        .to_string();
+
+    if !body.lines().any(|l| l.trim().starts_with("1.")) {
+        return format!(
+            "1. {} – {}\n\n{}",
+            display_name.trim(),
+            periode.trim(),
+            body
+        );
+    }
+    body
+}
+
+fn build_bulletin_resume(bulletins: &[ScpiBulletinInput], periode: &str) -> String {
     if bulletins.is_empty() {
         return String::new();
     }
     if bulletins.len() == 1 {
-        return bulletins[0].summary_markdown.trim().to_string();
+        return normalize_bulletin_summary_markdown(
+            bulletins[0].summary_markdown.trim(),
+            bulletins[0].nom_produit.trim(),
+            periode,
+        );
     }
     bulletins
         .iter()
         .map(|b| {
-            format!(
-                "## {}\n\n{}",
+            normalize_bulletin_summary_markdown(
+                b.summary_markdown.trim(),
                 b.nom_produit.trim(),
-                b.summary_markdown.trim()
+                periode,
             )
         })
         .collect::<Vec<_>>()
@@ -415,7 +544,10 @@ impl Database {
                 .iter()
                 .any(|nom| nom_produit_matches(nom, &bulletin.nom_produit))
             {
-                matched.push(bulletin.clone());
+                matched.push(ScpiBulletinInput {
+                    nom_produit: pick_display_produit_nom(&noms, &bulletin.nom_produit),
+                    ..bulletin.clone()
+                });
             }
         }
         Ok(matched)
@@ -600,7 +732,41 @@ mod tests {
         }];
         let resume = build_bulletin_resume(&bulletins, "T1 2026");
         assert!(!resume.contains("## Comète"));
-        assert!(resume.contains("2. Chiffres clés"));
+        assert!(resume.contains("**Chiffres clés**"));
+        assert!(resume.contains("Collecte : 132 M€"));
+    }
+
+    #[test]
+    fn build_bulletin_resume_multi_uses_crm_name_and_no_hash_headers() {
+        let bulletins = vec![
+            ScpiBulletinInput {
+                nom_produit: "Comète".into(),
+                summary_markdown: "1. Comète – T1 2026\n\n2. Chiffres clés\n- Collecte : 132 M€".into(),
+                fichier_source: None,
+            },
+            ScpiBulletinInput {
+                nom_produit: "Transitions Europe".into(),
+                summary_markdown:
+                    "## Europe\n\n1. Europe – T1 2026\n\n2. Chiffres clés\n- Collecte : 147 M€".into(),
+                fichier_source: None,
+            },
+        ];
+        let resume = build_bulletin_resume(&bulletins, "T1 2026");
+        assert!(!resume.contains("## Comète"));
+        assert!(!resume.contains("## Europe"));
+        assert!(resume.contains("1. Comète – T1 2026"));
+        assert!(resume.contains("1. Transitions Europe – T1 2026"));
+        assert!(resume.contains("**Chiffres clés**"));
+        assert!(resume.contains("\n\n---\n\n"));
+    }
+
+    #[test]
+    fn pick_display_produit_nom_prefers_longest_crm_label() {
+        let noms = vec!["Transitions Europe".into(), "Europe".into()];
+        assert_eq!(
+            pick_display_produit_nom(&noms, "Europe"),
+            "Transitions Europe"
+        );
     }
 
     #[test]

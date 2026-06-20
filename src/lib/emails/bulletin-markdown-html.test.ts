@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bulletinMarkdownToHtml,
   bulletinMarkdownToPlainEmail,
+  normalizeScpiBulletinDigest,
 } from "./bulletin-markdown-html";
 
 describe("bulletin-markdown-html", () => {
@@ -27,13 +28,13 @@ describe("bulletin-markdown-html", () => {
       "Pologne – Tarnobrzeg : Actif logistique.",
     ].join("\n");
     const html = bulletinMarkdownToHtml(md);
-    expect(html).toContain("2. Chiffres clés");
+    expect(html).toContain("<strong>Chiffres clés</strong>");
     expect(html).toContain("Collecte nette");
-    expect(html).toContain("3. Ce trimestre");
+    expect(html).toContain("<strong>Ce trimestre</strong>");
     expect(html).toContain("Dans un contexte");
     expect(html).not.toMatch(/20262\. Chiffres/);
     const collecteIdx = html.indexOf("Collecte nette");
-    const chiffresIdx = html.indexOf("2. Chiffres clés");
+    const chiffresIdx = html.indexOf("Chiffres clés");
     expect(collecteIdx).toBeGreaterThan(chiffresIdx);
   });
 
@@ -43,6 +44,27 @@ describe("bulletin-markdown-html", () => {
     );
     expect(plain).toContain("Comète");
     expect(plain).toContain("• Collecte");
+  });
+
+  it("normalise les sous-sections numérotées en titres gras", () => {
+    const md = [
+      "1. Transitions Europe – T1 2026",
+      "2. Chiffres clés",
+      "- Collecte : 147 M€",
+      "3. Ce trimestre",
+      "Dynamique confirmée.",
+    ].join("\n");
+    const html = bulletinMarkdownToHtml(md);
+    expect(html).toContain("<strong>Chiffres clés</strong>");
+    expect(html).not.toContain("2. Chiffres clés");
+    expect(html).toContain("<strong>Ce trimestre</strong>");
+  });
+
+  it("supprime les en-têtes ## redondants", () => {
+    const md = "## Europe\n\n1. Europe – T1 2026\n\n**Chiffres clés**\n- Collecte";
+    const normalized = normalizeScpiBulletinDigest(md);
+    expect(normalized).not.toContain("## Europe");
+    expect(normalized).toContain("1. Europe – T1 2026");
   });
 
   it("echappe le HTML injecté", () => {

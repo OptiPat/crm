@@ -1,6 +1,7 @@
 import {
   bulletinMarkdownToHtml,
   bulletinMarkdownToPlainEmail,
+  normalizeScpiBulletinDigest,
 } from "@/lib/emails/bulletin-markdown-html";
 
 /** Exemple fictif pour l'aperçu des modèles SCPI (Paramètres → Modèles email). */
@@ -34,7 +35,6 @@ function inferScpiCount(raw: Record<string, unknown>, bulletin: string): number 
   return Math.max(1, sections.length);
 }
 
-/** Ancien format CRM : « ## Comète — T1 2026 » redondant avec l'intro. */
 function stripRedundantProductPeriodHeaders(markdown: string, periode: string): string {
   if (!markdown.trim() || !periode.trim()) return markdown;
   const periodeRe = periode.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -48,6 +48,13 @@ function stripRedundantProductPeriodHeaders(markdown: string, periode: string): 
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+/** Ancien format CRM : « ## Comète — T1 2026 » ou « ## Comète » redondants avec le titre numéroté. */
+function stripLegacyBulletinHeaders(markdown: string, periode: string): string {
+  return normalizeScpiBulletinDigest(
+    stripRedundantProductPeriodHeaders(markdown, periode)
+  );
 }
 
 export function buildScpiBulletinPreviewVariables(
@@ -83,7 +90,7 @@ export function parseScpiCampaignVariables(
     const periode = typeof parsed.periode === "string" ? parsed.periode : "";
     const bulletinRaw =
       typeof parsed.bulletin_resume === "string" ? parsed.bulletin_resume : "";
-    const bulletin = stripRedundantProductPeriodHeaders(bulletinRaw, periode);
+    const bulletin = stripLegacyBulletinHeaders(bulletinRaw, periode);
     const count = inferScpiCount(parsed, bulletin);
     const intros = scpiIntroPhrases(count);
     return {
