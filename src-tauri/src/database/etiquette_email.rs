@@ -35,7 +35,8 @@ impl Database {
                         {template_fields}, NULL,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        COALESCE(ce.email_relance_active, 0)
+                        COALESCE(ce.email_relance_active, 0),
+                        NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -60,7 +61,8 @@ impl Database {
                         'SCHEDULED',
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        COALESCE(ce.email_relance_active, 0)
+                        COALESCE(ce.email_relance_active, 0),
+                        NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -91,7 +93,8 @@ impl Database {
                         END,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        COALESCE(ce.email_relance_active, 0)
+                        COALESCE(ce.email_relance_active, 0),
+                        NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -121,7 +124,8 @@ impl Database {
                         t.variables, t.categorie, NULL,
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        0
+                        0,
+                        NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -147,7 +151,8 @@ impl Database {
                         t.variables, t.categorie, 'FOLLOWUP',
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        0
+                        0,
+                        NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -174,7 +179,8 @@ impl Database {
                         'CANCELLED',
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        COALESCE(ce.email_relance_active, 0)
+                        COALESCE(ce.email_relance_active, 0),
+                        NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -221,6 +227,7 @@ impl Database {
                 contact_date_dernier_contact: row.get(19)?,
                 contact_registre: row.get(20)?,
                 email_is_relance: row.get::<_, i64>(21)? != 0,
+                campaign_variables: row.get(22).ok(),
             })
         };
 

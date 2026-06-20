@@ -611,6 +611,9 @@ pub struct EtiquetteEmailQueueItem {
     pub email_is_relance: bool,
     /// `VOUS` ou `TU` (fiche contact)
     pub contact_registre: Option<String>,
+    /// JSON campagne SCPI (periode, bulletin_resume) — file modèle n8n
+    #[serde(default)]
+    pub campaign_variables: Option<String>,
 }
 
 /// Snapshot des files d'envoi (1 appel IPC au lieu de 6).

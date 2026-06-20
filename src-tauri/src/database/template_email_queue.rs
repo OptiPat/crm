@@ -389,11 +389,14 @@ impl Database {
         now: i64,
         default_delai_jours: i64,
     ) -> Result<Vec<EtiquetteEmailQueueItem>> {
-        const TRIGGER_FILTER: &str = "json_extract(t.variables, '$.email_trigger.enabled') = 1
+        const TRIGGER_FILTER: &str = "(
+            json_extract(t.variables, '$.email_trigger.enabled') = 1
             AND (
               json_extract(t.variables, '$.email_trigger.condition_type') IS NOT NULL
               OR json_extract(t.variables, '$.email_trigger.trigger_type') = 'EVENEMENT_SOUSCRIPTION'
-            )";
+            )
+            OR (cte.campaign_batch_key IS NOT NULL AND TRIM(cte.campaign_batch_key) != '')
+        )";
 
         use super::template_formality_sql::{
             template_queue_fields_simple_sql, template_queue_fields_sql_cte,
@@ -415,7 +418,8 @@ impl Database {
                         NULL,
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        COALESCE(cte.email_relance_active, 0)
+                        COALESCE(cte.email_relance_active, 0),
+                        cte.campaign_variables
                  FROM contact_template_envois cte
                  {template_joins}
                  WHERE {TRIGGER_FILTER}
@@ -433,7 +437,8 @@ impl Database {
                         'SCHEDULED',
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        0
+                        0,
+                        cte.campaign_variables
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -457,7 +462,8 @@ impl Database {
                         END,
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        0
+                        0,
+                        cte.campaign_variables
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -479,7 +485,8 @@ impl Database {
                         'CANCELLED',
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
-                        0
+                        0,
+                        cte.campaign_variables
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -503,7 +510,8 @@ impl Database {
                             t.variables, t.categorie, NULL,
                             cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                             c.registre,
-                            0
+                            0,
+                            cte.campaign_variables
                      FROM contact_template_envois cte
                      INNER JOIN templates_email t ON cte.template_id = t.id
                      INNER JOIN contacts c ON cte.contact_id = c.id
@@ -546,6 +554,7 @@ impl Database {
                 contact_date_dernier_contact: row.get(18)?,
                 contact_registre: row.get(19)?,
                 email_is_relance: row.get::<_, i64>(20).unwrap_or(0) != 0,
+                campaign_variables: row.get(21).ok(),
             })
         };
 

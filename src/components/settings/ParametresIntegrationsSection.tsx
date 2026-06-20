@@ -41,7 +41,7 @@ export function ParametresIntegrationsSection() {
 
   const copy = async (value: string, label: string) => {
     try {
-      await navigator.clipboard.writeText(value);
+      await navigator.clipboard.writeText(value.trim());
       toast.success(`${label} copié.`);
     } catch {
       toast.error("Copie impossible.");
@@ -93,7 +93,7 @@ export function ParametresIntegrationsSection() {
     <div className="space-y-6">
       <SettingsPanel
         title="Intégration n8n"
-        description="API locale en lecture seule. Le CRM (app desktop) doit être ouvert et déverrouillé — pas seulement n8n."
+        description="API locale pour n8n (anniversaires, campagnes SCPI). Le CRM doit être ouvert et déverrouillé."
         action={
           <Workflow className="h-5 w-5 text-muted-foreground" aria-hidden />
         }
@@ -138,6 +138,22 @@ export function ParametresIntegrationsSection() {
               </div>
 
               <div className="grid gap-2">
+                <Label>URL campagnes SCPI (POST, n8n Docker)</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={settings.scpiCampaignsUrl} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => void copy(settings.scpiCampaignsUrl, "URL SCPI")}
+                    aria-label="Copier l'URL SCPI"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-2">
                 <Label>Token (header Authorization: Bearer …)</Label>
                 <div className="flex gap-2">
                   <Input readOnly value={settings.token} className="font-mono text-xs" />
@@ -166,8 +182,8 @@ export function ParametresIntegrationsSection() {
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            Workflow Anniversaires : Telegram = rappel + brouillon SMS (templates Patrimoine
-            Sarcasme) pour vous uniquement. Aucun envoi automatique au contact.
+            Bulletins SCPI : après le workflow n8n, les mails digest apparaissent dans Suivi → Envois
+            (modèle « Bulletin SCPI trimestriel »). Anniversaires : Telegram = rappel CGP uniquement.
           </p>
 
           <Button onClick={() => void handleSave()} disabled={saving}>

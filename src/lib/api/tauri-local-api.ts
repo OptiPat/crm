@@ -5,6 +5,7 @@ export interface LocalApiSettings {
   port: number;
   token: string;
   birthdaysUrl: string;
+  scpiCampaignsUrl: string;
   healthUrl: string;
 }
 

@@ -1,6 +1,7 @@
 use crate::database::Database;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::sync::{Arc, RwLock};
 
 pub const SETTING_ENABLED: &str = "local_api_enabled";
 pub const SETTING_PORT: &str = "local_api_port";
@@ -11,7 +12,8 @@ const DEFAULT_PORT: u16 = 3001;
 #[derive(Debug, Clone)]
 pub struct LocalApiConfig {
     pub db_path: std::path::PathBuf,
-    pub token: String,
+    /// Partagé entre le thread serveur et les mises à jour (régénération token).
+    pub token: Arc<RwLock<String>>,
     pub port: u16,
 }
 
@@ -22,6 +24,7 @@ pub struct LocalApiSettingsPayload {
     pub port: u16,
     pub token: String,
     pub birthdays_url: String,
+    pub scpi_campaigns_url: String,
     pub health_url: String,
 }
 
@@ -69,6 +72,10 @@ impl LocalApiSettings {
             token: self.token.clone(),
             birthdays_url: format!(
                 "http://host.docker.internal:{}/api/birthdays/today",
+                self.port
+            ),
+            scpi_campaigns_url: format!(
+                "http://host.docker.internal:{}/api/scpi/campaigns/prepare",
                 self.port
             ),
             health_url: format!("http://127.0.0.1:{}/api/health", self.port),

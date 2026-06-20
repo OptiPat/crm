@@ -15,6 +15,19 @@ import { parseMillesimeLabelFromEtiquetteNom } from "@/lib/etiquettes/exceltis";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 
+function parseCampaignVariables(raw: string | null | undefined): Record<string, string> {
+  if (!raw?.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    return {
+      periode: typeof parsed.periode === "string" ? parsed.periode : "",
+      bulletin_resume: typeof parsed.bulletin_resume === "string" ? parsed.bulletin_resume : "",
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function buildTemplateVariables(
   item: EtiquetteEmailQueueItem,
   cgp: CgpConfig | null
@@ -33,6 +46,7 @@ export function buildTemplateVariables(
     ),
     millesime,
     etiquette_nom: item.etiquette_nom,
+    ...parseCampaignVariables(item.campaign_variables),
   };
 }
 

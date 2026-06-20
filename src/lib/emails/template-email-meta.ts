@@ -67,6 +67,18 @@ export const EMAIL_TEMPLATE_VARIABLES: {
     label: "Nom de l'étiquette",
     hint: "Campagne liée (ex. Exceltis — Août 2026)",
   },
+  {
+    token: "{{periode}}",
+    key: "periode",
+    label: "Période bulletin SCPI",
+    hint: "Ex. T1 2026 — campagne n8n",
+  },
+  {
+    token: "{{bulletin_resume}}",
+    key: "bulletin_resume",
+    label: "Résumé bulletins SCPI",
+    hint: "Contenu agrégé injecté par n8n",
+  },
 ];
 
 export function getAgendaVariableTokens(links: AgendaLink[]) {

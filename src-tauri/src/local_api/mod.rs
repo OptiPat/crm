@@ -1,20 +1,23 @@
-//! API HTTP locale (lecture seule) pour n8n — anniversaires du jour.
+//! API HTTP locale pour n8n — anniversaires (lecture) et campagnes SCPI (écriture).
 
 mod config;
 mod commands;
+mod scpi;
 
 use crate::database::Database;
 use config::{LocalApiConfig, LocalApiSettings};
-use std::io::Result as IoResult;
+use std::io::{Read, Result as IoResult, Write};
 use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 
 static SERVER_RUNNING: AtomicBool = AtomicBool::new(false);
 static SERVER_PORT: AtomicU16 = AtomicU16::new(0);
 static SERVER_HANDLE: Mutex<Option<JoinHandle<()>>> = Mutex::new(None);
+static RUNTIME_TOKEN: Mutex<Option<Arc<RwLock<String>>>> = Mutex::new(None);
 
 pub use commands::{get_local_api_settings_cmd, regenerate_local_api_token_cmd, save_local_api_settings_cmd};
 
@@ -37,7 +40,7 @@ pub fn start_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {
 
     let config = LocalApiConfig {
         db_path,
-        token: settings.token,
+        token: Arc::new(RwLock::new(settings.token)),
         port: settings.port,
     };
 
@@ -56,8 +59,7 @@ pub fn stop() {
     SERVER_RUNNING.store(false, Ordering::SeqCst);
     let port = SERVER_PORT.load(Ordering::SeqCst);
     if port > 0 {
-        // Débloque incoming_requests() (sinon join() peut attendre indéfiniment).
-        let _ = std::net::TcpStream::connect(format!("127.0.0.1:{port}"));
+        wakeup_server(port);
     }
     if let Ok(mut guard) = SERVER_HANDLE.lock() {
         if let Some(handle) = guard.take() {
@@ -65,6 +67,34 @@ pub fn stop() {
         }
     }
     SERVER_PORT.store(0, Ordering::SeqCst);
+    if let Ok(mut guard) = RUNTIME_TOKEN.lock() {
+        *guard = None;
+    }
+}
+
+/// Reveille incoming_requests() avec une vraie requête HTTP (pas un TCP nu).
+fn wakeup_server(port: u16) {
+    let Ok(mut stream) = std::net::TcpStream::connect(format!("127.0.0.1:{port}")) else {
+        return;
+    };
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let _ = stream.write_all(
+        b"GET /api/health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
+    );
+    let _ = stream.shutdown(std::net::Shutdown::Write);
+    let mut buf = [0u8; 512];
+    let _ = stream.read(&mut buf);
+}
+
+/// Met à jour le token en mémoire sans redémarrer le serveur (après régénération).
+pub fn update_runtime_token(new_token: String) {
+    if let Ok(guard) = RUNTIME_TOKEN.lock() {
+        if let Some(arc) = guard.as_ref() {
+            if let Ok(mut token) = arc.write() {
+                *token = new_token;
+            }
+        }
+    }
 }
 
 pub fn restart_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {
@@ -72,14 +102,21 @@ pub fn restart_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {
 }
 
 fn run_server(config: LocalApiConfig) {
+    if let Ok(mut guard) = RUNTIME_TOKEN.lock() {
+        *guard = Some(Arc::clone(&config.token));
+    }
     SERVER_PORT.store(config.port, Ordering::SeqCst);
     // 0.0.0.0 : n8n Docker (host.docker.internal) n'atteint pas toujours 127.0.0.1 sur Windows.
-    // Acces protege par token Bearer ; lecture seule.
+    // Acces protege par token Bearer.
     let addr = format!("0.0.0.0:{}", config.port);
     let server = match Server::http(&addr) {
         Ok(s) => s,
         Err(e) => {
             eprintln!("❌ API locale n8n : écoute {addr} impossible : {e}");
+            SERVER_PORT.store(0, Ordering::SeqCst);
+            if let Ok(mut guard) = RUNTIME_TOKEN.lock() {
+                *guard = None;
+            }
             return;
         }
     };
@@ -91,13 +128,13 @@ fn run_server(config: LocalApiConfig) {
     );
 
     for request in server.incoming_requests() {
+        let _ = handle_request(request, &config);
         if !SERVER_RUNNING.load(Ordering::SeqCst) {
             break;
         }
-        let cfg = config.clone();
-        thread::spawn(move || {
-            let _ = handle_request(request, &cfg);
-        });
+    }
+    if let Ok(mut guard) = RUNTIME_TOKEN.lock() {
+        *guard = None;
     }
 }
 
@@ -108,6 +145,13 @@ fn handle_request(request: Request, config: &LocalApiConfig) -> IoResult<()> {
             .with_header(
                 Header::from_bytes("Access-Control-Allow-Headers", "Authorization, Content-Type")
                     .unwrap(),
+            )
+            .with_header(
+                Header::from_bytes(
+                    "Access-Control-Allow-Methods",
+                    "GET, POST, OPTIONS",
+                )
+                .unwrap(),
             );
         return request.respond(response);
     }
@@ -125,6 +169,9 @@ fn handle_request(request: Request, config: &LocalApiConfig) -> IoResult<()> {
             json_response(request, StatusCode(200), r#"{"status":"ok"}"#)
         }
         (&Method::Get, "/api/birthdays/today") => handle_birthdays_today(request, config),
+        (&Method::Post, "/api/scpi/campaigns/prepare") => {
+            scpi::handle_prepare_campaign(request, config)
+        }
         _ => json_response(request, StatusCode(404), r#"{"error":"Not found"}"#),
     }
 }
@@ -179,7 +226,11 @@ fn handle_birthdays_today(
     json_response(request, StatusCode(200), &body)
 }
 
-fn authorize(request: &Request, expected_token: &str) -> bool {
+fn authorize(request: &Request, token_store: &Arc<RwLock<String>>) -> bool {
+    let expected = match token_store.read() {
+        Ok(guard) => guard.clone(),
+        Err(_) => return false,
+    };
     let Some(auth) = request.headers().iter().find(|h| h.field.equiv("Authorization")) else {
         return false;
     };
@@ -187,10 +238,10 @@ fn authorize(request: &Request, expected_token: &str) -> bool {
     let Some(token) = value.strip_prefix("Bearer ") else {
         return false;
     };
-    token.trim() == expected_token
+    token.trim() == expected
 }
 
-fn json_response(
+pub(crate) fn json_response(
     request: Request,
     status: StatusCode,
     body: &str,

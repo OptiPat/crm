@@ -32,6 +32,7 @@ pub mod models;
 pub mod newsletter_ops;
 pub mod notifications_summary;
 pub mod birthdays;
+pub mod scpi_campaigns;
 pub mod operations;
 pub mod segments;
 pub mod taches;
@@ -86,6 +87,15 @@ impl Database {
             eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
         }
 
+        Ok(db)
+    }
+
+    /// Ouverture secondaire (API locale n8n) — migrations idempotentes, sans backup.
+    pub fn open_at_path(db_path: &std::path::Path) -> Result<Self> {
+        let conn = Connection::open(db_path)?;
+        conn.execute("PRAGMA foreign_keys = ON", [])?;
+        let db = Database { conn };
+        db.init_tables()?;
         Ok(db)
     }
 
@@ -512,6 +522,7 @@ impl Database {
         self.migrate_contact_mail_sync_state()?;
         self.migrate_drop_emails_message_id_smtp()?;
         self.migrate_contact_template_envois()?;
+        self.migrate_scpi_campaign_envois()?;
         self.migrate_email_campaign_cancelled()?;
         self.migrate_fix_agenda_template_token_typos()?;
         self.migrate_email_send_log()?;

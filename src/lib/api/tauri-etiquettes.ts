@@ -119,6 +119,8 @@ export interface EtiquetteEmailQueueItem {
   contact_date_dernier_contact?: number | null;
   email_is_relance?: boolean;
   contact_registre?: string | null;
+  /** JSON campagne SCPI (periode, bulletin_resume) */
+  campaign_variables?: string | null;
 }
 
 export type EtiquetteEmailQueueStatus =
