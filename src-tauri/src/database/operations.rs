@@ -80,15 +80,24 @@ pub(crate) const EFFECTIVE_ENCOURS_DATE_SQL_I: &str = "COALESCE(
 )";
 
 // Colonnes encours effectif (montant + date) pour les SELECT investissements.
+// Dernier snapshot Stellium (ignore un encours manuel plus récent sans données Stellium).
+const LATEST_STELLIUM_VERSEMENTS_SQL: &str = "(SELECT v.stellium_versements_nets_centimes FROM investissement_valorisations v WHERE v.investissement_id = investissements.id AND (v.stellium_versements_nets_centimes IS NOT NULL OR v.stellium_perf_euro_centimes IS NOT NULL) ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
+
+const LATEST_STELLIUM_PERF_SQL: &str = "(SELECT v.stellium_perf_euro_centimes FROM investissement_valorisations v WHERE v.investissement_id = investissements.id AND (v.stellium_versements_nets_centimes IS NOT NULL OR v.stellium_perf_euro_centimes IS NOT NULL) ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
+
+const LATEST_STELLIUM_VERSEMENTS_SQL_I: &str = "(SELECT v.stellium_versements_nets_centimes FROM investissement_valorisations v WHERE v.investissement_id = i.id AND (v.stellium_versements_nets_centimes IS NOT NULL OR v.stellium_perf_euro_centimes IS NOT NULL) ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
+
+const LATEST_STELLIUM_PERF_SQL_I: &str = "(SELECT v.stellium_perf_euro_centimes FROM investissement_valorisations v WHERE v.investissement_id = i.id AND (v.stellium_versements_nets_centimes IS NOT NULL OR v.stellium_perf_euro_centimes IS NOT NULL) ORDER BY v.date_valorisation DESC, v.id DESC LIMIT 1)";
+
 pub(crate) fn investissement_encours_select_cols() -> String {
     format!(
-        "{EFFECTIVE_ENCOURS_SQL}, {EFFECTIVE_ENCOURS_DATE_SQL}, {MONTANT_INVESTI_TOTAL_SQL}"
+        "{EFFECTIVE_ENCOURS_SQL}, {EFFECTIVE_ENCOURS_DATE_SQL}, {MONTANT_INVESTI_TOTAL_SQL}, {LATEST_STELLIUM_VERSEMENTS_SQL}, {LATEST_STELLIUM_PERF_SQL}"
     )
 }
 
 pub(crate) fn investissement_encours_select_cols_i() -> String {
     format!(
-        "{EFFECTIVE_ENCOURS_SQL_I}, {EFFECTIVE_ENCOURS_DATE_SQL_I}, {MONTANT_INVESTI_TOTAL_SQL_I}"
+        "{EFFECTIVE_ENCOURS_SQL_I}, {EFFECTIVE_ENCOURS_DATE_SQL_I}, {MONTANT_INVESTI_TOTAL_SQL_I}, {LATEST_STELLIUM_VERSEMENTS_SQL_I}, {LATEST_STELLIUM_PERF_SQL_I}"
     )
 }
 
@@ -300,6 +309,8 @@ mod database_integration_tests {
             montant: 2_500_000,
             date_valorisation: None,
             notes: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
         })
         .unwrap();
 
@@ -622,6 +633,8 @@ mod database_integration_tests {
             montant: 3_000_000,
             date_valorisation: None,
             notes: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
         })
         .unwrap();
 
@@ -666,6 +679,8 @@ mod database_integration_tests {
             montant: 1_100_000,
             date_valorisation: Some(iso.clone()),
             notes: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
         })
         .unwrap();
 
@@ -674,6 +689,8 @@ mod database_integration_tests {
             montant: 1_250_000,
             date_valorisation: Some(iso),
             notes: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
         })
         .unwrap();
 

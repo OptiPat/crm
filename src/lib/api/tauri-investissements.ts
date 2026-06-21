@@ -30,6 +30,10 @@ export interface Investissement {
   encours_date?: number;
   /** Souscription initiale + versements complémentaires (centimes). */
   montant_investi_total?: number;
+  /** Dernier relevé Stellium — versements nets (≠ versements bruts CRM). */
+  stellium_versements_nets_centimes?: number;
+  /** Dernier relevé Stellium — performance financière en €. */
+  stellium_perf_euro_centimes?: number;
   created_at: number;
   updated_at: number;
 }
@@ -85,6 +89,8 @@ export interface InvestissementWithDetails {
   encours_actuel?: number;
   encours_date?: number;
   montant_investi_total?: number;
+  stellium_versements_nets_centimes?: number;
+  stellium_perf_euro_centimes?: number;
   created_at: number;
   updated_at: number;
 }

@@ -20,10 +20,12 @@ import {
   buildStelliumContratsImportPreview,
   mapDetailsToStelliumImportRef,
   parseStelliumContratsCsvRows,
+  resolveStelliumPerfEuroCentimes,
   summarizeStelliumImportPreview,
   type StelliumContratCsvRow,
   type StelliumImportPreviewLine,
 } from "@/lib/investissements/stellium-contrats-import";
+import { formatStelliumPerfPctLabel } from "@/lib/investissements/stellium-perf-display";
 
 type Step = "pick" | "preview";
 
@@ -277,7 +279,7 @@ export function StelliumContratsImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Import encours Stellium</DialogTitle>
           <DialogDescription>
@@ -373,6 +375,9 @@ export function StelliumContratsImportDialog({
                     <th className="p-2">N°</th>
                     <th className="p-2">Statut</th>
                     <th className="p-2">Valorisation</th>
+                    <th className="p-2 hidden lg:table-cell">Versements nets</th>
+                    <th className="p-2 hidden lg:table-cell">Perf €</th>
+                    <th className="p-2 hidden xl:table-cell">Perf %</th>
                     <th className="p-2">Encours CRM</th>
                     <th className="p-2 hidden sm:table-cell">Client CRM</th>
                     <th className="p-2 hidden md:table-cell">Contrat CRM</th>
@@ -401,6 +406,18 @@ export function StelliumContratsImportDialog({
                       </td>
                       <td className="p-2 align-top tabular-nums">
                         {formatEuroCentimes(line.valorisationCentimes)}
+                      </td>
+                      <td className="p-2 align-top tabular-nums hidden lg:table-cell">
+                        {formatEuroCentimes(line.versementsNetsCentimes ?? undefined)}
+                      </td>
+                      <td className="p-2 align-top tabular-nums hidden lg:table-cell">
+                        {formatEuroCentimes(resolveStelliumPerfEuroCentimes(line) ?? undefined)}
+                      </td>
+                      <td className="p-2 align-top tabular-nums hidden xl:table-cell">
+                        {formatStelliumPerfPctLabel(
+                          resolveStelliumPerfEuroCentimes(line) ?? undefined,
+                          line.versementsNetsCentimes ?? undefined
+                        ) ?? "—"}
                       </td>
                       <td className="p-2 align-top tabular-nums">
                         {formatEuroCentimes(line.crmEncoursCentimes)}

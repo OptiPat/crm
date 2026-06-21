@@ -7,6 +7,7 @@ import {
   markStelliumLineImported,
   parseStelliumContratsCsvRows,
   parseStelliumEuroToCentimes,
+  resolveStelliumPerfEuroCentimes,
   summarizeStelliumImportPreview,
   type StelliumImportInvestissementRef,
 } from "./stellium-contrats-import";
@@ -65,6 +66,30 @@ describe("parseStelliumContratsCsvRows", () => {
   });
 });
 
+describe("resolveStelliumPerfEuroCentimes", () => {
+  it("prend la colonne Excel si renseignée", () => {
+    expect(
+      resolveStelliumPerfEuroCentimes({
+        valorisationCentimes: 1_050_000,
+        versementsNetsCentimes: 1_000_000,
+        rachatsCentimes: 0,
+        perfEuroCentimes: 500_000,
+      })
+    ).toBe(500_000);
+  });
+
+  it("calcule valorisation − versements nets si colonne absente", () => {
+    expect(
+      resolveStelliumPerfEuroCentimes({
+        valorisationCentimes: 1_050_000,
+        versementsNetsCentimes: 1_000_000,
+        rachatsCentimes: 0,
+        perfEuroCentimes: null,
+      })
+    ).toBe(50_000);
+  });
+});
+
 describe("buildStelliumContratsImportPreview", () => {
   it("ready quand match unique et encours différent", () => {
     const csvRows = parseStelliumContratsCsvRows([SAMPLE_HEADERS]);
@@ -75,12 +100,14 @@ describe("buildStelliumContratsImportPreview", () => {
     expect(lines[0]?.investissementId).toBe(42);
   });
 
-  it("unchanged si montant et date identiques", () => {
+  it("unchanged si encours, versements nets et perf identiques", () => {
     const csvRows = parseStelliumContratsCsvRows([SAMPLE_HEADERS]);
     const lines = buildStelliumContratsImportPreview(csvRows, [
       sampleInv({
         encours_actuel: 1_050_000,
         encours_date: Math.floor(Date.parse("2026-06-19T00:00:00.000Z") / 1000),
+        stellium_versements_nets_centimes: 1_000_000,
+        stellium_perf_euro_centimes: 50_000,
       }),
     ]);
     expect(lines[0]?.status).toBe("unchanged");

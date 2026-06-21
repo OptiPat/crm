@@ -46,6 +46,8 @@ export type StelliumImportPreviewLine = StelliumContratCsvRow & {
   crmNomProduit?: string;
   crmEncoursCentimes?: number;
   crmEncoursDate?: number;
+  crmStelliumVersementsNetsCentimes?: number;
+  crmStelliumPerfEuroCentimes?: number;
 };
 
 export type StelliumImportPreviewSummary = {
@@ -203,7 +205,13 @@ export function parseStelliumContratsCsvRows(
 
 export type StelliumImportInvestissementRef = Pick<
   Investissement,
-  "id" | "numero_contrat" | "encours_actuel" | "encours_date" | "nom_produit"
+  | "id"
+  | "numero_contrat"
+  | "encours_actuel"
+  | "encours_date"
+  | "nom_produit"
+  | "stellium_versements_nets_centimes"
+  | "stellium_perf_euro_centimes"
 > & {
   contactLabel?: string;
   contactNom?: string;
@@ -220,6 +228,8 @@ export function mapDetailsToStelliumImportRef(
     encours_actuel: inv.encours_actuel,
     encours_date: inv.encours_date,
     nom_produit: inv.nom_produit,
+    stellium_versements_nets_centimes: inv.stellium_versements_nets_centimes,
+    stellium_perf_euro_centimes: inv.stellium_perf_euro_centimes,
     contactNom: inv.contact_nom?.trim() || undefined,
     contactPrenom: inv.contact_prenom?.trim() || undefined,
     foyerNom: inv.foyer_nom?.trim() || undefined,
@@ -227,6 +237,63 @@ export function mapDetailsToStelliumImportRef(
       [inv.contact_prenom, inv.contact_nom].filter(Boolean).join(" ").trim() ||
       inv.foyer_nom ||
       undefined,
+  };
+}
+
+/** Perf € Stellium : colonne Excel, ou valorisation − versements nets + rachats. */
+export function resolveStelliumPerfEuroCentimes(
+  row: Pick<
+    StelliumContratCsvRow,
+    "valorisationCentimes" | "versementsNetsCentimes" | "rachatsCentimes" | "perfEuroCentimes"
+  >
+): number | null {
+  if (row.perfEuroCentimes != null) return row.perfEuroCentimes;
+  if (row.versementsNetsCentimes == null) return null;
+  const rachats = row.rachatsCentimes ?? 0;
+  return row.valorisationCentimes - row.versementsNetsCentimes + rachats;
+}
+
+function optionalCentimesEqual(a?: number | null, b?: number | null): boolean {
+  return (a ?? null) === (b ?? null);
+}
+
+function isStelliumSnapshotUnchanged(
+  row: StelliumContratCsvRow,
+  inv: Pick<
+    Investissement,
+    | "encours_actuel"
+    | "encours_date"
+    | "stellium_versements_nets_centimes"
+    | "stellium_perf_euro_centimes"
+  >
+): boolean {
+  const perfEuro = resolveStelliumPerfEuroCentimes(row);
+  return (
+    inv.encours_actuel === row.valorisationCentimes &&
+    sameCalendarDayUnix(inv.encours_date, row.dateValorisationIso) &&
+    optionalCentimesEqual(inv.stellium_versements_nets_centimes, row.versementsNetsCentimes) &&
+    optionalCentimesEqual(inv.stellium_perf_euro_centimes, perfEuro)
+  );
+}
+
+export function buildStelliumValorisationPayload(
+  line: StelliumImportPreviewLine
+): {
+  montant: number;
+  date_valorisation: string;
+  notes: string;
+  stellium_versements_nets_centimes?: number;
+  stellium_perf_euro_centimes?: number;
+} {
+  const perfEuro = resolveStelliumPerfEuroCentimes(line);
+  return {
+    montant: line.valorisationCentimes,
+    date_valorisation: line.dateValorisationIso!,
+    notes: "Import Stellium contrats",
+    ...(line.versementsNetsCentimes != null
+      ? { stellium_versements_nets_centimes: line.versementsNetsCentimes }
+      : {}),
+    ...(perfEuro != null ? { stellium_perf_euro_centimes: perfEuro } : {}),
   };
 }
 
@@ -303,6 +370,8 @@ function enrichMatchedLine(
     crmNomProduit: inv.nom_produit,
     crmEncoursCentimes: inv.encours_actuel,
     crmEncoursDate: inv.encours_date,
+    crmStelliumVersementsNetsCentimes: inv.stellium_versements_nets_centimes,
+    crmStelliumPerfEuroCentimes: inv.stellium_perf_euro_centimes,
   };
 }
 
@@ -403,24 +472,20 @@ export function buildStelliumContratsImportPreview(
     }
 
     const inv = matches[0]!;
-    const unchanged =
-      inv.encours_actuel === row.valorisationCentimes &&
-      sameCalendarDayUnix(inv.encours_date, row.dateValorisationIso);
-
-    if (unchanged) {
+    if (isStelliumSnapshotUnchanged(row, inv)) {
       lines.push(
         enrichMatchedLine(
           base,
           inv,
           "unchanged",
-          "Encours déjà à jour (montant et date identiques)"
+          "Relevé Stellium déjà à jour (encours et performance)"
         )
       );
       continue;
     }
 
     lines.push(
-      enrichMatchedLine(base, inv, "ready", "Prêt — mise à jour encours")
+      enrichMatchedLine(base, inv, "ready", "Prêt — mise à jour relevé Stellium")
     );
   }
 
@@ -434,12 +499,15 @@ export function markStelliumLineImported(
   const encoursDate = line.dateValorisationIso
     ? Math.floor(new Date(line.dateValorisationIso).getTime() / 1000)
     : line.crmEncoursDate;
+  const perfEuro = resolveStelliumPerfEuroCentimes(line);
   return {
     ...line,
     status: "unchanged",
-    statusMessage: "Encours importé",
+    statusMessage: "Relevé Stellium importé",
     crmEncoursCentimes: line.valorisationCentimes,
     crmEncoursDate: encoursDate,
+    crmStelliumVersementsNetsCentimes: line.versementsNetsCentimes ?? undefined,
+    crmStelliumPerfEuroCentimes: perfEuro ?? undefined,
   };
 }
 
@@ -449,15 +517,19 @@ export type ApplyStelliumImportResult =
 
 function isStelliumLineStillReady(
   line: StelliumImportPreviewLine,
-  inv: Pick<Investissement, "numero_contrat" | "encours_actuel" | "encours_date">
+  inv: Pick<
+    Investissement,
+    | "numero_contrat"
+    | "encours_actuel"
+    | "encours_date"
+    | "stellium_versements_nets_centimes"
+    | "stellium_perf_euro_centimes"
+  >
 ): boolean {
   if (numeroContratMatchKey(inv.numero_contrat) !== numeroContratMatchKey(line.numeroContrat)) {
     return false;
   }
-  return !(
-    inv.encours_actuel === line.valorisationCentimes &&
-    sameCalendarDayUnix(inv.encours_date, line.dateValorisationIso)
-  );
+  return !isStelliumSnapshotUnchanged(line, inv);
 }
 
 export async function applyStelliumImportLine(
@@ -471,11 +543,10 @@ export async function applyStelliumImportLine(
     if (!isStelliumLineStillReady(line, fresh)) {
       return { ok: false, reason: "stale" };
     }
+    const payload = buildStelliumValorisationPayload(line);
     await createInvestissementValorisation({
       investissement_id: line.investissementId,
-      montant: line.valorisationCentimes,
-      date_valorisation: line.dateValorisationIso,
-      notes: "Import Stellium contrats",
+      ...payload,
     });
     return { ok: true, line: markStelliumLineImported(line) };
   } catch {

@@ -279,6 +279,24 @@ export const investissementVersements = sqliteTable("investissement_versements",
     .notNull(),
 });
 
+export const investissementValorisations = sqliteTable("investissement_valorisations", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  investissementId: integer("investissement_id")
+    .notNull()
+    .references(() => investissements.id, { onDelete: "cascade" }),
+  /** Encours / valorisation du contrat à date (centimes). */
+  montant: integer("montant").notNull(),
+  dateValorisation: integer("date_valorisation", { mode: "timestamp" }).notNull(),
+  notes: text("notes"),
+  /** Relevé Stellium — versements nets (≠ versements bruts CRM). */
+  stelliumVersementsNetsCentimes: integer("stellium_versements_nets_centimes"),
+  /** Relevé Stellium — performance financière en €. */
+  stelliumPerfEuroCentimes: integer("stellium_perf_euro_centimes"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
 // ============================================
 // DOCUMENTS
 // ============================================
@@ -458,6 +476,9 @@ export type NewPartenaire = typeof partenaires.$inferInsert;
 
 export type Investissement = typeof investissements.$inferSelect;
 export type NewInvestissement = typeof investissements.$inferInsert;
+
+export type InvestissementValorisation = typeof investissementValorisations.$inferSelect;
+export type NewInvestissementValorisation = typeof investissementValorisations.$inferInsert;
 
 export type Document = typeof documents.$inferSelect;
 export type NewDocument = typeof documents.$inferInsert;

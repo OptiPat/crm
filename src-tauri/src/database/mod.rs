@@ -493,8 +493,8 @@ impl Database {
         self.migrate_add_date_fin_pret()?;
         self.migrate_add_investissement_immo_financing_fields()?;
         self.migrate_add_investissement_numero_contrat()?;
-
         self.migrate_investissement_valorisations()?;
+        self.migrate_stellium_fields_on_valorisations()?;
 
         self.migrate_investissement_versements()?;
 
@@ -1471,6 +1471,26 @@ impl Database {
              ON investissement_valorisations (investissement_id, date_valorisation DESC)",
             [],
         )?;
+        Ok(())
+    }
+
+    /// Migration : champs Stellium sur relevés d'encours (versements nets, perf €).
+    fn migrate_stellium_fields_on_valorisations(&self) -> Result<()> {
+        if !self.table_has_column("investissement_valorisations", "stellium_versements_nets_centimes")?
+        {
+            self.conn.execute(
+                "ALTER TABLE investissement_valorisations ADD COLUMN stellium_versements_nets_centimes INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: stellium_versements_nets_centimes sur investissement_valorisations");
+        }
+        if !self.table_has_column("investissement_valorisations", "stellium_perf_euro_centimes")? {
+            self.conn.execute(
+                "ALTER TABLE investissement_valorisations ADD COLUMN stellium_perf_euro_centimes INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: stellium_perf_euro_centimes sur investissement_valorisations");
+        }
         Ok(())
     }
 

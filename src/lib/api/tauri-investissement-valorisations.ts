@@ -7,6 +7,8 @@ export interface InvestissementValorisation {
   montant: number;
   date_valorisation: number;
   notes?: string;
+  stellium_versements_nets_centimes?: number;
+  stellium_perf_euro_centimes?: number;
   created_at: number;
 }
 
@@ -15,6 +17,8 @@ export interface NewInvestissementValorisation {
   montant: number;
   date_valorisation?: string;
   notes?: string;
+  stellium_versements_nets_centimes?: number;
+  stellium_perf_euro_centimes?: number;
 }
 
 export async function getValorisationsByInvestissement(

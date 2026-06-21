@@ -363,6 +363,10 @@ pub struct Investissement {
     pub encours_date: Option<i64>,
     /// Souscription initiale + versements complémentaires (centimes).
     pub montant_investi_total: Option<i64>,
+    /// Dernier relevé Stellium — versements nets (≠ versements bruts CRM).
+    pub stellium_versements_nets_centimes: Option<i64>,
+    /// Dernier relevé Stellium — performance financière en €.
+    pub stellium_perf_euro_centimes: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -426,6 +430,8 @@ pub struct InvestissementWithDetails {
     pub encours_actuel: Option<i64>,
     pub encours_date: Option<i64>,
     pub montant_investi_total: Option<i64>,
+    pub stellium_versements_nets_centimes: Option<i64>,
+    pub stellium_perf_euro_centimes: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -437,6 +443,10 @@ pub struct InvestissementValorisation {
     pub montant: i64,
     pub date_valorisation: i64,
     pub notes: Option<String>,
+    /// Versements nets Stellium au relevé (≠ versements bruts CRM).
+    pub stellium_versements_nets_centimes: Option<i64>,
+    /// Performance financière Stellium en € au relevé.
+    pub stellium_perf_euro_centimes: Option<i64>,
     pub created_at: i64,
 }
 
@@ -446,6 +456,8 @@ pub struct NewInvestissementValorisation {
     pub montant: i64,
     pub date_valorisation: Option<String>,
     pub notes: Option<String>,
+    pub stellium_versements_nets_centimes: Option<i64>,
+    pub stellium_perf_euro_centimes: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

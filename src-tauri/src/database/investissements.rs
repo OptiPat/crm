@@ -51,6 +51,8 @@ impl super::Database {
             encours_actuel: row.get(22)?,
             encours_date: row.get(23)?,
             montant_investi_total: row.get(24)?,
+            stellium_versements_nets_centimes: row.get(25)?,
+            stellium_perf_euro_centimes: row.get(26)?,
         })
     }
 
@@ -209,6 +211,8 @@ impl super::Database {
                 encours_actuel: row.get(26)?,
                 encours_date: row.get(27)?,
                 montant_investi_total: row.get(28)?,
+                stellium_versements_nets_centimes: row.get(29)?,
+                stellium_perf_euro_centimes: row.get(30)?,
             })
         })?;
 
@@ -507,7 +511,8 @@ impl super::Database {
         investissement_id: i64,
     ) -> Result<Vec<super::models::InvestissementValorisation>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, investissement_id, montant, date_valorisation, notes, created_at
+            "SELECT id, investissement_id, montant, date_valorisation, notes,
+                    stellium_versements_nets_centimes, stellium_perf_euro_centimes, created_at
              FROM investissement_valorisations
              WHERE investissement_id = ?1
              ORDER BY date_valorisation ASC, id ASC",
@@ -519,7 +524,9 @@ impl super::Database {
                 montant: row.get(2)?,
                 date_valorisation: row.get(3)?,
                 notes: row.get(4)?,
-                created_at: row.get(5)?,
+                stellium_versements_nets_centimes: row.get(5)?,
+                stellium_perf_euro_centimes: row.get(6)?,
+                created_at: row.get(7)?,
             })
         })?;
         let mut result = Vec::new();
@@ -531,7 +538,8 @@ impl super::Database {
 
     fn get_valorisation_by_id(&self, id: i64) -> Result<super::models::InvestissementValorisation> {
         self.conn.query_row(
-            "SELECT id, investissement_id, montant, date_valorisation, notes, created_at
+            "SELECT id, investissement_id, montant, date_valorisation, notes,
+                    stellium_versements_nets_centimes, stellium_perf_euro_centimes, created_at
              FROM investissement_valorisations WHERE id = ?1",
             params![id],
             |row| {
@@ -541,7 +549,9 @@ impl super::Database {
                     montant: row.get(2)?,
                     date_valorisation: row.get(3)?,
                     notes: row.get(4)?,
-                    created_at: row.get(5)?,
+                    stellium_versements_nets_centimes: row.get(5)?,
+                    stellium_perf_euro_centimes: row.get(6)?,
+                    created_at: row.get(7)?,
                 })
             },
         )
@@ -577,21 +587,33 @@ impl super::Database {
         if let Some(id) = existing_id {
             self.conn.execute(
                 "UPDATE investissement_valorisations
-                 SET montant = ?1, notes = ?2
-                 WHERE id = ?3",
-                params![valorisation.montant, valorisation.notes, id],
+                 SET montant = ?1, notes = ?2,
+                     stellium_versements_nets_centimes = COALESCE(?3, stellium_versements_nets_centimes),
+                     stellium_perf_euro_centimes = COALESCE(?4, stellium_perf_euro_centimes)
+                 WHERE id = ?5",
+                params![
+                    valorisation.montant,
+                    valorisation.notes,
+                    valorisation.stellium_versements_nets_centimes,
+                    valorisation.stellium_perf_euro_centimes,
+                    id,
+                ],
             )?;
             return self.get_valorisation_by_id(id);
         }
 
         self.conn.execute(
-            "INSERT INTO investissement_valorisations (investissement_id, montant, date_valorisation, notes)
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO investissement_valorisations (
+                investissement_id, montant, date_valorisation, notes,
+                stellium_versements_nets_centimes, stellium_perf_euro_centimes
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 valorisation.investissement_id,
                 valorisation.montant,
                 date_ts,
                 valorisation.notes,
+                valorisation.stellium_versements_nets_centimes,
+                valorisation.stellium_perf_euro_centimes,
             ],
         )?;
         let id = self.conn.last_insert_rowid();
@@ -983,5 +1005,190 @@ mod tests {
 
         let updated = db.get_investissement_by_id(id).unwrap();
         assert_eq!(updated.numero_contrat.as_deref(), Some("AV-12345"));
+    }
+
+    #[test]
+    fn create_valorisation_persists_stellium_snapshot_fields() {
+        use super::super::models::{NewInvestissement, NewInvestissementValorisation};
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let id = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Test".into(),
+                numero_contrat: Some("123".into()),
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap()
+            .id;
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: id,
+            montant: 1_050_000,
+            date_valorisation: Some("2026-06-19T00:00:00.000Z".into()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(50_000),
+        })
+        .unwrap();
+
+        let vals = db.get_valorisations_by_investissement(id).unwrap();
+        assert_eq!(vals.len(), 1);
+        assert_eq!(vals[0].montant, 1_050_000);
+        assert_eq!(vals[0].stellium_versements_nets_centimes, Some(1_000_000));
+        assert_eq!(vals[0].stellium_perf_euro_centimes, Some(50_000));
+
+        let inv = db.get_investissement_by_id(id).unwrap();
+        assert_eq!(inv.stellium_versements_nets_centimes, Some(1_000_000));
+        assert_eq!(inv.stellium_perf_euro_centimes, Some(50_000));
+    }
+
+    #[test]
+    fn manual_encours_update_preserves_stellium_fields_same_day() {
+        use super::super::models::{NewInvestissement, NewInvestissementValorisation};
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let id = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Test".into(),
+                numero_contrat: Some("123".into()),
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap()
+            .id;
+
+        let iso = "2026-06-19T00:00:00.000Z".to_string();
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: id,
+            montant: 1_050_000,
+            date_valorisation: Some(iso.clone()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(50_000),
+        })
+        .unwrap();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: id,
+            montant: 1_060_000,
+            date_valorisation: Some(iso),
+            notes: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
+        })
+        .unwrap();
+
+        let vals = db.get_valorisations_by_investissement(id).unwrap();
+        assert_eq!(vals.len(), 1);
+        assert_eq!(vals[0].montant, 1_060_000);
+        assert_eq!(vals[0].stellium_versements_nets_centimes, Some(1_000_000));
+        assert_eq!(vals[0].stellium_perf_euro_centimes, Some(50_000));
+    }
+
+    #[test]
+    fn latest_stellium_aggregates_ignore_newer_manual_encours_without_stellium() {
+        use super::super::models::{NewInvestissement, NewInvestissementValorisation};
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let id = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Test".into(),
+                numero_contrat: Some("123".into()),
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap()
+            .id;
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: id,
+            montant: 1_050_000,
+            date_valorisation: Some("2026-06-19T00:00:00.000Z".into()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(50_000),
+        })
+        .unwrap();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: id,
+            montant: 1_060_000,
+            date_valorisation: Some("2026-07-19T00:00:00.000Z".into()),
+            notes: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
+        })
+        .unwrap();
+
+        let inv = db.get_investissement_by_id(id).unwrap();
+        assert_eq!(inv.stellium_versements_nets_centimes, Some(1_000_000));
+        assert_eq!(inv.stellium_perf_euro_centimes, Some(50_000));
     }
 }
