@@ -1,3 +1,17 @@
+/**
+ * OBSOLÈTE — ne pas recréer le workflow depuis ce fichier.
+ *
+ * Gabarit SDK v1 (PDF → Mistral → .md manuel). Le workflow PROD dans n8n inclut
+ * webhook CRM, OCR Mistral, accumuler bulletins, POST prepare CRM, etc.
+ *
+ * Source de vérité :
+ * - docs/SCPI_TRIMESTRE.md — checklist CGP
+ * - scripts/n8n-accumuler-bulletin.js — nœud Code « Accumuler bulletin »
+ * - Workflow n8n live : « SCPI — Resume bulletins trimestriels »
+ *
+ * Pour modifier le workflow prod : MCP n8n ou invoke-n8n-mcp.ps1 + update_workflow.
+ */
+
 import {
   workflow,
   node,
@@ -311,7 +325,7 @@ return [{
 });
 
 const note = sticky(
-  '## Bulletins SCPI\\n\\n1. Deposez les PDF dans **D:\\\\n8n_bridge\\\\scpi\\\\a-traiter** (10+ OK)\\n2. Cliquez **Lancer resume bulletins**\\n3. Recuperez les .md dans **resumes/**\\n4. Deplacez les PDF traites vers **traites/** (manuel)\\n\\nCopiez le resume dans une campagne CRM (clients avec ce nom_produit).',
+  '## OBSOLÈTE — voir docs/SCPI_TRIMESTRE.md\\n\\nProd : webhook CRM + prepare auto. Ce sticky décrit l’ancien flux manuel (.md + copie CRM).',
   [readBulletins, mistralSummary, writeSummary],
   { color: 5, position: [240, 80], width: 520, height: 260 }
 );

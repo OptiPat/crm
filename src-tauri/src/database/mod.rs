@@ -1200,6 +1200,19 @@ impl Database {
             )?;
             println!("✅ Migration: colonne traitee_at sur alertes");
         }
+        // KPI Suivi « traitées cette semaine » : reprise des lignes déjà clôturées.
+        let updated = self.conn.execute(
+            "UPDATE alertes
+             SET traitee_at = COALESCE(date_alerte, created_at)
+             WHERE traitee = 1 AND traitee_at IS NULL",
+            [],
+        )?;
+        if updated > 0 {
+            println!(
+                "✅ Migration traitee_at : {} alerte(s) historique(s) backfill",
+                updated
+            );
+        }
         Ok(())
     }
 
@@ -1895,5 +1908,32 @@ mod open_tests {
             .query_row("SELECT count(*) FROM sqlite_master", [], |r| r.get(0))
             .unwrap();
         assert!(count > 0, "le schéma doit contenir des tables");
+    }
+
+    #[test]
+    fn migrate_alertes_traitee_at_backfills_legacy_traitee_rows() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let legacy_ts = 1_704_067_200_i64; // 2024-01-01 UTC
+        db.get_connection()
+            .execute_batch(&format!(
+                "INSERT INTO contacts (nom, prenom, categorie) VALUES ('TEST', 'Backfill', 'CLIENT');
+                 INSERT INTO alertes (contact_id, type_alerte, message, date_alerte, lue, traitee, created_at)
+                 VALUES (1, 'SUIVI', 'Relance', {legacy_ts}, 1, 1, {legacy_ts});
+                 UPDATE alertes SET traitee_at = NULL WHERE id = 1;"
+            ))
+            .unwrap();
+
+        db.migrate_alertes_traitee_at().unwrap();
+
+        let traitee_at: i64 = db
+            .get_connection()
+            .query_row("SELECT traitee_at FROM alertes WHERE id = 1", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(
+            traitee_at, legacy_ts,
+            "backfill doit reprendre date_alerte pour les alertes déjà traitées"
+        );
     }
 }

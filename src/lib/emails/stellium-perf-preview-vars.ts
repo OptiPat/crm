@@ -68,6 +68,49 @@ export function repairStelliumTemplateForRegistre(
   return repairStelliumVousTemplateText(text);
 }
 
+/** Normalise un gabarit HTML tu — aligné sur `fix_stellium_tu_corps_html` (Rust). */
+export function repairStelliumPerfTemplateHtml(html: string): string {
+  return html
+    .replace(/\{\{perf_detail_html_tu\}\}_tu/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail_tu\}\}_tu/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail_html\}\}_tu/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail\}\}_tu/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail_html_tu\}\}/g, "{{PERF_DETAIL_HTML_TU_SLOT}}")
+    .replace(/\{\{perf_detail_html\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{PERF_DETAIL_HTML_TU_SLOT\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail_tu\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_resume_html_tu\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_resume_html\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_resume_tu\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_resume\}\}/g, "{{perf_detail_html_tu}}");
+}
+
+/** Normalise un gabarit HTML vous — aligné sur `fix_stellium_vous_corps_html` (Rust). */
+export function repairStelliumVousTemplateHtml(html: string): string {
+  return html
+    .replace(/\{\{perf_detail_html_tu\}\}/g, "{{PERF_DETAIL_HTML_VOUS_SLOT}}")
+    .replace(/\{\{perf_detail_tu\}\}/g, "{{perf_detail}}")
+    .replace(/\{\{perf_detail_html\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_detail\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{PERF_DETAIL_HTML_VOUS_SLOT\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_resume_html_tu\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_resume_html\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_resume_tu\}\}/g, "{{perf_detail}}")
+    .replace(/\{\{perf_resume\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_intro_tu\}\}/g, "{{perf_intro_vous}}");
+}
+
+export function repairStelliumTemplateHtmlForRegistre(
+  html: string,
+  registre: string | null | undefined
+): string {
+  if ((registre ?? "VOUS").toUpperCase() === "TU") {
+    return repairStelliumPerfTemplateHtml(html);
+  }
+  return repairStelliumVousTemplateHtml(html);
+}
+
 /** Contact TU : alias vous → tu pour les anciens gabarits encore en {{perf_detail}}. */
 export function alignStelliumVarsForRegistre(
   vars: Record<string, string>,

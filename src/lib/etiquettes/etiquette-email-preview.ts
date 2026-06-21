@@ -24,6 +24,7 @@ import {
   alignStelliumVarsForRegistre,
   parseStelliumPerfCampaignVariables,
   repairStelliumTemplateForRegistre,
+  repairStelliumTemplateHtmlForRegistre,
   shouldRepairStelliumPerfTemplate,
   stripOrphanStelliumFormalityHtml,
   stripOrphanStelliumFormalityLines,
@@ -96,7 +97,7 @@ export function renderEtiquetteEmailPreview(
 
   const htmlTemplate = corpsHtmlStored
     ? stelliumRepair
-      ? repairStelliumTemplateForRegistre(corpsHtmlStored, item.contact_registre)
+      ? repairStelliumTemplateHtmlForRegistre(corpsHtmlStored, item.contact_registre)
       : corpsHtmlStored
     : null;
   const bodyHtmlCore = htmlTemplate

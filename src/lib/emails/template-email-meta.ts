@@ -25,6 +25,7 @@ import {
   buildStelliumPerfPreviewVariables,
   alignStelliumVarsForRegistre,
   repairStelliumTemplateForRegistre,
+  repairStelliumTemplateHtmlForRegistre,
   stripOrphanStelliumFormalityHtml,
   stripOrphanStelliumFormalityLines,
   templateUsesStelliumPerfVariables,
@@ -233,7 +234,7 @@ export function renderTemplatePreview(
   const body = appendEmailSignature(plainCore, cgp?.email_signature);
   const htmlSource = corpsHtmlStored
     ? usesStelliumPerf
-      ? repairStelliumTemplateForRegistre(corpsHtmlStored, registre)
+      ? repairStelliumTemplateHtmlForRegistre(corpsHtmlStored, registre)
       : corpsHtmlStored
     : null;
   const bodyHtmlCore = htmlSource

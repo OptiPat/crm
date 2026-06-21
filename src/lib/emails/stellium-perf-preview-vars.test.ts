@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   alignStelliumVarsForRegistre,
+  repairStelliumPerfTemplateHtml,
   repairStelliumPerfTemplateText,
   repairStelliumTemplateForRegistre,
+  repairStelliumTemplateHtmlForRegistre,
   repairStelliumVousTemplateText,
   stripOrphanStelliumFormalityLines,
 } from "./stellium-perf-preview-vars";
@@ -36,6 +38,25 @@ describe("repairStelliumPerfTemplateText", () => {
       "Voici la perf :\n\nValeur actuelle : 100 €\n\n_tu\n\nBonne journée.";
     expect(stripOrphanStelliumFormalityLines(rendered)).not.toContain("_tu");
     expect(stripOrphanStelliumFormalityLines(rendered)).toContain("Bonne journée.");
+  });
+});
+
+describe("repairStelliumPerfTemplateHtml", () => {
+  it("mappe {{perf_detail}}_tu vers perf_detail_html_tu (pas perf_detail_tu)", () => {
+    const raw = "<div>{{perf_intro_tu}}</div><div>{{perf_detail}}_tu</div>";
+    expect(repairStelliumTemplateHtmlForRegistre(raw, "TU")).toContain(
+      "{{perf_detail_html_tu}}"
+    );
+    expect(repairStelliumTemplateHtmlForRegistre(raw, "TU")).not.toContain(
+      "{{perf_detail_tu}}"
+    );
+    expect(repairStelliumTemplateHtmlForRegistre(raw, "TU")).not.toContain("}}_tu");
+  });
+
+  it("laisse un gabarit HTML tu déjà propre inchangé", () => {
+    const clean =
+      '<div>{{perf_intro_tu}}</div><div>{{perf_detail_html_tu}}</div>';
+    expect(repairStelliumPerfTemplateHtml(clean)).toBe(clean);
   });
 });
 
