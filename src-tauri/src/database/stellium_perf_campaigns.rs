@@ -2,6 +2,7 @@
 
 use super::birthdays::{is_contact_minor, type_produit_label};
 use super::models::NewTemplateEmail;
+use super::scpi_campaigns::contact_inherits_foyer_scpi_investments;
 use super::Database;
 use rusqlite::{params, OptionalExtension, Result};
 use serde::{Deserialize, Serialize};
@@ -16,6 +17,15 @@ pub struct PrepareStelliumPerfCampaignInput {
     pub periode: String,
     pub releve_date_unix: i64,
     pub investissement_ids: Vec<i64>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscoverStelliumPerfCampaignPrepareResponse {
+    pub periode: String,
+    pub releve_date_unix: i64,
+    pub investissement_ids: Vec<i64>,
+    pub contract_count: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -49,7 +59,19 @@ struct BeneficiaryBundle {
     beneficiary_email: Option<String>,
     beneficiary_date_naissance: Option<i64>,
     beneficiary_foyer_id: Option<i64>,
+    seen_investissement_ids: std::collections::HashSet<i64>,
     contracts: Vec<ContractPerfLine>,
+}
+
+fn push_contract_to_bundle(
+    bundle: &mut BeneficiaryBundle,
+    investissement_id: i64,
+    contract: ContractPerfLine,
+) {
+    if !bundle.seen_investissement_ids.insert(investissement_id) {
+        return;
+    }
+    bundle.contracts.push(contract);
 }
 
 fn normalize_batch_key(periode: &str) -> String {
@@ -179,6 +201,8 @@ fn build_campaign_variables_json(
     .to_string()
 }
 
+const STELLIUM_TEMPLATE_VERSION: i64 = 1;
+
 const STELLIUM_VOUS_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour {{prenom}} {{nom}},</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_intro_vous}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_resume_html}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">—</div><div style="line-height:1.5;margin:0;padding:0">Relevé informatif Stellium — se référer aux documents officiels de l'assureur. Ce message ne constitue pas un conseil en investissement.</div></div>"#;
 
 const STELLIUM_TU_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour {{prenom}},</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_intro_tu}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_resume_html}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">—</div><div style="line-height:1.5;margin:0;padding:0">Relevé informatif Stellium — se référer aux documents officiels de l'assureur. Ce message ne constitue pas un conseil en investissement.</div></div>"#;
@@ -186,11 +210,36 @@ const STELLIUM_TU_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1
 fn stellium_template_variables_json(corps_html: &str) -> String {
     serde_json::json!({
         "corps_html": corps_html,
-        "stellium_perf_template_version": 1,
+        "stellium_perf_template_version": STELLIUM_TEMPLATE_VERSION,
         "email_suivi_reponse": { "attendre_reponse": false },
         "email_relance": { "enabled": false },
     })
     .to_string()
+}
+
+fn stellium_template_needs_upgrade(variables: Option<&str>) -> bool {
+    let Some(raw) = variables.filter(|s| !s.trim().is_empty()) else {
+        return true;
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(raw) else {
+        return true;
+    };
+    if parsed
+        .get("stellium_perf_template_user_customized")
+        .and_then(|v| v.as_bool())
+        == Some(true)
+    {
+        return false;
+    }
+    let corps_html = parsed.get("corps_html").and_then(|v| v.as_str());
+    if corps_html.map(str::trim).filter(|s| !s.is_empty()).is_none() {
+        return true;
+    }
+    parsed
+        .get("stellium_perf_template_version")
+        .and_then(|v| v.as_i64())
+        .unwrap_or(0)
+        < STELLIUM_TEMPLATE_VERSION
 }
 
 fn stellium_vous_corps_plain() -> &'static str {
@@ -213,6 +262,30 @@ fn contact_has_email(email: Option<&str>) -> bool {
     email.map(str::trim).filter(|s| !s.is_empty()).is_some()
 }
 
+fn stellium_periode_label(unix: i64) -> Option<String> {
+    use chrono::{Datelike, Local, TimeZone};
+    let dt = Local.timestamp_opt(unix, 0).single()?;
+    const MOIS: [&str; 12] = [
+        "Janvier",
+        "Février",
+        "Mars",
+        "Avril",
+        "Mai",
+        "Juin",
+        "Juillet",
+        "Août",
+        "Septembre",
+        "Octobre",
+        "Novembre",
+        "Décembre",
+    ];
+    Some(format!(
+        "{} {}",
+        MOIS[(dt.month() as usize).saturating_sub(1)],
+        dt.year()
+    ))
+}
+
 impl Database {
     pub fn ensure_stellium_perf_email_templates(&self) -> Result<()> {
         let exists: i64 = self.conn.query_row(
@@ -221,7 +294,7 @@ impl Database {
             |row| row.get(0),
         )?;
         if exists > 0 {
-            return Ok(());
+            return self.upgrade_stellium_perf_email_templates();
         }
 
         let tu = self.create_template_email(NewTemplateEmail {
@@ -246,6 +319,81 @@ impl Database {
             tutoiement_template_id: Some(tu.id),
         })?;
 
+        Ok(())
+    }
+
+    fn upgrade_stellium_perf_email_templates(&self) -> Result<()> {
+        let tu_row: Option<(i64, Option<String>)> = self
+            .conn
+            .query_row(
+                "SELECT id, variables FROM templates_email WHERE nom = ?1",
+                params![STELLIUM_PERF_TEMPLATE_TU_NOM],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .ok();
+        let vous_row: Option<(i64, Option<String>, Option<i64>)> = self
+            .conn
+            .query_row(
+                "SELECT id, variables, tutoiement_template_id FROM templates_email WHERE nom = ?1",
+                params![STELLIUM_PERF_TEMPLATE_NOM],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .ok();
+
+        let Some((vous_id, vous_vars, tu_link)) = vous_row else {
+            return Ok(());
+        };
+
+        let tu_id = if let Some((id, tu_vars)) = tu_row {
+            if stellium_template_needs_upgrade(tu_vars.as_deref()) {
+                self.conn.execute(
+                    "UPDATE templates_email SET sujet = ?1, corps = ?2, variables = ?3, updated_at = unixepoch()
+                     WHERE id = ?4",
+                    params![
+                        "Performance AV/PER — {{periode}}, {{beneficiary_prenom}} {{beneficiary_nom}}",
+                        stellium_tu_corps_plain(),
+                        stellium_template_variables_json(STELLIUM_TU_CORPS_HTML),
+                        id
+                    ],
+                )?;
+            }
+            Some(id)
+        } else {
+            let tu = self.create_template_email(NewTemplateEmail {
+                nom: STELLIUM_PERF_TEMPLATE_TU_NOM.into(),
+                sujet: "Performance AV/PER — {{periode}}, {{beneficiary_prenom}} {{beneficiary_nom}}".into(),
+                corps: stellium_tu_corps_plain().into(),
+                categorie: "NEWSLETTER".into(),
+                variables: Some(stellium_template_variables_json(STELLIUM_TU_CORPS_HTML)),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })?;
+            Some(tu.id)
+        };
+
+        if stellium_template_needs_upgrade(vous_vars.as_deref()) {
+            self.conn.execute(
+                "UPDATE templates_email SET sujet = ?1, corps = ?2, variables = ?3,
+                    tutoiement_template_id = ?4, updated_at = unixepoch()
+                 WHERE id = ?5",
+                params![
+                    "Performance AV/PER — {{periode}}, {{beneficiary_prenom}} {{beneficiary_nom}}",
+                    stellium_vous_corps_plain(),
+                    stellium_template_variables_json(STELLIUM_VOUS_CORPS_HTML),
+                    tu_id,
+                    vous_id
+                ],
+            )?;
+        } else if tu_link.is_none() {
+            if let Some(tu_id) = tu_id {
+                self.conn.execute(
+                    "UPDATE templates_email SET tutoiement_template_id = ?1, updated_at = unixepoch()
+                     WHERE id = ?2",
+                    params![tu_id, vous_id],
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -306,6 +454,61 @@ impl Database {
                 ))
             },
         )
+    }
+
+    fn load_investissement_owner(
+        &self,
+        investissement_id: i64,
+    ) -> Result<(Option<i64>, Option<i64>)> {
+        self.conn.query_row(
+            "SELECT contact_id, foyer_id FROM investissements WHERE id = ?1",
+            params![investissement_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+    }
+
+    fn load_foyer_inheriting_contact_ids(&self, foyer_id: i64) -> Result<Vec<i64>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, role_foyer FROM contacts
+             WHERE foyer_id = ?1 AND categorie IN ('CLIENT', 'PROSPECT_CLIENT')",
+        )?;
+        let rows: Vec<(i64, Option<String>)> = stmt
+            .query_map(params![foyer_id], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows
+            .into_iter()
+            .filter(|(_, role)| contact_inherits_foyer_scpi_investments(role.as_deref()))
+            .map(|(id, _)| id)
+            .collect())
+    }
+
+    fn new_beneficiary_bundle(&self, beneficiary_id: i64) -> BeneficiaryBundle {
+        let (prenom, nom, email, date_naissance, foyer_id) = self
+            .load_beneficiary_contact(beneficiary_id)
+            .unwrap_or_else(|_| {
+                (
+                    "Client".into(),
+                    "CRM".into(),
+                    None,
+                    None,
+                    None,
+                )
+            });
+        BeneficiaryBundle {
+            beneficiary_id,
+            beneficiary_prenom: prenom,
+            beneficiary_nom: nom,
+            beneficiary_email: email,
+            beneficiary_date_naissance: date_naissance,
+            beneficiary_foyer_id: foyer_id,
+            seen_investissement_ids: std::collections::HashSet::new(),
+            contracts: Vec::new(),
+        }
     }
 
     fn load_foyer_parents_with_email(&self, foyer_id: i64) -> Result<Vec<i64>> {
@@ -397,6 +600,46 @@ impl Database {
         Ok("created")
     }
 
+    /// Dernier relevé Stellium en base (tous contrats partageant cette date de valorisation).
+    pub fn discover_stellium_perf_campaign_prepare_input(
+        &self,
+    ) -> Result<Option<DiscoverStelliumPerfCampaignPrepareResponse>> {
+        let releve_date: Option<i64> = self.conn.query_row(
+            "SELECT MAX(date_valorisation) FROM investissement_valorisations
+             WHERE stellium_versements_nets_centimes IS NOT NULL
+                OR stellium_perf_euro_centimes IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+        let Some(releve_date) = releve_date else {
+            return Ok(None);
+        };
+        let Some(periode) = stellium_periode_label(releve_date) else {
+            return Ok(None);
+        };
+
+        let mut stmt = self.conn.prepare(
+            "SELECT DISTINCT investissement_id FROM investissement_valorisations
+             WHERE (stellium_versements_nets_centimes IS NOT NULL
+                    OR stellium_perf_euro_centimes IS NOT NULL)
+               AND ABS(date_valorisation - ?1) <= 86400
+             ORDER BY investissement_id",
+        )?;
+        let investissement_ids: Vec<i64> = stmt
+            .query_map(params![releve_date], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        if investissement_ids.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(DiscoverStelliumPerfCampaignPrepareResponse {
+            periode,
+            releve_date_unix: releve_date,
+            contract_count: investissement_ids.len() as u64,
+            investissement_ids,
+        }))
+    }
+
     pub fn prepare_stellium_perf_campaign(
         &self,
         input: PrepareStelliumPerfCampaignInput,
@@ -424,45 +667,28 @@ impl Database {
             std::collections::HashMap::new();
 
         for investissement_id in &input.investissement_ids {
-            let contact_id: Option<i64> = self
-                .conn
-                .query_row(
-                    "SELECT contact_id FROM investissements WHERE id = ?1",
-                    params![investissement_id],
-                    |row| row.get(0),
-                )
-                .optional()?
-                .flatten();
-            let Some(beneficiary_id) = contact_id else {
-                continue;
-            };
-            let contract = match self.load_stellium_contract_line(*investissement_id, input.releve_date_unix)? {
+            let (contact_id, foyer_id) = self.load_investissement_owner(*investissement_id)?;
+            let contract = match self
+                .load_stellium_contract_line(*investissement_id, input.releve_date_unix)?
+            {
                 Some(c) => c,
                 None => continue,
             };
-            let entry = bundles.entry(beneficiary_id).or_insert_with(|| {
-                let (prenom, nom, email, date_naissance, foyer_id) =
-                    self.load_beneficiary_contact(beneficiary_id)
-                        .unwrap_or_else(|_| {
-                            (
-                                "Client".into(),
-                                "CRM".into(),
-                                None,
-                                None,
-                                None,
-                            )
-                        });
-                BeneficiaryBundle {
-                    beneficiary_id,
-                    beneficiary_prenom: prenom,
-                    beneficiary_nom: nom,
-                    beneficiary_email: email,
-                    beneficiary_date_naissance: date_naissance,
-                    beneficiary_foyer_id: foyer_id,
-                    contracts: Vec::new(),
+
+            if let Some(beneficiary_id) = contact_id {
+                let entry = bundles
+                    .entry(beneficiary_id)
+                    .or_insert_with(|| self.new_beneficiary_bundle(beneficiary_id));
+                push_contract_to_bundle(entry, *investissement_id, contract);
+            } else if let Some(fid) = foyer_id {
+                let inheritors = self.load_foyer_inheriting_contact_ids(fid)?;
+                for beneficiary_id in inheritors {
+                    let entry = bundles
+                        .entry(beneficiary_id)
+                        .or_insert_with(|| self.new_beneficiary_bundle(beneficiary_id));
+                    push_contract_to_bundle(entry, *investissement_id, contract.clone());
                 }
-            });
-            entry.contracts.push(contract);
+            }
         }
 
         let mut contacts_matched = 0u64;
@@ -541,6 +767,365 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::models::{NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation};
+
+    fn sample_client(nom: &str, prenom: &str) -> NewContact {
+        NewContact {
+            categorie: "CLIENT".into(),
+            nom: nom.into(),
+            prenom: prenom.into(),
+            statut_suivi: Some("ACTIF".into()),
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            filleul_categorie: None,
+            parrain_id: None,
+            prescripteur_id: None,
+            civilite: None,
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            pays: None,
+            date_naissance: None,
+            lieu_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            regime_matrimonial: None,
+            revenus_annuels: None,
+            charges_emprunts: None,
+            epargne_precaution_souhaitee: None,
+            objectifs_patrimoniaux: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            notes: None,
+            registre: None,
+            famille_regroupement_exclu: None,
+        }
+    }
+
+    fn seed_stellium_investment(
+        db: &Database,
+        contact_id: i64,
+        nom: &str,
+        num: &str,
+        perf_centimes: i64,
+    ) -> (i64, i64) {
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: nom.into(),
+                numero_contrat: Some(num.into()),
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap()
+            .id;
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv,
+            montant: 1_050_000,
+            date_valorisation: Some("2026-06-19T00:00:00.000Z".into()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(perf_centimes),
+        })
+        .unwrap();
+        let releve: i64 = db
+            .conn
+            .query_row(
+                "SELECT date_valorisation FROM investissement_valorisations WHERE investissement_id = ?1",
+                params![inv],
+                |row| row.get(0),
+            )
+            .unwrap();
+        (inv, releve)
+    }
+
+    fn seed_stellium_foyer_investment(
+        db: &Database,
+        foyer_id: i64,
+        nom: &str,
+        num: &str,
+        perf_centimes: i64,
+    ) -> (i64, i64) {
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: None,
+                foyer_id: Some(foyer_id),
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: nom.into(),
+                numero_contrat: Some(num.into()),
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap()
+            .id;
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv,
+            montant: 1_050_000,
+            date_valorisation: Some("2026-06-19T00:00:00.000Z".into()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(perf_centimes),
+        })
+        .unwrap();
+        let releve: i64 = db
+            .conn
+            .query_row(
+                "SELECT date_valorisation FROM investissement_valorisations WHERE investissement_id = ?1",
+                params![inv],
+                |row| row.get(0),
+            )
+            .unwrap();
+        (inv, releve)
+    }
+
+    #[test]
+    fn prepare_campaign_routes_foyer_common_to_declarants() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer MARTIN".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let decl1 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                email: Some("decl1@example.com".into()),
+                ..sample_client("MARTIN", "Paul")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let decl2 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_2".into()),
+                email: Some("decl2@example.com".into()),
+                ..sample_client("MARTIN", "Sophie")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv, releve) =
+            seed_stellium_foyer_investment(&db, foyer.id, "AV Commun", "999", 75_000);
+
+        let result = db
+            .prepare_stellium_perf_campaign(PrepareStelliumPerfCampaignInput {
+                periode: "Juin 2026".into(),
+                releve_date_unix: releve,
+                investissement_ids: vec![inv],
+            })
+            .unwrap();
+
+        assert_eq!(result.contacts_matched, 2);
+        assert_eq!(result.contacts_queued, 2);
+
+        for contact_id in [decl1, decl2] {
+            let vars: String = db
+                .conn
+                .query_row(
+                    "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                    params![contact_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(vars.contains("AV Commun"));
+            assert!(vars.contains("\"is_proxy_for_minor\":false"));
+        }
+    }
+
+    #[test]
+    fn prepare_campaign_excludes_enfant_from_foyer_common() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer LEROY".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let parent = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                email: Some("parent@example.com".into()),
+                ..sample_client("LEROY", "Marie")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let enfant = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("ENFANT".into()),
+                email: Some("enfant@example.com".into()),
+                date_naissance: Some("2015-06-01T00:00:00.000Z".into()),
+                ..sample_client("LEROY", "Lucas")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv, releve) =
+            seed_stellium_foyer_investment(&db, foyer.id, "AV Commun", "888", 40_000);
+
+        let result = db
+            .prepare_stellium_perf_campaign(PrepareStelliumPerfCampaignInput {
+                periode: "Juin 2026".into(),
+                releve_date_unix: releve,
+                investissement_ids: vec![inv],
+            })
+            .unwrap();
+
+        assert_eq!(result.contacts_matched, 1);
+        assert_eq!(result.contacts_queued, 1);
+
+        let parent_envoi: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![parent],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(parent_envoi, 1);
+
+        let enfant_envoi: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![enfant],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(enfant_envoi, 0);
+    }
+
+    #[test]
+    fn prepare_campaign_merges_personal_and_foyer_common_for_declarant() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer BERNARD".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let decl1 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                email: Some("bernard@example.com".into()),
+                ..sample_client("BERNARD", "Luc")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv_perso, releve) =
+            seed_stellium_investment(&db, decl1, "AV Perso", "111", 10_000);
+        let (inv_commun, _) =
+            seed_stellium_foyer_investment(&db, foyer.id, "AV Commun", "222", 20_000);
+
+        let result = db
+            .prepare_stellium_perf_campaign(PrepareStelliumPerfCampaignInput {
+                periode: "Juin 2026".into(),
+                releve_date_unix: releve,
+                investissement_ids: vec![inv_perso, inv_commun],
+            })
+            .unwrap();
+
+        assert_eq!(result.contacts_matched, 1);
+        assert_eq!(result.contacts_queued, 1);
+
+        let vars: String = db
+            .conn
+            .query_row(
+                "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                params![decl1],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(vars.contains("AV Perso"));
+        assert!(vars.contains("AV Commun"));
+        assert!(vars.contains("\"contrat_count\":2"));
+
+        let envoi_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![decl1],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(envoi_count, 1);
+    }
 
     #[test]
     fn build_perf_resume_aggregates_multiple_contracts() {
@@ -570,49 +1155,6 @@ mod tests {
 
     #[test]
     fn prepare_campaign_groups_multi_contract_and_routes_minor_to_parent() {
-        use crate::database::models::{NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation};
-
-        fn sample_client(nom: &str, prenom: &str) -> NewContact {
-            NewContact {
-                categorie: "CLIENT".into(),
-                nom: nom.into(),
-                prenom: prenom.into(),
-                statut_suivi: Some("ACTIF".into()),
-                famille_id: None,
-                foyer_id: None,
-                role_foyer: None,
-                role_famille: None,
-                filleul_categorie: None,
-                parrain_id: None,
-                prescripteur_id: None,
-                civilite: None,
-                email: None,
-                telephone: None,
-                adresse: None,
-                code_postal: None,
-                ville: None,
-                pays: None,
-                date_naissance: None,
-                lieu_naissance: None,
-                profession: None,
-                situation_familiale: None,
-                regime_matrimonial: None,
-                revenus_annuels: None,
-                charges_emprunts: None,
-                epargne_precaution_souhaitee: None,
-                objectifs_patrimoniaux: None,
-                source_lead: None,
-                profil_risque_sri: None,
-                date_dernier_contact: None,
-                date_prochain_suivi: None,
-                date_dernier_contact_filleul: None,
-                date_prochain_suivi_filleul: None,
-                notes: None,
-                registre: None,
-                famille_regroupement_exclu: None,
-            }
-        }
-
         let db = Database::open_in_memory_for_tests().unwrap();
         db.ensure_stellium_perf_email_templates().unwrap();
 
@@ -654,51 +1196,12 @@ mod tests {
             .unwrap();
 
         let mut inv_ids = Vec::new();
+        let mut releve = 0_i64;
         for (nom, num) in [("AV 1", "111"), ("AV 2", "222")] {
-            let inv = db
-                .create_investissement(NewInvestissement {
-                    contact_id: Some(enfant),
-                    foyer_id: None,
-                    type_produit: "ASSURANCE_VIE".into(),
-                    partenaire_id: None,
-                    nom_produit: nom.into(),
-                    numero_contrat: Some(num.into()),
-                    montant_initial: Some(1_000_000),
-                    date_souscription: None,
-                    date_fin_demembrement: None,
-                    date_fin_pret: None,
-                    mensualite_credit: None,
-                    credit_crd: None,
-                    loyer_mensuel: None,
-                    versement_programme: Some(false),
-                    montant_versement_programme: None,
-                    frequence_versement: None,
-                    reinvestissement_dividendes: Some(false),
-                    notes: None,
-                    origine: Some("MON_CONSEIL".into()),
-                })
-                .unwrap()
-                .id;
-            db.create_investissement_valorisation(NewInvestissementValorisation {
-                investissement_id: inv,
-                montant: 1_050_000,
-                date_valorisation: Some("2026-06-19T00:00:00.000Z".into()),
-                notes: Some("Import Stellium contrats".into()),
-                stellium_versements_nets_centimes: Some(1_000_000),
-                stellium_perf_euro_centimes: Some(50_000),
-            })
-            .unwrap();
+            let (inv, r) = seed_stellium_investment(&db, enfant, nom, num, 50_000);
+            releve = r;
             inv_ids.push(inv);
         }
-
-        let releve: i64 = db
-            .conn
-            .query_row(
-                "SELECT date_valorisation FROM investissement_valorisations WHERE investissement_id = ?1",
-                params![inv_ids[0]],
-                |row| row.get(0),
-            )
-            .unwrap();
 
         let result = db
             .prepare_stellium_perf_campaign(PrepareStelliumPerfCampaignInput {
@@ -723,5 +1226,322 @@ mod tests {
         assert!(vars.contains("AV 1"));
         assert!(vars.contains("AV 2"));
         assert!(vars.contains("\"is_proxy_for_minor\":true"));
+    }
+
+    #[test]
+    fn prepare_campaign_routes_minor_to_both_parents_with_email() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer MARTIN".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let parent1 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                email: Some("p1@example.com".into()),
+                ..sample_client("MARTIN", "Paul")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        let parent2 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_2".into()),
+                email: Some("p2@example.com".into()),
+                ..sample_client("MARTIN", "Anne")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let enfant = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("ENFANT".into()),
+                email: None,
+                date_naissance: Some("2015-06-01T00:00:00.000Z".into()),
+                ..sample_client("MARTIN", "Leo")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv, releve) = seed_stellium_investment(&db, enfant, "PER Enfant", "333", 25_000);
+        let result = db
+            .prepare_stellium_perf_campaign(PrepareStelliumPerfCampaignInput {
+                periode: "Juin 2026".into(),
+                releve_date_unix: releve,
+                investissement_ids: vec![inv],
+            })
+            .unwrap();
+
+        assert_eq!(result.contacts_matched, 1);
+        assert_eq!(result.contacts_queued, 2);
+        assert_eq!(result.contacts_proxy_to_parent, 2);
+
+        let envoi_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id IN (?1, ?2)",
+                params![parent1, parent2],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(envoi_count, 2);
+    }
+
+    #[test]
+    fn prepare_campaign_counts_adult_without_email() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let adult = db
+            .create_contact(NewContact {
+                email: None,
+                date_naissance: Some("1980-01-01T00:00:00.000Z".into()),
+                ..sample_client("BERNARD", "Luc")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv, releve) = seed_stellium_investment(&db, adult, "AV Solo", "444", 10_000);
+        let result = db
+            .prepare_stellium_perf_campaign(PrepareStelliumPerfCampaignInput {
+                periode: "Juin 2026".into(),
+                releve_date_unix: releve,
+                investissement_ids: vec![inv],
+            })
+            .unwrap();
+
+        assert_eq!(result.contacts_matched, 1);
+        assert_eq!(result.contacts_queued, 0);
+        assert_eq!(result.contacts_no_email, 1);
+        assert_eq!(result.contacts_proxy_to_parent, 0);
+
+        let envoi_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![adult],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(envoi_count, 1);
+    }
+
+    #[test]
+    fn prepare_campaign_reprepare_updates_variables() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let client = db
+            .create_contact(NewContact {
+                email: Some("client@example.com".into()),
+                ..sample_client("LEGRAND", "Paul")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv, releve) = seed_stellium_investment(&db, client, "Evoluvie", "555", 50_000);
+        let input = PrepareStelliumPerfCampaignInput {
+            periode: "Juin 2026".into(),
+            releve_date_unix: releve,
+            investissement_ids: vec![inv],
+        };
+        db.prepare_stellium_perf_campaign(input.clone()).unwrap();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv,
+            montant: 1_120_000,
+            date_valorisation: Some("2026-06-19T00:00:00.000Z".into()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(120_000),
+        })
+        .unwrap();
+
+        db.prepare_stellium_perf_campaign(input).unwrap();
+
+        let vars: String = db
+            .conn
+            .query_row(
+                "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                params![client],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(vars.contains("120"));
+        let envoi_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![client],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(envoi_count, 1);
+    }
+
+    #[test]
+    fn prepare_campaign_skips_already_sent_envoi() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let client = db
+            .create_contact(NewContact {
+                email: Some("sent@example.com".into()),
+                ..sample_client("NOM1", "Client")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv, releve) = seed_stellium_investment(&db, client, "AV Sent", "666", 30_000);
+        let input = PrepareStelliumPerfCampaignInput {
+            periode: "Juin 2026".into(),
+            releve_date_unix: releve,
+            investissement_ids: vec![inv],
+        };
+        db.prepare_stellium_perf_campaign(input.clone()).unwrap();
+
+        db.conn
+            .execute(
+                "UPDATE contact_template_envois SET email_envoye = 1 WHERE contact_id = ?1",
+                params![client],
+            )
+            .unwrap();
+
+        let result = db.prepare_stellium_perf_campaign(input).unwrap();
+        assert_eq!(result.contacts_skipped_already_sent, 1);
+        assert_eq!(result.contacts_queued, 0);
+    }
+
+    #[test]
+    fn discover_prepare_input_uses_latest_stellium_releve_date() {
+        use crate::database::models::{NewContact, NewInvestissement, NewInvestissementValorisation};
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        assert!(db
+            .discover_stellium_perf_campaign_prepare_input()
+            .unwrap()
+            .is_none());
+
+        let cid = db
+            .create_contact(NewContact {
+                categorie: "CLIENT".into(),
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                statut_suivi: Some("ACTIF".into()),
+                famille_id: None,
+                foyer_id: None,
+                role_foyer: None,
+                role_famille: None,
+                filleul_categorie: None,
+                parrain_id: None,
+                prescripteur_id: None,
+                civilite: None,
+                email: Some("j@example.com".into()),
+                telephone: None,
+                adresse: None,
+                code_postal: None,
+                ville: None,
+                pays: None,
+                date_naissance: None,
+                lieu_naissance: None,
+                profession: None,
+                situation_familiale: None,
+                regime_matrimonial: None,
+                revenus_annuels: None,
+                charges_emprunts: None,
+                epargne_precaution_souhaitee: None,
+                objectifs_patrimoniaux: None,
+                source_lead: None,
+                profil_risque_sri: None,
+                date_dernier_contact: None,
+                date_prochain_suivi: None,
+                date_dernier_contact_filleul: None,
+                date_prochain_suivi_filleul: None,
+                notes: None,
+                registre: None,
+                famille_regroupement_exclu: None,
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(cid),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV".into(),
+                numero_contrat: Some("777".into()),
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap()
+            .id;
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv,
+            montant: 1_050_000,
+            date_valorisation: Some("2026-05-19T00:00:00.000Z".into()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(40_000),
+        })
+        .unwrap();
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv,
+            montant: 1_060_000,
+            date_valorisation: Some("2026-06-19T00:00:00.000Z".into()),
+            notes: Some("Import Stellium contrats".into()),
+            stellium_versements_nets_centimes: Some(1_000_000),
+            stellium_perf_euro_centimes: Some(60_000),
+        })
+        .unwrap();
+
+        let discovered = db
+            .discover_stellium_perf_campaign_prepare_input()
+            .unwrap()
+            .expect("latest releve");
+        assert_eq!(discovered.investissement_ids, vec![inv]);
+        assert_eq!(discovered.contract_count, 1);
+        assert!(discovered.periode.contains("2026"));
+    }
+
+    #[test]
+    fn stellium_template_user_customized_blocks_upgrade() {
+        let vars = r#"{"corps_html":"<p>x</p>","stellium_perf_template_version":1,"stellium_perf_template_user_customized":true}"#;
+        assert!(!stellium_template_needs_upgrade(Some(vars)));
+        assert!(stellium_template_needs_upgrade(None));
     }
 }

@@ -1068,6 +1068,29 @@ pub fn create_investissement_valorisation(
 }
 
 #[tauri::command]
+pub fn ensure_stellium_perf_email_templates(db: State<'_, DbState>) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .ensure_stellium_perf_email_templates()
+        .map_err(|e| format!("Failed to ensure Stellium perf templates: {}", e))
+}
+
+#[tauri::command]
+pub fn discover_stellium_perf_campaign_prepare_input(
+    db: State<'_, DbState>,
+) -> Result<
+    Option<crate::database::stellium_perf_campaigns::DiscoverStelliumPerfCampaignPrepareResponse>,
+    String,
+> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .discover_stellium_perf_campaign_prepare_input()
+        .map_err(|e| format!("Failed to discover Stellium perf campaign input: {}", e))
+}
+
+#[tauri::command]
 pub fn prepare_stellium_perf_campaign(
     db: State<'_, DbState>,
     input: crate::database::stellium_perf_campaigns::PrepareStelliumPerfCampaignInput,

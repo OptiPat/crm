@@ -123,17 +123,6 @@ export function computeStelliumPerfPct(
   return (gain / versementsNetsCentimes) * 100;
 }
 
-function sameCalendarDayUnix(unixSeconds?: number, iso?: string): boolean {
-  if (unixSeconds == null || !iso) return false;
-  const d1 = new Date(unixSeconds * 1000);
-  const d2 = new Date(iso);
-  return (
-    d1.getUTCFullYear() === d2.getUTCFullYear() &&
-    d1.getUTCMonth() === d2.getUTCMonth() &&
-    d1.getUTCDate() === d2.getUTCDate()
-  );
-}
-
 function resolveColumnKeys(
   sampleRow: Record<string, unknown>
 ): Record<keyof typeof COLUMN_ALIASES, string | undefined> {
@@ -261,16 +250,16 @@ function isStelliumSnapshotUnchanged(
   row: StelliumContratCsvRow,
   inv: Pick<
     Investissement,
-    | "encours_actuel"
-    | "encours_date"
-    | "stellium_versements_nets_centimes"
-    | "stellium_perf_euro_centimes"
+    "stellium_versements_nets_centimes" | "stellium_perf_euro_centimes"
   >
 ): boolean {
+  const hasStelliumSnapshot =
+    inv.stellium_versements_nets_centimes != null || inv.stellium_perf_euro_centimes != null;
+  if (!hasStelliumSnapshot) {
+    return false;
+  }
   const perfEuro = resolveStelliumPerfEuroCentimes(row);
   return (
-    inv.encours_actuel === row.valorisationCentimes &&
-    sameCalendarDayUnix(inv.encours_date, row.dateValorisationIso) &&
     optionalCentimesEqual(inv.stellium_versements_nets_centimes, row.versementsNetsCentimes) &&
     optionalCentimesEqual(inv.stellium_perf_euro_centimes, perfEuro)
   );

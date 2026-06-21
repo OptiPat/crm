@@ -11,7 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, RefreshCw, Upload } from "lucide-react";
+import { Check, Loader2, RefreshCw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { getInvestissementsWithDetails } from "@/lib/api/tauri-investissements";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
@@ -26,13 +26,8 @@ import {
   type StelliumImportPreviewLine,
 } from "@/lib/investissements/stellium-contrats-import";
 import { formatStelliumPerfPctLabel } from "@/lib/investissements/stellium-perf-display";
-import { prepareStelliumPerfCampaign } from "@/lib/api/tauri-stellium-perf-campaign";
-import {
-  inferStelliumReleveDateUnix,
-  stelliumPerfPeriodeLabelFromIso,
-} from "@/lib/investissements/stellium-perf-campaign";
-import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
-import { Mail } from "lucide-react";
+import { buildStelliumImportPrepareInput } from "@/lib/investissements/stellium-perf-campaign";
+import { StelliumPerfPrepareCampaignButton } from "@/components/emails/StelliumPerfPrepareCampaignButton";
 
 type Step = "pick" | "preview";
 
@@ -96,7 +91,6 @@ export function StelliumContratsImportDialog({
   const [busy, setBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [applyingLineKey, setApplyingLineKey] = useState<string | null>(null);
-  const [preparingCampaign, setPreparingCampaign] = useState(false);
   const [importedInvestissementIds, setImportedInvestissementIds] = useState<number[]>([]);
 
   const summary = useMemo(() => summarizeStelliumImportPreview(lines), [lines]);
@@ -117,38 +111,10 @@ export function StelliumContratsImportDialog({
     return [...ids];
   }, [importedInvestissementIds, lines]);
 
-  const handlePrepareCampaign = async () => {
-    if (campaignEligibleIds.length === 0) {
-      toast.error("Aucun contrat éligible — importez d'abord les encours Stellium");
-      return;
-    }
-    const releveDateUnix = inferStelliumReleveDateUnix(lines, campaignEligibleIds);
-    if (releveDateUnix == null) {
-      toast.error("Date de relevé introuvable ou incohérente dans le fichier");
-      return;
-    }
-    const periodeLine = lines.find(
-      (l) =>
-        l.investissementId != null &&
-        campaignEligibleIds.includes(l.investissementId) &&
-        l.dateValorisationIso
-    );
-    const periode = stelliumPerfPeriodeLabelFromIso(periodeLine?.dateValorisationIso);
-    setPreparingCampaign(true);
-    try {
-      const result = await prepareStelliumPerfCampaign({
-        periode,
-        releveDateUnix,
-        investissementIds: campaignEligibleIds,
-      });
-      notifyEtiquettesChanged();
-      toast.success(result.message);
-    } catch (error) {
-      toast.error("Campagne : " + String(error));
-    } finally {
-      setPreparingCampaign(false);
-    }
-  };
+  const importPrepareInput = useMemo(
+    () => buildStelliumImportPrepareInput(lines, campaignEligibleIds),
+    [campaignEligibleIds, lines]
+  );
 
   const reset = useCallback(() => {
     setStep("pick");
@@ -160,7 +126,6 @@ export function StelliumContratsImportDialog({
     setBusy(false);
     setRefreshing(false);
     setApplyingLineKey(null);
-    setPreparingCampaign(false);
     setImportedInvestissementIds([]);
     if (inputRef.current) inputRef.current.value = "";
   }, []);
@@ -515,7 +480,7 @@ export function StelliumContratsImportDialog({
                         )}
                       </td>
                       <td className="p-2 align-top text-right">
-                        {line.status === "ready" && (
+                        {line.status === "ready" ? (
                           <Button
                             type="button"
                             size="sm"
@@ -530,7 +495,13 @@ export function StelliumContratsImportDialog({
                               "Importer"
                             )}
                           </Button>
-                        )}
+                        ) : line.status === "unchanged" &&
+                          line.statusMessage.includes("importé") ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                            <Check className="h-3.5 w-3.5" aria-hidden />
+                            Importé
+                          </span>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -549,20 +520,12 @@ export function StelliumContratsImportDialog({
               <Button type="button" onClick={() => void handleApply()} disabled={busy || selected.size === 0}>
                 Importer {selected.size} encours
               </Button>
-              <Button
-                type="button"
-                variant="secondary"
+              <StelliumPerfPrepareCampaignButton
+                importInput={importPrepareInput}
+                disabled={busy || importPrepareInput == null}
                 className="gap-1.5"
-                disabled={busy || preparingCampaign || campaignEligibleIds.length === 0}
-                onClick={() => void handlePrepareCampaign()}
-              >
-                {preparingCampaign ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Mail className="h-4 w-4" />
-                )}
-                Préparer emails perf
-              </Button>
+                label="Préparer emails perf"
+              />
             </>
           )}
         </DialogFooter>

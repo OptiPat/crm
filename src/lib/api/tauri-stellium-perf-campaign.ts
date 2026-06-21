@@ -6,6 +6,13 @@ export interface PrepareStelliumPerfCampaignInput {
   investissementIds: number[];
 }
 
+export interface DiscoverStelliumPerfCampaignPrepareResponse {
+  periode: string;
+  releveDateUnix: number;
+  investissementIds: number[];
+  contractCount: number;
+}
+
 export interface PrepareStelliumPerfCampaignResult {
   periode: string;
   batchKey: string;
@@ -15,6 +22,14 @@ export interface PrepareStelliumPerfCampaignResult {
   contactsProxyToParent: number;
   contactsSkippedAlreadySent: number;
   message: string;
+}
+
+export async function ensureStelliumPerfEmailTemplates(): Promise<void> {
+  await invoke("ensure_stellium_perf_email_templates");
+}
+
+export async function discoverStelliumPerfCampaignPrepareInput(): Promise<DiscoverStelliumPerfCampaignPrepareResponse | null> {
+  return invoke("discover_stellium_perf_campaign_prepare_input");
 }
 
 export async function prepareStelliumPerfCampaign(

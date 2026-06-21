@@ -100,12 +100,25 @@ describe("buildStelliumContratsImportPreview", () => {
     expect(lines[0]?.investissementId).toBe(42);
   });
 
-  it("unchanged si encours, versements nets et perf identiques", () => {
+  it("unchanged si relevé Stellium (nets + perf) déjà en CRM", () => {
     const csvRows = parseStelliumContratsCsvRows([SAMPLE_HEADERS]);
     const lines = buildStelliumContratsImportPreview(csvRows, [
       sampleInv({
         encours_actuel: 1_050_000,
         encours_date: Math.floor(Date.parse("2026-06-19T00:00:00.000Z") / 1000),
+        stellium_versements_nets_centimes: 1_000_000,
+        stellium_perf_euro_centimes: 50_000,
+      }),
+    ]);
+    expect(lines[0]?.status).toBe("unchanged");
+  });
+
+  it("unchanged si relevé Stellium OK même quand encours CRM effectif diffère", () => {
+    const csvRows = parseStelliumContratsCsvRows([SAMPLE_HEADERS]);
+    const lines = buildStelliumContratsImportPreview(csvRows, [
+      sampleInv({
+        encours_actuel: 1_100_000,
+        encours_date: Math.floor(Date.parse("2026-06-25T00:00:00.000Z") / 1000),
         stellium_versements_nets_centimes: 1_000_000,
         stellium_perf_euro_centimes: 50_000,
       }),
