@@ -1,5 +1,16 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   ChevronDown,
   ChevronRight,
@@ -9,7 +20,9 @@ import {
   Link2,
   Trash2,
   TrendingUp,
+  Unlink2,
   UserPlus,
+  UserRound,
   Wallet,
 } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
@@ -29,6 +42,10 @@ import {
 import { ContactInitialsAvatar } from "@/components/contacts/contacts-ui";
 import { cn } from "@/lib/utils";
 
+type PendingAction =
+  | { type: "delete"; contact: Contact }
+  | { type: "unlink"; contact: Contact };
+
 type PrescripteurTreeViewProps = {
   root: PrescripteurNode;
   foyersInfo: Record<number, FoyerInfo>;
@@ -37,10 +54,12 @@ type PrescripteurTreeViewProps = {
   onToggleNode: (id: number) => void;
   onToggleInvestissements: (id: number) => void;
   onNodeClick: (contact: Contact) => void;
-  onDeletePrescripteur: (contact: Contact) => void;
+  onDeleteContact: (contact: Contact) => void;
+  onUnlinkFromNetwork?: (contact: Contact) => void;
   onAddClientRecommande?: (contact: Contact) => void;
   onLinkClient?: (contact: Contact) => void;
   selectedContactId?: number;
+  highlightContactId?: number;
 };
 
 function formatDate(timestamp: number): string {
@@ -59,14 +78,29 @@ function TreeNode({
   onToggleNode,
   onToggleInvestissements,
   onNodeClick,
-  onDeletePrescripteur,
+  onRequestDelete,
+  onRequestUnlink,
   onAddClientRecommande,
   onLinkClient,
   selectedContactId,
+  highlightContactId,
+  isRoot,
 }: {
   node: PrescripteurNode;
   foyersInfo: Record<number, FoyerInfo>;
-} & Omit<PrescripteurTreeViewProps, "root">) {
+  expandedNodes: Set<number>;
+  expandedInvestissements: Set<number>;
+  onToggleNode: (id: number) => void;
+  onToggleInvestissements: (id: number) => void;
+  onNodeClick: (contact: Contact) => void;
+  onRequestDelete: (contact: Contact) => void;
+  onRequestUnlink: (contact: Contact) => void;
+  onAddClientRecommande?: (contact: Contact) => void;
+  onLinkClient?: (contact: Contact) => void;
+  selectedContactId?: number;
+  highlightContactId?: number;
+  isRoot?: boolean;
+}) {
   const hasChildren = node.clientsRecommandes.length > 0;
   const isExpanded = expandedNodes.has(node.contact.id);
   const showInvestissements = expandedInvestissements.has(node.contact.id);
@@ -75,7 +109,11 @@ function TreeNode({
   const brancheClients = countTreeClients(node);
   const branchePatrimoine = calculateTreePatrimoine(node) - node.patrimoine;
   const isSelected = selectedContactId === node.contact.id;
+  const isHighlighted =
+    highlightContactId === node.contact.id ||
+    (isSelected && highlightContactId == null);
   const displayName = getContactDisplayName(node.contact, foyersInfo);
+  const canUnlink = !isRoot && node.contact.prescripteur_id != null;
 
   return (
     <div className={cn(node.niveau > 0 && "ml-3 sm:ml-4 border-l-2 border-border/50 pl-3 sm:pl-4")}>
@@ -84,7 +122,7 @@ function TreeNode({
           "rounded-xl border mb-2 overflow-hidden transition-colors",
           styles.bg,
           styles.border,
-          isSelected && "ring-2 ring-primary/40"
+          isHighlighted && "ring-2 ring-primary/40"
         )}
       >
         <div className="flex items-start gap-2 p-2.5 sm:p-3">
@@ -105,10 +143,28 @@ function TreeNode({
             <div className="w-7 shrink-0" />
           )}
 
-          <button
-            type="button"
-            className="flex flex-1 items-start gap-2.5 min-w-0 text-left rounded-lg hover:bg-background/50 -m-1 p-1 transition-colors group"
-            onClick={() => onNodeClick(node.contact)}
+          <div
+            className={cn(
+              "flex flex-1 items-start gap-2.5 min-w-0 text-left rounded-lg -m-1 p-1 transition-colors",
+              hasChildren && "hover:bg-background/50 cursor-pointer group"
+            )}
+            role={hasChildren ? "button" : undefined}
+            tabIndex={hasChildren ? 0 : undefined}
+            onClick={
+              hasChildren
+                ? () => onToggleNode(node.contact.id)
+                : undefined
+            }
+            onKeyDown={
+              hasChildren
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      onToggleNode(node.contact.id);
+                    }
+                  }
+                : undefined
+            }
           >
             {isFoyerDisplay ? (
               <div className="h-9 w-9 rounded-full bg-sky-100 border border-sky-200 flex items-center justify-center shrink-0">
@@ -123,8 +179,13 @@ function TreeNode({
             )}
             <div className="min-w-0 flex-1">
               <div className={cn("font-semibold text-sm flex flex-wrap gap-1.5", styles.text)}>
-                <span className="group-hover:text-primary transition-colors truncate">
-                  {getContactDisplayName(node.contact, foyersInfo)}
+                <span
+                  className={cn(
+                    "truncate",
+                    hasChildren && "group-hover:text-primary transition-colors"
+                  )}
+                >
+                  {displayName}
                 </span>
                 {node.contact.categorie === "CLIENT" && (
                   <Badge className="bg-emerald-100 text-emerald-800 text-[10px]">Client</Badge>
@@ -143,14 +204,28 @@ function TreeNode({
               <p className="text-xs font-medium text-primary tabular-nums mt-1">
                 {formatEuroCentimes(node.patrimoine)} avec moi
               </p>
+              {hasChildren && (
+                <p className="text-[10px] text-muted-foreground mt-0.5">
+                  {isExpanded ? "Replier la branche" : "Déplier la branche"}
+                </p>
+              )}
             </div>
-            <ChevronRight className="h-4 w-4 text-muted-foreground/40 shrink-0 mt-2 group-hover:text-primary" />
-          </button>
+          </div>
 
           <div
             className="flex flex-row items-center gap-0.5 shrink-0"
             onClick={(e) => e.stopPropagation()}
           >
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 text-xs gap-1 shrink-0"
+              onClick={() => onNodeClick(node.contact)}
+              title={`Ouvrir la fiche de ${displayName}`}
+            >
+              <UserRound className="h-3 w-3" />
+              <span className="hidden sm:inline">Fiche</span>
+            </Button>
             {onAddClientRecommande && (
               <Button
                 variant="ghost"
@@ -188,15 +263,28 @@ function TreeNode({
                 <span className="ml-1 tabular-nums">{node.investissements.length}</span>
               </Button>
             )}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
-              onClick={() => onDeletePrescripteur(node.contact)}
-              title="Supprimer ce contact"
-            >
-              <Trash2 className="h-3 w-3" />
-            </Button>
+            {canUnlink && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-amber-700 hover:text-amber-800 hover:bg-amber-50"
+                onClick={() => onRequestUnlink(node.contact)}
+                title="Retirer du réseau (conserve le contact)"
+              >
+                <Unlink2 className="h-3 w-3" />
+              </Button>
+            )}
+            {!isRoot && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                onClick={() => onRequestDelete(node.contact)}
+                title="Supprimer le contact"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            )}
           </div>
         </div>
 
@@ -267,10 +355,12 @@ function TreeNode({
               onToggleNode={onToggleNode}
               onToggleInvestissements={onToggleInvestissements}
               onNodeClick={onNodeClick}
-              onDeletePrescripteur={onDeletePrescripteur}
+              onRequestDelete={onRequestDelete}
+              onRequestUnlink={onRequestUnlink}
               onAddClientRecommande={onAddClientRecommande}
               onLinkClient={onLinkClient}
               selectedContactId={selectedContactId}
+              highlightContactId={highlightContactId}
             />
           ))}
         </div>
@@ -287,32 +377,87 @@ export function PrescripteurTreeView({
   onToggleNode,
   onToggleInvestissements,
   onNodeClick,
-  onDeletePrescripteur,
+  onDeleteContact,
+  onUnlinkFromNetwork,
   onAddClientRecommande,
   onLinkClient,
   selectedContactId,
+  highlightContactId,
 }: PrescripteurTreeViewProps) {
+  const [pending, setPending] = useState<PendingAction | null>(null);
+
+  const pendingLabel = pending
+    ? getContactDisplayName(pending.contact, foyersInfo)
+    : "";
+
   return (
-    <div>
-      <p className="text-xs text-muted-foreground mb-3">
-        Clic sur le nom → fiche contact. Sur chaque ligne :{" "}
-        <UserPlus className="inline h-3 w-3 -mt-0.5" aria-hidden /> nouveau recommandé,{" "}
-        <Link2 className="inline h-3 w-3 -mt-0.5" aria-hidden /> lier un existant — sous
-        cette personne (ex. Julien), pas seulement la racine.
-      </p>
-      <TreeNode
-        node={root}
-        foyersInfo={foyersInfo}
-        expandedNodes={expandedNodes}
-        expandedInvestissements={expandedInvestissements}
-        onToggleNode={onToggleNode}
-        onToggleInvestissements={onToggleInvestissements}
-        onNodeClick={onNodeClick}
-        onDeletePrescripteur={onDeletePrescripteur}
-        onAddClientRecommande={onAddClientRecommande}
-        onLinkClient={onLinkClient}
-        selectedContactId={selectedContactId}
-      />
-    </div>
+    <>
+      <div>
+        <p className="text-xs text-muted-foreground mb-3">
+          Clic sur le nom → déplier ou replier la branche. Bouton{" "}
+          <strong className="font-medium text-foreground/80">Fiche</strong> pour ouvrir le contact.{" "}
+          <Unlink2 className="inline h-3 w-3 -mt-0.5" aria-hidden /> retirer du réseau,{" "}
+          <Trash2 className="inline h-3 w-3 -mt-0.5" aria-hidden /> supprimer.
+        </p>
+        <TreeNode
+          node={root}
+          foyersInfo={foyersInfo}
+          expandedNodes={expandedNodes}
+          expandedInvestissements={expandedInvestissements}
+          onToggleNode={onToggleNode}
+          onToggleInvestissements={onToggleInvestissements}
+          onNodeClick={onNodeClick}
+          onRequestDelete={(contact) => setPending({ type: "delete", contact })}
+          onRequestUnlink={(contact) => setPending({ type: "unlink", contact })}
+          onAddClientRecommande={onAddClientRecommande}
+          onLinkClient={onLinkClient}
+          selectedContactId={selectedContactId}
+          highlightContactId={highlightContactId}
+          isRoot
+        />
+      </div>
+
+      <AlertDialog open={pending != null} onOpenChange={(open) => !open && setPending(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pending?.type === "unlink"
+                ? "Retirer du réseau ?"
+                : "Supprimer ce contact ?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {pending?.type === "unlink" ? (
+                <>
+                  <strong>{pendingLabel}</strong> ne sera plus recommandé par ce prescripteur.
+                  Le contact reste dans le CRM.
+                </>
+              ) : (
+                <>
+                  Cette action supprime définitivement <strong>{pendingLabel}</strong> et ses
+                  données associées.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              className={pending?.type === "delete" ? "bg-destructive hover:bg-destructive/90" : undefined}
+              onClick={() => {
+                if (!pending) return;
+                if (pending.type === "unlink") {
+                  onUnlinkFromNetwork?.(pending.contact);
+                } else {
+                  onDeleteContact(pending.contact);
+                }
+                setPending(null);
+              }}
+            >
+              {pending?.type === "unlink" ? "Retirer du réseau" : "Supprimer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -7,7 +7,6 @@ import {
   type FoyerInfo,
 } from "@/lib/prescripteurs/prescripteur-tree";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
-import { ContactInitialsAvatar } from "@/components/contacts/contacts-ui";
 import { cn } from "@/lib/utils";
 
 type PrescripteurSummaryCardProps = {
@@ -15,6 +14,7 @@ type PrescripteurSummaryCardProps = {
   foyersInfo: Record<number, FoyerInfo>;
   selected?: boolean;
   compact?: boolean;
+  actionHint?: string;
   onClick: () => void;
 };
 
@@ -23,6 +23,7 @@ export function PrescripteurSummaryCard({
   foyersInfo,
   selected = false,
   compact = false,
+  actionHint = "Voir le réseau",
   onClick,
 }: PrescripteurSummaryCardProps) {
   const { contact } = stats;
@@ -76,14 +77,8 @@ export function PrescripteurSummaryCard({
                 ` · ${stats.nombreClientsTotal} total`}
             </span>
           </p>
-          {!compact && (
-            <div className="flex items-center gap-1 mt-2">
-              <ContactInitialsAvatar
-                prenom={contact.prenom}
-                nom={contact.nom}
-                className="h-7 w-7 text-[10px]"
-              />
-            </div>
+          {!compact && actionHint && (
+            <p className="text-[11px] text-primary/80 mt-1.5 font-medium">{actionHint}</p>
           )}
         </div>
 

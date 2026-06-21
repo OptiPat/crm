@@ -17,6 +17,7 @@ import {
   Briefcase,
   Edit,
   Home,
+  Share2,
   UserCheck,
   UserPlus,
   Users2,
@@ -54,6 +55,7 @@ interface ContactDetailFoyerTabProps {
   onRemoveMemberFromFoyer: (member: Contact) => void;
   onAddFoyerMember: () => void;
   onCreateFoyer: () => void;
+  onViewPrescripteurNetwork?: () => void;
 }
 
 function FoyerMemberRow({
@@ -192,6 +194,7 @@ export function ContactDetailFoyerTab({
   onRemoveMemberFromFoyer,
   onAddFoyerMember,
   onCreateFoyer,
+  onViewPrescripteurNetwork,
 }: ContactDetailFoyerTabProps) {
   const allMembers = [contact, ...foyerMembers.filter((m) => m.id !== contact.id)];
 
@@ -316,13 +319,56 @@ export function ContactDetailFoyerTab({
                 {prescripteur.email && (
                   <p className="text-sm text-muted-foreground">{prescripteur.email}</p>
                 )}
-                <p className="text-xs text-primary mt-1">Voir la fiche prescripteur</p>
+                <div className="flex flex-wrap items-center gap-2 mt-2">
+                  <p className="text-xs text-primary">Voir la fiche prescripteur</p>
+                  {onViewPrescripteurNetwork && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onViewPrescripteurNetwork();
+                      }}
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                      Voir le réseau
+                    </Button>
+                  )}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
                 Prescripteur introuvable (ID: {contact.prescripteur_id})
               </p>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {contact.categorie === "PRESCRIPTEUR" && onViewPrescripteurNetwork && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Share2 className="h-5 w-5" />
+              Réseau de recommandations
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              Visualisez l&apos;arbre des clients recommandés par ce prescripteur.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onViewPrescripteurNetwork}
+            >
+              <Share2 className="h-4 w-4" />
+              Voir le réseau
+            </Button>
           </CardContent>
         </Card>
       )}

@@ -22,6 +22,7 @@ export type AppNavigationDetail =
     }
   | { type: "interactions"; contactId?: number }
   | { type: "documents"; contactId?: number }
+  | { type: "prescripteurs"; rootId?: number; focusContactId?: number }
   | { type: "parametres"; section: SettingsSectionId; scrollToId?: string }
   | { type: "page"; page: string };
 

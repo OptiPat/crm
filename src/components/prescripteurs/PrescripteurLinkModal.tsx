@@ -55,9 +55,10 @@ export function PrescripteurLinkModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chargement à l'ouverture / changement de prescripteur
   }, [open, prescripteur.id]);
 
-  const filteredContacts = contacts.filter((c) =>
-    contactMatchesSearch(searchQuery, c)
-  );
+  const filteredContacts =
+    searchQuery.trim().length >= 2
+      ? contacts.filter((c) => contactMatchesSearch(searchQuery, c))
+      : [];
 
   const handleLink = async (contact: Contact) => {
     if (contact.prescripteur_id === prescripteur.id) {
@@ -132,7 +133,9 @@ export function PrescripteurLinkModal({
         <div className="min-h-0 flex-1 overflow-y-auto space-y-2 py-1">
           {filteredContacts.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              {searchQuery ? "Aucun contact trouvé" : "Saisissez un nom pour rechercher"}
+              {searchQuery.trim().length < 2
+                ? "Saisissez au moins 2 caractères pour rechercher"
+                : "Aucun contact trouvé"}
             </p>
           ) : (
             filteredContacts.map((contact) => {
