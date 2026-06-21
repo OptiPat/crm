@@ -17,8 +17,8 @@ import {
   subscribeEtiquetteBatchSend,
 } from "@/lib/etiquettes/etiquette-email-send-runner";
 import {
-  getScpiBulletinSendBlockReason,
-  isScpiBulletinSendBlocked,
+  getCampaignTemplateSendBlockReason,
+  isCampaignTemplateSendBlocked,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { toast } from "sonner";
 
@@ -47,10 +47,10 @@ export function EtiquetteBatchSendDialog({
     });
   }, []);
 
-  const blockedItems = items.filter((i) => isScpiBulletinSendBlocked(i));
+  const blockedItems = items.filter((i) => isCampaignTemplateSendBlocked(i));
   const sendBlocked = blockedItems.length > 0;
   const blockReason =
-    blockedItems.map((i) => getScpiBulletinSendBlockReason(i)).find(Boolean) ?? null;
+    blockedItems.map((i) => getCampaignTemplateSendBlockReason(i)).find(Boolean) ?? null;
 
   const start = async () => {
     if (items.length === 0 || running || isEtiquetteEmailSendActive() || sendBlocked) return;

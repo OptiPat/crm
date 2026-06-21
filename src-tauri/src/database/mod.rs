@@ -33,6 +33,7 @@ pub mod newsletter_ops;
 pub mod notifications_summary;
 pub mod birthdays;
 pub mod scpi_campaigns;
+pub mod stellium_perf_campaigns;
 pub mod operations;
 pub mod segments;
 pub mod taches;

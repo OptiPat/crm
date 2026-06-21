@@ -138,6 +138,7 @@ fn main() {
             delete_investissement,
             get_valorisations_by_investissement,
             create_investissement_valorisation,
+            prepare_stellium_perf_campaign,
             delete_investissement_valorisation,
             get_versements_by_investissement,
             create_investissement_versement,

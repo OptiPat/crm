@@ -1068,6 +1068,18 @@ pub fn create_investissement_valorisation(
 }
 
 #[tauri::command]
+pub fn prepare_stellium_perf_campaign(
+    db: State<'_, DbState>,
+    input: crate::database::stellium_perf_campaigns::PrepareStelliumPerfCampaignInput,
+) -> Result<crate::database::stellium_perf_campaigns::PrepareStelliumPerfCampaignResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .prepare_stellium_perf_campaign(input)
+        .map_err(|e| format!("Failed to prepare Stellium perf campaign: {}", e))
+}
+
+#[tauri::command]
 pub fn delete_investissement_valorisation(
     db: State<'_, DbState>,
     id: i64,

@@ -40,6 +40,17 @@ pub fn is_birthday_today(date_naissance_unix: i64) -> bool {
     birth.0 == today.0 && birth.1 == today.1
 }
 
+/// Mineur strict (moins de 18 ans) à la date de référence (ex. relevé Stellium).
+pub fn is_contact_minor(date_naissance: Option<i64>, ref_unix: i64) -> bool {
+    let Some(dob) = date_naissance else {
+        return false;
+    };
+    let Some(ref_dt) = Local.timestamp_opt(ref_unix, 0).single() else {
+        return false;
+    };
+    compute_age_at_date(dob, ref_dt) < 18
+}
+
 pub fn compute_age_at_date(date_naissance_unix: i64, ref_date: chrono::DateTime<Local>) -> i32 {
     let birth = Utc
         .timestamp_opt(date_naissance_unix, 0)

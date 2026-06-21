@@ -17,7 +17,7 @@ import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import {
-  getScpiBulletinSendBlockReason,
+  getCampaignTemplateSendBlockReason,
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { buildEditedHtmlEmailSendBodies } from "@/lib/etiquettes/etiquette-email-send-bodies";
@@ -82,7 +82,7 @@ export function EtiquetteEmailSendDialog({
   const batchLocked =
     item != null && isEtiquetteQueueItemBatchLocked(item);
   const scpiSendBlockReason =
-    item != null ? getScpiBulletinSendBlockReason(item) : null;
+    item != null ? getCampaignTemplateSendBlockReason(item) : null;
   const sendBlocked =
     batchLocked || isEtiquetteEmailSendActive() || scpiSendBlockReason != null;
 

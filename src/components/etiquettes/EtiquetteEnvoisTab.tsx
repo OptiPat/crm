@@ -46,8 +46,8 @@ import {
   formatEtiquetteSendDatetime,
   getIncompleteQueueLabel,
   hasContactActivityAfterEmailSend,
-  getScpiBulletinSendBlockReason,
-  isScpiBulletinSendBlocked,
+  getCampaignTemplateSendBlockReason,
+  isCampaignTemplateSendBlocked,
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
@@ -290,10 +290,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       toast.info("Aucun bulletin SCPI en file pour ce trimestre.");
       return;
     }
-    const blocked = scpiBatchReadyItems.find((i) => isScpiBulletinSendBlocked(i));
+    const blocked = scpiBatchReadyItems.find((i) => isCampaignTemplateSendBlocked(i));
     if (blocked) {
       toast.warning(
-        getScpiBulletinSendBlockReason(blocked) ??
+        getCampaignTemplateSendBlockReason(blocked) ??
           "Envoi SCPI bloqué — relancez n8n prepare."
       );
       return;
@@ -434,10 +434,10 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     selectedIds.has(getEtiquetteQueueItemKey(i))
   );
   const selectedReadySendBlocked = selectedReadyItems.some((i) =>
-    isScpiBulletinSendBlocked(i)
+    isCampaignTemplateSendBlocked(i)
   );
   const selectedReadySendBlockReason = selectedReadyItems
-    .map((i) => getScpiBulletinSendBlockReason(i))
+    .map((i) => getCampaignTemplateSendBlockReason(i))
     .find(Boolean);
   const selectedFollowupRelanceItems = followup.filter(
     (i) =>
@@ -672,7 +672,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               ? renderEtiquetteEmailPreview(item, cgpConfig)
               : null;
           const scpiSendBlockReason =
-            options.mode === "ready" ? getScpiBulletinSendBlockReason(item) : null;
+            options.mode === "ready" ? getCampaignTemplateSendBlockReason(item) : null;
           const scpiDigestStale =
             options.mode === "ready" &&
             isScpiBulletinQueueItem(item) &&

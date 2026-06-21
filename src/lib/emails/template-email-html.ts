@@ -290,22 +290,29 @@ export function injectTemplateSignatureHtml(
   return `${html}${gmailBlankLineHtml()}${sig}`;
 }
 
-/** Slot temporaire : le normaliseur Gmail ne doit pas repasser sur le HTML bulletin (blocs multiples). */
+/** Slot temporaire : le normaliseur Gmail ne doit pas repasser sur le HTML bulletin / perf (blocs multiples). */
 export const BULLETIN_RESUME_HTML_PLACEHOLDER = "___CRM_BULLETIN_RESUME_HTML___";
+export const PERF_RESUME_HTML_PLACEHOLDER = "___CRM_PERF_RESUME_HTML___";
 
-/** Remplace les variables, normalise le gabarit, puis injecte le HTML bulletin sans le tronquer. */
+/** Remplace les variables, normalise le gabarit, puis injecte le HTML bulletin/perf sans le tronquer. */
 export function prepareTemplateHtmlForSend(
   corpsHtml: string,
   vars: Record<string, string>
 ): string {
   const bulletinHtml = vars.bulletin_resume_html ?? "";
-  const slotVars = bulletinHtml
-    ? { ...vars, bulletin_resume_html: BULLETIN_RESUME_HTML_PLACEHOLDER }
-    : vars;
+  const perfHtml = vars.perf_resume_html ?? "";
+  const slotVars = {
+    ...vars,
+    ...(bulletinHtml ? { bulletin_resume_html: BULLETIN_RESUME_HTML_PLACEHOLDER } : {}),
+    ...(perfHtml ? { perf_resume_html: PERF_RESUME_HTML_PLACEHOLDER } : {}),
+  };
   let html = replaceTemplateVariables(corpsHtml, slotVars);
   html = normalizeTemplateEmailHtmlLikeGmail(html);
   if (bulletinHtml) {
     html = html.split(BULLETIN_RESUME_HTML_PLACEHOLDER).join(bulletinHtml);
+  }
+  if (perfHtml) {
+    html = html.split(PERF_RESUME_HTML_PLACEHOLDER).join(perfHtml);
   }
   return html;
 }

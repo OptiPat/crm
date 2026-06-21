@@ -20,9 +20,15 @@ import {
   parseScpiCampaignVariables,
   templateUsesScpiBulletinVariables,
 } from "@/lib/emails/scpi-bulletin-preview-vars";
+import { parseStelliumPerfCampaignVariables } from "@/lib/emails/stellium-perf-preview-vars";
 import { isScpiDigestStale } from "@/lib/emails/scpi-digest-stale";
+import { getStelliumPerfSendBlockReason } from "@/lib/emails/stellium-perf-send-guard";
 
 function parseCampaignVariables(raw: string | null | undefined): Record<string, string> {
+  const stellium = parseStelliumPerfCampaignVariables(raw);
+  if (Object.keys(stellium).length > 0) {
+    return stellium;
+  }
   return parseScpiCampaignVariables(raw);
 }
 
@@ -120,6 +126,17 @@ export function isScpiBulletinContentMissing(item: EtiquetteEmailQueueItem): boo
   if (!templateUsesScpiBulletinVariables(hay)) return false;
   const campaign = parseCampaignVariables(item.campaign_variables);
   return !campaign.bulletin_resume?.trim();
+}
+
+/** Raison de blocage envoi campagne modèle (SCPI ou perf Stellium). */
+export function getCampaignTemplateSendBlockReason(
+  item: EtiquetteEmailQueueItem
+): string | null {
+  return getScpiBulletinSendBlockReason(item) ?? getStelliumPerfSendBlockReason(item);
+}
+
+export function isCampaignTemplateSendBlocked(item: EtiquetteEmailQueueItem): boolean {
+  return getCampaignTemplateSendBlockReason(item) != null;
 }
 
 /** Raison de blocage envoi SCPI (null = envoi autorisé pour ce contrôle). */
