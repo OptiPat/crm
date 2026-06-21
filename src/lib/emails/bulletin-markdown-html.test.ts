@@ -72,4 +72,26 @@ describe("bulletin-markdown-html", () => {
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
   });
+
+  it("recolle une année 2026 sur plusieurs lignes Mistral", () => {
+    const md = [
+      "3. Ce trimestre",
+      "Le dividende brut s'élève à 4,10 €/part, en ligne avec l'objectif de distribution",
+      "2",
+      "0",
+      "2",
+      "6. Malgré un contexte géopolitique incertain.",
+    ].join("\n");
+    const plain = bulletinMarkdownToPlainEmail(md);
+    expect(plain).toContain("distribution 2026. Malgré");
+    expect(plain).not.toMatch(/distribution\n2\n0\n2\n6/);
+  });
+
+  it("ne coupe pas 2026. en fin de phrase lors du split des sections", () => {
+    const md =
+      "3. Ce trimestre\nObjectif de distribution 2026. Malgré un contexte incertain.";
+    const plain = bulletinMarkdownToPlainEmail(md);
+    expect(plain).toContain("distribution 2026. Malgré");
+    expect(plain).not.toMatch(/distribution 202\n/);
+  });
 });

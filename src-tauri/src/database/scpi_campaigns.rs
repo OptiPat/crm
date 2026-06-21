@@ -232,7 +232,7 @@ fn normalize_subsection_line(line: &str) -> String {
     line.to_string()
 }
 
-fn fix_product_title_line(line: &str, display_name: &str) -> String {
+fn fix_product_title_line(line: &str, display_name: &str, periode: &str) -> String {
     let trimmed = line.trim();
     if !trimmed.starts_with("1.") {
         return line.to_string();
@@ -243,9 +243,12 @@ fn fix_product_title_line(line: &str, display_name: &str) -> String {
             .trim()
             .trim_start_matches(['–', '-'])
             .trim();
+        if period_clean.len() < 4 || !period_clean.chars().any(|c| c.is_ascii_digit()) {
+            return format!("1. {} – {}", display_name.trim(), periode.trim());
+        }
         return format!("1. {} – {}", display_name.trim(), period_clean);
     }
-    format!("1. {}", display_name.trim())
+    format!("1. {} – {}", display_name.trim(), periode.trim())
 }
 
 fn fix_glued_year_subsection(line: &str) -> String {
@@ -266,16 +269,132 @@ fn fix_glued_year_subsection(line: &str) -> String {
     result
 }
 
+/// Mistral/OCR : année « 2026 » répartie sur plusieurs lignes (2 / 0 / 2 / 6).
+fn collapse_vertical_year_lines(text: &str) -> String {
+    let lines: Vec<String> = text.replace("\r\n", "\n").lines().map(String::from).collect();
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0usize;
+    while i < lines.len() {
+        if let Some((merged, consumed)) = try_merge_vertical_year_block(&lines, i) {
+            out.push(merged);
+            i += consumed;
+            continue;
+        }
+        out.push(lines[i].clone());
+        i += 1;
+    }
+    merge_orphan_year_with_previous_line(out).join("\n")
+}
+
+fn merge_orphan_year_with_previous_line(lines: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in lines {
+        let trimmed = line.trim();
+        let is_year_start_line = trimmed.len() >= 4
+            && trimmed.chars().take(4).all(|c| c.is_ascii_digit())
+            && trimmed.starts_with("20");
+        if is_year_start_line {
+            if let Some(prev) = out.last_mut() {
+                let year = &trimmed[..4];
+                if !prev.trim().ends_with(year) {
+                    prev.push(' ');
+                    prev.push_str(trimmed);
+                    continue;
+                }
+            }
+        }
+        out.push(line);
+    }
+    out
+}
+
+fn try_merge_vertical_year_block(lines: &[String], i: usize) -> Option<(String, usize)> {
+    if i + 3 >= lines.len() {
+        return None;
+    }
+    let mut year = String::new();
+    for k in 0..3 {
+        let t = lines[i + k].trim();
+        if t.len() != 1 || !t.chars().all(|c| c.is_ascii_digit()) {
+            return None;
+        }
+        year.push(t.chars().next()?);
+    }
+    let fourth = lines[i + 3].trim();
+    let suffix = if fourth.len() == 1 && fourth.chars().all(|c| c.is_ascii_digit()) {
+        year.push(fourth.chars().next()?);
+        String::new()
+    } else {
+        let mut chars = fourth.chars();
+        let d = chars.next()?;
+        if !d.is_ascii_digit() {
+            return None;
+        }
+        year.push(d);
+        chars.as_str().to_string()
+    };
+    if year.len() != 4 || !year.starts_with("20") {
+        return None;
+    }
+    Some((format!("{year}{suffix}"), 4))
+}
+
+/// Après OCR : « 1. Comète – T » puis « 1 » / « 2026 » sur des lignes séparées.
+fn remove_split_period_fragments(lines: Vec<String>) -> Vec<String> {
+    if lines.is_empty() {
+        return lines;
+    }
+    let first = lines[0].trim();
+    if !first.starts_with("1.") {
+        return lines;
+    }
+    let rest = first.strip_prefix("1.").unwrap_or(first).trim();
+    let period_clean = rest
+        .find('–')
+        .or_else(|| rest.find('-'))
+        .map(|idx| {
+            rest[idx..]
+                .trim()
+                .trim_start_matches(['–', '-'])
+                .trim()
+        })
+        .unwrap_or("");
+    if period_clean.len() >= 4 && period_clean.chars().any(|c| c.is_ascii_digit()) {
+        return lines;
+    }
+    let mut skip = 1usize;
+    while skip < lines.len() {
+        let t = lines[skip].trim();
+        if t.is_empty() {
+            skip += 1;
+            continue;
+        }
+        if t.len() <= 4 && t.chars().all(|c| c.is_ascii_digit()) {
+            skip += 1;
+            continue;
+        }
+        break;
+    }
+    if skip <= 1 {
+        return lines;
+    }
+    let mut out = vec![lines[0].clone()];
+    out.extend(lines.into_iter().skip(skip));
+    out
+}
+
 fn normalize_bulletin_summary_markdown(
     summary: &str,
     display_name: &str,
     periode: &str,
 ) -> String {
-    let lines: Vec<String> = summary
-        .replace("\r\n", "\n")
-        .lines()
-        .map(|l| fix_glued_year_subsection(l))
-        .collect();
+    let collapsed = collapse_vertical_year_lines(summary);
+    let lines: Vec<String> = remove_split_period_fragments(
+        collapsed
+            .lines()
+            .map(|l| fix_glued_year_subsection(l))
+            .collect(),
+    );
 
     let has_numbered_title = lines.iter().any(|l| l.trim().starts_with("1."));
     let mut start = 0usize;
@@ -299,7 +418,7 @@ fn normalize_bulletin_summary_markdown(
         }
         let mut normalized = normalize_subsection_line(&line);
         if first_content && normalized.trim().starts_with("1.") {
-            normalized = fix_product_title_line(&normalized, display_name);
+            normalized = fix_product_title_line(&normalized, display_name, periode);
             first_content = false;
         } else {
             first_content = false;
@@ -1090,6 +1209,31 @@ mod tests {
         assert!(!resume.contains("## Comète"));
         assert!(resume.contains("**Chiffres clés**"));
         assert!(resume.contains("Collecte : 132 M€"));
+    }
+
+    #[test]
+    fn collapse_vertical_year_in_bulletin_summary() {
+        let bulletins = vec![ScpiBulletinInput {
+            nom_produit: "Comète".into(),
+            summary_markdown: [
+                "1. Comète – T",
+                "1",
+                "2026",
+                "",
+                "3. Ce trimestre",
+                "Objectif de distribution",
+                "2",
+                "0",
+                "2",
+                "6. Malgré un contexte incertain.",
+            ]
+            .join("\n"),
+            fichier_source: None,
+        }];
+        let resume = build_bulletin_resume(&bulletins, "T1 2026");
+        assert!(resume.contains("1. Comète – T1 2026"));
+        assert!(resume.contains("distribution 2026. Malgré"));
+        assert!(!resume.contains("– T\n1\n2026"));
     }
 
     #[test]

@@ -40,12 +40,43 @@ function fixProductTitleLine(line: string, displayName: string): string {
   return `1. ${displayName.trim()} ${dash} ${period}`;
 }
 
+/** Après OCR : « 1. Comète – T » puis « 1 » / « 2026 » sur des lignes séparées. */
+function removeSplitPeriodFragments(lines: string[]): string[] {
+  if (lines.length === 0) return lines;
+  const first = lines[0]?.trim() ?? "";
+  if (!first.startsWith("1.")) return lines;
+  const rest = first.slice(2).trim();
+  const dashIdx = rest.search(/[–-]/);
+  const periodClean =
+    dashIdx >= 0 ? rest.slice(dashIdx + 1).trim().replace(/^[–-]\s*/, "") : "";
+  if (periodClean.length >= 4 && /\d/.test(periodClean)) return lines;
+  let skip = 1;
+  while (skip < lines.length) {
+    const t = lines[skip]?.trim() ?? "";
+    if (!t) {
+      skip += 1;
+      continue;
+    }
+    if (t.length <= 4 && /^\d+$/.test(t)) {
+      skip += 1;
+      continue;
+    }
+    break;
+  }
+  if (skip <= 1) return lines;
+  return [lines[0]!, ...lines.slice(skip)];
+}
+
 /** Nettoie le markdown Mistral/n8n avant rendu email (aligné Rust build_bulletin_resume). */
 export function normalizeScpiBulletinMarkdown(
   markdown: string,
   displayName = ""
 ): string {
-  const lines = markdown.replace(/\r\n/g, "\n").split("\n");
+  const lines = removeSplitPeriodFragments(
+    mergeOrphanYearWithPreviousLine(
+      collapseVerticalYearLines(markdown).replace(/\r\n/g, "\n").split("\n")
+    )
+  );
   const hasNumberedTitle = lines.some((l) => l.trim().startsWith("1."));
   let start = 0;
   if (hasNumberedTitle) {
@@ -90,11 +121,61 @@ function fixGluedYearSubsection(line: string): string {
   );
 }
 
+/** Mistral/OCR : année « 2026 » sur plusieurs lignes (2 / 0 / 2 / 6). */
+function collapseVerticalYearLines(markdown: string): string {
+  let s = markdown.replace(/\r\n/g, "\n");
+  // 2\n0\n2\n6. suite
+  s = s.replace(
+    /(?:^|\n)(\d)\s*\n\s*(\d)\s*\n\s*(\d)\s*\n\s*(\d)([.,;:)\s]|$)/g,
+    (match, a, b, c, d, after) => {
+      const year = `${a}${b}${c}${d}`;
+      if (/^20[0-9]{2}$/.test(year)) {
+        return `\n${year}${after}`;
+      }
+      return match;
+    }
+  );
+  // 2\n0\n2\n6 seuls (sans ponctuation sur la dernière ligne)
+  s = s.replace(
+    /(?:^|\n)(\d)\s*\n\s*(\d)\s*\n\s*(\d)\s*\n\s*(\d)\s*(?=\n)/g,
+    (match, a, b, c, d) => {
+      const year = `${a}${b}${c}${d}`;
+      return /^20[0-9]{2}$/.test(year) ? `\n${year}` : match;
+    }
+  );
+  return s;
+}
+
+/** Après recollage vertical, « 2026. Malgré… » reste parfois seul sur une ligne. */
+function mergeOrphanYearWithPreviousLine(lines: string[]): string[] {
+  const out: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length >= 4 && /^20\d{2}/.test(trimmed)) {
+      const year = trimmed.slice(0, 4);
+      const prev = out[out.length - 1];
+      if (prev && !prev.trim().endsWith(year)) {
+        out[out.length - 1] = `${prev} ${trimmed}`;
+        continue;
+      }
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+const INLINE_SUBSECTION_LOOKAHEAD =
+  /(?=[2-9]\.\s+(?:Chiffres clés|Ce trimestre|Acquisitions))/g;
+
 /** Mistral colle parfois « 20262. Chiffres » — on repère les sous-sections numérotées. */
 function expandInlineNumberedSections(line: string): string[] {
   const fixed = fixGluedYearSubsection(line);
-  if (!/\d+\.\s+/.test(fixed)) return [fixed];
-  const parts = fixed.split(/(?=\d+\.\s+)/).map((p) => p.trim()).filter(Boolean);
+  if (!INLINE_SUBSECTION_LOOKAHEAD.test(fixed)) return [fixed];
+  INLINE_SUBSECTION_LOOKAHEAD.lastIndex = 0;
+  const parts = fixed
+    .split(INLINE_SUBSECTION_LOOKAHEAD)
+    .map((p) => p.trim())
+    .filter(Boolean);
   return parts.length > 1 ? parts : [fixed];
 }
 
