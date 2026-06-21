@@ -232,23 +232,89 @@ fn normalize_subsection_line(line: &str) -> String {
     line.to_string()
 }
 
+fn should_use_crm_periode(period_clean: &str, periode: &str) -> bool {
+    if periode.trim().is_empty() {
+        return false;
+    }
+    let lower = period_clean.to_lowercase();
+    if lower.contains("trimestre") || lower.contains("semestre") {
+        return true;
+    }
+    period_clean.len() < 4 || !period_clean.chars().any(|c| c.is_ascii_digit())
+}
+
+fn strip_title_markdown_artifacts(line: &str) -> String {
+    let mut s = line.trim().to_string();
+    while s.ends_with("**") {
+        s.truncate(s.len().saturating_sub(2));
+        s = s.trim_end().to_string();
+    }
+    s
+}
+
+fn title_dedup_key(line: &str, periode: &str) -> String {
+    fix_product_title_line(line, "", periode)
+        .trim()
+        .to_lowercase()
+        .replace('–', "-")
+}
+
+/// Mistral laisse parfois le titre dupliqué en fin de résumé, avec « ** » orphelins.
+fn strip_trailing_duplicate_title(text: &str, periode: &str) -> String {
+    let lines: Vec<String> = text.lines().map(String::from).collect();
+    if lines.is_empty() {
+        return String::new();
+    }
+    let opening_key = lines
+        .iter()
+        .find(|l| l.trim().starts_with("1."))
+        .map(|l| title_dedup_key(l, periode));
+    let Some(opening_key) = opening_key else {
+        return text.to_string();
+    };
+    let mut end = lines.len();
+    while end > 0 {
+        let t = lines[end - 1].trim();
+        if t.is_empty() {
+            end -= 1;
+            continue;
+        }
+        if t.starts_with("1.") && title_dedup_key(t, periode) == opening_key && end > 1 {
+            end -= 1;
+            continue;
+        }
+        break;
+    }
+    lines[..end].join("\n")
+}
+
 fn fix_product_title_line(line: &str, display_name: &str, periode: &str) -> String {
-    let trimmed = line.trim();
+    let trimmed = strip_title_markdown_artifacts(line);
     if !trimmed.starts_with("1.") {
         return line.to_string();
     }
-    let rest = trimmed.strip_prefix("1.").unwrap_or(trimmed).trim();
+    let rest = trimmed.strip_prefix("1.").unwrap_or(&trimmed).trim();
     if let Some(dash_idx) = rest.find('–').or_else(|| rest.find('-')) {
+        let name = if display_name.trim().is_empty() {
+            rest[..dash_idx].trim()
+        } else {
+            display_name.trim()
+        };
         let period_clean = rest[dash_idx..]
             .trim()
             .trim_start_matches(['–', '-'])
             .trim();
-        if period_clean.len() < 4 || !period_clean.chars().any(|c| c.is_ascii_digit()) {
-            return format!("1. {} – {}", display_name.trim(), periode.trim());
+        if should_use_crm_periode(period_clean, periode) {
+            return format!("1. {} – {}", name, periode.trim());
         }
-        return format!("1. {} – {}", display_name.trim(), period_clean);
+        return format!("1. {} – {}", name, period_clean);
     }
-    format!("1. {} – {}", display_name.trim(), periode.trim())
+    let name = if display_name.trim().is_empty() {
+        rest
+    } else {
+        display_name.trim()
+    };
+    format!("1. {} – {}", name, periode.trim())
 }
 
 fn fix_glued_year_subsection(line: &str) -> String {
@@ -439,7 +505,7 @@ fn normalize_bulletin_summary_markdown(
             body
         );
     }
-    body
+    strip_trailing_duplicate_title(&body, periode)
 }
 
 fn build_bulletin_resume(bulletins: &[ScpiBulletinInput], periode: &str) -> String {
@@ -1234,6 +1300,32 @@ mod tests {
         assert!(resume.contains("1. Comète – T1 2026"));
         assert!(resume.contains("distribution 2026. Malgré"));
         assert!(!resume.contains("– T\n1\n2026"));
+    }
+
+    #[test]
+    fn bulletin_summary_strips_trailing_duplicate_title_and_verbose_period() {
+        let bulletins = vec![ScpiBulletinInput {
+            nom_produit: "Epargne Pierre Europe".into(),
+            summary_markdown: [
+                "1. Epargne Pierre Europe – 1er trimestre 2026**",
+                "",
+                "2. Chiffres clés",
+                "- Collecte : 75 M€",
+                "",
+                "1. Epargne Pierre Europe – 1er trimestre 2026**",
+            ]
+            .join("\n"),
+            fichier_source: None,
+        }];
+        let resume = build_bulletin_resume(&bulletins, "T1 2026");
+        assert!(resume.contains("1. Epargne Pierre Europe – T1 2026"));
+        assert!(resume.contains("**Chiffres clés**"));
+        assert!(!resume.contains("1er trimestre"));
+        assert!(!resume.contains("2026**"));
+        assert_eq!(
+            resume.matches("1. Epargne Pierre Europe – T1 2026").count(),
+            1
+        );
     }
 
     #[test]

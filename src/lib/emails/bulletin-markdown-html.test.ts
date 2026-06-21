@@ -4,6 +4,7 @@ import {
   bulletinMarkdownToPlainEmail,
   normalizeScpiBulletinDigest,
 } from "./bulletin-markdown-html";
+import { parseScpiCampaignVariables } from "./scpi-bulletin-preview-vars";
 
 describe("bulletin-markdown-html", () => {
   it("convertit titres, listes et gras", () => {
@@ -93,5 +94,38 @@ describe("bulletin-markdown-html", () => {
     const plain = bulletinMarkdownToPlainEmail(md);
     expect(plain).toContain("distribution 2026. Malgré");
     expect(plain).not.toMatch(/distribution 202\n/);
+  });
+
+  it("normalise digest multi-SCPI Mistral (titres, sections, doublon **)", () => {
+    const md = [
+      "1. Comete – 1er trimestre 2026",
+      "",
+      "2. Chiffres clés",
+      "Collecte nette : 132,2 M€",
+      "",
+      "3. Ce trimestre",
+      "Dans un contexte.",
+      "",
+      "4. Acquisitions",
+      "Pologne.",
+      "",
+      "---",
+      "",
+      "1. Epargne Pierre Europe – 1er trimestre 2026**",
+      "",
+      "2. Chiffres clés",
+      "Capitalisation : 635 M€",
+      "",
+      "1. Epargne Pierre Europe – 1er trimestre 2026**",
+    ].join("\n");
+    const vars = parseScpiCampaignVariables(
+      JSON.stringify({ periode: "T1 2026", scpi_count: 2, bulletin_resume: md })
+    );
+    const plain = vars.bulletin_resume;
+    expect(plain).not.toContain("2. Chiffres clés");
+    expect(plain).toContain("Chiffres clés");
+    expect(plain).not.toMatch(/\*\*$/m);
+    expect((plain.match(/Epargne Pierre Europe – T1 2026/g) ?? []).length).toBe(1);
+    expect(plain).toContain("Comete – T1 2026");
   });
 });

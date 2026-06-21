@@ -29,15 +29,66 @@ function normalizeSubsectionLine(line: string): string {
   return `**${rest}**`;
 }
 
-function fixProductTitleLine(line: string, displayName: string): string {
-  const trimmed = line.trim();
+function shouldUseCrmPeriode(periodClean: string, periode: string): boolean {
+  if (!periode.trim()) return false;
+  const lower = periodClean.toLowerCase();
+  if (lower.includes("trimestre") || lower.includes("semestre")) return true;
+  return periodClean.length < 4 || !/\d/.test(periodClean);
+}
+
+function stripTitleMarkdownArtifacts(line: string): string {
+  let s = line.trim();
+  if (!s.startsWith("1.")) return line;
+  while (s.endsWith("**")) {
+    s = s.slice(0, -2).trimEnd();
+  }
+  return s;
+}
+
+function titleDedupKey(line: string, periode = ""): string {
+  return fixProductTitleLine(stripTitleMarkdownArtifacts(line), "", periode)
+    .trim()
+    .toLowerCase()
+    .replace(/–/g, "-");
+}
+
+function stripTrailingDuplicateTitle(text: string, periode = ""): string {
+  const lines = text.split("\n");
+  const opening = lines.find((l) => l.trim().startsWith("1."));
+  if (!opening) return text;
+  const key = titleDedupKey(opening, periode);
+  let end = lines.length;
+  while (end > 0) {
+    const t = lines[end - 1]?.trim() ?? "";
+    if (!t) {
+      end -= 1;
+      continue;
+    }
+    if (t.startsWith("1.") && titleDedupKey(t, periode) === key && end > 1) {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return lines.slice(0, end).join("\n");
+}
+
+function fixProductTitleLine(line: string, displayName: string, periode = ""): string {
+  const trimmed = stripTitleMarkdownArtifacts(line).trim();
   if (!trimmed.startsWith("1.")) return line;
   const rest = trimmed.slice(2).trim();
   const dashIdx = rest.search(/[–-]/);
-  if (dashIdx < 0) return `1. ${displayName.trim()}`;
-  const dash = rest[dashIdx];
-  const period = rest.slice(dashIdx + 1).trim();
-  return `1. ${displayName.trim()} ${dash} ${period}`;
+  if (dashIdx < 0) {
+    const name = displayName.trim() || rest;
+    return periode.trim() ? `1. ${name} – ${periode.trim()}` : `1. ${name}`;
+  }
+  const dash = rest[dashIdx]!;
+  const periodClean = rest.slice(dashIdx + 1).trim().replace(/^[–-]\s*/, "");
+  const name = displayName.trim() || rest.slice(0, dashIdx).trim();
+  if (shouldUseCrmPeriode(periodClean, periode)) {
+    return `1. ${name} ${dash} ${periode.trim()}`;
+  }
+  return `1. ${name} ${dash} ${periodClean}`;
 }
 
 /** Après OCR : « 1. Comète – T » puis « 1 » / « 2026 » sur des lignes séparées. */
@@ -70,7 +121,8 @@ function removeSplitPeriodFragments(lines: string[]): string[] {
 /** Nettoie le markdown Mistral/n8n avant rendu email (aligné Rust build_bulletin_resume). */
 export function normalizeScpiBulletinMarkdown(
   markdown: string,
-  displayName = ""
+  displayName = "",
+  periode = ""
 ): string {
   const lines = removeSplitPeriodFragments(
     mergeOrphanYearWithPreviousLine(
@@ -93,22 +145,22 @@ export function normalizeScpiBulletinMarkdown(
     }
     const expanded = fixGluedYearSubsection(line);
     let normalized = normalizeSubsectionLine(expanded);
-    if (firstContent && normalized.trim().startsWith("1.") && displayName.trim()) {
-      normalized = fixProductTitleLine(normalized, displayName);
+    if (firstContent && normalized.trim().startsWith("1.")) {
+      normalized = fixProductTitleLine(normalized, displayName, periode);
     }
     firstContent = false;
     out.push(normalized);
   }
-  return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  return stripTrailingDuplicateTitle(out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), periode);
 }
 
-export function normalizeScpiBulletinDigest(markdown: string): string {
+export function normalizeScpiBulletinDigest(markdown: string, periode = ""): string {
   const blocks = markdown.split(/\n---\n/);
   if (blocks.length <= 1) {
-    return normalizeScpiBulletinMarkdown(markdown);
+    return normalizeScpiBulletinMarkdown(markdown, "", periode);
   }
   return blocks
-    .map((block) => normalizeScpiBulletinMarkdown(block.trim()))
+    .map((block) => normalizeScpiBulletinMarkdown(block.trim(), "", periode))
     .filter(Boolean)
     .join("\n\n---\n\n");
 }

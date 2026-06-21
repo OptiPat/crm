@@ -53,7 +53,8 @@ function stripRedundantProductPeriodHeaders(markdown: string, periode: string): 
 /** Ancien format CRM : « ## Comète — T1 2026 » ou « ## Comète » redondants avec le titre numéroté. */
 function stripLegacyBulletinHeaders(markdown: string, periode: string): string {
   return normalizeScpiBulletinDigest(
-    stripRedundantProductPeriodHeaders(markdown, periode)
+    stripRedundantProductPeriodHeaders(markdown, periode),
+    periode
   );
 }
 
