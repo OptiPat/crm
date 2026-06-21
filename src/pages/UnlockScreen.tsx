@@ -101,9 +101,11 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
           </CardContent>
         </Card>
 
-        <p className="flex items-center justify-center gap-2 text-sm sm:text-base text-muted-foreground text-center px-4">
+        <p className="flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm sm:text-base text-muted-foreground text-center px-4 max-w-md mx-auto">
           <ShieldCheck className="h-5 w-5 shrink-0 text-primary/70" aria-hidden />
-          Accès protégé par mot de passe — vos données restent sur cet ordinateur
+          <span>
+            Accès protégé par mot de passe — vos données restent sur cet ordinateur
+          </span>
         </p>
       </div>
     </div>

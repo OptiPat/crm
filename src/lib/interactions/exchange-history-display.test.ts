@@ -31,11 +31,22 @@ describe("exchange-history-display", () => {
     ).toBe(true);
   });
 
-  it("une clé par contact pour les emails campagne", () => {
-    expect(exchangeEntryKey(emailEntry)).toBe("email-contact-1");
-    expect(exchangeEntryKey({ ...emailEntry, contact_id: 2 })).toBe(
-      "email-contact-2"
-    );
+  it("une clé par campagne email (contact_etiquette)", () => {
+    expect(exchangeEntryKey(emailEntry)).toBe("email-ce-42");
+    expect(
+      exchangeEntryKey({ ...emailEntry, contact_etiquette_id: 99, contact_id: 1 })
+    ).toBe("email-ce-99");
+    expect(exchangeEntryKey({ ...emailEntry, contact_id: 2 })).toBe("email-ce-42");
+  });
+
+  it("clés distinctes pour deux campagnes du même contact", () => {
+    const a = exchangeEntryKey(emailEntry);
+    const b = exchangeEntryKey({
+      ...emailEntry,
+      contact_etiquette_id: 43,
+      etiquette_nom: "Autre campagne",
+    });
+    expect(a).not.toBe(b);
   });
 
   it("fusionne envoi + trace réponse pour un même contact", () => {

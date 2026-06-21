@@ -5,6 +5,7 @@ import {
   buildContactRelationTimeline,
   isLegacyCampaignInteraction,
 } from "@/lib/interactions/contact-relation-timeline";
+import { exchangeEntryKey } from "@/lib/interactions/exchange-history-display";
 
 const emailEntry: ExchangeHistoryEntry = {
   entry_kind: "email_campagne",
@@ -62,6 +63,22 @@ describe("contact-relation-timeline", () => {
     expect(items).toHaveLength(2);
     expect(items[0].kind).toBe("email");
     expect(items[1].kind).toBe("manual");
+  });
+
+  it("clés distinctes pour plusieurs campagnes email sur un contact", () => {
+    const second = {
+      ...emailEntry,
+      contact_etiquette_id: 43,
+      etiquette_nom: "Relance SCPI",
+      sort_date: 1_690_000_000,
+      sent_at: 1_690_000_000,
+    };
+    const items = buildContactRelationTimeline([emailEntry, second], [], []);
+    const emailItems = items.filter((i) => i.kind === "email");
+    expect(emailItems).toHaveLength(2);
+    expect(emailItems[0].key).toBe(exchangeEntryKey(emailEntry));
+    expect(emailItems[1].key).toBe(exchangeEntryKey(second));
+    expect(emailItems[0].key).not.toBe(emailItems[1].key);
   });
 
   it("intègre investissements, documents et tâches, triés par date décroissante", () => {

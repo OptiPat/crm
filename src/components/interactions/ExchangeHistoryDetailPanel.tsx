@@ -15,7 +15,7 @@ import {
   formatInteractionDateTime,
   getInteractionTypeLabel,
 } from "@/lib/interactions/interaction-display";
-import { ExternalLink, Mail, Pencil, Trash2, X } from "lucide-react";
+import { ExternalLink, Mail, Pencil, Trash2, X, Send } from "lucide-react";
 
 export function ExchangeHistoryDetailPanel({
   entry,
@@ -24,6 +24,7 @@ export function ExchangeHistoryDetailPanel({
   onEdit,
   onDelete,
   onOpenContact,
+  onNavigateSuiviEnvois,
   onRefresh,
 }: {
   entry: ExchangeHistoryEntry;
@@ -32,6 +33,7 @@ export function ExchangeHistoryDetailPanel({
   onEdit?: () => void;
   onDelete?: () => void;
   onOpenContact?: () => void;
+  onNavigateSuiviEnvois?: () => void;
   onRefresh?: () => void;
 }) {
   const name = exchangeContactName(entry);
@@ -99,6 +101,18 @@ export function ExchangeHistoryDetailPanel({
               Fiche contact
             </Button>
           )}
+          {isEmail && onNavigateSuiviEnvois && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1"
+              onClick={onNavigateSuiviEnvois}
+            >
+              <Send className="h-4 w-4" />
+              Suivi → Envois
+            </Button>
+          )}
           {!isEmail && onEdit && (
             <Button
               type="button"
@@ -138,6 +152,11 @@ export function ExchangeHistoryDetailPanel({
                 </p>
               )}
               <p className="text-sm font-medium text-foreground">{templateLabel}</p>
+              {entry.etiquette_nom?.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Campagne : {entry.etiquette_nom.trim()}
+                </p>
+              )}
               {sentSubject && (
                 <p className="text-xs text-muted-foreground">
                   Objet envoyé : {sentSubject}

@@ -4,10 +4,16 @@ import {
   interactionContactName,
 } from "@/lib/interactions/interaction-display";
 
-/** Clé stable après fusion « un fil email par contact ». */
+/** Clé stable : une ligne par campagne (`contact_etiquette`), pas par contact. */
 export function exchangeEntryKey(entry: ExchangeHistoryEntry): string {
   if (isEmailCampaignEntry(entry)) {
-    return `email-contact-${entry.contact_id}`;
+    if (entry.contact_etiquette_id != null && entry.contact_etiquette_id > 0) {
+      return `email-ce-${entry.contact_etiquette_id}`;
+    }
+    if (entry.interaction_id != null) {
+      return `email-legacy-${entry.interaction_id}`;
+    }
+    return `email-contact-${entry.contact_id}-${entry.sort_date}`;
   }
   return `manual-${entry.interaction_id ?? `${entry.contact_id}-${entry.sort_date}`}`;
 }
@@ -406,9 +412,22 @@ export async function loadExchangeHistory(
   };
 
   if (contactId) {
+    const { isLegacyCampaignInteraction } = await import(
+      "@/lib/interactions/contact-relation-timeline"
+    );
     const { nom, prenom } = contactNamesFromTimeline();
+    const timelineEntries = Array.from(byKey.values());
     const legacyRows = await getInteractionsByContact(contactId);
     for (const row of legacyRows) {
+      if (isLegacyCampaignInteraction(row)) {
+        const dup = timelineEntries.some(
+          (e) =>
+            isEmailCampaignEntry(e) &&
+            (e.sent_at === row.date_interaction ||
+              e.email_reponse_at === row.date_interaction)
+        );
+        if (dup) continue;
+      }
       const entry = interactionToExchangeEntry({
         id: row.id,
         contact_id: row.contact_id,
@@ -425,8 +444,12 @@ export async function loadExchangeHistory(
     }
   }
 
-  const merged = mergeEmailEntriesByContact(Array.from(byKey.values()));
-  return contactId == null ? truncateExchangeHistory(merged, maxEntries) : merged;
+  const sorted = Array.from(byKey.values()).sort(
+    (a, b) => b.sort_date - a.sort_date
+  );
+  return contactId == null
+    ? truncateExchangeHistory(sorted, maxEntries)
+    : sorted;
 }
 
 export function manualEntryToInteraction(

@@ -1,6 +1,9 @@
 import { useEffect, useRef } from "react";
 import { subscribeInteractionsChanged } from "@/lib/interactions/interaction-events";
-import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import {
+  subscribeEtiquettesChanged,
+  subscribeRelationChanged,
+} from "@/lib/etiquettes/etiquette-events";
 
 const DEBOUNCE_MS = 120;
 
@@ -23,6 +26,7 @@ export function useInteractionsAutoRefresh(
 
     const unsubInteractions = subscribeInteractionsChanged(schedule);
     const unsubRelation = subscribeRelationChanged(schedule);
+    const unsubEtiquettes = subscribeEtiquettesChanged(schedule);
 
     const onWake = () => {
       if (!document.hidden) void onRefreshRef.current();
@@ -33,6 +37,7 @@ export function useInteractionsAutoRefresh(
     return () => {
       unsubInteractions();
       unsubRelation();
+      unsubEtiquettes();
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
       if (debounceRef.current != null) window.clearTimeout(debounceRef.current);

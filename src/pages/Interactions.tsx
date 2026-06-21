@@ -1,32 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Plus, Search, X } from "lucide-react";
 import { useInteractionsAutoRefresh } from "@/hooks/useInteractionsAutoRefresh";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { toast } from "sonner";
 import {
   deleteInteraction,
-  INTERACTION_TYPES,
   type ExchangeHistoryEntry,
   type InteractionWithContact,
 } from "@/lib/api/tauri-interactions";
 import { InteractionForm } from "@/components/interactions/InteractionForm";
-import { ExchangeHistoryListRow } from "@/components/interactions/ExchangeHistoryListRow";
 import { ExchangeHistoryDetailPanel } from "@/components/interactions/ExchangeHistoryDetailPanel";
 import { InteractionsPageHeader } from "@/components/interactions/InteractionsPageHeader";
+import {
+  InteractionsActiveFilterChips,
+  InteractionsContactFilterBanner,
+  InteractionsEmptyState,
+  InteractionsGroupedList,
+  InteractionsPageHelp,
+  InteractionsStatCards,
+  InteractionsToolbar,
+} from "@/components/interactions/interactions-page-ui";
 import {
   consumeInteractionsContactFocus,
   setInteractionsContactFocus,
 } from "@/lib/navigation/interactions-navigation";
+import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import {
   exchangeContactName,
@@ -35,7 +34,21 @@ import {
   loadExchangeHistory,
   manualEntryToInteraction,
 } from "@/lib/interactions/exchange-history-display";
-import { getInteractionTypeLabel } from "@/lib/interactions/interaction-display";
+import { getEtiquetteEmailQueue } from "@/lib/api/tauri-etiquettes";
+import {
+  buildAwaitingResponseIndex,
+  countExchangesByStat,
+  filterExchangeHistoryList,
+  type AwaitingResponseIndex,
+  type ExchangeStatFilter,
+} from "@/lib/interactions/exchange-history-filters";
+import { groupExchangeHistoryByYearMonth } from "@/lib/interactions/exchange-history-groups";
+import {
+  loadInteractionsPagePreferences,
+  saveInteractionsPagePreferences,
+  type InteractionsPagePreferences,
+} from "@/lib/interactions/interactions-page-preferences";
+import type { ExchangeKindFilter } from "@/lib/interactions/exchange-history-filters";
 import { cn } from "@/lib/utils";
 import {
   SplitDetailLayout,
@@ -45,7 +58,6 @@ import {
   splitCardContentClassName,
   splitCardHeaderClassName,
 } from "@/components/layout";
-import { textMatchesSearch } from "@/lib/search-utils";
 
 interface InteractionsProps {
   currentPage?: string;
@@ -54,11 +66,15 @@ interface InteractionsProps {
 }
 
 export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
+  const [prefs, setPrefs] = useState<InteractionsPagePreferences>(() =>
+    loadInteractionsPagePreferences()
+  );
   const [items, setItems] = useState<ExchangeHistoryEntry[]>([]);
+  const [awaitingResponse, setAwaitingResponse] = useState<AwaitingResponseIndex>(() => ({
+    keys: new Set(),
+  }));
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("ALL");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<InteractionWithContact | null>(null);
   const [selectedEntry, setSelectedEntry] = useState<ExchangeHistoryEntry | null>(null);
@@ -72,14 +88,26 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
   const isWideLayout = useMediaQuery("(min-width: 1024px)");
   const showSplit = isWideLayout && selectedEntry != null;
 
+  const updatePrefs = useCallback((patch: Partial<InteractionsPagePreferences>) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      saveInteractionsPagePreferences(next);
+      return next;
+    });
+  }, []);
+
   const load = useCallback(async () => {
     setLoadError(null);
     try {
       const contactId = contactFilterIdRef.current;
-      const data = await loadExchangeHistory(
-        contactId != null ? { contactId } : { maxEntries: historyLimit }
-      );
+      const [data, sentQueue] = await Promise.all([
+        loadExchangeHistory(
+          contactId != null ? { contactId } : { maxEntries: historyLimit }
+        ),
+        getEtiquetteEmailQueue("sent"),
+      ]);
       setItems(data);
+      setAwaitingResponse(buildAwaitingResponseIndex(sentQueue, contactId));
       setHistoryTruncated(
         contactId == null && data.length >= historyLimit && historyLimit > 0
       );
@@ -91,6 +119,7 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
       console.error(error);
       setLoadError(String(error));
       setItems([]);
+      setAwaitingResponse({ keys: new Set() });
       setSelectedEntry(null);
       setHistoryTruncated(false);
     } finally {
@@ -135,37 +164,31 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
     }
   };
 
-  const filtered = useMemo(() => {
-    return items.filter((item) => {
-      if (contactFilterId != null && item.contact_id !== contactFilterId) {
-        return false;
-      }
-      const typeValue = isEmailCampaignEntry(item)
-        ? "EMAIL"
-        : item.type_interaction ?? "AUTRE";
-      const matchesType = typeFilter === "ALL" || typeValue === typeFilter;
-      const matchesSearch = textMatchesSearch(
-        searchQuery,
-        item.contact_nom,
-        item.contact_prenom,
-        item.sujet,
-        item.contenu,
-        item.sent_subject,
-        item.sent_template_nom,
-        item.email_reponse_body,
-        item.etiquette_nom,
-        getInteractionTypeLabel(typeValue)
-      );
-      return matchesType && matchesSearch;
-    });
-  }, [items, searchQuery, typeFilter, contactFilterId]);
+  const filtered = useMemo(
+    () =>
+      filterExchangeHistoryList(
+        items,
+        {
+          searchQuery: prefs.searchQuery,
+          typeFilter: prefs.typeFilter,
+          kindFilter: prefs.kindFilter,
+          statFilter: prefs.statFilter,
+          contactFilterId,
+        },
+        awaitingResponse
+      ),
+    [items, prefs, contactFilterId, awaitingResponse]
+  );
 
-  useEffect(() => {
-    if (loading || contactFilterId == null) return;
-    if (items.length > 0 && filtered.length === 0) {
-      setContactFilterId(null);
-    }
-  }, [loading, contactFilterId, items.length, filtered.length]);
+  const statCounts = useMemo(
+    () => countExchangesByStat(items, awaitingResponse),
+    [items, awaitingResponse]
+  );
+
+  const grouped = useMemo(
+    () => groupExchangeHistoryByYearMonth(filtered),
+    [filtered]
+  );
 
   const contactFilterLabel = useMemo(() => {
     if (contactFilterId == null) return null;
@@ -175,6 +198,12 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
     }
     return `Contact #${contactFilterId}`;
   }, [items, contactFilterId]);
+
+  const emptyVariant = useMemo(() => {
+    if (items.length === 0) return "empty" as const;
+    if (contactFilterId != null && filtered.length === 0) return "contact_empty" as const;
+    return "filtered" as const;
+  }, [items.length, contactFilterId, filtered.length]);
 
   const openEntry = (entry: ExchangeHistoryEntry) => {
     setSelectedEntry(entry);
@@ -227,6 +256,45 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
     setShowForm(true);
   };
 
+  const clearUiFilters = () => {
+    updatePrefs({
+      searchQuery: "",
+      typeFilter: "ALL",
+      kindFilter: "all",
+      statFilter: null,
+    });
+  };
+
+  const handleStatFilterChange = (filter: ExchangeStatFilter | null) => {
+    if (filter === "email_campagne") {
+      updatePrefs({ statFilter: filter, kindFilter: "email_campagne" });
+      return;
+    }
+    if (filter === "manual") {
+      updatePrefs({ statFilter: filter, kindFilter: "manual" });
+      return;
+    }
+    updatePrefs({ statFilter: filter });
+  };
+
+  const detailPanelProps = (entry: ExchangeHistoryEntry) => ({
+    entry,
+    onClose: () => setSelectedEntry(null),
+    onEdit: !isEmailCampaignEntry(entry) ? () => startEdit(entry) : undefined,
+    onDelete: !isEmailCampaignEntry(entry)
+      ? () => void handleDelete(entry)
+      : undefined,
+    onOpenContact:
+      onOpenContact || onNavigate
+        ? () => openContact(entry.contact_id)
+        : undefined,
+    onNavigateSuiviEnvois:
+      onNavigate && isEmailCampaignEntry(entry)
+        ? () => navigateToSuivi(onNavigate, "envois")
+        : undefined,
+    onRefresh: () => void load(),
+  });
+
   return (
     <div
       className={cn(
@@ -237,6 +305,14 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
       <InteractionsPageHeader
         filteredCount={filtered.length}
         onNewInteraction={startCreate}
+      />
+
+      <InteractionsPageHelp />
+
+      <InteractionsStatCards
+        counts={statCounts}
+        activeFilter={prefs.statFilter}
+        onFilterChange={handleStatFilterChange}
       />
 
       <Card className={splitCardClassName(showSplit, "min-w-0 border-border/70 shadow-sm")}>
@@ -262,74 +338,43 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
               </Button>
             </div>
           ) : null}
-          {contactFilterId != null && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2 text-sm">
-              <span>
-                Filtre contact : <strong>{contactFilterLabel}</strong>
-              </span>
-              <div className="flex gap-2">
-                {(onOpenContact || onNavigate) && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openContact(contactFilterId)}
-                  >
-                    Fiche contact
-                  </Button>
-                )}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setContactFilterId(null);
-                    setSearchQuery("");
-                    setSelectedEntry(null);
-                  }}
-                >
-                  Voir tout le journal
-                </Button>
-              </div>
-            </div>
+
+          {contactFilterId != null && contactFilterLabel && (
+            <InteractionsContactFilterBanner
+              label={contactFilterLabel}
+              onOpenContact={
+                onOpenContact || onNavigate
+                  ? () => openContact(contactFilterId)
+                  : undefined
+              }
+              onClear={() => {
+                setContactFilterId(null);
+                setSelectedEntry(null);
+              }}
+            />
           )}
 
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Rechercher contact, sujet, contenu…"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
-                  onClick={() => setSearchQuery("")}
-                  aria-label="Effacer la recherche"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-full sm:w-48">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">Tous les types</SelectItem>
-                {INTERACTION_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <InteractionsToolbar
+            searchQuery={prefs.searchQuery}
+            onSearchChange={(searchQuery) => updatePrefs({ searchQuery })}
+            typeFilter={prefs.typeFilter}
+            onTypeChange={(typeFilter) => updatePrefs({ typeFilter })}
+            kindFilter={prefs.kindFilter}
+            onKindChange={(kindFilter: ExchangeKindFilter) =>
+              updatePrefs({ kindFilter, statFilter: null })
+            }
+          />
+
+          <InteractionsActiveFilterChips
+            statFilter={prefs.statFilter}
+            kindFilter={prefs.kindFilter}
+            searchQuery={prefs.searchQuery}
+            typeFilter={prefs.typeFilter}
+            onClearStat={() => updatePrefs({ statFilter: null })}
+            onClearKind={() => updatePrefs({ kindFilter: "all" })}
+            onClearSearch={() => updatePrefs({ searchQuery: "" })}
+            onClearType={() => updatePrefs({ typeFilter: "ALL" })}
+          />
 
           {loadError ? (
             <div className="text-center py-8 space-y-3">
@@ -345,81 +390,52 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
               ))}
             </div>
           ) : filtered.length === 0 ? (
-            <div className="text-center py-12 rounded-xl border border-dashed border-border/80 bg-muted/15">
-              <p className="text-muted-foreground mb-4">
-                {items.length === 0
-                  ? "Aucune interaction enregistrée"
-                  : "Aucun résultat pour cette recherche"}
-              </p>
-              <Button onClick={startCreate}>
-                <Plus className="h-4 w-4 mr-2" />
-                Nouvelle interaction
-              </Button>
-            </div>
+            <InteractionsEmptyState
+              variant={emptyVariant}
+              onNewInteraction={startCreate}
+              onClearFilters={emptyVariant === "filtered" ? clearUiFilters : undefined}
+            />
           ) : (
             <div className={cn(showSplit && "min-h-0 flex-1 overflow-hidden")}>
-            <SplitDetailLayout
-              showSplit={showSplit}
-              nested
-              list={
-                <SplitListColumn
-                  showSplit={showSplit}
-                  nested
-                  showListLabel
-                  listLabel={
-                    <>
-                      Échanges ({filtered.length})
-                      {!showSplit && isWideLayout && (
-                        <span className="font-normal normal-case text-muted-foreground/80">
-                          {" "}
-                          — cliquez une ligne pour le détail
-                        </span>
-                      )}
-                    </>
-                  }
-                >
-                {filtered.map((entry) => (
-                  <ExchangeHistoryListRow
-                    key={exchangeEntryKey(entry)}
-                    entry={entry}
-                    compact={showSplit}
-                    selected={
-                      selectedEntry != null &&
-                      exchangeEntryKey(selectedEntry) === exchangeEntryKey(entry)
+              <SplitDetailLayout
+                showSplit={showSplit}
+                nested
+                list={
+                  <SplitListColumn
+                    showSplit={showSplit}
+                    nested
+                    showListLabel
+                    listLabel={
+                      <>
+                        Échanges ({filtered.length})
+                        {!showSplit && isWideLayout && (
+                          <span className="font-normal normal-case text-muted-foreground/80">
+                            {" "}
+                            — cliquez une ligne pour le détail
+                          </span>
+                        )}
+                      </>
                     }
-                    onClick={() => openEntry(entry)}
-                  />
-                ))}
-                </SplitListColumn>
-              }
-              detail={
-                showSplit && selectedEntry ? (
-                  <SplitDetailPane nested>
-                    <ExchangeHistoryDetailPanel
-                      embedded
-                      entry={selectedEntry}
-                      onClose={() => setSelectedEntry(null)}
-                      onEdit={
-                        !isEmailCampaignEntry(selectedEntry)
-                          ? () => startEdit(selectedEntry)
-                          : undefined
-                      }
-                      onDelete={
-                        !isEmailCampaignEntry(selectedEntry)
-                          ? () => void handleDelete(selectedEntry)
-                          : undefined
-                      }
-                      onOpenContact={
-                        onOpenContact || onNavigate
-                          ? () => openContact(selectedEntry.contact_id)
-                          : undefined
-                      }
-                      onRefresh={() => void load()}
+                  >
+                    <InteractionsGroupedList
+                      groups={grouped}
+                      showSplit={showSplit}
+                      selectedEntry={selectedEntry}
+                      onSelect={openEntry}
                     />
-                  </SplitDetailPane>
-                ) : null
-              }
-            />
+                  </SplitListColumn>
+                }
+                detail={
+                  showSplit && selectedEntry ? (
+                    <SplitDetailPane nested>
+                      <ExchangeHistoryDetailPanel
+                        embedded
+                        {...detailPanelProps(selectedEntry)}
+                      />
+                    </SplitDetailPane>
+                  ) : null
+                }
+              />
             </div>
           )}
         </CardContent>
@@ -427,26 +443,7 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
 
       {!isWideLayout && selectedEntry && (
         <div id="interaction-detail-panel">
-          <ExchangeHistoryDetailPanel
-            entry={selectedEntry}
-            onClose={() => setSelectedEntry(null)}
-            onEdit={
-              !isEmailCampaignEntry(selectedEntry)
-                ? () => startEdit(selectedEntry)
-                : undefined
-            }
-            onDelete={
-              !isEmailCampaignEntry(selectedEntry)
-                ? () => void handleDelete(selectedEntry)
-                : undefined
-            }
-            onOpenContact={
-              onOpenContact || onNavigate
-                ? () => openContact(selectedEntry.contact_id)
-                : undefined
-            }
-            onRefresh={() => void load()}
-          />
+          <ExchangeHistoryDetailPanel {...detailPanelProps(selectedEntry)} />
         </div>
       )}
 
@@ -457,6 +454,7 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
         defaultContactId={
           contactFilterId ?? selectedEntry?.contact_id ?? undefined
         }
+        onSuccess={() => void load()}
       />
     </div>
   );
