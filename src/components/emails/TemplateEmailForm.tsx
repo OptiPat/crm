@@ -850,6 +850,7 @@ export function TemplateEmailForm({
                         sujet={formData.sujet}
                         corps={formData.corps}
                         corpsHtml={corpsHtml}
+                        templateNom={formData.nom}
                         templateVariables={formData.variables}
                         cgp={cgp}
                         agendaLinkId={formData.agenda_link_id}
@@ -1007,6 +1008,7 @@ export function TemplateEmailForm({
                 sujet={formData.sujet}
                 corps={formData.corps}
                 corpsHtml={corpsHtml}
+                templateNom={formData.nom}
                 templateVariables={formData.variables}
                 cgp={cgp}
                 agendaLinkId={formData.agenda_link_id}

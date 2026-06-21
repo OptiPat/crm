@@ -5,6 +5,7 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import {
   isContactTu,
+  normalizeContactRegistre,
   pickTemplateContentForRegistre,
   type ContactRegistre,
 } from "@/lib/emails/template-email-formality";
@@ -24,6 +25,7 @@ type TemplateEmailPreviewPanelProps = {
   cgp: CgpConfig | null;
   agendaLinkId?: string | null;
   templateVariables?: string | null;
+  templateNom?: string | null;
   /** HTML live de l’éditeur (évite le décalage avec `variables` JSON). */
   corpsHtml?: string | null;
   contact?: Pick<Contact, "prenom" | "nom" | "email" | "telephone" | "registre"> | null;
@@ -42,6 +44,7 @@ export function TemplateEmailPreviewPanel({
   cgp,
   agendaLinkId,
   templateVariables,
+  templateNom,
   corpsHtml,
   contact,
   tutoiement,
@@ -83,6 +86,10 @@ export function TemplateEmailPreviewPanel({
   const effectiveHtml =
     useTuVariant && tutoiement?.corpsHtml?.trim() ? tutoiement.corpsHtml : corpsHtml;
 
+  const previewRegistreEffective: ContactRegistre = normalizeContactRegistre(
+    contact?.registre ?? previewRegistre
+  );
+
   const preview = useMemo(
     () =>
       renderTemplatePreview(
@@ -92,9 +99,20 @@ export function TemplateEmailPreviewPanel({
         cgp,
         agendaLinkId,
         mergedVariables,
-        effectiveHtml
+        effectiveHtml,
+        { templateNom, registre: previewRegistreEffective }
       ),
-    [effective.sujet, effective.corps, sample, cgp, agendaLinkId, mergedVariables, effectiveHtml]
+    [
+      effective.sujet,
+      effective.corps,
+      sample,
+      cgp,
+      agendaLinkId,
+      mergedVariables,
+      effectiveHtml,
+      templateNom,
+      previewRegistreEffective,
+    ]
   );
 
   const handleSendTest = async () => {
@@ -116,6 +134,8 @@ export function TemplateEmailPreviewPanel({
         agendaLinkId,
         cgp,
         contact: sample,
+        templateNom,
+        registre: previewRegistreEffective,
       });
       toast.success(
         preview.body_html

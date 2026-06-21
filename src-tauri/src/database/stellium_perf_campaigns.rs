@@ -689,8 +689,44 @@ fn stellium_line_format_is_legacy(plain: &str) -> bool {
         || s.contains("vous avez")
 }
 
+fn fix_stellium_tu_corps_plain(corps: &str) -> String {
+    let mut s = corps.to_string();
+    s = s.replace("{{perf_detail_html_tu}}_tu", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail_tu}}_tu", "{{perf_detail_tu}}");
+    s = s.replace("{{perf_detail_html}}_tu", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail}}_tu", "{{perf_detail_tu}}");
+    s = s.replace("{{perf_resume_html}}_tu", "{{perf_resume_html_tu}}");
+    s = s.replace("{{perf_resume}}_tu", "{{perf_resume_tu}}");
+    s = s.replace("{{perf_resume_tu}}", "{{perf_detail_tu}}");
+    s = s.replace("{{perf_resume}}", "{{perf_detail_tu}}");
+    s = s.replace("{{perf_detail_html_tu}}", "{{PERF_DETAIL_HTML_TU}}");
+    s = s.replace("{{perf_detail_html}}", "{{perf_detail_tu}}");
+    s = s.replace("{{PERF_DETAIL_HTML_TU}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail_tu}}", "{{PERF_DETAIL_TU}}");
+    s = s.replace("{{perf_detail}}", "{{perf_detail_tu}}");
+    s = s.replace("{{PERF_DETAIL_TU}}", "{{perf_detail_tu}}");
+    s
+}
+
+fn fix_stellium_vous_corps_plain(corps: &str) -> String {
+    let mut s = corps.to_string();
+    s = s.replace("{{perf_detail_html_tu}}", "{{PERF_DETAIL_SLOT}}");
+    s = s.replace("{{perf_detail_tu}}", "{{perf_detail}}");
+    s = s.replace("{{perf_detail_html}}_tu", "{{perf_detail}}");
+    s = s.replace("{{perf_detail}}_tu", "{{perf_detail}}");
+    s = s.replace("{{perf_resume_html_tu}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_resume_html}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_resume_tu}}", "{{perf_detail}}");
+    s = s.replace("{{perf_resume}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_intro_tu}}", "{{perf_intro_vous}}");
+    s = s.replace("{{PERF_DETAIL_SLOT}}", "{{perf_detail}}");
+    s
+}
+
 fn fix_stellium_tu_corps_html(corps_html: &str) -> String {
     let mut s = corps_html.to_string();
+    s = s.replace("{{perf_detail_html_tu}}_tu", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail_tu}}_tu", "{{perf_detail_html_tu}}");
     s = s.replace("{{perf_detail_html}}_tu", "{{perf_detail_html_tu}}");
     s = s.replace("{{perf_detail}}_tu", "{{perf_detail_html_tu}}");
     s = s.replace("{{perf_detail_html_tu}}", "{{PERF_DETAIL_HTML_TU_SLOT}}");
@@ -951,16 +987,17 @@ impl Database {
             stellium_template_content_preserved(vous_vars.as_deref(), &vous_sujet, &vous_corps, false);
         let any_preserved = tu_preserved || vous_preserved;
 
-        let tu_id = if let Some((id, _tu_sujet, _tu_corps, tu_vars)) = tu_row {
+        let tu_id = if let Some((id, _tu_sujet, tu_corps, tu_vars)) = tu_row {
             if any_preserved {
                 let merged = merge_stellium_template_variables(
                     tu_vars.as_deref(),
                     STELLIUM_TU_CORPS_HTML,
                     true,
                 );
+                let fixed_corps = fix_stellium_tu_corps_plain(&tu_corps);
                 self.conn.execute(
-                    "UPDATE templates_email SET variables = ?1, updated_at = unixepoch() WHERE id = ?2",
-                    params![merged, id],
+                    "UPDATE templates_email SET variables = ?1, corps = ?2, updated_at = unixepoch() WHERE id = ?3",
+                    params![merged, fixed_corps, id],
                 )?;
             } else if stellium_template_needs_upgrade(tu_vars.as_deref()) {
                 self.conn.execute(
@@ -995,9 +1032,10 @@ impl Database {
                 STELLIUM_VOUS_CORPS_HTML,
                 false,
             );
+            let fixed_corps = fix_stellium_vous_corps_plain(&vous_corps);
             self.conn.execute(
-                "UPDATE templates_email SET variables = ?1, updated_at = unixepoch() WHERE id = ?2",
-                params![merged, vous_id],
+                "UPDATE templates_email SET variables = ?1, corps = ?2, updated_at = unixepoch() WHERE id = ?3",
+                params![merged, fixed_corps, vous_id],
             )?;
         } else if stellium_template_needs_upgrade(vous_vars.as_deref()) {
             self.conn.execute(
@@ -1021,6 +1059,83 @@ impl Database {
                 )?;
             }
         }
+
+        self.reconcile_stellium_tutoiement_link(vous_id)?;
+        if let Some(tu_id) = self.stellium_tu_template_id()? {
+            self.apply_stellium_tu_template_fixes(tu_id)?;
+        }
+        self.apply_stellium_vous_template_fixes(vous_id)?;
+        Ok(())
+    }
+
+    fn stellium_tu_template_id(&self) -> Result<Option<i64>> {
+        self.conn
+            .query_row(
+                "SELECT id FROM templates_email WHERE nom = ?1",
+                params![STELLIUM_PERF_TEMPLATE_TU_NOM],
+                |row| row.get(0),
+            )
+            .optional()
+    }
+
+    fn reconcile_stellium_tutoiement_link(&self, vous_id: i64) -> Result<()> {
+        let Some(tu_id) = self.stellium_tu_template_id()? else {
+            return Ok(());
+        };
+        let current: Option<i64> = self
+            .conn
+            .query_row(
+                "SELECT tutoiement_template_id FROM templates_email WHERE id = ?1",
+                params![vous_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .flatten();
+        if current != Some(tu_id) {
+            self.conn.execute(
+                "UPDATE templates_email SET tutoiement_template_id = ?1, updated_at = unixepoch()
+                 WHERE id = ?2",
+                params![tu_id, vous_id],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn apply_stellium_tu_template_fixes(&self, tu_id: i64) -> Result<()> {
+        let (corps, vars): (String, Option<String>) = self.conn.query_row(
+            "SELECT corps, variables FROM templates_email WHERE id = ?1",
+            params![tu_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let fixed_corps = fix_stellium_tu_corps_plain(&corps);
+        let merged = merge_stellium_template_variables(
+            vars.as_deref(),
+            STELLIUM_TU_CORPS_HTML,
+            true,
+        );
+        self.conn.execute(
+            "UPDATE templates_email SET corps = ?1, variables = ?2, updated_at = unixepoch() WHERE id = ?3",
+            params![fixed_corps, merged, tu_id],
+        )?;
+        Ok(())
+    }
+
+    fn apply_stellium_vous_template_fixes(&self, vous_id: i64) -> Result<()> {
+        let (corps, vars): (String, Option<String>) = self.conn.query_row(
+            "SELECT corps, variables FROM templates_email WHERE id = ?1",
+            params![vous_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
+        let fixed_corps = fix_stellium_vous_corps_plain(&corps);
+        let merged = merge_stellium_template_variables(
+            vars.as_deref(),
+            STELLIUM_VOUS_CORPS_HTML,
+            false,
+        );
+        self.conn.execute(
+            "UPDATE templates_email SET corps = ?1, variables = ?2, updated_at = unixepoch() WHERE id = ?3",
+            params![fixed_corps, merged, vous_id],
+        )?;
         Ok(())
     }
 
@@ -2638,5 +2753,13 @@ mod tests {
         let fixed = fix_stellium_tu_corps_html(raw);
         assert!(fixed.contains("{{perf_detail_html_tu}}"));
         assert!(!fixed.contains("{{perf_detail_tu}}"));
+    }
+
+    #[test]
+    fn fix_stellium_tu_corps_plain_repairs_orphan_suffix() {
+        let raw = "Bonjour {{prenom}},\n\n{{perf_intro_tu}}\n\n{{perf_detail}}_tu\n\nBonne journée.";
+        let fixed = fix_stellium_tu_corps_plain(raw);
+        assert!(fixed.contains("{{perf_detail_tu}}"));
+        assert!(!fixed.contains("}}_tu"));
     }
 }

@@ -248,4 +248,45 @@ describe("etiquette-email-preview", () => {
     expect(isScpiBulletinSendBlocked(base)).toBe(true);
     expect(getScpiBulletinSendBlockReason(base)).toContain("Digest périmé");
   });
+
+  it("répare un gabarit perf Stellium tu legacy ({{perf_detail}}_tu + vous)", () => {
+    const detailTu =
+      "Valeur actuelle : 362 585,54 €\nCe que tu as versé (Net de frais) : 348 874,80 €\nPerformance : +13 710,74 € soit +3,93 %";
+    const detailVous = detailTu.replace("tu as", "vous avez");
+    const item: EtiquetteEmailQueueItem = {
+      contact_etiquette_id: 1,
+      contact_id: 2,
+      contact_nom: "Dupont",
+      contact_prenom: "Luc",
+      contact_email: "luc@example.com",
+      contact_telephone: null,
+      contact_registre: "TU",
+      etiquette_id: 99,
+      etiquette_nom: "Modèle · Performance AV/PER Stellium",
+      etiquette_couleur: "#6366F1",
+      email_date_prevue: null,
+      email_date_envoi: null,
+      template_sujet: "Performance {{periode}}",
+      template_corps:
+        "Bonjour {{prenom}},\n\n{{perf_intro_tu}}\n\n{{perf_detail}}_tu\n\nBonne journée.",
+      template_agenda_link_id: null,
+      template_categorie: "NEWSLETTER",
+      template_variables: setTemplateCorpsHtmlInMeta(
+        null,
+        "<div>{{perf_intro_tu}}</div><div>{{perf_detail}}_tu</div>"
+      ),
+      campaign_variables: JSON.stringify({
+        perf_intro_tu: "Voici la performance de ton contrat au 20/06/2026 :",
+        perf_detail: detailVous,
+        perf_detail_tu: detailTu,
+        perf_detail_html_tu: "<ul><li>metrics tu</li></ul>",
+        encours: "362 585,54 €",
+      }),
+      queue_issue: null,
+    };
+    const rendered = renderEtiquetteEmailPreview(item, null);
+    expect(rendered.body).toContain("Ce que tu as versé");
+    expect(rendered.body).not.toContain("Ce que vous avez versé");
+    expect(rendered.body).not.toContain("_tu");
+  });
 });

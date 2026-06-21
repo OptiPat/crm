@@ -8,6 +8,116 @@ export function templateUsesStelliumPerfVariables(
   return STELLIUM_PERF_VAR_RE.test(hay);
 }
 
+/** Suffixes `}}_tu` orphelins — variante tu. */
+export function repairStelliumTuSuffixOrphans(text: string): string {
+  return text
+    .replace(/\{\{perf_detail_html_tu\}\}_tu/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail_tu\}\}_tu/g, "{{perf_detail_tu}}")
+    .replace(/\{\{perf_detail_html\}\}_tu/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail\}\}_tu/g, "{{perf_detail_tu}}")
+    .replace(/\{\{perf_resume_html\}\}_tu/g, "{{perf_resume_html_tu}}")
+    .replace(/\{\{perf_resume\}\}_tu/g, "{{perf_resume_tu}}");
+}
+
+/** Suffixes `}}_tu` orphelins — variante vous (mappe vers tokens vous). */
+export function repairStelliumVousSuffixOrphans(text: string): string {
+  return text
+    .replace(/\{\{perf_detail_html_tu\}\}_tu/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail_tu\}\}_tu/g, "{{perf_detail_tu}}")
+    .replace(/\{\{perf_detail_html\}\}_tu/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_detail\}\}_tu/g, "{{perf_detail}}")
+    .replace(/\{\{perf_resume_html\}\}_tu/g, "{{perf_resume_html}}")
+    .replace(/\{\{perf_resume\}\}_tu/g, "{{perf_resume}}");
+}
+
+/** @deprecated alias tu */
+export function repairStelliumPerfSuffixOrphans(text: string): string {
+  return repairStelliumTuSuffixOrphans(text);
+}
+
+/** Normalise un gabarit tu (variables *_tu / HTML tu). */
+export function repairStelliumPerfTemplateText(text: string): string {
+  return repairStelliumTuSuffixOrphans(text)
+    .replace(/\{\{perf_resume_html_tu\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_resume_html\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_resume_tu\}\}/g, "{{perf_detail_tu}}")
+    .replace(/\{\{perf_resume\}\}/g, "{{perf_detail_tu}}")
+    .replace(/\{\{perf_detail_html\}\}/g, "{{perf_detail_html_tu}}")
+    .replace(/\{\{perf_detail\}\}/g, "{{perf_detail_tu}}");
+}
+
+/** Normalise un gabarit vous. */
+export function repairStelliumVousTemplateText(text: string): string {
+  return repairStelliumVousSuffixOrphans(text)
+    .replace(/\{\{perf_detail_html_tu\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_detail_tu\}\}/g, "{{perf_detail}}")
+    .replace(/\{\{perf_resume_html_tu\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_resume_html\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_resume_tu\}\}/g, "{{perf_detail}}")
+    .replace(/\{\{perf_resume\}\}/g, "{{perf_detail_html}}")
+    .replace(/\{\{perf_intro_tu\}\}/g, "{{perf_intro_vous}}");
+}
+
+export function repairStelliumTemplateForRegistre(
+  text: string,
+  registre: string | null | undefined
+): string {
+  if ((registre ?? "VOUS").toUpperCase() === "TU") {
+    return repairStelliumPerfTemplateText(text);
+  }
+  return repairStelliumVousTemplateText(text);
+}
+
+/** Contact TU : alias vous → tu pour les anciens gabarits encore en {{perf_detail}}. */
+export function alignStelliumVarsForRegistre(
+  vars: Record<string, string>,
+  registre: string | null | undefined
+): Record<string, string> {
+  if ((registre ?? "VOUS").toUpperCase() !== "TU") return vars;
+  const perfDetailTu = vars.perf_detail_tu?.trim();
+  const perfDetailHtmlTu = vars.perf_detail_html_tu?.trim();
+  if (!perfDetailTu && !perfDetailHtmlTu) return vars;
+  return {
+    ...vars,
+    ...(perfDetailTu
+      ? {
+          perf_detail: perfDetailTu,
+          perf_resume: vars.perf_resume_tu?.trim() || perfDetailTu,
+        }
+      : {}),
+    ...(perfDetailHtmlTu
+      ? {
+          perf_detail_html: perfDetailHtmlTu,
+          perf_resume_html: vars.perf_resume_html_tu?.trim() || perfDetailHtmlTu,
+        }
+      : {}),
+    perf_intro_vous: vars.perf_intro_tu?.trim() || vars.perf_intro_vous,
+  };
+}
+
+export function shouldRepairStelliumPerfTemplate(
+  item: { etiquette_nom?: string | null },
+  ...parts: (string | null | undefined)[]
+): boolean {
+  return isStelliumPerfQueueItem(item) || templateUsesStelliumPerfVariables(...parts);
+}
+
+/** Filet après substitution (corps texte déjà envoyé / modèle legacy en base). */
+export function stripOrphanStelliumFormalityLines(text: string): string {
+  return text.replace(/^\s*_tu\s*$/gm, "").replace(/^\s*_vous\s*$/gm, "");
+}
+
+/** Retire `_tu` / `_vous` orphelins laissés dans le HTML rendu. */
+export function stripOrphanStelliumFormalityHtml(html: string): string {
+  return html
+    .replace(/<div[^>]*>\s*_tu\s*<\/div>/gi, "")
+    .replace(/<div[^>]*>\s*_vous\s*<\/div>/gi, "")
+    .replace(/(<\/div>)\s*_tu\s*(?=<)/gi, "$1")
+    .replace(/(<\/div>)\s*_vous\s*(?=<)/gi, "$1")
+    .replace(/>\s*_tu\s*</g, "><")
+    .replace(/>\s*_vous\s*</g, "><");
+}
+
 export function isStelliumPerfQueueItem(item: { etiquette_nom?: string | null }): boolean {
   return (item.etiquette_nom ?? "").includes("Performance AV/PER Stellium");
 }

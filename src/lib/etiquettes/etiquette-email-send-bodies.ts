@@ -1,6 +1,10 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { appendEmailSignature } from "@/lib/emails/email-signature";
 import {
+  stripOrphanStelliumFormalityHtml,
+  stripOrphanStelliumFormalityLines,
+} from "@/lib/emails/stellium-perf-preview-vars";
+import {
   buildTemplateSendBodies,
   htmlToPlainEmail,
   normalizeTemplateEmailHtmlLikeGmail,
@@ -13,8 +17,10 @@ export function buildEditedHtmlEmailSendBodies(
   cgp: CgpConfig | null
 ): { body: string; body_html: string } {
   const sanitized = sanitizeTemplateEmailHtml(bodyHtml.trim());
-  const normalized = normalizeTemplateEmailHtmlLikeGmail(sanitized);
-  const plainCore = htmlToPlainEmail(normalized);
+  const normalized = stripOrphanStelliumFormalityHtml(
+    normalizeTemplateEmailHtmlLikeGmail(sanitized)
+  );
+  const plainCore = stripOrphanStelliumFormalityLines(htmlToPlainEmail(normalized));
   const { body, body_html } = buildTemplateSendBodies(
     appendEmailSignature(plainCore, cgp?.email_signature),
     normalized,

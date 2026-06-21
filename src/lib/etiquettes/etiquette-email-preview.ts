@@ -20,7 +20,14 @@ import {
   parseScpiCampaignVariables,
   templateUsesScpiBulletinVariables,
 } from "@/lib/emails/scpi-bulletin-preview-vars";
-import { parseStelliumPerfCampaignVariables } from "@/lib/emails/stellium-perf-preview-vars";
+import {
+  alignStelliumVarsForRegistre,
+  parseStelliumPerfCampaignVariables,
+  repairStelliumTemplateForRegistre,
+  shouldRepairStelliumPerfTemplate,
+  stripOrphanStelliumFormalityHtml,
+  stripOrphanStelliumFormalityLines,
+} from "@/lib/emails/stellium-perf-preview-vars";
 import { isScpiDigestStale } from "@/lib/emails/scpi-digest-stale";
 import { getStelliumPerfSendBlockReason } from "@/lib/emails/stellium-perf-send-guard";
 
@@ -58,9 +65,24 @@ export function renderEtiquetteEmailPreview(
   item: EtiquetteEmailQueueItem,
   cgp: CgpConfig | null
 ): { subject: string; body: string; body_html: string | null } {
-  const vars = buildTemplateVariables(item, cgp);
+  const corpsHtmlStored = getTemplateCorpsHtml(item.template_variables);
+  const stelliumRepair = shouldRepairStelliumPerfTemplate(
+    item,
+    item.template_sujet,
+    item.template_corps,
+    corpsHtmlStored
+  );
+  const vars = alignStelliumVarsForRegistre(
+    buildTemplateVariables(item, cgp),
+    item.contact_registre
+  );
   const subject = replaceTemplateVariables(item.template_sujet, vars);
-  const bodyCore = replaceTemplateVariables(item.template_corps, vars);
+  const plainTemplate = stelliumRepair
+    ? repairStelliumTemplateForRegistre(item.template_corps, item.contact_registre)
+    : item.template_corps;
+  const bodyCore = stripOrphanStelliumFormalityLines(
+    replaceTemplateVariables(plainTemplate, vars)
+  );
   const body = appendEmailSignature(bodyCore, cgp?.email_signature);
 
   if (isNewsletterTemplate(item.template_categorie)) {
@@ -72,9 +94,15 @@ export function renderEtiquetteEmailPreview(
     }
   }
 
-  const corpsHtmlStored = getTemplateCorpsHtml(item.template_variables);
-  const bodyHtmlCore = corpsHtmlStored
-    ? prepareTemplateHtmlForSend(corpsHtmlStored, vars)
+  const htmlTemplate = corpsHtmlStored
+    ? stelliumRepair
+      ? repairStelliumTemplateForRegistre(corpsHtmlStored, item.contact_registre)
+      : corpsHtmlStored
+    : null;
+  const bodyHtmlCore = htmlTemplate
+    ? stripOrphanStelliumFormalityHtml(
+        prepareTemplateHtmlForSend(htmlTemplate, vars)
+      )
     : null;
   const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp, {
     htmlAlreadyNormalized: Boolean(bodyHtmlCore),

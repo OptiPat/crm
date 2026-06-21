@@ -1,6 +1,7 @@
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { sendEmail } from "@/lib/api/tauri-email";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import type { ContactRegistre } from "@/lib/emails/template-email-formality";
 import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import {
   renderTemplatePreview,
@@ -22,6 +23,8 @@ export async function sendTemplateTestToSelf(params: {
   agendaLinkId?: string | null;
   cgp: CgpConfig | null;
   contact?: TemplateTestSendContact | null;
+  templateNom?: string | null;
+  registre?: ContactRegistre | null;
 }): Promise<string> {
   const status = await getEmailConnectionStatus();
   if (!status.connected || !status.email?.trim()) {
@@ -42,7 +45,8 @@ export async function sendTemplateTestToSelf(params: {
     params.cgp,
     params.agendaLinkId,
     variables,
-    params.corpsHtml
+    params.corpsHtml,
+    { templateNom: params.templateNom, registre: params.registre }
   );
 
   const subject = preview.subject.trim()

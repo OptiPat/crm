@@ -23,8 +23,14 @@ import {
 } from "@/lib/emails/scpi-bulletin-preview-vars";
 import {
   buildStelliumPerfPreviewVariables,
+  alignStelliumVarsForRegistre,
+  repairStelliumTemplateForRegistre,
+  stripOrphanStelliumFormalityHtml,
+  stripOrphanStelliumFormalityLines,
   templateUsesStelliumPerfVariables,
 } from "@/lib/emails/stellium-perf-preview-vars";
+import { isStelliumPerfTemplateNom } from "@/lib/emails/stellium-template-meta";
+import type { ContactRegistre } from "@/lib/emails/template-email-formality";
 
 export type EmailTemplateCategory =
   | "RELANCE"
@@ -191,7 +197,11 @@ export function renderTemplatePreview(
   templateAgendaLinkId?: string | null,
   templateVariables?: string | null,
   /** HTML en cours d’édition (prioritaire sur `variables.corps_html`). */
-  corpsHtmlOverride?: string | null
+  corpsHtmlOverride?: string | null,
+  options?: {
+    templateNom?: string | null;
+    registre?: ContactRegistre | null;
+  }
 ): { subject: string; body: string; body_html: string | null } {
   const corpsHtmlStored =
     corpsHtmlOverride?.trim() || getTemplateCorpsHtml(templateVariables);
@@ -200,22 +210,36 @@ export function renderTemplatePreview(
     corps,
     corpsHtmlStored
   );
-  const usesStelliumPerf = templateUsesStelliumPerfVariables(
-    sujet,
-    corps,
-    corpsHtmlStored
+  const usesStelliumPerf =
+    isStelliumPerfTemplateNom(options?.templateNom ?? "") ||
+    templateUsesStelliumPerfVariables(sujet, corps, corpsHtmlStored);
+  const registre = options?.registre ?? "VOUS";
+  const vars = alignStelliumVarsForRegistre(
+    {
+      ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
+      ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
+      ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
+      ...(usesStelliumPerf ? buildStelliumPerfPreviewVariables() : {}),
+    },
+    registre
   );
-  const vars = {
-    ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
-    ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
-    ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
-    ...(usesStelliumPerf ? buildStelliumPerfPreviewVariables() : {}),
-  };
   const subject = replaceTemplateVariables(sujet, vars);
-  const plainCore = replaceTemplateVariables(corps, vars);
+  const plainTemplate = usesStelliumPerf
+    ? repairStelliumTemplateForRegistre(corps, registre)
+    : corps;
+  const plainCore = stripOrphanStelliumFormalityLines(
+    replaceTemplateVariables(plainTemplate, vars)
+  );
   const body = appendEmailSignature(plainCore, cgp?.email_signature);
-  const bodyHtmlCore = corpsHtmlStored
-    ? prepareTemplateHtmlForSend(corpsHtmlStored, vars)
+  const htmlSource = corpsHtmlStored
+    ? usesStelliumPerf
+      ? repairStelliumTemplateForRegistre(corpsHtmlStored, registre)
+      : corpsHtmlStored
+    : null;
+  const bodyHtmlCore = htmlSource
+    ? stripOrphanStelliumFormalityHtml(
+        prepareTemplateHtmlForSend(htmlSource, vars)
+      )
     : null;
   const { body_html } = buildTemplateSendBodies(body, bodyHtmlCore, cgp, {
     htmlAlreadyNormalized: Boolean(bodyHtmlCore),

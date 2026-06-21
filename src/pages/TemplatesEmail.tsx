@@ -556,6 +556,7 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
                   sujet={previewTemplate.sujet}
                   corps={previewTemplate.corps}
                   corpsHtml={getTemplateCorpsHtml(previewTemplate.variables)}
+                  templateNom={previewTemplate.nom}
                   templateVariables={previewTemplate.variables}
                   cgp={cgp}
                   agendaLinkId={previewTemplate.agenda_link_id}
