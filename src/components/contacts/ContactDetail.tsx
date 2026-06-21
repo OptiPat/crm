@@ -97,6 +97,7 @@ import { consumeOpenContactInvestissementFlag } from "@/lib/investissements/inve
 import { navigateToDocuments } from "@/lib/documents/documents-navigation";
 import { navigateToPrescripteurs } from "@/lib/navigation/prescripteurs-navigation";
 import { navigateToFamilles } from "@/lib/navigation/familles-navigation";
+import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -1035,6 +1036,17 @@ export function ContactDetail({
                     ? () => {
                         onOpenChange(false);
                         navigateToFamilles(onNavigate, {
+                          focusContactId: contact.id,
+                        });
+                      }
+                    : undefined
+                }
+                onViewFoyerPage={
+                  onNavigate && contact.id && contact.foyer_id != null
+                    ? () => {
+                        onOpenChange(false);
+                        navigateToFoyers(onNavigate, {
+                          foyerId: contact.foyer_id ?? undefined,
                           focusContactId: contact.id,
                         });
                       }

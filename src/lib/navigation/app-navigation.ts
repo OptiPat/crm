@@ -24,6 +24,7 @@ export type AppNavigationDetail =
   | { type: "documents"; contactId?: number }
   | { type: "prescripteurs"; rootId?: number; focusContactId?: number }
   | { type: "familles"; familleKey?: string; focusContactId?: number }
+  | { type: "foyers"; foyerId?: number; focusContactId?: number }
   | { type: "parametres"; section: SettingsSectionId; scrollToId?: string }
   | { type: "page"; page: string };
 

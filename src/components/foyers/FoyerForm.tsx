@@ -35,7 +35,7 @@ interface FoyerFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   foyer?: Foyer | null;
-  onSuccess: () => void;
+  onSuccess: (createdOrUpdatedFoyerId?: number) => void;
 }
 
 export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormProps) {
@@ -75,12 +75,12 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
     try {
       if (foyer) {
         await updateFoyer(foyer.id, formData);
-        // Synchroniser la fiscalité sur les fiches contacts des membres.
         await propagateFiscalToFoyerMembers(foyer.id, pickFiscal(formData));
+        onSuccess(foyer.id);
       } else {
-        await createFoyer(formData);
+        const created = await createFoyer(formData);
+        onSuccess(created.id);
       }
-      onSuccess();
       onOpenChange(false);
       // Réinitialiser le formulaire
       setFormData({

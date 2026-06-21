@@ -99,8 +99,8 @@ import {
   InvestissementMultiFilterSelect,
   INVESTISSEMENT_TYPE_FILTER_OPTIONS,
 } from "@/components/investissements/InvestissementMultiFilterSelect";
-import { stashOpenFoyerId } from "@/lib/foyers/foyer-navigation";
 import { navigateAppPage } from "@/lib/navigation/app-navigation";
+import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
@@ -242,9 +242,11 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
   };
 
   const openFoyerFromPicker = (foyerId: number) => {
-    stashOpenFoyerId(foyerId);
     if (onNavigate) {
-      navigateAppPage("investissements", onNavigate, "foyers");
+      navigateToFoyers(onNavigate, {
+        foyerId,
+        currentPage: "investissements",
+      });
     }
   };
 

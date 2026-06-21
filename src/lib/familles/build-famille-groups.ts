@@ -5,64 +5,9 @@ import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getRolePriority } from "@/lib/familles/famille-roles";
 import type {
   FamilleGroup,
-  InvestWithCommun,
   MemberWithInvestments,
 } from "@/lib/familles/famille-types";
-
-function getContactPatrimoine(
-  contact: Contact,
-  investissementsByContact: Record<number, Investissement[]>,
-  investissementsByFoyer: Record<number, Investissement[]>
-): {
-  investissements: InvestWithCommun[];
-  patrimoinePerso: number;
-  patrimoineCommun: number;
-  total: number;
-  avecMoiPerso: number;
-  avecMoiCommun: number;
-  avecMoiTotal: number;
-} {
-  const contactInvests: InvestWithCommun[] = (
-    investissementsByContact[contact.id] || []
-  ).map((inv) => ({ ...inv, isCommun: false }));
-
-  let foyerInvests: InvestWithCommun[] = [];
-  if (contact.foyer_id) {
-    const allFoyerInvests = investissementsByFoyer[contact.foyer_id] || [];
-    foyerInvests = allFoyerInvests
-      .filter((inv) => !inv.contact_id)
-      .map((inv) => ({ ...inv, isCommun: true }));
-  }
-
-  const allInvests = [...contactInvests, ...foyerInvests];
-  const patrimoinePerso = contactInvests.reduce(
-    (sum, inv) => sum + (inv.montant_initial || 0),
-    0
-  );
-  const patrimoineCommun = foyerInvests.reduce(
-    (sum, inv) => sum + (inv.montant_initial || 0),
-    0
-  );
-  const total = patrimoinePerso + patrimoineCommun;
-
-  const avecMoiPerso = contactInvests
-    .filter((inv) => inv.origine === "MON_CONSEIL")
-    .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-  const avecMoiCommun = foyerInvests
-    .filter((inv) => inv.origine === "MON_CONSEIL")
-    .reduce((sum, inv) => sum + (inv.montant_initial || 0), 0);
-  const avecMoiTotal = avecMoiPerso + avecMoiCommun;
-
-  return {
-    investissements: allInvests,
-    patrimoinePerso,
-    patrimoineCommun,
-    total,
-    avecMoiPerso,
-    avecMoiCommun,
-    avecMoiTotal,
-  };
-}
+import { getContactPatrimoine } from "@/lib/investissements/contact-patrimoine";
 
 function buildMembresWithInvests(
   membres: Contact[],

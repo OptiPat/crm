@@ -57,6 +57,7 @@ interface ContactDetailFoyerTabProps {
   onCreateFoyer: () => void;
   onViewPrescripteurNetwork?: () => void;
   onViewFamilleGroup?: () => void;
+  onViewFoyerPage?: () => void;
 }
 
 function FoyerMemberRow({
@@ -197,6 +198,7 @@ export function ContactDetailFoyerTab({
   onCreateFoyer,
   onViewPrescripteurNetwork,
   onViewFamilleGroup,
+  onViewFoyerPage,
 }: ContactDetailFoyerTabProps) {
   const allMembers = [contact, ...foyerMembers.filter((m) => m.id !== contact.id)];
 
@@ -240,6 +242,18 @@ export function ContactDetailFoyerTab({
                   <UserPlus className="h-4 w-4" />
                   Ajouter un membre
                 </Button>
+                {onViewFoyerPage && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5"
+                    onClick={onViewFoyerPage}
+                  >
+                    <Home className="h-4 w-4" />
+                    Voir dans Foyers
+                  </Button>
+                )}
               </div>
 
               <div>

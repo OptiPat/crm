@@ -18,6 +18,7 @@ type FoyerSummaryCardProps = {
   patrimoineAvecMoi?: number;
   selected?: boolean;
   compact?: boolean;
+  actionHint?: string;
   onClick: () => void;
 };
 
@@ -27,6 +28,7 @@ export function FoyerSummaryCard({
   patrimoineAvecMoi,
   selected = false,
   compact = false,
+  actionHint = "Voir les membres",
   onClick,
 }: FoyerSummaryCardProps) {
   const preview = membres.slice(0, compact ? 2 : 3);
@@ -127,6 +129,9 @@ export function FoyerSummaryCard({
               </span>
             )}
           </div>
+          {!compact && actionHint && (
+            <p className="text-[11px] text-primary/80 mt-1.5 font-medium">{actionHint}</p>
+          )}
         </div>
 
         <div className="shrink-0 text-right flex items-center gap-2">

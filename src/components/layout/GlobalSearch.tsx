@@ -22,6 +22,7 @@ import {
   navigateAppPage,
   requestOpenContact,
 } from "@/lib/navigation/app-navigation";
+import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import {
   getInvestissementsWithDetails,
@@ -221,7 +222,10 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
         sublabel: f.type_foyer || undefined,
         icon: House,
         onSelect: () => {
-          navigateAppPage(currentPage, onPageChange, "foyers");
+          navigateToFoyers(onPageChange, {
+            foyerId: f.id,
+            currentPage,
+          });
           close();
         },
       }));

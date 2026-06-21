@@ -1,74 +1,89 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Plus,
-  Users,
-  Home,
-  Filter,
-  ArrowLeft,
-  X,
-  Building2,
-} from "lucide-react";
+import { Plus, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { getAllFoyers, deleteFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { cleanupOrphanedData, deleteContact, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getContactsForFoyer } from "@/lib/foyers/foyer-utils";
-import { getAllInvestissements } from "@/lib/api/tauri-investissements";
-import { buildPatrimoineMaps } from "@/lib/investissements/bulk-patrimoine";
-import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
+import { getAllInvestissements, type Investissement } from "@/lib/api/tauri-investissements";
+import { buildPatrimoineMaps, indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
 import { FoyerForm } from "@/components/foyers/FoyerForm";
 import { FoyerDetail } from "@/components/foyers/FoyerDetail";
 import { FoyerSummaryCard } from "@/components/foyers/FoyerSummaryCard";
+import { FoyerMemberList } from "@/components/foyers/FoyerMemberList";
+import {
+  FoyersPageHelp,
+  FoyersStatCards,
+  FoyersToolbar,
+} from "@/components/foyers/foyers-page-ui";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
-import { StatCard } from "@/components/dashboard/StatCard";
-import { textMatchesSearch } from "@/lib/search-utils";
+import {
+  filterFoyerRowsByStat,
+  filterFoyerRowsByType,
+  findFoyerIdForContact,
+  searchFoyerRows,
+  sortFoyerRows,
+  type FoyerRow,
+} from "@/lib/foyers/foyers-search";
+import {
+  loadFoyersPagePreferences,
+  saveFoyersPagePreferences,
+  type FoyersPagePreferences,
+} from "@/lib/foyers/foyers-page-preferences";
+import { downloadFoyerMembersCsv } from "@/lib/foyers/foyers-export";
+import { buildFoyerMembersWithInvestments } from "@/lib/foyers/foyers-member-patrimoine";
+import {
+  consumeFoyersNavigationIntent,
+  type FoyersNavigationIntent,
+} from "@/lib/navigation/foyers-navigation";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
-import { peekOpenFoyerId, clearOpenFoyerId } from "@/lib/foyers/foyer-navigation";
+import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { cn } from "@/lib/utils";
-import {
-  SplitDetailLayout,
-  SplitDetailPane,
-  SplitDetailStack,
-  SplitListColumn,
-  ListSearchField,
-  splitCardClassName,
-  splitCardContentClassName,
-  splitCardHeaderClassName,
-} from "@/components/layout";
 
 type FoyersProps = {
   onNavigate?: (page: string) => void;
 };
 
 export function Foyers({ onNavigate }: FoyersProps) {
+  const [prefs, setPrefs] = useState<FoyersPagePreferences>(() =>
+    loadFoyersPagePreferences()
+  );
   const [foyers, setFoyers] = useState<Foyer[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [patrimoineParFoyer, setPatrimoineParFoyer] = useState<Record<number, number>>(
     {}
   );
+  const [investissementsByContact, setInvestissementsByContact] = useState<
+    Record<number, Investissement[]>
+  >({});
+  const [investissementsByFoyer, setInvestissementsByFoyer] = useState<
+    Record<number, Investissement[]>
+  >({});
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("ALL");
+  const [expandedFoyerId, setExpandedFoyerId] = useState<number | null>(
+    () => loadFoyersPagePreferences().expandedFoyerId
+  );
+  const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
+  const pendingFocusContactIdRef = useRef<number | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [selectedFoyerId, setSelectedFoyerId] = useState<number | null>(null);
+  const [showFoyerDetail, setShowFoyerDetail] = useState(false);
+  const [foyerDetailId, setFoyerDetailId] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showContactDetail, setShowContactDetail] = useState(false);
 
-  const isWideLayout = useMediaQuery("(min-width: 1024px)");
-  const showSplit =
-    isWideLayout && (selectedFoyerId != null || selectedContact != null);
+  const updatePrefs = useCallback((patch: Partial<FoyersPagePreferences>) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      saveFoyersPagePreferences(next);
+      return next;
+    });
+  }, []);
 
   const loadFoyers = useCallback(async () => {
     try {
@@ -80,6 +95,9 @@ export function Foyers({ onNavigate }: FoyersProps) {
       setContacts(contactsData);
 
       const allInv = await getAllInvestissements();
+      const indexed = indexInvestissementsByOwner(allInv);
+      setInvestissementsByContact(indexed.byContactId);
+      setInvestissementsByFoyer(indexed.byFoyerId);
       const maps = buildPatrimoineMaps(contactsData, foyersData, allInv);
       const patrimoines: Record<number, number> = {};
       for (const foyer of foyersData) {
@@ -94,12 +112,9 @@ export function Foyers({ onNavigate }: FoyersProps) {
         if (!prev?.id) return prev;
         return contactsData.find((c) => c.id === prev.id) ?? prev;
       });
-      setSelectedFoyerId((prev) => {
-        if (prev == null) return prev;
-        return foyersData.some((f) => f.id === prev) ? prev : null;
-      });
     } catch (error) {
       console.error("Error loading foyers:", error);
+      toast.error("Impossible de charger les foyers");
     } finally {
       setLoading(false);
     }
@@ -109,42 +124,130 @@ export function Foyers({ onNavigate }: FoyersProps) {
     void loadFoyers();
   }, [loadFoyers]);
 
+  useEventAutoRefresh(
+    loadFoyers,
+    subscribeContactsChanged,
+    subscribeFoyersChanged,
+    subscribeInvestissementsChanged
+  );
+
+  const foyerRows = useMemo((): FoyerRow[] => {
+    return foyers.map((foyer) => ({
+      foyer,
+      membres: getContactsForFoyer(contacts, foyer.id),
+      patrimoineAvecMoi: patrimoineParFoyer[foyer.id] ?? 0,
+    }));
+  }, [foyers, contacts, patrimoineParFoyer]);
+
+  const applyFoyersIntent = useCallback(
+    (intent: FoyersNavigationIntent) => {
+      const hasNavigationTarget =
+        intent.foyerId != null || intent.focusContactId != null;
+      const prefsPatch: Partial<FoyersPagePreferences> = {};
+      if (hasNavigationTarget) {
+        prefsPatch.searchQuery = "";
+        prefsPatch.statFilter = null;
+        prefsPatch.typeFilter = "ALL";
+      }
+      if (intent.foyerId != null) {
+        setExpandedFoyerId(intent.foyerId);
+        prefsPatch.expandedFoyerId = intent.foyerId;
+      }
+      if (Object.keys(prefsPatch).length > 0) {
+        updatePrefs(prefsPatch);
+      }
+      if (intent.focusContactId != null) {
+        setHighlightContactId(intent.focusContactId);
+        pendingFocusContactIdRef.current = intent.focusContactId;
+        setSelectedContact(null);
+        setShowContactDetail(false);
+      }
+    },
+    [updatePrefs]
+  );
+
   useEffect(() => {
-    if (loading) return;
-    const foyerId = peekOpenFoyerId();
-    if (foyerId != null && foyers.some((f) => f.id === foyerId)) {
-      setSelectedFoyerId(foyerId);
-      setSelectedContact(null);
-      clearOpenFoyerId();
+    applyFoyersIntent(consumeFoyersNavigationIntent());
+  }, [applyFoyersIntent]);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type === "foyers") {
+      applyFoyersIntent({
+        foyerId: detail.foyerId,
+        focusContactId: detail.focusContactId,
+      });
+      consumeFoyersNavigationIntent();
+      return;
     }
-  }, [loading, foyers]);
-
-  useEventAutoRefresh(loadFoyers, subscribeContactsChanged, subscribeFoyersChanged);
-
-  const membresParFoyerId = useMemo(() => {
-    const map = new Map<number, Contact[]>();
-    for (const foyer of foyers) {
-      map.set(foyer.id, getContactsForFoyer(contacts, foyer.id));
+    if (detail.type === "page" && detail.page === "foyers") {
+      applyFoyersIntent(consumeFoyersNavigationIntent());
     }
-    return map;
-  }, [foyers, contacts]);
+  }, [applyFoyersIntent]);
 
-  const filteredFoyers = useMemo(() => {
-    return foyers.filter((foyer) => {
-      const membres = membresParFoyerId.get(foyer.id) ?? [];
-      const membresText = membres.map((c) => `${c.prenom} ${c.nom}`).join(" ");
-      const matchesSearch = textMatchesSearch(searchQuery, foyer.nom, membresText);
-      const matchesType = typeFilter === "ALL" || foyer.type_foyer === typeFilter;
-      return matchesSearch && matchesType;
-    });
-  }, [foyers, membresParFoyerId, searchQuery, typeFilter]);
+  useEffect(() => {
+    if (pendingFocusContactIdRef.current == null || foyerRows.length === 0) return;
+    const focusId = pendingFocusContactIdRef.current;
+    pendingFocusContactIdRef.current = null;
+    const foyerId = findFoyerIdForContact(focusId, foyerRows);
+    if (foyerId != null) {
+      setExpandedFoyerId(foyerId);
+      updatePrefs({ expandedFoyerId: foyerId });
+    }
+  }, [foyerRows, updatePrefs]);
 
-  const selectedFoyer = useMemo(
+  const { filteredRows, searchFocusId } = useMemo(() => {
+    const statFilter = prefs.statFilter ?? null;
+    const byType = filterFoyerRowsByType(foyerRows, prefs.typeFilter);
+    const byStat = filterFoyerRowsByStat(byType, statFilter);
+    const searched = searchFoyerRows(prefs.searchQuery, byStat);
+    const sorted = sortFoyerRows(searched.rows, prefs.sortId);
+    return {
+      filteredRows: sorted,
+      searchFocusId: searched.focusContactId,
+    };
+  }, [foyerRows, prefs]);
+
+  const effectiveHighlightId = prefs.searchQuery.trim()
+    ? (searchFocusId ?? highlightContactId)
+    : (highlightContactId ?? searchFocusId);
+
+  useEffect(() => {
+    if (searchFocusId == null || !prefs.searchQuery.trim()) return;
+    const foyerId = findFoyerIdForContact(searchFocusId, foyerRows);
+    if (foyerId != null) {
+      setExpandedFoyerId(foyerId);
+      updatePrefs({ expandedFoyerId: foyerId });
+    }
+  }, [searchFocusId, prefs.searchQuery, foyerRows, updatePrefs]);
+
+  useEffect(() => {
+    if (loading || expandedFoyerId == null) return;
+    if (foyers.some((f) => f.id === expandedFoyerId)) return;
+    const saved = prefs.expandedFoyerId;
+    if (saved != null && foyers.some((f) => f.id === saved)) {
+      setExpandedFoyerId(saved);
+    } else {
+      setExpandedFoyerId(null);
+      updatePrefs({ expandedFoyerId: null });
+    }
+  }, [loading, foyers, expandedFoyerId, prefs.expandedFoyerId, updatePrefs]);
+
+  const expandedRow = useMemo(
     () =>
-      selectedFoyerId != null
-        ? (foyers.find((f) => f.id === selectedFoyerId) ?? null)
+      expandedFoyerId != null
+        ? (foyerRows.find((r) => r.foyer.id === expandedFoyerId) ?? null)
         : null,
-    [foyers, selectedFoyerId]
+    [foyerRows, expandedFoyerId]
+  );
+
+  const expandedIsVisible =
+    expandedFoyerId != null &&
+    filteredRows.some((r) => r.foyer.id === expandedFoyerId);
+
+  const foyerDetailTarget = useMemo(
+    () =>
+      foyerDetailId != null ? (foyers.find((f) => f.id === foyerDetailId) ?? null) : null,
+    [foyers, foyerDetailId]
   );
 
   const totalPatrimoineAvecMoi = useMemo(
@@ -157,34 +260,44 @@ export function Foyers({ onNavigate }: FoyersProps) {
     [contacts]
   );
 
-  const openFoyer = (foyer: Foyer) => {
-    setSelectedFoyerId(foyer.id);
-    setSelectedContact(null);
-  };
+  const emptyCount = foyerRows.filter((r) => r.membres.length === 0).length;
+  const withPatrimoineCount = foyerRows.filter((r) => r.patrimoineAvecMoi > 0).length;
+  const coupleCount = foyerRows.filter((r) => r.foyer.type_foyer === "COUPLE").length;
 
-  const closeSplit = () => {
-    setSelectedFoyerId(null);
-    setSelectedContact(null);
-    setShowContactDetail(false);
+  const toggleFoyer = (foyer: Foyer) => {
+    setExpandedFoyerId((prev) => {
+      const next = prev === foyer.id ? null : foyer.id;
+      updatePrefs({ expandedFoyerId: next });
+      return next;
+    });
   };
 
   const openMember = (contact: Contact) => {
     setSelectedContact(contact);
-    if (!isWideLayout) {
-      setShowContactDetail(true);
-    }
+    setShowContactDetail(true);
+  };
+
+  const openFoyerDetail = (foyerId: number) => {
+    setFoyerDetailId(foyerId);
+    setShowFoyerDetail(true);
   };
 
   const handleDeleteFoyer = async (id: number) => {
     try {
       await deleteFoyer(id);
-      if (selectedFoyerId === id) {
-        closeSplit();
+      if (expandedFoyerId === id) {
+        setExpandedFoyerId(null);
+        updatePrefs({ expandedFoyerId: null });
+      }
+      if (foyerDetailId === id) {
+        setShowFoyerDetail(false);
+        setFoyerDetailId(null);
       }
       await loadFoyers();
+      toast.success("Foyer supprimé");
     } catch (error) {
       console.error("Error deleting foyer:", error);
-      alert("Erreur lors de la suppression: " + String(error));
+      toast.error("Impossible de supprimer le foyer");
     }
   };
 
@@ -196,13 +309,12 @@ export function Foyers({ onNavigate }: FoyersProps) {
         setSelectedContact(null);
         setShowContactDetail(false);
       }
+      toast.success("Contact supprimé");
     } catch (error) {
       console.error("Erreur suppression contact:", error);
-      alert("Erreur lors de la suppression: " + String(error));
+      toast.error("Impossible de supprimer le contact");
     }
   };
-
-  const hasActiveFilters = searchQuery.trim() !== "" || typeFilter !== "ALL";
 
   const today = new Intl.DateTimeFormat("fr-FR", {
     weekday: "long",
@@ -215,7 +327,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
       <div className="space-y-6 max-w-[1600px] mx-auto pb-8 animate-pulse">
         <div className="h-20 rounded-lg bg-muted/50" />
         <div className="grid gap-3 md:grid-cols-3">
-          {Array.from({ length: 3 }).map((_, i) => (
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-24 rounded-xl bg-muted/50" />
           ))}
         </div>
@@ -230,12 +342,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
   }
 
   return (
-    <div
-      className={cn(
-        "space-y-6 mx-auto pb-8",
-        showSplit ? "max-w-[1800px]" : "max-w-[1600px]"
-      )}
-    >
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-8">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
         <div>
           <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
@@ -243,13 +350,17 @@ export function Foyers({ onNavigate }: FoyersProps) {
             Foyers
           </h2>
           <p className="text-muted-foreground mt-1 text-sm max-w-2xl">
-            Regrouper des personnes qui déclarent ensemble — noms de famille
-            différents possibles.
+            Regrouper des personnes qui déclarent ensemble — noms de famille différents
+            possibles.
           </p>
           <p className="text-muted-foreground mt-1 text-sm">
-            Foyers fiscaux et patrimoine commun —{" "}
+            Patrimoine avec moi —{" "}
             <span className="tabular-nums text-foreground/80">
-              {filteredFoyers.length} sur {foyers.length}
+              {formatEuroCentimes(totalPatrimoineAvecMoi)}
+            </span>
+            {" · "}
+            <span className="tabular-nums text-foreground/80">
+              {filteredRows.length} sur {foyers.length}
             </span>
           </p>
         </div>
@@ -259,211 +370,167 @@ export function Foyers({ onNavigate }: FoyersProps) {
         </Button>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          title="Foyers"
-          value={foyers.length}
-          description="Unités fiscales enregistrées"
-          icon={Home}
-          accentColor="#b45309"
-          iconColor="text-amber-700"
-          iconBgColor="bg-amber-50"
-        />
-        <StatCard
-          title="Contacts rattachés"
-          value={contactsRattaches}
-          description="Liés à au moins un foyer"
-          icon={Users}
-          accentColor="#1d4ed8"
-          iconColor="text-blue-700"
-          iconBgColor="bg-blue-50"
-        />
-        <StatCard
-          title="Patrimoine avec moi"
-          value={formatEuroCentimes(totalPatrimoineAvecMoi)}
-          description="Somme des foyers (commun + membres)"
-          icon={Building2}
-          accentColor="#047857"
-          iconColor="text-emerald-700"
-          iconBgColor="bg-emerald-50"
-        />
-      </div>
+      <FoyersPageHelp />
 
-      <div className="sticky top-0 z-10 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 rounded-lg border border-border/60 bg-background/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <ListSearchField
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Nom du foyer ou membre…"
-          className="flex-1 min-w-[220px]"
-        />
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-full sm:w-[200px]">
-            <Filter className="h-4 w-4 mr-2 shrink-0" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">Tous les types</SelectItem>
-            <SelectItem value="COUPLE">Couples</SelectItem>
-            <SelectItem value="FAMILLE">Avec enfant(s)</SelectItem>
-            <SelectItem value="CELIBATAIRE">Célibataires</SelectItem>
-            <SelectItem value="DIVORCE">Divorcé(e)s</SelectItem>
-            <SelectItem value="VEUF">Veuf(ve)s</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <FoyersStatCards
+        totalCount={foyers.length}
+        emptyCount={emptyCount}
+        withPatrimoineCount={withPatrimoineCount}
+        coupleCount={coupleCount}
+        contactsRattaches={contactsRattaches}
+        activeFilter={prefs.statFilter}
+        onFilterChange={(filter) => updatePrefs({ statFilter: filter })}
+      />
 
-      <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
-        <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
+      <FoyersToolbar
+        searchQuery={prefs.searchQuery}
+        onSearchChange={(searchQuery) => updatePrefs({ searchQuery })}
+        sortId={prefs.sortId}
+        onSortChange={(sortId) => updatePrefs({ sortId })}
+        typeFilter={prefs.typeFilter}
+        onTypeFilterChange={(typeFilter) => updatePrefs({ typeFilter })}
+        statFilter={prefs.statFilter}
+        onClearStatFilter={() => updatePrefs({ statFilter: null })}
+        onExportCsv={
+          expandedRow ? () => downloadFoyerMembersCsv(expandedRow) : undefined
+        }
+        showExport={expandedIsVisible && expandedRow != null}
+      />
+
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-3">
           <CardTitle className="font-serif text-lg">Liste des foyers</CardTitle>
           <CardDescription>
-            {hasActiveFilters
-              ? `${filteredFoyers.length} résultat(s) filtré(s)`
-              : "Cliquez sur un foyer pour la fiche et les membres"}
+            {prefs.searchQuery.trim() || prefs.typeFilter !== "ALL" || prefs.statFilter
+              ? `${filteredRows.length} résultat(s)`
+              : "Cliquez sur une carte pour déplier les membres"}
           </CardDescription>
-          {hasActiveFilters && (
-            <div className="flex flex-wrap gap-2 pt-2">
-              {typeFilter !== "ALL" && (
-                <Badge variant="secondary" className="gap-1 font-normal">
-                  Type : {getFoyerTypeLabel(typeFilter)}
-                  <button
-                    type="button"
-                    className="ml-1 hover:text-foreground"
-                    onClick={() => setTypeFilter("ALL")}
-                    aria-label="Retirer filtre type"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-            </div>
-          )}
         </CardHeader>
 
-        <CardContent className={splitCardContentClassName(showSplit, "pt-0", true)}>
-          <SplitDetailLayout
-            showSplit={showSplit}
-            nested
-            list={
-              <SplitListColumn
-                showSplit={showSplit}
-                nested
-                listLabel={`Foyers (${filteredFoyers.length})`}
-              >
-              {filteredFoyers.length === 0 ? (
-                <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
-                  <Home className="h-12 w-12 mx-auto text-muted-foreground/35 mb-3" />
-                  <p className="font-medium text-foreground/90">
-                    {hasActiveFilters ? "Aucun foyer trouvé" : "Aucun foyer"}
-                  </p>
-                  <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm mx-auto">
-                    {hasActiveFilters
-                      ? "Modifiez la recherche ou le filtre type."
-                      : "Créez un foyer fiscal pour regrouper contacts et patrimoine commun."}
-                  </p>
-                  {!hasActiveFilters && (
-                    <Button onClick={() => setShowForm(true)} className="gap-2">
-                      <Plus className="h-4 w-4" />
-                      Créer un foyer
-                    </Button>
+        <CardContent className="pt-0 space-y-3">
+          {filteredRows.length === 0 ? (
+            <div className="py-14 text-center rounded-xl border border-dashed border-border/80 bg-muted/15">
+              <p className="font-medium text-foreground/90">
+                {prefs.searchQuery.trim() || prefs.statFilter || prefs.typeFilter !== "ALL"
+                  ? "Aucun foyer trouvé"
+                  : "Aucun foyer"}
+              </p>
+              <p className="text-sm text-muted-foreground mt-1 mb-4 max-w-sm mx-auto">
+                {prefs.searchQuery.trim() || prefs.statFilter || prefs.typeFilter !== "ALL"
+                  ? "Modifiez la recherche ou les filtres."
+                  : "Créez un foyer fiscal pour regrouper contacts et patrimoine commun."}
+              </p>
+              {!prefs.searchQuery.trim() && !prefs.statFilter && prefs.typeFilter === "ALL" && (
+                <Button onClick={() => setShowForm(true)} className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  Créer un foyer
+                </Button>
+              )}
+            </div>
+          ) : (
+            filteredRows.map((row) => {
+              const isExpanded = expandedFoyerId === row.foyer.id;
+              const { foyer, membres, patrimoineAvecMoi } = row;
+              return (
+                <div
+                  key={foyer.id}
+                  className={cn(
+                    "rounded-xl border border-border/70 bg-card overflow-hidden shadow-sm transition-shadow",
+                    isExpanded && "ring-1 ring-primary/20"
                   )}
-                </div>
-              ) : (
-                filteredFoyers.map((foyer) => {
-                  const membres = membresParFoyerId.get(foyer.id) ?? [];
-                  return (
+                >
+                  <div className="p-1">
                     <FoyerSummaryCard
-                      key={foyer.id}
                       foyer={foyer}
                       membres={membres}
-                      patrimoineAvecMoi={patrimoineParFoyer[foyer.id]}
-                      compact={showSplit}
-                      selected={
-                        selectedFoyerId === foyer.id && !selectedContact
-                      }
-                      onClick={() => openFoyer(foyer)}
+                      patrimoineAvecMoi={patrimoineAvecMoi}
+                      selected={isExpanded}
+                      onClick={() => toggleFoyer(foyer)}
+                      actionHint={isExpanded ? "Replier les membres" : "Voir les membres"}
                     />
-                  );
-                })
-              )}
-              </SplitListColumn>
-            }
-            detail={
-              showSplit ? (
-                <SplitDetailPane nested>
-                {selectedContact ? (
-                  <SplitDetailStack
-                    back={
-                      selectedFoyer ? (
+                  </div>
+
+                  {isExpanded && (
+                    <div className="border-t border-border/60 bg-muted/15 px-4 py-4 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {membres.length} membre{membres.length !== 1 ? "s" : ""} ·{" "}
+                          {getFoyerTypeLabel(foyer.type_foyer)}
+                          {patrimoineAvecMoi > 0 && (
+                            <>
+                              {" "}
+                              · {formatEuroCentimes(patrimoineAvecMoi)} avec moi
+                            </>
+                          )}
+                          {foyer.nombre_parts_fiscales != null && (
+                            <> · {foyer.nombre_parts_fiscales} parts</>
+                          )}
+                          {foyer.tranche_imposition && <> · TMI {foyer.tranche_imposition}</>}
+                        </p>
                         <Button
                           type="button"
-                          variant="outline"
                           size="sm"
-                          className="gap-1.5 shadow-sm"
-                          onClick={() => setSelectedContact(null)}
+                          variant="outline"
+                          className="gap-1.5"
+                          onClick={() => openFoyerDetail(foyer.id)}
                         >
-                          <ArrowLeft className="h-4 w-4" />
-                          {selectedFoyer.nom}
+                          <FileText className="h-4 w-4" />
+                          Fiche complète
                         </Button>
-                      ) : undefined
-                    }
-                  >
-                    <ContactDetail
-                      key={selectedContact.id}
-                      embedded
-                      open
-                      contact={selectedContact}
-                      onOpenChange={(open) => {
-                        if (!open) setSelectedContact(null);
-                      }}
-                      onDelete={handleDeleteContact}
-                      onUpdate={() => void loadFoyers()}
-                      onContactRefreshed={setSelectedContact}
-                      onNavigate={onNavigate}
-                      onOpenContact={openMember}
-                    />
-                  </SplitDetailStack>
-                ) : selectedFoyer ? (
-                  <FoyerDetail
-                    key={selectedFoyer.id}
-                    embedded
-                    open
-                    foyer={selectedFoyer}
-                    onOpenChange={(open) => {
-                      if (!open) closeSplit();
-                    }}
-                    onDelete={handleDeleteFoyer}
-                    onUpdate={() => void loadFoyers()}
-                    onMemberClick={openMember}
-                  />
-                ) : null}
-                </SplitDetailPane>
-              ) : null
-            }
-          />
+                      </div>
+
+                      <FoyerMemberList
+                        membres={buildFoyerMembersWithInvestments(
+                          membres,
+                          investissementsByContact,
+                          investissementsByFoyer
+                        )}
+                        highlightContactId={
+                          isExpanded ? (effectiveHighlightId ?? undefined) : undefined
+                        }
+                        onMemberClick={openMember}
+                        showTitle
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
 
       <FoyerForm
         open={showForm}
         onOpenChange={setShowForm}
-        onSuccess={() => void loadFoyers()}
+        onSuccess={(foyerId) => {
+          if (foyerId != null) {
+            setExpandedFoyerId(foyerId);
+            updatePrefs({ expandedFoyerId: foyerId });
+          }
+          void loadFoyers();
+        }}
       />
 
-      {!isWideLayout && selectedFoyer && !selectedContact && (
+      {foyerDetailTarget && (
         <FoyerDetail
-          key={selectedFoyer.id}
-          open={selectedFoyerId != null}
+          key={foyerDetailTarget.id}
+          open={showFoyerDetail}
           onOpenChange={(open) => {
-            if (!open) closeSplit();
+            setShowFoyerDetail(open);
+            if (!open) setFoyerDetailId(null);
           }}
-          foyer={selectedFoyer}
+          foyer={foyerDetailTarget}
           onDelete={handleDeleteFoyer}
           onUpdate={() => void loadFoyers()}
-          onMemberClick={openMember}
+          onMemberClick={(contact) => {
+            setShowFoyerDetail(false);
+            openMember(contact);
+          }}
         />
       )}
 
-      {!isWideLayout && selectedContact && (
+      {selectedContact && (
         <ContactDetail
           key={selectedContact.id}
           open={showContactDetail}
