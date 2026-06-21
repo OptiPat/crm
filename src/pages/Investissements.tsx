@@ -45,6 +45,7 @@ import { InvestissementCard } from "@/components/investissements/InvestissementC
 import { InvestissementPatrimoineActions } from "@/components/investissements/InvestissementPatrimoineActions";
 import { InvestissementCreateContactDialog } from "@/components/investissements/InvestissementCreateContactDialog";
 import { InvestissementFoyerMemberPickerDialog } from "@/components/investissements/InvestissementFoyerMemberPickerDialog";
+import { StelliumContratsImportDialog } from "@/components/investissements/StelliumContratsImportDialog";
 import { VirtualizedInvestissementsPortfolio } from "@/components/investissements/VirtualizedInvestissementsPortfolio";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
@@ -168,6 +169,8 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     useState<InvestissementWithDetails | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InvestissementWithDetails | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [showStelliumImport, setShowStelliumImport] = useState(false);
+  const [investissementsListVersion, setInvestissementsListVersion] = useState(0);
   const [foyerPicker, setFoyerPicker] = useState<{
     inv: InvestissementWithDetails;
     members: Contact[];
@@ -207,6 +210,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     try {
       const data = await getInvestissementsWithDetails();
       setInvestissements(data);
+      setInvestissementsListVersion((v) => v + 1);
     } catch (error) {
       console.error("Error loading investissements:", error);
     } finally {
@@ -263,6 +267,21 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
       setDeleteBusy(false);
     }
   };
+
+  const openInvestissementFromImport = useCallback(async (investissementId: number) => {
+    try {
+      const details = await getInvestissementsWithDetails();
+      const inv = details.find((i) => i.id === investissementId);
+      if (!inv) {
+        toast.error("Investissement introuvable");
+        return;
+      }
+      setSelectedInvestissement(inv);
+      setShowForm(true);
+    } catch {
+      toast.error("Impossible de charger l'investissement");
+    }
+  }, []);
 
   const openInvestissementOwner = useCallback(
     async (inv: InvestissementWithDetails) => {
@@ -676,6 +695,14 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
           </p>
         </div>
         <div className="flex gap-2 shrink-0">
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={() => setShowStelliumImport(true)}
+          >
+            <FileUp className="h-4 w-4" />
+            Import Stellium
+          </Button>
           {filteredInvestissements.length > 0 && (
             <Button variant="outline" className="gap-2" onClick={handleExportCsv}>
               <Download className="h-4 w-4" />
@@ -1100,6 +1127,14 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <StelliumContratsImportDialog
+        open={showStelliumImport}
+        onOpenChange={setShowStelliumImport}
+        onApplied={() => void loadInvestissements()}
+        onOpenInvestissement={(id) => void openInvestissementFromImport(id)}
+        investissementsVersion={investissementsListVersion}
+      />
     </div>
   );
 }

@@ -5,6 +5,8 @@ import {
   getTypeProduitBgColor,
   getTypeProduitTextClass,
   isNumeroContratEligible,
+  normalizeNumeroContrat,
+  numeroContratMatchKey,
 } from "./investissement-display";
 
 describe("formatNomProduit", () => {
@@ -53,6 +55,24 @@ describe("isNumeroContratEligible", () => {
     expect(isNumeroContratEligible("EPARGNE_SALARIALE")).toBe(false);
     expect(isNumeroContratEligible("FIP_FCPI")).toBe(false);
     expect(isNumeroContratEligible("SCPI")).toBe(false);
+  });
+});
+
+describe("normalizeNumeroContrat", () => {
+  it("trim sans modifier les zéros", () => {
+    expect(normalizeNumeroContrat(" 0123456 ")).toBe("0123456");
+  });
+});
+
+describe("numeroContratMatchKey", () => {
+  it("ignore les zéros en tête pour les n° numériques", () => {
+    expect(numeroContratMatchKey("0123456")).toBe("123456");
+    expect(numeroContratMatchKey("123456")).toBe("123456");
+    expect(numeroContratMatchKey("000")).toBe("0");
+  });
+
+  it("conserve les n° alphanumériques tels quels", () => {
+    expect(numeroContratMatchKey("AV-0012")).toBe("AV-0012");
   });
 });
 

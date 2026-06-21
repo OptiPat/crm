@@ -68,6 +68,7 @@ export interface InvestissementWithDetails {
   partenaire_id?: number;
   partenaire_nom?: string;
   nom_produit: string;
+  numero_contrat?: string;
   montant_initial?: number;
   date_souscription?: number;
   date_fin_demembrement?: number;

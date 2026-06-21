@@ -194,8 +194,18 @@ export const INVESTISSEMENT_META_TONE_CLASS: Record<
     "inline-flex items-center gap-1.5 flex-nowrap whitespace-nowrap rounded-md border border-orange-300 bg-orange-100 px-2 py-0.5 font-medium text-orange-950 [&>svg]:text-orange-700",
 };
 
-/** Trim — clé de matching import Stellium / perf mensuelle. */
+/** Trim — saisie / affichage n° contrat. */
 export function normalizeNumeroContrat(raw: string | null | undefined): string | undefined {
   const s = String(raw ?? "").trim();
   return s || undefined;
+}
+
+/** Clé de matching import Stellium — ignore zéros en tête pour les n° purement numériques. */
+export function numeroContratMatchKey(raw: string | null | undefined): string | undefined {
+  const s = normalizeNumeroContrat(raw);
+  if (!s) return undefined;
+  if (/^\d+$/.test(s)) {
+    return s.replace(/^0+/, "") || "0";
+  }
+  return s;
 }
