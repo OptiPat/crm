@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { AlertTriangle, ChevronDown, Mail } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function EnvoisQueueStats({
   ready,
@@ -88,7 +89,15 @@ export function EnvoisQueueHelp() {
         </p>
         <p>
           <strong className="text-foreground">Journal</strong> — Chaque envoi (individuel, groupé,
-          étiquette ou modèle seul) est tracé avec horodatage et statut.
+          étiquette ou modèle seul) est tracé avec horodatage et statut. Les{" "}
+          <strong>bulletins SCPI trimestriels</strong> n&apos;apparaissent pas dans Envoyés / À
+          relancer : consultez le <strong>Journal</strong> (filtre SCPI disponible).
+        </p>
+        <p>
+          <strong className="text-foreground">Campagne bulletins SCPI</strong> — PDF dans le dossier
+          n8n → workflow (bouton n8n) → file Prêts. Checklist en haut de l&apos;onglet Envois.
+          Contrôlez l&apos;aperçu digest avant envoi groupé. Un nouveau prepare remet en file les
+          contacts retirés.
         </p>
         <p>
           <strong className="text-foreground">Planifiés</strong> — Date d&apos;envoi pas encore
@@ -105,6 +114,64 @@ export function EnvoisQueueHelp() {
         </p>
       </div>
     </details>
+  );
+}
+
+/** Barre campagne SCPI dans l’onglet Prêts — filtre liste vs sélection cases. */
+export function ScpiReadyCampaignBar({
+  periode,
+  batchCount,
+  otherReadyCount,
+  filtered,
+  onToggleFilter,
+  onSelectBatch,
+}: {
+  periode: string;
+  batchCount: number;
+  otherReadyCount: number;
+  filtered: boolean;
+  onToggleFilter: () => void;
+  onSelectBatch: () => void;
+}) {
+  const batchLabel =
+    batchCount === 1
+      ? "1 mail bulletin SCPI prêt pour ce trimestre."
+      : `${batchCount} mails bulletins SCPI prêts pour ce trimestre.`;
+
+  return (
+    <div className="rounded-lg border border-primary/20 bg-primary/[0.04] px-3 py-2.5 space-y-2">
+      <div>
+        <p className="text-sm font-medium text-foreground">
+          Campagne bulletins SCPI — {periode}
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+          {batchLabel}
+          {!filtered && otherReadyCount > 0
+            ? ` ${otherReadyCount} autre${otherReadyCount > 1 ? "s" : ""} envoi${otherReadyCount > 1 ? "s" : ""} prêt${otherReadyCount > 1 ? "s" : ""} (hors SCPI) dans la liste.`
+            : filtered
+              ? " Seuls les mails de cette campagne sont affichés."
+              : ""}
+        </p>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {otherReadyCount > 0 && (
+          <Button type="button" variant={filtered ? "secondary" : "outline"} size="sm" onClick={onToggleFilter}>
+            {filtered ? "Afficher tous les envois prêts" : `Masquer les envois hors SCPI`}
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="default"
+          size="sm"
+          title="Coche la campagne et ouvre l’envoi groupé"
+          onClick={onSelectBatch}
+        >
+          {batchCount === 1
+            ? "Envoyer la campagne (1 mail)"
+            : `Envoyer la campagne (${batchCount} mails)`}
+        </Button>
+      </div>
+    </div>
   );
 }
 

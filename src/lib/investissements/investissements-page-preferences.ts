@@ -15,7 +15,7 @@ export type InvestissementsPagePreferences = {
 };
 
 const DEFAULTS: InvestissementsPagePreferences = {
-  sortKey: "date_desc",
+  sortKey: "client_asc",
   groupMode: "category",
   origineFilters: [],
   typeFilters: [],

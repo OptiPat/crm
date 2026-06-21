@@ -492,6 +492,7 @@ impl Database {
         // Migration automatique : Ajouter date_fin_pret aux investissements
         self.migrate_add_date_fin_pret()?;
         self.migrate_add_investissement_immo_financing_fields()?;
+        self.migrate_add_investissement_numero_contrat()?;
 
         self.migrate_investissement_valorisations()?;
 
@@ -507,6 +508,7 @@ impl Database {
         self.migrate_protect_newsletter_etiquette()?;
         self.migrate_contact_etiquettes_contact_index()?;
         self.migrate_contact_etiquettes_tache_id()?;
+        self.migrate_alertes_traitee_at()?;
         self.migrate_taches_multi_contacts()?;
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
@@ -1188,6 +1190,17 @@ impl Database {
         Ok(())
     }
 
+    fn migrate_alertes_traitee_at(&self) -> Result<()> {
+        if !self.table_has_column("alertes", "traitee_at")? {
+            self.conn.execute(
+                "ALTER TABLE alertes ADD COLUMN traitee_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: colonne traitee_at sur alertes");
+        }
+        Ok(())
+    }
+
     /// Table de liaison tâche ↔ contacts + reprise des liens mono-contact existants.
     fn migrate_taches_multi_contacts(&self) -> Result<()> {
         self.conn.execute(
@@ -1456,6 +1469,24 @@ impl Database {
         self.conn.execute(
             "CREATE INDEX IF NOT EXISTS investissement_valorisations_inv_idx
              ON investissement_valorisations (investissement_id, date_valorisation DESC)",
+            [],
+        )?;
+        Ok(())
+    }
+
+    /// Migration : N° contrat (AV/PER — import perf Stellium).
+    fn migrate_add_investissement_numero_contrat(&self) -> Result<()> {
+        if !self.table_has_column("investissements", "numero_contrat")? {
+            self.conn.execute(
+                "ALTER TABLE investissements ADD COLUMN numero_contrat TEXT",
+                [],
+            )?;
+            println!("✅ Migration appliquée : colonne numero_contrat sur investissements");
+        }
+        self.conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_investissements_numero_contrat
+             ON investissements(numero_contrat)
+             WHERE numero_contrat IS NOT NULL AND TRIM(numero_contrat) != ''",
             [],
         )?;
         Ok(())

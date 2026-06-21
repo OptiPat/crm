@@ -25,6 +25,11 @@ fn inactive_suivi_contact_sql(alias: &str) -> String {
     )
 }
 
+/// Alerte visible dans Suivi / notifications (snooze = date_alerte repoussée dans le futur).
+fn alerte_due_now_sql(a_alias: &str) -> String {
+    format!("{a_alias}.date_alerte <= unixepoch()")
+}
+
 /// Segment inactif ou contact exclu du calcul auto de l'étiquette liée.
 fn alerte_segment_eligible_sql(a_alias: &str) -> String {
     format!(
@@ -90,11 +95,13 @@ impl super::Database {
 
     pub fn get_alertes_non_traitees(&self) -> Result<Vec<super::models::Alerte>> {
         let visibility = open_alerte_visibility_sql("a", "c");
+        let due = alerte_due_now_sql("a");
         let sql = format!(
             "SELECT a.id, a.contact_id, a.type_alerte, a.message, a.date_alerte, a.lue, a.traitee, a.created_at
              FROM alertes a
              INNER JOIN contacts c ON a.contact_id = c.id
              WHERE a.traitee = 0
+               AND {due}
                AND {visibility}
              ORDER BY a.date_alerte DESC, a.created_at DESC"
         );
@@ -171,11 +178,46 @@ impl super::Database {
     }
 
     pub fn marquer_alerte_traitee(&self, id: i64) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
         self.conn.execute(
-            "UPDATE alertes SET traitee = 1, lue = 1 WHERE id = ?1",
-            params![id],
+            "UPDATE alertes SET traitee = 1, lue = 1, traitee_at = ?2 WHERE id = ?1",
+            params![id, now],
         )?;
         Ok(())
+    }
+
+    /// Repousse l'alerte sans toucher aux dates contact (snooze).
+    pub fn snooze_alerte(&self, id: i64, days: i64) -> Result<()> {
+        let now = chrono::Utc::now().timestamp();
+        let new_date = now + days * 86_400;
+        let updated = self.conn.execute(
+            "UPDATE alertes SET date_alerte = ?1, lue = 0 WHERE id = ?2 AND traitee = 0",
+            params![new_date, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        Ok(())
+    }
+
+    pub fn count_alertes_traitees_depuis(&self, since_ts: i64) -> Result<i64> {
+        let table_exists: Result<i64> = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='alertes'",
+            [],
+            |row| row.get(0),
+        );
+        if table_exists.unwrap_or(0) == 0 {
+            return Ok(0);
+        }
+        if !self.table_has_column("alertes", "traitee_at")? {
+            return Ok(0);
+        }
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM alertes WHERE traitee = 1 AND traitee_at IS NOT NULL AND traitee_at >= ?1",
+            params![since_ts],
+            |row| row.get(0),
+        )?;
+        Ok(n)
     }
 
     pub fn delete_alerte(&self, id: i64) -> Result<()> {
@@ -540,6 +582,7 @@ impl super::Database {
         }
 
         let visibility = open_alerte_visibility_sql("a", "c");
+        let due = alerte_due_now_sql("a");
         let base_sql = format!(
             "SELECT a.id, a.contact_id, c.nom, c.prenom,
                     COALESCE(NULLIF(c.filleul_categorie, ''), c.categorie) as display_categorie,
@@ -548,6 +591,7 @@ impl super::Database {
              FROM alertes a
              INNER JOIN contacts c ON a.contact_id = c.id
              WHERE a.traitee = 0
+               AND {due}
                AND {visibility}
              ORDER BY a.date_alerte ASC"
         );
@@ -575,5 +619,98 @@ impl super::Database {
         }
 
         Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Database;
+    use super::super::models::{NewAlerte, NewContact};
+    use rusqlite::params;
+
+    fn sample_contact(nom: &str, prenom: &str) -> NewContact {
+        NewContact {
+            categorie: "CLIENT".into(),
+            nom: nom.into(),
+            prenom: prenom.into(),
+            statut_suivi: Some("ACTIF".into()),
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            filleul_categorie: None,
+            parrain_id: None,
+            prescripteur_id: None,
+            civilite: None,
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            pays: None,
+            date_naissance: None,
+            lieu_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            regime_matrimonial: None,
+            revenus_annuels: None,
+            charges_emprunts: None,
+            epargne_precaution_souhaitee: None,
+            objectifs_patrimoniaux: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            registre: None,
+            notes: None,
+            famille_regroupement_exclu: None,
+        }
+    }
+
+    #[test]
+    fn snooze_hides_alerte_until_due_date() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact = db
+            .create_contact(sample_contact("DUPONT", "Jean"))
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let alerte = db
+            .create_alerte(NewAlerte {
+                contact_id,
+                type_alerte: "SUIVI_CLIENT_1AN".into(),
+                message: "Test".into(),
+                date_alerte: Some(now),
+            })
+            .unwrap();
+        let alerte_id = alerte.id;
+
+        assert_eq!(db.get_alertes_with_contacts(None).unwrap().len(), 1);
+
+        db.snooze_alerte(alerte_id, 7).unwrap();
+
+        assert!(
+            db.get_alertes_with_contacts(None).unwrap().is_empty(),
+            "alerte snoozée ne doit pas apparaître avant la date"
+        );
+        assert!(
+            db.get_alertes_non_traitees().unwrap().is_empty(),
+            "compteur notifications exclut les alertes snoozées"
+        );
+
+        db.get_connection()
+            .execute(
+                "UPDATE alertes SET date_alerte = ?1 WHERE id = ?2",
+                params![now - 1, alerte_id],
+            )
+            .unwrap();
+
+        assert_eq!(db.get_alertes_with_contacts(None).unwrap().len(), 1);
     }
 }

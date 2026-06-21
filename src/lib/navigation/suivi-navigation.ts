@@ -4,6 +4,7 @@ import { dispatchAppNavigation } from "@/lib/navigation/app-navigation";
 export type SuiviMainTab = "alertes" | "etiquettes" | "segments" | "envois";
 
 const TAB_KEY = "crm_nav_suivi_tab";
+const TAB_PREF_KEY = "crm_suivi_active_tab_v1";
 const ENVOIS_SUBTAB_KEY = "crm_nav_suivi_envois_subtab";
 const CONTACT_KEY = "crm_nav_suivi_contact_id";
 const ETIQUETTE_KEY = "crm_nav_suivi_etiquette_id";
@@ -28,6 +29,31 @@ export type SuiviNavigationIntent = {
   contactId: number | null;
   etiquetteId: number | null;
 };
+
+export function persistSuiviActiveTab(tab: SuiviMainTab): void {
+  try {
+    sessionStorage.setItem(TAB_PREF_KEY, tab);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function loadPersistedSuiviActiveTab(): SuiviMainTab | null {
+  try {
+    const raw = sessionStorage.getItem(TAB_PREF_KEY);
+    if (
+      raw === "alertes" ||
+      raw === "etiquettes" ||
+      raw === "segments" ||
+      raw === "envois"
+    ) {
+      return raw;
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
 
 export function setSuiviNavigationIntent(
   tab: SuiviMainTab,

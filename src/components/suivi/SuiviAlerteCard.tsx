@@ -1,14 +1,9 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ContactInitialsAvatar } from "@/components/dashboard/dashboard-ui";
 import { AlerteEtiquetteHint } from "@/components/suivi/AlerteEtiquetteHint";
+import { SuiviAlerteActionsMenu } from "@/components/suivi/SuiviAlerteActionsMenu";
 import {
   getTypeAlerteBadgeClass,
   getTypeAlerteLabel,
@@ -25,7 +20,9 @@ import {
   getEtiquetteNomForAlerte,
 } from "@/lib/alertes/alerte-etiquette-links";
 import { getAlerteTraceInfo } from "@/lib/alertes/alerte-trace";
-import { Calendar, Check, Clock, ExternalLink, History, Info, ListTodo, Mail, X } from "lucide-react";
+import type { AlerteViewMode } from "@/lib/alertes/alerte-filters";
+import { Check, ExternalLink, History, Info, ListTodo } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 function formatLastContact(timestamp: number | null) {
   if (!timestamp) return null;
@@ -50,13 +47,17 @@ function contactDisplayName(alerte: AlerteWithContact) {
 export function SuiviAlerteCard({
   alerte,
   etiquettes,
-  reporterSelectKey,
+  viewMode,
   showEmailAction,
   emailLoading,
+  hasLinkedTache,
+  selected,
+  onToggleSelect,
   onOpenContact,
   onOpenHistorique,
   onTraiter,
   onReporter,
+  onSnooze,
   onEnvoyerEmail,
   onPlanifierRdv,
   onCreateTache,
@@ -65,13 +66,17 @@ export function SuiviAlerteCard({
 }: {
   alerte: AlerteWithContact;
   etiquettes: EtiquetteWithCount[];
-  reporterSelectKey: number;
+  viewMode: AlerteViewMode;
   showEmailAction: boolean;
   emailLoading: boolean;
+  hasLinkedTache?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
   onOpenContact?: (contactId: number) => void;
   onOpenHistorique?: (contactId: number) => void;
   onTraiter: () => void;
   onReporter: (mois: number) => void;
+  onSnooze: (days: number) => void;
   onEnvoyerEmail: () => void;
   onPlanifierRdv?: () => void;
   onCreateTache?: () => void;
@@ -93,10 +98,24 @@ export function SuiviAlerteCard({
   const showEtiquetteHint = linkedEtiquetteNom != null && !linkedEtiquette;
   const showLastContactLine =
     lastContact != null && !(alerte.type_alerte in ALERTE_ETIQUETTE_NOM);
+  const compact = viewMode === "compact";
 
   return (
-    <article className="rounded-xl border border-border/70 bg-card overflow-hidden">
-      <div className="flex items-start gap-3 p-4">
+    <article
+      className={cn(
+        "rounded-xl border border-border/70 bg-card overflow-hidden",
+        selected && "ring-2 ring-primary/40"
+      )}
+    >
+      <div className={cn("flex items-start gap-3 p-4", compact && "py-3")}>
+        {onToggleSelect && (
+          <Checkbox
+            checked={selected}
+            onCheckedChange={() => onToggleSelect()}
+            aria-label={`Sélectionner ${name}`}
+            className="mt-1"
+          />
+        )}
         <ContactInitialsAvatar
           prenom={alerte.contact_prenom}
           nom={alerte.contact_nom}
@@ -125,31 +144,46 @@ export function SuiviAlerteCard({
                 +{trace.daysOpen} j
               </Badge>
             )}
+            {hasLinkedTache && (
+              <Badge
+                variant="outline"
+                className="text-[10px] px-1.5 py-0 h-5 shrink-0 border-blue-200 text-blue-800 bg-blue-50 gap-0.5"
+              >
+                <ListTodo className="h-3 w-3" />
+                Tâche
+              </Badge>
+            )}
             {alerteDate && (
               <span className="text-xs text-muted-foreground ml-auto shrink-0">
                 {alerteDate}
               </span>
             )}
           </div>
-          <div className="mt-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1">
-            <p className="flex items-start gap-1.5 font-medium text-foreground/90">
-              <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-              {trace.rule}
-            </p>
-            <p>{trace.detail}</p>
-            <p className="text-[10px] opacity-80">Source : {trace.source}</p>
-          </div>
-          {showLastContactLine && (
+
+          {compact ? (
+            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{trace.rule}</p>
+          ) : (
+            <div className="mt-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1">
+              <p className="flex items-start gap-1.5 font-medium text-foreground/90">
+                <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                {trace.rule}
+              </p>
+              <p>{trace.detail}</p>
+              <p className="text-[10px] opacity-80">Source : {trace.source}</p>
+            </div>
+          )}
+
+          {!compact && showLastContactLine && (
             <p className="text-xs text-muted-foreground mt-1">
               Dernier contact : {lastContact}
             </p>
           )}
-          {showMessageDetail && (
+          {!compact && showMessageDetail && (
             <p className="text-sm text-muted-foreground mt-1.5 line-clamp-2">
               {alerte.message}
             </p>
           )}
-          {showEtiquetteHint && (
+          {!compact && showEtiquetteHint && (
             <AlerteEtiquetteHint
               typeAlerte={alerte.type_alerte}
               etiquettes={etiquettes}
@@ -157,32 +191,35 @@ export function SuiviAlerteCard({
             />
           )}
         </div>
-        <div className="flex flex-col gap-1 shrink-0">
-          {onOpenContact && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={() => onOpenContact(alerte.contact_id)}
-            >
-              <ExternalLink className="h-4 w-4" />
-              <span className="hidden sm:inline">Fiche</span>
-            </Button>
-          )}
-          {onOpenHistorique && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1"
-              onClick={() => onOpenHistorique(alerte.contact_id)}
-            >
-              <History className="h-4 w-4" />
-              <span className="hidden sm:inline">Historique</span>
-            </Button>
-          )}
-        </div>
+
+        {!compact && (
+          <div className="flex flex-col gap-1 shrink-0">
+            {onOpenContact && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => onOpenContact(alerte.contact_id)}
+              >
+                <ExternalLink className="h-4 w-4" />
+                <span className="hidden sm:inline">Fiche</span>
+              </Button>
+            )}
+            {onOpenHistorique && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1"
+                onClick={() => onOpenHistorique(alerte.contact_id)}
+              >
+                <History className="h-4 w-4" />
+                <span className="hidden sm:inline">Historique</span>
+              </Button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 px-4 pb-4 pt-0 border-t border-border/50 bg-muted/20">
@@ -190,72 +227,28 @@ export function SuiviAlerteCard({
           <Check className="h-4 w-4" />
           Traité
         </Button>
-
-        <Select
-          key={`reporter-${alerte.alerte_id}-${reporterSelectKey}`}
-          onValueChange={(value) => onReporter(parseInt(value, 10))}
-        >
-          <SelectTrigger className="w-[180px] h-9 bg-background">
-            <Clock className="h-4 w-4 mr-2 shrink-0" />
-            <SelectValue placeholder="Reporter" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="3">Dans 3 mois</SelectItem>
-            <SelectItem value="6">Dans 6 mois</SelectItem>
-            <SelectItem value="12">Dans 12 mois</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {showEmailAction && (
+        <SuiviAlerteActionsMenu
+          showEmailAction={showEmailAction}
+          emailLoading={emailLoading}
+          onReporter={onReporter}
+          onSnooze={onSnooze}
+          onEnvoyerEmail={onEnvoyerEmail}
+          onPlanifierRdv={onPlanifierRdv}
+          onCreateTache={hasLinkedTache ? undefined : onCreateTache}
+          onSupprimer={onSupprimer}
+        />
+        {compact && onOpenContact && (
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
-            className="gap-1"
-            disabled={emailLoading}
-            onClick={onEnvoyerEmail}
+            className="sm:ml-auto gap-1"
+            onClick={() => onOpenContact(alerte.contact_id)}
           >
-            <Mail className="h-4 w-4" />
-            {emailLoading ? "Préparation…" : "Email"}
+            <ExternalLink className="h-4 w-4" />
+            Fiche
           </Button>
         )}
-
-        {onPlanifierRdv && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={onPlanifierRdv}
-          >
-            <Calendar className="h-4 w-4" />
-            Planifier RDV
-          </Button>
-        )}
-
-        {onCreateTache && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1"
-            onClick={onCreateTache}
-          >
-            <ListTodo className="h-4 w-4" />
-            Créer une tâche
-          </Button>
-        )}
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="gap-1 text-red-600 hover:text-red-700 hover:bg-red-50 sm:ml-auto"
-          onClick={onSupprimer}
-        >
-          <X className="h-4 w-4" />
-          Supprimer
-        </Button>
       </div>
     </article>
   );

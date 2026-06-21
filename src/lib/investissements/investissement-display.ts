@@ -1,3 +1,15 @@
+/** Types avec n° contrat assureur (AV, PER, contrat de capi). */
+export const NUMERO_CONTRAT_TYPES = [
+  "ASSURANCE_VIE",
+  "PER",
+  "CONTRAT_CAPITALISATION",
+] as const;
+
+export function isNumeroContratEligible(typeProduit: string | undefined): boolean {
+  if (!typeProduit) return false;
+  return (NUMERO_CONTRAT_TYPES as readonly string[]).includes(typeProduit);
+}
+
 /** Types immobilier (couleur dédiée). */
 export const IMMOBILIER_TYPES = [
   "IMMOBILIER",
@@ -181,3 +193,9 @@ export const INVESTISSEMENT_META_TONE_CLASS: Record<
   credit:
     "inline-flex items-center gap-1.5 flex-nowrap whitespace-nowrap rounded-md border border-orange-300 bg-orange-100 px-2 py-0.5 font-medium text-orange-950 [&>svg]:text-orange-700",
 };
+
+/** Trim — clé de matching import Stellium / perf mensuelle. */
+export function normalizeNumeroContrat(raw: string | null | undefined): string | undefined {
+  const s = String(raw ?? "").trim();
+  return s || undefined;
+}

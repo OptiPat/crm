@@ -63,6 +63,15 @@ export async function deleteAlerte(id: number): Promise<void> {
   notifyAlertesChanged();
 }
 
+export async function snoozeAlerte(id: number, days: number): Promise<void> {
+  await invoke<void>("snooze_alerte", { id, days });
+  notifyAlertesChanged();
+}
+
+export async function countAlertesTraiteesDepuis(sinceTs: number): Promise<number> {
+  return invoke<number>("count_alertes_traitees_depuis", { sinceTs });
+}
+
 export async function genererAlertesAutomatiques(): Promise<number> {
   return invoke<number>("generer_alertes_automatiques");
 }

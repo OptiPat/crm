@@ -1,14 +1,24 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   getEmailSendLog,
   type EmailSendLogEntry,
 } from "@/lib/api/tauri-email-send-log";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { formatEtiquetteSendDatetime } from "@/lib/etiquettes/etiquette-email-preview";
 import { subscribeRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { isScpiBulletinLogEntry } from "@/lib/emails/scpi-envois-filters";
 
-export function EmailSendLogTab() {
+export function EmailSendLogTab({
+  scpiOnly = false,
+  scpiPeriod,
+  onScpiOnlyChange,
+}: {
+  scpiOnly?: boolean;
+  scpiPeriod?: string | null;
+  onScpiOnlyChange?: (value: boolean) => void;
+}) {
   const [entries, setEntries] = useState<EmailSendLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,18 +38,74 @@ export function EmailSendLogTab() {
     return subscribeRelationChanged(() => void load());
   }, [load]);
 
+  const filtered = useMemo(() => {
+    let list = entries;
+    if (scpiOnly) {
+      list = list.filter(isScpiBulletinLogEntry);
+    }
+    if (scpiPeriod?.trim()) {
+      const p = scpiPeriod.trim().toLowerCase();
+      list = list.filter(
+        (e) =>
+          (e.subject ?? "").toLowerCase().includes(p) ||
+          (e.template_nom ?? "").toLowerCase().includes(p)
+      );
+    }
+    return list;
+  }, [entries, scpiOnly, scpiPeriod]);
+
+  const scpiStats = useMemo(() => {
+    const scpi = entries.filter(isScpiBulletinLogEntry);
+    const ok = scpi.filter((e) => e.status === "success").length;
+    const err = scpi.filter((e) => e.status === "error").length;
+    return { total: scpi.length, ok, err };
+  }, [entries]);
+
   if (loading) {
     return <div className="text-center py-8 text-muted-foreground">Chargement…</div>;
   }
 
-  if (entries.length === 0) {
-    return (
-      <div className="text-center py-8 text-muted-foreground">
-        Aucun envoi enregistré pour le moment.
-      </div>
-    );
-  }
+  return (
+    <div className="space-y-3">
+      {(onScpiOnlyChange || scpiPeriod) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {onScpiOnlyChange && (
+            <Button
+              type="button"
+              variant={scpiOnly ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => onScpiOnlyChange(!scpiOnly)}
+            >
+              {scpiOnly ? "Voir tout le journal" : "Filtrer : bulletins SCPI"}
+            </Button>
+          )}
+          {scpiPeriod ? (
+            <Badge variant="outline" className="text-[10px]">
+              Période {scpiPeriod}
+            </Badge>
+          ) : null}
+          {scpiStats.total > 0 && (
+            <span className="text-muted-foreground">
+              {scpiStats.ok} OK{scpiStats.err > 0 ? ` · ${scpiStats.err} erreur(s)` : ""}
+            </span>
+          )}
+        </div>
+      )}
 
+      {filtered.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          {scpiOnly
+            ? "Aucun envoi bulletin SCPI dans le journal."
+            : "Aucun envoi enregistré pour le moment."}
+        </div>
+      ) : (
+        <LogEntriesList entries={filtered} />
+      )}
+    </div>
+  );
+}
+
+function LogEntriesList({ entries }: { entries: EmailSendLogEntry[] }) {
   const batchGroups = new Map<string, EmailSendLogEntry[]>();
   for (const e of entries) {
     if (e.batch_id && e.send_mode === "batch") {
@@ -60,7 +126,7 @@ export function EmailSendLogTab() {
           const group = batchGroups.get(entry.batch_id) ?? [entry];
           const ok = group.filter((g) => g.status === "success").length;
           const err = group.filter((g) => g.status === "error").length;
-          const etiquette = group[0]?.etiquette_nom ?? "Campagne";
+          const etiquette = group[0]?.etiquette_nom ?? group[0]?.template_nom ?? "Campagne";
           const date = formatEtiquetteSendDatetime(group[0]?.created_at ?? null);
           return (
             <div key={entry.batch_id} className="p-4 border rounded-lg bg-card space-y-1">

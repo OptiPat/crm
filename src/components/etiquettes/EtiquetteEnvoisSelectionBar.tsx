@@ -12,6 +12,7 @@ type EtiquetteEnvoisSelectionBarProps = {
   removeDisabled?: boolean;
   selectDisabled?: boolean;
   trailing?: React.ReactNode;
+  selectAllLabel?: string;
 };
 
 export function EtiquetteEnvoisSelectionBar({
@@ -23,6 +24,7 @@ export function EtiquetteEnvoisSelectionBar({
   removeDisabled = false,
   selectDisabled = false,
   trailing,
+  selectAllLabel = "Tout sélectionner",
 }: EtiquetteEnvoisSelectionBarProps) {
   const selectedCount = items.filter((i) =>
     selectedIds.has(getEtiquetteQueueItemKey(i))
@@ -42,7 +44,7 @@ export function EtiquetteEnvoisSelectionBar({
           }
         }}
       />
-      <span className="text-sm text-muted-foreground">Tout sélectionner</span>
+      <span className="text-sm text-muted-foreground">{selectAllLabel}</span>
       {trailing}
       <Button
         size="sm"

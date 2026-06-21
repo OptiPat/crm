@@ -172,7 +172,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     inv: InvestissementWithDetails;
     members: Contact[];
   } | null>(null);
-  const [sortKey, setSortKey] = useState<InvestissementPortfolioSort>("date_desc");
+  const [sortKey, setSortKey] = useState<InvestissementPortfolioSort>("client_asc");
   const [groupMode, setGroupMode] = useState<InvestissementPortfolioGroup>("category");
 
   useEffect(() => {

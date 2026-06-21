@@ -11,6 +11,8 @@ export interface Investissement {
   type_produit: string;
   partenaire_id?: number;
   nom_produit: string;
+  /** N° contrat assureur / Stellium (import perf mensuel). */
+  numero_contrat?: string;
   montant_initial?: number;
   date_souscription?: number;
   date_fin_demembrement?: number;
@@ -38,6 +40,8 @@ export interface NewInvestissement {
   type_produit: string;
   partenaire_id?: number;
   nom_produit: string;
+  /** N° contrat assureur / Stellium (import perf mensuel). */
+  numero_contrat?: string;
   montant_initial?: number;
   date_souscription?: string; // ISO string ou timestamp
   date_fin_demembrement?: string; // ISO string ou timestamp

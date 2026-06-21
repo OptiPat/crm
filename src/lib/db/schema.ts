@@ -219,7 +219,9 @@ export const investissements = sqliteTable("investissements", {
     onDelete: "set null",
   }),
   nomProduit: text("nom_produit").notNull(),
-  
+  /** N° contrat assureur / Stellium (import perf mensuel). */
+  numeroContrat: text("numero_contrat"),
+
   // Montants
   montantInitial: integer("montant_initial"), // En centimes
   

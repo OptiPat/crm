@@ -103,13 +103,34 @@ describe("investissements-portfolio-utils", () => {
     ).toBe("Jean DUPONT");
   });
 
-  it("compareInvestissementsPortfolio client asc", () => {
+  it("compareInvestissementsPortfolio client asc — nom de famille avant prénom", () => {
     expect(
       compareInvestissementsPortfolio(
-        inv({ contact_nom: "ZED" }),
-        inv({ contact_nom: "ALPHA" }),
+        inv({ contact_prenom: "Jean", contact_nom: "DUPONT" }),
+        inv({ contact_prenom: "Paul", contact_nom: "ALPHA" }),
         "client_asc"
       )
     ).toBeGreaterThan(0);
+    expect(
+      sortInvestissementsPortfolio(
+        [
+          inv({ id: 1, contact_prenom: "Zoé", contact_nom: "MARTIN" }),
+          inv({ id: 2, contact_prenom: "Alice", contact_nom: "BERNARD" }),
+        ],
+        "client_asc"
+      ).map((i) => i.id)
+    ).toEqual([2, 1]);
+  });
+
+  it("tri secondaire par nom de famille quel que soit le tri principal", () => {
+    expect(
+      sortInvestissementsPortfolio(
+        [
+          inv({ id: 1, contact_prenom: "Paul", contact_nom: "ZED", montant_initial: 5_000_00 }),
+          inv({ id: 2, contact_prenom: "Jean", contact_nom: "ALPHA", montant_initial: 5_000_00 }),
+        ],
+        "montant_desc"
+      ).map((i) => i.id)
+    ).toEqual([2, 1]);
   });
 });

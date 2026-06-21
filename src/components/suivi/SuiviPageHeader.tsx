@@ -1,4 +1,4 @@
-import { AlertCircle, Mail, RefreshCw, Settings2, Tag } from "lucide-react";
+import { AlertCircle, Filter, Mail, RefreshCw, Settings2, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { SuiviMainTab } from "@/lib/navigation/suivi-navigation";
@@ -16,6 +16,9 @@ export function SuiviPageHeader({
   alertesCount,
   etiquettesContactsCount,
   readyEmailCount,
+  scpiReadyCount = 0,
+  scpiPeriode,
+  segmentsCount,
   activeTab,
   onTabChange,
   onSyncEtiquettes,
@@ -26,6 +29,9 @@ export function SuiviPageHeader({
   alertesCount: number;
   etiquettesContactsCount: number;
   readyEmailCount: number;
+  scpiReadyCount?: number;
+  scpiPeriode?: string | null;
+  segmentsCount: number;
   activeTab: SuiviMainTab;
   onTabChange: (tab: SuiviMainTab) => void;
   onSyncEtiquettes: () => void;
@@ -38,6 +44,12 @@ export function SuiviPageHeader({
     day: "numeric",
     month: "long",
   }).format(new Date());
+
+  const otherReady = Math.max(0, readyEmailCount - scpiReadyCount);
+  const envoisHint =
+    scpiReadyCount > 0 && scpiPeriode
+      ? `${scpiReadyCount} SCPI ${scpiPeriode}${otherReady > 0 ? ` · ${otherReady} autre(s)` : ""}`
+      : "File email prête à partir";
 
   const stats: SuiviStat[] = [
     {
@@ -57,10 +69,18 @@ export function SuiviPageHeader({
       accent: "border-blue-200/80 bg-blue-50/60 hover:bg-blue-50",
     },
     {
+      id: "segments",
+      label: "Groupes",
+      value: segmentsCount,
+      hint: "Segments de contacts",
+      icon: Filter,
+      accent: "border-violet-200/80 bg-violet-50/60 hover:bg-violet-50",
+    },
+    {
       id: "envois",
       label: "Envois prêts",
       value: readyEmailCount,
-      hint: "Étiquettes et modèles (déclencheur)",
+      hint: envoisHint,
       icon: Mail,
       accent: "border-emerald-200/80 bg-emerald-50/60 hover:bg-emerald-50",
     },
@@ -111,7 +131,7 @@ export function SuiviPageHeader({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {stats.map((stat) => {
           const Icon = stat.icon;
           const selected = activeTab === stat.id;

@@ -4,6 +4,7 @@ import {
   formatNomProduit,
   getTypeProduitBgColor,
   getTypeProduitTextClass,
+  isNumeroContratEligible,
 } from "./investissement-display";
 
 describe("formatNomProduit", () => {
@@ -41,6 +42,17 @@ describe("getTypeProduitTextClass", () => {
   it("texte gris si existant client", () => {
     expect(getTypeProduitTextClass("SCPI", "EXISTANT_CLIENT")).toContain("gray");
     expect(getTypeProduitTextClass("SCPI")).toBe("text-white");
+  });
+});
+
+describe("isNumeroContratEligible", () => {
+  it("AV, PER et contrat de capi uniquement", () => {
+    expect(isNumeroContratEligible("ASSURANCE_VIE")).toBe(true);
+    expect(isNumeroContratEligible("PER")).toBe(true);
+    expect(isNumeroContratEligible("CONTRAT_CAPITALISATION")).toBe(true);
+    expect(isNumeroContratEligible("EPARGNE_SALARIALE")).toBe(false);
+    expect(isNumeroContratEligible("FIP_FCPI")).toBe(false);
+    expect(isNumeroContratEligible("SCPI")).toBe(false);
   });
 });
 

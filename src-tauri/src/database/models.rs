@@ -342,6 +342,8 @@ pub struct Investissement {
     pub type_produit: String,
     pub partenaire_id: Option<i64>,
     pub nom_produit: String,
+    /// N° contrat assureur / Stellium (matching import perf mensuel).
+    pub numero_contrat: Option<String>,
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,
@@ -378,6 +380,8 @@ pub struct NewInvestissement {
     pub type_produit: String,
     pub partenaire_id: Option<i64>,
     pub nom_produit: String,
+    /// N° contrat assureur / Stellium (matching import perf mensuel).
+    pub numero_contrat: Option<String>,
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<String>,     // ISO string
     pub date_fin_demembrement: Option<String>, // ISO string
@@ -405,6 +409,7 @@ pub struct InvestissementWithDetails {
     pub partenaire_id: Option<i64>,
     pub partenaire_nom: Option<String>,
     pub nom_produit: String,
+    pub numero_contrat: Option<String>,
     pub montant_initial: Option<i64>,
     pub date_souscription: Option<i64>,
     pub date_fin_demembrement: Option<i64>,

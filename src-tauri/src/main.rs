@@ -116,6 +116,8 @@ fn main() {
             marquer_alerte_lue,
             marquer_alerte_traitee,
             delete_alerte,
+            snooze_alerte,
+            count_alertes_traitees_depuis,
             generer_alertes_automatiques,
             get_dashboard_stats,
             get_category_stats,

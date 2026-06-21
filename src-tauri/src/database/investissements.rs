@@ -4,10 +4,18 @@
 use rusqlite::{params, OptionalExtension, Result};
 
 const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+    numero_contrat,
     montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
     mensualite_credit, credit_crd, loyer_mensuel,
     versement_programme, montant_versement_programme, frequence_versement,
     reinvestissement_dividendes, notes, origine, created_at, updated_at";
+
+fn normalize_numero_contrat(value: Option<String>) -> Option<String> {
+    value.and_then(|s| {
+        let t = s.trim().to_string();
+        if t.is_empty() { None } else { Some(t) }
+    })
+}
 
 use super::operations::{investissement_encours_select_cols, investissement_encours_select_cols_i};
 
@@ -22,26 +30,27 @@ impl super::Database {
             type_produit: row.get(3)?,
             partenaire_id: row.get(4)?,
             nom_produit: row.get(5)?,
-            montant_initial: row.get(6)?,
-            date_souscription: row.get(7)?,
-            date_fin_demembrement: row.get(8)?,
-            date_fin_pret: row.get(9)?,
-            mensualite_credit: row.get(10)?,
-            credit_crd: row.get(11)?,
-            loyer_mensuel: row.get(12)?,
-            versement_programme: row.get::<_, i64>(13)? != 0,
-            montant_versement_programme: row.get(14)?,
-            frequence_versement: row.get(15)?,
-            reinvestissement_dividendes: row.get::<_, i64>(16)? != 0,
-            notes: row.get(17)?,
+            numero_contrat: row.get(6)?,
+            montant_initial: row.get(7)?,
+            date_souscription: row.get(8)?,
+            date_fin_demembrement: row.get(9)?,
+            date_fin_pret: row.get(10)?,
+            mensualite_credit: row.get(11)?,
+            credit_crd: row.get(12)?,
+            loyer_mensuel: row.get(13)?,
+            versement_programme: row.get::<_, i64>(14)? != 0,
+            montant_versement_programme: row.get(15)?,
+            frequence_versement: row.get(16)?,
+            reinvestissement_dividendes: row.get::<_, i64>(17)? != 0,
+            notes: row.get(18)?,
             origine: row
-                .get::<_, String>(18)
+                .get::<_, String>(19)
                 .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-            created_at: row.get(19)?,
-            updated_at: row.get(20)?,
-            encours_actuel: row.get(21)?,
-            encours_date: row.get(22)?,
-            montant_investi_total: row.get(23)?,
+            created_at: row.get(20)?,
+            updated_at: row.get(21)?,
+            encours_actuel: row.get(22)?,
+            encours_date: row.get(23)?,
+            montant_investi_total: row.get(24)?,
         })
     }
 
@@ -139,7 +148,7 @@ impl super::Database {
                     COALESCE(c.prenom, CASE WHEN i.contact_id IS NULL AND f.nom IS NOT NULL THEN 'Commun' ELSE '' END) as contact_prenom,
                     i.foyer_id, f.nom as foyer_nom,
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
-                    i.nom_produit, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
+                    i.nom_produit, i.numero_contrat, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
                     i.mensualite_credit, i.credit_crd, i.loyer_mensuel,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at,
@@ -179,26 +188,27 @@ impl super::Database {
                 partenaire_id: row.get(7)?,
                 partenaire_nom: row.get(8)?,
                 nom_produit: row.get(9)?,
-                montant_initial: row.get(10)?,
-                date_souscription: row.get(11)?,
-                date_fin_demembrement: row.get(12)?,
-                date_fin_pret: row.get(13)?,
-                mensualite_credit: row.get(14)?,
-                credit_crd: row.get(15)?,
-                loyer_mensuel: row.get(16)?,
-                versement_programme: row.get::<_, i64>(17)? != 0,
-                montant_versement_programme: row.get(18)?,
-                frequence_versement: row.get(19)?,
-                reinvestissement_dividendes: row.get::<_, i64>(20)? != 0,
-                notes: row.get(21)?,
+                numero_contrat: row.get(10)?,
+                montant_initial: row.get(11)?,
+                date_souscription: row.get(12)?,
+                date_fin_demembrement: row.get(13)?,
+                date_fin_pret: row.get(14)?,
+                mensualite_credit: row.get(15)?,
+                credit_crd: row.get(16)?,
+                loyer_mensuel: row.get(17)?,
+                versement_programme: row.get::<_, i64>(18)? != 0,
+                montant_versement_programme: row.get(19)?,
+                frequence_versement: row.get(20)?,
+                reinvestissement_dividendes: row.get::<_, i64>(21)? != 0,
+                notes: row.get(22)?,
                 origine: row
-                    .get::<_, String>(22)
+                    .get::<_, String>(23)
                     .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(23)?,
-                updated_at: row.get(24)?,
-                encours_actuel: row.get(25)?,
-                encours_date: row.get(26)?,
-                montant_investi_total: row.get(27)?,
+                created_at: row.get(24)?,
+                updated_at: row.get(25)?,
+                encours_actuel: row.get(26)?,
+                encours_date: row.get(27)?,
+                montant_investi_total: row.get(28)?,
             })
         })?;
 
@@ -316,20 +326,23 @@ impl super::Database {
         let origine = investissement
             .origine
             .unwrap_or_else(|| "MON_CONSEIL".to_string());
+        let numero_contrat = normalize_numero_contrat(investissement.numero_contrat);
 
         self.conn.execute(
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
+                                         numero_contrat,
                                          montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
                                          mensualite_credit, credit_crd, loyer_mensuel,
                                          versement_programme, montant_versement_programme, frequence_versement,
                                          reinvestissement_dividendes, notes, origine) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
                 &investissement.type_produit,
                 &investissement.partenaire_id,
                 &investissement.nom_produit,
+                &numero_contrat,
                 &investissement.montant_initial,
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
@@ -419,6 +432,13 @@ impl super::Database {
             .clone()
             .or_else(|| self.get_investissement_by_id(id).ok().map(|i| i.origine))
             .unwrap_or_else(|| "MON_CONSEIL".to_string());
+        let numero_contrat = match investissement.numero_contrat.as_ref() {
+            Some(raw) => normalize_numero_contrat(Some(raw.clone())),
+            None => self
+                .get_investissement_by_id(id)
+                .ok()
+                .and_then(|i| i.numero_contrat),
+        };
 
         self.conn.execute(
             "UPDATE investissements SET 
@@ -427,26 +447,28 @@ impl super::Database {
                 type_produit = ?3,
                 partenaire_id = ?4,
                 nom_produit = ?5,
-                montant_initial = ?6,
-                date_souscription = ?7,
-                date_fin_demembrement = ?8,
-                date_fin_pret = ?9,
-                mensualite_credit = ?10,
-                credit_crd = ?11,
-                loyer_mensuel = ?12,
-                versement_programme = ?13,
-                montant_versement_programme = ?14,
-                frequence_versement = ?15,
-                reinvestissement_dividendes = ?16,
-                notes = ?17,
+                numero_contrat = ?6,
+                montant_initial = ?7,
+                date_souscription = ?8,
+                date_fin_demembrement = ?9,
+                date_fin_pret = ?10,
+                mensualite_credit = ?11,
+                credit_crd = ?12,
+                loyer_mensuel = ?13,
+                versement_programme = ?14,
+                montant_versement_programme = ?15,
+                frequence_versement = ?16,
+                reinvestissement_dividendes = ?17,
+                notes = ?18,
                 updated_at = unixepoch()
-            WHERE id = ?18",
+            WHERE id = ?19",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
                 &investissement.type_produit,
                 &investissement.partenaire_id,
                 &investissement.nom_produit,
+                &numero_contrat,
                 &investissement.montant_initial,
                 date_souscription_timestamp,
                 date_fin_demembrement_timestamp,
@@ -887,5 +909,79 @@ mod tests {
 
         let none = db.get_nom_produit_suggestions("SCPI", None).unwrap();
         assert!(none.is_empty());
+    }
+
+    #[test]
+    fn update_investissement_preserves_numero_contrat_when_omitted() {
+        use super::super::models::NewInvestissement;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact = db
+            .get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let _ = contact;
+        let contact_id: i64 = db
+            .get_connection()
+            .query_row("SELECT id FROM contacts LIMIT 1", [], |r| r.get(0))
+            .unwrap();
+
+        let created = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "Contrat test".into(),
+                numero_contrat: Some("AV-12345".into()),
+                montant_initial: Some(10_000_00),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: None,
+            })
+            .unwrap();
+        let id = created.id;
+
+        db.update_investissement(
+            id,
+            &NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "SCPI".into(),
+                partenaire_id: None,
+                nom_produit: "SCPI test".into(),
+                numero_contrat: None,
+                montant_initial: Some(50_000_00),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: Some("note".into()),
+                origine: None,
+            },
+        )
+        .unwrap();
+
+        let updated = db.get_investissement_by_id(id).unwrap();
+        assert_eq!(updated.numero_contrat.as_deref(), Some("AV-12345"));
     }
 }

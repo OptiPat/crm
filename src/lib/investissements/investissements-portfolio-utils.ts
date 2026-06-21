@@ -1,4 +1,5 @@
 import type { InvestissementWithDetails } from "@/lib/api/tauri-investissements";
+import { compareContactsAlphabetically } from "@/lib/contacts/contact-sort";
 import { formatNomProduit } from "@/lib/investissements/investissement-display";
 import {
   getEffectiveEncoursCentimes,
@@ -25,10 +26,10 @@ export const INVESTISSEMENT_PORTFOLIO_SORT_LABELS: Record<
   InvestissementPortfolioSort,
   string
 > = {
+  client_asc: "Nom de famille — A → Z",
   date_desc: "Souscription — plus récent",
   montant_desc: "Montant souscrit — décroissant",
   encours_desc: "Encours — décroissant",
-  client_asc: "Client / foyer — A → Z",
   demembrement_asc: "Fin démembrement — proche",
 };
 
@@ -77,6 +78,32 @@ export function getInvestissementOwnerLabel(inv: InvestissementWithDetails): str
   return name || "Sans détenteur";
 }
 
+/** Identité de tri : nom de famille d'abord (foyer commun → libellé du foyer). */
+export function getInvestissementOwnerSortIdentity(
+  inv: Pick<
+    InvestissementWithDetails,
+    "contact_id" | "contact_nom" | "contact_prenom" | "foyer_id" | "foyer_nom"
+  >
+): { nom: string; prenom: string } {
+  const isFoyerOnly =
+    inv.foyer_id != null &&
+    (inv.contact_id == null || inv.contact_prenom.trim() === "Foyer");
+  if (isFoyerOnly) {
+    return { nom: (inv.foyer_nom ?? inv.contact_nom ?? "").trim(), prenom: "" };
+  }
+  return { nom: inv.contact_nom.trim(), prenom: inv.contact_prenom.trim() };
+}
+
+export function compareInvestissementsByOwnerSurname(
+  a: InvestissementWithDetails,
+  b: InvestissementWithDetails
+): number {
+  return compareContactsAlphabetically(
+    getInvestissementOwnerSortIdentity(a),
+    getInvestissementOwnerSortIdentity(b)
+  );
+}
+
 /** Clé stable de regroupement (évite fusion de homonymes). */
 export function getInvestissementOwnerGroupKey(inv: InvestissementWithDetails): string {
   if (inv.foyer_id != null && inv.foyer_id > 0) {
@@ -111,10 +138,7 @@ export function compareInvestissementsPortfolio(
         getPatrimoineLineAmountCentimes(b)
       );
     case "client_asc":
-      return getInvestissementOwnerLabel(a).localeCompare(
-        getInvestissementOwnerLabel(b),
-        "fr"
-      );
+      return compareInvestissementsByOwnerSurname(a, b);
     case "demembrement_asc": {
       const ad = a.date_fin_demembrement;
       const bd = b.date_fin_demembrement;
@@ -141,6 +165,8 @@ export function sortInvestissementsPortfolio(
     }
     const primary = compareInvestissementsPortfolio(a, b, sort);
     if (primary !== 0) return primary;
+    const bySurname = compareInvestissementsByOwnerSurname(a, b);
+    if (bySurname !== 0) return bySurname;
     return compareInvestissementsPortfolio(a, b, "date_desc");
   });
   return sorted;
@@ -231,9 +257,12 @@ export function groupInvestissementsPortfolio(
       items: groupItems,
     }))
     .sort((a, b) => {
+      if (mode === "client") {
+        return compareInvestissementsByOwnerSurname(a.items[0], b.items[0]);
+      }
       const totalA = sumPatrimoineLineAmountCentimes(a.items);
       const totalB = sumPatrimoineLineAmountCentimes(b.items);
       if (totalB !== totalA) return totalB - totalA;
-      return a.label.localeCompare(b.label, "fr");
+      return compareInvestissementsByOwnerSurname(a.items[0], b.items[0]);
     });
 }

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { EmailSendLogTab } from "@/components/etiquettes/EmailSendLogTab";
 import { ScpiCampaignChecklist } from "@/components/etiquettes/ScpiCampaignChecklist";
+import { ScpiReadyDigestAccordion } from "@/components/etiquettes/ScpiReadyDigestAccordion";
 import { EtiquetteBatchSendDialog } from "@/components/etiquettes/EtiquetteBatchSendDialog";
 import { EtiquetteEnvoisSelectionBar } from "@/components/etiquettes/EtiquetteEnvoisSelectionBar";
 import {
@@ -65,6 +66,7 @@ import {
   EnvoisEmailConnectionBanner,
   EnvoisQueueHelp,
   EnvoisQueueStats,
+  ScpiReadyCampaignBar,
 } from "@/components/etiquettes/etiquette-envois-ui";
 import {
   notifyRelationChanged,
@@ -102,6 +104,8 @@ import {
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { isScpiDigestStale } from "@/lib/emails/scpi-digest-stale";
 import { isScpiBulletinQueueItem } from "@/lib/emails/scpi-bulletin-preview-vars";
+import { filterReadyByScpiBatch } from "@/lib/emails/scpi-envois-filters";
+import { useScpiCampaignDashboard } from "@/hooks/useScpiCampaignDashboard";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -153,7 +157,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
   const [highlightRowKey, setHighlightRowKey] = useState<string | null>(null);
   const [batchSendRunning, setBatchSendRunning] = useState(false);
   const [, setSendUiPulse] = useState(0);
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
+  const [scpiReadyOnly, setScpiReadyOnly] = useState(false);
+  const [journalScpiOnly, setJournalScpiOnly] = useState(false);
   const queueRefreshGenRef = useRef(0);
+  const { dashboard: scpiDashboard } = useScpiCampaignDashboard(dashboardRefreshKey);
 
   const runAutoSync = useCallback(async () => {
     if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
@@ -234,6 +242,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         emailStatus: emailConn,
       });
       onQueueChanged?.();
+      setDashboardRefreshKey((k) => k + 1);
     } catch (error) {
       if (!isRefreshGenerationCurrent(queueRefreshGenRef, token)) return;
       console.error("Error loading email queue:", error);
@@ -253,6 +262,44 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       ).length,
     [ready]
   );
+
+  const scpiBatchPeriod = scpiDashboard?.lastPrepare?.periode ?? null;
+  const scpiReadyLive = scpiDashboard?.readyCount ?? 0;
+
+  const scpiBatchReadyItems = useMemo(
+    () => filterReadyByScpiBatch(ready, scpiBatchPeriod),
+    [ready, scpiBatchPeriod]
+  );
+
+  useEffect(() => {
+    if (scpiReadyLive === 0 && scpiBatchReadyItems.length === 0 && scpiReadyOnly) {
+      setScpiReadyOnly(false);
+    }
+  }, [scpiReadyLive, scpiBatchReadyItems.length, scpiReadyOnly]);
+
+  const readyDisplayed = useMemo(() => {
+    if (!scpiReadyOnly) return ready;
+    return scpiBatchReadyItems;
+  }, [ready, scpiReadyOnly, scpiBatchReadyItems]);
+
+  const prepareScpiBatchSend = () => {
+    setSubTab("ready");
+    setScpiReadyOnly(true);
+    setSelectedIds(new Set(scpiBatchReadyItems.map((i) => getEtiquetteQueueItemKey(i))));
+    if (scpiBatchReadyItems.length === 0) {
+      toast.info("Aucun bulletin SCPI en file pour ce trimestre.");
+      return;
+    }
+    const blocked = scpiBatchReadyItems.find((i) => isScpiBulletinSendBlocked(i));
+    if (blocked) {
+      toast.warning(
+        getScpiBulletinSendBlockReason(blocked) ??
+          "Envoi SCPI bloqué — relancez n8n prepare."
+      );
+      return;
+    }
+    setBatchOpen(true);
+  };
 
   useEffect(() => {
     return subscribeEtiquetteEmailSendActivity((activity) => {
@@ -315,6 +362,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         return next;
       });
       onQueueChanged?.();
+      setDashboardRefreshKey((k) => k + 1);
     },
     [onQueueChanged]
   );
@@ -382,7 +430,9 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     });
   };
 
-  const selectedReadyItems = ready.filter((i) => selectedIds.has(getEtiquetteQueueItemKey(i)));
+  const selectedReadyItems = readyDisplayed.filter((i) =>
+    selectedIds.has(getEtiquetteQueueItemKey(i))
+  );
   const selectedReadySendBlocked = selectedReadyItems.some((i) =>
     isScpiBulletinSendBlocked(i)
   );
@@ -583,6 +633,21 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       );
     }
     if (items.length === 0) {
+      if (options.mode === "sent" && scpiDashboard?.lastPrepare) {
+        return (
+          <div className="text-center py-8 space-y-3">
+            <p className="text-muted-foreground text-sm max-w-md mx-auto">
+              Les bulletins SCPI ({scpiDashboard.lastPrepare.periode}) ne passent pas par
+              « Envoyés » — ils sont tracés dans le{" "}
+              <strong>Journal</strong> ({scpiDashboard.sentSincePrepare} envoyé
+              {scpiDashboard.sentSincePrepare > 1 ? "s" : ""} pour ce batch).
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => setSubTab("journal")}>
+              Ouvrir le Journal
+            </Button>
+          </div>
+        );
+      }
       const empty =
         options.mode === "ready"
           ? "Rien à envoyer pour le moment. Utilisez « Vérifier maintenant », consultez l'onglet Planifiés, et vérifiez la campagne sur l'étiquette (onglet Email) ainsi que l'email en fiche contact."
@@ -709,6 +774,9 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                     <p className="text-xs text-muted-foreground truncate">
                       Objet : {preview.subject}
                     </p>
+                    {isScpiBulletinQueueItem(item) ? (
+                      <ScpiReadyDigestAccordion item={item} />
+                    ) : null}
                     {scpiSendBlockReason ? (
                       <p className="text-xs text-amber-800 dark:text-amber-200">
                         {scpiSendBlockReason}
@@ -859,7 +927,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
       )}
       <ScpiCampaignChecklist
         staleReadyCount={scpiStaleReadyCount}
+        refreshKey={dashboardRefreshKey}
         onRefreshQueue={() => loadQueue({ silent: true })}
+        onNavigateToIncomplete={() => setSubTab("incomplete")}
+        onNavigateToReady={() => setSubTab("ready")}
+        onSendRemaining={prepareScpiBatchSend}
       />
       <EnvoisQueueStats
         ready={ready.length}
@@ -966,12 +1038,27 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
               </TabsTrigger>
             </TabsList>
             <TabsContent value="ready" className="mt-4 space-y-3">
-              {ready.length > 0 && (
+              {scpiBatchPeriod && scpiReadyLive > 0 && (
+                <ScpiReadyCampaignBar
+                  periode={scpiBatchPeriod}
+                  batchCount={scpiBatchReadyItems.length}
+                  otherReadyCount={Math.max(0, ready.length - scpiBatchReadyItems.length)}
+                  filtered={scpiReadyOnly}
+                  onToggleFilter={() => setScpiReadyOnly((v) => !v)}
+                  onSelectBatch={prepareScpiBatchSend}
+                />
+              )}
+              {readyDisplayed.length > 0 && (
                 <EtiquetteEnvoisSelectionBar
-                  items={ready}
+                  items={readyDisplayed}
                   selectedIds={selectedIds}
                   onSelectedIdsChange={setSelectedIds}
                   selectDisabled={batchSendRunning}
+                  selectAllLabel={
+                    scpiReadyOnly
+                      ? "Cocher toute la liste affichée"
+                      : "Tout sélectionner"
+                  }
                   removeDisabled={bulkRemoving || batchSendRunning}
                   removeLabel={getEnvoisBulkRemoveLabel("cancel")}
                   onRemoveSelection={() => openBulkRemove("cancel", ready)}
@@ -999,7 +1086,7 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
                   }
                 />
               )}
-              {renderList(ready, { mode: "ready" })}
+              {renderList(readyDisplayed, { mode: "ready" })}
             </TabsContent>
             <TabsContent value="scheduled" className="mt-4 space-y-3">
               <p className="text-xs text-muted-foreground">
@@ -1083,8 +1170,13 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
             <TabsContent value="journal" className="mt-4">
               <p className="text-xs text-muted-foreground mb-3">
                 Historique de tous les envois (individuels et groupés) avec statut et horodatage.
+                Les bulletins SCPI trimestriels sont listés ici.
               </p>
-              <EmailSendLogTab />
+              <EmailSendLogTab
+                scpiOnly={journalScpiOnly}
+                scpiPeriod={scpiBatchPeriod}
+                onScpiOnlyChange={setJournalScpiOnly}
+              />
             </TabsContent>
           </Tabs>
         </CardContent>

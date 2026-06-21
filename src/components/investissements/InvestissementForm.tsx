@@ -89,7 +89,11 @@ import {
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
-import { formatNomProduit } from "@/lib/investissements/investissement-display";
+import {
+  formatNomProduit,
+  isNumeroContratEligible,
+  normalizeNumeroContrat,
+} from "@/lib/investissements/investissement-display";
 import { isVersementComplementaireEligible } from "@/lib/investissements/investissement-versements";
 import {
   ContactFormExceltisSection,
@@ -217,6 +221,7 @@ export function InvestissementForm({
   const [typeProduit, setTypeProduit] = useState<string>("");
   const [partenaireId, setPartenaireId] = useState<string>("");
   const [nomProduit, setNomProduit] = useState("");
+  const [numeroContrat, setNumeroContrat] = useState("");
   const [montantInitial, setMontantInitial] = useState("");
   const [dateSouscription, setDateSouscription] = useState("");
   const [dateFinDemembrement, setDateFinDemembrement] = useState("");
@@ -249,6 +254,8 @@ export function InvestissementForm({
 
   const showEncoursSection =
     !!investissement && isPlacementEncoursEligible(typeProduit);
+
+  const showNumeroContratField = isNumeroContratEligible(typeProduit);
 
   const showVersementsSection =
     !!investissement && isVersementComplementaireEligible(typeProduit);
@@ -362,6 +369,7 @@ export function InvestissementForm({
         setTypeProduit(investissement.type_produit);
         setPartenaireId(investissement.partenaire_id?.toString() || "");
         setNomProduit(investissement.nom_produit);
+        setNumeroContrat(investissement.numero_contrat ?? "");
         setMontantInitial(investissement.montant_initial ? (investissement.montant_initial / 100).toString() : "");
         setDateSouscription(
           investissement.date_souscription
@@ -445,6 +453,7 @@ export function InvestissementForm({
     setTypeProduit("");
     setPartenaireId("");
     setNomProduit("");
+    setNumeroContrat("");
     setNomProduitSuggestions([]);
     setMontantInitial("");
     setDateSouscription("");
@@ -533,6 +542,9 @@ export function InvestissementForm({
         type_produit: typeProduit,
         partenaire_id: partenaireId ? parseInt(partenaireId) : undefined,
         nom_produit: nomProduit,
+        numero_contrat: showNumeroContratField
+          ? normalizeNumeroContrat(numeroContrat)
+          : undefined,
         montant_initial: montantInitial ? Math.round(parseFloat(montantInitial) * 100) : undefined,
         date_souscription: dateFieldToIso(dateSouscription),
         date_fin_demembrement: dateFinDemembrementIso,
@@ -839,6 +851,24 @@ export function InvestissementForm({
               </datalist>
             )}
           </div>
+
+          {showNumeroContratField && (
+            <div className="space-y-2">
+              <Label htmlFor="numero-contrat">N° de contrat</Label>
+              <Input
+                id="numero-contrat"
+                value={numeroContrat}
+                onChange={(e) => setNumeroContrat(e.target.value)}
+                placeholder="Ex: 4055352 (export Stellium)"
+                inputMode="numeric"
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Reprendre le « N° de contrat » ou « Identifiant du contrat » de l&apos;export mensuel
+                — permet l&apos;import automatique des performances.
+              </p>
+            </div>
+          )}
       </InvestissementFormSection>
 
       <Separator />

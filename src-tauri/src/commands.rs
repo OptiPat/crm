@@ -784,6 +784,30 @@ pub fn delete_alerte(db: State<'_, DbState>, id: i64) -> Result<(), String> {
 }
 
 #[tauri::command]
+pub fn snooze_alerte(db: State<'_, DbState>, id: i64, days: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    if days <= 0 || days > 365 {
+        return Err("Durée de snooze invalide".to_string());
+    }
+    database
+        .snooze_alerte(id, days)
+        .map_err(|e| format!("Failed to snooze alerte: {}", e))
+}
+
+#[tauri::command]
+pub fn count_alertes_traitees_depuis(
+    db: State<'_, DbState>,
+    since_ts: i64,
+) -> Result<i64, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .count_alertes_traitees_depuis(since_ts)
+        .map_err(|e| format!("Failed to count treated alertes: {}", e))
+}
+
+#[tauri::command]
 pub fn generer_alertes_automatiques(db: State<'_, DbState>) -> Result<usize, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;

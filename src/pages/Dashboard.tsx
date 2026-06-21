@@ -202,6 +202,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
         <div className="flex flex-col gap-5">
           <DashboardTodayGrid
             key={`today-${refreshKey}`}
+            currentPage={currentPage}
             onNavigate={onNavigate}
             onOpenContact={onOpenContact}
           />
