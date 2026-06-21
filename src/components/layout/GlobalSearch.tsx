@@ -23,6 +23,7 @@ import {
   requestOpenContact,
 } from "@/lib/navigation/app-navigation";
 import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
+import { navigateToPartenaires } from "@/lib/navigation/partenaires-navigation";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import {
   getInvestissementsWithDetails,
@@ -249,7 +250,10 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
         sublabel: [p.type_partenaire, p.ville].filter(Boolean).join(" · ") || undefined,
         icon: Handshake,
         onSelect: () => {
-          navigateAppPage(currentPage, onPageChange, "partenaires");
+          navigateToPartenaires(onPageChange, {
+            partenaireId: p.id,
+            currentPage,
+          });
           close();
         },
       }));

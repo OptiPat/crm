@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 
 export type PartenaireListMeta = {
   investissementCount: number;
-  patrimoineAvecMoi: number;
+  encoursAvecMoi: number;
 };
 
 type PartenaireSummaryCardProps = {
@@ -15,6 +15,7 @@ type PartenaireSummaryCardProps = {
   meta?: PartenaireListMeta;
   selected?: boolean;
   compact?: boolean;
+  actionHint?: string;
   onClick: () => void;
 };
 
@@ -23,6 +24,7 @@ export function PartenaireSummaryCard({
   meta,
   selected = false,
   compact = false,
+  actionHint,
   onClick,
 }: PartenaireSummaryCardProps) {
   const typeInfo = getPartenaireTypeInfo(partenaire.type_partenaire);
@@ -91,13 +93,16 @@ export function PartenaireSummaryCard({
               {meta.investissementCount > 1 ? "s" : ""}
             </p>
           )}
+          {actionHint && (
+            <p className="text-[11px] text-muted-foreground/80 mt-1">{actionHint}</p>
+          )}
         </div>
 
         <div className="shrink-0 text-right flex items-center gap-2">
-          {meta && meta.patrimoineAvecMoi > 0 && (
+          {meta && meta.encoursAvecMoi > 0 && (
             <div className="hidden sm:block">
               <p className="text-sm font-semibold text-primary tabular-nums leading-tight">
-                {formatEuroCentimes(meta.patrimoineAvecMoi)}
+                {formatEuroCentimes(meta.encoursAvecMoi)}
               </p>
             </div>
           )}

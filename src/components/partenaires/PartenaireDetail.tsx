@@ -31,6 +31,7 @@ import { type Partenaire } from "@/lib/api/tauri-partenaires";
 import { getAllInvestissements, type Investissement } from "@/lib/api/tauri-investissements";
 import { getPartenaireTypeInfo } from "@/lib/partenaires/partenaire-display";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
+import { partenaireEncoursContribution } from "@/lib/partenaires/partenaires-meta";
 import { InvestissementCard } from "@/components/investissements/InvestissementCard";
 import { PartenaireForm } from "./PartenaireForm";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,7 @@ interface PartenaireDetailProps {
   onDelete: (id: number) => void;
   onUpdate: () => void;
   embedded?: boolean;
+  preloadedInvestissements?: Investissement[];
   onOpenContact?: (contactId: number) => void;
 }
 
@@ -68,6 +70,7 @@ export function PartenaireDetail({
   onDelete,
   onUpdate,
   embedded = false,
+  preloadedInvestissements,
   onOpenContact,
 }: PartenaireDetailProps) {
   const [showEditForm, setShowEditForm] = useState(false);
@@ -79,6 +82,11 @@ export function PartenaireDetail({
 
   useEffect(() => {
     if (!partenaire?.id || !detailActive) return;
+    if (preloadedInvestissements != null) {
+      setInvestissements(preloadedInvestissements);
+      setLoadingInv(false);
+      return;
+    }
     let cancelled = false;
     setLoadingInv(true);
     void (async () => {
@@ -98,16 +106,17 @@ export function PartenaireDetail({
     return () => {
       cancelled = true;
     };
-  }, [partenaire?.id, detailActive]);
+  }, [partenaire?.id, detailActive, preloadedInvestissements]);
 
   if (!partenaire) return null;
 
   const typeInfo = getPartenaireTypeInfo(partenaire.type_partenaire);
   const TypeIcon = typeInfo.icon;
 
-  const patrimoineAvecMoi = investissements
-    .filter((i) => i.origine === "MON_CONSEIL")
-    .reduce((s, i) => s + (i.montant_initial || 0), 0);
+  const encoursAvecMoi = investissements.reduce(
+    (s, i) => s + partenaireEncoursContribution(i),
+    0
+  );
 
   const handleDeleteConfirm = () => {
     onDelete(partenaire.id);
@@ -253,9 +262,9 @@ export function PartenaireDetail({
               <Wallet className="h-4 w-4" />
               Produits liés
             </CardTitle>
-            {patrimoineAvecMoi > 0 && (
+            {encoursAvecMoi > 0 && (
               <span className="text-sm font-semibold text-primary tabular-nums">
-                {formatEuroCentimes(patrimoineAvecMoi)}
+                {formatEuroCentimes(encoursAvecMoi)}
               </span>
             )}
           </div>

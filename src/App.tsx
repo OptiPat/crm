@@ -165,12 +165,7 @@ function App() {
       case "prescripteurs":
         return <Prescripteurs onNavigate={setCurrentPage} />;
       case "partenaires":
-        return (
-          <Partenaires
-            currentPage={currentPage}
-            onNavigate={setCurrentPage}
-          />
-        );
+        return <Partenaires onNavigate={setCurrentPage} />;
       case "investissements":
         return (
           <Investissements

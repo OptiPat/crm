@@ -23,7 +23,7 @@ interface PartenaireFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   partenaire?: Partenaire | null;
-  onSuccess: () => void;
+  onSuccess: (partenaireId?: number) => void;
 }
 
 export function PartenaireForm({ open, onOpenChange, partenaire, onSuccess }: PartenaireFormProps) {
@@ -50,10 +50,11 @@ export function PartenaireForm({ open, onOpenChange, partenaire, onSuccess }: Pa
     try {
       if (partenaire) {
         await updatePartenaire(partenaire.id, formData);
+        onSuccess(partenaire.id);
       } else {
-        await createPartenaire(formData);
+        const created = await createPartenaire(formData);
+        onSuccess(created.id);
       }
-      onSuccess();
       onOpenChange(false);
     } catch (error) {
       console.error("Error saving partenaire:", error);

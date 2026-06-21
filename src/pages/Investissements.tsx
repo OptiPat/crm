@@ -101,6 +101,7 @@ import {
 } from "@/components/investissements/InvestissementMultiFilterSelect";
 import { navigateAppPage } from "@/lib/navigation/app-navigation";
 import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
+import { navigateToPartenaires } from "@/lib/navigation/partenaires-navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
@@ -245,6 +246,16 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     if (onNavigate) {
       navigateToFoyers(onNavigate, {
         foyerId,
+        currentPage: "investissements",
+      });
+    }
+  };
+
+  const openPartenaireFromCard = (partenaireId: number, investissementId?: number) => {
+    if (onNavigate) {
+      navigateToPartenaires(onNavigate, {
+        partenaireId,
+        focusInvestissementId: investissementId,
         currentPage: "investissements",
       });
     }
@@ -626,6 +637,11 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
         }
         onProprietaireClick={
           onOpenContact ? () => void openInvestissementOwner(inv) : undefined
+        }
+        onPartenaireClick={
+          onNavigate && inv.partenaire_id != null
+            ? () => openPartenaireFromCard(inv.partenaire_id!, inv.id)
+            : undefined
         }
         actions={
           <InvestissementPatrimoineActions

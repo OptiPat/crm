@@ -98,6 +98,7 @@ import { navigateToDocuments } from "@/lib/documents/documents-navigation";
 import { navigateToPrescripteurs } from "@/lib/navigation/prescripteurs-navigation";
 import { navigateToFamilles } from "@/lib/navigation/familles-navigation";
 import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
+import { navigateToPartenaires } from "@/lib/navigation/partenaires-navigation";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -995,6 +996,17 @@ export function ContactDetail({
                     : undefined
                 }
                 onImportDocument={() => setShowDocUpload(true)}
+                onViewPartenaire={
+                  onNavigate
+                    ? (partenaireId: number, investissementId?: number) => {
+                        onOpenChange(false);
+                        navigateToPartenaires(onNavigate, {
+                          partenaireId,
+                          focusInvestissementId: investissementId,
+                        });
+                      }
+                    : undefined
+                }
               />
             </TabsContent>
 

@@ -48,6 +48,8 @@ export interface InvestissementCardProps {
   onOpenContactClick?: () => void;
   /** Clic sur le badge détenteur → ouvrir la fiche du contact propriétaire. */
   onProprietaireClick?: () => void;
+  /** Clic sur le partenaire → ouvrir la page Partenaires. */
+  onPartenaireClick?: () => void;
   actions?: React.ReactNode;
 }
 
@@ -79,6 +81,7 @@ export function InvestissementCard({
   proprietaireVariant,
   onOpenContactClick,
   onProprietaireClick,
+  onPartenaireClick,
   actions,
 }: InvestissementCardProps) {
   const interactive = Boolean(onOpenContactClick);
@@ -177,7 +180,20 @@ export function InvestissementCard({
           )}
           {partenaireNom && (
             <InvestissementMetaRow icon={Building2}>
-              {partenaireNom}
+              {onPartenaireClick ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPartenaireClick();
+                  }}
+                  className="hover:underline text-left"
+                >
+                  {partenaireNom}
+                </button>
+              ) : (
+                partenaireNom
+              )}
             </InvestissementMetaRow>
           )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">

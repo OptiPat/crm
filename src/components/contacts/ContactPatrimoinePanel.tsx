@@ -89,6 +89,7 @@ function PatrimoineSection({
   onDelete,
   onEncours,
   onOpenOwnerContact,
+  onViewPartenaire,
 }: {
   title: string;
   icon: typeof Home;
@@ -101,6 +102,7 @@ function PatrimoineSection({
   onDelete: (inv: Investissement) => void;
   onEncours?: (inv: Investissement) => void;
   onOpenOwnerContact?: (contactId: number) => void;
+  onViewPartenaire?: (partenaireId: number, investissementId?: number) => void;
 }) {
   if (items.length === 0) return null;
 
@@ -141,6 +143,11 @@ function PatrimoineSection({
                 : undefined
             }
             onOpenContactClick={() => onEdit(inv)}
+            onPartenaireClick={
+              onViewPartenaire && inv.partenaire_id != null
+                ? () => onViewPartenaire(inv.partenaire_id!, inv.id)
+                : undefined
+            }
             actions={
               <InvestissementPatrimoineActions
                 inv={inv}
@@ -172,6 +179,7 @@ export function ContactPatrimoinePanel({
   onOpenOwnerContact,
   onNavigateDocuments,
   onImportDocument,
+  onViewPartenaire,
 }: {
   contactId: number;
   contactPrenom: string;
@@ -187,6 +195,7 @@ export function ContactPatrimoinePanel({
   onOpenOwnerContact?: (contactId: number) => void;
   onNavigateDocuments?: () => void;
   onImportDocument?: () => void;
+  onViewPartenaire?: (partenaireId: number, investissementId?: number) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
@@ -531,6 +540,7 @@ export function ContactPatrimoinePanel({
                     onDelete={onDelete}
                     onEncours={(inv) => setEncoursInvestissement(inv)}
                     onOpenOwnerContact={onOpenOwnerContact}
+                    onViewPartenaire={onViewPartenaire}
                   />
                   <PatrimoineSection
                     title="Placements financiers"
@@ -544,6 +554,7 @@ export function ContactPatrimoinePanel({
                     onDelete={onDelete}
                     onEncours={(inv) => setEncoursInvestissement(inv)}
                     onOpenOwnerContact={onOpenOwnerContact}
+                    onViewPartenaire={onViewPartenaire}
                   />
                   {showFlatList && (
                     <div className="space-y-2">
@@ -576,6 +587,11 @@ export function ContactPatrimoinePanel({
                               : undefined
                           }
                           onOpenContactClick={() => onEdit(inv)}
+                          onPartenaireClick={
+                            onViewPartenaire && inv.partenaire_id != null
+                              ? () => onViewPartenaire(inv.partenaire_id!, inv.id)
+                              : undefined
+                          }
                           actions={
                             <InvestissementPatrimoineActions
                               inv={inv}
