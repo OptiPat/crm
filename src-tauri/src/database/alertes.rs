@@ -26,8 +26,12 @@ fn inactive_suivi_contact_sql(alias: &str) -> String {
 }
 
 /// Alerte visible dans Suivi / notifications (snooze = date_alerte repoussée dans le futur).
-fn alerte_due_now_sql(a_alias: &str) -> String {
+pub(crate) fn alerte_due_now_sql(a_alias: &str) -> String {
     format!("{a_alias}.date_alerte <= unixepoch()")
+}
+
+fn mark_alertes_traitees_set_sql() -> &'static str {
+    "traitee = 1, lue = 1, traitee_at = unixepoch()"
 }
 
 /// Segment inactif ou contact exclu du calcul auto de l'étiquette liée.
@@ -125,6 +129,26 @@ impl super::Database {
             result.push(alerte?);
         }
         Ok(result)
+    }
+
+    /// Même périmètre que `get_alertes_non_traitees` (due + visibilité), pour compteurs dashboard.
+    pub fn count_alertes_non_traitees(&self) -> Result<i64> {
+        let table_exists: Result<i64> = self.conn.query_row(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='alertes'",
+            [],
+            |row| row.get(0),
+        );
+        if table_exists.unwrap_or(0) == 0 {
+            return Ok(0);
+        }
+        let visibility = open_alerte_visibility_sql("a", "c");
+        let due = alerte_due_now_sql("a");
+        let sql = format!(
+            "SELECT COUNT(*) FROM alertes a
+             INNER JOIN contacts c ON a.contact_id = c.id
+             WHERE a.traitee = 0 AND {due} AND {visibility}"
+        );
+        self.conn.query_row(&sql, [], |row| row.get(0))
     }
 
     pub fn create_alerte(&self, alerte: super::models::NewAlerte) -> Result<super::models::Alerte> {
@@ -226,9 +250,11 @@ impl super::Database {
         Ok(())
     }
 
-    fn has_alerte_non_traitee(&self, contact_id: i64, type_alerte: &str) -> Result<bool> {
+    /// Alerte suivi ouverte (snooze incluse) — dédup à la création auto.
+    fn has_open_alerte_suivi(&self, contact_id: i64, type_alerte: &str) -> Result<bool> {
         let n: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM alertes WHERE contact_id = ?1 AND type_alerte = ?2 AND traitee = 0",
+            "SELECT COUNT(*) FROM alertes
+             WHERE contact_id = ?1 AND type_alerte = ?2 AND traitee = 0",
             params![contact_id, type_alerte],
             |row| row.get(0),
         )?;
@@ -242,7 +268,7 @@ impl super::Database {
         message: String,
         now: i64,
     ) -> Result<bool> {
-        if self.has_alerte_non_traitee(contact_id, type_alerte)? {
+        if self.has_open_alerte_suivi(contact_id, type_alerte)? {
             return Ok(false);
         }
         self.create_alerte(super::models::NewAlerte {
@@ -255,9 +281,12 @@ impl super::Database {
     }
 
     fn close_open_suivi_alerte(&self, contact_id: i64, type_alerte: &str) -> Result<bool> {
+        let set = mark_alertes_traitees_set_sql();
         let updated = self.conn.execute(
-            "UPDATE alertes SET traitee = 1, lue = 1
-             WHERE contact_id = ?1 AND type_alerte = ?2 AND traitee = 0",
+            &format!(
+                "UPDATE alertes SET {set}
+             WHERE contact_id = ?1 AND type_alerte = ?2 AND traitee = 0"
+            ),
             params![contact_id, type_alerte],
         )?;
         Ok(updated > 0)
@@ -315,9 +344,10 @@ impl super::Database {
             return Ok(0);
         }
         let patrimoine = patrimoine_alerte_types_sql();
+        let set = mark_alertes_traitees_set_sql();
         let updated = self.conn.execute(
             &format!(
-                "UPDATE alertes SET traitee = 1, lue = 1
+                "UPDATE alertes SET {set}
                  WHERE traitee = 0
                    AND type_alerte NOT IN ({patrimoine})
                    AND type_alerte IN (
@@ -334,10 +364,13 @@ impl super::Database {
         let contact = self.get_contact_by_id(contact_id)?;
 
         if contact.statut_suivi == "ARCHIVE" || contact.statut_suivi == "EN_PAUSE" {
+            let set = mark_alertes_traitees_set_sql();
             let n = self.conn.execute(
-                "UPDATE alertes SET traitee = 1, lue = 1
+                &format!(
+                    "UPDATE alertes SET {set}
                  WHERE contact_id = ?1 AND traitee = 0
-                   AND type_alerte NOT IN ('FIN_DEMEMBREMENT')",
+                   AND type_alerte NOT IN ('FIN_DEMEMBREMENT')"
+                ),
                 params![contact_id],
             )?;
             return Ok(n);
@@ -435,9 +468,10 @@ impl super::Database {
     fn close_orphan_suivi_alertes_for_inactive_contacts(&self) -> Result<usize> {
         let inactive = inactive_suivi_contact_sql("c");
         let patrimoine = patrimoine_alerte_types_sql();
+        let set = mark_alertes_traitees_set_sql();
         let updated = self.conn.execute(
             &format!(
-                "UPDATE alertes SET traitee = 1, lue = 1
+                "UPDATE alertes SET {set}
                  WHERE traitee = 0
                    AND type_alerte NOT IN ({patrimoine})
                    AND contact_id IN (
@@ -455,9 +489,10 @@ impl super::Database {
             return Ok(0);
         }
         let patrimoine = patrimoine_alerte_types_sql();
+        let set = mark_alertes_traitees_set_sql();
         let n_segments = self.conn.execute(
             &format!(
-                "UPDATE alertes SET traitee = 1, lue = 1
+                "UPDATE alertes SET {set}
                  WHERE traitee = 0
                    AND type_alerte NOT IN ({patrimoine})
                    AND type_alerte IN (
@@ -469,7 +504,8 @@ impl super::Database {
             [],
         )?;
         let n_exclusions = self.conn.execute(
-            "UPDATE alertes SET traitee = 1, lue = 1
+            &format!(
+                "UPDATE alertes SET {set}
              WHERE traitee = 0
                AND EXISTS (
                  SELECT 1 FROM alerte_segment_links asl
@@ -477,7 +513,8 @@ impl super::Database {
                  INNER JOIN contact_etiquette_auto_exclusions ex
                    ON ex.contact_id = alertes.contact_id AND ex.etiquette_id = e.id
                  WHERE asl.type_alerte = alertes.type_alerte
-               )",
+               )"
+            ),
             [],
         )?;
         Ok(n_segments + n_exclusions)
@@ -626,6 +663,7 @@ impl super::Database {
 mod tests {
     use super::super::Database;
     use super::super::models::{NewAlerte, NewContact};
+    use chrono::Datelike;
     use rusqlite::params;
 
     fn sample_contact(nom: &str, prenom: &str) -> NewContact {
@@ -703,6 +741,37 @@ mod tests {
             db.get_alertes_non_traitees().unwrap().is_empty(),
             "compteur notifications exclut les alertes snoozées"
         );
+        assert_eq!(
+            db.count_alertes_non_traitees().unwrap(),
+            0,
+            "count dashboard aligné Suivi"
+        );
+        assert!(
+            db.get_alertes_for_contact(contact_id).unwrap().is_empty(),
+            "fiche contact exclut les alertes snoozées"
+        );
+
+        let old_contact = now - 400 * 86_400;
+        db.get_connection()
+            .execute(
+                "UPDATE contacts SET date_dernier_contact = ?1 WHERE id = ?2",
+                params![old_contact, contact_id],
+            )
+            .unwrap();
+        db.generer_alertes_automatiques().unwrap();
+        let open_count: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT COUNT(*) FROM alertes
+                 WHERE contact_id = ?1 AND type_alerte = ?2 AND traitee = 0",
+                params![contact_id, "SUIVI_CLIENT_1AN"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            open_count, 1,
+            "snooze ne doit pas permettre un doublon à la regénération auto"
+        );
 
         db.get_connection()
             .execute(
@@ -712,5 +781,56 @@ mod tests {
             .unwrap();
 
         assert_eq!(db.get_alertes_with_contacts(None).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn auto_close_sets_traitee_at_for_weekly_stats() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact = db
+            .create_contact(NewContact {
+                nom: "CLOSE".into(),
+                prenom: "Test".into(),
+                ..sample_contact("CLOSE", "Test")
+            })
+            .unwrap();
+        let contact_id = contact.id.unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let alerte = db
+            .create_alerte(NewAlerte {
+                contact_id,
+                type_alerte: "SUIVI_CLIENT_1AN".into(),
+                message: "Relance".into(),
+                date_alerte: Some(now),
+            })
+            .unwrap();
+
+        db.auto_close_obsolete_suivi_alertes_for_contact(contact_id)
+            .unwrap();
+
+        let traitee_at: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT traitee_at FROM alertes WHERE id = ?1",
+                params![alerte.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(traitee_at > 0, "clôture auto doit remplir traitee_at");
+
+        let now_dt = chrono::Utc::now();
+        let weekday = now_dt.weekday().num_days_from_monday() as i64;
+        let monday = (now_dt - chrono::Duration::days(weekday))
+            .date_naive()
+            .and_hms_opt(0, 0, 0)
+            .unwrap()
+            .and_utc()
+            .timestamp();
+        assert!(
+            db.count_alertes_traitees_depuis(monday).unwrap() >= 1,
+            "stat hebdo compte les clôtures auto"
+        );
     }
 }

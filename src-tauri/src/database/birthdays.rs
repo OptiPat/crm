@@ -94,6 +94,7 @@ pub fn type_produit_label(type_produit: &str) -> String {
         "SCPI_FISCALE" => "SCPI fiscale".to_string(),
         "ASSURANCE_VIE" => "assurance-vie".to_string(),
         "PER" => "PER".to_string(),
+        "CONTRAT_CAPITALISATION" => "contrat de capitalisation".to_string(),
         "IMMOBILIER" => "immobilier".to_string(),
         "FIP_FCPI" => "FIP/FCPI".to_string(),
         "FCPR" => "FCPR".to_string(),

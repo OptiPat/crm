@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 pub const STELLIUM_PERF_TEMPLATE_NOM: &str = "Performance AV/PER Stellium";
 pub const STELLIUM_PERF_TEMPLATE_TU_NOM: &str = "Performance AV/PER Stellium (tu)";
-pub const STELLIUM_PERF_DIGEST_VERSION: i64 = 1;
+pub const STELLIUM_PERF_DIGEST_VERSION: i64 = 9;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,18 +43,21 @@ pub struct PrepareStelliumPerfCampaignResult {
 
 #[derive(Debug, Clone)]
 struct ContractPerfLine {
-    nom_produit: String,
+    investissement_id: i64,
     type_produit: String,
     numero_contrat: Option<String>,
     encours_centimes: i64,
     nets_centimes: Option<i64>,
     perf_euro_centimes: Option<i64>,
+    owner_prenom: Option<String>,
+    partenaire_nom: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct BeneficiaryBundle {
     beneficiary_id: i64,
     beneficiary_prenom: String,
+    #[allow(dead_code)]
     beneficiary_nom: String,
     beneficiary_email: Option<String>,
     beneficiary_date_naissance: Option<i64>,
@@ -63,14 +66,39 @@ struct BeneficiaryBundle {
     contracts: Vec<ContractPerfLine>,
 }
 
+#[derive(Debug, Clone)]
+struct RecipientBundle {
+    recipient_id: i64,
+    seen_investissement_ids: std::collections::HashSet<i64>,
+    contracts: Vec<ContractPerfLine>,
+    has_own_contracts: bool,
+    proxy_child_prenoms: Vec<String>,
+}
+
 fn push_contract_to_bundle(
     bundle: &mut BeneficiaryBundle,
     investissement_id: i64,
-    contract: ContractPerfLine,
+    mut contract: ContractPerfLine,
 ) {
     if !bundle.seen_investissement_ids.insert(investissement_id) {
         return;
     }
+    contract.investissement_id = investissement_id;
+    contract.owner_prenom = None;
+    bundle.contracts.push(contract);
+}
+
+fn push_contract_to_recipient(
+    bundle: &mut RecipientBundle,
+    investissement_id: i64,
+    mut contract: ContractPerfLine,
+    owner_prenom: Option<String>,
+) {
+    if !bundle.seen_investissement_ids.insert(investissement_id) {
+        return;
+    }
+    contract.investissement_id = investissement_id;
+    contract.owner_prenom = owner_prenom;
     bundle.contracts.push(contract);
 }
 
@@ -82,13 +110,74 @@ fn normalize_batch_key(periode: &str) -> String {
         .collect()
 }
 
+const STELLIUM_TEMPLATE_VERSION: i64 = 6;
+
+const DEFAULT_METRICS_PLAIN_VOUS: &str = "Valeur actuelle : {{encours}}\n\
+Ce que vous avez versé (Net de frais) : {{nets}}\n\
+Performance : {{perf_signed}} soit {{perf_pct}}";
+
+const DEFAULT_METRICS_PLAIN_TU: &str = "Valeur actuelle : {{encours}}\n\
+Ce que tu as versé (Net de frais) : {{nets}}\n\
+Performance : {{perf_signed}} soit {{perf_pct}}";
+
+const DEFAULT_METRICS_HTML_VOUS: &str = r#"<ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que vous avez versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul>"#;
+
+const DEFAULT_METRICS_HTML_TU: &str = r#"<ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que tu as versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul>"#;
+
+#[derive(Debug, Clone)]
+struct StelliumLineFormats {
+    plain_vous: String,
+    plain_tu: String,
+    html_vous: Option<String>,
+    html_tu: Option<String>,
+}
+
+impl Default for StelliumLineFormats {
+    fn default() -> Self {
+        Self {
+            plain_vous: DEFAULT_METRICS_PLAIN_VOUS.into(),
+            plain_tu: DEFAULT_METRICS_PLAIN_TU.into(),
+            html_vous: None,
+            html_tu: None,
+        }
+    }
+}
+
+fn format_euros_integer_with_spaces(euros: i64) -> String {
+    let s = euros.abs().to_string();
+    let mut grouped = String::new();
+    for (i, ch) in s.chars().rev().enumerate() {
+        if i > 0 && i % 3 == 0 {
+            grouped.push(' ');
+        }
+        grouped.push(ch);
+    }
+    grouped.chars().rev().collect()
+}
+
 fn format_euro_centimes(centimes: i64) -> String {
-    let euros = centimes as f64 / 100.0;
-    let has_cents = centimes.abs() % 100 != 0;
-    if has_cents {
-        format!("{euros:.2} €").replace('.', ",")
+    let negative = centimes < 0;
+    let abs = centimes.abs();
+    let euros = abs / 100;
+    let cents = abs % 100;
+    let euros_str = format_euros_integer_with_spaces(euros);
+    let amount = if cents == 0 {
+        format!("{euros_str} €")
     } else {
-        format!("{:.0} €", euros).replace('.', ",")
+        format!("{euros_str},{cents:02} €")
+    };
+    if negative {
+        format!("-{amount}")
+    } else {
+        amount
+    }
+}
+
+fn format_perf_signed_euro(centimes: i64) -> String {
+    if centimes >= 0 {
+        format!("+{}", format_euro_centimes(centimes))
+    } else {
+        format_euro_centimes(centimes)
     }
 }
 
@@ -101,111 +190,445 @@ fn format_perf_pct_label(perf_centimes: i64, nets_centimes: i64) -> Option<Strin
     Some(format!("{sign}{:.2} %", pct).replace('.', ","))
 }
 
-fn perf_intro_phrases(count: usize, proxy: bool) -> (String, String) {
-    if proxy {
-        return (
-            "Voici la performance Stellium des contrats de {{beneficiary_prenom}} ({{periode}}) :"
-                .into(),
-            "Voici la performance Stellium des contrats de {{beneficiary_prenom}} {{beneficiary_nom}} ({{periode}}) :"
-                .into(),
-        );
-    }
-    if count <= 1 {
-        (
-            "Voici la performance Stellium de ton contrat ({{periode}}) :".into(),
-            "Voici la performance Stellium de votre contrat ({{periode}}) :".into(),
-        )
-    } else {
-        (
-            "Voici la performance Stellium de tes contrats ({{periode}}) :".into(),
-            "Voici la performance Stellium de vos contrats ({{periode}}) :".into(),
-        )
+fn format_name_list_fr(names: &[String]) -> String {
+    match names.len() {
+        0 => String::new(),
+        1 => names[0].clone(),
+        2 => format!("{} et {}", names[0], names[1]),
+        _ => {
+            let last = names.last().cloned().unwrap_or_default();
+            let rest = names[..names.len() - 1].join(", ");
+            format!("{rest} et {last}")
+        }
     }
 }
 
-fn build_contract_line_plain(c: &ContractPerfLine) -> String {
+fn stellium_releve_date_plain(unix: i64) -> Option<String> {
+    use chrono::{Datelike, Local, TimeZone};
+    let dt = Local.timestamp_opt(unix, 0).single()?;
+    Some(format!(
+        "{:02}/{:02}/{}",
+        dt.day(),
+        dt.month(),
+        dt.year()
+    ))
+}
+
+fn stellium_releve_date_suffix(unix: i64) -> Option<String> {
+    stellium_releve_date_plain(unix).map(|d| format!("au {d}"))
+}
+
+fn perf_intro_phrases_for_recipient(
+    releve_date_suffix: &str,
+    contract_count: usize,
+    has_own: bool,
+    proxy_prenoms: &[String],
+    single_product_label: Option<&str>,
+) -> (String, String) {
+    if !proxy_prenoms.is_empty() && !has_own {
+        let names = format_name_list_fr(proxy_prenoms);
+        let intro = format!(
+            "Voici la performance des contrats de {names} {releve_date_suffix} :"
+        );
+        return (intro.clone(), intro);
+    }
+    if contract_count <= 1 {
+        if let Some(product) = single_product_label.map(str::trim).filter(|s| !s.is_empty()) {
+            return (
+                format!("Voici la performance de ton contrat {product} {releve_date_suffix} :"),
+                format!("Voici la performance de votre contrat {product} {releve_date_suffix} :"),
+            );
+        }
+        return (
+            format!("Voici la performance de ton contrat {releve_date_suffix} :"),
+            format!("Voici la performance de votre contrat {releve_date_suffix} :"),
+        );
+    }
+    (
+        format!("Voici la performance de tes contrats {releve_date_suffix} :"),
+        format!("Voici la performance de vos contrats {releve_date_suffix} :"),
+    )
+}
+
+fn contract_product_label(c: &ContractPerfLine) -> String {
     let type_label = type_produit_label(&c.type_produit);
+    if let Some(partenaire) = c
+        .partenaire_nom
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        format!("{type_label} - {partenaire}")
+    } else {
+        type_label
+    }
+}
+
+fn sort_recipient_contracts(contracts: &mut [ContractPerfLine]) {
+    contracts.sort_by(|a, b| {
+        let a_child = a.owner_prenom.is_some();
+        let b_child = b.owner_prenom.is_some();
+        match (a_child, b_child) {
+            (false, true) => std::cmp::Ordering::Less,
+            (true, false) => std::cmp::Ordering::Greater,
+            _ => a.investissement_id.cmp(&b.investissement_id),
+        }
+    });
+}
+
+fn contrat_label_for_contract(
+    c: &ContractPerfLine,
+    recipient_prenom: &str,
+    own_index: &mut usize,
+    own_total: usize,
+) -> String {
+    if let Some(child_prenom) = c
+        .owner_prenom
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        return format!("Contrat {child_prenom}");
+    }
+    *own_index += 1;
+    let prenom = recipient_prenom.trim();
+    if own_total <= 1 {
+        if prenom.is_empty() {
+            "Contrat".to_string()
+        } else {
+            format!("Contrat {prenom}")
+        }
+    } else if prenom.is_empty() {
+        format!("Contrat {own_index}")
+    } else if *own_index == 1 {
+        format!("Contrat {prenom}")
+    } else {
+        format!("Contrat {prenom} {own_index}")
+    }
+}
+
+fn contrat_labels_for_recipient(
+    contracts: &[ContractPerfLine],
+    recipient_prenom: &str,
+) -> Vec<String> {
+    let own_total = contracts
+        .iter()
+        .filter(|c| c.owner_prenom.is_none())
+        .count();
+    let mut own_index = 0usize;
+    contracts
+        .iter()
+        .map(|c| contrat_label_for_contract(c, recipient_prenom, &mut own_index, own_total))
+        .collect()
+}
+
+fn contract_format_tokens(c: &ContractPerfLine, contrat_label: &str) -> [(&'static str, String); 9] {
+    let produit = contract_product_label(c);
     let numero = c
         .numero_contrat
         .as_deref()
-        .map(|n| format!(" (n° {n})"))
-        .unwrap_or_default();
-    let mut parts = vec![format!("Encours {}", format_euro_centimes(c.encours_centimes))];
-    if let Some(nets) = c.nets_centimes {
-        parts.push(format!("Nets versés {}", format_euro_centimes(nets)));
-    }
-    if let Some(perf) = c.perf_euro_centimes {
-        let mut perf_label = format!("Performance {}", format_euro_centimes(perf));
-        if let Some(nets) = c.nets_centimes {
-            if let Some(pct) = format_perf_pct_label(perf, nets) {
-                perf_label.push_str(&format!(" ({pct})"));
-            }
-        }
-        parts.push(perf_label);
-    }
-    format!(
-        "• {} — {type_label}{numero}\n  {}",
-        c.nom_produit.trim(),
-        parts.join(" · ")
-    )
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let encours = format_euro_centimes(c.encours_centimes);
+    let nets = c
+        .nets_centimes
+        .map(format_euro_centimes)
+        .unwrap_or_else(|| "—".to_string());
+    let perf_signed = c
+        .perf_euro_centimes
+        .map(format_perf_signed_euro)
+        .unwrap_or_else(|| "—".to_string());
+    let perf_pct = match (c.perf_euro_centimes, c.nets_centimes) {
+        (Some(perf), Some(nets)) => format_perf_pct_label(perf, nets).unwrap_or_else(|| "—".to_string()),
+        _ => "—".to_string(),
+    };
+    [
+        ("contrat_label", contrat_label.to_string()),
+        ("produit", produit),
+        ("numero", numero),
+        ("encours", encours),
+        ("nets", nets),
+        ("perf_signed", perf_signed.clone()),
+        ("perf_pct", perf_pct.clone()),
+        (
+            "perf_line",
+            format!("Performance : {perf_signed} soit {perf_pct}"),
+        ),
+        ("owner_line", String::new()),
+    ]
 }
 
-fn build_contract_line_html(c: &ContractPerfLine) -> String {
-    let plain = build_contract_line_plain(c);
-    let escaped = plain
-        .replace('&', "&amp;")
+fn apply_line_format_template(template: &str, c: &ContractPerfLine, contrat_label: &str) -> String {
+    let tokens = contract_format_tokens(c, contrat_label);
+    let mut out = template.to_string();
+    for (key, value) in tokens {
+        out = out.replace(&format!("{{{{{key}}}}}"), &value);
+    }
+    out
+}
+
+fn apply_line_format_template_html(
+    template: &str,
+    c: &ContractPerfLine,
+    contrat_label: &str,
+) -> String {
+    let tokens = contract_format_tokens(c, contrat_label);
+    let mut out = template.to_string();
+    for (key, value) in tokens {
+        out = out.replace(&format!("{{{{{key}}}}}"), &escape_html_text(&value));
+    }
+    out
+}
+
+fn escape_html_text(text: &str) -> String {
+    text.replace('&', "&amp;")
         .replace('<', "&lt;")
-        .replace('>', "&gt;");
-    format!(
-        "<div style=\"line-height:1.5;margin:0 0 8px 0;padding:0\">{}</div>",
-        escaped.replace('\n', "<br>")
-    )
+        .replace('>', "&gt;")
 }
 
-fn build_perf_resume(contracts: &[ContractPerfLine]) -> (String, String) {
-    let plain = contracts
+fn show_contract_header(contracts: &[ContractPerfLine]) -> bool {
+    contracts.len() > 1
+}
+
+fn build_contract_line_plain(
+    c: &ContractPerfLine,
+    contrat_label: &str,
+    formats: &StelliumLineFormats,
+    tu: bool,
+    show_header: bool,
+) -> String {
+    let metrics_template = if tu {
+        &formats.plain_tu
+    } else {
+        &formats.plain_vous
+    };
+    let metrics = apply_line_format_template(metrics_template, c, contrat_label);
+    if show_header {
+        format!(
+            "{} : {}\n{}",
+            contrat_label,
+            contract_product_label(c),
+            metrics
+        )
+    } else {
+        metrics
+    }
+}
+
+const PERF_CONTRACT_BLOCK_SPACER_HTML: &str =
+    r#"<div style="line-height:1.5;margin:0;padding:0"><br></div>"#;
+
+fn build_contract_line_html(
+    c: &ContractPerfLine,
+    contrat_label: &str,
+    formats: &StelliumLineFormats,
+    tu: bool,
+    show_header: bool,
+) -> String {
+    let custom = if tu {
+        formats.html_tu.as_deref()
+    } else {
+        formats.html_vous.as_deref()
+    };
+    if let Some(html_template) = custom {
+        let inner = apply_line_format_template_html(html_template, c, contrat_label);
+        return format!(
+            "<div style=\"line-height:1.5;margin:0 0 12px 0;padding:0\">{inner}</div>"
+        );
+    }
+    let metrics_template = if tu {
+        DEFAULT_METRICS_HTML_TU
+    } else {
+        DEFAULT_METRICS_HTML_VOUS
+    };
+    let metrics = apply_line_format_template_html(metrics_template, c, contrat_label);
+    if show_header {
+        let header = format!(
+            "<div style=\"line-height:1.5;margin:0 0 4px 0;font-weight:600\">{} : {}</div>",
+            escape_html_text(contrat_label),
+            escape_html_text(&contract_product_label(c))
+        );
+        format!(
+            "<div style=\"margin:0 0 16px 0;padding:0\">{header}{metrics}</div>"
+        )
+    } else {
+        format!("<div style=\"margin:0 0 16px 0;padding:0\">{metrics}</div>")
+    }
+}
+
+struct PerfResumeBundle {
+    plain_vous: String,
+    plain_tu: String,
+    html_vous: String,
+    html_tu: String,
+}
+
+fn build_perf_resume(
+    contracts: &[ContractPerfLine],
+    recipient_prenom: &str,
+    formats: &StelliumLineFormats,
+) -> PerfResumeBundle {
+    let labels = contrat_labels_for_recipient(contracts, recipient_prenom);
+    let show_header = show_contract_header(contracts);
+    let plain_vous = contracts
         .iter()
-        .map(build_contract_line_plain)
+        .zip(labels.iter())
+        .map(|(c, label)| build_contract_line_plain(c, label, formats, false, show_header))
         .collect::<Vec<_>>()
         .join("\n\n");
-    let html = contracts
+    let plain_tu = contracts
         .iter()
-        .map(build_contract_line_html)
+        .zip(labels.iter())
+        .map(|(c, label)| build_contract_line_plain(c, label, formats, true, show_header))
         .collect::<Vec<_>>()
-        .join("");
-    (plain, html)
+        .join("\n\n");
+    let html_vous = contracts
+        .iter()
+        .zip(labels.iter())
+        .map(|(c, label)| build_contract_line_html(c, label, formats, false, show_header))
+        .collect::<Vec<_>>()
+        .join(PERF_CONTRACT_BLOCK_SPACER_HTML);
+    let html_tu = contracts
+        .iter()
+        .zip(labels.iter())
+        .map(|(c, label)| build_contract_line_html(c, label, formats, true, show_header))
+        .collect::<Vec<_>>()
+        .join(PERF_CONTRACT_BLOCK_SPACER_HTML);
+    PerfResumeBundle {
+        plain_vous,
+        plain_tu,
+        html_vous,
+        html_tu,
+    }
 }
 
-fn build_campaign_variables_json(
-    bundle: &BeneficiaryBundle,
+fn contract_scalar_fields(c: &ContractPerfLine, contrat_label: &str) -> serde_json::Map<String, serde_json::Value> {
+    let tokens = contract_format_tokens(c, contrat_label);
+    let mut obj = serde_json::Map::new();
+    for (key, value) in tokens {
+        if matches!(
+            key,
+            "encours" | "nets" | "perf_signed" | "perf_pct" | "produit" | "numero" | "contrat_label"
+        ) {
+            obj.insert(key.to_string(), serde_json::Value::String(value));
+        }
+    }
+    obj
+}
+
+const AUTRES_CONTRAT_BLOCK_VOUS: &str = r#"<div style="margin-top:12px;padding:0"><div style="line-height:1.5;margin:0 0 4px 0;font-weight:600">{{produit}}</div><ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que vous avez versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul></div>"#;
+
+const AUTRES_CONTRAT_BLOCK_TU: &str = r#"<div style="margin-top:12px;padding:0"><div style="line-height:1.5;margin:0 0 4px 0;font-weight:600">{{produit}}</div><ul style="margin:0;padding:0 0 0 20px;list-style:disc"><li style="line-height:1.5;margin:0;padding:0"><strong>Valeur actuelle :</strong> {{encours}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Ce que tu as versé (Net de frais) :</strong> {{nets}}</li><li style="line-height:1.5;margin:0;padding:0"><strong>Performance :</strong> {{perf_signed}} soit {{perf_pct}}</li></ul></div>"#;
+
+fn build_fixed_contracts_html(
+    contracts: &[ContractPerfLine],
+    labels: &[String],
+    tu: bool,
+) -> String {
+    if contracts.is_empty() {
+        return String::new();
+    }
+    let template = if tu {
+        AUTRES_CONTRAT_BLOCK_TU
+    } else {
+        AUTRES_CONTRAT_BLOCK_VOUS
+    };
+    contracts
+        .iter()
+        .zip(labels.iter())
+        .map(|(c, label)| apply_line_format_template_html(template, c, label))
+        .collect::<String>()
+}
+
+fn build_recipient_campaign_variables_json(
+    recipient: &RecipientBundle,
+    recipient_prenom: &str,
+    recipient_nom: &str,
     periode: &str,
-    is_proxy: bool,
+    releve_date_unix: i64,
     prepared_at: i64,
 ) -> String {
-    let count = bundle.contracts.len();
-    let (intro_tu, intro_vous) = perf_intro_phrases(count, is_proxy);
-    let (perf_resume, perf_resume_html) = build_perf_resume(&bundle.contracts);
-    serde_json::json!({
-        "periode": periode.trim(),
-        "contrat_count": count,
-        "perf_intro_tu": intro_tu,
-        "perf_intro_vous": intro_vous,
-        "perf_resume": perf_resume,
-        "perf_resume_html": perf_resume_html,
-        "beneficiary_prenom": bundle.beneficiary_prenom,
-        "beneficiary_nom": bundle.beneficiary_nom,
-        "is_proxy_for_minor": is_proxy,
-        "prepared_at": prepared_at,
-        "digest_version": STELLIUM_PERF_DIGEST_VERSION,
-    })
-    .to_string()
+    let mut contracts = recipient.contracts.clone();
+    sort_recipient_contracts(&mut contracts);
+    let count = contracts.len();
+    let labels = contrat_labels_for_recipient(&contracts, recipient_prenom);
+    let releve_date = stellium_releve_date_plain(releve_date_unix).unwrap_or_default();
+    let releve_date_label =
+        stellium_releve_date_suffix(releve_date_unix).unwrap_or_else(|| format!("({periode})"));
+    let single_product_label = if count == 1 {
+        contracts.first().map(contract_product_label)
+    } else {
+        None
+    };
+    let (intro_tu, intro_vous) = perf_intro_phrases_for_recipient(
+        &releve_date_label,
+        count,
+        recipient.has_own_contracts,
+        &recipient.proxy_child_prenoms,
+        single_product_label.as_deref(),
+    );
+    let line_formats = StelliumLineFormats::default();
+    let resume = build_perf_resume(&contracts, recipient_prenom, &line_formats);
+    let is_proxy = !recipient.proxy_child_prenoms.is_empty();
+    let mut vars = serde_json::Map::new();
+    vars.insert("periode".into(), periode.trim().into());
+    vars.insert("contrat_count".into(), serde_json::json!(count));
+    vars.insert("releve_date".into(), releve_date.into());
+    vars.insert("releve_date_label".into(), releve_date_label.into());
+    vars.insert("perf_intro_tu".into(), intro_tu.into());
+    vars.insert("perf_intro_vous".into(), intro_vous.into());
+    vars.insert("perf_resume".into(), resume.plain_vous.clone().into());
+    vars.insert("perf_resume_tu".into(), resume.plain_tu.clone().into());
+    vars.insert("perf_resume_html".into(), resume.html_vous.clone().into());
+    vars.insert("perf_resume_html_tu".into(), resume.html_tu.clone().into());
+    vars.insert("perf_detail".into(), resume.plain_vous.clone().into());
+    vars.insert("perf_detail_tu".into(), resume.plain_tu.clone().into());
+    vars.insert("perf_detail_html".into(), resume.html_vous.clone().into());
+    vars.insert("perf_detail_html_tu".into(), resume.html_tu.clone().into());
+    vars.insert(
+        "beneficiary_prenom".into(),
+        recipient_prenom.trim().into(),
+    );
+    vars.insert("beneficiary_nom".into(), recipient_nom.trim().into());
+    vars.insert("is_proxy_for_minor".into(), is_proxy.into());
+    vars.insert("prepared_at".into(), prepared_at.into());
+    vars.insert(
+        "digest_version".into(),
+        STELLIUM_PERF_DIGEST_VERSION.into(),
+    );
+    vars.insert(
+        "perf_autres_contrats_html".into(),
+        build_fixed_contracts_html(&contracts[1..], &labels[1..], false).into(),
+    );
+    vars.insert(
+        "perf_autres_contrats_html_tu".into(),
+        build_fixed_contracts_html(&contracts[1..], &labels[1..], true).into(),
+    );
+    if let Some(first) = contracts.first() {
+        let first_label = labels.first().map(String::as_str).unwrap_or("Contrat");
+        for (key, value) in contract_scalar_fields(first, first_label) {
+            vars.insert(key, value);
+        }
+    } else {
+        for key in [
+            "encours",
+            "nets",
+            "perf_signed",
+            "perf_pct",
+            "produit",
+            "numero",
+            "contrat_label",
+        ] {
+            vars.insert(key.to_string(), String::new().into());
+        }
+    }
+    serde_json::Value::Object(vars).to_string()
 }
 
-const STELLIUM_TEMPLATE_VERSION: i64 = 1;
+const STELLIUM_VOUS_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour {{prenom}} {{nom}},</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_intro_vous}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_detail_html}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">Bonne journée.</div></div>"#;
 
-const STELLIUM_VOUS_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour {{prenom}} {{nom}},</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_intro_vous}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_resume_html}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">—</div><div style="line-height:1.5;margin:0;padding:0">Relevé informatif Stellium — se référer aux documents officiels de l'assureur. Ce message ne constitue pas un conseil en investissement.</div></div>"#;
-
-const STELLIUM_TU_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour {{prenom}},</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_intro_tu}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_resume_html}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">—</div><div style="line-height:1.5;margin:0;padding:0">Relevé informatif Stellium — se référer aux documents officiels de l'assureur. Ce message ne constitue pas un conseil en investissement.</div></div>"#;
+const STELLIUM_TU_CORPS_HTML: &str = r#"<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour {{prenom}},</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_intro_tu}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">{{perf_detail_html_tu}}</div><div style="line-height:1.5;margin:0;padding:0"><br></div><div style="line-height:1.5;margin:0;padding:0">Bonne journée.</div></div>"#;
 
 fn stellium_template_variables_json(corps_html: &str) -> String {
     serde_json::json!({
@@ -215,6 +638,182 @@ fn stellium_template_variables_json(corps_html: &str) -> String {
         "email_relance": { "enabled": false },
     })
     .to_string()
+}
+
+const STELLIUM_DEFAULT_SUJET: &str =
+    "Performance AV/PER — {{periode}}, {{beneficiary_prenom}} {{beneficiary_nom}}";
+
+fn stellium_template_user_customized(variables: Option<&str>) -> bool {
+    let Some(raw) = variables.filter(|s| !s.trim().is_empty()) else {
+        return false;
+    };
+    serde_json::from_str::<serde_json::Value>(raw)
+        .ok()
+        .and_then(|parsed| {
+            parsed
+                .get("stellium_perf_template_user_customized")
+                .and_then(|v| v.as_bool())
+        })
+        .unwrap_or(false)
+}
+
+fn stellium_template_content_preserved(
+    variables: Option<&str>,
+    sujet: &str,
+    corps: &str,
+    tu: bool,
+) -> bool {
+    if stellium_template_user_customized(variables) {
+        return true;
+    }
+    if sujet.trim() != STELLIUM_DEFAULT_SUJET {
+        return true;
+    }
+    let default_corps = if tu {
+        stellium_tu_corps_plain()
+    } else {
+        stellium_vous_corps_plain()
+    };
+    corps.trim() != default_corps.trim()
+}
+
+fn stellium_line_format_is_legacy(plain: &str) -> bool {
+    let s = plain.trim();
+    s.contains("Encours")
+        || s.contains("Nets versés")
+        || s.contains("contrat_label")
+        || s.contains("Contrat {{")
+        || s.contains("{{produit}}")
+        || s.contains("{{perf_line}}")
+        || s.contains("(net de frais)")
+        || s.contains("vous avez")
+}
+
+fn fix_stellium_tu_corps_html(corps_html: &str) -> String {
+    let mut s = corps_html.to_string();
+    s = s.replace("{{perf_detail_html}}_tu", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail}}_tu", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail_html_tu}}", "{{PERF_DETAIL_HTML_TU_SLOT}}");
+    s = s.replace("{{perf_detail_html}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{PERF_DETAIL_HTML_TU_SLOT}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail_tu}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_detail}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_resume_html_tu}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_resume_html}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_resume_tu}}", "{{perf_detail_html_tu}}");
+    s = s.replace("{{perf_resume}}", "{{perf_detail_html_tu}}");
+    s
+}
+
+fn fix_stellium_vous_corps_html(corps_html: &str) -> String {
+    let mut s = corps_html.to_string();
+    s = s.replace("{{perf_detail_html_tu}}", "{{PERF_DETAIL_HTML_VOUS_SLOT}}");
+    s = s.replace("{{perf_detail_tu}}", "{{perf_detail}}");
+    s = s.replace("{{perf_detail_html}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_detail}}", "{{perf_detail_html}}");
+    s = s.replace("{{PERF_DETAIL_HTML_VOUS_SLOT}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_resume_html_tu}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_resume_html}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_resume_tu}}", "{{perf_detail}}");
+    s = s.replace("{{perf_resume}}", "{{perf_detail_html}}");
+    s = s.replace("{{perf_intro_tu}}", "{{perf_intro_vous}}");
+    s
+}
+
+fn merge_stellium_template_variables(
+    existing: Option<&str>,
+    corps_html: &str,
+    tu: bool,
+) -> String {
+    let mut parsed = existing
+        .filter(|s| !s.trim().is_empty())
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(raw).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    let obj = parsed
+        .as_object_mut()
+        .expect("stellium template variables object");
+    let stored_html = obj
+        .get("corps_html")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty());
+    let merged_html = if tu {
+        fix_stellium_tu_corps_html(stored_html.unwrap_or(corps_html))
+    } else {
+        fix_stellium_vous_corps_html(stored_html.unwrap_or(corps_html))
+    };
+    obj.insert("corps_html".into(), merged_html.into());
+    if obj
+        .get("stellium_perf_line_plain_vous")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+        || obj
+            .get("stellium_perf_line_plain_vous")
+            .and_then(|v| v.as_str())
+            .map(|s| stellium_line_format_is_legacy(s))
+            .unwrap_or(false)
+    {
+        obj.insert(
+            "stellium_perf_line_plain_vous".into(),
+            DEFAULT_METRICS_PLAIN_VOUS.into(),
+        );
+    }
+    if obj
+        .get("stellium_perf_line_plain_tu")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_none()
+        || obj
+            .get("stellium_perf_line_plain_tu")
+            .and_then(|v| v.as_str())
+            .map(|s| stellium_line_format_is_legacy(s))
+            .unwrap_or(false)
+    {
+        obj.insert(
+            "stellium_perf_line_plain_tu".into(),
+            DEFAULT_METRICS_PLAIN_TU.into(),
+        );
+    }
+    if obj
+        .get("stellium_perf_line_html_vous")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
+        obj.remove("stellium_perf_line_html_vous");
+    }
+    if obj
+        .get("stellium_perf_line_html_tu")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .is_some()
+    {
+        obj.remove("stellium_perf_line_html_tu");
+    }
+    if !obj.contains_key("stellium_perf_template_version") {
+        obj.insert(
+            "stellium_perf_template_version".into(),
+            STELLIUM_TEMPLATE_VERSION.into(),
+        );
+    }
+    if !obj.contains_key("email_suivi_reponse") {
+        obj.insert(
+            "email_suivi_reponse".into(),
+            serde_json::json!({ "attendre_reponse": false }),
+        );
+    }
+    if !obj.contains_key("email_relance") {
+        obj.insert(
+            "email_relance".into(),
+            serde_json::json!({ "enabled": false }),
+        );
+    }
+    parsed.to_string()
 }
 
 fn stellium_template_needs_upgrade(variables: Option<&str>) -> bool {
@@ -245,17 +844,15 @@ fn stellium_template_needs_upgrade(variables: Option<&str>) -> bool {
 fn stellium_vous_corps_plain() -> &'static str {
     "Bonjour {{prenom}} {{nom}},\n\n\
 {{perf_intro_vous}}\n\n\
-{{perf_resume}}\n\n\
----\n\
-Relevé informatif Stellium — se référer aux documents officiels de l'assureur. Ce message ne constitue pas un conseil en investissement."
+{{perf_detail}}\n\n\
+Bonne journée."
 }
 
 fn stellium_tu_corps_plain() -> &'static str {
     "Bonjour {{prenom}},\n\n\
 {{perf_intro_tu}}\n\n\
-{{perf_resume}}\n\n\
----\n\
-Relevé informatif Stellium — se référer aux documents officiels de l'assureur. Ce message ne constitue pas un conseil en investissement."
+{{perf_detail_tu}}\n\n\
+Bonne journée."
 }
 
 fn contact_has_email(email: Option<&str>) -> bool {
@@ -323,34 +920,54 @@ impl Database {
     }
 
     fn upgrade_stellium_perf_email_templates(&self) -> Result<()> {
-        let tu_row: Option<(i64, Option<String>)> = self
+        let tu_row: Option<(i64, String, String, Option<String>)> = self
             .conn
             .query_row(
-                "SELECT id, variables FROM templates_email WHERE nom = ?1",
+                "SELECT id, sujet, corps, variables FROM templates_email WHERE nom = ?1",
                 params![STELLIUM_PERF_TEMPLATE_TU_NOM],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
             )
             .ok();
-        let vous_row: Option<(i64, Option<String>, Option<i64>)> = self
+        let vous_row: Option<(i64, String, String, Option<String>, Option<i64>)> = self
             .conn
             .query_row(
-                "SELECT id, variables, tutoiement_template_id FROM templates_email WHERE nom = ?1",
+                "SELECT id, sujet, corps, variables, tutoiement_template_id FROM templates_email WHERE nom = ?1",
                 params![STELLIUM_PERF_TEMPLATE_NOM],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
             )
             .ok();
 
-        let Some((vous_id, vous_vars, tu_link)) = vous_row else {
+        let Some((vous_id, vous_sujet, vous_corps, vous_vars, tu_link)) = vous_row else {
             return Ok(());
         };
 
-        let tu_id = if let Some((id, tu_vars)) = tu_row {
-            if stellium_template_needs_upgrade(tu_vars.as_deref()) {
+        let tu_preserved = tu_row
+            .as_ref()
+            .map(|(_, tu_sujet, tu_corps, tu_vars)| {
+                stellium_template_content_preserved(tu_vars.as_deref(), tu_sujet, tu_corps, true)
+            })
+            .unwrap_or(false);
+        let vous_preserved =
+            stellium_template_content_preserved(vous_vars.as_deref(), &vous_sujet, &vous_corps, false);
+        let any_preserved = tu_preserved || vous_preserved;
+
+        let tu_id = if let Some((id, _tu_sujet, _tu_corps, tu_vars)) = tu_row {
+            if any_preserved {
+                let merged = merge_stellium_template_variables(
+                    tu_vars.as_deref(),
+                    STELLIUM_TU_CORPS_HTML,
+                    true,
+                );
+                self.conn.execute(
+                    "UPDATE templates_email SET variables = ?1, updated_at = unixepoch() WHERE id = ?2",
+                    params![merged, id],
+                )?;
+            } else if stellium_template_needs_upgrade(tu_vars.as_deref()) {
                 self.conn.execute(
                     "UPDATE templates_email SET sujet = ?1, corps = ?2, variables = ?3, updated_at = unixepoch()
                      WHERE id = ?4",
                     params![
-                        "Performance AV/PER — {{periode}}, {{beneficiary_prenom}} {{beneficiary_nom}}",
+                        STELLIUM_DEFAULT_SUJET,
                         stellium_tu_corps_plain(),
                         stellium_template_variables_json(STELLIUM_TU_CORPS_HTML),
                         id
@@ -361,7 +978,7 @@ impl Database {
         } else {
             let tu = self.create_template_email(NewTemplateEmail {
                 nom: STELLIUM_PERF_TEMPLATE_TU_NOM.into(),
-                sujet: "Performance AV/PER — {{periode}}, {{beneficiary_prenom}} {{beneficiary_nom}}".into(),
+                sujet: STELLIUM_DEFAULT_SUJET.into(),
                 corps: stellium_tu_corps_plain().into(),
                 categorie: "NEWSLETTER".into(),
                 variables: Some(stellium_template_variables_json(STELLIUM_TU_CORPS_HTML)),
@@ -372,13 +989,23 @@ impl Database {
             Some(tu.id)
         };
 
-        if stellium_template_needs_upgrade(vous_vars.as_deref()) {
+        if any_preserved {
+            let merged = merge_stellium_template_variables(
+                vous_vars.as_deref(),
+                STELLIUM_VOUS_CORPS_HTML,
+                false,
+            );
+            self.conn.execute(
+                "UPDATE templates_email SET variables = ?1, updated_at = unixepoch() WHERE id = ?2",
+                params![merged, vous_id],
+            )?;
+        } else if stellium_template_needs_upgrade(vous_vars.as_deref()) {
             self.conn.execute(
                 "UPDATE templates_email SET sujet = ?1, corps = ?2, variables = ?3,
                     tutoiement_template_id = ?4, updated_at = unixepoch()
                  WHERE id = ?5",
                 params![
-                    "Performance AV/PER — {{periode}}, {{beneficiary_prenom}} {{beneficiary_nom}}",
+                    STELLIUM_DEFAULT_SUJET,
                     stellium_vous_corps_plain(),
                     stellium_template_variables_json(STELLIUM_VOUS_CORPS_HTML),
                     tu_id,
@@ -413,10 +1040,12 @@ impl Database {
     ) -> Result<Option<ContractPerfLine>> {
         self.conn
             .query_row(
-                "SELECT i.nom_produit, i.type_produit, i.numero_contrat,
-                        v.montant, v.stellium_versements_nets_centimes, v.stellium_perf_euro_centimes
+                "SELECT i.type_produit, i.numero_contrat,
+                        v.montant, v.stellium_versements_nets_centimes, v.stellium_perf_euro_centimes,
+                        p.raison_sociale
                  FROM investissements i
                  INNER JOIN investissement_valorisations v ON v.investissement_id = i.id
+                 LEFT JOIN partenaires p ON p.id = i.partenaire_id
                  WHERE i.id = ?1
                    AND (v.stellium_versements_nets_centimes IS NOT NULL OR v.stellium_perf_euro_centimes IS NOT NULL)
                    AND ABS(v.date_valorisation - ?2) <= 86400
@@ -425,12 +1054,14 @@ impl Database {
                 params![investissement_id, releve_date_unix],
                 |row| {
                     Ok(ContractPerfLine {
-                        nom_produit: row.get(0)?,
-                        type_produit: row.get(1)?,
-                        numero_contrat: row.get(2)?,
-                        encours_centimes: row.get(3)?,
-                        nets_centimes: row.get(4)?,
-                        perf_euro_centimes: row.get(5)?,
+                        investissement_id,
+                        type_produit: row.get(0)?,
+                        numero_contrat: row.get(1)?,
+                        encours_centimes: row.get(2)?,
+                        nets_centimes: row.get(3)?,
+                        perf_euro_centimes: row.get(4)?,
+                        owner_prenom: None,
+                        partenaire_nom: row.get(5)?,
                     })
                 },
             )
@@ -550,36 +1181,51 @@ impl Database {
         &self,
         contact_id: i64,
         template_id: i64,
+        batch_base: &str,
         batch_key: &str,
         campaign_variables: &str,
         email_date_prevue: Option<i64>,
         now: i64,
     ) -> Result<&'static str> {
-        let existing: Option<(i64, i64)> = self
+        let existing: Option<(i64, i64, String)> = self
             .conn
             .query_row(
-                "SELECT id, email_envoye FROM contact_template_envois
+                "SELECT id, email_envoye, COALESCE(campaign_batch_key, '')
+                 FROM contact_template_envois
                  WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
-                   AND COALESCE(campaign_batch_key, '') = ?3",
-                params![contact_id, template_id, batch_key],
-                |row| Ok((row.get(0)?, row.get(1)?)),
+                   AND (
+                     COALESCE(campaign_batch_key, '') = ?3
+                     OR COALESCE(campaign_batch_key, '') LIKE ?4 || '-%'
+                   )
+                 ORDER BY email_envoye DESC, id DESC
+                 LIMIT 1",
+                params![contact_id, template_id, batch_key, batch_base],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
             .ok();
 
-        if let Some((id, sent)) = existing {
+        if let Some((id, sent, existing_key)) = existing {
             if sent != 0 {
                 return Ok("already_sent");
             }
             self.conn.execute(
                 "UPDATE contact_template_envois SET
-                    campaign_variables = ?1,
-                    trigger_event_at = ?2,
-                    email_date_prevue = ?3,
+                    campaign_batch_key = ?1,
+                    campaign_variables = ?2,
+                    trigger_event_at = ?3,
+                    email_date_prevue = ?4,
                     email_annule = 0,
                     email_suivi_ignore = 0
-                 WHERE id = ?4",
-                params![campaign_variables, now, email_date_prevue, id],
+                 WHERE id = ?5",
+                params![
+                    batch_key,
+                    campaign_variables,
+                    now,
+                    email_date_prevue,
+                    id
+                ],
             )?;
+            let _ = existing_key;
             return Ok("updated");
         }
 
@@ -598,6 +1244,24 @@ impl Database {
             ],
         )?;
         Ok("created")
+    }
+
+    fn clear_superseded_stellium_perf_envois(
+        &self,
+        recipient_id: i64,
+        template_id: i64,
+        batch_base: &str,
+        keep_batch_key: &str,
+    ) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM contact_template_envois
+             WHERE contact_id = ?1 AND template_id = ?2 AND investissement_id IS NULL
+               AND email_envoye = 0
+               AND COALESCE(campaign_batch_key, '') LIKE ?3 || '-%'
+               AND COALESCE(campaign_batch_key, '') != ?4",
+            params![recipient_id, template_id, batch_base, keep_batch_key],
+        )?;
+        Ok(())
     }
 
     /// Dernier relevé Stellium en base (tous contrats partageant cette date de valorisation).
@@ -697,6 +1361,9 @@ impl Database {
         let mut contacts_proxy_to_parent = 0u64;
         let mut contacts_skipped_already_sent = 0u64;
 
+        let mut recipient_bundles: std::collections::HashMap<i64, RecipientBundle> =
+            std::collections::HashMap::new();
+
         for bundle in bundles.values() {
             if bundle.contracts.is_empty() {
                 continue;
@@ -705,39 +1372,91 @@ impl Database {
             let recipients =
                 self.resolve_recipient_contact_ids(bundle, input.releve_date_unix)?;
             for (recipient_id, is_proxy) in recipients {
-                let batch_key = format!("{}-b{}", batch_base, bundle.beneficiary_id);
-                let campaign_variables =
-                    build_campaign_variables_json(bundle, periode, is_proxy, now);
-
-                let (prenom, nom, email, _, _) =
-                    self.load_beneficiary_contact(recipient_id).unwrap_or_else(|_| {
-                        ("".into(), "".into(), None, None, None)
+                let entry = recipient_bundles
+                    .entry(recipient_id)
+                    .or_insert_with(|| RecipientBundle {
+                        recipient_id,
+                        seen_investissement_ids: std::collections::HashSet::new(),
+                        contracts: Vec::new(),
+                        has_own_contracts: false,
+                        proxy_child_prenoms: Vec::new(),
                     });
-                let has_email = contact_has_email(email.as_deref());
-                if !has_email {
-                    contacts_no_email += 1;
-                } else if is_proxy {
-                    contacts_proxy_to_parent += 1;
-                }
-
-                let email_date_prevue = Some(now);
-                match self.upsert_stellium_perf_envoi(
-                    recipient_id,
-                    template_id,
-                    &batch_key,
-                    &campaign_variables,
-                    email_date_prevue,
-                    now,
-                )? {
-                    "already_sent" => contacts_skipped_already_sent += 1,
-                    "created" | "updated" => {
-                        if has_email {
-                            contacts_queued += 1;
-                        }
+                if is_proxy {
+                    let prenom = bundle.beneficiary_prenom.trim();
+                    if !prenom.is_empty()
+                        && !entry
+                            .proxy_child_prenoms
+                            .iter()
+                            .any(|existing| existing == prenom)
+                    {
+                        entry.proxy_child_prenoms.push(prenom.to_string());
                     }
-                    _ => {}
+                } else if recipient_id == bundle.beneficiary_id {
+                    entry.has_own_contracts = true;
                 }
-                let _ = (prenom, nom);
+                for contract in &bundle.contracts {
+                    let owner = if is_proxy {
+                        Some(bundle.beneficiary_prenom.clone())
+                    } else {
+                        None
+                    };
+                    push_contract_to_recipient(
+                        entry,
+                        contract.investissement_id,
+                        contract.clone(),
+                        owner,
+                    );
+                }
+            }
+        }
+
+        for recipient in recipient_bundles.values() {
+            if recipient.contracts.is_empty() {
+                continue;
+            }
+            let batch_key = format!("{}-r{}", batch_base, recipient.recipient_id);
+            let (recipient_prenom, recipient_nom, email, _, _) = self
+                .load_beneficiary_contact(recipient.recipient_id)
+                .unwrap_or_else(|_| ("".into(), "".into(), None, None, None));
+            let campaign_variables = build_recipient_campaign_variables_json(
+                recipient,
+                &recipient_prenom,
+                &recipient_nom,
+                periode,
+                input.releve_date_unix,
+                now,
+            );
+            let has_email = contact_has_email(email.as_deref());
+            if !has_email {
+                contacts_no_email += 1;
+            } else if !recipient.proxy_child_prenoms.is_empty() {
+                contacts_proxy_to_parent += 1;
+            }
+
+            self.clear_superseded_stellium_perf_envois(
+                recipient.recipient_id,
+                template_id,
+                &batch_base,
+                &batch_key,
+            )?;
+
+            let email_date_prevue = Some(now);
+            match self.upsert_stellium_perf_envoi(
+                recipient.recipient_id,
+                template_id,
+                &batch_base,
+                &batch_key,
+                &campaign_variables,
+                email_date_prevue,
+                now,
+            )? {
+                "already_sent" => contacts_skipped_already_sent += 1,
+                "created" | "updated" => {
+                    if has_email {
+                        contacts_queued += 1;
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -750,6 +1469,20 @@ impl Database {
             contacts_no_email,
             contacts_skipped_already_sent
         );
+
+        let snapshot = super::stellium_perf_dashboard::StelliumPerfLastPrepareSnapshot {
+            periode: periode.to_string(),
+            batch_key: batch_base.clone(),
+            prepared_at: now,
+            contract_count: input.investissement_ids.len() as u64,
+            contacts_matched,
+            contacts_queued,
+            contacts_no_email,
+            contacts_proxy_to_parent,
+            contacts_skipped_already_sent,
+            digest_version: STELLIUM_PERF_DIGEST_VERSION,
+        };
+        self.save_stellium_last_prepare_snapshot(&snapshot)?;
 
         Ok(PrepareStelliumPerfCampaignResult {
             periode: periode.to_string(),
@@ -976,7 +1709,7 @@ mod tests {
                     |row| row.get(0),
                 )
                 .unwrap();
-            assert!(vars.contains("AV Commun"));
+            assert!(vars.contains("assurance-vie"));
             assert!(vars.contains("\"is_proxy_for_minor\":false"));
         }
     }
@@ -1112,8 +1845,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(vars.contains("AV Perso"));
-        assert!(vars.contains("AV Commun"));
+        assert!(vars.contains("assurance-vie"));
         assert!(vars.contains("\"contrat_count\":2"));
 
         let envoi_count: i64 = db
@@ -1131,26 +1863,37 @@ mod tests {
     fn build_perf_resume_aggregates_multiple_contracts() {
         let contracts = vec![
             ContractPerfLine {
-                nom_produit: "Cristalliance Avenir".into(),
+                investissement_id: 1,
                 type_produit: "ASSURANCE_VIE".into(),
                 numero_contrat: Some("123".into()),
-                encours_centimes: 100_000_00,
-                nets_centimes: Some(90_000_00),
-                perf_euro_centimes: Some(10_000_00),
+                encours_centimes: 100_000,
+                nets_centimes: Some(90_000),
+                perf_euro_centimes: Some(10_000),
+                owner_prenom: None,
+                partenaire_nom: None,
             },
             ContractPerfLine {
-                nom_produit: "Evoluvie".into(),
+                investissement_id: 2,
                 type_produit: "PER".into(),
                 numero_contrat: Some("456".into()),
-                encours_centimes: 50_000_00,
-                nets_centimes: Some(48_000_00),
-                perf_euro_centimes: Some(2_000_00),
+                encours_centimes: 50_000,
+                nets_centimes: Some(48_000),
+                perf_euro_centimes: Some(2_000),
+                owner_prenom: None,
+                partenaire_nom: None,
             },
         ];
-        let (plain, html) = build_perf_resume(&contracts);
-        assert!(plain.contains("Cristalliance Avenir"));
-        assert!(plain.contains("Evoluvie"));
-        assert!(html.contains("Performance"));
+        let (resume, _) = {
+            let formats = StelliumLineFormats::default();
+            let r = build_perf_resume(&contracts, "Marie", &formats);
+            (r.plain_vous, r.html_vous)
+        };
+        assert!(resume.contains("Contrat Marie"));
+        assert!(resume.contains("Contrat Marie 2"));
+        assert!(resume.contains("Valeur actuelle"));
+        assert!(resume.contains("1 000 €"));
+        assert!(resume.contains("Performance : +100 €"));
+        assert_eq!(resume.matches("Valeur actuelle").count(), 2);
     }
 
     #[test]
@@ -1223,9 +1966,175 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(vars.contains("AV 1"));
-        assert!(vars.contains("AV 2"));
+        assert!(vars.contains("assurance-vie"));
         assert!(vars.contains("\"is_proxy_for_minor\":true"));
+        assert!(vars.contains("Lucas"));
+        assert!(!vars.contains("{{beneficiary_prenom}}"));
+
+        let envoi_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![parent],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(envoi_count, 1);
+    }
+
+    #[test]
+    fn prepare_campaign_aggregates_parent_own_and_children_into_one_envoi() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let foyer = db
+            .create_foyer(NewFoyer {
+                nom: "Foyer AMANDINE".into(),
+                type_foyer: "COUPLE".into(),
+                nombre_parts_fiscales: None,
+                tranche_imposition: None,
+                revenu_fiscal_reference: None,
+                ir_net_a_payer: None,
+                situation_patrimoniale: None,
+                objectifs_patrimoniaux: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let parent = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("DECLARANT_1".into()),
+                email: Some("amandine@example.com".into()),
+                ..sample_client("DUPONT", "Amandine")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let enfant1 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("ENFANT".into()),
+                email: None,
+                date_naissance: Some("2015-06-01T00:00:00.000Z".into()),
+                ..sample_client("DUPONT", "Lucas")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let enfant2 = db
+            .create_contact(NewContact {
+                foyer_id: Some(foyer.id),
+                role_foyer: Some("ENFANT".into()),
+                email: None,
+                date_naissance: Some("2017-03-01T00:00:00.000Z".into()),
+                ..sample_client("DUPONT", "Emma")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv_parent, releve) =
+            seed_stellium_investment(&db, parent, "AV Amandine", "100", 10_000);
+        let (inv_enfant1, _) = seed_stellium_investment(&db, enfant1, "AV Lucas", "111", 20_000);
+        let (inv_enfant2, _) = seed_stellium_investment(&db, enfant2, "AV Emma", "222", 30_000);
+
+        let result = db
+            .prepare_stellium_perf_campaign(PrepareStelliumPerfCampaignInput {
+                periode: "Juin 2026".into(),
+                releve_date_unix: releve,
+                investissement_ids: vec![inv_parent, inv_enfant1, inv_enfant2],
+            })
+            .unwrap();
+
+        assert_eq!(result.contacts_queued, 1);
+
+        let envoi_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![parent],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(envoi_count, 1);
+
+        let vars: String = db
+            .conn
+            .query_row(
+                "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                params![parent],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(vars.contains("assurance-vie"));
+        assert!(vars.contains("\"contrat_count\":3"));
+        assert!(vars.contains("vos contrats"));
+        assert!(vars.contains("Contrat Amandine"));
+        assert!(vars.contains("Contrat Lucas"));
+        assert!(vars.contains("Contrat Emma"));
+        assert!(!vars.contains("Contrat enfant 1"));
+        assert!(vars.contains("\"beneficiary_prenom\":\"Amandine\""));
+        assert!(vars.contains("\"beneficiary_nom\":\"DUPONT\""));
+        assert!(!vars.contains("{{beneficiary_prenom}}"));
+        assert!(!vars.contains("{{periode}}"));
+    }
+
+    #[test]
+    fn prepare_campaign_respects_already_sent_legacy_batch_key() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.ensure_stellium_perf_email_templates().unwrap();
+
+        let client = db
+            .create_contact(NewContact {
+                email: Some("legacy@example.com".into()),
+                ..sample_client("MARTIN", "Jean")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        let (inv, releve) = seed_stellium_investment(&db, client, "AV Legacy", "555", 15_000);
+        let input = PrepareStelliumPerfCampaignInput {
+            periode: "Juin 2026".into(),
+            releve_date_unix: releve,
+            investissement_ids: vec![inv],
+        };
+        db.prepare_stellium_perf_campaign(input.clone()).unwrap();
+
+        let template_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT id FROM templates_email WHERE nom = ?1",
+                params![STELLIUM_PERF_TEMPLATE_NOM],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        db.conn
+            .execute(
+                "UPDATE contact_template_envois
+                 SET campaign_batch_key = ?1, email_envoye = 1
+                 WHERE contact_id = ?2 AND template_id = ?3",
+                params![format!("juin2026-b{}", client), client, template_id],
+            )
+            .unwrap();
+
+        let result = db.prepare_stellium_perf_campaign(input).unwrap();
+        assert_eq!(result.contacts_skipped_already_sent, 1);
+        assert_eq!(result.contacts_queued, 0);
+
+        let envoi_count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                params![client],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(envoi_count, 1);
     }
 
     #[test]
@@ -1293,15 +2202,29 @@ mod tests {
         assert_eq!(result.contacts_queued, 2);
         assert_eq!(result.contacts_proxy_to_parent, 2);
 
-        let envoi_count: i64 = db
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id IN (?1, ?2)",
-                params![parent1, parent2],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert_eq!(envoi_count, 2);
+        for parent_id in [parent1, parent2] {
+            let envoi_count: i64 = db
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM contact_template_envois WHERE contact_id = ?1",
+                    params![parent_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert_eq!(envoi_count, 1);
+
+            let vars: String = db
+                .conn
+                .query_row(
+                    "SELECT campaign_variables FROM contact_template_envois WHERE contact_id = ?1",
+                    params![parent_id],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(vars.contains("assurance-vie"));
+            assert!(vars.contains("Leo"));
+            assert!(!vars.contains("{{beneficiary_prenom}}"));
+        }
     }
 
     #[test]
@@ -1386,7 +2309,9 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(vars.contains("120"));
+        assert!(vars.contains("\"encours\""));
+        assert!(vars.contains("11 200"));
+        assert!(vars.contains("perf_signed"));
         let envoi_count: i64 = db
             .conn
             .query_row(
@@ -1543,5 +2468,175 @@ mod tests {
         let vars = r#"{"corps_html":"<p>x</p>","stellium_perf_template_version":1,"stellium_perf_template_user_customized":true}"#;
         assert!(!stellium_template_needs_upgrade(Some(vars)));
         assert!(stellium_template_needs_upgrade(None));
+    }
+
+    #[test]
+    fn perf_intro_uses_releve_date_suffix() {
+        use chrono::{TimeZone, Utc};
+        let unix = Utc.with_ymd_and_hms(2026, 6, 20, 12, 0, 0).unwrap().timestamp();
+        let suffix = stellium_releve_date_suffix(unix).expect("date");
+        assert_eq!(suffix, "au 20/06/2026");
+        let (tu, vous) = perf_intro_phrases_for_recipient(&suffix, 1, true, &[], None);
+        assert_eq!(tu, "Voici la performance de ton contrat au 20/06/2026 :");
+        assert_eq!(vous, "Voici la performance de votre contrat au 20/06/2026 :");
+        let (tu_multi, _) = perf_intro_phrases_for_recipient(&suffix, 2, true, &[], None);
+        assert_eq!(tu_multi, "Voici la performance de tes contrats au 20/06/2026 :");
+        let (tu_single, _) =
+            perf_intro_phrases_for_recipient(&suffix, 1, true, &[], Some("assurance-vie - Vie Plus"));
+        assert_eq!(
+            tu_single,
+            "Voici la performance de ton contrat assurance-vie - Vie Plus au 20/06/2026 :"
+        );
+    }
+
+    #[test]
+    fn contrat_labels_parent_with_children() {
+        let contracts = vec![
+            ContractPerfLine {
+                investissement_id: 1,
+                type_produit: "ASSURANCE_VIE".into(),
+                numero_contrat: None,
+                encours_centimes: 0,
+                nets_centimes: None,
+                perf_euro_centimes: None,
+                owner_prenom: None,
+                partenaire_nom: None,
+            },
+            ContractPerfLine {
+                investissement_id: 2,
+                type_produit: "ASSURANCE_VIE".into(),
+                numero_contrat: None,
+                encours_centimes: 0,
+                nets_centimes: None,
+                perf_euro_centimes: None,
+                owner_prenom: Some("Lucas".into()),
+                partenaire_nom: None,
+            },
+            ContractPerfLine {
+                investissement_id: 3,
+                type_produit: "ASSURANCE_VIE".into(),
+                numero_contrat: None,
+                encours_centimes: 0,
+                nets_centimes: None,
+                perf_euro_centimes: None,
+                owner_prenom: Some("Emma".into()),
+                partenaire_nom: None,
+            },
+        ];
+        let labels = contrat_labels_for_recipient(&contracts, "Amandine");
+        assert_eq!(
+            labels,
+            vec![
+                "Contrat Amandine",
+                "Contrat Lucas",
+                "Contrat Emma",
+            ]
+        );
+    }
+
+    #[test]
+    fn contract_product_label_uses_type_and_partenaire_only() {
+        let line = ContractPerfLine {
+            investissement_id: 1,
+            type_produit: "ASSURANCE_VIE".into(),
+            numero_contrat: None,
+            encours_centimes: 0,
+            nets_centimes: None,
+            perf_euro_centimes: None,
+            owner_prenom: None,
+            partenaire_nom: Some("Generali".into()),
+        };
+        assert_eq!(
+            contract_product_label(&line),
+            "assurance-vie - Generali"
+        );
+        let sans_partenaire = ContractPerfLine {
+            partenaire_nom: None,
+            ..line
+        };
+        assert_eq!(contract_product_label(&sans_partenaire), "assurance-vie");
+    }
+
+    #[test]
+    fn stellium_template_content_preserved_when_sujet_edited() {
+        assert!(stellium_template_content_preserved(
+            None,
+            "Mon objet perso",
+            stellium_vous_corps_plain(),
+            false
+        ));
+    }
+
+    #[test]
+    fn build_contract_line_html_uses_custom_html_template() {
+        let line = ContractPerfLine {
+            investissement_id: 1,
+            type_produit: "ASSURANCE_VIE".into(),
+            numero_contrat: Some("123".into()),
+            encours_centimes: 594_602,
+            nets_centimes: Some(504_084),
+            perf_euro_centimes: Some(90_518),
+            owner_prenom: None,
+            partenaire_nom: None,
+        };
+        let formats = StelliumLineFormats {
+            plain_vous: DEFAULT_METRICS_PLAIN_VOUS.into(),
+            plain_tu: DEFAULT_METRICS_PLAIN_TU.into(),
+            html_vous: Some(
+                "<ul><li><strong>Valeur :</strong> {{encours}}</li></ul>".into(),
+            ),
+            html_tu: None,
+        };
+        let html = build_contract_line_html(&line, "Contrat Marie", &formats, false, true);
+        assert!(html.contains("<strong>Valeur :</strong>"));
+        assert!(html.contains("5 946,02 €"));
+        assert!(!html.contains("<ul><li><strong>Valeur :</strong> {{encours}}"));
+    }
+
+    #[test]
+    fn merge_stellium_template_variables_replaces_legacy_line_format() {
+        let legacy = r#"{"corps_html":"<p>x</p>","stellium_perf_line_plain_vous":"{{produit}}\nEncours {{encours}}"}"#;
+        let merged = merge_stellium_template_variables(Some(legacy), "<p>x</p>", false);
+        let parsed: serde_json::Value = serde_json::from_str(&merged).unwrap();
+        assert_eq!(
+            parsed["stellium_perf_line_plain_vous"].as_str().unwrap(),
+            DEFAULT_METRICS_PLAIN_VOUS
+        );
+    }
+
+    #[test]
+    fn single_contract_html_uses_bullets_without_header() {
+        let contracts = vec![ContractPerfLine {
+            investissement_id: 1,
+            type_produit: "ASSURANCE_VIE".into(),
+            numero_contrat: Some("123".into()),
+            encours_centimes: 594_602,
+            nets_centimes: Some(504_084),
+            perf_euro_centimes: Some(90_518),
+            owner_prenom: None,
+            partenaire_nom: None,
+        }];
+        let resume = build_perf_resume(&contracts, "Luc", &StelliumLineFormats::default());
+        assert!(!resume.html_tu.contains("Contrat Luc"));
+        assert!(resume.html_tu.contains("<ul"));
+        assert!(resume.html_tu.contains("<strong>Valeur actuelle :</strong>"));
+        assert!(resume.html_tu.contains("5 946,02 €"));
+    }
+
+    #[test]
+    fn fix_stellium_tu_corps_html_repairs_orphan_suffix() {
+        let raw = "<div>{{perf_intro_tu}}</div><div>{{perf_detail_html}}_tu</div>";
+        let fixed = fix_stellium_tu_corps_html(raw);
+        assert!(fixed.contains("{{perf_detail_html_tu}}"));
+        assert!(!fixed.contains("}}_tu"));
+        assert!(!fixed.contains("{{perf_detail_tu}}"));
+    }
+
+    #[test]
+    fn fix_stellium_tu_corps_html_from_plain_detail() {
+        let raw = "<div>{{perf_intro_tu}}</div><div>{{perf_detail_tu}}</div>";
+        let fixed = fix_stellium_tu_corps_html(raw);
+        assert!(fixed.contains("{{perf_detail_html_tu}}"));
+        assert!(!fixed.contains("{{perf_detail_tu}}"));
     }
 }

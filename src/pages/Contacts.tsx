@@ -76,6 +76,13 @@ import {
   armContactInvestissementFormOnDetail,
   consumePendingOpenContactId,
 } from "@/lib/investissements/investissement-navigation";
+import { consumeContactsNavigationFilter } from "@/lib/navigation/contacts-navigation";
+import type { ContactsNavigationFilter } from "@/lib/navigation/contacts-navigation";
+import {
+  contactMatchesPipelineStage,
+  CONTACTS_PIPELINE_STAGE_LABELS,
+  type ContactsPipelineStage,
+} from "@/lib/contacts/contacts-pipeline-match";
 import {
   SplitDetailLayout,
   SplitDetailPane,
@@ -126,6 +133,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [groupByFoyer, setGroupByFoyer] = useState(false);
   const [etiquettesParContact, setEtiquettesParContact] = useState<Record<number, ContactEtiquetteDetails[]>>({});
   const [needsFollowupOnly, setNeedsFollowupOnly] = useState(false);
+  const [pipelineStageFilter, setPipelineStageFilter] = useState<ContactsPipelineStage | null>(
+    null
+  );
   const [alertContactIds, setAlertContactIds] = useState<Set<number>>(new Set());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const pendingOpenContactIdRef = useRef<number | null>(null);
@@ -133,6 +143,33 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [sessionHydrated, setSessionHydrated] = useState(false);
+
+  const applyContactsNavIntent = useCallback((filter: ContactsNavigationFilter | null) => {
+    if (!filter) return;
+    setSearchQuery("");
+    setStatutFilter("ALL");
+    setEtiquetteFilter("ALL");
+    setSegmentFilter("ALL");
+    setNeedsFollowupOnly(false);
+
+    if (filter.kind === "pipeline") {
+      setPipelineStageFilter(filter.stage);
+      setMainTab("clients");
+      setClientSubTab("CLIENT");
+      return;
+    }
+
+    if (filter.kind === "category") {
+      setPipelineStageFilter(null);
+      if (filter.mainTab === "clients" && "clientSubTab" in filter) {
+        setMainTab("clients");
+        setClientSubTab(filter.clientSubTab);
+      } else if (filter.mainTab === "filleuls" && "filleulSubTab" in filter) {
+        setMainTab("filleuls");
+        setFilleulSubTab(filter.filleulSubTab);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const stored = loadContactsUiState();
@@ -145,8 +182,9 @@ export function Contacts({ onNavigate }: ContactsProps) {
       if (stored.segmentFilter) setSegmentFilter(stored.segmentFilter);
       if (stored.groupByFoyer != null) setGroupByFoyer(stored.groupByFoyer);
     }
+    applyContactsNavIntent(consumeContactsNavigationFilter());
     setSessionHydrated(true);
-  }, []);
+  }, [applyContactsNavIntent]);
 
   useEffect(() => {
     if (!sessionHydrated) return;
@@ -344,13 +382,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
       // Filtre de recherche textuelle
       const matchesSearch = contactMatchesSearch(searchQuery, contact);
 
-      // 🔥 Filtre par catégorie - LOGIQUE INDÉPENDANTE
+      // Filtre par catégorie - LOGIQUE INDÉPENDANTE (ou vue pipeline dashboard)
       let matchesCategorie = false;
-      if (isFilleulTab) {
-        // Onglet FILLEULS → filtrer par filleul_categorie
+      if (pipelineStageFilter) {
+        matchesCategorie = contactMatchesPipelineStage(contact, pipelineStageFilter);
+      } else if (isFilleulTab) {
         matchesCategorie = contact.filleul_categorie === currentCategorie;
       } else {
-        // Onglet CLIENTS → filtrer par categorie
         matchesCategorie = contact.categorie === currentCategorie;
       }
 
@@ -529,6 +567,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
   useAppNavigationListener(
     (detail) => {
+      if (detail.type === "page" && detail.page === "contacts") {
+        applyContactsNavIntent(consumeContactsNavigationFilter());
+        return;
+      }
       if (detail.type !== "open-contact") return;
       const contact = contacts.find((c) => c.id === detail.contactId);
       if (contact) {
@@ -537,7 +579,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
         pendingOpenContactIdRef.current = detail.contactId;
       }
     },
-    [contacts, openContactDetail]
+    [contacts, openContactDetail, applyContactsNavIntent]
   );
 
   const openLinkedContact = useCallback(
@@ -730,11 +772,21 @@ export function Contacts({ onNavigate }: ContactsProps) {
               <CardDescription>
                 {filteredContacts.length} résultat
                 {filteredContacts.length > 1 ? "s" : ""}
+                {pipelineStageFilter
+                  ? ` · ${CONTACTS_PIPELINE_STAGE_LABELS[pipelineStageFilter]}`
+                  : ""}
                 {groupByFoyer ? " · regroupés par foyer" : ""}
               </CardDescription>
             </div>
 
-            <Tabs value={mainTab} onValueChange={(value) => setMainTab(value as MainTab)} className="w-full">
+            <Tabs
+              value={mainTab}
+              onValueChange={(value) => {
+                setPipelineStageFilter(null);
+                setMainTab(value as MainTab);
+              }}
+              className="w-full"
+            >
               <TabsList className="grid w-full grid-cols-2 h-auto">
                 <TabsTrigger value="clients" className="gap-2 py-2.5">
                   Clients
@@ -757,7 +809,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
               {/* Contenu onglet CLIENTS */}
               <TabsContent value="clients" className="space-y-4 mt-4">
-                <Tabs value={clientSubTab} onValueChange={(value) => setClientSubTab(value as ClientSubTab)}>
+                <Tabs
+                  value={clientSubTab}
+                  onValueChange={(value) => {
+                    setPipelineStageFilter(null);
+                    setClientSubTab(value as ClientSubTab);
+                  }}
+                >
                   <TabsList className="grid w-full grid-cols-3">
                     <TabsTrigger value="CLIENT" className="gap-2">
                       Clients
@@ -783,7 +841,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
 
               {/* Contenu onglet FILLEULS */}
               <TabsContent value="filleuls" className="space-y-4 mt-4">
-                <Tabs value={filleulSubTab} onValueChange={(value) => setFilleulSubTab(value as FilleulSubTab)}>
+                <Tabs
+                  value={filleulSubTab}
+                  onValueChange={(value) => {
+                    setPipelineStageFilter(null);
+                    setFilleulSubTab(value as FilleulSubTab);
+                  }}
+                >
                   <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="FILLEUL" className="gap-2">
                       Filleuls
@@ -910,6 +974,12 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 needsFollowupOnly={needsFollowupOnly}
                 onToggleNeedsFollowup={() => setNeedsFollowupOnly((v) => !v)}
                 followupCount={alertContactIds.size}
+                pipelineStageLabel={
+                  pipelineStageFilter
+                    ? CONTACTS_PIPELINE_STAGE_LABELS[pipelineStageFilter]
+                    : undefined
+                }
+                onClearPipelineStage={() => setPipelineStageFilter(null)}
               />
             </div>
           </div>

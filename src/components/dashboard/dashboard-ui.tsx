@@ -1,6 +1,11 @@
-import { ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { ReactNode, useState } from "react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  loadDashboardSectionOpen,
+  saveDashboardSectionOpen,
+  type DashboardSectionId,
+} from "@/lib/dashboard/dashboard-page-preferences";
 import { formatDashboardPercent } from "./dashboard-format";
 
 export function ChartLoading({ height = 360 }: { height?: number }) {
@@ -184,12 +189,79 @@ export function DashboardPageHeader() {
   }).format(new Date());
 
   return (
-    <header className="border-b border-border/60 pb-3">
-      <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
-      <h2 className="text-2xl font-serif font-bold text-primary tracking-tight mt-0.5">
-        Tableau de bord
-      </h2>
-    </header>
+    <p className="text-xs font-medium text-muted-foreground capitalize border-b border-border/60 pb-3">
+      {today}
+    </p>
+  );
+}
+
+export function DashboardKpiHelp() {
+  return (
+    <details className="group rounded-xl border bg-muted/20 text-sm">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 font-medium [&::-webkit-details-marker]:hidden">
+        Comprendre les indicateurs
+        <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground transition-transform group-open:rotate-180" />
+      </summary>
+      <div className="px-4 pb-4 space-y-2 text-xs text-muted-foreground leading-relaxed border-t pt-3">
+        <p>
+          <strong className="text-foreground">Encours placements</strong> — valorisation actuelle
+          AV, PER, FIP/FCPI… « avec moi ». Les SCPI et l&apos;immobilier ne sont pas inclus.
+        </p>
+        <p>
+          <strong className="text-foreground">Panier moyen</strong> — montants souscrits (
+          <em>montant initial</em>) divisés par le nombre de clients, pas l&apos;encours actuel.
+        </p>
+        <p>
+          <strong className="text-foreground">Versements programmés</strong> — projection annuelle
+          des VP actifs sur le portefeuille « avec moi ».
+        </p>
+      </div>
+    </details>
+  );
+}
+
+export function DashboardCollapsibleSection({
+  sectionId,
+  title,
+  subtitle,
+  children,
+  defaultOpen = true,
+}: {
+  sectionId: DashboardSectionId;
+  title: ReactNode;
+  subtitle?: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(() => loadDashboardSectionOpen(sectionId, defaultOpen));
+
+  return (
+    <details
+      className="group rounded-2xl border border-border/70 bg-card/40 open:bg-transparent open:border-transparent"
+      open={open}
+      onToggle={(event) => {
+        const nextOpen = (event.currentTarget as HTMLDetailsElement).open;
+        setOpen(nextOpen);
+        saveDashboardSectionOpen(sectionId, nextOpen);
+      }}
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-1 py-2 [&::-webkit-details-marker]:hidden">
+        <DashboardSectionTitle subtitle={subtitle}>{title}</DashboardSectionTitle>
+        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180 ml-auto" />
+      </summary>
+      <div className="pt-3 space-y-3">{children}</div>
+    </details>
+  );
+}
+
+export function DashboardCockpitSection({ children }: { children: ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-gradient-to-b from-muted/30 to-card p-4 sm:p-5 space-y-4 shadow-sm">
+      <DashboardSectionTitle subtitle="Anniversaires, agenda, tâches et alertes">
+        Cockpit du jour
+      </DashboardSectionTitle>
+      {children}
+    </div>
   );
 }
 

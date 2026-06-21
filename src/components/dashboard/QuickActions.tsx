@@ -1,8 +1,7 @@
 import {
   Bell,
-  History,
-  House,
-  UserPlus,
+  ListTodo,
+  TrendingUp,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -35,28 +34,20 @@ const ACTIONS: QuickAction[] = [
     iconColor: "text-red-600",
   },
   {
-    id: "foyer",
-    page: "foyers",
-    title: "Foyers",
-    icon: House,
-    iconBg: "bg-emerald-50",
-    iconColor: "text-emerald-700",
+    id: "investissements",
+    page: "investissements",
+    title: "Investissements",
+    icon: TrendingUp,
+    iconBg: "bg-amber-50",
+    iconColor: "text-amber-700",
   },
   {
-    id: "interaction",
-    page: "interactions",
-    title: "Historique des échanges",
-    icon: History,
+    id: "taches",
+    page: "taches",
+    title: "Tâches & rappels",
+    icon: ListTodo,
     iconBg: "bg-blue-50",
     iconColor: "text-blue-700",
-  },
-  {
-    id: "partenaire",
-    page: "partenaires",
-    title: "Partenaires",
-    icon: UserPlus,
-    iconBg: "bg-violet-50",
-    iconColor: "text-violet-700",
   },
 ];
 
@@ -67,7 +58,7 @@ interface QuickActionsProps {
 export function QuickActions({ onNavigate }: QuickActionsProps) {
   return (
     <nav
-      className="flex gap-2 min-w-0"
+      className="grid grid-cols-2 lg:grid-cols-4 gap-2 min-w-0"
       aria-label="Raccourcis navigation"
     >
       {ACTIONS.map((action) => {
@@ -79,7 +70,7 @@ export function QuickActions({ onNavigate }: QuickActionsProps) {
             onClick={() => onNavigate?.(action.page)}
             disabled={!onNavigate}
             className={cn(
-              "group flex flex-1 flex-col lg:flex-row items-center justify-center gap-1.5 lg:gap-2 rounded-xl border border-border/70 bg-card px-2 py-3 lg:px-3",
+              "group flex flex-col lg:flex-row items-center justify-center gap-1.5 lg:gap-2 rounded-xl border border-border/70 bg-card px-2 py-3 lg:px-3",
               "hover:bg-muted/50 hover:border-primary/25 hover:shadow-sm transition-all",
               "disabled:opacity-60 min-w-0"
             )}

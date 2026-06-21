@@ -34,6 +34,7 @@ import type { EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import {
   discoverStelliumPerfCampaignPrepareInput,
+  discoverResponseToPrepareInput,
   type DiscoverStelliumPerfCampaignPrepareResponse,
 } from "@/lib/api/tauri-stellium-perf-campaign";
 import { StelliumPerfPrepareCampaignButton } from "@/components/emails/StelliumPerfPrepareCampaignButton";
@@ -186,6 +187,15 @@ export function TemplatesEmailStelliumPerfSection({
           du relevé) →{" "}
           <strong className="text-foreground">Envoyer</strong> plus tard dans Suivi → Envois.
         </p>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Mise en forme : éditez le modèle{" "}
+          <strong className="text-foreground">Performance AV/PER Stellium</strong> dans l&apos;éditeur
+          HTML (puces, gras…) — variables{" "}
+          <code className="text-[11px]">{`{{encours}}`}</code>,{" "}
+          <code className="text-[11px]">{`{{nets}}`}</code>,{" "}
+          <code className="text-[11px]">{`{{releve_date_label}}`}</code>… Enregistrez puis{" "}
+          <strong className="text-foreground">Préparer</strong>.
+        </p>
         <div className="flex flex-wrap items-center gap-2">
           <StelliumPerfPrepareCampaignButton
             size="sm"
@@ -193,6 +203,7 @@ export function TemplatesEmailStelliumPerfSection({
             className="gap-1.5"
             disabled={!loadingReleve && releve == null}
             label="Préparer la campagne"
+            importInput={releve ? discoverResponseToPrepareInput(releve) : null}
             onPrepared={handlePrepared}
           />
           {onNavigate && (

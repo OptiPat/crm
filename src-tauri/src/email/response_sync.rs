@@ -570,6 +570,7 @@ pub fn resolve_campaign_rdv_start(
         contact_email: contact_email.to_string(),
         email_date_envoi,
         email_gmail_thread_id: None,
+        queue_row_kind: "etiquette".into(),
     };
     find_calendar_rdv_start(&client, &conn.access_token, &item)
 }
@@ -584,6 +585,7 @@ pub fn sync_email_campaign_responses(
         Option<&str>,
         Option<&str>,
         Option<i64>,
+        &str,
     ) -> Result<(), String>,
 ) -> Result<EmailCampaignSyncResult, String> {
     let store = EmailOAuthStore::load(app)?;
@@ -617,6 +619,7 @@ pub fn sync_email_campaign_responses(
                     None,
                     None,
                     Some(rdv_at),
+                    item.queue_row_kind.as_str(),
                 ) {
                 Ok(()) => result.rdv_detected += 1,
                 Err(e) if result.errors.len() < 5 => result.errors.push(e),
@@ -631,6 +634,7 @@ pub fn sync_email_campaign_responses(
                     Some(reply.message_id.as_str()),
                     reply.subject.as_deref(),
                     None,
+                    item.queue_row_kind.as_str(),
                 ) {
                     Ok(()) => result.mail_detected += 1,
                     Err(e) if result.errors.len() < 5 => result.errors.push(e),

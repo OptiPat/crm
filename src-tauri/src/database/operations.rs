@@ -1862,6 +1862,143 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn mark_campaign_response_routes_by_queue_row_kind_on_id_collision() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+        use crate::database::scpi_campaigns::{PrepareScpiCampaignInput, ScpiBulletinInput};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Etiquette tpl".into(),
+                sujet: "Objet".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Campagne test".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+
+        let contact_etiq = db
+            .create_contact(NewContact {
+                email: Some("akim@example.com".into()),
+                ..sample_contact("SEKKAI", "Akim")
+            })
+            .unwrap();
+        db.attribuer_etiquette(contact_etiq.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+
+        let contact_scpi = db
+            .create_contact(NewContact {
+                email: Some("nicolas@example.com".into()),
+                ..sample_contact("CHOUX", "Nicolas")
+            })
+            .unwrap();
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(contact_scpi.id.unwrap()),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Comète".into(),
+            numero_contrat: None,
+            montant_initial: None,
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: None,
+        })
+        .unwrap();
+        db.prepare_scpi_bulletin_campaign(PrepareScpiCampaignInput {
+            periode: "T1 2026".into(),
+            bulletins: vec![ScpiBulletinInput {
+                nom_produit: "Comète".into(),
+                summary_markdown: "Collecte stable".into(),
+                fichier_source: None,
+            }],
+        })
+        .unwrap();
+
+        let ready = db.get_etiquette_email_queue("ready").unwrap();
+        let etiquette_row = ready
+            .iter()
+            .find(|r| r.queue_row_kind == "etiquette")
+            .expect("etiquette row");
+        let template_row = ready
+            .iter()
+            .find(|r| r.queue_row_kind == "template")
+            .expect("template row");
+        assert_eq!(
+            etiquette_row.contact_etiquette_id, template_row.contact_etiquette_id,
+            "test setup: même id numérique sur les deux tables"
+        );
+        let row_id = template_row.contact_etiquette_id;
+
+        db.mark_etiquette_email_sent(row_id, None, None, Some("Etiquette"), None, None, None)
+            .unwrap();
+        db.mark_template_email_sent(row_id, None, None, Some("SCPI"), None, None, None)
+            .unwrap();
+
+        db.mark_email_campaign_response(row_id, "mail", None, None, None, None, Some("template"))
+            .unwrap();
+
+        let template_replied: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois
+                 WHERE id = ?1 AND email_reponse_at IS NOT NULL",
+                params![row_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let etiquette_replied: i64 = db
+            .get_connection()
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes
+                 WHERE id = ?1 AND email_reponse_at IS NOT NULL",
+                params![row_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(template_replied, 1);
+        assert_eq!(etiquette_replied, 0);
+    }
+
+    #[test]
     fn exceltis_etiquette_waits_for_stellium_before_email_ready() {
         use crate::database::models::{NewEtiquette, NewTemplateEmail};
         use crate::email::stellium_exceltis::format_exceltis_etiquette_nom;
@@ -3200,7 +3337,7 @@ mod database_integration_tests {
         assert_eq!(db.get_alertes_for_contact(cid).unwrap().len(), 1);
 
         let date_before_mail = db.get_contact_by_id(cid).unwrap().date_dernier_contact;
-        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None, None)
             .unwrap();
         assert!(
             db.get_etiquette_email_queue("sent").unwrap().is_empty(),
@@ -3222,7 +3359,7 @@ mod database_integration_tests {
             "réponse mail ne clôture pas les alertes suivi client"
         );
 
-        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None, None)
             .unwrap();
         assert_eq!(db.get_interactions_by_contact(cid).unwrap().len(), 1);
 
@@ -3258,7 +3395,7 @@ mod database_integration_tests {
         .unwrap();
         assert!(db.get_contact_by_id(cid_rdv).unwrap().date_dernier_contact.is_none());
         let rdv_at = now + 86400 * 10;
-        db.mark_email_campaign_response(ce_rdv, "rdv", None, None, None, Some(rdv_at))
+        db.mark_email_campaign_response(ce_rdv, "rdv", None, None, None, Some(rdv_at), None)
             .unwrap();
         assert_eq!(
             db.get_contact_by_id(cid_rdv).unwrap().date_dernier_contact,
@@ -3773,7 +3910,7 @@ mod database_integration_tests {
             "délai dépassé : bascule en relance"
         );
 
-        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None)
+        db.mark_email_campaign_response(ce_id, "mail", None, None, None, None, None)
             .unwrap();
         assert!(db.get_etiquette_email_queue("sent").unwrap().is_empty());
         assert!(db.get_etiquette_email_queue("followup").unwrap().is_empty());

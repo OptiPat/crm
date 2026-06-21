@@ -1,5 +1,13 @@
 const staticData = $getWorkflowStaticData('global');
-if (!Array.isArray(staticData.bulletins)) staticData.bulletins = [];
+// Réinitialiser à chaque exécution workflow (staticData n8n survit entre les runs).
+const executionId = typeof $execution !== 'undefined' ? $execution.id : null;
+if (executionId != null && staticData.executionId !== executionId) {
+  staticData.bulletins = [];
+  staticData.periode = null;
+  staticData.executionId = executionId;
+} else if (!Array.isArray(staticData.bulletins)) {
+  staticData.bulletins = [];
+}
 
 function inferFromSummary(summary) {
   for (const line of String(summary || '').split('\n')) {

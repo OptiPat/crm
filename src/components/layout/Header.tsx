@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { LogOut, User } from "lucide-react";
+import { getPageHeader } from "@/lib/navigation/page-headers";
 import { GlobalSearch } from "./GlobalSearch";
 
 interface HeaderProps {
@@ -9,15 +10,17 @@ interface HeaderProps {
 }
 
 export function Header({ onLogout, currentPage, onPageChange }: HeaderProps) {
+  const { title, subtitle } = getPageHeader(currentPage);
+
   return (
     <header className="bg-card border-b border-border px-6 py-4">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-serif font-bold text-primary">
-            Bienvenue
+            {title}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Gérez vos clients et leur patrimoine
+            {subtitle}
           </p>
         </div>
 

@@ -90,15 +90,8 @@ impl super::Database {
             0.0
         };
 
-        // Compter les alertes non traitées
-        let alertes_non_traitees: i64 = self
-            .conn
-            .query_row(
-                "SELECT COUNT(*) FROM alertes WHERE traitee = 0",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap_or(0);
+        // Compter les alertes non traitées (échues + visibles, aligné Suivi)
+        let alertes_non_traitees = self.count_alertes_non_traitees().unwrap_or(0);
 
         Ok(super::models::DashboardStats {
             total_clients,

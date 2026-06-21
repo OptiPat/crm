@@ -21,6 +21,10 @@ import {
   buildScpiBulletinPreviewVariables,
   templateUsesScpiBulletinVariables,
 } from "@/lib/emails/scpi-bulletin-preview-vars";
+import {
+  buildStelliumPerfPreviewVariables,
+  templateUsesStelliumPerfVariables,
+} from "@/lib/emails/stellium-perf-preview-vars";
 
 export type EmailTemplateCategory =
   | "RELANCE"
@@ -196,10 +200,16 @@ export function renderTemplatePreview(
     corps,
     corpsHtmlStored
   );
+  const usesStelliumPerf = templateUsesStelliumPerfVariables(
+    sujet,
+    corps,
+    corpsHtmlStored
+  );
   const vars = {
     ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
     ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
     ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
+    ...(usesStelliumPerf ? buildStelliumPerfPreviewVariables() : {}),
   };
   const subject = replaceTemplateVariables(sujet, vars);
   const plainCore = replaceTemplateVariables(corps, vars);

@@ -1091,6 +1091,20 @@ pub fn discover_stellium_perf_campaign_prepare_input(
 }
 
 #[tauri::command]
+pub fn get_stellium_perf_campaign_dashboard_cmd(
+    db: State<'_, DbState>,
+) -> Result<
+    crate::database::stellium_perf_dashboard::StelliumPerfCampaignDashboard,
+    String,
+> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_stellium_perf_campaign_dashboard()
+        .map_err(|e| format!("Failed to get Stellium perf campaign dashboard: {}", e))
+}
+
+#[tauri::command]
 pub fn prepare_stellium_perf_campaign(
     db: State<'_, DbState>,
     input: crate::database::stellium_perf_campaigns::PrepareStelliumPerfCampaignInput,
@@ -1801,7 +1815,7 @@ pub async fn sync_email_campaign_responses(
         crate::email::response_sync::sync_email_campaign_responses(
             &app,
             pending,
-            |contact_etiquette_id, response_type, body, gmail_msg, subject, rdv_at| {
+            |contact_etiquette_id, response_type, body, gmail_msg, subject, rdv_at, queue_row_kind| {
                 let db_guard = db_state.inner().lock().unwrap();
                 let database = db_guard.as_ref().ok_or("Database not initialized")?;
                 database
@@ -1812,6 +1826,7 @@ pub async fn sync_email_campaign_responses(
                         gmail_msg,
                         subject,
                         rdv_at,
+                        Some(queue_row_kind),
                     )
                     .map_err(|e| e.to_string())
             },
@@ -1830,13 +1845,15 @@ pub fn mark_email_campaign_response(
     reponse_body: Option<String>,
     reponse_gmail_message_id: Option<String>,
     rdv_event_at: Option<i64>,
+    queue_row_kind: Option<String>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let kind = queue_row_kind.as_deref();
     let mut rdv_at = rdv_event_at;
     if response_type == "rdv" && rdv_at.is_none() {
         if let Some((email, sent_at)) = database
-            .campaign_calendar_lookup(contact_etiquette_id)
+            .campaign_calendar_lookup(contact_etiquette_id, kind)
             .map_err(|e| e.to_string())?
         {
             rdv_at = crate::email::response_sync::resolve_campaign_rdv_start(
@@ -1854,6 +1871,7 @@ pub fn mark_email_campaign_response(
             reponse_gmail_message_id.as_deref(),
             None,
             rdv_at,
+            kind,
         )
         .map_err(|e| format!("Failed to mark response: {}", e))
 }

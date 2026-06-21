@@ -24,13 +24,13 @@ function stelliumQueueItem(
     email_date_prevue: null,
     email_date_envoi: null,
     template_sujet: "Performance {{periode}}",
-    template_corps: "{{perf_intro_vous}} {{perf_resume}}",
+    template_corps: "Valeur : {{encours}}",
     template_agenda_link_id: null,
     template_categorie: "NEWSLETTER",
-    template_variables: setTemplateCorpsHtmlInMeta(null, "{{perf_resume_html}}"),
+    template_variables: setTemplateCorpsHtmlInMeta(null, "<strong>{{encours}}</strong>"),
     campaign_variables: JSON.stringify({
       periode: "Juin 2026",
-      perf_resume: "• AV — Encours 1 000 €",
+      encours: "5 946,02 €",
       digest_version: CURRENT_STELLIUM_PERF_DIGEST_VERSION,
     }),
     queue_issue: null,
@@ -45,7 +45,7 @@ describe("stellium-perf-send-guard", () => {
     expect(isStelliumPerfSendBlocked(item)).toBe(false);
   });
 
-  it("isStelliumPerfContentMissing si modèle perf sans perf_resume", () => {
+  it("isStelliumPerfContentMissing si modèle perf sans chiffres", () => {
     const base = stelliumQueueItem();
     expect(isStelliumPerfContentMissing(base)).toBe(false);
     expect(
@@ -60,7 +60,7 @@ describe("stellium-perf-send-guard", () => {
     const item = stelliumQueueItem({
       campaign_variables: JSON.stringify({
         periode: "Juin 2026",
-        perf_resume: "• AV — Encours 1 000 €",
+        encours: "5 946,02 €",
         digest_version: CURRENT_STELLIUM_PERF_DIGEST_VERSION - 1,
       }),
     });

@@ -3,10 +3,11 @@ import { parseScpiDigestVersion } from "@/lib/emails/scpi-digest-stale";
 import {
   isStelliumPerfQueueItem,
   parseStelliumPerfCampaignVariables,
+  templateUsesStelliumPerfVariables,
 } from "@/lib/emails/stellium-perf-preview-vars";
 
 /** Aligné sur `STELLIUM_PERF_DIGEST_VERSION` (Rust). */
-export const CURRENT_STELLIUM_PERF_DIGEST_VERSION = 1;
+export const CURRENT_STELLIUM_PERF_DIGEST_VERSION = 9;
 
 export function isStelliumPerfDigestStale(
   raw: string | null | undefined,
@@ -18,9 +19,9 @@ export function isStelliumPerfDigestStale(
 
 export function isStelliumPerfContentMissing(item: EtiquetteEmailQueueItem): boolean {
   const hay = `${item.template_corps}\n${item.template_variables ?? ""}`;
-  if (!/\{\{perf_resume(_html)?\}\}/.test(hay)) return false;
+  if (!templateUsesStelliumPerfVariables(hay)) return false;
   const campaign = parseStelliumPerfCampaignVariables(item.campaign_variables);
-  return !campaign.perf_resume?.trim();
+  return !campaign.encours?.trim() && !campaign.perf_detail?.trim() && !campaign.perf_resume?.trim();
 }
 
 /** Raison de blocage envoi perf Stellium (null = envoi autorisé pour ce contrôle). */

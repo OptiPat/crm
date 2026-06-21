@@ -10,6 +10,9 @@ import { QuickActions } from "@/components/dashboard/QuickActions";
 import {
   DashboardPageHeader,
   DashboardSectionTitle,
+  DashboardKpiHelp,
+  DashboardCollapsibleSection,
+  DashboardCockpitSection,
   StatCardSkeleton,
 } from "@/components/dashboard/dashboard-ui";
 import { formatDashboardCurrency } from "@/components/dashboard/dashboard-format";
@@ -19,6 +22,7 @@ import {
   TrendingUp,
   CalendarClock,
   ShoppingCart,
+  Bell,
 } from "lucide-react";
 import { getDashboardStats, type DashboardStats } from "@/lib/api/tauri-dashboard";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
@@ -27,6 +31,7 @@ import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 
 interface DashboardProps {
   currentPage?: string;
@@ -49,11 +54,9 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
         } catch {
           /* déjà initialisé */
         }
-        try {
-          await genererAlertesAutomatiques();
-        } catch (error) {
+        void genererAlertesAutomatiques().catch((error) => {
           console.error("Erreur génération alertes:", error);
-        }
+        });
       }
       setStats(await getDashboardStats());
     } catch (error) {
@@ -114,6 +117,10 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
     void loadStats(false);
   };
 
+  const openSuiviAlertes = onNavigate
+    ? () => navigateToSuivi(onNavigate, "alertes", undefined, undefined, currentPage)
+    : undefined;
+
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto pb-8">
       <div className="space-y-3">
@@ -123,9 +130,10 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
           <DashboardSectionTitle subtitle="Chiffres consolidés du portefeuille">
             Vue d&apos;ensemble
           </DashboardSectionTitle>
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">
+          <DashboardKpiHelp />
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
           {loading ? (
-            Array.from({ length: 5 }).map((_, i) => <StatCardSkeleton key={i} />)
+            Array.from({ length: 6 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : stats ? (
             <>
               <StatCard
@@ -147,6 +155,17 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
                 iconColor="text-amber-600"
                 iconBgColor="bg-amber-50"
                 onClick={onNavigate ? () => onNavigate("investissements") : undefined}
+              />
+              <StatCard
+                title="Alertes non traitées"
+                value={stats.alertes_non_traitees}
+                description="Relances à traiter"
+                icon={Bell}
+                accentColor="#EF4444"
+                iconColor="text-red-600"
+                iconBgColor="bg-red-50"
+                highlight={stats.alertes_non_traitees > 0}
+                onClick={openSuiviAlertes}
               />
               <StatCard
                 title="Versements programmés"
@@ -195,45 +214,50 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
         <QuickActions onNavigate={onNavigate} />
       </section>
 
-      <section className="space-y-3">
-        <DashboardSectionTitle subtitle="Relances et tâches du jour">
-          Suivi &amp; actions
-        </DashboardSectionTitle>
-        <div className="flex flex-col gap-5">
-          <DashboardTodayGrid
-            key={`today-${refreshKey}`}
-            currentPage={currentPage}
-            onNavigate={onNavigate}
-            onOpenContact={onOpenContact}
-          />
-          <AlertsPreview
-            key={`alerts-${refreshKey}`}
-            currentPage={currentPage}
-            onNavigate={onNavigate}
-            onOpenContact={onOpenContact}
-          />
-        </div>
-      </section>
+      <DashboardCockpitSection>
+        <DashboardTodayGrid
+          key={`today-${refreshKey}`}
+          currentPage={currentPage}
+          onNavigate={onNavigate}
+          onOpenContact={onOpenContact}
+        />
+        <AlertsPreview
+          key={`alerts-${refreshKey}`}
+          currentPage={currentPage}
+          onNavigate={onNavigate}
+          onOpenContact={onOpenContact}
+        />
+      </DashboardCockpitSection>
 
-      <section className="space-y-3">
-        <DashboardSectionTitle subtitle="Catégories et produits">
-          Répartition
-        </DashboardSectionTitle>
+      <DashboardCollapsibleSection
+        sectionId="repartition"
+        title="Répartition"
+        subtitle="Catégories et produits"
+      >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          <CategoryPieChart key={`cat-${chartsRefreshKey}`} />
+          <CategoryPieChart
+            key={`cat-${chartsRefreshKey}`}
+            onNavigate={onNavigate}
+            currentPage={currentPage}
+          />
           <ProductPieChart key={`prod-${chartsRefreshKey}`} />
         </div>
-      </section>
+      </DashboardCollapsibleSection>
 
-      <section className="space-y-3">
-        <DashboardSectionTitle subtitle="Souscriptions et funnel commercial">
-          Activité
-        </DashboardSectionTitle>
+      <DashboardCollapsibleSection
+        sectionId="activite"
+        title="Activité"
+        subtitle="Souscriptions et funnel commercial"
+      >
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
           <YearlyActivityChart key={`year-${chartsRefreshKey}`} />
-          <PipelineChart key={`pipe-${chartsRefreshKey}`} />
+          <PipelineChart
+            key={`pipe-${chartsRefreshKey}`}
+            onNavigate={onNavigate}
+            currentPage={currentPage}
+          />
         </div>
-      </section>
+      </DashboardCollapsibleSection>
     </div>
   );
 }

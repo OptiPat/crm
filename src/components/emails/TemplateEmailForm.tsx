@@ -48,6 +48,11 @@ import {
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { stampScpiBulletinTemplateMeta } from "@/lib/emails/scpi-template-meta";
 import {
+  isStelliumPerfTemplateNom,
+  stampStelliumPerfTemplateMeta,
+  STELLIUM_PERF_TEMPLATE_VARIABLES,
+} from "@/lib/emails/stellium-template-meta";
+import {
   TemplateEmailRelancePanel,
   type TemplateRelanceDraft,
 } from "@/components/emails/TemplateEmailRelancePanel";
@@ -337,6 +342,10 @@ export function TemplateEmailForm({
 
   const agendaLinks = useMemo(() => normalizeAgendaLinks(cgp), [cgp]);
   const agendaVariables = useMemo(() => getAgendaVariableTokens(agendaLinks), [agendaLinks]);
+  const stelliumVariables = useMemo(
+    () => (isStelliumPerfTemplateNom(formData.nom) ? STELLIUM_PERF_TEMPLATE_VARIABLES : []),
+    [formData.nom]
+  );
 
   const categoryPills = EMAIL_TEMPLATE_CATEGORIES.map((c) => ({
     value: c.id,
@@ -410,10 +419,13 @@ export function TemplateEmailForm({
           sujet: tutoiementDraft.sujet.trim(),
           corps: tuPlain,
           categorie: formData.categorie,
-          variables: stampScpiBulletinTemplateMeta(
-            setTemplateCorpsHtmlInMeta(
-              tutoiementVariables,
-              tutoiementDraft.corpsHtml.trim() || null
+          variables: stampStelliumPerfTemplateMeta(
+            stampScpiBulletinTemplateMeta(
+              setTemplateCorpsHtmlInMeta(
+                tutoiementVariables,
+                tutoiementDraft.corpsHtml.trim() || null
+              ),
+              tuNom
             ),
             tuNom
           ),
@@ -491,7 +503,10 @@ export function TemplateEmailForm({
       variables = setTemplateEmailSuiviReponseInMeta(variables, {
         attendre_reponse: relanceDraft.attendreReponse,
       });
-      variables = stampScpiBulletinTemplateMeta(variables, formData.nom);
+      variables = stampStelliumPerfTemplateMeta(
+        stampScpiBulletinTemplateMeta(variables, formData.nom),
+        formData.nom
+      );
 
       const payload: NewTemplateEmail = {
         ...formData,
@@ -765,7 +780,37 @@ export function TemplateEmailForm({
                               </Badge>
                             </span>
                           ))}
+                          {stelliumVariables.map((v) => (
+                            <span key={v.token} className="inline-flex gap-0.5">
+                              <Badge
+                                variant="outline"
+                                className="cursor-pointer rounded-r-none text-[11px] border-emerald-300 bg-emerald-50/50"
+                                title={`${v.label} — ${v.hint}`}
+                                onMouseDown={(event) =>
+                                  handleVariableInsert(event, v.token, "corps")
+                                }
+                              >
+                                {v.token}
+                              </Badge>
+                              <Badge
+                                variant="secondary"
+                                className="cursor-pointer rounded-l-none text-[10px] px-1"
+                                title="→ objet"
+                                onMouseDown={(event) =>
+                                  handleVariableInsert(event, v.token, "sujet")
+                                }
+                              >
+                                obj
+                              </Badge>
+                            </span>
+                          ))}
                         </div>
+                        {stelliumVariables.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Perf Stellium : composez le message en HTML (gras, puces…) ; seuls les
+                            chiffres viennent des variables vertes à la préparation.
+                          </p>
+                        )}
                         <p className="text-[11px] text-muted-foreground">
                           Curseur dans l&apos;objet ou le message : clic variable → corps, « obj
                           » → objet.

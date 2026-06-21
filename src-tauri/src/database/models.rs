@@ -689,6 +689,7 @@ pub struct PendingCampaignResponseCheck {
     pub contact_email: String,
     pub email_date_envoi: i64,
     pub email_gmail_thread_id: Option<String>,
+    pub queue_row_kind: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

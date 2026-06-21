@@ -139,6 +139,7 @@ fn main() {
             get_valorisations_by_investissement,
             create_investissement_valorisation,
             prepare_stellium_perf_campaign,
+            get_stellium_perf_campaign_dashboard_cmd,
             ensure_stellium_perf_email_templates,
             discover_stellium_perf_campaign_prepare_input,
             delete_investissement_valorisation,

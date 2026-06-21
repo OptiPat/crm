@@ -429,7 +429,7 @@ impl Database {
 
     pub(crate) fn auto_close_suivi_alertes_after_contact(&self, contact_id: i64) -> Result<()> {
         self.conn.execute(
-            "UPDATE alertes SET traitee = 1, lue = 1
+            "UPDATE alertes SET traitee = 1, lue = 1, traitee_at = unixepoch()
              WHERE contact_id = ?1 AND traitee = 0
                AND type_alerte NOT IN ('FIN_DEMEMBREMENT')",
             params![contact_id],
@@ -437,7 +437,14 @@ impl Database {
         Ok(())
     }
 
-    fn campaign_response_already_recorded(&self, row_id: i64) -> Result<bool> {
+    fn campaign_response_already_recorded(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<bool> {
+        if email_queue_row_is_template(queue_row_kind) {
+            return self.template_envoi_response_already_recorded(row_id);
+        }
         let n: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM contact_etiquettes
              WHERE id = ?1 AND email_envoye = 1 AND email_reponse_at IS NOT NULL",
@@ -447,7 +454,10 @@ impl Database {
         if n > 0 {
             return Ok(true);
         }
-        self.template_envoi_response_already_recorded(row_id)
+        if queue_row_kind.is_none() {
+            return self.template_envoi_response_already_recorded(row_id);
+        }
+        Ok(false)
     }
 
     fn patch_campaign_response_details(
@@ -455,7 +465,15 @@ impl Database {
         row_id: i64,
         reponse_body: Option<&str>,
         reponse_gmail_message_id: Option<&str>,
+        queue_row_kind: Option<&str>,
     ) -> Result<()> {
+        if email_queue_row_is_template(queue_row_kind) {
+            return self.patch_template_envoi_response_details(
+                row_id,
+                reponse_body,
+                reponse_gmail_message_id,
+            );
+        }
         let updated = self.conn.execute(
             "UPDATE contact_etiquettes SET
                 email_reponse_body = COALESCE(?1, email_reponse_body),
@@ -466,7 +484,17 @@ impl Database {
         if updated > 0 {
             return Ok(());
         }
-        self.patch_template_envoi_response_details(row_id, reponse_body, reponse_gmail_message_id)
+        if queue_row_kind.is_none() {
+            return self.patch_template_envoi_response_details(
+                row_id,
+                reponse_body,
+                reponse_gmail_message_id,
+            );
+        }
+        Err(rusqlite::Error::InvalidParameterName(format!(
+            "Envoi introuvable: {}",
+            row_id
+        )))
     }
 
     fn campaign_email_already_sent(&self, contact_etiquette_id: i64) -> Result<bool> {
@@ -599,6 +627,7 @@ impl Database {
         reponse_gmail_message_id: Option<&str>,
         reponse_subject: Option<&str>,
         rdv_event_at: Option<i64>,
+        queue_row_kind: Option<&str>,
     ) -> Result<()> {
         let allowed = ["mail", "rdv", "autre"];
         if !allowed.contains(&response_type) {
@@ -608,28 +637,30 @@ impl Database {
             )));
         }
 
-        if self.campaign_response_already_recorded(row_id)? {
+        if self.campaign_response_already_recorded(row_id, queue_row_kind)? {
             if reponse_body.is_some() || reponse_gmail_message_id.is_some() {
-                self.patch_campaign_response_details(row_id, reponse_body, reponse_gmail_message_id)?;
+                self.patch_campaign_response_details(
+                    row_id,
+                    reponse_body,
+                    reponse_gmail_message_id,
+                    queue_row_kind,
+                )?;
             }
             return Ok(());
         }
 
-        if self
-            .mark_contact_etiquette_campaign_response(
+        if email_queue_row_is_template(queue_row_kind) {
+            return self.mark_template_envoi_response(
                 row_id,
                 response_type,
                 reponse_body,
                 reponse_gmail_message_id,
                 reponse_subject,
                 rdv_event_at,
-            )
-            .is_ok()
-        {
-            return Ok(());
+            );
         }
 
-        self.mark_template_envoi_response(
+        self.mark_contact_etiquette_campaign_response(
             row_id,
             response_type,
             reponse_body,
@@ -640,7 +671,26 @@ impl Database {
     }
 
     /// Email + date d'envoi pour recherche RDV Agenda (sync ou marquage manuel).
-    pub fn campaign_calendar_lookup(&self, row_id: i64) -> Result<Option<(String, i64)>> {
+    pub fn campaign_calendar_lookup(
+        &self,
+        row_id: i64,
+        queue_row_kind: Option<&str>,
+    ) -> Result<Option<(String, i64)>> {
+        if email_queue_row_is_template(queue_row_kind) {
+            return self
+                .conn
+                .query_row(
+                    "SELECT c.email, cte.email_date_envoi
+                     FROM contact_template_envois cte
+                     INNER JOIN contacts c ON c.id = cte.contact_id
+                     WHERE cte.id = ?1 AND cte.email_envoye = 1 AND cte.email_date_envoi IS NOT NULL
+                       AND c.email IS NOT NULL AND TRIM(c.email) != ''",
+                    params![row_id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional();
+        }
+
         let from_ce: Result<(String, i64), rusqlite::Error> = self.conn.query_row(
             "SELECT c.email, ce.email_date_envoi
              FROM contact_etiquettes ce
@@ -946,8 +996,8 @@ impl Database {
         &self,
     ) -> Result<Vec<super::models::PendingCampaignResponseCheck>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, email, email_date_envoi, email_gmail_thread_id FROM (
-                SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id
+            "SELECT id, email, email_date_envoi, email_gmail_thread_id, queue_row_kind FROM (
+                SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id, 'etiquette' AS queue_row_kind
                 FROM contact_etiquettes ce
                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                 INNER JOIN contacts c ON ce.contact_id = c.id
@@ -960,7 +1010,7 @@ impl Database {
                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
                 UNION ALL
-                SELECT cte.id, c.email, cte.email_date_envoi, cte.email_gmail_thread_id
+                SELECT cte.id, c.email, cte.email_date_envoi, cte.email_gmail_thread_id, 'template' AS queue_row_kind
                 FROM contact_template_envois cte
                 INNER JOIN templates_email t ON cte.template_id = t.id
                 INNER JOIN contacts c ON cte.contact_id = c.id
@@ -985,6 +1035,7 @@ impl Database {
                 contact_email: row.get::<_, String>(1)?,
                 email_date_envoi: row.get(2)?,
                 email_gmail_thread_id: row.get(3)?,
+                queue_row_kind: row.get(4)?,
             })
         })?;
         rows.collect()

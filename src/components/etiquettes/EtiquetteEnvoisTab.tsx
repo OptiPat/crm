@@ -498,7 +498,11 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
     responseType: "mail" | "rdv" | "autre"
   ) => {
     try {
-      await markEmailCampaignResponse(item.contact_etiquette_id, responseType);
+      await markEmailCampaignResponse(
+        item.contact_etiquette_id,
+        responseType,
+        item.queue_row_kind ?? "etiquette"
+      );
       toast.success("Retour client enregistré");
       notifyRelationChanged(item.contact_id);
       await loadQueue();

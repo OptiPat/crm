@@ -17,6 +17,8 @@ export function ContactsActiveFilters({
   needsFollowupOnly,
   onToggleNeedsFollowup,
   followupCount,
+  pipelineStageLabel,
+  onClearPipelineStage,
 }: {
   searchQuery: string;
   onClearSearch: () => void;
@@ -32,13 +34,16 @@ export function ContactsActiveFilters({
   needsFollowupOnly: boolean;
   onToggleNeedsFollowup: () => void;
   followupCount: number;
+  pipelineStageLabel?: string;
+  onClearPipelineStage?: () => void;
 }) {
   const hasChips =
     searchQuery.trim() ||
     statutFilter !== "ALL" ||
     etiquetteFilter !== "ALL" ||
     (segmentFilter != null && segmentFilter !== "ALL") ||
-    needsFollowupOnly;
+    needsFollowupOnly ||
+    Boolean(pipelineStageLabel);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -74,6 +79,9 @@ export function ContactsActiveFilters({
             onClearSegment && (
               <FilterChip label={segmentLabel} onRemove={onClearSegment} />
             )}
+          {pipelineStageLabel && onClearPipelineStage && (
+            <FilterChip label={pipelineStageLabel} onRemove={onClearPipelineStage} />
+          )}
         </div>
       )}
     </div>

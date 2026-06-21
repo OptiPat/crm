@@ -34,6 +34,7 @@ pub mod notifications_summary;
 pub mod birthdays;
 pub mod scpi_campaigns;
 pub mod stellium_perf_campaigns;
+pub mod stellium_perf_dashboard;
 pub mod operations;
 pub mod segments;
 pub mod taches;

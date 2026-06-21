@@ -80,14 +80,15 @@ impl Database {
         Ok(result)
     }
 
-    /// Alertes non traitées pour un contact (fiche relation).
+    /// Alertes non traitées et échues pour un contact (fiche relation).
     pub fn get_alertes_for_contact(&self, contact_id: i64) -> Result<Vec<super::models::Alerte>> {
-        let mut stmt = self.conn.prepare(
+        let due = super::alertes::alerte_due_now_sql("alertes");
+        let mut stmt = self.conn.prepare(&format!(
             "SELECT id, contact_id, type_alerte, message, date_alerte, lue, traitee, created_at
              FROM alertes
-             WHERE contact_id = ?1 AND traitee = 0
-             ORDER BY date_alerte DESC",
-        )?;
+             WHERE contact_id = ?1 AND traitee = 0 AND {due}
+             ORDER BY date_alerte DESC"
+        ))?;
         let rows = stmt.query_map(params![contact_id], |row| {
             Ok(super::models::Alerte {
                 id: row.get(0)?,

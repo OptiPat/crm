@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import {
   BarChart,
   Bar,
@@ -22,6 +22,8 @@ import {
   ChartTooltipBox,
   DashboardPanel,
 } from "./dashboard-ui";
+import type { ContactsPipelineStage } from "@/lib/contacts/contacts-pipeline-match";
+import { navigateToContactsPipeline } from "@/lib/navigation/contacts-navigation";
 
 const COLORS = {
   suspects: "#F59E0B",
@@ -29,17 +31,27 @@ const COLORS = {
   clients: "#10B981",
 };
 
+type PipelineStage = ContactsPipelineStage;
+
 interface ChartData {
   stage: string;
+  stageKey: PipelineStage;
   count: number;
   color: string;
 }
 
-export function PipelineChart() {
+export function PipelineChart({
+  onNavigate,
+  currentPage,
+}: {
+  onNavigate?: (page: string) => void;
+  currentPage?: string;
+}) {
   const [data, setData] = useState<ChartData[]>([]);
   const [loading, setLoading] = useState(true);
 
   const total = useMemo(() => data.reduce((s, i) => s + i.count, 0), [data]);
+  const interactive = Boolean(onNavigate);
 
   useEffect(() => {
     (async () => {
@@ -47,9 +59,24 @@ export function PipelineChart() {
         setLoading(true);
         const stats = await getPipelineStats();
         setData([
-          { stage: "Suspects", count: stats.suspects, color: COLORS.suspects },
-          { stage: "Prospects", count: stats.prospects, color: COLORS.prospects },
-          { stage: "Clients", count: stats.clients, color: COLORS.clients },
+          {
+            stage: "Suspects",
+            stageKey: "suspects",
+            count: stats.suspects,
+            color: COLORS.suspects,
+          },
+          {
+            stage: "Prospects",
+            stageKey: "prospects",
+            count: stats.prospects,
+            color: COLORS.prospects,
+          },
+          {
+            stage: "Clients",
+            stageKey: "clients",
+            count: stats.clients,
+            color: COLORS.clients,
+          },
         ]);
       } catch (error) {
         console.error("Erreur pipeline:", error);
@@ -59,8 +86,24 @@ export function PipelineChart() {
     })();
   }, []);
 
+  const handleBarClick = useCallback(
+    (entry: ChartData) => {
+      if (!onNavigate) return;
+      navigateToContactsPipeline(onNavigate, entry.stageKey, currentPage);
+    },
+    [onNavigate, currentPage]
+  );
+
   return (
-    <DashboardPanel title="Pipeline commercial" className="h-full">
+    <DashboardPanel
+      title="Pipeline commercial"
+      description={
+        interactive
+          ? "Clients et filleuls — cliquer pour voir la liste correspondante"
+          : undefined
+      }
+      className="h-full"
+    >
         {loading ? (
           <ChartLoading height={300} />
         ) : total === 0 ? (
@@ -109,11 +152,23 @@ export function PipelineChart() {
                         <p className="text-xs text-muted-foreground">
                           {formatDashboardPercent(v, total)}
                         </p>
+                        {interactive ? (
+                          <p className="text-xs text-muted-foreground mt-1">Cliquer pour voir la liste</p>
+                        ) : null}
                       </ChartTooltipBox>
                     );
                   }}
                 />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]} maxBarSize={40}>
+                <Bar
+                  dataKey="count"
+                  radius={[0, 6, 6, 0]}
+                  maxBarSize={40}
+                  className={interactive ? "cursor-pointer" : undefined}
+                  onClick={(_, index) => {
+                    const entry = data[index];
+                    if (entry) handleBarClick(entry);
+                  }}
+                >
                   {data.map((entry, index) => (
                     <Cell key={index} fill={entry.color} />
                   ))}

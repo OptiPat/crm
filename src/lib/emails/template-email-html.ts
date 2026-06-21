@@ -294,25 +294,37 @@ export function injectTemplateSignatureHtml(
 export const BULLETIN_RESUME_HTML_PLACEHOLDER = "___CRM_BULLETIN_RESUME_HTML___";
 export const PERF_RESUME_HTML_PLACEHOLDER = "___CRM_PERF_RESUME_HTML___";
 
+const PERF_HTML_SLOT_KEYS = [
+  "perf_resume_html",
+  "perf_resume_html_tu",
+  "perf_detail_html",
+  "perf_detail_html_tu",
+] as const;
+
 /** Remplace les variables, normalise le gabarit, puis injecte le HTML bulletin/perf sans le tronquer. */
 export function prepareTemplateHtmlForSend(
   corpsHtml: string,
   vars: Record<string, string>
 ): string {
   const bulletinHtml = vars.bulletin_resume_html ?? "";
-  const perfHtml = vars.perf_resume_html ?? "";
-  const slotVars = {
-    ...vars,
-    ...(bulletinHtml ? { bulletin_resume_html: BULLETIN_RESUME_HTML_PLACEHOLDER } : {}),
-    ...(perfHtml ? { perf_resume_html: PERF_RESUME_HTML_PLACEHOLDER } : {}),
-  };
+  const slotVars = { ...vars };
+  const perfSlots: { key: (typeof PERF_HTML_SLOT_KEYS)[number]; html: string }[] = [];
+
+  for (const key of PERF_HTML_SLOT_KEYS) {
+    const html = vars[key] ?? "";
+    if (html) {
+      perfSlots.push({ key, html });
+      slotVars[key] = `${PERF_RESUME_HTML_PLACEHOLDER}__${key}`;
+    }
+  }
+
   let html = replaceTemplateVariables(corpsHtml, slotVars);
   html = normalizeTemplateEmailHtmlLikeGmail(html);
   if (bulletinHtml) {
     html = html.split(BULLETIN_RESUME_HTML_PLACEHOLDER).join(bulletinHtml);
   }
-  if (perfHtml) {
-    html = html.split(PERF_RESUME_HTML_PLACEHOLDER).join(perfHtml);
+  for (const { key, html: perfHtml } of perfSlots) {
+    html = html.split(`${PERF_RESUME_HTML_PLACEHOLDER}__${key}`).join(perfHtml);
   }
   return html;
 }

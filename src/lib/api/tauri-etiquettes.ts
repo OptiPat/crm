@@ -415,11 +415,13 @@ export async function markEtiquetteEmailSent(
 
 export async function markEmailCampaignResponse(
   contactEtiquetteId: number,
-  responseType: "mail" | "rdv" | "autre"
+  responseType: "mail" | "rdv" | "autre",
+  queueRowKind?: string | null
 ): Promise<void> {
   return invoke<void>("mark_email_campaign_response", {
     contactEtiquetteId,
     responseType,
+    queueRowKind: queueRowKind ?? "etiquette",
   });
 }
 

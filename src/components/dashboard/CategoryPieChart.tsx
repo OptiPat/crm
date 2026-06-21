@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getCategoryStats } from "@/lib/api/tauri-dashboard";
 import { formatDashboardPercent } from "./dashboard-format";
@@ -9,6 +9,10 @@ import {
   ChartTooltipBox,
   DashboardPanel,
 } from "./dashboard-ui";
+import {
+  navigateToContactsCategory,
+  type ContactsCategoryFilter,
+} from "@/lib/navigation/contacts-navigation";
 
 const COLORS = {
   clients: "#10B981",
@@ -16,9 +20,11 @@ const COLORS = {
   prospect_filleul: "#06B6D4",
   suspect_client: "#F59E0B",
   suspect_filleul: "#F97316",
-};
+} as const;
 
-const LABELS: Record<keyof typeof COLORS, string> = {
+type CategoryKey = keyof typeof COLORS;
+
+const LABELS: Record<CategoryKey, string> = {
   clients: "Clients",
   prospect_client: "Prospects clients",
   prospect_filleul: "Prospects filleuls",
@@ -26,13 +32,33 @@ const LABELS: Record<keyof typeof COLORS, string> = {
   suspect_filleul: "Suspects filleuls",
 };
 
-export function CategoryPieChart() {
-  const [data, setData] = useState<
-    { name: string; value: number; color: string }[]
-  >([]);
+const CATEGORY_NAV: Record<CategoryKey, ContactsCategoryFilter> = {
+  clients: { mainTab: "clients", clientSubTab: "CLIENT" },
+  prospect_client: { mainTab: "clients", clientSubTab: "PROSPECT_CLIENT" },
+  prospect_filleul: { mainTab: "filleuls", filleulSubTab: "PROSPECT_FILLEUL" },
+  suspect_client: { mainTab: "clients", clientSubTab: "SUSPECT_CLIENT" },
+  suspect_filleul: { mainTab: "filleuls", filleulSubTab: "SUSPECT_FILLEUL" },
+};
+
+type ChartDatum = {
+  key: CategoryKey;
+  name: string;
+  value: number;
+  color: string;
+};
+
+export function CategoryPieChart({
+  onNavigate,
+  currentPage,
+}: {
+  onNavigate?: (page: string) => void;
+  currentPage?: string;
+}) {
+  const [data, setData] = useState<ChartDatum[]>([]);
   const [loading, setLoading] = useState(true);
 
   const total = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data]);
+  const interactive = Boolean(onNavigate);
 
   useEffect(() => {
     loadData();
@@ -53,6 +79,7 @@ export function CategoryPieChart() {
       )
         .filter((item) => item.value > 0)
         .map((item) => ({
+          key: item.key,
           name: LABELS[item.key],
           value: item.value,
           color: COLORS[item.key],
@@ -67,10 +94,22 @@ export function CategoryPieChart() {
     }
   };
 
+  const handleSliceClick = useCallback(
+    (entry: ChartDatum) => {
+      if (!onNavigate) return;
+      navigateToContactsCategory(onNavigate, CATEGORY_NAV[entry.key], currentPage);
+    },
+    [onNavigate, currentPage]
+  );
+
   return (
     <DashboardPanel
       title="Par catégorie"
-      description="Clients, prospects et suspects"
+      description={
+        interactive
+          ? "Clients, prospects et suspects — cliquer pour filtrer les contacts"
+          : "Clients, prospects et suspects"
+      }
       className="h-full"
     >
         {loading ? (
@@ -89,6 +128,11 @@ export function CategoryPieChart() {
                   outerRadius={88}
                   paddingAngle={2}
                   dataKey="value"
+                  className={interactive ? "cursor-pointer outline-none" : undefined}
+                  onClick={(_, index) => {
+                    const entry = data[index];
+                    if (entry) handleSliceClick(entry);
+                  }}
                 >
                   {data.map((entry, index) => (
                     <Cell
@@ -96,6 +140,7 @@ export function CategoryPieChart() {
                       fill={entry.color}
                       stroke="#fff"
                       strokeWidth={2}
+                      className={interactive ? "cursor-pointer" : undefined}
                     />
                   ))}
                 </Pie>
@@ -112,6 +157,9 @@ export function CategoryPieChart() {
                         <p className="text-xs text-muted-foreground">
                           {formatDashboardPercent(entry.value as number, total)}
                         </p>
+                        {interactive ? (
+                          <p className="text-xs text-muted-foreground mt-1">Cliquer pour voir la liste</p>
+                        ) : null}
                       </ChartTooltipBox>
                     );
                   }}

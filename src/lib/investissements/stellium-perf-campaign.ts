@@ -5,6 +5,7 @@ import type {
 } from "@/lib/api/tauri-stellium-perf-campaign";
 import {
   discoverStelliumPerfCampaignPrepareInput,
+  discoverResponseToPrepareInput,
   prepareStelliumPerfCampaign,
 } from "@/lib/api/tauri-stellium-perf-campaign";
 import type { StelliumImportPreviewLine } from "@/lib/investissements/stellium-contrats-import";
@@ -114,9 +115,5 @@ export async function prepareStelliumPerfCampaignFromLatestReleve(): Promise<Pre
   if (!draft?.investissementIds.length) {
     throw new Error("NO_STELLIUM_RELEVE");
   }
-  return executePrepareStelliumPerfCampaign({
-    periode: draft.periode,
-    releveDateUnix: draft.releveDateUnix,
-    investissementIds: draft.investissementIds,
-  });
+  return executePrepareStelliumPerfCampaign(discoverResponseToPrepareInput(draft));
 }
