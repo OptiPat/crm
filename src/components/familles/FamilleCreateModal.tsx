@@ -21,7 +21,7 @@ import { toast } from "sonner";
 interface FamilleCreateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSuccess: () => void;
+  onSuccess: (familleId: number) => void;
 }
 
 export function FamilleCreateModal({
@@ -79,10 +79,10 @@ export function FamilleCreateModal({
     setSaving(true);
     try {
       const byId = new Map(contacts.map((c) => [c.id!, c]));
-      await createFamilleWithMembers(trimmedNom, [...selectedIds], byId);
+      const familleId = await createFamilleWithMembers(trimmedNom, [...selectedIds], byId);
       toast.success(`Famille « ${trimmedNom} » créée`);
       onOpenChange(false);
-      onSuccess();
+      onSuccess(familleId);
     } catch (error) {
       console.error("Erreur création famille:", error);
       toast.error("Impossible de créer la famille");

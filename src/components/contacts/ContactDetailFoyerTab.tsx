@@ -56,6 +56,7 @@ interface ContactDetailFoyerTabProps {
   onAddFoyerMember: () => void;
   onCreateFoyer: () => void;
   onViewPrescripteurNetwork?: () => void;
+  onViewFamilleGroup?: () => void;
 }
 
 function FoyerMemberRow({
@@ -195,6 +196,7 @@ export function ContactDetailFoyerTab({
   onAddFoyerMember,
   onCreateFoyer,
   onViewPrescripteurNetwork,
+  onViewFamilleGroup,
 }: ContactDetailFoyerTabProps) {
   const allMembers = [contact, ...foyerMembers.filter((m) => m.id !== contact.id)];
 
@@ -368,6 +370,33 @@ export function ContactDetailFoyerTab({
             >
               <Share2 className="h-4 w-4" />
               Voir le réseau
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {onViewFamilleGroup && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Users2 className="h-5 w-5" />
+              Regroupement Familles
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground mb-3">
+              Voir ce contact dans la page Familles (homonymes ou famille manuelle
+              rattachée).
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onViewFamilleGroup}
+            >
+              <Users2 className="h-4 w-4" />
+              Voir le regroupement
             </Button>
           </CardContent>
         </Card>

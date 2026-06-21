@@ -1,7 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Users, ChevronDown, ChevronUp, Home, ArrowLeft, TreePine, Plus } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Plus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
@@ -9,7 +19,6 @@ import {
   getAllInvestissements,
   type Investissement,
 } from "@/lib/api/tauri-investissements";
-import { textMatchesSearch } from "@/lib/search-utils";
 import { indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { getAllFamilles } from "@/lib/api/tauri-familles";
@@ -20,36 +29,52 @@ import {
   removeContactFromFamille,
 } from "@/lib/familles/famille-members";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import {
+  coreMemberCount,
+  filterFamilleGroupsByStat,
+  findFamilleKeyForContact,
+  searchFamilleGroups,
+  sortFamilleGroups,
+} from "@/lib/familles/familles-search";
+import {
+  loadFamillesPagePreferences,
+  saveFamillesPagePreferences,
+  type FamillesPagePreferences,
+} from "@/lib/familles/familles-page-preferences";
+import { downloadFamilleMembersCsv } from "@/lib/familles/familles-export";
+import {
+  consumeFamillesNavigationIntent,
+  type FamillesNavigationIntent,
+} from "@/lib/navigation/familles-navigation";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { FamilleMemberTree } from "@/components/familles/FamilleMemberTree";
 import { FamilleSummaryCard } from "@/components/familles/FamilleSummaryCard";
-import { FamilleDetailHeader } from "@/components/familles/FamilleDetailHeader";
 import { FamilleCreateModal } from "@/components/familles/FamilleCreateModal";
 import { FamilleAddMemberModal } from "@/components/familles/FamilleAddMemberModal";
-import { StatCard } from "@/components/dashboard/StatCard";
+import {
+  FamillesPageHelp,
+  FamillesStatCards,
+  FamillesToolbar,
+} from "@/components/familles/familles-page-ui";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
-import {
-  SplitDetailLayout,
-  SplitDetailPane,
-  SplitDetailStack,
-  SplitListColumn,
-  ListSearchField,
-  embeddedDetailShellClassName,
-  splitCardClassName,
-  splitCardContentClassName,
-  splitCardHeaderClassName,
-} from "@/components/layout";
 
 type FamillesProps = {
   onNavigate?: (page: string) => void;
 };
 
+type PendingMemberAction =
+  | { type: "remove_manual"; contact: Contact; famille: FamilleGroup }
+  | { type: "exclude_auto"; contact: Contact };
+
 export function Familles({ onNavigate }: FamillesProps) {
+  const [prefs, setPrefs] = useState<FamillesPagePreferences>(() =>
+    loadFamillesPagePreferences()
+  );
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [foyers, setFoyers] = useState<Foyer[]>([]);
   const [investissementsByContact, setInvestissementsByContact] = useState<
@@ -59,18 +84,26 @@ export function Familles({ onNavigate }: FamillesProps) {
     Record<number, Investissement[]>
   >({});
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
   const [famillesDb, setFamillesDb] = useState<Awaited<ReturnType<typeof getAllFamilles>>>([]);
-  const [expandedFamilles, setExpandedFamilles] = useState<Set<string>>(new Set());
-  const [selectedFamilleKey, setSelectedFamilleKey] = useState<string | null>(null);
+  const [expandedFamilleKey, setExpandedFamilleKey] = useState<string | null>(
+    () => loadFamillesPagePreferences().expandedFamilleKey
+  );
+  const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showContactDetail, setShowContactDetail] = useState(false);
   const [showCreateFamilleModal, setShowCreateFamilleModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [pendingMemberAction, setPendingMemberAction] =
+    useState<PendingMemberAction | null>(null);
+  const pendingFocusContactIdRef = useRef<number | null>(null);
 
-  const isWideLayout = useMediaQuery("(min-width: 1024px)");
-  const showSplit =
-    isWideLayout && (selectedFamilleKey != null || selectedContact != null);
+  const updatePrefs = useCallback((patch: Partial<FamillesPagePreferences>) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      saveFamillesPagePreferences(next);
+      return next;
+    });
+  }, []);
 
   const loadData = useCallback(async () => {
     try {
@@ -130,35 +163,104 @@ export function Familles({ onNavigate }: FamillesProps) {
     [contacts, foyers, famillesDb, investissementsByContact, investissementsByFoyer]
   );
 
+  const applyFamillesIntent = useCallback(
+    (intent: FamillesNavigationIntent) => {
+      if (intent.familleKey != null) {
+        setExpandedFamilleKey(intent.familleKey);
+        updatePrefs({ expandedFamilleKey: intent.familleKey });
+      }
+      if (intent.focusContactId != null) {
+        updatePrefs({ searchQuery: "" });
+        setHighlightContactId(intent.focusContactId);
+        pendingFocusContactIdRef.current = intent.focusContactId;
+        setSelectedContact(null);
+        setShowContactDetail(false);
+      }
+    },
+    [updatePrefs]
+  );
+
+  useEffect(() => {
+    applyFamillesIntent(consumeFamillesNavigationIntent());
+  }, [applyFamillesIntent]);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type === "familles") {
+      applyFamillesIntent({
+        familleKey: detail.familleKey,
+        focusContactId: detail.focusContactId,
+      });
+      return;
+    }
+    if (detail.type === "page" && detail.page === "familles") {
+      applyFamillesIntent(consumeFamillesNavigationIntent());
+    }
+  }, [applyFamillesIntent]);
+
+  useEffect(() => {
+    if (pendingFocusContactIdRef.current == null || familleGroups.length === 0) return;
+    const focusId = pendingFocusContactIdRef.current;
+    pendingFocusContactIdRef.current = null;
+    const key = findFamilleKeyForContact(focusId, familleGroups);
+    if (key != null) {
+      setExpandedFamilleKey(key);
+      updatePrefs({ expandedFamilleKey: key });
+    }
+  }, [familleGroups, updatePrefs]);
+
+  const { filteredFamilles, searchFocusId } = useMemo(() => {
+    const searched = searchFamilleGroups(prefs.searchQuery, familleGroups);
+    const statFilter = prefs.statFilter ?? "all";
+    const filtered = sortFamilleGroups(
+      filterFamilleGroupsByStat(searched.groups, statFilter),
+      prefs.sortId
+    );
+    return {
+      filteredFamilles: filtered,
+      searchFocusId: searched.focusContactId,
+    };
+  }, [familleGroups, prefs]);
+
+  const effectiveHighlightId = prefs.searchQuery.trim()
+    ? (searchFocusId ?? highlightContactId)
+    : (highlightContactId ?? searchFocusId);
+
+  useEffect(() => {
+    if (searchFocusId == null || !prefs.searchQuery.trim()) return;
+    const key = findFamilleKeyForContact(searchFocusId, familleGroups);
+    if (key != null) {
+      setExpandedFamilleKey(key);
+      updatePrefs({ expandedFamilleKey: key });
+    }
+  }, [searchFocusId, prefs.searchQuery, familleGroups, updatePrefs]);
+
+  useEffect(() => {
+    if (loading || expandedFamilleKey == null) return;
+    if (familleGroups.some((g) => g.key === expandedFamilleKey)) return;
+    const saved = prefs.expandedFamilleKey;
+    if (saved != null && familleGroups.some((g) => g.key === saved)) {
+      setExpandedFamilleKey(saved);
+    } else {
+      setExpandedFamilleKey(null);
+      updatePrefs({ expandedFamilleKey: null });
+    }
+  }, [loading, familleGroups, expandedFamilleKey, prefs.expandedFamilleKey, updatePrefs]);
+
+  const expandedFamille = useMemo(
+    () =>
+      expandedFamilleKey != null
+        ? (familleGroups.find((g) => g.key === expandedFamilleKey) ?? null)
+        : null,
+    [familleGroups, expandedFamilleKey]
+  );
+
+  const expandedIsVisible =
+    expandedFamilleKey != null &&
+    filteredFamilles.some((g) => g.key === expandedFamilleKey);
+
   const excludedHomonyms = useMemo(
     () => contacts.filter((c) => c.famille_regroupement_exclu),
     [contacts]
-  );
-
-  const filteredFamilles = useMemo(() => {
-    if (!searchQuery) return familleGroups;
-    return familleGroups.filter(
-      (f) =>
-        textMatchesSearch(searchQuery, f.nom) ||
-        f.membres.some((m) =>
-          textMatchesSearch(
-            searchQuery,
-            m.contact.prenom,
-            m.contact.nom,
-            `${m.contact.prenom} ${m.contact.nom}`
-          )
-        )
-    );
-  }, [familleGroups, searchQuery]);
-
-  const selectedFamille = useMemo(
-    () =>
-      selectedFamilleKey
-        ? (filteredFamilles.find((f) => f.key === selectedFamilleKey) ??
-          familleGroups.find((f) => f.key === selectedFamilleKey) ??
-          null)
-        : null,
-    [selectedFamilleKey, filteredFamilles, familleGroups]
   );
 
   const totalPatrimoineAvecMoi = useMemo(
@@ -166,35 +268,22 @@ export function Familles({ onNavigate }: FamillesProps) {
     [familleGroups]
   );
 
-  const memberCount = (f: FamilleGroup) =>
-    f.membres.filter((m) => !m.isSpouse).length;
+  const manualCount = familleGroups.filter((g) => g.isManual).length;
+  const autoCount = familleGroups.filter((g) => !g.isManual).length;
+  const withFoyerCount = familleGroups.filter((g) => g.foyers.length > 0).length;
 
-  const toggleExpand = (familleKey: string) => {
-    const next = new Set(expandedFamilles);
-    if (next.has(familleKey)) next.delete(familleKey);
-    else next.add(familleKey);
-    setExpandedFamilles(next);
-  };
-
-  const openFamille = (famille: FamilleGroup) => {
-    setSelectedFamilleKey(famille.key);
-    setSelectedContact(null);
-    if (!isWideLayout) {
-      setExpandedFamilles((prev) => new Set(prev).add(famille.key));
-    }
-  };
-
-  const closeSplit = () => {
-    setSelectedFamilleKey(null);
-    setSelectedContact(null);
-    setShowContactDetail(false);
+  const toggleFamille = (famille: FamilleGroup) => {
+    const key = famille.key;
+    setExpandedFamilleKey((prev) => {
+      const next = prev === key ? null : key;
+      updatePrefs({ expandedFamilleKey: next });
+      return next;
+    });
   };
 
   const openMember = (contact: Contact) => {
     setSelectedContact(contact);
-    if (!isWideLayout) {
-      setShowContactDetail(true);
-    }
+    setShowContactDetail(true);
   };
 
   const handleRoleFamilleChange = async (contact: Contact, newRole: string) => {
@@ -213,23 +302,30 @@ export function Familles({ onNavigate }: FamillesProps) {
       );
     } catch (error) {
       console.error("Erreur mise à jour rôle famille:", error);
+      toast.error("Impossible de mettre à jour le rôle famille");
     }
   };
 
-  const handleRemoveFromManualFamille = async (
+  const executeRemoveFromManualFamille = async (
     contact: Contact,
     famille: FamilleGroup
   ) => {
-    const msg = `Retirer ${contact.prenom} ${contact.nom} de la famille « ${famille.nom} » ?`;
-    if (!confirm(msg)) return;
     try {
       await removeContactFromFamille(contact);
       const nextContacts = contacts.map((c) =>
         c.id === contact.id ? { ...c, famille_id: null } : c
       );
-      await deleteFamilleIfEmpty(famille.familleId!, nextContacts);
+      if (famille.familleId != null) {
+        await deleteFamilleIfEmpty(famille.familleId, nextContacts);
+        const stillHasMembers = nextContacts.some(
+          (c) => c.famille_id === famille.familleId
+        );
+        if (!stillHasMembers) {
+          setExpandedFamilleKey(null);
+          updatePrefs({ expandedFamilleKey: null });
+        }
+      }
       await loadData();
-      setSelectedFamilleKey((prev) => (prev === famille.key ? null : prev));
       toast.success(`${contact.prenom} ${contact.nom} retiré de la famille`);
     } catch (error) {
       console.error("Erreur retrait membre famille:", error);
@@ -237,9 +333,7 @@ export function Familles({ onNavigate }: FamillesProps) {
     }
   };
 
-  const handleExcludeFromFamille = async (contact: Contact) => {
-    const msg = `Retirer ${contact.prenom} ${contact.nom} du regroupement « ${contact.nom.toUpperCase()} » ?\n\nCe contact reste dans le CRM mais ne sera plus listé avec les autres homonymes.`;
-    if (!confirm(msg)) return;
+  const executeExcludeFromFamille = async (contact: Contact) => {
     try {
       await updateContact(
         contact.id,
@@ -258,6 +352,14 @@ export function Familles({ onNavigate }: FamillesProps) {
     }
   };
 
+  const requestExcludeFromFamille = (contact: Contact, famille: FamilleGroup) => {
+    if (famille.isManual) {
+      setPendingMemberAction({ type: "remove_manual", contact, famille });
+    } else {
+      setPendingMemberAction({ type: "exclude_auto", contact });
+    }
+  };
+
   const handleReintegrateFamille = async (contact: Contact) => {
     try {
       await updateContact(
@@ -272,18 +374,20 @@ export function Familles({ onNavigate }: FamillesProps) {
     }
   };
 
-  const handleDeleteContact = async (id: number) => {
-    try {
-      await deleteContact(id);
-      await loadData();
-      if (selectedContact?.id === id) {
-        setSelectedContact(null);
-        setShowContactDetail(false);
+  const handleDeleteContactById = (id: number) => {
+    void (async () => {
+      try {
+        await deleteContact(id);
+        await loadData();
+        if (selectedContact?.id === id) {
+          setSelectedContact(null);
+          setShowContactDetail(false);
+        }
+      } catch (error) {
+        console.error("Erreur suppression contact:", error);
+        toast.error("Erreur lors de la suppression");
       }
-    } catch (error) {
-      console.error("Erreur suppression contact:", error);
-      alert("Erreur lors de la suppression: " + String(error));
-    }
+    })();
   };
 
   const today = new Intl.DateTimeFormat("fr-FR", {
@@ -312,12 +416,7 @@ export function Familles({ onNavigate }: FamillesProps) {
   }
 
   return (
-    <div
-      className={cn(
-        "space-y-6 mx-auto pb-8",
-        showSplit ? "max-w-[1800px]" : "max-w-[1600px]"
-      )}
-    >
+    <div className="space-y-6 max-w-[1600px] mx-auto pb-8">
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border/60 pb-6">
         <div>
           <p className="text-xs font-medium text-muted-foreground capitalize">{today}</p>
@@ -325,11 +424,13 @@ export function Familles({ onNavigate }: FamillesProps) {
             Familles
           </h2>
           <p className="text-muted-foreground mt-1 text-sm max-w-xl">
-            Familles créées manuellement ou regroupées automatiquement par nom (2+ homonymes).{" "}
-            <span className="text-foreground/80 tabular-nums">
+            Regroupement par nom ou famille manuelle —{" "}
+            <span className="tabular-nums text-foreground/80">
               {filteredFamilles.length} famille{filteredFamilles.length !== 1 ? "s" : ""}
-            </span>{" "}
-            affichée{filteredFamilles.length !== 1 ? "s" : ""}.
+            </span>
+            {prefs.searchQuery.trim() ? " (recherche active)" : ""}
+            {" · "}
+            {formatEuroCentimes(totalPatrimoineAvecMoi)} avec moi au total
           </p>
         </div>
         <Button
@@ -340,52 +441,33 @@ export function Familles({ onNavigate }: FamillesProps) {
           <Plus className="h-4 w-4" />
           Créer une famille
         </Button>
-        {!showSplit && filteredFamilles.length > 0 && (
-          <p className="text-sm text-muted-foreground hidden lg:block">
-            <TreePine className="inline h-4 w-4 mr-1 text-primary/70" />
-            Cliquez sur une famille pour voir le détail
-          </p>
-        )}
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          title="Familles"
-          value={familleGroups.length}
-          description="2 membres ou plus, même nom"
-          icon={Users}
-          accentColor="#1d4ed8"
-          iconColor="text-blue-700"
-          iconBgColor="bg-blue-50"
-        />
-        <StatCard
-          title="Membres listés"
-          value={familleGroups.reduce((sum, f) => sum + f.membres.length, 0)}
-          description="Inclut conjoints d'autres noms"
-          icon={Users}
-          accentColor="#047857"
-          iconColor="text-emerald-700"
-          iconBgColor="bg-emerald-50"
-        />
-        <StatCard
-          title="Patrimoine avec moi"
-          value={formatEuroCentimes(totalPatrimoineAvecMoi)}
-          description={`${foyers.length} foyer${foyers.length !== 1 ? "s" : ""} au total`}
-          icon={Home}
-          accentColor="#b45309"
-          iconColor="text-amber-700"
-          iconBgColor="bg-amber-50"
-        />
-      </div>
+      <FamillesPageHelp />
 
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <ListSearchField
-          value={searchQuery}
-          onChange={setSearchQuery}
-          placeholder="Nom de famille ou membre…"
-          className="flex-1 min-w-[220px] max-w-xl"
-        />
-      </div>
+      <FamillesStatCards
+        totalCount={familleGroups.length}
+        manualCount={manualCount}
+        autoCount={autoCount}
+        withFoyerCount={withFoyerCount}
+        activeFilter={prefs.statFilter}
+        onFilterChange={(filter) => updatePrefs({ statFilter: filter })}
+      />
+
+      <FamillesToolbar
+        searchQuery={prefs.searchQuery}
+        onSearchChange={(searchQuery) => updatePrefs({ searchQuery })}
+        sortId={prefs.sortId}
+        onSortChange={(sortId) => updatePrefs({ sortId })}
+        statFilter={prefs.statFilter}
+        onClearStatFilter={() => updatePrefs({ statFilter: null })}
+        onExportCsv={
+          expandedFamille
+            ? () => downloadFamilleMembersCsv(expandedFamille)
+            : undefined
+        }
+        showExport={expandedIsVisible && expandedFamille != null}
+      />
 
       {excludedHomonyms.length > 0 && (
         <div className="rounded-lg border border-dashed border-border/70 bg-muted/15 px-3 py-3">
@@ -420,204 +502,132 @@ export function Familles({ onNavigate }: FamillesProps) {
         </div>
       )}
 
-      <Card className={splitCardClassName(showSplit, "border-border/70 shadow-sm")}>
-        <CardHeader className={splitCardHeaderClassName(showSplit, "pb-3")}>
+      <Card className="border-border/70 shadow-sm">
+        <CardHeader className="pb-3">
           <CardTitle className="font-serif text-lg">Liste des familles</CardTitle>
           <CardDescription>
-            {searchQuery
-              ? `${filteredFamilles.length} résultat(s) pour « ${searchQuery} »`
-              : "Automatique par nom ou créée manuellement — choisissez qui regrouper"}
+            {prefs.searchQuery.trim()
+              ? `${filteredFamilles.length} résultat(s)`
+              : "Cliquez sur une carte pour déplier les membres"}
           </CardDescription>
         </CardHeader>
 
-        <CardContent className={splitCardContentClassName(showSplit, "pt-0", true)}>
-          <SplitDetailLayout
-            showSplit={showSplit}
-            nested
-            list={
-              <SplitListColumn
-                showSplit={showSplit}
-                nested
-                listLabel={`Familles (${filteredFamilles.length})`}
-              >
-              {filteredFamilles.length === 0 ? (
-                <div className="py-14 text-center text-muted-foreground rounded-xl border border-dashed border-border/80 bg-muted/15">
-                  {searchQuery ? (
-                    <p>Aucune famille ne correspond à votre recherche.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      <Users className="h-12 w-12 mx-auto opacity-35" />
-                      <p className="font-medium text-foreground/80">Aucune famille détectée</p>
-                      <p className="text-sm max-w-sm mx-auto">
-                        Créez une famille manuellement ou attendez deux homonymes pour un
-                        regroupement automatique.
-                      </p>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() => setShowCreateFamilleModal(true)}
-                      >
-                        Créer une famille
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : showSplit ? (
-                filteredFamilles.map((famille) => (
-                  <FamilleSummaryCard
-                    key={famille.key}
-                    famille={famille}
-                    memberCount={memberCount(famille)}
-                    compact
-                    selected={
-                      selectedFamilleKey === famille.key && !selectedContact
-                    }
-                    onClick={() => openFamille(famille)}
-                  />
-                ))
+        <CardContent className="pt-0 space-y-3">
+          {filteredFamilles.length === 0 ? (
+            <div className="py-14 text-center text-muted-foreground rounded-xl border border-dashed border-border/80 bg-muted/15">
+              {prefs.searchQuery.trim() ? (
+                <p>Aucune famille ne correspond à votre recherche.</p>
               ) : (
-                filteredFamilles.map((famille) => {
-                  const expanded = expandedFamilles.has(famille.key);
-                  return (
-                    <div
-                      key={famille.key}
-                      className="rounded-xl border border-border/70 bg-card overflow-hidden shadow-sm"
-                    >
-                      <div className="flex items-stretch">
-                        <div className="flex-1 min-w-0 p-1">
-                          <FamilleSummaryCard
-                            famille={famille}
-                            memberCount={memberCount(famille)}
-                            onClick={() => openFamille(famille)}
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          className="px-4 border-l border-border/60 hover:bg-muted/50 flex items-center shrink-0"
-                          onClick={() => toggleExpand(famille.key)}
-                          aria-expanded={expanded}
-                          aria-label={expanded ? "Replier" : "Déplier les membres"}
-                        >
-                          {expanded ? (
-                            <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                          ) : (
-                            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                          )}
-                        </button>
-                      </div>
-                      {expanded && (
-                        <div className="border-t border-border/60 bg-muted/15 px-4 py-4">
-                          <FamilleMemberTree
-                            famille={famille}
-                            foyers={foyers}
-                            isManual={famille.isManual}
-                            onRoleChange={handleRoleFamilleChange}
-                            onMemberClick={openMember}
-                            onExcludeFromFamille={(c) =>
-                              famille.isManual
-                                ? void handleRemoveFromManualFamille(c, famille)
-                                : void handleExcludeFromFamille(c)
-                            }
-                            showTitle={false}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-              </SplitListColumn>
-            }
-            detail={
-              showSplit ? (
-                <SplitDetailPane nested>
-                {selectedContact ? (
-                  <SplitDetailStack
-                    back={
-                      selectedFamille ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="gap-1.5 shadow-sm"
-                          onClick={() => setSelectedContact(null)}
-                        >
-                          <ArrowLeft className="h-4 w-4" />
-                          Famille {selectedFamille.nom}
-                        </Button>
-                      ) : undefined
-                    }
+                <div className="space-y-2">
+                  <p className="font-medium text-foreground/80">Aucune famille détectée</p>
+                  <p className="text-sm max-w-sm mx-auto">
+                    Créez une famille manuellement ou attendez deux homonymes pour un
+                    regroupement automatique.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                    onClick={() => setShowCreateFamilleModal(true)}
                   >
-                    <ContactDetail
-                      key={selectedContact.id}
-                      embedded
-                      open
-                      contact={selectedContact}
-                      onOpenChange={(open) => {
-                        if (!open) setSelectedContact(null);
-                      }}
-                      onDelete={handleDeleteContact}
-                      onUpdate={() => void loadData()}
-                      onContactRefreshed={setSelectedContact}
-                      onNavigate={onNavigate}
-                      onOpenContact={openMember}
+                    Créer une famille
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            filteredFamilles.map((famille) => {
+              const isExpanded = expandedFamilleKey === famille.key;
+              return (
+                <div
+                  key={famille.key}
+                  className={cn(
+                    "rounded-xl border border-border/70 bg-card overflow-hidden shadow-sm transition-shadow",
+                    isExpanded && "ring-1 ring-primary/20"
+                  )}
+                >
+                  <div className="p-1">
+                    <FamilleSummaryCard
+                      famille={famille}
+                      memberCount={coreMemberCount(famille)}
+                      selected={isExpanded}
+                      onClick={() => toggleFamille(famille)}
+                      actionHint={isExpanded ? "Replier les membres" : "Voir les membres"}
                     />
-                  </SplitDetailStack>
-                ) : selectedFamille ? (
-                  <div className={embeddedDetailShellClassName("shadow-md")}>
-                    <FamilleDetailHeader
-                      famille={selectedFamille}
-                      memberCount={memberCount(selectedFamille)}
-                      onClose={closeSplit}
-                      onAddMember={
-                        selectedFamille.isManual
-                          ? () => setShowAddMemberModal(true)
-                          : undefined
-                      }
-                    />
-                    <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                  </div>
+
+                  {isExpanded && (
+                    <div className="border-t border-border/60 bg-muted/15 px-4 py-4 space-y-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                          {coreMemberCount(famille)} membre
+                          {coreMemberCount(famille) > 1 ? "s" : ""} ·{" "}
+                          {formatEuroCentimes(famille.patrimoineAvecMoi)} avec moi
+                          {famille.isManual && (
+                            <span className="normal-case ml-2">· Famille manuelle</span>
+                          )}
+                        </p>
+                        {famille.isManual && famille.familleId != null && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => setShowAddMemberModal(true)}
+                          >
+                            <UserPlus className="h-4 w-4" />
+                            Ajouter un membre
+                          </Button>
+                        )}
+                      </div>
                       <FamilleMemberTree
-                        famille={selectedFamille}
+                        famille={famille}
                         foyers={foyers}
-                        isManual={selectedFamille.isManual}
+                        isManual={famille.isManual}
                         onRoleChange={handleRoleFamilleChange}
                         onMemberClick={openMember}
                         onExcludeFromFamille={(c) =>
-                          selectedFamille.isManual
-                            ? void handleRemoveFromManualFamille(c, selectedFamille)
-                            : void handleExcludeFromFamille(c)
+                          requestExcludeFromFamille(c, famille)
                         }
+                        highlightContactId={
+                          isExpanded ? (effectiveHighlightId ?? undefined) : undefined
+                        }
+                        showTitle
                       />
                     </div>
-                  </div>
-                ) : null}
-                </SplitDetailPane>
-              ) : null
-            }
-          />
+                  )}
+                </div>
+              );
+            })
+          )}
         </CardContent>
       </Card>
 
       <FamilleCreateModal
         open={showCreateFamilleModal}
         onOpenChange={setShowCreateFamilleModal}
-        onSuccess={() => void loadData()}
+        onSuccess={(familleId) => {
+          const key = `manual:${familleId}`;
+          setExpandedFamilleKey(key);
+          updatePrefs({ expandedFamilleKey: key });
+          void loadData();
+        }}
       />
-      {selectedFamille?.isManual && selectedFamille.familleId != null && (
+
+      {expandedFamille?.isManual && expandedFamille.familleId != null && (
         <FamilleAddMemberModal
           open={showAddMemberModal}
           onOpenChange={setShowAddMemberModal}
-          famille={selectedFamille}
-          existingMemberIds={selectedFamille.membres
+          famille={expandedFamille}
+          existingMemberIds={expandedFamille.membres
             .filter((m) => !m.isSpouse)
             .map((m) => m.contact.id!)}
           onSuccess={() => void loadData()}
         />
       )}
 
-      {!isWideLayout && selectedContact && (
+      {selectedContact && (
         <ContactDetail
           key={selectedContact.id}
           open={showContactDetail}
@@ -626,13 +636,73 @@ export function Familles({ onNavigate }: FamillesProps) {
             if (!open) setSelectedContact(null);
           }}
           contact={selectedContact}
-          onDelete={handleDeleteContact}
+          onDelete={handleDeleteContactById}
           onUpdate={() => void loadData()}
           onContactRefreshed={setSelectedContact}
           onNavigate={onNavigate}
           onOpenContact={openMember}
         />
       )}
+
+      <AlertDialog
+        open={pendingMemberAction != null}
+        onOpenChange={(open) => !open && setPendingMemberAction(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingMemberAction?.type === "remove_manual"
+                ? "Retirer de la famille ?"
+                : "Retirer du regroupement ?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                {pendingMemberAction?.type === "remove_manual" && (
+                  <p>
+                    Retirer{" "}
+                    <strong>
+                      {pendingMemberAction.contact.prenom}{" "}
+                      {pendingMemberAction.contact.nom}
+                    </strong>{" "}
+                    de la famille « {pendingMemberAction.famille.nom} » ?
+                  </p>
+                )}
+                {pendingMemberAction?.type === "exclude_auto" && (
+                  <p>
+                    Retirer{" "}
+                    <strong>
+                      {pendingMemberAction.contact.prenom}{" "}
+                      {pendingMemberAction.contact.nom}
+                    </strong>{" "}
+                    du regroupement « {pendingMemberAction.contact.nom.toUpperCase()} » ?
+                    Le contact reste dans le CRM mais ne sera plus listé avec les
+                    homonymes.
+                  </p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!pendingMemberAction) return;
+                if (pendingMemberAction.type === "remove_manual") {
+                  void executeRemoveFromManualFamille(
+                    pendingMemberAction.contact,
+                    pendingMemberAction.famille
+                  );
+                } else {
+                  void executeExcludeFromFamille(pendingMemberAction.contact);
+                }
+                setPendingMemberAction(null);
+              }}
+            >
+              Retirer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

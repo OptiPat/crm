@@ -96,6 +96,7 @@ import {
 import { consumeOpenContactInvestissementFlag } from "@/lib/investissements/investissement-navigation";
 import { navigateToDocuments } from "@/lib/documents/documents-navigation";
 import { navigateToPrescripteurs } from "@/lib/navigation/prescripteurs-navigation";
+import { navigateToFamilles } from "@/lib/navigation/familles-navigation";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -1021,6 +1022,19 @@ export function ContactDetail({
                     ? () => {
                         onOpenChange(false);
                         navigateToPrescripteurs(onNavigate, {
+                          focusContactId: contact.id,
+                        });
+                      }
+                    : undefined
+                }
+                onViewFamilleGroup={
+                  onNavigate &&
+                  contact.id &&
+                  !contact.famille_regroupement_exclu &&
+                  (contact.famille_id != null || Boolean(contact.nom?.trim()))
+                    ? () => {
+                        onOpenChange(false);
+                        navigateToFamilles(onNavigate, {
                           focusContactId: contact.id,
                         });
                       }

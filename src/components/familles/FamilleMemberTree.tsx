@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronRight, Home, UserMinus, Wallet } from "lucide-react";
+import { ChevronDown, ChevronRight, Home, UserMinus, UserRound, Wallet } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import type { Foyer } from "@/lib/api/tauri-foyers";
 import {
@@ -26,7 +26,7 @@ type FamilleMemberTreeProps = {
   onRoleChange: (contact: Contact, newRole: string) => void;
   onMemberClick: (contact: Contact) => void;
   onExcludeFromFamille?: (contact: Contact) => void;
-  selectedContactId?: number;
+  highlightContactId?: number;
   showTitle?: boolean;
   isManual?: boolean;
 };
@@ -96,7 +96,7 @@ function MemberInvestments({ membre }: { membre: MemberWithInvestments }) {
 function MemberCard({
   membre,
   foyer,
-  isSelected,
+  isHighlighted,
   onRoleChange,
   onMemberClick,
   onExcludeFromFamille,
@@ -104,7 +104,7 @@ function MemberCard({
 }: {
   membre: MemberWithInvestments;
   foyer?: Foyer;
-  isSelected: boolean;
+  isHighlighted: boolean;
   onRoleChange: (contact: Contact, newRole: string) => void;
   onMemberClick: (contact: Contact) => void;
   onExcludeFromFamille?: (contact: Contact) => void;
@@ -112,34 +112,32 @@ function MemberCard({
 }) {
   const [investOpen, setInvestOpen] = useState(false);
   const hasInvest = membre.investissements.length > 0;
+  const memberId = membre.contact.id;
 
   return (
     <article
+      id={memberId != null ? `famille-member-${memberId}` : undefined}
       className={cn(
         "rounded-xl border overflow-hidden transition-colors",
         membre.isSpouse
           ? "border-sky-200/70 bg-sky-50/30 ml-4 sm:ml-6"
           : "border-border/70 bg-card",
-        isSelected && "ring-2 ring-primary/40 border-primary/30"
+        isHighlighted && "ring-2 ring-primary/40 border-primary/30"
       )}
     >
       <div className="flex items-start gap-2 p-3">
-        <button
-          type="button"
-          className="flex flex-1 items-start gap-3 min-w-0 text-left rounded-lg hover:bg-muted/40 -m-1 p-1 transition-colors group"
-          onClick={() => onMemberClick(membre.contact)}
-        >
+        <div className="flex flex-1 items-start gap-3 min-w-0">
           <ContactInitialsAvatar
             prenom={membre.contact.prenom}
             nom={membre.contact.nom}
             className={cn(
-              "h-11 w-11",
+              "h-11 w-11 shrink-0",
               membre.isSpouse && "ring-2 ring-sky-200/80"
             )}
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-semibold text-foreground group-hover:text-primary transition-colors">
+              <span className="font-semibold text-foreground">
                 {membre.contact.prenom} {membre.contact.nom}
               </span>
               {!membre.isSpouse && membre.contact.role_famille && (
@@ -178,13 +176,23 @@ function MemberCard({
               )}
             </p>
           </div>
-          <ChevronRight className="h-4 w-4 text-muted-foreground/50 shrink-0 mt-3 group-hover:text-primary transition-colors" />
-        </button>
+        </div>
 
         <div
           className="flex shrink-0 items-center gap-1 pt-0.5"
           onClick={(e) => e.stopPropagation()}
         >
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 px-2 text-xs gap-1"
+            onClick={() => onMemberClick(membre.contact)}
+            title={`Ouvrir la fiche de ${membre.contact.prenom} ${membre.contact.nom}`}
+          >
+            <UserRound className="h-3 w-3" />
+            <span className="hidden sm:inline">Fiche</span>
+          </Button>
           {!membre.isSpouse ? (
             <Select
               value={membre.contact.role_famille || ""}
@@ -257,7 +265,7 @@ export function FamilleMemberTree({
   onRoleChange,
   onMemberClick,
   onExcludeFromFamille,
-  selectedContactId,
+  highlightContactId,
   showTitle = true,
   isManual = false,
 }: FamilleMemberTreeProps) {
@@ -266,13 +274,22 @@ export function FamilleMemberTree({
     return foyers.find((f) => f.id === contact.foyer_id);
   };
 
+  useEffect(() => {
+    if (highlightContactId == null) return;
+    document
+      .getElementById(`famille-member-${highlightContactId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightContactId, famille.key]);
+
   return (
     <div className="space-y-3">
       {showTitle && (
         <p className="text-xs text-muted-foreground">
+          Bouton <strong className="font-medium text-foreground/80">Fiche</strong> pour ouvrir
+          le contact.{" "}
           {isManual
-            ? "Cliquez sur un membre pour ouvrir sa fiche. Icône − pour le retirer de cette famille."
-            : "Cliquez sur un membre pour ouvrir sa fiche. Icône − pour retirer un homonyme du regroupement."}
+            ? "Icône − pour retirer un membre de cette famille."
+            : "Icône − pour retirer un homonyme du regroupement."}
         </p>
       )}
       {famille.membres.map((membre) => (
@@ -280,7 +297,7 @@ export function FamilleMemberTree({
           key={membre.contact.id}
           membre={membre}
           foyer={getFoyerForMember(membre.contact)}
-          isSelected={selectedContactId === membre.contact.id}
+          isHighlighted={highlightContactId === membre.contact.id}
           onRoleChange={onRoleChange}
           onMemberClick={onMemberClick}
           onExcludeFromFamille={onExcludeFromFamille}

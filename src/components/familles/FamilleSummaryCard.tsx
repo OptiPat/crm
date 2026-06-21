@@ -11,6 +11,7 @@ type FamilleSummaryCardProps = {
   memberCount: number;
   selected?: boolean;
   compact?: boolean;
+  actionHint?: string;
   onClick: () => void;
 };
 
@@ -19,6 +20,7 @@ export function FamilleSummaryCard({
   memberCount,
   selected = false,
   compact = false,
+  actionHint = "Voir les membres",
   onClick,
 }: FamilleSummaryCardProps) {
   const coreMembers = famille.membres.filter((m) => !m.isSpouse);
@@ -103,6 +105,9 @@ export function FamilleSummaryCard({
               </span>
             )}
           </div>
+          {!compact && actionHint && (
+            <p className="text-[11px] text-primary/80 mt-1.5 font-medium">{actionHint}</p>
+          )}
         </div>
 
         <div className="shrink-0 text-right flex items-center gap-2">

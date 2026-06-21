@@ -60,7 +60,10 @@ export function FamilleAddMemberModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recharge à l'ouverture
   }, [open, existingMemberIds.join(",")]);
 
-  const filtered = candidates.filter((c) => contactMatchesSearch(searchQuery, c));
+  const filtered =
+    searchQuery.trim().length >= 2
+      ? candidates.filter((c) => contactMatchesSearch(searchQuery, c))
+      : [];
 
   const handleAdd = async (contact: Contact) => {
     if (!contact.id || linkingId != null || !famille.familleId) return;
@@ -102,9 +105,11 @@ export function FamilleAddMemberModal({
         <div className="min-h-0 flex-1 overflow-y-auto space-y-2 py-1">
           {filtered.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              {searchQuery
-                ? "Aucun contact ne correspond"
-                : "Tous les contacts éligibles sont déjà dans une famille"}
+              {searchQuery.trim().length < 2
+                ? "Saisissez au moins 2 caractères pour rechercher"
+                : searchQuery
+                  ? "Aucun contact ne correspond"
+                  : "Tous les contacts éligibles sont déjà dans une famille"}
             </p>
           ) : (
             filtered.map((contact) => (
