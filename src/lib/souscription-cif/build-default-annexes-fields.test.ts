@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildDefaultConseil,
+  DEFAULT_CONSEIL_CAPITAL_INVEST_TEXT,
   DEFAULT_CONSEIL_TEXT,
 } from "@/lib/souscription-cif/build-default-annexes-fields";
 import {
@@ -17,8 +18,13 @@ const cometeRow = {
 };
 
 describe("buildDefaultAnnexesFields", () => {
-  it("retourne le texte type Conseil", () => {
+  it("retourne le texte type Conseil SCPI", () => {
     expect(buildDefaultConseil()).toBe(DEFAULT_CONSEIL_TEXT);
+    expect(buildDefaultConseil("scpi")).toBe(DEFAULT_CONSEIL_TEXT);
+  });
+
+  it("retourne le texte type Conseil Capital investissement", () => {
+    expect(buildDefaultConseil("capital-investissement")).toBe(DEFAULT_CONSEIL_CAPITAL_INVEST_TEXT);
   });
 
   it("génère Mes préconisations depuis une souscription Comète type (réinvest. + VP)", () => {

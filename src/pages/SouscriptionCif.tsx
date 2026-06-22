@@ -301,7 +301,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
           patch.rappelDemande = buildDefaultRappelDemande(contact, foyer);
         }
         if (!existing.conseil?.trim()) {
-          patch.conseil = buildDefaultConseil();
+          patch.conseil = buildDefaultConseil(productType);
         }
 
         if (!existing.rappelSituationClient?.trim()) {
@@ -578,6 +578,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
             <SouscriptionCifDossierForm
               key={`${selectedContactId}-${productType}`}
               activeDocument={activeDocument}
+              productType={productType}
               dossierKey={`${selectedContactId}-${productType}`}
               value={dossier}
               onChange={patchDossier}

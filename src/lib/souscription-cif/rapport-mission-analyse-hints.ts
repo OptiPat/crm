@@ -1,0 +1,25 @@
+/** Aide sous le textarea « Analyse de la situation » (rapport de mission). */
+
+export const RM_ANALYSE_SITUATION_INTRO =
+  "Tableau page 3 — après la phrase sur le RIO. Retranscrire la démarche intellectuelle : ce que le client vous a dit au premier entretien (R1) et en quoi la préconisation répond à son projet.";
+
+export const RM_ANALYSE_SITUATION_EXAMPLES_SCPI: readonly string[] = [
+  "Exemple : le client souhaite se reconvertir professionnellement d'ici X années — expliquer pourquoi les SCPI l'aideraient dans son projet.",
+  "Exemple : héritage, donation, préparation de la retraite, etc.",
+  "Autre exemple : couplage Malraux, SCPI, assurance-vie, retraite dans 15 ans, études des enfants, etc.",
+];
+
+export const RM_ANALYSE_SITUATION_EXAMPLES_CAPITAL_INVEST: readonly string[] = [
+  "Capital investissement avec réduction d'impôt : rattacher l'analyse à l'objectif « Optimiser la fiscalité de vos revenus » (Recueil / QPI) et expliquer en quoi la FCPI ou le FIP répond à cette attente.",
+  "Si le client souscrit déjà régulièrement (FCPI, FIP…), le préciser et montrer la cohérence avec son historique de souscription.",
+  "Si une augmentation de revenus motive la démarche, la mentionner et lier la préconisation au surplus fiscal à optimiser.",
+];
+
+export function getRapportMissionAnalyseExamples(
+  productType: "scpi" | "capital-investissement" | "g3f"
+): readonly string[] {
+  if (productType === "capital-investissement") {
+    return RM_ANALYSE_SITUATION_EXAMPLES_CAPITAL_INVEST;
+  }
+  return RM_ANALYSE_SITUATION_EXAMPLES_SCPI;
+}

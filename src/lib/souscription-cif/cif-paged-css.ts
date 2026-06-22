@@ -76,6 +76,15 @@ export function buildCifPagedCss(): string {
   break-inside: avoid;
 }
 
+/* Schéma Capital investissement — éviter une coupure au milieu du visuel. */
+.cif-capital-invest-lifecycle {
+  break-inside: avoid;
+}
+
+.cif-capital-invest-fiscalite-table {
+  break-inside: avoid;
+}
+
 /* Pas de titre orphelin en bas de page. */
 .cif-paged-flow h2,
 .cif-paged-flow h3 {

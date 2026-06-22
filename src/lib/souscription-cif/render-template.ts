@@ -64,6 +64,16 @@ export type ScpiLmPagePreview = {
   }[];
   /** En-tête du tableau récap (colspan, ex. annexes SCPI page 5). */
   rapportRecapTableHeader?: string;
+  /** Bloc schéma cycle de vie FCPI/FIP (annexes Capital investissement). */
+  showCapitalInvestLifecycleDiagram?: boolean;
+  /** Texte après le schéma cycle de vie (annexes Capital investissement). */
+  bodySegmentsAfterCapitalInvestLifecycleDiagram?: SouscriptionPreviewSegment[];
+  /** Tableau comparatif fiscalité FCPI / FIP OM (annexes Capital investissement). */
+  showCapitalInvestFiscaliteTable?: boolean;
+  /** Texte avant le tableau fiscalité Capital investissement. */
+  bodySegmentsBeforeCapitalInvestFiscaliteTable?: SouscriptionPreviewSegment[];
+  /** Texte après le tableau fiscalité Capital investissement. */
+  bodySegmentsAfterCapitalInvestFiscaliteTable?: SouscriptionPreviewSegment[];
   /** Échelle AMF 1–7 (annexes SCPI). */
   showAmfRiskScale?: boolean;
   /** Case surlignée sur l'échelle AMF (ex. 3 pour SCPI de rendement). */
@@ -319,6 +329,15 @@ export function collectMissingFromPage(page: ScpiLmPagePreview): string[] {
   }
   if (page.bodySegmentsAfterCaracteristiquesOperationTable) {
     collectMissing(page.bodySegmentsAfterCaracteristiquesOperationTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterCapitalInvestLifecycleDiagram) {
+    collectMissing(page.bodySegmentsAfterCapitalInvestLifecycleDiagram).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsBeforeCapitalInvestFiscaliteTable) {
+    collectMissing(page.bodySegmentsBeforeCapitalInvestFiscaliteTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterCapitalInvestFiscaliteTable) {
+    collectMissing(page.bodySegmentsAfterCapitalInvestFiscaliteTable).forEach((k) => keys.add(k));
   }
   if (page.bodySegmentsAfterOrigineFonds) {
     collectMissing(page.bodySegmentsAfterOrigineFonds).forEach((k) => keys.add(k));

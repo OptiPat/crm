@@ -14,6 +14,10 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 import { RM_RAPPEL_SITUATION_PANEL_HINTS } from "@/lib/souscription-cif/rapport-mission-recap-table";
+import {
+  getRapportMissionAnalyseExamples,
+  RM_ANALYSE_SITUATION_INTRO,
+} from "@/lib/souscription-cif/rapport-mission-analyse-hints";
 import { SCPI_ANNEXE_PRODUCT_FICHES } from "@/lib/souscription-cif/scpi-annexe-catalog";
 import {
   buildMesPreconisationsFromSouscriptions,
@@ -29,11 +33,15 @@ import {
   ORIGINE_FONDS_OPTIONS,
   PROVENANCE_FONDS_OPTIONS,
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
-import type { SouscriptionCifDocumentId } from "@/lib/souscription-cif/souscription-cif-storage";
+import type {
+  SouscriptionCifDocumentId,
+  SouscriptionCifProductType,
+} from "@/lib/souscription-cif/souscription-cif-storage";
 import { AlertTriangle } from "lucide-react";
 
 type SouscriptionCifDossierFormProps = {
   activeDocument: SouscriptionCifDocumentId;
+  productType: SouscriptionCifProductType;
   /** Identifie le dossier (ex. contactId) pour réinitialiser la synchro auto au changement. */
   dossierKey?: string | number;
   value: SouscriptionDossierFields;
@@ -42,6 +50,7 @@ type SouscriptionCifDossierFormProps = {
 
 export function SouscriptionCifDossierForm({
   activeDocument,
+  productType,
   dossierKey,
   value,
   onChange,
@@ -249,21 +258,11 @@ export function SouscriptionCifDossierForm({
                 onChange={(e) => onChange({ analyseSituationClient: e.target.value })}
                 placeholder="Rédigez ici l'analyse personnalisée (voir exemples ci-dessous)."
               />
-              <p className="text-xs text-muted-foreground">
-                Tableau page 3 — après la phrase sur le RIO. Retranscrire la démarche intellectuelle
-                : ce que le client vous a dit au premier entretien (R1) et en quoi la préconisation
-                répond à son projet.
-              </p>
+              <p className="text-xs text-muted-foreground">{RM_ANALYSE_SITUATION_INTRO}</p>
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
-                <li>
-                  Exemple : le client souhaite se reconvertir professionnellement d&apos;ici X
-                  années — expliquer pourquoi les SCPI l&apos;aideraient dans son projet.
-                </li>
-                <li>Exemple : héritage, donation, préparation de la retraite, etc.</li>
-                <li>
-                  Autre exemple : couplage Malraux, SCPI, assurance-vie, retraite dans 15 ans,
-                  études des enfants, etc.
-                </li>
+                {getRapportMissionAnalyseExamples(productType).map((example) => (
+                  <li key={example}>{example}</li>
+                ))}
               </ul>
             </div>
           </CardContent>
@@ -273,9 +272,17 @@ export function SouscriptionCifDossierForm({
       {activeDocument === "annexes-rapport" && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Annexes SCPI</CardTitle>
+            <CardTitle className="text-base">
+              {productType === "scpi"
+                ? "Annexes SCPI"
+                : productType === "capital-investissement"
+                  ? "Annexes capital investissement"
+                  : "Annexes"}
+            </CardTitle>
             <CardDescription>
-              Conseil, préconisations et fiches produits (catalogue).
+              {productType === "scpi"
+                ? "Conseil, préconisations et fiches produits (catalogue)."
+                : "Conseil et champs spécifiques au dossier (autres pages à venir)."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -287,11 +294,15 @@ export function SouscriptionCifDossierForm({
                 value={value.conseil}
                 onChange={(e) => onChange({ conseil: e.target.value })}
               />
-              <p className="text-xs text-muted-foreground">
-                Prérempli avec un texte type — à ajuster pour les annexes SCPI.
-              </p>
+              {(productType === "scpi" || productType === "capital-investissement") && (
+                <p className="text-xs text-muted-foreground">
+                  Prérempli avec un texte type — à ajuster pour les annexes.
+                </p>
+              )}
             </div>
 
+            {productType === "scpi" && (
+              <>
             <div id="cif-scpi-souscriptions" className="space-y-2 scroll-mt-4">
               <Label>Souscriptions SCPI</Label>
               <p className="text-xs text-muted-foreground">
@@ -529,6 +540,8 @@ export function SouscriptionCifDossierForm({
                 />
               )}
             </div>
+              </>
+            )}
           </CardContent>
         </Card>
       )}

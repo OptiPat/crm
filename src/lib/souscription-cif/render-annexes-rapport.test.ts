@@ -384,4 +384,43 @@ describe("buildAnnexesRapportPreview", () => {
     expect(body).toContain("Je renonce à mon délai de rétractation de 14 jours");
     expect(body).toContain("Je vous remercie de démarrer votre prestation dès à présent.");
   });
+
+  it("construit les annexes Capital investissement (§5 risques sur page 2)", () => {
+    const preview = buildAnnexesRapportPreview(
+      "capital-investissement",
+      {
+        conseil:
+          "Je vous propose de souscrire à un FCPI afin de bénéficier d'une réduction d'impôt sur l'IR.",
+      },
+      defaultSouscriptionDossierFields()
+    );
+
+    expect(preview.pages).toHaveLength(2);
+
+    const page1 = preview.pages[0]!;
+    expect(page1.title).toBe(ANNEXES_RAPPORT_DOCUMENT_TITLE);
+    expect(page1.centeredSectionTitle).toBe("— LE CAPITAL INVESTISSEMENT —");
+    expect(page1.showAnnexesProsConsTable).toBe(true);
+    expect(page1.showAmfRiskScale).toBeUndefined();
+    expect(page1.bodySegmentsAfterProsConsTable).toBeUndefined();
+
+    const page2 = preview.pages[1]!;
+    expect(page2.pageNumber).toBe(2);
+    expect(page2.title).toBeUndefined();
+    const risques = page2.bodySegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(risques).toContain("5. Les risques");
+    expect(page2.showAmfRiskScale).toBe(true);
+    expect(page2.amfRiskHighlightLevel).toBe(6);
+    expect(page2.amfRiskInvestmentHorizon).toBe("> 10 ans");
+
+    const risksBody = (page2.bodySegmentsAfterTable ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(risksBody).toContain("L'investissement en FIP FCPI comporte des risques");
+    expect(risksBody).toContain("Risque de perte en capital");
+    expect(risksBody).toContain("Risque fiscal");
+    expect(risksBody).toContain("Le Client déclare avoir pris connaissance");
+  });
 });

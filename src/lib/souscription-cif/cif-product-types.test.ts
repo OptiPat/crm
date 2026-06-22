@@ -6,9 +6,9 @@ import {
 } from "@/lib/souscription-cif/cif-product-types";
 
 describe("cif-product-types", () => {
-  it("ne permet que SCPI pour l'instant", () => {
+  it("SCPI et capital investissement sont sélectionnables", () => {
     expect(isCifProductTypeAvailable("scpi")).toBe(true);
-    expect(isCifProductTypeAvailable("capital-investissement")).toBe(false);
+    expect(isCifProductTypeAvailable("capital-investissement")).toBe(true);
     expect(isCifProductTypeAvailable("g3f")).toBe(false);
   });
 

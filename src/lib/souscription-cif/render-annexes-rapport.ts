@@ -1,4 +1,21 @@
 import {
+  ANNEXES_CAPITAL_INVEST_BODY_AFTER_DIAGRAM,
+  ANNEXES_CAPITAL_INVEST_BODY_AFTER_FISCALITE_TABLE,
+  ANNEXES_CAPITAL_INVEST_BEFORE_FISCALITE_TABLE,
+  ANNEXES_CAPITAL_INVEST_PAGE1_BODY_AFTER_SECTION,
+  ANNEXES_CAPITAL_INVEST_PAGE1_BODY_BEFORE_SECTION,
+  ANNEXES_CAPITAL_INVEST_PRODUCT_SECTION_TITLE,
+} from "@/lib/souscription-cif/annexes-rapport-capital-invest-page1";
+import {
+  ANNEXES_CAPITAL_INVEST_PROS_CONS_ROWS,
+  ANNEXES_CAPITAL_INVEST_SECTION32_SORTIE,
+  ANNEXES_CAPITAL_INVEST_SECTION4_INTRO,
+  ANNEXES_CAPITAL_INVEST_AMF_RISK_LEVEL,
+  ANNEXES_CAPITAL_INVEST_HORIZON_PLACEMENT,
+  ANNEXES_CAPITAL_INVEST_SECTION5_RISQUES,
+  ANNEXES_CAPITAL_INVEST_SECTION5_RISKS_BODY,
+} from "@/lib/souscription-cif/annexes-capital-invest-pros-cons-table";
+import {
   ANNEXES_SCPI_PAGE1_BODY_AFTER_SECTION,
   ANNEXES_SCPI_PAGE1_BODY_BEFORE_SECTION,
   ANNEXES_SCPI_PRODUCT_SECTION_TITLE,
@@ -56,17 +73,73 @@ import {
 } from "@/lib/souscription-cif/render-template";
 import type { SouscriptionCifProductType } from "@/lib/souscription-cif/souscription-cif-storage";
 
-export function buildAnnexesRapportPreview(
-  productType: SouscriptionCifProductType,
+function buildAnnexesCapitalInvestRapportPreview(
+  variables: Record<string, string | null>,
+  footerOverride?: string | null
+): ScpiLettreMissionPreview {
+  const footerSegments = buildCifDocumentFooterSegments(variables, footerOverride);
+
+  const page1: ScpiLmPagePreview = {
+    pageNumber: 1,
+    title: ANNEXES_RAPPORT_DOCUMENT_TITLE,
+    bodySegments: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_PAGE1_BODY_BEFORE_SECTION,
+      variables
+    ),
+    centeredSectionTitle: ANNEXES_CAPITAL_INVEST_PRODUCT_SECTION_TITLE,
+    bodySegmentsContinuation: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_PAGE1_BODY_AFTER_SECTION,
+      variables
+    ),
+    showCapitalInvestLifecycleDiagram: true,
+    bodySegmentsAfterCapitalInvestLifecycleDiagram: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_BODY_AFTER_DIAGRAM,
+      variables
+    ),
+    bodySegmentsBeforeCapitalInvestFiscaliteTable: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_BEFORE_FISCALITE_TABLE,
+      variables
+    ),
+    showCapitalInvestFiscaliteTable: true,
+    bodySegmentsAfterCapitalInvestFiscaliteTable: renderTemplateSegments(
+      `${ANNEXES_CAPITAL_INVEST_BODY_AFTER_FISCALITE_TABLE}\n\n${ANNEXES_CAPITAL_INVEST_SECTION32_SORTIE}\n\n${ANNEXES_CAPITAL_INVEST_SECTION4_INTRO}`,
+      variables
+    ),
+    showAnnexesProsConsTable: true,
+    annexesProsConsRows: ANNEXES_CAPITAL_INVEST_PROS_CONS_ROWS,
+    footerSegments,
+  };
+
+  const page2: ScpiLmPagePreview = {
+    pageNumber: 2,
+    bodySegments: renderTemplateSegments(ANNEXES_CAPITAL_INVEST_SECTION5_RISQUES, variables),
+    showAmfRiskScale: true,
+    amfRiskHighlightLevel: ANNEXES_CAPITAL_INVEST_AMF_RISK_LEVEL,
+    amfRiskInvestmentHorizon: ANNEXES_CAPITAL_INVEST_HORIZON_PLACEMENT,
+    bodySegmentsAfterTable: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_SECTION5_RISKS_BODY,
+      variables
+    ),
+    footerSegments,
+  };
+
+  const missing = new Set<string>([
+    ...collectMissingFromPage(page1),
+    ...collectMissingFromPage(page2),
+  ]);
+
+  return {
+    pages: [page1, page2],
+    missingKeys: [...missing],
+  };
+}
+
+function buildAnnexesScpiRapportPreview(
   variables: Record<string, string | null>,
   dossier: SouscriptionDossierFields,
   footerOverride?: string | null,
   profilRisqueSri?: number | null
 ): ScpiLettreMissionPreview {
-  if (productType !== "scpi") {
-    return { pages: [], missingKeys: [] };
-  }
-
   const footerSegments = buildCifDocumentFooterSegments(variables, footerOverride);
 
   const page1: ScpiLmPagePreview = {
@@ -187,6 +260,27 @@ export function buildAnnexesRapportPreview(
     pages: [page1, page2, page3, page4, page5, page6, page7, page8, page9],
     missingKeys: [...missing],
   };
+}
+
+export function buildAnnexesRapportPreview(
+  productType: SouscriptionCifProductType,
+  variables: Record<string, string | null>,
+  dossier: SouscriptionDossierFields,
+  footerOverride?: string | null,
+  profilRisqueSri?: number | null
+): ScpiLettreMissionPreview {
+  if (productType === "capital-investissement") {
+    return buildAnnexesCapitalInvestRapportPreview(variables, footerOverride);
+  }
+  if (productType !== "scpi") {
+    return { pages: [], missingKeys: [] };
+  }
+  return buildAnnexesScpiRapportPreview(
+    variables,
+    dossier,
+    footerOverride,
+    profilRisqueSri
+  );
 }
 
 export { SCPI_LM_PAGE1_FOOTER_DEFAULT as ANNEXES_RAPPORT_FOOTER_DEFAULT };

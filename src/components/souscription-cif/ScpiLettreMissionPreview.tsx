@@ -23,6 +23,8 @@ import { AnnexesScpiHorizonProfilTable } from "@/components/souscription-cif/Ann
 import { AnnexesScpiOrigineFondsSection } from "@/components/souscription-cif/AnnexesScpiOrigineFondsSection";
 import { AnnexesScpiProsConsTable } from "@/components/souscription-cif/AnnexesScpiProsConsTable";
 import { ScpiAmfRiskScaleTable } from "@/components/souscription-cif/ScpiAmfRiskScaleTable";
+import { CapitalInvestLifecycleDiagram } from "@/components/souscription-cif/CapitalInvestLifecycleDiagram";
+import { CapitalInvestFiscaliteTable } from "@/components/souscription-cif/CapitalInvestFiscaliteTable";
 import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInstrumentsTable";
 import { RmRecapTable } from "@/components/souscription-cif/RmRecapTable";
 import { ScpiLmSignatureBlock } from "@/components/souscription-cif/ScpiLmSignatureBlock";
@@ -88,6 +90,37 @@ export function ScpiLmBodyContent({
           onMissingVariableClick={onMissingVariableClick}
         />
       )}
+
+      {page.showCapitalInvestLifecycleDiagram && <CapitalInvestLifecycleDiagram />}
+
+      {page.bodySegmentsAfterCapitalInvestLifecycleDiagram &&
+        page.bodySegmentsAfterCapitalInvestLifecycleDiagram.length > 0 && (
+          <CifProse
+            className={cn("mt-[4mm]", cifDocumentBodyProseClass)}
+            segments={page.bodySegmentsAfterCapitalInvestLifecycleDiagram}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+        )}
+
+      {page.bodySegmentsBeforeCapitalInvestFiscaliteTable &&
+        page.bodySegmentsBeforeCapitalInvestFiscaliteTable.length > 0 && (
+          <CifProse
+            className={cn("mt-[3mm]", cifDocumentBodyProseClass)}
+            segments={page.bodySegmentsBeforeCapitalInvestFiscaliteTable}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+        )}
+
+      {page.showCapitalInvestFiscaliteTable && <CapitalInvestFiscaliteTable />}
+
+      {page.bodySegmentsAfterCapitalInvestFiscaliteTable &&
+        page.bodySegmentsAfterCapitalInvestFiscaliteTable.length > 0 && (
+          <CifProse
+            className={cn("mt-[3mm]", cifDocumentBodyProseClass)}
+            segments={page.bodySegmentsAfterCapitalInvestFiscaliteTable}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+        )}
 
       {page.rapportRecapRows && page.rapportRecapRows.length > 0 && (
         <>

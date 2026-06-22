@@ -89,6 +89,32 @@
   display: none;
 }
 
+/* Chevrons phases Capital investissement */
+.ci-phase-chevron {
+  clip-path: polygon(0 0, calc(100% - 3.5mm) 0, 100% 50%, calc(100% - 3.5mm) 100%, 0 100%, 3.5mm 50%);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.ci-phase-chevron:first-child {
+  clip-path: polygon(0 0, calc(100% - 3.5mm) 0, 100% 50%, calc(100% - 3.5mm) 100%, 0 100%);
+}
+.ci-phase-chevron:last-child {
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 3.5mm 50%);
+}
+
+/* Schéma cycle de vie Capital investissement — couleurs conservées à l'impression. */
+.cif-capital-invest-lifecycle .ci-phase-chevron {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  html.cif-printing .cif-capital-invest-lifecycle .ci-phase-chevron {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
 /** Case surlignée — échelle AMF (identique écran et PDF). */
 .cif-amf-risk-highlight {
   background-color: #fcd34d;

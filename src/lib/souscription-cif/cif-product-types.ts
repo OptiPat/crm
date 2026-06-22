@@ -9,7 +9,7 @@ export type CifProductTypeOption = {
 /** Types de souscription CIF — seules les entrées `available` sont sélectionnables. */
 export const CIF_PRODUCT_TYPE_OPTIONS: readonly CifProductTypeOption[] = [
   { id: "scpi", label: "SCPI", available: true },
-  { id: "capital-investissement", label: "Capital investissement", available: false },
+  { id: "capital-investissement", label: "Capital investissement", available: true },
   { id: "g3f", label: "G3F", available: false },
 ] as const;
 
