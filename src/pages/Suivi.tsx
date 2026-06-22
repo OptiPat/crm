@@ -619,6 +619,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
           <EtiquetteEnvoisTab
             onQueueChanged={() => void loadEmailQueueCount()}
             onOpenContact={openContact}
+            onNavigate={onNavigate}
           />
         </TabsContent>
       </Tabs>

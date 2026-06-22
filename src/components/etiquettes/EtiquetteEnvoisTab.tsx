@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { EmailSendLogTab } from "@/components/etiquettes/EmailSendLogTab";
 import { ScpiCampaignChecklist } from "@/components/etiquettes/ScpiCampaignChecklist";
+import { StelliumPerfCampaignPanel } from "@/components/etiquettes/StelliumPerfCampaignPanel";
 import { ScpiReadyDigestAccordion } from "@/components/etiquettes/ScpiReadyDigestAccordion";
 import { EtiquetteBatchSendDialog } from "@/components/etiquettes/EtiquetteBatchSendDialog";
 import { EtiquetteEnvoisSelectionBar } from "@/components/etiquettes/EtiquetteEnvoisSelectionBar";
@@ -112,9 +113,14 @@ import { toast } from "sonner";
 interface EtiquetteEnvoisTabProps {
   onOpenContact?: (contactId: number) => void;
   onQueueChanged?: () => void;
+  onNavigate?: (page: string) => void;
 }
 
-export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteEnvoisTabProps) {
+export function EtiquetteEnvoisTab({
+  onOpenContact,
+  onQueueChanged,
+  onNavigate,
+}: EtiquetteEnvoisTabProps) {
   const [initialState] = useState(() => getEnvoisTabInitialState());
   const [ready, setReady] = useState(initialState.ready);
   const [scheduled, setScheduled] = useState(initialState.scheduled);
@@ -936,6 +942,18 @@ export function EtiquetteEnvoisTab({ onOpenContact, onQueueChanged }: EtiquetteE
         onNavigateToIncomplete={() => setSubTab("incomplete")}
         onNavigateToReady={() => setSubTab("ready")}
         onSendRemaining={prepareScpiBatchSend}
+      />
+      <StelliumPerfCampaignPanel
+        refreshKey={dashboardRefreshKey}
+        onRefreshQueue={() => loadQueue({ silent: true })}
+        onNavigateToIncomplete={() => setSubTab("incomplete")}
+        onNavigateToReady={() => setSubTab("ready")}
+        onOpenTemplatesEmail={
+          onNavigate ? () => onNavigate("templates-email") : undefined
+        }
+        onOpenInvestissements={
+          onNavigate ? () => onNavigate("investissements") : undefined
+        }
       />
       <EnvoisQueueStats
         ready={ready.length}

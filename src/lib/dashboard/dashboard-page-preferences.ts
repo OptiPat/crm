@@ -1,4 +1,4 @@
-export type DashboardSectionId = "repartition" | "activite";
+export type DashboardSectionId = "repartition" | "activite" | "campagnes_email";
 
 const STORAGE_KEY = "crm_dashboard_sections_v1";
 

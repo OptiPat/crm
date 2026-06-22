@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,17 +32,10 @@ import { EnvoisEmailConnectionBanner } from "@/components/etiquettes/etiquette-e
 import type { EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import {
-  discoverStelliumPerfCampaignPrepareInput,
-  discoverResponseToPrepareInput,
-  type DiscoverStelliumPerfCampaignPrepareResponse,
-} from "@/lib/api/tauri-stellium-perf-campaign";
-import { StelliumPerfPrepareCampaignButton } from "@/components/emails/StelliumPerfPrepareCampaignButton";
-import {
   ArrowRight,
   AlertTriangle,
   ChevronDown,
   Copy,
-  LineChart,
   Mail,
   MessageCircle,
   Pencil,
@@ -127,113 +119,6 @@ export function TemplatesEmailDeliveryBanner({
         )}
       </div>
     </div>
-  );
-}
-
-export function TemplatesEmailStelliumPerfSection({
-  onNavigate,
-  onPrepared,
-  onShowStelliumTemplates,
-}: {
-  onNavigate?: (page: string) => void;
-  onPrepared?: () => void;
-  onShowStelliumTemplates?: () => void;
-}) {
-  const [releve, setReleve] = useState<DiscoverStelliumPerfCampaignPrepareResponse | null>(null);
-  const [loadingReleve, setLoadingReleve] = useState(true);
-
-  const refreshReleve = useCallback(async () => {
-    setLoadingReleve(true);
-    try {
-      setReleve(await discoverStelliumPerfCampaignPrepareInput());
-    } catch {
-      setReleve(null);
-    } finally {
-      setLoadingReleve(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshReleve();
-  }, [refreshReleve]);
-
-  const handlePrepared = () => {
-    onPrepared?.();
-    void refreshReleve();
-  };
-
-  const statusLine = loadingReleve
-    ? "Chargement…"
-    : releve
-      ? `${releve.periode} · ${releve.contractCount} contrat${releve.contractCount > 1 ? "s" : ""}`
-      : "Aucun relevé importé — commencez par Investissements → import Contrats.";
-
-  return (
-    <details className="group rounded-xl border bg-muted/20 text-sm open:bg-card open:shadow-sm">
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-4 py-3 [&::-webkit-details-marker]:hidden">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-          <LineChart className="h-4 w-4 text-primary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="font-medium text-foreground">Perf Stellium AV/PER</p>
-          <p className="text-xs text-muted-foreground truncate">{statusLine}</p>
-        </div>
-        <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-      </summary>
-      <div className="space-y-3 border-t px-4 pb-4 pt-3">
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          <strong className="text-foreground">Import</strong> des encours →{" "}
-          <strong className="text-foreground">Préparer</strong> calcule un mail par client (chiffres
-          du relevé) →{" "}
-          <strong className="text-foreground">Envoyer</strong> plus tard dans Suivi → Envois.
-        </p>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          Mise en forme : éditez le modèle{" "}
-          <strong className="text-foreground">Performance AV/PER Stellium</strong> dans l&apos;éditeur
-          HTML (puces, gras…) — variables{" "}
-          <code className="text-[11px]">{`{{encours}}`}</code>,{" "}
-          <code className="text-[11px]">{`{{nets}}`}</code>,{" "}
-          <code className="text-[11px]">{`{{releve_date_label}}`}</code>… Enregistrez puis{" "}
-          <strong className="text-foreground">Préparer</strong>.
-        </p>
-        <div className="flex flex-wrap items-center gap-2">
-          <StelliumPerfPrepareCampaignButton
-            size="sm"
-            variant="default"
-            className="gap-1.5"
-            disabled={!loadingReleve && releve == null}
-            label="Préparer la campagne"
-            importInput={releve ? discoverResponseToPrepareInput(releve) : null}
-            onPrepared={handlePrepared}
-          />
-          {onNavigate && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() =>
-                navigateToSuivi(onNavigate, "envois", "ready", undefined, "templates-email")
-              }
-            >
-              Suivi → Envois
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Button>
-          )}
-          {onShowStelliumTemplates && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-              onClick={onShowStelliumTemplates}
-            >
-              Voir le modèle
-            </Button>
-          )}
-        </div>
-      </div>
-    </details>
   );
 }
 

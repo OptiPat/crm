@@ -36,7 +36,6 @@ import {
   TemplatesEmailActiveFilterChips,
   TemplatesEmailDeliveryBanner,
   TemplatesEmailHelp,
-  TemplatesEmailStelliumPerfSection,
 } from "@/components/emails/templates-email-ui";
 import {
   duplicateTemplatePayload,
@@ -58,7 +57,6 @@ import type { ContactRegistre } from "@/lib/emails/template-email-formality";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { getTemplateCorpsHtml } from "@/lib/emails/template-email-html";
 import { ensureStelliumPerfEmailTemplates } from "@/lib/api/tauri-stellium-perf-campaign";
-import { STELLIUM_PERF_TEMPLATE_NOM } from "@/lib/investissements/stellium-perf-campaign";
 import { useTemplatesEmailAutoRefresh } from "@/hooks/useTemplatesEmailAutoRefresh";
 import { navigateToEtiquetteEdit } from "@/lib/navigation/etiquettes-navigation";
 import { resolveTemplateSouscriptionDuplicateWarning } from "@/lib/emails/template-etiquette-duplicate";
@@ -348,14 +346,6 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
     navigateToEtiquetteEdit(onNavigate, etiquetteId, "templates-email");
   };
 
-  const focusStelliumPerfTemplate = useCallback(() => {
-    setSearchQuery("Performance AV/PER");
-    setCategoryFilter("NEWSLETTER");
-    setActivationFilter(null);
-    const stellium = templates.find((t) => t.nom === STELLIUM_PERF_TEMPLATE_NOM);
-    if (stellium) setPreviewId(stellium.id);
-  }, [templates]);
-
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -387,12 +377,6 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
       <TemplatesEmailHelp />
 
       <TemplatesEmailDeliveryBanner emailStatus={emailStatus} onNavigate={onNavigate} />
-
-      <TemplatesEmailStelliumPerfSection
-        onNavigate={onNavigate}
-        onPrepared={() => void loadTemplates({ silent: true })}
-        onShowStelliumTemplates={focusStelliumPerfTemplate}
-      />
 
       <section className="space-y-2" aria-label="Synthèse des modèles">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

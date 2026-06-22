@@ -94,10 +94,10 @@ export function EnvoisQueueHelp() {
           relancer : consultez le <strong>Journal</strong> (filtre SCPI disponible).
         </p>
         <p>
-          <strong className="text-foreground">Campagne bulletins SCPI</strong> — PDF dans le dossier
-          n8n → workflow (bouton n8n) → file Prêts. Checklist en haut de l&apos;onglet Envois.
-          Contrôlez l&apos;aperçu digest avant envoi groupé. Un nouveau prepare remet en file les
-          contacts retirés.
+          <strong className="text-foreground">Campagnes email</strong> — En haut de l&apos;onglet :{" "}
+          <strong>bulletins SCPI</strong> (PDF → n8n → prepare) et{" "}
+          <strong>Perf Stellium AV/PER</strong> (import encours → prepare). Contrôlez l&apos;aperçu
+          avant envoi groupé. Modèle Stellium : Modèles email.
         </p>
         <p>
           <strong className="text-foreground">Planifiés</strong> — Date d&apos;envoi pas encore
