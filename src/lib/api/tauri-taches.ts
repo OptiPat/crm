@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyTachesChanged } from "@/lib/taches/tache-events";
+import type { TacheRecurrence } from "@/lib/taches/tache-recurrence";
 
 export type TacheStatut = "A_FAIRE" | "FAIT";
 export type TachePriorite = "BASSE" | "NORMALE" | "HAUTE";
@@ -26,6 +27,8 @@ export interface Tache {
   contacts: TacheContactRef[];
   /** Créée automatiquement par une action étiquette. */
   from_etiquette_auto?: boolean;
+  /** Règle de récurrence (prochaine occurrence à la complétion). */
+  recurrence?: TacheRecurrence | null;
 }
 
 /** Conservé pour compat : une tâche porte désormais directement ses contacts. */
@@ -39,6 +42,12 @@ export interface NewTache {
   date_echeance?: number | null;
   priorite?: TachePriorite;
   statut?: TacheStatut;
+  recurrence?: TacheRecurrence | null;
+}
+
+export interface SetTacheStatutResult {
+  tache: Tache;
+  spawned_next?: Tache | null;
 }
 
 export async function getAllTaches(): Promise<Tache[]> {
@@ -61,10 +70,13 @@ export async function updateTache(id: number, tache: NewTache): Promise<Tache> {
   return updated;
 }
 
-export async function setTacheStatut(id: number, statut: TacheStatut): Promise<Tache> {
-  const updated = await invoke<Tache>("set_tache_statut", { id, statut });
+export async function setTacheStatut(
+  id: number,
+  statut: TacheStatut
+): Promise<SetTacheStatutResult> {
+  const result = await invoke<SetTacheStatutResult>("set_tache_statut", { id, statut });
   notifyTachesChanged();
-  return updated;
+  return result;
 }
 
 export async function deleteTache(id: number): Promise<void> {

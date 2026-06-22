@@ -1,6 +1,9 @@
 //! Tâches / rappels (liés ou non à un contact). Module de domaine dédié.
 
-use super::models::{NewTache, Tache, TacheContactRef};
+use super::models::{NewTache, SetTacheStatutResult, Tache, TacheContactRef};
+use super::tache_recurrence::{
+    next_occurrence, parse_recurrence_json, serialize_recurrence_json,
+};
 use rusqlite::{params, OptionalExtension, Result};
 
 fn normalize_priorite(value: Option<String>) -> String {
@@ -20,7 +23,7 @@ fn normalize_statut(value: Option<String>) -> String {
 
 impl super::Database {
     const TACHE_SELECT_COLS: &'static str = "id, titre, description, date_echeance, priorite,
-                    statut, completed_at, created_at, updated_at,
+                    statut, completed_at, created_at, updated_at, recurrence,
                     EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = taches.id) AS from_etiquette_auto";
 
     /// Toutes les tâches (page Tâches), chacune avec ses contacts liés.
@@ -47,7 +50,7 @@ impl super::Database {
     pub fn get_taches_by_contact(&self, contact_id: i64) -> Result<Vec<Tache>> {
         let sql = format!(
             "SELECT t.id, t.titre, t.description, t.date_echeance, t.priorite,
-                    t.statut, t.completed_at, t.created_at, t.updated_at,
+                    t.statut, t.completed_at, t.created_at, t.updated_at, t.recurrence,
                     EXISTS (SELECT 1 FROM contact_etiquettes ce WHERE ce.tache_id = t.id) AS from_etiquette_auto
              FROM taches t
              JOIN tache_contacts tc ON tc.tache_id = t.id
@@ -85,10 +88,11 @@ impl super::Database {
         } else {
             None
         };
+        let recurrence_json = serialize_recurrence_json(tache.recurrence.as_ref());
 
         self.conn.execute(
-            "INSERT INTO taches (titre, description, date_echeance, priorite, statut, completed_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO taches (titre, description, date_echeance, priorite, statut, completed_at, recurrence)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 tache.titre,
                 tache.description,
@@ -96,6 +100,7 @@ impl super::Database {
                 priorite,
                 statut,
                 completed_at,
+                recurrence_json,
             ],
         )?;
         let id = self.conn.last_insert_rowid();
@@ -104,14 +109,15 @@ impl super::Database {
     }
 
     pub fn update_tache(&self, id: i64, tache: &NewTache) -> Result<Tache> {
+        let existing = self.get_tache_by_id(id)?;
         let priorite = normalize_priorite(tache.priorite.clone());
         let statut = normalize_statut(tache.statut.clone());
-        // completed_at suit le statut : posé si FAIT, effacé si A_FAIRE.
         let completed_at: Option<i64> = if statut == "FAIT" {
             Some(now_unix())
         } else {
             None
         };
+        let recurrence_json = serialize_recurrence_json(tache.recurrence.as_ref());
 
         self.conn.execute(
             "UPDATE taches SET
@@ -121,8 +127,9 @@ impl super::Database {
                 priorite = ?4,
                 statut = ?5,
                 completed_at = ?6,
+                recurrence = ?7,
                 updated_at = unixepoch()
-             WHERE id = ?7",
+             WHERE id = ?8",
             params![
                 tache.titre,
                 tache.description,
@@ -130,15 +137,21 @@ impl super::Database {
                 priorite,
                 statut,
                 completed_at,
+                recurrence_json,
                 id,
             ],
         )?;
         self.replace_tache_contacts(id, &tache.contact_ids)?;
-        self.get_tache_by_id(id)
+        let updated = self.get_tache_by_id(id)?;
+        if existing.statut != "FAIT" && updated.statut == "FAIT" {
+            let _ = self.maybe_spawn_recurrence(&updated)?;
+        }
+        Ok(updated)
     }
 
     /// Bascule rapide du statut (case à cocher) sans toucher au reste.
-    pub fn set_tache_statut(&self, id: i64, statut: &str) -> Result<Tache> {
+    pub fn set_tache_statut(&self, id: i64, statut: &str) -> Result<SetTacheStatutResult> {
+        let existing = self.get_tache_by_id(id)?;
         let statut = normalize_statut(Some(statut.to_string()));
         let completed_at: Option<i64> = if statut == "FAIT" {
             Some(now_unix())
@@ -151,13 +164,53 @@ impl super::Database {
             params![statut, completed_at, id],
         )?;
 
-        self.get_tache_by_id(id)
+        let tache = self.get_tache_by_id(id)?;
+        let spawned_next = if existing.statut != "FAIT" && tache.statut == "FAIT" {
+            self.maybe_spawn_recurrence(&tache)?
+        } else {
+            None
+        };
+        Ok(SetTacheStatutResult {
+            tache,
+            spawned_next,
+        })
     }
 
     pub fn delete_tache(&self, id: i64) -> Result<()> {
         self.conn
             .execute("DELETE FROM taches WHERE id = ?1", params![id])?;
         Ok(())
+    }
+
+    /// Crée la prochaine occurrence si la tâche terminée est récurrente.
+    fn maybe_spawn_recurrence(&self, completed: &Tache) -> Result<Option<Tache>> {
+        let Some(rec) = completed.recurrence.as_ref() else {
+            return Ok(None);
+        };
+        if completed.statut != "FAIT" || !rec.is_active() {
+            return Ok(None);
+        }
+        let anchor = completed
+            .date_echeance
+            .unwrap_or_else(start_of_today_unix);
+        let Some(next_due) = next_occurrence(anchor, rec) else {
+            return Ok(None);
+        };
+        let contact_ids: Vec<i64> = completed
+            .contacts
+            .iter()
+            .map(|c| c.contact_id)
+            .collect();
+        let spawned = self.create_tache(NewTache {
+            contact_ids,
+            titre: completed.titre.clone(),
+            description: completed.description.clone(),
+            date_echeance: Some(next_due),
+            priorite: Some(completed.priorite.clone()),
+            statut: Some("A_FAIRE".to_string()),
+            recurrence: Some(rec.clone()),
+        })?;
+        Ok(Some(spawned))
     }
 
     /// Remplace l'ensemble des contacts liés à une tâche (dédupliqués).
@@ -207,6 +260,7 @@ impl super::Database {
     }
 
     fn map_tache_base(row: &rusqlite::Row) -> Result<Tache> {
+        let recurrence_raw: Option<String> = row.get(9)?;
         Ok(Tache {
             id: row.get(0)?,
             titre: row.get(1)?,
@@ -217,8 +271,9 @@ impl super::Database {
             completed_at: row.get(6)?,
             created_at: row.get(7)?,
             updated_at: row.get(8)?,
+            recurrence: parse_recurrence_json(recurrence_raw.as_deref()),
             contacts: Vec::new(),
-            from_etiquette_auto: row.get::<_, i64>(9)? != 0,
+            from_etiquette_auto: row.get::<_, i64>(10)? != 0,
         })
     }
 
@@ -272,6 +327,7 @@ fn now_unix() -> i64 {
 mod tests {
     use super::*;
     use crate::database::models::NewContact;
+    use crate::database::tache_recurrence::TacheRecurrence;
     use crate::database::Database;
 
     fn mem_db() -> Database {
@@ -286,6 +342,7 @@ mod tests {
             date_echeance: None,
             priorite: None,
             statut: None,
+            recurrence: None,
         }
     }
 
@@ -347,11 +404,36 @@ mod tests {
         let db = mem_db();
         let t = db.create_tache(new_tache("Relancer")).unwrap();
         let done = db.set_tache_statut(t.id, "FAIT").unwrap();
-        assert_eq!(done.statut, "FAIT");
-        assert!(done.completed_at.is_some());
+        assert_eq!(done.tache.statut, "FAIT");
+        assert!(done.tache.completed_at.is_some());
+        assert!(done.spawned_next.is_none());
         let reopened = db.set_tache_statut(t.id, "A_FAIRE").unwrap();
-        assert_eq!(reopened.statut, "A_FAIRE");
-        assert!(reopened.completed_at.is_none());
+        assert_eq!(reopened.tache.statut, "A_FAIRE");
+        assert!(reopened.tache.completed_at.is_none());
+    }
+
+    #[test]
+    fn completing_recurring_monthly_spawns_next() {
+        let db = mem_db();
+        let today = start_of_today_unix();
+        let mut t = new_tache("Versements programmés");
+        t.date_echeance = Some(today);
+        t.recurrence = Some(TacheRecurrence {
+            freq: "monthly".into(),
+            interval: Some(1),
+            day_of_month: Some(2),
+            ..Default::default()
+        });
+        let created = db.create_tache(t).unwrap();
+        assert!(created.recurrence.is_some());
+
+        let result = db.set_tache_statut(created.id, "FAIT").unwrap();
+        assert!(result.spawned_next.is_some());
+        let next = result.spawned_next.unwrap();
+        assert_eq!(next.statut, "A_FAIRE");
+        assert_eq!(next.titre, "Versements programmés");
+        assert!(next.date_echeance.unwrap() > today);
+        assert_eq!(db.get_all_taches_with_contact().unwrap().len(), 2);
     }
 
     #[test]
@@ -367,7 +449,6 @@ mod tests {
         assert_eq!(db.get_taches_by_contact(cid).unwrap().len(), 1);
         assert_eq!(db.get_all_taches_with_contact().unwrap().len(), 2);
 
-        // Supprimer le contact retire le lien ; la tâche subsiste (devient libre).
         db.delete_contact(cid).unwrap();
         assert_eq!(db.get_taches_by_contact(cid).unwrap().len(), 0);
         assert_eq!(db.get_all_taches_with_contact().unwrap().len(), 2);
@@ -384,12 +465,10 @@ mod tests {
         t.contact_ids = vec![c1, c2];
         let created = db.create_tache(t).unwrap();
         assert_eq!(created.contacts.len(), 2);
-        // La tâche apparaît sur chaque fiche liée.
         assert_eq!(db.get_taches_by_contact(c1).unwrap().len(), 1);
         assert_eq!(db.get_taches_by_contact(c2).unwrap().len(), 1);
         assert_eq!(db.get_taches_by_contact(c3).unwrap().len(), 0);
 
-        // Mise à jour : remplace la liste de contacts (c1 retiré, c3 ajouté).
         let mut upd = new_tache("Relancer le groupe");
         upd.contact_ids = vec![c2, c3];
         let updated = db.update_tache(created.id, &upd).unwrap();

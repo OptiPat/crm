@@ -12,7 +12,7 @@ use crate::database::{
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation,
         InvestissementVersement, NewInteraction,
         NewTemplateEmail, NewSegment, NewTache, Partenaire,
-        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, Tache,
+        PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
         TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
         CalendarEventEntry, CalendarSyncResult,
     },
@@ -481,7 +481,7 @@ pub fn set_tache_statut(
     db: State<'_, DbState>,
     id: i64,
     statut: String,
-) -> Result<Tache, String> {
+) -> Result<SetTacheStatutResult, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 

@@ -847,6 +847,9 @@ pub struct Tache {
     /// Créée automatiquement par une action étiquette (`contact_etiquettes.tache_id`).
     #[serde(default)]
     pub from_etiquette_auto: bool,
+    /// Règle de récurrence (prochaine occurrence à la complétion).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recurrence: Option<super::tache_recurrence::TacheRecurrence>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -859,6 +862,16 @@ pub struct NewTache {
     pub date_echeance: Option<i64>,
     pub priorite: Option<String>,
     pub statut: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recurrence: Option<super::tache_recurrence::TacheRecurrence>,
+}
+
+/// Résultat d'une mise à jour de statut avec éventuelle occurrence suivante.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetTacheStatutResult {
+    pub tache: Tache,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spawned_next: Option<Tache>,
 }
 
 // ==================== CHAMPS PERSONNALISÉS ====================

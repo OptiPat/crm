@@ -47,6 +47,8 @@ import {
   resolveTacheFormContextBanner,
   type TacheFormCreationContext,
 } from "@/lib/taches/tache-form-presets";
+import { TacheRecurrenceFields } from "@/components/taches/TacheRecurrenceFields";
+import { isActiveRecurrence, type TacheRecurrence } from "@/lib/taches/tache-recurrence";
 import { toast } from "sonner";
 
 interface TacheFormProps {
@@ -67,6 +69,8 @@ interface FormState {
   dateEcheance: string;
   priorite: TachePriorite;
   contactIds: number[];
+  recurrenceEnabled: boolean;
+  recurrence: TacheRecurrence | null;
 }
 
 function buildState(
@@ -93,6 +97,8 @@ function buildState(
       : defaultCreateDateEcheance(defaultDateEcheance),
     priorite: tache?.priorite ?? "NORMALE",
     contactIds,
+    recurrenceEnabled: isActiveRecurrence(tache?.recurrence ?? null),
+    recurrence: tache?.recurrence ?? null,
   };
 }
 
@@ -112,6 +118,8 @@ function buildCreateAnotherState(
     dateEcheance: defaultCreateDateEcheance(),
     priorite: "NORMALE",
     contactIds,
+    recurrenceEnabled: false,
+    recurrence: null,
   };
 }
 
@@ -236,6 +244,7 @@ export function TacheForm({
         date_echeance: dateInputToUnix(form.dateEcheance),
         priorite: form.priorite,
         statut: tache?.statut ?? "A_FAIRE",
+        recurrence: form.recurrenceEnabled ? form.recurrence : null,
       };
       if (tache) {
         await updateTache(tache.id, payload);
@@ -307,12 +316,18 @@ export function TacheForm({
   const scheduleField = (
     <div className="grid grid-cols-2 gap-3">
       <div className="space-y-2">
-        <Label>Échéance</Label>
+        <Label>{form.recurrenceEnabled ? "Première échéance" : "Échéance"}</Label>
         <Input
           type="date"
           value={form.dateEcheance}
           onChange={(e) => setDateEcheance(e.target.value)}
         />
+        {form.recurrenceEnabled && (
+          <p className="text-xs text-muted-foreground">
+            Date de la tâche en cours uniquement. Les suivantes suivent la règle de
+            récurrence.
+          </p>
+        )}
         <div className="flex flex-wrap gap-1.5">
           {TACHE_DATE_SHORTCUTS_EXTENDED.map((shortcut) => (
             <Button
@@ -352,13 +367,13 @@ export function TacheForm({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{tache ? "Modifier la tâche" : "Nouvelle tâche"}</DialogTitle>
           <DialogDescription>
             {isCreate
-              ? "Échéance par défaut : demain. Les relances auto restent dans Suivi → Alertes."
-              : "Modifiez le rappel et ses contacts liés."}
+              ? "Activez la récurrence pour une série ; sinon l'échéance par défaut est demain."
+              : "Modifiez le rappel, sa récurrence et ses contacts liés."}
           </DialogDescription>
         </DialogHeader>
 
@@ -390,6 +405,19 @@ export function TacheForm({
               {contactField}
             </>
           )}
+
+          <TacheRecurrenceFields
+            enabled={form.recurrenceEnabled}
+            onEnabledChange={(recurrenceEnabled) =>
+              setForm((prev) => ({ ...prev, recurrenceEnabled }))
+            }
+            recurrence={form.recurrence}
+            onRecurrenceChange={(recurrence) =>
+              setForm((prev) => ({ ...prev, recurrence }))
+            }
+            dateEcheance={form.dateEcheance}
+            onAlignEcheance={setDateEcheance}
+          />
 
           {scheduleField}
 

@@ -10,6 +10,7 @@ import {
   type Tache,
 } from "@/lib/api/tauri-taches";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
+import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
 import { toast } from "sonner";
 
 interface ContactTachesPanelProps {
@@ -39,7 +40,12 @@ export function ContactTachesPanel({ contactId }: ContactTachesPanelProps) {
 
   const handleToggle = async (tache: Tache) => {
     try {
-      await setTacheStatut(tache.id, tache.statut === "FAIT" ? "A_FAIRE" : "FAIT");
+      const result = await setTacheStatut(
+        tache.id,
+        tache.statut === "FAIT" ? "A_FAIRE" : "FAIT"
+      );
+      const msg = spawnedNextTacheToastMessage(result);
+      if (msg) toast.success(msg);
     } catch (error) {
       toast.error(`Erreur : ${String(error)}`);
     }

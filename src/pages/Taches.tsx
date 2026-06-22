@@ -46,6 +46,7 @@ import {
   type TacheEcheanceStatFilter,
 } from "@/lib/taches/tache-filters";
 import { buildPostponedTachePayload } from "@/lib/taches/postpone-tache";
+import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
 import {
   loadTachesPagePreferences,
   resetTachesPagePreferences,
@@ -184,7 +185,12 @@ export function Taches({ onNavigate }: TachesProps) {
 
   const handleToggle = async (tache: TacheWithContact) => {
     try {
-      await setTacheStatut(tache.id, tache.statut === "FAIT" ? "A_FAIRE" : "FAIT");
+      const result = await setTacheStatut(
+        tache.id,
+        tache.statut === "FAIT" ? "A_FAIRE" : "FAIT"
+      );
+      const msg = spawnedNextTacheToastMessage(result);
+      if (msg) toast.success(msg);
     } catch (error) {
       toast.error(`Erreur : ${String(error)}`);
     }
@@ -216,12 +222,17 @@ export function Taches({ onNavigate }: TachesProps) {
     if (selectedIds.size === 0) return;
     setBulkBusy(true);
     try {
-      await Promise.all(
+      const results = await Promise.all(
         [...selectedIds].map((id) => setTacheStatut(id, "FAIT"))
       );
+      const spawned = results.filter((r) => r.spawned_next).length;
       setSelectedIds(new Set());
       setBulkMode(false);
-      toast.success("Tâches marquées comme faites");
+      toast.success(
+        spawned > 0
+          ? `Tâches terminées · ${spawned} prochaine(s) occurrence(s) créée(s)`
+          : "Tâches marquées comme faites"
+      );
     } catch (error) {
       toast.error(`Erreur : ${String(error)}`);
     } finally {

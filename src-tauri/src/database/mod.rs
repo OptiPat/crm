@@ -37,6 +37,7 @@ pub mod stellium_perf_campaigns;
 pub mod stellium_perf_dashboard;
 pub mod operations;
 pub mod segments;
+pub mod tache_recurrence;
 pub mod taches;
 pub mod template_email_trigger;
 pub mod template_email_relance;
@@ -512,6 +513,7 @@ impl Database {
         self.migrate_contact_etiquettes_tache_id()?;
         self.migrate_alertes_traitee_at()?;
         self.migrate_taches_multi_contacts()?;
+        self.migrate_taches_recurrence()?;
         self.migrate_etiquettes_actif()?;
         self.migrate_templates_email_agenda_link_id()?;
         self.migrate_templates_email_relance_template_id()?;
@@ -1244,6 +1246,17 @@ impl Database {
         )?;
         if migrated > 0 {
             println!("✅ Migration: {} liaison(s) tâche↔contact reprises", migrated);
+        }
+        Ok(())
+    }
+
+    fn migrate_taches_recurrence(&self) -> Result<()> {
+        if !self.table_has_column("taches", "recurrence")? {
+            self.conn.execute(
+                "ALTER TABLE taches ADD COLUMN recurrence TEXT",
+                [],
+            )?;
+            println!("✅ Migration: colonne recurrence sur taches");
         }
         Ok(())
     }

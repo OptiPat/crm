@@ -19,6 +19,7 @@ import {
   echeanceState,
 } from "@/lib/taches/tache-display";
 import { TACHE_POSTPONE_OPTIONS } from "@/lib/taches/postpone-tache";
+import { formatRecurrenceLabel, isActiveRecurrence } from "@/lib/taches/tache-recurrence";
 
 interface TacheItemProps {
   tache: Tache | TacheWithContact;
@@ -96,6 +97,12 @@ export function TacheItem({
           {tache.from_etiquette_auto && (
             <Badge variant="outline" className="h-5 text-[10px] px-1.5">
               Étiquette auto
+            </Badge>
+          )}
+
+          {isActiveRecurrence(tache.recurrence) && (
+            <Badge variant="outline" className="h-5 text-[10px] px-1.5 text-violet-700 border-violet-200">
+              {formatRecurrenceLabel(tache.recurrence)}
             </Badge>
           )}
 

@@ -15,6 +15,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { TacheForm } from "@/components/taches/TacheForm";
 import { cn } from "@/lib/utils";
+import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
+import { toast } from "sonner";
 import { DashboardPanel } from "./dashboard-ui";
 
 interface TachesPreviewProps {
@@ -50,7 +52,9 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
 
   const handleDone = async (tache: Tache) => {
     try {
-      await setTacheStatut(tache.id, "FAIT");
+      const result = await setTacheStatut(tache.id, "FAIT");
+      const msg = spawnedNextTacheToastMessage(result);
+      if (msg) toast.success(msg);
     } catch (error) {
       console.error(error);
     }

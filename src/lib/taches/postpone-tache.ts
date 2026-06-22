@@ -36,5 +36,6 @@ export function buildPostponedTachePayload(tache: Tache, days: number): NewTache
     date_echeance: computePostponedEcheance(tache, days),
     priorite: tache.priorite,
     statut: tache.statut,
+    recurrence: tache.recurrence ?? null,
   };
 }
