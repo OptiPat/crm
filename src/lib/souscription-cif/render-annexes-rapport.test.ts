@@ -119,7 +119,7 @@ describe("buildAnnexesRapportPreview", () => {
     const risks = (page4.bodySegmentsAfterFiscalProsConsTable ?? [])
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(risks).toContain("Risque de liquidité");
+    expect(risks).toContain("- Risque de liquidité");
     expect(risks).toContain("Risque de perte en capital");
     expect(risks).toContain("Risque de variation des revenus distribués");
   });
@@ -418,9 +418,9 @@ describe("buildAnnexesRapportPreview", () => {
     const risksBody = (page2.bodySegmentsAfterTable ?? [])
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(risksBody).toContain("L'investissement en FIP FCPI comporte des risques");
-    expect(risksBody).toContain("Risque de perte en capital");
-    expect(risksBody).toContain("Risque fiscal");
+    expect(risksBody).toContain("L'investissement en FIP et FCPI comporte des risques");
+    expect(risksBody).toContain("- Risque de perte en capital");
+    expect(risksBody).toContain("- Risque fiscal");
     expect(risksBody).toContain("Le Client déclare avoir pris connaissance");
   });
 });
