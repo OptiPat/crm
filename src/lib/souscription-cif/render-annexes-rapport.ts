@@ -1,3 +1,8 @@
+import { ANNEXES_CAPITAL_INVEST_PRECONISATIONS_BODY } from "@/lib/souscription-cif/annexes-rapport-capital-invest-preconisations";
+import {
+  ANNEXES_CAPITAL_INVEST_RECAP_TABLE_HEADER,
+  buildAnnexesCapitalInvestRecapRows,
+} from "@/lib/souscription-cif/annexes-capital-invest-recap-table";
 import {
   ANNEXES_CAPITAL_INVEST_BODY_AFTER_DIAGRAM,
   ANNEXES_CAPITAL_INVEST_BODY_AFTER_FISCALITE_TABLE,
@@ -75,6 +80,7 @@ import type { SouscriptionCifProductType } from "@/lib/souscription-cif/souscrip
 
 function buildAnnexesCapitalInvestRapportPreview(
   variables: Record<string, string | null>,
+  dossier: SouscriptionDossierFields,
   footerOverride?: string | null
 ): ScpiLettreMissionPreview {
   const footerSegments = buildCifDocumentFooterSegments(variables, footerOverride);
@@ -123,13 +129,29 @@ function buildAnnexesCapitalInvestRapportPreview(
     footerSegments,
   };
 
+  const page3: ScpiLmPagePreview = {
+    pageNumber: 3,
+    bodySegments: renderTemplateSegments(ANNEXES_CAPITAL_INVEST_PRECONISATIONS_BODY, variables),
+    footerSegments,
+  };
+
+  const page4: ScpiLmPagePreview = {
+    pageNumber: 4,
+    bodySegments: [],
+    rapportRecapTableHeader: ANNEXES_CAPITAL_INVEST_RECAP_TABLE_HEADER,
+    rapportRecapRows: buildAnnexesCapitalInvestRecapRows(variables, dossier),
+    footerSegments,
+  };
+
   const missing = new Set<string>([
     ...collectMissingFromPage(page1),
     ...collectMissingFromPage(page2),
+    ...collectMissingFromPage(page3),
+    ...collectMissingFromPage(page4),
   ]);
 
   return {
-    pages: [page1, page2],
+    pages: [page1, page2, page3, page4],
     missingKeys: [...missing],
   };
 }
@@ -270,7 +292,7 @@ export function buildAnnexesRapportPreview(
   profilRisqueSri?: number | null
 ): ScpiLettreMissionPreview {
   if (productType === "capital-investissement") {
-    return buildAnnexesCapitalInvestRapportPreview(variables, footerOverride);
+    return buildAnnexesCapitalInvestRapportPreview(variables, dossier, footerOverride);
   }
   if (productType !== "scpi") {
     return { pages: [], missingKeys: [] };

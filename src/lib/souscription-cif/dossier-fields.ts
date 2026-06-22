@@ -3,13 +3,15 @@ import type {
   OrigineFondsKey,
   ProvenanceFonds,
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
+import type { CapitalInvestAnnexeSouscription } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
+import { DEFAULT_CAPITAL_INVEST_DUREE_BLOCAGE_ANNEES } from "@/lib/souscription-cif/annexes-capital-invest-recap-table";
 import type { ScpiAnnexeSouscription } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import {
   buildMesPreconisationsFromSouscriptions,
   defaultScpiAnnexeSouscriptions,
 } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 
-export type { ScpiAnnexeSouscription };
+export type { CapitalInvestAnnexeSouscription, ScpiAnnexeSouscription };
 export type { OrigineFondsKey, ProvenanceFonds };
 
 export type SouscriptionDossierFields = {
@@ -31,6 +33,12 @@ export type SouscriptionDossierFields = {
   mesPreconisations: string;
   /** Annexes — souscriptions SCPI structurées (montants, prix part, réinvest., VP, fiches). */
   scpiAnnexeSouscriptions: ScpiAnnexeSouscription[];
+  /** Annexes Capital invest — souscriptions FCPI / FIP (nb parts, prix part, droit d'entrée). */
+  capitalInvestAnnexeSouscriptions: CapitalInvestAnnexeSouscription[];
+  /** Annexes Capital invest — fiches produit (texte libre, ex. millésime). */
+  descriptionsCapitalInvest: string;
+  /** Annexes Capital invest — durée minimale de blocage (tableau récap), en années. */
+  capitalInvestDureeBlocageAnnees: string;
   /** Annexes — attestation CIF : quote-part perçue consultant (€). */
   quotePartPercueConsultantCifEur: string;
   /** Annexes — provenance des fonds (§ 5 page 7). */
@@ -61,6 +69,9 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     conseil: "",
     mesPreconisations: "",
     scpiAnnexeSouscriptions: [],
+    capitalInvestAnnexeSouscriptions: [],
+    descriptionsCapitalInvest: "",
+    capitalInvestDureeBlocageAnnees: DEFAULT_CAPITAL_INVEST_DUREE_BLOCAGE_ANNEES,
     quotePartPercueConsultantCifEur: "",
     provenanceFonds: "",
     origineFondsSelected: [],

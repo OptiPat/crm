@@ -385,17 +385,32 @@ describe("buildAnnexesRapportPreview", () => {
     expect(body).toContain("Je vous remercie de démarrer votre prestation dès à présent.");
   });
 
-  it("construit les annexes Capital investissement (§5 risques sur page 2)", () => {
+  it("construit les annexes Capital investissement (§5 risques page 2, préco page 3, récap page 4)", () => {
     const preview = buildAnnexesRapportPreview(
       "capital-investissement",
       {
         conseil:
           "Je vous propose de souscrire à un FCPI afin de bénéficier d'une réduction d'impôt sur l'IR.",
+        mes_preconisations:
+          "Mes préconisations portent sur un investissement global de 9 975 € (montants souscrits et droits d'entrée inclus), répartis ainsi :\n\nLa souscription de parts du FCPI Odyssée au comptant pour un montant de 9 975 €, soit 105 € la part x 95 parts = montant total souscrit de 9 975 €. Dont 5 % de droit d'entrée, soit 498,75 €.",
       },
-      defaultSouscriptionDossierFields()
+      {
+        ...defaultSouscriptionDossierFields(),
+        capitalInvestAnnexeSouscriptions: [
+          {
+            id: "ci-test",
+            nomFonds: "Odysée M2",
+            type: "fcpi",
+            nbParts: "95",
+            partPriceEur: "105",
+            droitEntreePct: "5",
+            millesime: "",
+          },
+        ],
+      }
     );
 
-    expect(preview.pages).toHaveLength(2);
+    expect(preview.pages).toHaveLength(4);
 
     const page1 = preview.pages[0]!;
     expect(page1.title).toBe(ANNEXES_RAPPORT_DOCUMENT_TITLE);
@@ -422,5 +437,31 @@ describe("buildAnnexesRapportPreview", () => {
     expect(risksBody).toContain("- Risque de perte en capital");
     expect(risksBody).toContain("- Risque fiscal");
     expect(risksBody).toContain("Le Client déclare avoir pris connaissance");
+
+    const page3 = preview.pages[2]!;
+    expect(page3.pageNumber).toBe(3);
+    const preco = page3.bodySegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(preco).toContain("Mes préconisations portent sur un investissement global");
+    expect(preco).toContain("du FCPI Odyssée");
+
+    const page4 = preview.pages[3]!;
+    expect(page4.pageNumber).toBe(4);
+    expect(page4.rapportRecapTableHeader).toBe("TABLEAU RÉCAPITULATIF");
+    expect(page4.rapportRecapRows).toHaveLength(3);
+    const objectifsCell = page4.rapportRecapRows?.[1].contentSegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(objectifsCell).toContain("le FCPI Odysée M2 permet de bénéficier");
+    const adaptationCell = page4.rapportRecapRows?.[0].contentSegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(adaptationCell).toContain("réduction d'impôt, tout en diversifiant");
+    const dureeCell = page4.rapportRecapRows?.[2].contentSegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(dureeCell).toContain("à minima de 10 ans");
+    expect(dureeCell).toContain("prorogée par la Société de gestion");
   });
 });

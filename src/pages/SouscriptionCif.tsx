@@ -20,6 +20,7 @@ import { subscribeInvestissementsChanged } from "@/lib/investissements/investiss
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { buildDefaultConseil } from "@/lib/souscription-cif/build-default-annexes-fields";
+import { buildMesPreconisationsFromCapitalInvestSouscriptions } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
 import { buildMesPreconisationsFromSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import { buildDefaultObjectifsClient } from "@/lib/souscription-cif/build-default-objectifs-client";
 import { buildDefaultRappelDemande } from "@/lib/souscription-cif/build-default-rappel-demande";
@@ -323,11 +324,22 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         }
 
         if (
+          productType === "scpi" &&
           existing.scpiAnnexeSouscriptions.length > 0 &&
           !existing.mesPreconisations?.trim()
         ) {
           patch.mesPreconisations = buildMesPreconisationsFromSouscriptions(
             existing.scpiAnnexeSouscriptions
+          );
+        }
+
+        if (
+          productType === "capital-investissement" &&
+          existing.capitalInvestAnnexeSouscriptions.length > 0 &&
+          !existing.mesPreconisations?.trim()
+        ) {
+          patch.mesPreconisations = buildMesPreconisationsFromCapitalInvestSouscriptions(
+            existing.capitalInvestAnnexeSouscriptions
           );
         }
 

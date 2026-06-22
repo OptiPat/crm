@@ -19,6 +19,18 @@ export const CIF_DOSSIER_VARIABLE_FIELD: Readonly<Record<string, CifDossierField
   conseil: { fieldId: "cif-conseil", document: "annexes-rapport" },
   mes_preconisations: { fieldId: "cif-mes-preconisations", document: "annexes-rapport" },
   descriptions_scpi: { fieldId: "cif-scpi-souscriptions", document: "annexes-rapport" },
+  descriptions_capital_invest: {
+    fieldId: "cif-descriptions-capital-invest",
+    document: "annexes-rapport",
+  },
+  produits_capital_invest_cibles: {
+    fieldId: "cif-capital-invest-souscriptions",
+    document: "annexes-rapport",
+  },
+  duree_blocage_capital_invest_annees: {
+    fieldId: "cif-ci-duree-blocage",
+    document: "annexes-rapport",
+  },
   provenance_fonds: { fieldId: "cif-provenance-fonds", document: "annexes-rapport" },
   origine_fonds: { fieldId: "cif-origine-fonds", document: "annexes-rapport" },
 };

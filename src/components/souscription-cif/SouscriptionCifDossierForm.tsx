@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { CapitalInvestAnnexeSouscriptionsPanel } from "@/components/souscription-cif/CapitalInvestAnnexeSouscriptionsPanel";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 import { RM_RAPPEL_SITUATION_PANEL_HINTS } from "@/lib/souscription-cif/rapport-mission-recap-table";
 import {
@@ -19,6 +20,14 @@ import {
   RM_ANALYSE_SITUATION_INTRO,
 } from "@/lib/souscription-cif/rapport-mission-analyse-hints";
 import { SCPI_ANNEXE_PRODUCT_FICHES } from "@/lib/souscription-cif/scpi-annexe-catalog";
+import {
+  addCapitalInvestAnnexeSouscription,
+  buildMesPreconisationsFromCapitalInvestSouscriptions,
+  newCapitalInvestAnnexeSouscription,
+  patchCapitalInvestAnnexeSouscription,
+  removeCapitalInvestAnnexeSouscription,
+  type CapitalInvestAnnexeSouscription,
+} from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
 import {
   buildMesPreconisationsFromSouscriptions,
   getScpiSouscriptionPartsWarning,
@@ -55,28 +64,62 @@ export function SouscriptionCifDossierForm({
   value,
   onChange,
 }: SouscriptionCifDossierFormProps) {
-  const lastAutoMesPreconisationsRef = useRef(
-    buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions)
-  );
+  const autoMesPreconisationsNow = useMemo(() => {
+    if (productType === "capital-investissement") {
+      return buildMesPreconisationsFromCapitalInvestSouscriptions(
+        value.capitalInvestAnnexeSouscriptions
+      );
+    }
+    if (productType === "scpi") {
+      return buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions);
+    }
+    return "";
+  }, [productType, value.capitalInvestAnnexeSouscriptions, value.scpiAnnexeSouscriptions]);
+
+  const lastAutoMesPreconisationsRef = useRef(autoMesPreconisationsNow);
 
   useEffect(() => {
-    const auto = buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions);
     const canSync = shouldAutoSyncMesPreconisationsText(
       value.mesPreconisations,
       lastAutoMesPreconisationsRef.current
     );
-    const matchesAuto = value.mesPreconisations === auto;
+    const matchesAuto = value.mesPreconisations === autoMesPreconisationsNow;
     if (canSync || matchesAuto) {
+      lastAutoMesPreconisationsRef.current = autoMesPreconisationsNow;
+    }
+  }, [dossierKey, productType, autoMesPreconisationsNow, value.mesPreconisations]);
+
+  const syncMesPreconisationsIfNeeded = (auto: string, patch: Partial<SouscriptionDossierFields>) => {
+    if (
+      shouldAutoSyncMesPreconisationsText(
+        value.mesPreconisations,
+        lastAutoMesPreconisationsRef.current
+      )
+    ) {
+      patch.mesPreconisations = auto;
       lastAutoMesPreconisationsRef.current = auto;
     }
-  }, [dossierKey, value.scpiAnnexeSouscriptions, value.mesPreconisations]);
+  };
 
   const applySouscriptionUpdate = (nextSouscriptions: ScpiAnnexeSouscription[]) => {
     const auto = buildMesPreconisationsFromSouscriptions(nextSouscriptions);
     const patch: Partial<SouscriptionDossierFields> = {
       scpiAnnexeSouscriptions: nextSouscriptions,
     };
+    syncMesPreconisationsIfNeeded(auto, patch);
+    onChange(patch);
+  };
+
+  const applyCapitalInvestSouscriptionUpdate = (
+    nextSouscriptions: CapitalInvestAnnexeSouscription[],
+    options?: { forceMesPreconisationsSync?: boolean }
+  ) => {
+    const auto = buildMesPreconisationsFromCapitalInvestSouscriptions(nextSouscriptions);
+    const patch: Partial<SouscriptionDossierFields> = {
+      capitalInvestAnnexeSouscriptions: nextSouscriptions,
+    };
     if (
+      options?.forceMesPreconisationsSync ||
       shouldAutoSyncMesPreconisationsText(
         value.mesPreconisations,
         lastAutoMesPreconisationsRef.current
@@ -87,6 +130,25 @@ export function SouscriptionCifDossierForm({
     }
     onChange(patch);
   };
+
+  useEffect(() => {
+    if (
+      activeDocument !== "annexes-rapport" ||
+      productType !== "capital-investissement" ||
+      value.capitalInvestAnnexeSouscriptions.length > 0
+    ) {
+      return;
+    }
+    applyCapitalInvestSouscriptionUpdate([newCapitalInvestAnnexeSouscription()], {
+      forceMesPreconisationsSync: true,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed initial row once per empty dossier
+  }, [
+    activeDocument,
+    productType,
+    value.capitalInvestAnnexeSouscriptions.length,
+    dossierKey,
+  ]);
 
   const toggleScpiSouscription = (productKey: string, checked: boolean) => {
     applySouscriptionUpdate(
@@ -105,15 +167,9 @@ export function SouscriptionCifDossierForm({
   };
 
   const reprendreTexteAuto = () => {
-    const auto = buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions);
-    lastAutoMesPreconisationsRef.current = auto;
-    onChange({ mesPreconisations: auto });
+    lastAutoMesPreconisationsRef.current = autoMesPreconisationsNow;
+    onChange({ mesPreconisations: autoMesPreconisationsNow });
   };
-
-  const autoMesPreconisationsNow = useMemo(
-    () => buildMesPreconisationsFromSouscriptions(value.scpiAnnexeSouscriptions),
-    [value.scpiAnnexeSouscriptions]
-  );
 
   const mesPreconisationsIsCustom =
     value.mesPreconisations.trim() !== "" &&
@@ -282,7 +338,7 @@ export function SouscriptionCifDossierForm({
             <CardDescription>
               {productType === "scpi"
                 ? "Conseil, préconisations et fiches produits (catalogue)."
-                : "Conseil et champs spécifiques au dossier (autres pages à venir)."}
+                : "Conseil, souscriptions FCPI/FIP, préconisations et fiches produit (texte libre)."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -443,33 +499,105 @@ export function SouscriptionCifDossierForm({
                 </div>
               )}
             </div>
+              </>
+            )}
 
-            <div className="space-y-2">
-              <Label htmlFor="cif-mes-preconisations">Mes préconisations</Label>
-              <Textarea
-                id="cif-mes-preconisations"
-                rows={6}
-                value={value.mesPreconisations}
-                onChange={(e) => onChange({ mesPreconisations: e.target.value })}
+            {productType === "capital-investissement" && (
+              <CapitalInvestAnnexeSouscriptionsPanel
+                rows={value.capitalInvestAnnexeSouscriptions}
+                onAdd={() =>
+                  applyCapitalInvestSouscriptionUpdate(
+                    addCapitalInvestAnnexeSouscription(value.capitalInvestAnnexeSouscriptions),
+                    { forceMesPreconisationsSync: true }
+                  )
+                }
+                onRemove={(id) =>
+                  applyCapitalInvestSouscriptionUpdate(
+                    removeCapitalInvestAnnexeSouscription(value.capitalInvestAnnexeSouscriptions, id),
+                    { forceMesPreconisationsSync: true }
+                  )
+                }
+                onPatch={(id, field, fieldValue) =>
+                  applyCapitalInvestSouscriptionUpdate(
+                    patchCapitalInvestAnnexeSouscription(
+                      value.capitalInvestAnnexeSouscriptions,
+                      id,
+                      field,
+                      fieldValue
+                    )
+                  )
+                }
               />
-              <p className="text-xs text-muted-foreground">
-                Mis à jour automatiquement quand vous modifiez le tableau — éditable librement pour
-                ajouter ou reformuler. Les retouches manuelles ne sont pas écrasées tant que vous
-                ne reprenez pas le texte auto.
-              </p>
-              {mesPreconisationsIsCustom && (
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0 text-xs"
-                  onClick={reprendreTexteAuto}
-                >
-                  Reprendre le texte depuis le tableau
-                </Button>
-              )}
-            </div>
+            )}
 
+            {(productType === "scpi" || productType === "capital-investissement") && (
+              <div className="space-y-2">
+                <Label htmlFor="cif-mes-preconisations">Mes préconisations</Label>
+                <Textarea
+                  id="cif-mes-preconisations"
+                  rows={6}
+                  value={value.mesPreconisations}
+                  onChange={(e) => onChange({ mesPreconisations: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Mis à jour automatiquement quand vous modifiez le tableau — éditable librement pour
+                  ajouter ou reformuler. Les retouches manuelles ne sont pas écrasées tant que vous
+                  ne reprenez pas le texte auto.
+                </p>
+                {mesPreconisationsIsCustom && (
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0 text-xs"
+                    onClick={reprendreTexteAuto}
+                  >
+                    Reprendre le texte depuis le tableau
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {productType === "capital-investissement" && (
+              <div className="space-y-2">
+                <Label htmlFor="cif-ci-duree-blocage">Durée de blocage (tableau récap)</Label>
+                <Input
+                  id="cif-ci-duree-blocage"
+                  inputMode="numeric"
+                  className="w-24"
+                  value={value.capitalInvestDureeBlocageAnnees}
+                  onChange={(e) =>
+                    onChange({ capitalInvestDureeBlocageAnnees: e.target.value })
+                  }
+                  placeholder="10"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Durée minimale en années — défaut 10 (ligne « durée d&apos;investissement » du
+                  tableau récapitulatif).
+                </p>
+              </div>
+            )}
+
+            {productType === "capital-investissement" && (
+              <div className="space-y-2">
+                <Label htmlFor="cif-descriptions-capital-invest">
+                  Descriptions des fonds
+                </Label>
+                <Textarea
+                  id="cif-descriptions-capital-invest"
+                  rows={8}
+                  value={value.descriptionsCapitalInvest}
+                  onChange={(e) => onChange({ descriptionsCapitalInvest: e.target.value })}
+                  placeholder="Coller ici la fiche millésime (caractéristiques, stratégie, frais…)."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Texte libre inséré dans les annexes après « Mes préconisations ».
+                </p>
+              </div>
+            )}
+
+            {productType === "scpi" && (
+              <>
             <div className="space-y-3 rounded-md border bg-muted/20 p-3">
               <p className="text-sm font-medium">Coûts et frais — attestation CIF</p>
               <div className="space-y-2">
