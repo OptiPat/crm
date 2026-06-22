@@ -52,7 +52,6 @@ describe("souscription-cif-storage", () => {
           ],
           capitalInvestAnnexeSouscriptions: [],
           descriptionsCapitalInvest: "",
-          capitalInvestDureeBlocageAnnees: "10",
           quotePartPercueConsultantCifEur: "",
           provenanceFonds: "dom_tom",
           origineFondsSelected: ["reemploi"],
@@ -113,6 +112,42 @@ describe("souscription-cif-storage", () => {
       "Paris"
     );
     expect(loaded?.dossiersByContactId["7"]).toBeUndefined();
+  });
+
+  it("persiste les champs EMT et quote-part CIF (capital investissement)", () => {
+    saveSouscriptionCifDraft({
+      productType: "capital-investissement",
+      activeDocument: "lettre-mission",
+      selectedContactId: 99,
+      dossiersByContactId: {
+        [buildDossierStorageKey(99, "capital-investissement")]: {
+          ...getDossierForContact({}, 99, "capital-investissement"),
+          capitalInvestAnnexeSouscriptions: [
+            {
+              id: "ci-1",
+              nomFonds: "Test",
+              type: "fcpi",
+              nbParts: "10",
+              partPriceEur: "100",
+              droitEntreePct: "5",
+              millesime: "2025",
+              emtLine07110Pct: "0,005",
+              emtLine07130Pct: "0,0005",
+              emtLine07140Pct: "0",
+            },
+          ],
+          quotePartPercueConsultantCifEur: "150",
+        },
+      },
+    });
+    const loaded = loadSouscriptionCifDraft();
+    const dossier = getDossierForContact(
+      loaded!.dossiersByContactId,
+      99,
+      "capital-investissement"
+    );
+    expect(dossier.capitalInvestAnnexeSouscriptions[0]?.emtLine07110Pct).toBe("0,005");
+    expect(dossier.quotePartPercueConsultantCifEur).toBe("150");
   });
 
   it("isole les dossiers par client", () => {

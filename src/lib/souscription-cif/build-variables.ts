@@ -5,10 +5,7 @@ import { latestQpiExperienceInvestissement } from "@/lib/documents/qpi-document-
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import { formatDateInputFr } from "@/lib/souscription-cif/format-date-input-fr";
 import { normalizeRappelSituationClient } from "@/lib/souscription-cif/build-rappel-situation-default";
-import {
-  buildDureeBlocageCapitalInvestAnneesVariable,
-  buildProduitsCapitalInvestCiblesVariable,
-} from "@/lib/souscription-cif/annexes-capital-invest-recap-table";
+import { buildProduitsCapitalInvestCiblesVariable } from "@/lib/souscription-cif/annexes-capital-invest-recap-table";
 import { buildDescriptionsScpiFromKeys } from "@/lib/souscription-cif/scpi-annexe-catalog";
 import {
   getScpiAnnexeProductKeysFromSouscriptions,
@@ -82,7 +79,6 @@ export function buildSouscriptionVariables(
     produits_capital_invest_cibles: buildProduitsCapitalInvestCiblesVariable(
       dossier.capitalInvestAnnexeSouscriptions
     ),
-    duree_blocage_capital_invest_annees: buildDureeBlocageCapitalInvestAnneesVariable(dossier),
     cgp_nom_complet: cgpNomComplet(cgp),
     cgp_cabinet: cgpCabinet(cgp),
     cgp_representant_legal: cgpRepresentantLegal(cgp),

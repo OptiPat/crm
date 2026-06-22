@@ -13,6 +13,7 @@ export const RM_ANALYSE_SITUATION_EXAMPLES_CAPITAL_INVEST: readonly string[] = [
   "Capital investissement avec réduction d'impôt : rattacher l'analyse à l'objectif « Optimiser la fiscalité de vos revenus » (Recueil / QPI) et expliquer en quoi la FCPI ou le FIP répond à cette attente.",
   "Si le client souscrit déjà régulièrement (FCPI, FIP…), le préciser et montrer la cohérence avec son historique de souscription.",
   "Si une augmentation de revenus motive la démarche, la mentionner et lier la préconisation au surplus fiscal à optimiser.",
+  "Si le client est expérimenté ou souscrit déjà : préciser depuis combien d'années (ex. « régulièrement depuis 5 ans ») et en quoi la nouvelle souscription prolonge ou complète cette démarche.",
 ];
 
 export function getRapportMissionAnalyseExamples(

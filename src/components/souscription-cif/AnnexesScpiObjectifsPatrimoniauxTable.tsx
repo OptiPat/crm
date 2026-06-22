@@ -3,23 +3,36 @@ import {
   formatObjectifPatrimonialCheck,
   type AnnexesScpiObjectifsPatrimoniauxRow,
 } from "@/lib/souscription-cif/annexes-scpi-objectifs-patrimoniaux-table";
+import { formatCapitalInvestObjectifPatrimonialCheck } from "@/lib/souscription-cif/annexes-capital-invest-objectifs-patrimoniaux-table";
 import { cn } from "@/lib/utils";
 
 type AnnexesScpiObjectifsPatrimoniauxTableProps = {
   rows?: ReadonlyArray<AnnexesScpiObjectifsPatrimoniauxRow>;
+  variant?: "scpi" | "capital-invest";
   className?: string;
 };
 
-function CheckCell({ checked }: { checked: boolean }) {
+function CheckCell({
+  checked,
+  variant = "scpi",
+}: {
+  checked: boolean;
+  variant?: "scpi" | "capital-invest";
+}) {
+  const formatCheck =
+    variant === "capital-invest"
+      ? formatCapitalInvestObjectifPatrimonialCheck
+      : formatObjectifPatrimonialCheck;
   return (
     <td className="border border-neutral-400 px-1.5 py-1.5 text-center align-middle [text-align-last:center]">
-      {formatObjectifPatrimonialCheck(checked)}
+      {formatCheck(checked)}
     </td>
   );
 }
 
 export function AnnexesScpiObjectifsPatrimoniauxTable({
   rows = ANNEXES_SCPI_OBJECTIFS_PATRIMONIAUX_ROWS,
+  variant = "scpi",
   className,
 }: AnnexesScpiObjectifsPatrimoniauxTableProps) {
   return (
@@ -53,8 +66,8 @@ export function AnnexesScpiObjectifsPatrimoniauxTable({
             <th className="border border-neutral-400 bg-neutral-50 px-1.5 py-1.5 text-left align-top font-normal whitespace-pre-wrap [text-align-last:auto]">
               {row.label}
             </th>
-            <CheckCell checked={row.immobilier} />
-            <CheckCell checked={row.placementsFinanciers} />
+            <CheckCell checked={row.immobilier} variant={variant} />
+            <CheckCell checked={row.placementsFinanciers} variant={variant} />
           </tr>
         ))}
       </tbody>

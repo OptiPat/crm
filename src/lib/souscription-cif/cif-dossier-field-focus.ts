@@ -27,10 +27,6 @@ export const CIF_DOSSIER_VARIABLE_FIELD: Readonly<Record<string, CifDossierField
     fieldId: "cif-capital-invest-souscriptions",
     document: "annexes-rapport",
   },
-  duree_blocage_capital_invest_annees: {
-    fieldId: "cif-ci-duree-blocage",
-    document: "annexes-rapport",
-  },
   provenance_fonds: { fieldId: "cif-provenance-fonds", document: "annexes-rapport" },
   origine_fonds: { fieldId: "cif-origine-fonds", document: "annexes-rapport" },
 };

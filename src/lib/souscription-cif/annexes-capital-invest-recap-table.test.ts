@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildCapitalInvestRecapDureeContent,
+  ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT,
+  ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT,
+  ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_CONTENT,
+  ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_CONTENT,
   buildCapitalInvestRecapObjectifsContent,
   buildCapitalInvestRecapProduitLabels,
   formatCapitalInvestProduitRecapLabel,
-  resolveCapitalInvestDureeBlocageAnnees,
 } from "@/lib/souscription-cif/annexes-capital-invest-recap-table";
 import { newCapitalInvestAnnexeSouscription } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
 
@@ -53,14 +55,27 @@ describe("annexes-capital-invest-recap-table", () => {
     expect(text).toContain("{{produits_capital_invest_cibles}}");
   });
 
-  it("résout la durée de blocage avec défaut 10 ans", () => {
-    expect(resolveCapitalInvestDureeBlocageAnnees("")).toBe("10");
-    expect(resolveCapitalInvestDureeBlocageAnnees("8")).toBe("8");
-    expect(
-      buildCapitalInvestRecapDureeContent({ capitalInvestDureeBlocageAnnees: "" })
-    ).toContain("à minima de 10 ans");
-    expect(
-      buildCapitalInvestRecapDureeContent({ capitalInvestDureeBlocageAnnees: "8" })
-    ).toContain("à minima de 8 ans");
+  it("fixe la ligne durée à 7–10 ans selon millésimes", () => {
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT).toContain(
+      "de 7 à 10 ans minimum, selon les millésimes souscrits"
+    );
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT).toContain(
+      "prorogée par la Société de gestion"
+    );
+  });
+
+  it("référence le niveau QPI dans la ligne connaissances", () => {
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT).toContain(
+      "{{niveau_experience_qpi}}"
+    );
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT).toContain("DICI");
+  });
+
+  it("fixe les lignes risque et réexamen (fonds fermés)", () => {
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_CONTENT).toContain("épargne de précaution");
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_CONTENT).toContain("part mineure");
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_CONTENT).toContain("Non.");
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_CONTENT).toContain("fonds fermés");
+    expect(ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_CONTENT).toContain("vocation fiscale");
   });
 });

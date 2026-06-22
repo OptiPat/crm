@@ -50,7 +50,8 @@ export function CapitalInvestAnnexeSouscriptionsPanel({
         Une ligne par fonds — vous pouvez combiner plusieurs types (ex. un FCPI et un FIP). Saisir le
         nombre de parts et le prix de part ; le montant souscrit est calculé (parts × prix). Droit
         d&apos;entrée par défaut : {DEFAULT_CAPITAL_INVEST_DROIT_ENTREE_PCT} %, en sus du montant
-        souscrit.
+        souscrit. Les taux EMT (07110 / 07130 / 07140) se reprennent du fichier EMT — distincts du
+        droit d&apos;entrée.
       </p>
 
       {rows.length === 0 ? (
@@ -117,7 +118,7 @@ export function CapitalInvestAnnexeSouscriptionsPanel({
                       htmlFor={`cif-ci-millesime-${row.id}`}
                       className="text-xs text-muted-foreground"
                     >
-                      Millésime (formulaire)
+                      Millésime
                     </Label>
                     <Input
                       id={`cif-ci-millesime-${row.id}`}
@@ -173,6 +174,64 @@ export function CapitalInvestAnnexeSouscriptionsPanel({
                       onChange={(e) => onPatch(row.id, "droitEntreePct", e.target.value)}
                       placeholder={DEFAULT_CAPITAL_INVEST_DROIT_ENTREE_PCT}
                     />
+                  </div>
+                </div>
+
+                <div className="rounded-md border border-dashed bg-muted/10 p-2.5">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Coûts EMT — lignes 07110 / 07130 / 07140
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Reprendre la valeur telle quelle du fichier EMT (sans %), comme pour les SCPI
+                    en catalogue — ex. 0,005 pour 0,5 % du montant souscrit. Ne pas confondre avec
+                    le droit d&apos;entrée ci-dessus.
+                  </p>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor={`cif-ci-emt-07110-${row.id}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        07110
+                      </Label>
+                      <Input
+                        id={`cif-ci-emt-07110-${row.id}`}
+                        inputMode="decimal"
+                        value={row.emtLine07110Pct}
+                        onChange={(e) => onPatch(row.id, "emtLine07110Pct", e.target.value)}
+                        placeholder="Ex. 0,005"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor={`cif-ci-emt-07130-${row.id}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        07130
+                      </Label>
+                      <Input
+                        id={`cif-ci-emt-07130-${row.id}`}
+                        inputMode="decimal"
+                        value={row.emtLine07130Pct}
+                        onChange={(e) => onPatch(row.id, "emtLine07130Pct", e.target.value)}
+                        placeholder="Ex. 0,0267"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label
+                        htmlFor={`cif-ci-emt-07140-${row.id}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        07140
+                      </Label>
+                      <Input
+                        id={`cif-ci-emt-07140-${row.id}`}
+                        inputMode="decimal"
+                        value={row.emtLine07140Pct}
+                        onChange={(e) => onPatch(row.id, "emtLine07140Pct", e.target.value)}
+                        placeholder="Ex. 0"
+                      />
+                    </div>
                   </div>
                 </div>
 

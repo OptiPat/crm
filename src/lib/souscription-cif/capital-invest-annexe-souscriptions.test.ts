@@ -83,6 +83,9 @@ describe("capital-invest-annexe-souscriptions", () => {
       },
     ]);
     expect(rows[0]?.nbParts).toBe("95");
+    expect(rows[0]?.emtLine07110Pct).toBe("");
+    expect(rows[0]?.emtLine07130Pct).toBe("");
+    expect(rows[0]?.emtLine07140Pct).toBe("");
   });
 
   it("génère Mes préconisations pour FCPI + FIP combinés", () => {

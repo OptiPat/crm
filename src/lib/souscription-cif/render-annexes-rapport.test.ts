@@ -27,7 +27,7 @@ describe("buildAnnexesRapportPreview", () => {
       defaultSouscriptionDossierFields()
     );
 
-    expect(preview.pages).toHaveLength(9);
+    expect(preview.pages).toHaveLength(10);
     const page = preview.pages[0];
     expect(page.title).toBe(ANNEXES_RAPPORT_DOCUMENT_TITLE);
     expect(page.headerLeft).toBeUndefined();
@@ -56,7 +56,7 @@ describe("buildAnnexesRapportPreview", () => {
   it("construit la page 2 avec la section fiscalité", () => {
     const preview = buildAnnexesRapportPreview("scpi", {}, defaultSouscriptionDossierFields());
 
-    expect(preview.pages).toHaveLength(9);
+    expect(preview.pages).toHaveLength(10);
     const page2 = preview.pages[1];
     expect(page2.pageNumber).toBe(2);
     expect(page2.title).toBeUndefined();
@@ -274,7 +274,12 @@ describe("buildAnnexesRapportPreview", () => {
   it("construit la page 8 avec déclaration origine des fonds", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
-      {},
+      {
+        client_ville: "Lyon",
+        date_document: "22/06/2025",
+        cgp_nom_complet: "MARTIN Pierre",
+        client_nom_prenom: "BERNARD Luc",
+      },
       {
         ...defaultSouscriptionDossierFields(),
         provenanceFonds: "metropole",
@@ -311,18 +316,51 @@ describe("buildAnnexesRapportPreview", () => {
     expect(section6).toContain("☒ Oui");
     expect(section6).toContain("⬜ Non");
 
+    expect(page8.bodySegmentsSection7).toBeUndefined();
+    expect(page8.bodySegmentsAfterSection7).toBeUndefined();
+    expect(page8.signatureColumns).toBeUndefined();
+
+    const page9 = preview.pages[8];
+    expect(page9.pageNumber).toBe(9);
+    expect(page9.showAnnexesOrigineFondsSection).toBeUndefined();
+
     expect(
-      page8.bodySegmentsSection7?.some(
+      page9.bodySegmentsSection7?.some(
         (s) => s.kind === "bold" && s.value.includes("Le CIF déclare")
       )
     ).toBe(true);
-    const section7 = page8.bodySegmentsSection7
+    const section7 = page9.bodySegmentsSection7
       ?.map((s) =>
         s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""
       )
       .join("");
     expect(section7).toContain("7. Notes importantes");
     expect(section7).toContain("Je déclare que les préconisations");
+
+    const faitA = page9.bodySegmentsAfterSection7
+      ?.map((s) =>
+        s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""
+      )
+      .join("");
+    expect(faitA).toBe("Fait à Lyon, le 22/06/2025.");
+
+    const sigLeft = (page9.signatureColumns?.left ?? [])
+      .map((line) =>
+        line.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : "")).join("")
+      )
+      .join("\n");
+    expect(sigLeft).toContain("Signature du conseiller");
+    expect(sigLeft).toContain("Lu et Approuvé");
+    expect(sigLeft).toContain("MARTIN Pierre");
+
+    const sigRight = (page9.signatureColumns?.right ?? [])
+      .map((line) =>
+        line.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : "")).join("")
+      )
+      .join("\n");
+    expect(sigRight).toContain("Signature du client");
+    expect(sigRight).toContain("exactitude des renseignements");
+    expect(sigRight).toContain("BERNARD Luc");
 
     expect(preview.missingKeys).not.toContain("provenance_fonds");
     expect(preview.missingKeys).not.toContain("origine_fonds");
@@ -334,7 +372,7 @@ describe("buildAnnexesRapportPreview", () => {
     expect(preview.missingKeys).toContain("origine_fonds");
   });
 
-  it("construit la page 9 avec en-tête client / conseiller et renonciation", () => {
+  it("construit la page 10 avec en-tête client / conseiller et renonciation", () => {
     const preview = buildAnnexesRapportPreview(
       "scpi",
       {
@@ -351,22 +389,22 @@ describe("buildAnnexesRapportPreview", () => {
       defaultSouscriptionDossierFields()
     );
 
-    const page9 = preview.pages[8];
-    expect(page9.pageNumber).toBe(9);
+    const page10 = preview.pages[9];
+    expect(page10.pageNumber).toBe(10);
 
     const seg = (s: { kind: string; value?: string; label?: string }) =>
       s.kind === "text" || s.kind === "underline" || s.kind === "bold"
         ? s.value
         : `[${s.label}]`;
 
-    const headerLeft = page9.headerLeft!
+    const headerLeft = page10.headerLeft!
       .map((line) => line.map(seg).join(""))
       .join("\n");
     expect(headerLeft).toContain("Luc BERNARD");
     expect(headerLeft).toContain("12 rue des Oliviers");
     expect(headerLeft).toContain("34000 Montpellier");
 
-    const headerRight = page9.headerRight!
+    const headerRight = page10.headerRight!
       .map((line) => line.map(seg).join(""))
       .join("\n");
     expect(headerRight).toContain("Jean DUPONT");
@@ -374,9 +412,9 @@ describe("buildAnnexesRapportPreview", () => {
     expect(headerRight).toContain("34660 Cournonsec");
     expect(headerRight).toContain("À Montpellier, le 13/06/2026");
 
-    const body = page9.bodySegments.map(seg).join("");
+    const body = page10.bodySegments.map(seg).join("");
     expect(body).toContain("Objet : Renonciation au délai de rétractation.");
-    expect(page9.bodySegments.some((s) => s.kind === "underline" && s.value.startsWith("Objet :"))).toBe(
+    expect(page10.bodySegments.some((s) => s.kind === "underline" && s.value.startsWith("Objet :"))).toBe(
       true
     );
     expect(body).toContain("Jean DUPONT,");
@@ -393,6 +431,7 @@ describe("buildAnnexesRapportPreview", () => {
           "Je vous propose de souscrire à un FCPI afin de bénéficier d'une réduction d'impôt sur l'IR.",
         mes_preconisations:
           "Mes préconisations portent sur un investissement global de 9 975 € (montants souscrits et droits d'entrée inclus), répartis ainsi :\n\nLa souscription de parts du FCPI Odyssée au comptant pour un montant de 9 975 €, soit 105 € la part x 95 parts = montant total souscrit de 9 975 €. Dont 5 % de droit d'entrée, soit 498,75 €.",
+        niveau_experience_qpi: "Expérimenté",
       },
       {
         ...defaultSouscriptionDossierFields(),
@@ -405,12 +444,15 @@ describe("buildAnnexesRapportPreview", () => {
             partPriceEur: "105",
             droitEntreePct: "5",
             millesime: "",
+            emtLine07110Pct: "",
+            emtLine07130Pct: "",
+            emtLine07140Pct: "",
           },
         ],
       }
     );
 
-    expect(preview.pages).toHaveLength(4);
+    expect(preview.pages).toHaveLength(8);
 
     const page1 = preview.pages[0]!;
     expect(page1.title).toBe(ANNEXES_RAPPORT_DOCUMENT_TITLE);
@@ -449,7 +491,7 @@ describe("buildAnnexesRapportPreview", () => {
     const page4 = preview.pages[3]!;
     expect(page4.pageNumber).toBe(4);
     expect(page4.rapportRecapTableHeader).toBe("TABLEAU RÉCAPITULATIF");
-    expect(page4.rapportRecapRows).toHaveLength(3);
+    expect(page4.rapportRecapRows).toHaveLength(6);
     const objectifsCell = page4.rapportRecapRows?.[1].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
@@ -461,7 +503,185 @@ describe("buildAnnexesRapportPreview", () => {
     const dureeCell = page4.rapportRecapRows?.[2].contentSegments
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
       .join("");
-    expect(dureeCell).toContain("à minima de 10 ans");
+    expect(dureeCell).toContain("de 7 à 10 ans minimum, selon les millésimes souscrits");
     expect(dureeCell).toContain("prorogée par la Société de gestion");
+    const connaissancesCell = page4.rapportRecapRows?.[3].contentSegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(connaissancesCell).toContain("Expérimenté");
+    expect(connaissancesCell).toContain("DICI");
+    expect(preview.missingKeys).not.toContain("niveau_experience_qpi");
+    const risqueCell = page4.rapportRecapRows?.[4].contentSegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(risqueCell).toContain("épargne de précaution");
+    expect(risqueCell).toContain("part mineure du patrimoine");
+    const reexamenCell = page4.rapportRecapRows?.[5].contentSegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(reexamenCell).toContain("Non.");
+    expect(reexamenCell).toContain("fonds fermés");
+    expect(reexamenCell).toContain("vocation fiscale");
+
+    const costsIntro = (page4.bodySegmentsAfterRecapTable ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(costsIntro).toContain("Informations sur les coûts et les frais");
+    expect(costsIntro).toContain("Document d'Informations Clés");
+    expect(page4.showAnnexesCostsTable).toBe(true);
+
+    const productsRow = page4.annexesCostsRows?.find((r) => r.label === "Coûts liés aux produits");
+    expect(productsRow?.amount).toBe("");
+
+    const footer = (page4.bodySegmentsAfterCostsTable ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(footer).toContain("ventilation plus précise");
+  });
+
+  it("calcule le tableau coûts CI avec taux EMT et quote-part CIF", () => {
+    const preview = buildAnnexesRapportPreview(
+      "capital-investissement",
+      { conseil: "", mes_preconisations: "", niveau_experience_qpi: "Expérimenté" },
+      {
+        ...defaultSouscriptionDossierFields(),
+        capitalInvestAnnexeSouscriptions: [
+          {
+            id: "ci-test",
+            nomFonds: "Odysée M2",
+            type: "fcpi",
+            nbParts: "100",
+            partPriceEur: "100",
+            droitEntreePct: "5",
+            millesime: "2025",
+            emtLine07110Pct: "0,0066",
+            emtLine07130Pct: "0,0267",
+            emtLine07140Pct: "0",
+          },
+        ],
+        quotePartPercueConsultantCifEur: "300",
+      }
+    );
+
+    const page4 = preview.pages[3]!;
+    const tiersRow = page4.annexesCostsRows?.find((r) => r.label.includes("Paiement reçu de tiers"));
+    expect(tiersRow?.amount).toBe("300 €");
+    expect(tiersRow?.percent).toBe("3,0 %");
+
+    const productsRow = page4.annexesCostsRows?.find((r) => r.label === "Coûts liés aux produits");
+    expect(productsRow?.amount).toBe("333 €");
+    expect(productsRow?.percent).toBe("3,33 %");
+
+    const totalRow = page4.annexesCostsRows?.find((r) => r.label === "TOTAL COÛTS ET FRAIS");
+    expect(totalRow?.amount).toBe("633 €");
+    expect(totalRow?.percent).toBe("6,33 %");
+  });
+
+  it("construit la page 5 CI (préconisations conseiller, objectifs, caractéristiques)", () => {
+    const preview = buildAnnexesRapportPreview(
+      "capital-investissement",
+      {},
+      defaultSouscriptionDossierFields()
+    );
+
+    const page5 = preview.pages[4]!;
+    expect(page5.pageNumber).toBe(5);
+    expect(page5.showAnnexesObjectifsPatrimoniauxTable).toBe(true);
+    expect(page5.objectifsPatrimoniauxVariant).toBe("capital-invest");
+
+    const section1 = page5.bodySegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(section1).toContain("1. Préconisations du conseiller");
+    expect(section1).toContain("perspective long terme");
+
+    const rows = page5.annexesObjectifsPatrimoniauxRows ?? [];
+    expect(rows.every((r) => !r.immobilier && r.placementsFinanciers)).toBe(true);
+
+    expect(page5.showAnnexesCaracteristiquesOperationTable).toBe(true);
+    const avantages = page5.annexesCaracteristiquesOperationSections?.[0];
+    expect(avantages?.rows[5]?.placementsFinanciers).toEqual({ kind: "check", checked: false });
+
+    const inconv = page5.annexesCaracteristiquesOperationSections?.[1];
+    expect(inconv?.rows[0].placementsFinanciers).toMatchObject({
+      kind: "text",
+      value: expect.stringContaining("sociétés de gestion"),
+    });
+    expect(page5.showAnnexesHorizonProfilTable).toBe(true);
+    expect(page5.annexesHorizonProfilRows?.[2].horizon).toMatchObject({
+      label: "de 7 à 10 ans",
+      checked: true,
+    });
+  });
+
+  it("construit les pages 6–8 CI (origine des fonds, signatures et renonciation)", () => {
+    const preview = buildAnnexesRapportPreview(
+      "capital-investissement",
+      {
+        cgp_formule_politesse: "Monsieur,",
+        client_ville: "Paris",
+        date_document: "22/06/2025",
+        cgp_nom_complet: "MARTIN Pierre",
+        client_nom_prenom: "BERNARD Luc",
+      },
+      {
+        ...defaultSouscriptionDossierFields(),
+        provenanceFonds: "metropole",
+        origineFondsSelected: ["epargne_courante"],
+      }
+    );
+
+    expect(preview.pages).toHaveLength(8);
+
+    const page6 = preview.pages[5]!;
+    expect(page6.showAnnexesOrigineFondsSection).toBe(true);
+    const intro = page6.bodySegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(intro).toContain("5. Déclaration sur l'honneur");
+    expect(intro).toContain("R.561-38");
+    expect(page6.annexesOrigineFondsView?.provenanceFonds).toBe("metropole");
+
+    const section6 = page6.bodySegmentsSection6Intro
+      ?.map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(section6).toContain("6. Informations");
+    expect(page6.bodySegmentsSection7).toBeUndefined();
+    expect(page6.bodySegmentsAfterSection7).toBeUndefined();
+    expect(page6.signatureColumns).toBeUndefined();
+
+    const page7 = preview.pages[6]!;
+    const section7 = page7.bodySegmentsSection7
+      ?.map((s) =>
+        s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""
+      )
+      .join("");
+    expect(section7).toContain("7. Notes importantes");
+
+    const faitA = page7.bodySegmentsAfterSection7
+      ?.map((s) =>
+        s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""
+      )
+      .join("");
+    expect(faitA).toBe("Fait à Paris, le 22/06/2025.");
+
+    expect(page7.signatureColumns?.left?.[0]?.[0]).toMatchObject({
+      kind: "text",
+      value: "Signature du conseiller :",
+    });
+    expect(page7.signatureColumns?.right?.[0]?.[0]).toMatchObject({
+      kind: "text",
+      value: "Signature du client :",
+    });
+    expect(page7.signatureColumns?.right?.[2]?.[0]).toMatchObject({
+      kind: "text",
+      value: expect.stringContaining("exactitude des renseignements"),
+    });
+
+    const page8 = preview.pages[7]!;
+    const renonciation = page8.bodySegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(renonciation).toContain("Renonciation au délai de rétractation");
   });
 });

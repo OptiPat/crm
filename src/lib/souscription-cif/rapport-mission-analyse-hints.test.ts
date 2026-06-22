@@ -18,5 +18,9 @@ describe("rapport-mission-analyse-hints", () => {
     expect(getRapportMissionAnalyseExamples("capital-investissement")[0]).toContain(
       "Optimiser la fiscalité de vos revenus"
     );
+    expect(getRapportMissionAnalyseExamples("capital-investissement")).toHaveLength(4);
+    expect(getRapportMissionAnalyseExamples("capital-investissement")[3]).toContain(
+      "régulièrement depuis 5 ans"
+    );
   });
 });

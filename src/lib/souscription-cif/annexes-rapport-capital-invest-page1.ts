@@ -14,8 +14,8 @@ Les professionnels de chaque fonds assurent la sélection, l'accompagnement stra
 [u]2. Fonctionnement[/u]
 
 2 véhicules d'investissement sont principalement proposés :
-➢ FCPI : Fonds Communs de Placement dans l'Innovation. Comme le nom l'indique, ils sont principalement investis en titres de sociétés innovantes non cotées en bourse à hauteur de 70 % minimum.
-➢ FIP Outre-Mer : fonds d'investissement de proximité spécialisé sur l'Outre-Mer. Ils sont investis, à hauteur de 70 % minimum, dans des PME régionales localisées en Outre-Mer comme en Guadeloupe, à La Martinique, en Guyane, à La Réunion, etc.
+- FCPI : Fonds Communs de Placement dans l'Innovation. Comme le nom l'indique, ils sont principalement investis en titres de sociétés innovantes non cotées en bourse à hauteur de 70 % minimum.
+- FIP Outre-Mer : fonds d'investissement de proximité spécialisé sur l'Outre-Mer. Ils sont investis, à hauteur de 70 % minimum, dans des PME régionales localisées en Outre-Mer comme en Guadeloupe, à La Martinique, en Guyane, à La Réunion, etc.
 
 - Comment investir ?
 Un investissement au comptant en année N pour obtenir une réduction d'impôt lors de la déclaration des revenus de l'année N+1 qui porte sur les revenus de l'année N.
@@ -52,6 +52,6 @@ export const ANNEXES_CAPITAL_INVEST_BEFORE_FISCALITE_TABLE = `Investissement sou
 - à un plafond de versement par catégorie de fonds ;
 - au plafonnement global des niches fiscales.`;
 
-export const ANNEXES_CAPITAL_INVEST_BODY_AFTER_FISCALITE_TABLE = `La réduction fiscale est plafonnée à un investissement :
+export const ANNEXES_CAPITAL_INVEST_BODY_AFTER_FISCALITE_TABLE = `Les montants ouvrant droit à réduction fiscale sont plafonnés :
 - pour un célibataire : pouvant aller jusqu'à 12 000 € en FIP et 12 000 € supplémentaires en FCPI ; soit 24 000 € maximum.
 - pour un couple : pouvant aller jusqu'à 24 000 € en FIP et 24 000 € supplémentaires en FCPI ; soit 48 000 € maximum.`;

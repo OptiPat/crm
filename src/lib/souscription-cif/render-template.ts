@@ -101,6 +101,8 @@ export type ScpiLmPagePreview = {
   /** Tableau objectifs patrimoniaux (annexes SCPI page 6). */
   showAnnexesObjectifsPatrimoniauxTable?: boolean;
   annexesObjectifsPatrimoniauxRows?: ReadonlyArray<AnnexesScpiObjectifsPatrimoniauxRow>;
+  /** Symboles cases objectifs : SCPI (☐/☒) ou capital investissement (⬜/☒). */
+  objectifsPatrimoniauxVariant?: "scpi" | "capital-invest";
   /** Titre § 3 après le tableau objectifs (annexes SCPI page 6). */
   bodySegmentsAfterObjectifsPatrimoniauxTable?: SouscriptionPreviewSegment[];
   /** Tableau caractéristiques de l'opération (annexes SCPI page 6 § 3). */
@@ -120,6 +122,8 @@ export type ScpiLmPagePreview = {
   bodySegmentsSection6Intro?: SouscriptionPreviewSegment[];
   /** § 7 Notes importantes (page 7). */
   bodySegmentsSection7?: SouscriptionPreviewSegment[];
+  /** « Fait à … » avant le bloc signatures (annexes origine des fonds). */
+  bodySegmentsAfterSection7?: SouscriptionPreviewSegment[];
 };
 
 export type ScpiLettreMissionPreview = {
@@ -347,6 +351,9 @@ export function collectMissingFromPage(page: ScpiLmPagePreview): string[] {
   }
   if (page.bodySegmentsSection7) {
     collectMissing(page.bodySegmentsSection7).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterSection7) {
+    collectMissing(page.bodySegmentsAfterSection7).forEach((k) => keys.add(k));
   }
   collectMissing(page.footerSegments).forEach((k) => keys.add(k));
   return [...keys];

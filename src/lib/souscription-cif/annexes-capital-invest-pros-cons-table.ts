@@ -11,7 +11,7 @@ export const ANNEXES_CAPITAL_INVEST_PROS_CONS_ROWS: ReadonlyArray<AnnexesScpiPro
     advantages:
       "Mutualisation des risques grâce à la diversification (géographique, sectorielle, etc.) et aux entreprises intégrées dans chaque fonds.",
     disadvantages:
-      "Épargne bloquée pendant toute la durée d'investissement, pendant minimum 7 ans, prorogeable 2 fois 1 an.",
+      "Épargne bloquée pendant toute la durée d'investissement, pendant 7 ans minimum, prorogeable deux fois d'un an.",
   },
   {
     advantages:
@@ -39,7 +39,7 @@ export const ANNEXES_CAPITAL_INVEST_PROS_CONS_ROWS: ReadonlyArray<AnnexesScpiPro
 export const ANNEXES_CAPITAL_INVEST_SECTION32_SORTIE = `3.2. À la sortie
 
 Les FIP et FCPI bénéficient d'une exonération d'impôt sur les plus-values réalisées lors de la liquidation du fonds.
-En revanche, cette plus-value sera soumise aux prélèvements sociaux, prélevés par le gestionnaire directement. Le souscripteur recevra donc une somme exonérée d'impôt et nette de prélèvements sociaux.`;
+En revanche, cette plus-value sera soumise aux prélèvements sociaux, prélevés directement par le gestionnaire. Le souscripteur recevra donc une somme exonérée d'impôt et nette de prélèvements sociaux.`;
 
 export const ANNEXES_CAPITAL_INVEST_SECTION4_INTRO = `[u]4. Avantages et inconvénients[/u]
 
@@ -54,9 +54,9 @@ export const ANNEXES_CAPITAL_INVEST_HORIZON_PLACEMENT = "> 10 ans";
 export const ANNEXES_CAPITAL_INVEST_SECTION5_RISQUES = `[u]5. Les risques[/u]`;
 
 export const ANNEXES_CAPITAL_INVEST_SECTION5_RISKS_BODY = `L'investissement en FIP et FCPI comporte des risques qu'il convient d'appréhender.
-- Risque de perte en capital : Les FIP et FCPI n'offrent aucune garantie, ni protection en capital. Il est donc possible que le capital initialement investi ne soit pas intégralement restitué. Par ailleurs, la valorisation du fonds pendant la vie du produit peut évoluer à la hausse et à la baisse.
+- Risque de perte en capital : Les FIP et FCPI n'offrent aucune garantie ni protection en capital. Il est donc possible que le capital initialement investi ne soit pas intégralement restitué. Par ailleurs, la valorisation du fonds pendant la vie du produit peut évoluer à la hausse et à la baisse.
 - Risque lié au sous-jacent : Les FIP et FCPI investissent dans des entreprises innovantes ou régionales, cotées ou non cotées, de petite taille qui présentent un risque important et des risques spécifiques qu'il convient d'appréhender.
-- Risque de liquidité : Les FIP et FCPI peuvent être investis dans des titres cotés ou non cotés présentant une faible liquidité. Les fonds peuvent donc éprouver des difficultés à céder les titres dans les délais et au prix souhaités. Ces éléments peuvent entraîner une baisse de la valeur liquidative.
+- Risque de liquidité : Les FIP et FCPI investissent dans des titres cotés ou non cotés présentant une faible liquidité. Les fonds peuvent donc éprouver des difficultés à céder les titres dans les délais et au prix souhaités. Ces éléments peuvent entraîner une baisse de la valeur liquidative.
 - Risques liés aux instruments financiers : Les FIP et FCPI investissent principalement dans des titres cotés ou non cotés présentant des risques importants. Les actifs financiers détenus par les FIP et FCPI sont susceptibles d'entraîner différents risques : risque actions, risque de taux, risque de défaillance de l'émetteur.
 - Risque lié à la gestion discrétionnaire : Les FIP et FCPI sont soumis à un risque lié à la gestion discrétionnaire dans le choix des cibles d'investissement et de l'allocation d'actifs.
 - Durée de blocage : Les FIP et FCPI prévoient une durée minimale de blocage avant laquelle les investisseurs ne peuvent pas récupérer leur épargne (sauf cas de déblocage anticipé prévu au règlement).

@@ -2,7 +2,6 @@ import {
   defaultSouscriptionDossierFields,
   type SouscriptionDossierFields,
 } from "@/lib/souscription-cif/dossier-fields";
-import { DEFAULT_CAPITAL_INVEST_DUREE_BLOCAGE_ANNEES } from "@/lib/souscription-cif/annexes-capital-invest-recap-table";
 import { normalizeCapitalInvestAnnexeSouscriptions } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
 import { normalizeScpiAnnexeSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
 import {
@@ -82,10 +81,6 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     ),
     descriptionsCapitalInvest:
       typeof o.descriptionsCapitalInvest === "string" ? o.descriptionsCapitalInvest : "",
-    capitalInvestDureeBlocageAnnees:
-      typeof o.capitalInvestDureeBlocageAnnees === "string"
-        ? o.capitalInvestDureeBlocageAnnees
-        : DEFAULT_CAPITAL_INVEST_DUREE_BLOCAGE_ANNEES,
     quotePartPercueConsultantCifEur:
       typeof o.quotePartPercueConsultantCifEur === "string"
         ? o.quotePartPercueConsultantCifEur

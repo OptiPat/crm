@@ -14,6 +14,12 @@ export type CapitalInvestAnnexeSouscription = {
   droitEntreePct: string;
   /** Millésime — affichage formulaire uniquement. */
   millesime: string;
+  /** Coefficient EMT fichier (ligne 07110, ex. 0,005). Distinct du droit d'entrée. */
+  emtLine07110Pct: string;
+  /** Coefficient EMT fichier (ligne 07130). */
+  emtLine07130Pct: string;
+  /** Coefficient EMT fichier (ligne 07140). */
+  emtLine07140Pct: string;
 };
 
 export const DEFAULT_CAPITAL_INVEST_DROIT_ENTREE_PCT = "5";
@@ -143,6 +149,9 @@ export function newCapitalInvestAnnexeSouscription(
       ? partial.droitEntreePct
       : DEFAULT_CAPITAL_INVEST_DROIT_ENTREE_PCT,
     millesime: partial?.millesime ?? "",
+    emtLine07110Pct: partial?.emtLine07110Pct ?? "",
+    emtLine07130Pct: partial?.emtLine07130Pct ?? "",
+    emtLine07140Pct: partial?.emtLine07140Pct ?? "",
   };
 }
 
@@ -170,6 +179,9 @@ export function normalizeCapitalInvestAnnexeSouscriptions(raw: unknown): Capital
               ? o.droitEntreePct
               : DEFAULT_CAPITAL_INVEST_DROIT_ENTREE_PCT,
           millesime: typeof o.millesime === "string" ? o.millesime : "",
+          emtLine07110Pct: typeof o.emtLine07110Pct === "string" ? o.emtLine07110Pct : "",
+          emtLine07130Pct: typeof o.emtLine07130Pct === "string" ? o.emtLine07130Pct : "",
+          emtLine07140Pct: typeof o.emtLine07140Pct === "string" ? o.emtLine07140Pct : "",
         },
         rows
       )

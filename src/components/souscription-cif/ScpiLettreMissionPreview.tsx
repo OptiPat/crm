@@ -177,7 +177,10 @@ export function ScpiLmBodyContent({
               />
             </div>
           )}
-          <AnnexesScpiObjectifsPatrimoniauxTable rows={page.annexesObjectifsPatrimoniauxRows} />
+          <AnnexesScpiObjectifsPatrimoniauxTable
+            rows={page.annexesObjectifsPatrimoniauxRows}
+            variant={page.objectifsPatrimoniauxVariant}
+          />
         </>
       )}
 
@@ -235,15 +238,30 @@ export function ScpiLmBodyContent({
               />
             </div>
           )}
-          {page.bodySegmentsSection7 && page.bodySegmentsSection7.length > 0 && (
-            <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
-              <CifPreviewSegments
-                segments={page.bodySegmentsSection7}
-                onMissingVariableClick={onMissingVariableClick}
-              />
-            </div>
-          )}
         </>
+      )}
+
+      {page.bodySegmentsSection7 && page.bodySegmentsSection7.length > 0 && (
+        <div
+          className={cn(
+            "mt-[4mm]",
+            cifDocumentBodyProseClass,
+            !page.showAnnexesOrigineFondsSection && page.bodySegments.length === 0 && "mt-0"
+          )}
+        >
+          <CifPreviewSegments
+            segments={page.bodySegmentsSection7}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+        </div>
+      )}
+      {page.bodySegmentsAfterSection7 && page.bodySegmentsAfterSection7.length > 0 && (
+        <div className={cn("mt-[4mm]", cifDocumentBodyProseClass)}>
+          <CifPreviewSegments
+            segments={page.bodySegmentsAfterSection7}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+        </div>
       )}
 
       {page.showAnnexesProsConsTable && (

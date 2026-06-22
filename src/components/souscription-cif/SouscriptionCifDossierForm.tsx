@@ -338,7 +338,7 @@ export function SouscriptionCifDossierForm({
             <CardDescription>
               {productType === "scpi"
                 ? "Conseil, préconisations et fiches produits (catalogue)."
-                : "Conseil, souscriptions FCPI/FIP, préconisations et fiches produit (texte libre)."}
+                : "Conseil, souscriptions FCPI/FIP, taux EMT (DICI), préconisations, quote-part CIF et fiches produit."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -560,26 +560,6 @@ export function SouscriptionCifDossierForm({
 
             {productType === "capital-investissement" && (
               <div className="space-y-2">
-                <Label htmlFor="cif-ci-duree-blocage">Durée de blocage (tableau récap)</Label>
-                <Input
-                  id="cif-ci-duree-blocage"
-                  inputMode="numeric"
-                  className="w-24"
-                  value={value.capitalInvestDureeBlocageAnnees}
-                  onChange={(e) =>
-                    onChange({ capitalInvestDureeBlocageAnnees: e.target.value })
-                  }
-                  placeholder="10"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Durée minimale en années — défaut 10 (ligne « durée d&apos;investissement » du
-                  tableau récapitulatif).
-                </p>
-              </div>
-            )}
-
-            {productType === "capital-investissement" && (
-              <div className="space-y-2">
                 <Label htmlFor="cif-descriptions-capital-invest">
                   Descriptions des fonds
                 </Label>
@@ -596,30 +576,33 @@ export function SouscriptionCifDossierForm({
               </div>
             )}
 
-            {productType === "scpi" && (
-              <>
-            <div className="space-y-3 rounded-md border bg-muted/20 p-3">
-              <p className="text-sm font-medium">Coûts et frais — attestation CIF</p>
-              <div className="space-y-2">
-                <Label htmlFor="cif-quote-part-consultant">
-                  Quote-part perçue consultant (CIF)
-                </Label>
-                <Input
-                  id="cif-quote-part-consultant"
-                  inputMode="decimal"
-                  value={value.quotePartPercueConsultantCifEur}
-                  onChange={(e) =>
-                    onChange({ quotePartPercueConsultantCifEur: e.target.value })
-                  }
-                  placeholder="Ex. 900"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Montant issu de l&apos;attestation CIF. Le % du tableau est calculé : quote-part
-                  ÷ somme des montants souscrits ci-dessus.
-                </p>
+            {(productType === "scpi" || productType === "capital-investissement") && (
+              <div className="space-y-3 rounded-md border bg-muted/20 p-3">
+                <p className="text-sm font-medium">Coûts et frais — attestation CIF</p>
+                <div className="space-y-2">
+                  <Label htmlFor="cif-quote-part-consultant">
+                    Quote-part perçue consultant (CIF)
+                  </Label>
+                  <Input
+                    id="cif-quote-part-consultant"
+                    inputMode="decimal"
+                    value={value.quotePartPercueConsultantCifEur}
+                    onChange={(e) =>
+                      onChange({ quotePartPercueConsultantCifEur: e.target.value })
+                    }
+                    placeholder="Ex. 900"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Montant issu de l&apos;attestation CIF. Le % du tableau est calculé : quote-part
+                    ÷ somme des montants souscrits
+                    {productType === "scpi" ? " ci-dessus" : " (parts × prix)"}.
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
+            {(productType === "scpi" || productType === "capital-investissement") && (
+              <>
             <div id="cif-provenance-fonds" className="space-y-2 scroll-mt-4">
               <Label>Provenance des fonds</Label>
               <div className="flex flex-wrap gap-4">

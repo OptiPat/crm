@@ -1,3 +1,16 @@
+import {
+  ANNEXES_CAPITAL_INVEST_CARACTERISTIQUES_OPERATION_SECTIONS,
+} from "@/lib/souscription-cif/annexes-capital-invest-caracteristiques-operation-table";
+import {
+  ANNEXES_CAPITAL_INVEST_OBJECTIFS_PATRIMONIAUX_ROWS,
+} from "@/lib/souscription-cif/annexes-capital-invest-objectifs-patrimoniaux-table";
+import {
+  ANNEXES_CAPITAL_INVEST_PAGE5_SECTION1,
+  ANNEXES_CAPITAL_INVEST_PAGE5_SECTION2_TITLE,
+  ANNEXES_CAPITAL_INVEST_PAGE5_SECTION3_TITLE,
+  ANNEXES_CAPITAL_INVEST_PAGE5_SECTION4_TITLE,
+} from "@/lib/souscription-cif/annexes-rapport-capital-invest-page5";
+import { buildAnnexesCapitalInvestCostsRows } from "@/lib/souscription-cif/build-annexes-capital-invest-costs";
 import { ANNEXES_CAPITAL_INVEST_PRECONISATIONS_BODY } from "@/lib/souscription-cif/annexes-rapport-capital-invest-preconisations";
 import {
   ANNEXES_CAPITAL_INVEST_RECAP_TABLE_HEADER,
@@ -62,9 +75,18 @@ import {
   collectAnnexesOrigineFondsMissingKeys,
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
 import { ANNEXES_SCPI_PAGE8_BODY } from "@/lib/souscription-cif/annexes-rapport-scpi-page8";
+import {
+  buildAnnexesRapportFaitASegments,
+  buildAnnexesRapportSignatureColumns,
+} from "@/lib/souscription-cif/annexes-rapport-signatures";
 import { ANNEXES_SCPI_PAGE5_TABLE_HEADER } from "@/lib/souscription-cif/annexes-rapport-scpi-page5";
 import { ANNEXES_SCPI_RECAP_ROW_TEMPLATES } from "@/lib/souscription-cif/annexes-scpi-recap-table";
+import { buildAnnexesCapitalInvestHorizonProfilRowViews } from "@/lib/souscription-cif/annexes-capital-invest-horizon-profil-table";
 import { buildAnnexesScpiCostsRows } from "@/lib/souscription-cif/build-annexes-scpi-costs";
+import {
+  ANNEXES_CAPITAL_INVEST_COSTS_FOOTER,
+  ANNEXES_CAPITAL_INVEST_COSTS_INTRO,
+} from "@/lib/souscription-cif/annexes-capital-invest-costs-table";
 import { ANNEXES_RAPPORT_DOCUMENT_TITLE } from "@/lib/souscription-cif/cif-documents";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 import { SCPI_LM_PAGE1_FOOTER_DEFAULT } from "@/lib/souscription-cif/scpi-lettre-mission-page1";
@@ -81,7 +103,8 @@ import type { SouscriptionCifProductType } from "@/lib/souscription-cif/souscrip
 function buildAnnexesCapitalInvestRapportPreview(
   variables: Record<string, string | null>,
   dossier: SouscriptionDossierFields,
-  footerOverride?: string | null
+  footerOverride?: string | null,
+  profilRisqueSri?: number | null
 ): ScpiLettreMissionPreview {
   const footerSegments = buildCifDocumentFooterSegments(variables, footerOverride);
 
@@ -140,6 +163,71 @@ function buildAnnexesCapitalInvestRapportPreview(
     bodySegments: [],
     rapportRecapTableHeader: ANNEXES_CAPITAL_INVEST_RECAP_TABLE_HEADER,
     rapportRecapRows: buildAnnexesCapitalInvestRecapRows(variables, dossier),
+    bodySegmentsAfterRecapTable: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_COSTS_INTRO,
+      variables
+    ),
+    showAnnexesCostsTable: true,
+    annexesCostsRows: buildAnnexesCapitalInvestCostsRows(dossier),
+    bodySegmentsAfterCostsTable: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_COSTS_FOOTER,
+      variables
+    ),
+    footerSegments,
+  };
+
+  const page5: ScpiLmPagePreview = {
+    pageNumber: 5,
+    bodySegments: renderTemplateSegments(ANNEXES_CAPITAL_INVEST_PAGE5_SECTION1, variables),
+    bodySegmentsAfterTable: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_PAGE5_SECTION2_TITLE,
+      variables
+    ),
+    showAnnexesObjectifsPatrimoniauxTable: true,
+    annexesObjectifsPatrimoniauxRows: ANNEXES_CAPITAL_INVEST_OBJECTIFS_PATRIMONIAUX_ROWS,
+    objectifsPatrimoniauxVariant: "capital-invest",
+    bodySegmentsAfterObjectifsPatrimoniauxTable: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_PAGE5_SECTION3_TITLE,
+      variables
+    ),
+    showAnnexesCaracteristiquesOperationTable: true,
+    annexesCaracteristiquesOperationSections:
+      ANNEXES_CAPITAL_INVEST_CARACTERISTIQUES_OPERATION_SECTIONS,
+    bodySegmentsAfterCaracteristiquesOperationTable: renderTemplateSegments(
+      ANNEXES_CAPITAL_INVEST_PAGE5_SECTION4_TITLE,
+      variables
+    ),
+    showAnnexesHorizonProfilTable: true,
+    annexesHorizonProfilRows: buildAnnexesCapitalInvestHorizonProfilRowViews(profilRisqueSri),
+    footerSegments,
+  };
+
+  const page6: ScpiLmPagePreview = {
+    pageNumber: 6,
+    bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION5_INTRO, variables),
+    showAnnexesOrigineFondsSection: true,
+    annexesOrigineFondsView: buildAnnexesScpiOrigineFondsView(dossier),
+    bodySegmentsAfterOrigineFonds: renderTemplateSegments(
+      ANNEXES_SCPI_PAGE7_CERTIFICATION,
+      variables
+    ),
+    bodySegmentsSection6Intro: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION6_INTRO, variables),
+    footerSegments,
+  };
+
+  const page7: ScpiLmPagePreview = {
+    pageNumber: 7,
+    bodySegments: [],
+    bodySegmentsSection7: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION7, variables),
+    bodySegmentsAfterSection7: buildAnnexesRapportFaitASegments(variables),
+    signatureColumns: buildAnnexesRapportSignatureColumns(variables),
+    footerSegments,
+  };
+
+  const page8: ScpiLmPagePreview = {
+    pageNumber: 8,
+    ...buildAnnexesRenonciationHeader(variables),
+    bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE8_BODY, variables),
     footerSegments,
   };
 
@@ -148,10 +236,15 @@ function buildAnnexesCapitalInvestRapportPreview(
     ...collectMissingFromPage(page2),
     ...collectMissingFromPage(page3),
     ...collectMissingFromPage(page4),
+    ...collectMissingFromPage(page5),
+    ...collectMissingFromPage(page6),
+    ...collectMissingFromPage(page7),
+    ...collectMissingFromPage(page8),
   ]);
+  collectAnnexesOrigineFondsMissingKeys(dossier).forEach((k) => missing.add(k));
 
   return {
-    pages: [page1, page2, page3, page4],
+    pages: [page1, page2, page3, page4, page5, page6, page7, page8],
     missingKeys: [...missing],
   };
 }
@@ -264,7 +357,6 @@ function buildAnnexesScpiRapportPreview(
     annexesOrigineFondsView: buildAnnexesScpiOrigineFondsView(dossier),
     bodySegmentsAfterOrigineFonds: renderTemplateSegments(ANNEXES_SCPI_PAGE7_CERTIFICATION, variables),
     bodySegmentsSection6Intro: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION6_INTRO, variables),
-    bodySegmentsSection7: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION7, variables),
     footerSegments,
   };
   collectMissingFromPage(page8).forEach((k) => missing.add(k));
@@ -272,14 +364,24 @@ function buildAnnexesScpiRapportPreview(
 
   const page9: ScpiLmPagePreview = {
     pageNumber: 9,
-    ...buildAnnexesRenonciationHeader(variables),
-    bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE8_BODY, variables),
+    bodySegments: [],
+    bodySegmentsSection7: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION7, variables),
+    bodySegmentsAfterSection7: buildAnnexesRapportFaitASegments(variables),
+    signatureColumns: buildAnnexesRapportSignatureColumns(variables),
     footerSegments,
   };
   collectMissingFromPage(page9).forEach((k) => missing.add(k));
 
+  const page10: ScpiLmPagePreview = {
+    pageNumber: 10,
+    ...buildAnnexesRenonciationHeader(variables),
+    bodySegments: renderTemplateSegments(ANNEXES_SCPI_PAGE8_BODY, variables),
+    footerSegments,
+  };
+  collectMissingFromPage(page10).forEach((k) => missing.add(k));
+
   return {
-    pages: [page1, page2, page3, page4, page5, page6, page7, page8, page9],
+    pages: [page1, page2, page3, page4, page5, page6, page7, page8, page9, page10],
     missingKeys: [...missing],
   };
 }
@@ -292,7 +394,12 @@ export function buildAnnexesRapportPreview(
   profilRisqueSri?: number | null
 ): ScpiLettreMissionPreview {
   if (productType === "capital-investissement") {
-    return buildAnnexesCapitalInvestRapportPreview(variables, dossier, footerOverride);
+    return buildAnnexesCapitalInvestRapportPreview(
+      variables,
+      dossier,
+      footerOverride,
+      profilRisqueSri
+    );
   }
   if (productType !== "scpi") {
     return { pages: [], missingKeys: [] };

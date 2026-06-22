@@ -8,15 +8,11 @@ import {
 
 export const ANNEXES_CAPITAL_INVEST_RECAP_TABLE_HEADER = ANNEXES_SCPI_PAGE5_TABLE_HEADER;
 
-export const DEFAULT_CAPITAL_INVEST_DUREE_BLOCAGE_ANNEES = "10";
-
-export const DUREE_BLOCAGE_CAPITAL_INVEST_ANNEES_VARIABLE = "duree_blocage_capital_invest_annees";
-
 export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_ADAPTATION_TITLE =
   "La recommandation formulée est adaptée au client ?";
 
 export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_ADAPTATION_CONTENT =
-  "OUI. En effet, la recommandation permet au Client d'obtenir une réduction d'impôt, tout en diversifiant le patrimoine financier.";
+  "Oui. En effet, la recommandation permet au Client d'obtenir une réduction d'impôt, tout en diversifiant le patrimoine financier.";
 
 export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_OBJECTIFS_TITLE =
   "La recommandation est conforme aux objectifs ?";
@@ -24,12 +20,25 @@ export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_OBJECTIFS_TITLE =
 export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_TITLE =
   "La durée d'investissement est conforme à la situation particulière du client ?";
 
-export function buildCapitalInvestRecapDureeContent(
-  dossier: Pick<SouscriptionDossierFields, "capitalInvestDureeBlocageAnnees">
-): string {
-  const annees = resolveCapitalInvestDureeBlocageAnnees(dossier.capitalInvestDureeBlocageAnnees);
-  return `Oui. La durée recommandée est à minima de ${annees} ans. Cette durée peut être prorogée par la Société de gestion du Fonds.`;
-}
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT =
+  "Oui. La durée recommandée est de 7 à 10 ans minimum, selon les millésimes souscrits. Cette durée peut être prorogée par la Société de gestion du Fonds.";
+
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_TITLE =
+  "La recommandation est adaptée aux connaissances et à l'expérience du client ?";
+
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT = `Oui. Aux termes du Questionnaire Profil Investisseur, le Client est classé « {{niveau_experience_qpi}} » en matière de connaissances et d'expérience financière. L'ensemble des informations relatives aux Fonds recommandés, à leurs particularités et à leur fonctionnement lui a été expliqué ; la documentation précontractuelle obligatoire (DICI, note d'information et documents réglementaires du ou des Fonds) lui a été remise.`;
+
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_TITLE =
+  "La recommandation est adaptée au client vis-à-vis de son attitude à l'égard du risque et de sa capacité à subir des pertes ?";
+
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_CONTENT =
+  "Oui. Une épargne de précaution permet au Client de faire face à tout imprévu. De plus, cet investissement représente une part mineure du patrimoine global du Client.";
+
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_TITLE =
+  "Les services ou instruments recommandés entraînent-ils un réexamen périodique ?";
+
+export const ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_CONTENT =
+  "Non. Il s'agit de fonds fermés pour lesquels aucune réévaluation périodique n'est possible du fait de leur vocation fiscale.";
 
 /** Variable affichée en rouge si aucune souscription renseignée. */
 export const PRODUITS_CAPITAL_INVEST_CIBLES_VARIABLE = "produits_capital_invest_cibles";
@@ -90,9 +99,9 @@ export function buildCapitalInvestRecapObjectifsContent(
 ): string {
   const clause = buildCapitalInvestRecapObjectifsProduitsClause(souscriptions);
   if (!clause) {
-    return `OUI. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi {{${PRODUITS_CAPITAL_INVEST_CIBLES_VARIABLE}}} permet de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts pendant la durée de blocage du Fonds.`;
+    return `Oui. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi {{${PRODUITS_CAPITAL_INVEST_CIBLES_VARIABLE}}} permet de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts pendant la durée de blocage du Fonds.`;
   }
-  return `OUI. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi ${clause.produitsPhrase} ${clause.verbe} de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts pendant la durée de blocage du Fonds.`;
+  return `Oui. L'objectif déclaré est de bénéficier d'une réduction d'impôt. Ainsi ${clause.produitsPhrase} ${clause.verbe} de bénéficier d'une réduction d'impôt en contrepartie d'un engagement de conservation des parts pendant la durée de blocage du Fonds.`;
 }
 
 export function buildProduitsCapitalInvestCiblesVariable(
@@ -101,17 +110,6 @@ export function buildProduitsCapitalInvestCiblesVariable(
   const labels = buildCapitalInvestRecapProduitLabels(souscriptions);
   if (labels.length === 0) return null;
   return formatFrenchEtList(labels);
-}
-
-export function resolveCapitalInvestDureeBlocageAnnees(raw: string): string {
-  const trimmed = raw.trim();
-  return /^\d+$/.test(trimmed) ? trimmed : DEFAULT_CAPITAL_INVEST_DUREE_BLOCAGE_ANNEES;
-}
-
-export function buildDureeBlocageCapitalInvestAnneesVariable(
-  dossier: Pick<SouscriptionDossierFields, "capitalInvestDureeBlocageAnnees">
-): string {
-  return resolveCapitalInvestDureeBlocageAnnees(dossier.capitalInvestDureeBlocageAnnees);
 }
 
 export type AnnexesCapitalInvestRecapRowView = {
@@ -142,7 +140,28 @@ export function buildAnnexesCapitalInvestRecapRows(
     {
       title: ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_TITLE,
       contentSegments: renderTemplateSegments(
-        buildCapitalInvestRecapDureeContent(dossier),
+        ANNEXES_CAPITAL_INVEST_RECAP_ROW_DUREE_CONTENT,
+        variables
+      ),
+    },
+    {
+      title: ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_TITLE,
+      contentSegments: renderTemplateSegments(
+        ANNEXES_CAPITAL_INVEST_RECAP_ROW_CONNAISSANCES_CONTENT,
+        variables
+      ),
+    },
+    {
+      title: ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_TITLE,
+      contentSegments: renderTemplateSegments(
+        ANNEXES_CAPITAL_INVEST_RECAP_ROW_RISQUE_CONTENT,
+        variables
+      ),
+    },
+    {
+      title: ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_TITLE,
+      contentSegments: renderTemplateSegments(
+        ANNEXES_CAPITAL_INVEST_RECAP_ROW_REEXAMEN_CONTENT,
         variables
       ),
     },
