@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildDistinctNomProduits,
-  buildNomProduitSuggestions,
-} from "./nom-produit-suggestions";
+import { buildNomProduitSuggestions } from "./nom-produit-suggestions";
 
 describe("buildNomProduitSuggestions", () => {
   const sample = [

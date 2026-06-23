@@ -3,7 +3,7 @@ import type { ConditionTypeProduit } from "@/lib/api/tauri-etiquettes";
 export function buildTypeProduitConditionConfig(
   types: string[],
   nomsProduit: string[]
-): ConditionTypeProduit {
+): Record<string, unknown> {
   return {
     types,
     noms_produit: nomsProduit.length > 0 ? nomsProduit : undefined,

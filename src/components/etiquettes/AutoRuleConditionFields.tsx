@@ -132,10 +132,6 @@ export function AutoRuleConditionFields({
     [conditionConfig]
   );
 
-  const toggleType = (list: string[], value: string, setter: (types: string[]) => void) => {
-    setter(list.includes(value) ? list.filter((x) => x !== value) : [...list, value]);
-  };
-
   const toggleCategory = (value: string) => {
     const next = categories.includes(value)
       ? categories.filter((c) => c !== value)

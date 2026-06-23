@@ -275,10 +275,16 @@ export function RuleLeafFields({
           nomsProduit={typeProduitNoms}
           highlightInvalid={highlightInvalid}
           onTypesChange={(next) =>
-            setConfig(buildTypeProduitConditionConfig(next, typeProduitNoms))
+            onChange({
+              ...leaf,
+              config: buildTypeProduitConditionConfig(next, typeProduitNoms),
+            })
           }
           onNomsProduitChange={(next) =>
-            setConfig(buildTypeProduitConditionConfig(typeProduitTypes, next))
+            onChange({
+              ...leaf,
+              config: buildTypeProduitConditionConfig(typeProduitTypes, next),
+            })
           }
         />
       )}
