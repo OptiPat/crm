@@ -21,6 +21,7 @@ export interface EtiquetteRuleSummaryInput {
   moisDebut: number;
   moisFin: number;
   typesProduitCount: number;
+  nomsProduitCount?: number;
   /** Types produit pour EVENEMENT_SOUSCRIPTION (sinon `typesProduitCount`). */
   eventTypesProduitCount?: number;
   /** Pose de l'étiquette à chaque investissement (événement souscription). */
@@ -94,12 +95,23 @@ export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): st
     case "PERIODE_ANNEE":
       detail = `de ${monthLabel(input.moisDebut)} à ${monthLabel(input.moisFin)} (chaque année)`;
       break;
-    case "TYPE_PRODUIT":
+    case "TYPE_PRODUIT": {
+      const parts: string[] = [];
+      if (input.typesProduitCount > 0) {
+        parts.push(
+          `${input.typesProduitCount} type${input.typesProduitCount > 1 ? "s" : ""}`
+        );
+      }
+      const nomsCount = input.nomsProduitCount ?? 0;
+      if (nomsCount > 0) {
+        parts.push(`${nomsCount} nom${nomsCount > 1 ? "s" : ""} de produit`);
+      }
       detail =
-        input.typesProduitCount > 0
-          ? `détient au moins un parmi ${input.typesProduitCount} type${input.typesProduitCount > 1 ? "s" : ""} de produit`
-          : "aucun type de produit sélectionné";
+        parts.length > 0
+          ? `détient au moins un investissement (${parts.join(" + ")})`
+          : "aucun type ni nom de produit sélectionné";
       break;
+    }
     case "DATE_APPROCHE_INVESTISSEMENT": {
       const types =
         input.invTypesProduitCount > 0

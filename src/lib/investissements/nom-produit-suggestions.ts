@@ -43,3 +43,37 @@ export function buildNomProduitSuggestions(
     )
     .slice(0, limit);
 }
+
+/** Noms distincts du portefeuille, optionnellement filtrés par types produit. */
+export function buildDistinctNomProduits(
+  investissements: InvestissementNomSource[],
+  typeFilters?: string[],
+  limit = 200
+): NomProduitSuggestion[] {
+  const counts = new Map<string, { nom_produit: string; usage_count: number }>();
+  const typeSet =
+    typeFilters && typeFilters.length > 0 ? new Set(typeFilters) : null;
+
+  for (const inv of investissements) {
+    if (typeSet && !typeSet.has(inv.type_produit)) continue;
+
+    const trimmed = inv.nom_produit.trim();
+    if (!trimmed) continue;
+
+    const key = trimmed.toLowerCase();
+    const existing = counts.get(key);
+    if (existing) {
+      existing.usage_count += 1;
+    } else {
+      counts.set(key, { nom_produit: trimmed, usage_count: 1 });
+    }
+  }
+
+  return Array.from(counts.values())
+    .sort(
+      (a, b) =>
+        b.usage_count - a.usage_count ||
+        a.nom_produit.localeCompare(b.nom_produit, "fr", { sensitivity: "base" })
+    )
+    .slice(0, limit);
+}

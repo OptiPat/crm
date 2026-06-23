@@ -15,6 +15,7 @@ import {
 } from "@/lib/etiquettes/etiquette-condition-labels";
 import { RuleLeafFields } from "@/components/etiquettes/RuleLeafFields";
 import { SegmentRulePreview } from "@/components/etiquettes/SegmentRulePreview";
+import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
 import type { CustomFieldDef } from "@/lib/api/tauri-custom-fields";
 
 const CONDITION_TYPES: ConditionType[] = [
@@ -42,7 +43,7 @@ function newLeaf(
         : type === "A_ETIQUETTE"
           ? { etiquette_id: 0, present: true }
           : type === "TYPE_PRODUIT"
-            ? { types: [] }
+            ? buildTypeProduitConditionConfig([], [])
             : type === "PERIODE_ANNEE"
               ? { mois_debut: 4, mois_fin: 5 }
               : type === "DATE_APPROCHE"
@@ -81,6 +82,7 @@ export interface ConditionBuilderProps {
   etiquettesOptions?: { id: number; nom: string }[];
   customFieldsOptions?: CustomFieldDef[];
   showPreview?: boolean;
+  highlightRuleLeafIndex?: number | null;
 }
 
 export function ConditionBuilder({
@@ -91,6 +93,7 @@ export function ConditionBuilder({
   etiquettesOptions = [],
   customFieldsOptions = [],
   showPreview = true,
+  highlightRuleLeafIndex = null,
 }: ConditionBuilderProps) {
   const availableTypes: ConditionType[] =
     customFieldsOptions.length > 0
@@ -122,7 +125,15 @@ export function ConditionBuilder({
       </div>
 
       {children.map((leaf, index) => (
-        <div key={index} className="space-y-3 rounded-lg border bg-background p-4 sm:p-5">
+        <div
+          key={index}
+          id={`rule-leaf-${index}`}
+          className={
+            highlightRuleLeafIndex === index
+              ? "space-y-3 rounded-lg border bg-background p-4 sm:p-5 ring-2 ring-destructive ring-offset-2 ring-offset-background"
+              : "space-y-3 rounded-lg border bg-background p-4 sm:p-5"
+          }
+        >
           <div className="flex items-center justify-between gap-2">
             <Select
               value={leaf.type}
@@ -161,6 +172,7 @@ export function ConditionBuilder({
             onChange={(next) => onChange(children.map((c, i) => (i === index ? next : c)))}
             etiquettesOptions={etiquettesOptions}
             customFieldsOptions={customFieldsOptions}
+            highlightInvalid={highlightRuleLeafIndex === index}
           />
         </div>
       ))}

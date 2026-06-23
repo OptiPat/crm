@@ -21,6 +21,7 @@ const base: EtiquetteFormValidationInput = {
   ruleChildren: [],
   conditionType: "DELAI_SANS_CONTACT",
   typesProduitSelectionnes: [],
+  nomsProduitSelectionnes: [],
   tmiTranchesSelectionnees: [],
   irNetMontant: null,
 };
@@ -99,15 +100,45 @@ describe("validateEtiquetteForm", () => {
     ).toMatch(/condition combinée/i);
   });
 
-  it("type produit sans type sélectionné", () => {
+  it("type produit sans type ni nom sélectionné", () => {
     expect(
       validateEtiquetteForm({
         ...base,
         isAuto: true,
         conditionType: "TYPE_PRODUIT",
         typesProduitSelectionnes: [],
+        nomsProduitSelectionnes: [],
       })
-    ).toMatch(/type de produit/i);
+    ).toMatch(/type ou un nom/i);
+  });
+
+  it("type produit avec nom seulement", () => {
+    expect(
+      validateEtiquetteForm({
+        ...base,
+        isAuto: true,
+        conditionType: "TYPE_PRODUIT",
+        typesProduitSelectionnes: [],
+        nomsProduitSelectionnes: ["Epargne Pierre"],
+      })
+    ).toBeNull();
+  });
+
+  it("combo type produit sans type ni nom", () => {
+    expect(
+      validateEtiquetteForm({
+        ...base,
+        isAuto: true,
+        useComboRule: true,
+        ruleChildren: [
+          {
+            categories: ["CLIENT"],
+            type: "TYPE_PRODUIT",
+            config: { types: [], noms_produit: [] },
+          },
+        ],
+      })
+    ).toMatch(/type ou un nom/i);
   });
 
   it("segment lié : pas d'exigence de catégorie", () => {

@@ -11,6 +11,8 @@ import {
 import type { RuleLeaf } from "@/lib/etiquettes/rule-ast";
 import { MOIS_LABELS } from "@/lib/api/tauri-etiquettes";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
+import { TypeProduitConditionFields } from "@/components/etiquettes/TypeProduitConditionFields";
+import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
 import { IrNetConditionFields, TmiTranchePicker } from "@/components/etiquettes/FiscalRuleFields";
 import {
   type IrNetOperator,
@@ -46,11 +48,13 @@ export function RuleLeafFields({
   onChange,
   etiquettesOptions = [],
   customFieldsOptions = [],
+  highlightInvalid = false,
 }: {
   leaf: RuleLeaf;
   onChange: (leaf: RuleLeaf) => void;
   etiquettesOptions?: { id: number; nom: string }[];
   customFieldsOptions?: CustomFieldDef[];
+  highlightInvalid?: boolean;
 }) {
   const setConfig = (patch: Record<string, unknown>) =>
     onChange({ ...leaf, config: { ...leaf.config, ...patch } });
@@ -62,11 +66,9 @@ export function RuleLeafFields({
     onChange({ ...leaf, categories: next });
   };
 
-  const toggleType = (value: string) => {
-    const types = (leaf.config.types as string[] | undefined) ?? [];
-    const next = types.includes(value) ? types.filter((t) => t !== value) : [...types, value];
-    setConfig({ types: next });
-  };
+
+  const typeProduitTypes = (leaf.config.types as string[] | undefined) ?? [];
+  const typeProduitNoms = (leaf.config.noms_produit as string[] | undefined) ?? [];
 
   const invTypes = (leaf.config.types_produit as string[] | undefined) ?? [];
 
@@ -267,17 +269,18 @@ export function RuleLeafFields({
       )}
 
       {leaf.type === "TYPE_PRODUIT" && (
-        <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-          {INVESTISSEMENT_TYPE_GROUPS.flatMap((g) => g.types).map((t) => (
-            <label key={t.value} className="flex items-center gap-1 text-xs">
-              <Checkbox
-                checked={((leaf.config.types as string[]) ?? []).includes(t.value)}
-                onCheckedChange={() => toggleType(t.value)}
-              />
-              {t.label}
-            </label>
-          ))}
-        </div>
+        <TypeProduitConditionFields
+          compact
+          types={typeProduitTypes}
+          nomsProduit={typeProduitNoms}
+          highlightInvalid={highlightInvalid}
+          onTypesChange={(next) =>
+            setConfig(buildTypeProduitConditionConfig(next, typeProduitNoms))
+          }
+          onNomsProduitChange={(next) =>
+            setConfig(buildTypeProduitConditionConfig(typeProduitTypes, next))
+          }
+        />
       )}
 
       {leaf.type === "A_ETIQUETTE" && (

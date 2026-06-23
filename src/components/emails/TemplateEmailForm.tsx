@@ -97,6 +97,14 @@ import {
   type TemplateEmailTriggerConfig,
 } from "@/lib/emails/template-email-trigger";
 import { CategoryTogglePills } from "@/components/etiquettes/etiquette-form-ui";
+import {
+  parseConditionConfig,
+  type ConditionTypeProduit,
+} from "@/lib/api/tauri-etiquettes";
+import {
+  isTypeProduitConditionValid,
+  parseTypeProduitConditionConfig,
+} from "@/lib/etiquettes/type-produit-condition";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
@@ -404,6 +412,15 @@ export function TemplateEmailForm({
       if (!tutoiementDraft.sujet.trim() || !tuPlain) {
         toast.error("Tutoiement : renseignez l'objet et le message (onglet Tutoiement)");
         setFormTab("tutoiement");
+        return;
+      }
+    }
+    if (emailTrigger.enabled && emailTrigger.condition_type === "TYPE_PRODUIT") {
+      const cfg = parseConditionConfig<ConditionTypeProduit>(emailTrigger.condition_config);
+      const { types, nomsProduit } = parseTypeProduitConditionConfig(cfg);
+      if (!isTypeProduitConditionValid(types, nomsProduit)) {
+        toast.error("Déclencheur : sélectionnez au moins un type ou un nom de produit");
+        setFormTab("declencheur");
         return;
       }
     }

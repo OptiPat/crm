@@ -20,7 +20,7 @@ export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
   DELAI_SANS_CONTACT: "Délai sans contact",
   DATE_APPROCHE: "Date sur la fiche contact",
   PERIODE_ANNEE: "Période de l'année",
-  TYPE_PRODUIT: "Détient un type de produit",
+  TYPE_PRODUIT: "Détient un type ou nom de produit",
   DATE_APPROCHE_INVESTISSEMENT: "Date sur un investissement",
   AGE_APPROCHE: "Âge approchant",
   TMI: "TMI (tranche marginale d'imposition)",

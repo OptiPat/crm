@@ -66,6 +66,7 @@ describe("exceltis campaign flow (simulation frontend)", () => {
         ruleChildren: [],
         conditionType: "",
         typesProduitSelectionnes: [],
+        nomsProduitSelectionnes: [],
         tmiTranchesSelectionnees: [],
         irNetMontant: null,
       })

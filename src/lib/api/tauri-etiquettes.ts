@@ -194,7 +194,9 @@ export interface ConditionPeriodeAnnee {
 }
 
 export interface ConditionTypeProduit {
-  types: string[];  // Liste des types de produits
+  types: string[];
+  /** Noms produit (investissements) — combinés en ET avec `types` si les deux sont renseignés. */
+  noms_produit?: string[];
 }
 
 /** Déclenché à l'enregistrement d'un investissement (date de souscription). */
@@ -558,7 +560,7 @@ export const CONDITION_LABELS: Record<ConditionType, string> = {
   DELAI_SANS_CONTACT: "Le client n'a pas été contacté depuis X jours",
   DATE_APPROCHE: "La date de [champ] est dans moins de X jours",
   PERIODE_ANNEE: "Nous sommes entre [mois] et [mois]",
-  TYPE_PRODUIT: "Le client détient un produit de type...",
+  TYPE_PRODUIT: "Le client détient un produit (type et/ou nom)...",
   DATE_APPROCHE_INVESTISSEMENT: "Une date sur un investissement (contact ou foyer) approche",
   AGE_APPROCHE: "Le client approche d'un âge cible",
 };

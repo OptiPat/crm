@@ -1,5 +1,8 @@
 //! Campagnes email bulletins SCPI (digest par contact, file modèle sans étiquette).
 
+use super::investissement_produit_match::{
+    nom_produit_matches, normalize_produit_match_key, MIN_PRODUIT_MATCH_LEN,
+};
 use super::models::NewTemplateEmail;
 use super::Database;
 use rusqlite::{params, Result};
@@ -37,26 +40,8 @@ pub struct PrepareScpiCampaignResult {
     pub message: String,
 }
 
-fn normalize_match_key(value: &str) -> String {
-    value
-        .to_lowercase()
-        .chars()
-        .filter_map(|c| match c {
-            'à' | 'á' | 'â' | 'ä' | 'ã' | 'å' => Some('a'),
-            'ç' => Some('c'),
-            'è' | 'é' | 'ê' | 'ë' => Some('e'),
-            'ì' | 'í' | 'î' | 'ï' => Some('i'),
-            'ò' | 'ó' | 'ô' | 'ö' | 'õ' => Some('o'),
-            'ù' | 'ú' | 'û' | 'ü' => Some('u'),
-            'ÿ' => Some('y'),
-            c if c.is_ascii_alphanumeric() => Some(c),
-            _ => None,
-        })
-        .collect()
-}
-
-pub fn normalize_batch_key(periode: &str) -> String {
-    normalize_match_key(periode)
+fn normalize_batch_key(periode: &str) -> String {
+    normalize_produit_match_key(periode)
 }
 
 /// SCPI rattachées au foyer (`foyer_id`) : visibles par les adultes du foyer, pas par les enfants.
@@ -66,36 +51,6 @@ pub fn contact_inherits_foyer_scpi_investments(role_foyer: Option<&str>) -> bool
         role_foyer.map(str::trim).filter(|s| !s.is_empty()),
         Some("ENFANT")
     )
-}
-
-const MIN_PRODUIT_MATCH_LEN: usize = 4;
-
-fn produit_tokens(value: &str) -> Vec<String> {
-    value
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|s| !s.is_empty())
-        .map(|s| normalize_match_key(s))
-        .filter(|s| s.len() >= MIN_PRODUIT_MATCH_LEN)
-        .collect()
-}
-
-fn nom_produit_matches(investissement_nom: &str, bulletin_key: &str) -> bool {
-    let key_norm = normalize_match_key(bulletin_key);
-    if key_norm.len() < MIN_PRODUIT_MATCH_LEN {
-        return false;
-    }
-    let inv_norm = normalize_match_key(investissement_nom);
-    if inv_norm == key_norm {
-        return true;
-    }
-    let bulletin_tokens = produit_tokens(bulletin_key);
-    if bulletin_tokens.is_empty() {
-        return false;
-    }
-    let inv_tokens = produit_tokens(investissement_nom);
-    bulletin_tokens
-        .iter()
-        .all(|bt| inv_tokens.iter().any(|it| it == bt))
 }
 
 fn pick_display_produit_nom(investissement_noms: &[String], bulletin_key: &str) -> String {

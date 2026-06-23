@@ -238,8 +238,22 @@ impl Database {
                                     .collect()
                             })
                             .unwrap_or_default();
-                        self.contact_has_investment_types(contact_id, contact.foyer_id, &types)
-                            .unwrap_or(false)
+                        let noms: Vec<String> = parsed["noms_produit"]
+                            .as_array()
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .filter(|s| !s.trim().is_empty())
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        self.contact_has_investment_types_and_noms(
+                            contact_id,
+                            contact.foyer_id,
+                            &types,
+                            &noms,
+                        )
+                        .unwrap_or(false)
                     } else {
                         false
                     }

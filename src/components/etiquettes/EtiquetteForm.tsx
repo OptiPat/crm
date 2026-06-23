@@ -46,6 +46,8 @@ import {
   type ConditionEvenementSouscription,
 } from "@/lib/api/tauri-etiquettes";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
+import { TypeProduitConditionFields } from "@/components/etiquettes/TypeProduitConditionFields";
+import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
 import {
   localDatetimeToUnix,
   unixToLocalDatetime,
@@ -161,6 +163,7 @@ export function EtiquetteForm({
   const [creationType, setCreationType] = useState<EtiquetteCreationIntent | null>(null);
   const [creationPickerExpanded, setCreationPickerExpanded] = useState(false);
   const [fieldHighlight, setFieldHighlight] = useState<EtiquetteFormFieldId | null>(null);
+  const [highlightRuleLeafIndex, setHighlightRuleLeafIndex] = useState<number | null>(null);
   const [segmentFormOpen, setSegmentFormOpen] = useState(false);
   
   // État du formulaire
@@ -182,6 +185,7 @@ export function EtiquetteForm({
   const [moisDebut, setMoisDebut] = useState(4);
   const [moisFin, setMoisFin] = useState(5);
   const [typesProduitSelectionnes, setTypesProduitSelectionnes] = useState<string[]>([]);
+  const [nomsProduitSelectionnes, setNomsProduitSelectionnes] = useState<string[]>([]);
   const [invChampDate, setInvChampDate] = useState("date_fin_demembrement");
   const [invJoursAvant, setInvJoursAvant] = useState(180);
   const [invTypesProduit, setInvTypesProduit] = useState<string[]>([]);
@@ -232,6 +236,7 @@ export function EtiquetteForm({
         moisDebut,
         moisFin,
         typesProduitCount: typesProduitSelectionnes.length,
+        nomsProduitCount: nomsProduitSelectionnes.length,
         eventTypesProduitCount:
           conditionType === "EVENEMENT_SOUSCRIPTION"
             ? eventTypesProduit.length
@@ -258,6 +263,7 @@ export function EtiquetteForm({
       moisDebut,
       moisFin,
       typesProduitSelectionnes.length,
+      nomsProduitSelectionnes.length,
       eventTypesProduit.length,
       eventAChaqueSouscription,
       invChampDate,
@@ -380,7 +386,10 @@ export function EtiquetteForm({
             }
           } else if (source.auto_condition_type === "TYPE_PRODUIT") {
             const config = parseConditionConfig<ConditionTypeProduit>(source.auto_condition_config);
-            if (config) setTypesProduitSelectionnes(config.types);
+            if (config) {
+              setTypesProduitSelectionnes(config.types ?? []);
+              setNomsProduitSelectionnes(config.noms_produit ?? []);
+            }
           } else if (source.auto_condition_type === "DATE_APPROCHE_INVESTISSEMENT") {
             const config = parseConditionConfig<ConditionDateApprocheInvestissement>(
               source.auto_condition_config
@@ -449,6 +458,7 @@ export function EtiquetteForm({
         setMoisDebut(4);
         setMoisFin(5);
         setTypesProduitSelectionnes([]);
+        setNomsProduitSelectionnes([]);
         setInvChampDate("date_fin_demembrement");
         setInvJoursAvant(180);
         setInvTypesProduit([]);
@@ -511,6 +521,7 @@ export function EtiquetteForm({
         moisDebut,
         moisFin,
         typesProduitSelectionnes,
+        nomsProduitSelectionnes,
         invChampDate,
         invJoursAvant,
         invTypesProduit,
@@ -536,6 +547,7 @@ export function EtiquetteForm({
       moisDebut,
       moisFin,
       typesProduitSelectionnes,
+      nomsProduitSelectionnes,
       invChampDate,
       invJoursAvant,
       invTypesProduit,
@@ -550,24 +562,28 @@ export function EtiquetteForm({
     Boolean(etiquette) || Boolean(duplicateFrom) || formTab === "general";
 
   useEffect(() => {
-    if (!open || !fieldHighlight) return;
+    if (!open || (!fieldHighlight && highlightRuleLeafIndex == null)) return;
     const id =
-      fieldHighlight === "email-template"
-        ? "email-template"
-        : fieldHighlight === "email-heure"
-          ? "email-envoi-heure"
-          : fieldHighlight === "email-date"
-            ? "email-envoi-prevu"
-            : fieldHighlight === "rule-ir-net"
-              ? "ir-net-montant"
-              : fieldHighlight;
+      highlightRuleLeafIndex != null
+        ? `rule-leaf-${highlightRuleLeafIndex}`
+        : fieldHighlight === "email-template"
+          ? "email-template"
+          : fieldHighlight === "email-heure"
+            ? "email-envoi-heure"
+            : fieldHighlight === "email-date"
+              ? "email-envoi-prevu"
+              : fieldHighlight === "rule-ir-net"
+                ? "ir-net-montant"
+                : fieldHighlight;
     const t = window.setTimeout(() => {
-      const el = document.getElementById(id);
+      const el = document.getElementById(id ?? "");
       el?.scrollIntoView({ block: "center", behavior: "smooth" });
-      el?.focus();
+      if (el instanceof HTMLElement && "focus" in el) {
+        el.focus();
+      }
     }, 80);
     return () => window.clearTimeout(t);
-  }, [open, fieldHighlight, formTab]);
+  }, [open, fieldHighlight, highlightRuleLeafIndex, formTab]);
 
   // Charger l'action « tâche » existante (édition ou duplication).
   useEffect(() => {
@@ -629,6 +645,7 @@ export function EtiquetteForm({
       ruleChildren,
       conditionType,
       typesProduitSelectionnes,
+      nomsProduitSelectionnes,
       tmiTranchesSelectionnees,
       irNetMontant: irNetMontant === "" ? null : Number(irNetMontant),
     });
@@ -636,8 +653,10 @@ export function EtiquetteForm({
       toast.error(validationError.message);
       setFormTab(validationError.tab);
       setFieldHighlight(validationError.fieldId ?? null);
+      setHighlightRuleLeafIndex(validationError.ruleLeafIndex ?? null);
       return;
     }
+    setHighlightRuleLeafIndex(null);
     const tacheError = validateEtiquetteTacheAction(tacheTitre, tacheActif);
     if (tacheError) {
       toast.error(tacheError.message);
@@ -678,7 +697,9 @@ export function EtiquetteForm({
         } else if (conditionType === "PERIODE_ANNEE") {
           autoConditionConfig = stringifyConditionConfig({ mois_debut: moisDebut, mois_fin: moisFin });
         } else if (conditionType === "TYPE_PRODUIT") {
-          autoConditionConfig = stringifyConditionConfig({ types: typesProduitSelectionnes });
+          autoConditionConfig = stringifyConditionConfig(
+            buildTypeProduitConditionConfig(typesProduitSelectionnes, nomsProduitSelectionnes)
+          );
         } else if (conditionType === "DATE_APPROCHE_INVESTISSEMENT") {
           autoConditionConfig = stringifyConditionConfig({
             champ: invChampDate,
@@ -1157,10 +1178,14 @@ export function EtiquetteForm({
                             op={ruleOp}
                             onOpChange={setRuleOp}
                             children={ruleChildren}
-                            onChange={setRuleChildren}
+                            onChange={(next) => {
+                              setRuleChildren(next);
+                              setHighlightRuleLeafIndex(null);
+                            }}
                             etiquettesOptions={allEtiquettes}
                             customFieldsOptions={customFields}
                             showPreview
+                            highlightRuleLeafIndex={highlightRuleLeafIndex}
                           />
                         </div>
                       ) : (
@@ -1309,44 +1334,15 @@ export function EtiquetteForm({
                 )}
 
                 {conditionType === "TYPE_PRODUIT" && (
-                  <div className="space-y-2">
-                    <Label>Types de produits détenus (au moins un)</Label>
-                    <div
-                      id="rule-types-produit"
-                      className={cn(
-                        "max-h-48 overflow-y-auto border rounded-md p-3 space-y-3",
-                        fieldHighlight === "rule-types-produit" &&
-                          "ring-2 ring-destructive ring-offset-2 ring-offset-background"
-                      )}
-                    >
-                      {INVESTISSEMENT_TYPE_GROUPS.map((group) => (
-                        <div key={group.label}>
-                          <p className="text-xs font-semibold text-muted-foreground mb-1">
-                            {group.label}
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {group.types.map((t) => (
-                              <div key={t.value} className="flex items-center gap-1.5">
-                                <Checkbox
-                                  id={`type-${t.value}`}
-                                  checked={typesProduitSelectionnes.includes(t.value)}
-                                  onCheckedChange={() =>
-                                    toggleTypeInList(t.value, setTypesProduitSelectionnes)
-                                  }
-                                />
-                                <Label
-                                  htmlFor={`type-${t.value}`}
-                                  className="text-sm font-normal cursor-pointer"
-                                >
-                                  {t.label}
-                                </Label>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  <TypeProduitConditionFields
+                    types={typesProduitSelectionnes}
+                    nomsProduit={nomsProduitSelectionnes}
+                    onTypesChange={setTypesProduitSelectionnes}
+                    onNomsProduitChange={setNomsProduitSelectionnes}
+                    typesFieldId="rule-types-produit"
+                    typesFieldHighlight={fieldHighlight === "rule-types-produit"}
+                    highlightInvalid={fieldHighlight === "rule-types-produit"}
+                  />
                 )}
 
                 {conditionType === "DATE_APPROCHE_INVESTISSEMENT" && (
@@ -1514,7 +1510,12 @@ export function EtiquetteForm({
                                     stringifyConditionConfig(
                                       conditionType === "DELAI_SANS_CONTACT"
                                         ? { jours: delaiJours, inclure_sans_date: inclureSansDate }
-                                        : { types: typesProduitSelectionnes }
+                                        : conditionType === "TYPE_PRODUIT"
+                                          ? buildTypeProduitConditionConfig(
+                                              typesProduitSelectionnes,
+                                              nomsProduitSelectionnes
+                                            )
+                                          : { types: typesProduitSelectionnes }
                                     ) || "{}"
                                   ) as Record<string, unknown>,
                                   categoriesSelectionnees

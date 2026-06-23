@@ -5,6 +5,8 @@ import {
   type RuleLeaf,
   type RuleOp,
 } from "@/lib/etiquettes/rule-ast";
+import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
+import { isRuleLeafValidForPreview } from "@/lib/etiquettes/rule-leaf-validation";
 import type { IrNetOperator } from "@/lib/etiquettes/fiscal-tmi";
 
 export interface EtiquetteRulePreviewInput {
@@ -25,6 +27,7 @@ export interface EtiquetteRulePreviewInput {
   moisDebut: number;
   moisFin: number;
   typesProduitSelectionnes: string[];
+  nomsProduitSelectionnes: string[];
   invChampDate: string;
   invJoursAvant: number;
   invTypesProduit: string[];
@@ -42,7 +45,7 @@ export function buildEtiquetteRulePreviewJson(input: EtiquetteRulePreviewInput):
   }
 
   if (input.useComboRule && input.ruleChildren.length > 0) {
-    if (input.ruleChildren.some((c) => c.categories.length === 0)) return null;
+    if (input.ruleChildren.some((c) => !isRuleLeafValidForPreview(c))) return null;
     return stringifyRuleTree(buildRuleTree(input.ruleChildren, input.ruleOp));
   }
 
@@ -67,7 +70,16 @@ export function buildEtiquetteRulePreviewJson(input: EtiquetteRulePreviewInput):
       config = { mois_debut: input.moisDebut, mois_fin: input.moisFin };
       break;
     case "TYPE_PRODUIT":
-      config = { types: input.typesProduitSelectionnes };
+      config = buildTypeProduitConditionConfig(
+        input.typesProduitSelectionnes,
+        input.nomsProduitSelectionnes
+      );
+      if (
+        input.typesProduitSelectionnes.length === 0 &&
+        input.nomsProduitSelectionnes.length === 0
+      ) {
+        return null;
+      }
       break;
     case "DATE_APPROCHE_INVESTISSEMENT":
       config = {

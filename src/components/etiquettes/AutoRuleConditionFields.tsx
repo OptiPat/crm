@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/select";
 import { CategoryTogglePills } from "@/components/etiquettes/etiquette-form-ui";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
+import { TypeProduitConditionFields } from "@/components/etiquettes/TypeProduitConditionFields";
+import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
 import {
   CONDITION_TYPE_LABELS,
   type ConditionType,
@@ -106,6 +108,10 @@ export function AutoRuleConditionFields({
   );
   const typesProduit = useMemo(
     () => parseConditionConfig<ConditionTypeProduit>(conditionConfig)?.types ?? [],
+    [conditionConfig]
+  );
+  const nomsProduit = useMemo(
+    () => parseConditionConfig<ConditionTypeProduit>(conditionConfig)?.noms_produit ?? [],
     [conditionConfig]
   );
   const invDate = useMemo(
@@ -330,35 +336,24 @@ export function AutoRuleConditionFields({
       )}
 
       {conditionType === "TYPE_PRODUIT" && (
-        <div className="space-y-2">
-          <Label>Types de produits détenus</Label>
-          <div className="max-h-40 overflow-y-auto border rounded-md p-2 space-y-2">
-            {INVESTISSEMENT_TYPE_GROUPS.map((group) => (
-              <div key={group.label}>
-                <p className="text-xs font-semibold text-muted-foreground">{group.label}</p>
-                <div className="flex flex-wrap gap-2">
-                  {group.types.map((t) => (
-                    <div key={t.value} className="flex items-center gap-1.5">
-                      <Checkbox
-                        checked={typesProduit.includes(t.value)}
-                        onCheckedChange={() =>
-                          toggleType(typesProduit, t.value, (next) =>
-                            emit(
-                              conditionType,
-                              stringifyConditionConfig({ types: next }),
-                              categories
-                            )
-                          )
-                        }
-                      />
-                      <Label className="text-xs font-normal cursor-pointer">{t.label}</Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <TypeProduitConditionFields
+          types={typesProduit}
+          nomsProduit={nomsProduit}
+          onTypesChange={(next) =>
+            emit(
+              conditionType,
+              stringifyConditionConfig(buildTypeProduitConditionConfig(next, nomsProduit)),
+              categories
+            )
+          }
+          onNomsProduitChange={(next) =>
+            emit(
+              conditionType,
+              stringifyConditionConfig(buildTypeProduitConditionConfig(typesProduit, next)),
+              categories
+            )
+          }
+        />
       )}
 
       {conditionType === "DATE_APPROCHE_INVESTISSEMENT" && (

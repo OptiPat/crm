@@ -2,6 +2,7 @@
 // Retourne le premier message d'erreur, ou null si le formulaire est valide.
 
 import { isExceltisEtiquetteNom } from "@/lib/etiquettes/exceltis";
+import { isTypeProduitConditionValid } from "@/lib/etiquettes/type-produit-condition";
 
 export type EtiquetteFormTab = "general" | "rule" | "email" | "action";
 
@@ -37,6 +38,7 @@ export interface EtiquetteFormValidationInput {
   }>;
   conditionType: string;
   typesProduitSelectionnes: string[];
+  nomsProduitSelectionnes: string[];
   tmiTranchesSelectionnees: number[];
   irNetMontant: number | null;
 }
@@ -45,6 +47,8 @@ export interface EtiquetteFormValidationError {
   message: string;
   tab: EtiquetteFormTab;
   fieldId?: EtiquetteFormFieldId;
+  /** Index de la leaf combo en erreur (scroll / surbrillance). */
+  ruleLeafIndex?: number;
 }
 
 export function validateEtiquetteFormDetailed(
@@ -115,7 +119,8 @@ export function validateEtiquetteFormDetailed(
   }
 
   if (i.actif && i.isAuto && i.useComboRule) {
-    for (const child of i.ruleChildren) {
+    for (let leafIndex = 0; leafIndex < i.ruleChildren.length; leafIndex++) {
+      const child = i.ruleChildren[leafIndex];
       if (child.type === "TMI") {
         const tranches = (child.config?.tranches as unknown[] | undefined) ?? [];
         if (tranches.length === 0) {
@@ -123,6 +128,7 @@ export function validateEtiquetteFormDetailed(
             message: "Sélectionnez au moins une tranche TMI",
             tab: "rule",
             fieldId: "rule-tmi",
+            ruleLeafIndex: leafIndex,
           };
         }
       }
@@ -133,6 +139,19 @@ export function validateEtiquetteFormDetailed(
             message: "Indiquez le montant d'IR net à comparer",
             tab: "rule",
             fieldId: "rule-ir-net",
+            ruleLeafIndex: leafIndex,
+          };
+        }
+      }
+      if (child.type === "TYPE_PRODUIT") {
+        const types = (child.config?.types as unknown[] | undefined) ?? [];
+        const noms = (child.config?.noms_produit as unknown[] | undefined) ?? [];
+        if (!isTypeProduitConditionValid(types as string[], noms as string[])) {
+          return {
+            message: "Sélectionnez au moins un type ou un nom de produit",
+            tab: "rule",
+            fieldId: "rule-types-produit",
+            ruleLeafIndex: leafIndex,
           };
         }
       }
@@ -142,10 +161,10 @@ export function validateEtiquetteFormDetailed(
   if (
     autoSansSegmentNiCombo &&
     i.conditionType === "TYPE_PRODUIT" &&
-    i.typesProduitSelectionnes.length === 0
+    !isTypeProduitConditionValid(i.typesProduitSelectionnes, i.nomsProduitSelectionnes)
   ) {
     return {
-      message: "Sélectionnez au moins un type de produit",
+      message: "Sélectionnez au moins un type ou un nom de produit",
       tab: "rule",
       fieldId: "rule-types-produit",
     };

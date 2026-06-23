@@ -1,3 +1,4 @@
+use super::investissement_produit_match::nom_produit_matches;
 use super::Database;
 use rusqlite::{params, Result};
 
@@ -109,29 +110,75 @@ impl Database {
     const INVESTISSEMENT_SCOPE_WHERE: &'static str =
         "(contact_id = ?1 OR (?2 IS NOT NULL AND foyer_id = ?2))";
 
-    pub(crate) fn contact_has_investment_types(
+    /// Au moins un investissement (contact ou foyer) correspond aux filtres.
+    /// `types` et `noms_produit` sont combinés en ET sur la même ligne ; l'un des deux peut être vide.
+    pub(crate) fn contact_has_investment_types_and_noms(
         &self,
         contact_id: i64,
         foyer_id: Option<i64>,
         types: &[String],
+        noms: &[String],
     ) -> Result<bool> {
-        if types.is_empty() {
+        if types.is_empty() && noms.is_empty() {
             return Ok(false);
         }
-        let types_str = types
-            .iter()
-            .map(|t| format!("'{}'", t.replace('\'', "''")))
-            .collect::<Vec<_>>()
-            .join(",");
+
+        // Chemin rapide : types seuls (COUNT, pas de fuzzy match).
+        if noms.is_empty() && !types.is_empty() {
+            let types_str = types
+                .iter()
+                .map(|t| format!("'{}'", t.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",");
+            let sql = format!(
+                "SELECT COUNT(*) FROM investissements WHERE {} AND type_produit IN ({})",
+                Self::INVESTISSEMENT_SCOPE_WHERE,
+                types_str
+            );
+            let count: i64 = self
+                .conn
+                .query_row(&sql, params![contact_id, foyer_id], |row| row.get(0))?;
+            return Ok(count > 0);
+        }
+
+        let type_filter = if types.is_empty() {
+            String::new()
+        } else {
+            let types_str = types
+                .iter()
+                .map(|t| format!("'{}'", t.replace('\'', "''")))
+                .collect::<Vec<_>>()
+                .join(",");
+            format!(" AND type_produit IN ({})", types_str)
+        };
+
+        let nom_filter = if noms.is_empty() {
+            String::new()
+        } else {
+            " AND TRIM(nom_produit) != ''".to_string()
+        };
+
         let sql = format!(
-            "SELECT COUNT(*) FROM investissements WHERE {} AND type_produit IN ({})",
+            "SELECT type_produit, TRIM(nom_produit) FROM investissements
+             WHERE {}{}",
             Self::INVESTISSEMENT_SCOPE_WHERE,
-            types_str
+            format!("{}{}", nom_filter, type_filter)
         );
-        let count: i64 = self
-            .conn
-            .query_row(&sql, params![contact_id, foyer_id], |row| row.get(0))?;
-        Ok(count > 0)
+
+        let mut stmt = self.conn.prepare(&sql)?;
+        let rows = stmt.query_map(params![contact_id, foyer_id], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+
+        for row in rows {
+            let (type_produit, nom) = row?;
+            let type_ok = types.is_empty() || types.iter().any(|t| t == &type_produit);
+            let nom_ok = noms.is_empty() || noms.iter().any(|n| nom_produit_matches(&nom, n));
+            if type_ok && nom_ok {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     pub(crate) fn contact_has_investment_date_approaching(
@@ -3991,6 +4038,271 @@ mod database_integration_tests {
 
         let assigned = db.check_and_apply_auto_etiquettes().unwrap();
         assert!(assigned >= 1);
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn auto_etiquette_type_produit_types_only_matches_empty_nom() {
+        use crate::database::models::{NewContact, NewEtiquette, NewInvestissement};
+
+        let db = test_db();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("scpi-sans-nom@example.com".into()),
+                ..sample_contact("LEFEVRE", "Claire")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "   ".into(),
+            numero_contrat: None,
+            montant_initial: Some(10_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Toute SCPI".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(10),
+                auto_condition_type: Some("TYPE_PRODUIT".into()),
+                auto_condition_config: Some(r#"{"types":["SCPI"]}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn auto_etiquette_type_produit_matches_nom_produit_only() {
+        use crate::database::models::{NewContact, NewEtiquette, NewInvestissement};
+
+        let db = test_db();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("epargne@example.com".into()),
+                ..sample_contact("MARTIN", "Paul")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Epargne Pierre".into(),
+            numero_contrat: None,
+            montant_initial: Some(10_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Comète".into(),
+            numero_contrat: None,
+            montant_initial: Some(5_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Epargne Pierre".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(10),
+                auto_condition_type: Some("TYPE_PRODUIT".into()),
+                auto_condition_config: Some(r#"{"noms_produit":["Epargne Pierre"]}"#.into()),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+
+        let assigned = db.check_and_apply_auto_etiquettes().unwrap();
+        assert!(assigned >= 1);
+
+        let count: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+                params![cid, etiqu.id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn auto_etiquette_type_produit_matches_type_and_nom_together() {
+        use crate::database::models::{NewContact, NewEtiquette, NewInvestissement};
+
+        let db = test_db();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("mix@example.com".into()),
+                ..sample_contact("DURAND", "Anne")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "SCPI".into(),
+            partenaire_id: None,
+            nom_produit: "Epargne Pierre".into(),
+            numero_contrat: None,
+            montant_initial: Some(10_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        db.create_investissement(NewInvestissement {
+            contact_id: Some(cid),
+            foyer_id: None,
+            type_produit: "ASSURANCE_VIE".into(),
+            partenaire_id: None,
+            nom_produit: "Epargne Pierre".into(),
+            numero_contrat: None,
+            montant_initial: Some(5_000),
+            date_souscription: None,
+            date_fin_demembrement: None,
+            date_fin_pret: None,
+            mensualite_credit: None,
+            credit_crd: None,
+            loyer_mensuel: None,
+            versement_programme: None,
+            montant_versement_programme: None,
+            frequence_versement: None,
+            reinvestissement_dividendes: None,
+            notes: None,
+            origine: Some("MON_CONSEIL".into()),
+        })
+        .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "SCPI Epargne Pierre".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(10),
+                auto_condition_type: Some("TYPE_PRODUIT".into()),
+                auto_condition_config: Some(
+                    r#"{"types":["SCPI"],"noms_produit":["Epargne Pierre"]}"#.into(),
+                ),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: None,
+                email_delai_jours: Some(0),
+                email_envoi_prevu: None,
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(false),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
 
         let count: i64 = db
             .conn

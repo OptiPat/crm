@@ -19,6 +19,7 @@ const base = {
   moisDebut: 4,
   moisFin: 5,
   typesProduitSelectionnes: [] as string[],
+  nomsProduitSelectionnes: [] as string[],
   invChampDate: "date_fin_demembrement",
   invJoursAvant: 180,
   invTypesProduit: [] as string[],
@@ -49,11 +50,28 @@ describe("buildEtiquetteRulePreviewJson", () => {
     expect(raw).toContain("365");
   });
 
-  it("événement souscription : pas de preview", () => {
+  it("construit un arbre pour nom produit seul", () => {
+    const raw = buildEtiquetteRulePreviewJson({
+      ...base,
+      conditionType: "TYPE_PRODUIT",
+      nomsProduitSelectionnes: ["Epargne Pierre"],
+    });
+    expect(raw).toContain("TYPE_PRODUIT");
+    expect(raw).toContain("Epargne Pierre");
+  });
+
+  it("combo : null si une leaf TYPE_PRODUIT est incomplète", () => {
     expect(
       buildEtiquetteRulePreviewJson({
         ...base,
-        conditionType: "EVENEMENT_SOUSCRIPTION",
+        useComboRule: true,
+        ruleChildren: [
+          {
+            type: "TYPE_PRODUIT",
+            config: { types: [], noms_produit: [] },
+            categories: ["CLIENT"],
+          },
+        ],
       })
     ).toBeNull();
   });

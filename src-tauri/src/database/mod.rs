@@ -24,6 +24,7 @@ pub mod familles;
 pub mod filleuls;
 pub mod foyers;
 pub mod interactions;
+pub mod investissement_produit_match;
 pub mod investissements;
 pub mod partenaires;
 pub mod settings;

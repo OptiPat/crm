@@ -76,6 +76,7 @@ function storedToSummaryInput(
     moisDebut: 4,
     moisFin: 5,
     typesProduitCount: 0,
+    nomsProduitCount: 0,
     invChampDate: "date_fin_demembrement",
     invJoursAvant: 180,
     invTypesProduitCount: 0,
@@ -112,6 +113,7 @@ function storedToSummaryInput(
   } else if (type === "TYPE_PRODUIT") {
     const config = parseConditionConfig<ConditionTypeProduit>(etiquette.auto_condition_config);
     base.typesProduitCount = config?.types?.length ?? 0;
+    base.nomsProduitCount = config?.noms_produit?.length ?? 0;
   } else if (type === "DATE_APPROCHE_INVESTISSEMENT") {
     const config = parseConditionConfig<ConditionDateApprocheInvestissement>(
       etiquette.auto_condition_config
