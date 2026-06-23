@@ -7,7 +7,11 @@ import { CifPagedDocumentPreview } from "@/components/souscription-cif/CifPagedD
 import { ScpiLettreMissionPreview } from "@/components/souscription-cif/ScpiLettreMissionPreview";
 import { SouscriptionCifDossierForm } from "@/components/souscription-cif/SouscriptionCifDossierForm";
 import { useCifPrintExport } from "@/hooks/use-cif-print-export";
-import { buildCifPrintBundle } from "@/lib/souscription-cif/cif-print-export";
+import {
+  buildCifPrintBundle,
+  cifProductHasConventionRto,
+  getCifPrintDocumentOrder,
+} from "@/lib/souscription-cif/cif-print-export";
 import { getClientCategorieLabel } from "@/lib/contacts/contact-list-labels";
 import { getAllContacts, getContactById, getContactsByFoyer, type Contact } from "@/lib/api/tauri-contacts";
 import { getDocumentsByContact, type Document } from "@/lib/api/tauri-documents";
@@ -191,6 +195,9 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     if (!isCifProductTypeAvailable(value)) return;
     pendingFocusFieldIdRef.current = null;
     setProductType(value);
+    if (!cifProductHasConventionRto(value)) {
+      setActiveDocument((current) => (current === "convention-rto" ? "lettre-mission" : current));
+    }
   }, []);
 
   useEffect(() => {
@@ -200,6 +207,12 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     }
     previousContactIdRef.current = selectedContactId;
   }, [selectedContactId]);
+
+  useEffect(() => {
+    if (!cifProductHasConventionRto(productType) && activeDocument === "convention-rto") {
+      setActiveDocument("lettre-mission");
+    }
+  }, [productType, activeDocument]);
 
   useEffect(() => {
     saveSouscriptionCifDraft({
@@ -435,8 +448,11 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   const clientPdfName = variables.client_nom_prenom?.trim() || "Client";
 
   const printAllDocuments = useCallback(() => {
-    void printDocuments(buildCifPrintBundle(cifPreviews, DOCUMENT_LABELS), clientPdfName);
-  }, [cifPreviews, clientPdfName, printDocuments]);
+    void printDocuments(
+      buildCifPrintBundle(cifPreviews, DOCUMENT_LABELS, getCifPrintDocumentOrder(productType)),
+      clientPdfName
+    );
+  }, [cifPreviews, clientPdfName, printDocuments, productType]);
 
   const printActiveDocument = useCallback(() => {
     void printDocuments(
@@ -506,14 +522,17 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
     return () => window.clearTimeout(timer);
   }, [activeDocument, dossier]);
 
+  const cifDocumentCount = cifProductHasConventionRto(productType) ? 4 : 3;
+
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <div className="space-y-1">
         <h2 className="text-2xl font-serif font-bold text-primary">Souscription CIF</h2>
         <p className="text-sm text-muted-foreground">
-          Lettre de mission et RTO (une fois pour toutes les solutions), rapport et annexes par
-          souscription — contenu des annexes selon le produit (SCPI, etc.). Aperçu page par page,
-          brouillon enregistré localement.
+          Lettre de mission
+          {cifProductHasConventionRto(productType) ? " et RTO" : ""} (une fois pour toutes les
+          solutions), rapport et annexes par souscription — contenu des annexes selon le produit
+          (SCPI, etc.). Aperçu page par page, brouillon enregistré localement.
         </p>
       </div>
 
@@ -648,9 +667,11 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
                 <TabsTrigger value="lettre-mission" className="text-xs sm:text-sm">
                   Lettre de mission
                 </TabsTrigger>
-                <TabsTrigger value="convention-rto" className="text-xs sm:text-sm">
-                  Convention RTO
-                </TabsTrigger>
+                {cifProductHasConventionRto(productType) && (
+                  <TabsTrigger value="convention-rto" className="text-xs sm:text-sm">
+                    Convention RTO
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="rapport-mission" className="text-xs sm:text-sm">
                   {RAPPORT_MISSION_UI_LABEL}
                 </TabsTrigger>
@@ -665,11 +686,13 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
                   size="sm"
                   className="gap-1.5"
                   disabled={isPrinting}
-                  title="4 fenêtres d'enregistrement PDF (une par document) — nom proposé automatiquement."
+                  title={`${cifDocumentCount} fenêtres d'enregistrement PDF (une par document) — nom proposé automatiquement.`}
                   onClick={printAllDocuments}
                 >
                   <Printer className="h-4 w-4 shrink-0" aria-hidden />
-                  {isPrinting ? "Téléchargement…" : "Télécharger les 4 documents"}
+                  {isPrinting
+                    ? "Téléchargement…"
+                    : `Télécharger les ${cifDocumentCount} documents`}
                 </Button>
                 <Button
                   type="button"
@@ -695,14 +718,16 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
                 />
               </TabsContent>
 
-              <TabsContent value="convention-rto" className="mt-3 space-y-3">
-                <ScpiLettreMissionPreview
-                  preview={conventionRtoPreview}
-                  documentLabel={DOCUMENT_LABELS["convention-rto"]}
-                  resetKey={`${selectedContactId}-${productType}-convention-rto`}
-                  onMissingVariableClick={handleMissingVariableClick}
-                />
-              </TabsContent>
+              {cifProductHasConventionRto(productType) && (
+                <TabsContent value="convention-rto" className="mt-3 space-y-3">
+                  <ScpiLettreMissionPreview
+                    preview={conventionRtoPreview}
+                    documentLabel={DOCUMENT_LABELS["convention-rto"]}
+                    resetKey={`${selectedContactId}-${productType}-convention-rto`}
+                    onMissingVariableClick={handleMissingVariableClick}
+                  />
+                </TabsContent>
+              )}
 
               <TabsContent value="rapport-mission" className="mt-3 space-y-3">
                 <CifPagedDocumentPreview

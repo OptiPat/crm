@@ -17,6 +17,31 @@ export const CIF_DOSSIER_VARIABLE_FIELD: Readonly<Record<string, CifDossierField
   rappel_situation_client: { fieldId: "cif-rappel-situation", document: "rapport-mission" },
   analyse_situation_client: { fieldId: "cif-analyse-situation", document: "rapport-mission" },
   conseil: { fieldId: "cif-conseil", document: "annexes-rapport" },
+  g3f_rendement: { fieldId: "cif-g3f-rendement", document: "annexes-rapport" },
+  g3f_annee_impot: { fieldId: "cif-g3f-annee-impot", document: "annexes-rapport" },
+  g3f_montant_impot: { fieldId: "cif-g3f-montant-impot", document: "annexes-rapport" },
+  g3f_montant_reduction_souhaitee: {
+    fieldId: "cif-g3f-reduction-souhaitee",
+    document: "annexes-rapport",
+  },
+  g3f_montant_apport: { fieldId: "cif-g3f-montant-apport", document: "annexes-rapport" },
+  g3f_frais_enregistrement: {
+    fieldId: "cif-g3f-frais-enregistrement",
+    document: "annexes-rapport",
+  },
+  g3f_total_apport: { fieldId: "cif-g3f-total-apport", document: "annexes-rapport" },
+  g3f_annee_loi_finances: {
+    fieldId: "cif-g3f-annee-loi-finances",
+    document: "annexes-rapport",
+  },
+  g3f_annee_souscription: {
+    fieldId: "cif-g3f-annee-souscription",
+    document: "annexes-rapport",
+  },
+  g3f_annee_declaration_revenus: {
+    fieldId: "cif-g3f-annee-declaration-revenus",
+    document: "annexes-rapport",
+  },
   mes_preconisations: { fieldId: "cif-mes-preconisations", document: "annexes-rapport" },
   descriptions_scpi: { fieldId: "cif-scpi-souscriptions", document: "annexes-rapport" },
   descriptions_capital_invest: {

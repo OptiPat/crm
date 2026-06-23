@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 
 type AnnexesScpiObjectifsPatrimoniauxTableProps = {
   rows?: ReadonlyArray<AnnexesScpiObjectifsPatrimoniauxRow>;
-  variant?: "scpi" | "capital-invest";
+  variant?: "scpi" | "capital-invest" | "g3f";
   className?: string;
 };
 
@@ -17,12 +17,12 @@ function CheckCell({
   variant = "scpi",
 }: {
   checked: boolean;
-  variant?: "scpi" | "capital-invest";
+  variant?: "scpi" | "capital-invest" | "g3f";
 }) {
   const formatCheck =
-    variant === "capital-invest"
-      ? formatCapitalInvestObjectifPatrimonialCheck
-      : formatObjectifPatrimonialCheck;
+    variant === "scpi"
+      ? formatObjectifPatrimonialCheck
+      : formatCapitalInvestObjectifPatrimonialCheck;
   return (
     <td className="border border-neutral-400 px-1.5 py-1.5 text-center align-middle [text-align-last:center]">
       {formatCheck(checked)}

@@ -5,7 +5,11 @@ import {
   defaultSouscriptionDossierFields,
 } from "@/lib/souscription-cif/dossier-fields";
 import { buildMesPreconisationsFromSouscriptions } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
+import { buildCifProseBlocks } from "@/components/souscription-cif/CifProse";
+import { ANNEXES_G3F_SECTION5_BODY } from "@/lib/souscription-cif/annexes-rapport-g3f-page2";
+import { ANNEXES_G3F_SECTION6_BODY } from "@/lib/souscription-cif/annexes-rapport-g3f-page3";
 import { buildAnnexesRapportPreview } from "@/lib/souscription-cif/render-annexes-rapport";
+import { renderTemplateSegments } from "@/lib/souscription-cif/render-template";
 
 const cometeAnnexeRow = {
   productKey: "comete",
@@ -683,5 +687,271 @@ describe("buildAnnexesRapportPreview", () => {
       .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
       .join("");
     expect(renonciation).toContain("Renonciation au délai de rétractation");
+  });
+
+  it("construit la page 1 G3F avec conseil, titre Girardin et sections 1 à 4", () => {
+    const preview = buildAnnexesRapportPreview(
+      "g3f",
+      {
+        conseil:
+          "Afin de répondre à vos objectifs, je vous conseille de souscrire en Girardin industriel.",
+        g3f_rendement: "11 %",
+      },
+      defaultSouscriptionDossierFields()
+    );
+
+    expect(preview.pages).toHaveLength(2);
+    const page = preview.pages[0]!;
+    expect(page.title).toBe(ANNEXES_RAPPORT_DOCUMENT_TITLE);
+    expect(page.centeredSectionTitle).toBe("— Girardin Industriel —");
+
+    const intro = page.bodySegments
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(intro).toContain("Girardin industriel");
+
+    const body = (page.bodySegmentsContinuation ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : `[${s.label}]`))
+      .join("");
+    expect(body).toContain("1. Caractéristiques de l'investissement en Girardin industriel");
+    expect(body).toContain("Société en Nom Commercial (SNC)");
+    expect(body).toContain("Outre-Mer");
+    expect(body).toContain("2. Mécanisme de la réduction d'impôt");
+    expect(body).toContain("3. La rentabilité");
+    expect(body).toContain("montant investi + 11 %");
+    expect(body).toContain("4. Le schéma du montage");
+    expect(body).toContain("DOM-COM");
+    expect(page.showG3fMontageDiagram).toBe(true);
+
+    const section5 = (page.bodySegmentsAfterG3fMontageDiagram ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(section5).toContain("5. Les risques du Girardin industriel");
+    expect(section5).toContain("Les risques du produit Girardin industriel sont les suivants");
+    expect(section5).toContain("ne percevront aucun dividende");
+    expect(section5).toContain("Code général des impôts (CGI)");
+    expect(section5).toContain("- Risques locatifs :");
+    expect(section5).toContain("- Risques bancaires :");
+    expect(section5).toContain("- Autres risques :");
+    expect(section5).not.toContain("✓ RISQUES LOCATIFS");
+    expect(section5).toContain("- Nature de l'activité de l'exploitant :");
+    expect(section5).toContain("- Diminution du montant de l'apport souhaité :");
+    expect(section5).toContain("Assistance administrative");
+    expect(section5).toContain("Couverture financière G3F");
+    expect(section5).toContain("assistance administrative au titre de cet investissement");
+
+    expect(section5).toContain("Cadre réservé au client");
+    expect(section5).toContain("article L.341-1 du CMF");
+    expect(section5).toContain("Calcul de l'investissement");
+    expect(section5).toContain("Calcul du montant d'apport nécessaire");
+    expect(section5).toContain("Recalcul du plafond");
+    expect(section5).toContain("opérations en LODEOM");
+    expect(section5).toContain("créance sur l'État");
+    expect(section5).not.toContain("opération opérations");
+    expect(section5).not.toContain("Loi Lodeom");
+
+    const pageRecap = preview.pages[1]!;
+    expect(pageRecap.bodySegments).toHaveLength(0);
+    expect(pageRecap.rapportRecapTableHeader).toBe("TABLEAU RÉCAPITULATIF");
+    expect(pageRecap.rapportRecapRows).toHaveLength(6);
+    const recapTitles = pageRecap.rapportRecapRows?.map((r) => r.title) ?? [];
+    expect(recapTitles[0]).toContain("adaptée au client");
+    expect(recapTitles[5]).toContain("réexamen périodique");
+    const recapObjectifs = pageRecap.rapportRecapRows?.[1].contentSegments
+      .map((s) => (s.kind === "text" ? s.value : ""))
+      .join("");
+    expect(recapObjectifs).toContain("réduction d'impôt immédiate");
+    const recapReexamen = pageRecap.rapportRecapRows?.[5].contentSegments
+      .map((s) => (s.kind === "text" ? s.value : ""))
+      .join("");
+    expect(recapReexamen).toContain("conservation des parts pendant 5 ans");
+    expect(page.rapportRecapRows).toBeUndefined();
+
+    const section5Blocks = buildCifProseBlocks(
+      renderTemplateSegments(ANNEXES_G3F_SECTION5_BODY, {})
+    );
+    const section6Blocks = buildCifProseBlocks(
+      renderTemplateSegments(ANNEXES_G3F_SECTION6_BODY, {})
+    );
+    expect(ANNEXES_G3F_SECTION5_BODY).not.toMatch(/\n{3,}/);
+    expect(ANNEXES_G3F_SECTION6_BODY).not.toMatch(/\n{3,}/);
+    expect(section5Blocks.filter((b) => b.kind === "blank").length).toBeLessThan(20);
+    expect(section6Blocks.filter((b) => b.kind === "blank").length).toBeLessThan(15);
+    expect(preview.missingKeys).not.toContain("g3f_rendement");
+  });
+
+  it("enchaîne récap et préconisations/objectifs sur la page 2 G3F (sans saut logique)", () => {
+    const preview = buildAnnexesRapportPreview(
+      "g3f",
+      { g3f_rendement: "11 %", conseil: "Conseil." },
+      defaultSouscriptionDossierFields()
+    );
+
+    expect(preview.pages).toHaveLength(2);
+    const pageRecap = preview.pages[1]!;
+    expect(pageRecap.rapportRecapTableHeader).toBe("TABLEAU RÉCAPITULATIF");
+    expect(pageRecap.showAnnexesObjectifsPatrimoniauxTable).toBe(true);
+    expect(pageRecap.objectifsPatrimoniauxVariant).toBe("g3f");
+
+    const section1 = (pageRecap.bodySegmentsAfterRecapTable ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(section1).toContain("1. Préconisations du conseiller");
+    expect(section1).toContain("perspective moyen terme");
+
+    const rows = pageRecap.annexesObjectifsPatrimoniauxRows ?? [];
+    expect(rows).toHaveLength(5);
+    expect(rows[0]?.placementsFinanciers).toBe(true);
+    expect(rows[4]?.label).toContain("Optimisation fiscale");
+
+    expect(pageRecap.showAnnexesCaracteristiquesOperationTable).toBe(true);
+    const avantages = pageRecap.annexesCaracteristiquesOperationSections?.[0];
+    expect(avantages?.rows[3]?.placementsFinanciers).toEqual({ kind: "check", checked: true });
+    expect(avantages?.rows[6]?.placementsFinanciers).toEqual({ kind: "check", checked: true });
+
+    const inconv = pageRecap.annexesCaracteristiquesOperationSections?.[1];
+    expect(inconv?.rows[0].placementsFinanciers).toEqual({
+      kind: "text",
+      value: "Voir détail en annexe",
+      rowSpan: 3,
+    });
+    expect(pageRecap.showAnnexesHorizonProfilTable).toBe(true);
+    expect(pageRecap.annexesHorizonProfilRows?.[1]?.horizon).toMatchObject({
+      label: "de 3 à 8 ans",
+      checked: true,
+    });
+  });
+
+  it("enchaîne origine des fonds, notes et signatures sur la page 2 G3F (sans saut logique)", () => {
+    const preview = buildAnnexesRapportPreview(
+      "g3f",
+      {
+        g3f_rendement: "11 %",
+        conseil: "Conseil.",
+        client_ville: "Montpellier",
+        date_document: "22/06/2025",
+        client_nom_prenom: "BERNARD Luc",
+        cgp_nom_complet: "DUPONT Jean",
+      },
+      {
+        ...defaultSouscriptionDossierFields(),
+        provenanceFonds: "metropole",
+        origineFondsSelected: ["epargne_courante"],
+      },
+      undefined,
+      2
+    );
+
+    expect(preview.pages).toHaveLength(2);
+    const pageSuite = preview.pages[1]!;
+    expect(pageSuite.showAnnexesOrigineFondsSection).toBe(true);
+    expect(pageSuite.annexesOrigineFondsView?.provenanceFonds).toBe("metropole");
+    const intro5 = (pageSuite.bodySegmentsAfterHorizonProfilTable ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(intro5).toContain("5. Déclaration sur l'honneur de l'origine des fonds");
+    const section6 = (pageSuite.bodySegmentsSection6Intro ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(section6).toContain("6. Informations");
+    expect(section6).toContain("☒ Oui");
+
+    const section7 = (pageSuite.bodySegmentsSection7 ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(section7).toContain("7. Notes importantes");
+    expect(section7).not.toContain("Le CIF déclare");
+    const faitA = (pageSuite.bodySegmentsAfterSection7 ?? [])
+      .map((s) => (s.kind === "text" ? s.value : ""))
+      .join("");
+    expect(faitA).toContain("Montpellier");
+    expect(
+      pageSuite.signatureColumns?.right
+        .flat()
+        .map((s) => (s.kind === "text" ? s.value : ""))
+        .join("")
+    ).toContain("Signature des clients");
+    expect(preview.missingKeys).not.toContain("provenance_fonds");
+  });
+
+  it("signale provenance et origine manquantes (G3F)", () => {
+    const preview = buildAnnexesRapportPreview(
+      "g3f",
+      { conseil: "Conseil.", g3f_rendement: "11 %" },
+      defaultSouscriptionDossierFields()
+    );
+    expect(preview.missingKeys).toEqual(
+      expect.arrayContaining(["provenance_fonds", "origine_fonds"])
+    );
+  });
+
+  it("signale le rendement G3F manquant", () => {
+    const preview = buildAnnexesRapportPreview("g3f", { conseil: "Conseil test." }, defaultSouscriptionDossierFields());
+    expect(preview.missingKeys).toContain("g3f_rendement");
+  });
+
+  it("signale les champs calcul G3F manquants", () => {
+    const preview = buildAnnexesRapportPreview(
+      "g3f",
+      {
+        conseil: "Conseil test.",
+        g3f_rendement: "11 %",
+        cgp_nom_complet: "Jean DUPONT",
+      },
+      defaultSouscriptionDossierFields()
+    );
+    expect(preview.missingKeys).toEqual(
+      expect.arrayContaining([
+        "g3f_annee_impot",
+        "g3f_montant_impot",
+        "g3f_montant_reduction_souhaitee",
+        "g3f_montant_apport",
+        "g3f_frais_enregistrement",
+        "g3f_total_apport",
+        "g3f_annee_loi_finances",
+      ])
+    );
+  });
+
+  it("intègre les montants G3F saisis dans le calcul d'apport", () => {
+    const dossier = {
+      ...defaultSouscriptionDossierFields(),
+      g3fAnneeImpot: "2025",
+      g3fMontantImpotEur: "25000",
+      g3fReductionSouhaiteeEur: "15000",
+      g3fMontantApportEur: "12000",
+      g3fFraisEnregistrementEur: "300",
+      g3fAnneeLoiFinances: "2025",
+      g3fAnneeSouscription: "2025",
+      g3fAnneeDeclarationRevenus: "2027",
+    };
+    const preview = buildAnnexesRapportPreview(
+      "g3f",
+      {
+        conseil: "Conseil test.",
+        g3f_rendement: "11 %",
+        cgp_nom_complet: "Jean DUPONT",
+        g3f_annee_impot: "2025",
+        g3f_montant_impot: "25 000",
+        g3f_montant_reduction_souhaitee: "15 000",
+        g3f_montant_apport: "12 000",
+        g3f_frais_enregistrement: "300",
+        g3f_total_apport: "12 300",
+        g3f_annee_loi_finances: "2025",
+        g3f_annee_souscription: "2025",
+        g3f_annee_declaration_revenus: "2027",
+      },
+      dossier
+    );
+    const afterMontage = (preview.pages[0]!.bodySegmentsAfterG3fMontageDiagram ?? [])
+      .map((s) => (s.kind === "text" || s.kind === "underline" || s.kind === "bold" ? s.value : ""))
+      .join("");
+    expect(afterMontage).toContain("Jean DUPONT");
+    expect(afterMontage).toContain("impôt sur le revenu 2025 à 25 000 €");
+    expect(afterMontage).toContain("Montant de l'apport nécessaire : 12 000 €");
+    expect(afterMontage).toContain("Total de l'apport : environ 12 300 €");
+    expect(afterMontage).toContain("avril/mai 2027");
+    expect(afterMontage).toContain("restituées à l'été 2027");
+    expect(preview.missingKeys).not.toContain("g3f_montant_apport");
   });
 });

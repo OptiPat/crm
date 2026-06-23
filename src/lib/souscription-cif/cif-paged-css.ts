@@ -60,6 +60,13 @@ export function buildCifPagedCss(): string {
   break-inside: auto;
 }
 
+/* Paragraphes CifProse — fragmentables page par page (évite le chevauchement pied de page). */
+.cif-prose-para {
+  break-inside: auto;
+  orphans: 2;
+  widows: 2;
+}
+
 /* Tableau récapitulatif : en-tête répété en haut de chaque page, lignes longues fragmentables. */
 .cif-rm-recap-table {
   break-inside: auto;
@@ -78,6 +85,10 @@ export function buildCifPagedCss(): string {
 
 /* Schéma Capital investissement — éviter une coupure au milieu du visuel. */
 .cif-capital-invest-lifecycle {
+  break-inside: avoid;
+}
+
+.cif-g3f-montage {
   break-inside: avoid;
 }
 

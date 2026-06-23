@@ -37,3 +37,21 @@ export function buildAnnexesRapportSignatureColumns(
     right: renderTemplateLines(ANNEXES_RAPPORT_SIGNATURE_RIGHT, variables),
   };
 }
+
+export const ANNEXES_G3F_SIGNATURE_RIGHT = `Signature des clients :
+
+Certifie sur l'honneur l'exactitude des renseignements fournis sur le présent document
+
+{{client_nom_prenom}}`;
+
+export function buildAnnexesG3fSignatureColumns(
+  variables: Record<string, string | null>
+): {
+  left: SouscriptionPreviewSegment[][];
+  right: SouscriptionPreviewSegment[][];
+} {
+  return {
+    left: renderTemplateLines(ANNEXES_RAPPORT_SIGNATURE_LEFT, variables),
+    right: renderTemplateLines(ANNEXES_G3F_SIGNATURE_RIGHT, variables),
+  };
+}

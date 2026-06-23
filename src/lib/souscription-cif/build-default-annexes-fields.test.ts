@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildDefaultConseil,
   DEFAULT_CONSEIL_CAPITAL_INVEST_TEXT,
+  DEFAULT_CONSEIL_G3F_TEXT,
   DEFAULT_CONSEIL_TEXT,
 } from "@/lib/souscription-cif/build-default-annexes-fields";
 import {
@@ -25,6 +26,10 @@ describe("buildDefaultAnnexesFields", () => {
 
   it("retourne le texte type Conseil Capital investissement", () => {
     expect(buildDefaultConseil("capital-investissement")).toBe(DEFAULT_CONSEIL_CAPITAL_INVEST_TEXT);
+  });
+
+  it("retourne le texte type Conseil G3F", () => {
+    expect(buildDefaultConseil("g3f")).toBe(DEFAULT_CONSEIL_G3F_TEXT);
   });
 
   it("génère Mes préconisations depuis une souscription Comète type (réinvest. + VP)", () => {

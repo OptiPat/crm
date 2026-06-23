@@ -10,6 +10,7 @@ import { buildDescriptionsScpiFromKeys } from "@/lib/souscription-cif/scpi-annex
 import {
   getScpiAnnexeProductKeysFromSouscriptions,
 } from "@/lib/souscription-cif/scpi-annexe-souscriptions";
+import { buildG3fInvestmentVariables } from "@/lib/souscription-cif/build-g3f-investment-calc";
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 
 function joinCpVille(cp?: string | null, ville?: string | null): string | null {
@@ -79,6 +80,8 @@ export function buildSouscriptionVariables(
     produits_capital_invest_cibles: buildProduitsCapitalInvestCiblesVariable(
       dossier.capitalInvestAnnexeSouscriptions
     ),
+    g3f_rendement: dossier.g3fRendement.trim() || null,
+    ...buildG3fInvestmentVariables(dossier),
     cgp_nom_complet: cgpNomComplet(cgp),
     cgp_cabinet: cgpCabinet(cgp),
     cgp_representant_legal: cgpRepresentantLegal(cgp),

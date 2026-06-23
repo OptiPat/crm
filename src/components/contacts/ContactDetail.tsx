@@ -43,7 +43,6 @@ import { ContactForm } from "./ContactForm";
 import {
   getInvestissementsByContact,
   deleteInvestissement,
-  getInvestissementById,
   type Investissement,
   getInvestissementsByFoyer,
   getInvestissementsByFoyerContacts,
@@ -715,16 +714,9 @@ export function ContactDetail({
     onOpenChange(false);
   };
 
-  const handleEditInvestissement = async (inv: Investissement) => {
+  const handleEditInvestissement = (inv: Investissement) => {
     setSelectedInvestissement(inv);
     setShowInvestissementForm(true);
-    try {
-      const fresh = await getInvestissementById(inv.id);
-      setSelectedInvestissement(fresh);
-    } catch (error) {
-      console.error("Error loading investissement:", error);
-      toast.error("Impossible de recharger le placement — données affichées depuis la liste");
-    }
   };
 
   const handleDeleteInvestissement = async (inv: Investissement) => {

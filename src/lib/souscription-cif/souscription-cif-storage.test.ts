@@ -29,16 +29,13 @@ describe("souscription-cif-storage", () => {
       selectedContactId: 42,
       dossiersByContactId: {
         [buildDossierStorageKey(42, "scpi")]: {
+          ...getDossierForContact({}, 42, "scpi"),
           dateDoc: "2026-06-13",
           dateDer: "2026-01-10",
           dateRio: "2026-02-01",
           dateQpi: "2026-02-15",
           lieuNaissance: "Montpellier",
           objectifsClient: "Revenus complémentaires",
-          rappelDemande: "",
-          rappelSituationClient: "",
-          analyseSituationClient: "",
-          conseil: "",
           mesPreconisations: "Mes préconisations portent sur un investissement global de 30 000 €",
           scpiAnnexeSouscriptions: [
             {
@@ -50,12 +47,8 @@ describe("souscription-cif-storage", () => {
               vpFrequence: "mois",
             },
           ],
-          capitalInvestAnnexeSouscriptions: [],
-          descriptionsCapitalInvest: "",
-          quotePartPercueConsultantCifEur: "",
           provenanceFonds: "dom_tom",
           origineFondsSelected: ["reemploi"],
-          origineFondsAutrePrecision: "",
         },
       },
     });

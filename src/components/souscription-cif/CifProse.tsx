@@ -52,6 +52,30 @@ function groupIntoBlocks(lines: ProseLine[]): ProseBlock[] {
 }
 
 /**
+ * Après expansion [u]/[b], le texte suivant est un segment séparé qui commence
+ * souvent par `\n\n` — sans fusion, CifProse affiche deux lignes vides au lieu d'une.
+ */
+function collapseConsecutiveEmptyLines(lines: ProseLine[]): ProseLine[] {
+  const collapsed: ProseLine[] = [];
+  for (const line of lines) {
+    const isEmpty = line.length === 0;
+    const prevEmpty =
+      collapsed.length > 0 && collapsed[collapsed.length - 1].length === 0;
+    if (isEmpty && prevEmpty) continue;
+    collapsed.push(line);
+  }
+  while (collapsed.length > 0 && collapsed[0].length === 0) {
+    collapsed.shift();
+  }
+  return collapsed;
+}
+
+/** Découpe segments → blocs paragraphe (testable sans React). */
+export function buildCifProseBlocks(segments: SouscriptionPreviewSegment[]): ProseBlock[] {
+  return groupIntoBlocks(collapseConsecutiveEmptyLines(splitIntoLines(segments)));
+}
+
+/**
  * Corps de texte CIF rendu en **paragraphes de niveau bloc** plutôt qu'en un seul
  * bloc `white-space: pre-wrap` géant.
  *
@@ -62,16 +86,16 @@ function groupIntoBlocks(lines: ProseLine[]): ProseBlock[] {
  * identique : chaque ligne source = une ligne rendue, lignes vides comprises.
  */
 export function CifProse({ segments, className, onMissingVariableClick }: CifProseProps) {
-  const blocks = groupIntoBlocks(splitIntoLines(segments));
+  const blocks = buildCifProseBlocks(segments);
   return (
     <div className={className}>
       {blocks.map((block, i) =>
         block.kind === "blank" ? (
-          <div key={i} aria-hidden>
+          <div key={i} className="cif-prose-blank" aria-hidden>
             <br />
           </div>
         ) : (
-          <div key={i}>
+          <div key={i} className="cif-prose-para">
             {block.lines.map((line, lineIndex) => (
               <Fragment key={lineIndex}>
                 {lineIndex > 0 && <br />}

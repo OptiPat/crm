@@ -66,6 +66,10 @@ export type ScpiLmPagePreview = {
   rapportRecapTableHeader?: string;
   /** Bloc schéma cycle de vie FCPI/FIP (annexes Capital investissement). */
   showCapitalInvestLifecycleDiagram?: boolean;
+  /** Schéma du montage Girardin industriel (annexes G3F). */
+  showG3fMontageDiagram?: boolean;
+  /** Texte après le schéma du montage (annexes G3F § 5). */
+  bodySegmentsAfterG3fMontageDiagram?: SouscriptionPreviewSegment[];
   /** Texte après le schéma cycle de vie (annexes Capital investissement). */
   bodySegmentsAfterCapitalInvestLifecycleDiagram?: SouscriptionPreviewSegment[];
   /** Tableau comparatif fiscalité FCPI / FIP OM (annexes Capital investissement). */
@@ -102,7 +106,7 @@ export type ScpiLmPagePreview = {
   showAnnexesObjectifsPatrimoniauxTable?: boolean;
   annexesObjectifsPatrimoniauxRows?: ReadonlyArray<AnnexesScpiObjectifsPatrimoniauxRow>;
   /** Symboles cases objectifs : SCPI (☐/☒) ou capital investissement (⬜/☒). */
-  objectifsPatrimoniauxVariant?: "scpi" | "capital-invest";
+  objectifsPatrimoniauxVariant?: "scpi" | "capital-invest" | "g3f";
   /** Titre § 3 après le tableau objectifs (annexes SCPI page 6). */
   bodySegmentsAfterObjectifsPatrimoniauxTable?: SouscriptionPreviewSegment[];
   /** Tableau caractéristiques de l'opération (annexes SCPI page 6 § 3). */
@@ -113,6 +117,8 @@ export type ScpiLmPagePreview = {
   /** Tableau horizon / profil (annexes SCPI page 6 § 4). */
   showAnnexesHorizonProfilTable?: boolean;
   annexesHorizonProfilRows?: ReadonlyArray<AnnexesScpiHorizonProfilRowView>;
+  /** Texte après le tableau horizon / profil (ex. § 5 origine des fonds — G3F). */
+  bodySegmentsAfterHorizonProfilTable?: SouscriptionPreviewSegment[];
   /** Bloc provenance / origine des fonds (annexes SCPI page 7 § 5). */
   showAnnexesOrigineFondsSection?: boolean;
   annexesOrigineFondsView?: AnnexesScpiOrigineFondsView;
@@ -333,6 +339,12 @@ export function collectMissingFromPage(page: ScpiLmPagePreview): string[] {
   }
   if (page.bodySegmentsAfterCaracteristiquesOperationTable) {
     collectMissing(page.bodySegmentsAfterCaracteristiquesOperationTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterHorizonProfilTable) {
+    collectMissing(page.bodySegmentsAfterHorizonProfilTable).forEach((k) => keys.add(k));
+  }
+  if (page.bodySegmentsAfterG3fMontageDiagram) {
+    collectMissing(page.bodySegmentsAfterG3fMontageDiagram).forEach((k) => keys.add(k));
   }
   if (page.bodySegmentsAfterCapitalInvestLifecycleDiagram) {
     collectMissing(page.bodySegmentsAfterCapitalInvestLifecycleDiagram).forEach((k) => keys.add(k));

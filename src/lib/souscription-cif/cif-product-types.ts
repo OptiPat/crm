@@ -10,7 +10,7 @@ export type CifProductTypeOption = {
 export const CIF_PRODUCT_TYPE_OPTIONS: readonly CifProductTypeOption[] = [
   { id: "scpi", label: "SCPI", available: true },
   { id: "capital-investissement", label: "Capital investissement", available: true },
-  { id: "g3f", label: "G3F", available: false },
+  { id: "g3f", label: "G3F", available: true },
 ] as const;
 
 export function parseSouscriptionCifProductType(raw: unknown): SouscriptionCifProductType {

@@ -9,7 +9,7 @@ describe("cif-product-types", () => {
   it("SCPI et capital investissement sont sélectionnables", () => {
     expect(isCifProductTypeAvailable("scpi")).toBe(true);
     expect(isCifProductTypeAvailable("capital-investissement")).toBe(true);
-    expect(isCifProductTypeAvailable("g3f")).toBe(false);
+    expect(isCifProductTypeAvailable("g3f")).toBe(true);
   });
 
   it("parse le type et retombe sur scpi", () => {

@@ -2,7 +2,8 @@
  * Modèle documentaire CIF — Patrimoine CRM.
  *
  * - **Lettre de mission** : signée une fois, commune à toutes les solutions (pages 1–7).
- * - **Convention RTO** : signée une fois, réception-transmission d'ordres (commune à toutes les solutions).
+ * - **Convention RTO** : signée une fois, réception-transmission d'ordres (SCPI, Capital invest.).
+ *   Absente pour **G3F** (Girardin industriel).
  * - **Rapport de mission** : par souscription ; structure similaire, champs dossier spécifiques.
  * - **Annexes au rapport** : par souscription ; contenu et déclaration d'adéquation détaillée
  *   selon le produit (SCPI rendement, Girardin, etc.).

@@ -7,6 +7,8 @@ import {
 import {
   buildCifPrintBundle,
   CIF_PRINT_DOCUMENT_ORDER,
+  CIF_PRINT_DOCUMENT_ORDER_G3F,
+  getCifPrintDocumentOrder,
 } from "@/lib/souscription-cif/cif-print-export";
 import type { ScpiLettreMissionPreview } from "@/lib/souscription-cif/render-template";
 
@@ -64,5 +66,12 @@ describe("buildCifPrintBundle", () => {
 
     expect(bundle).toHaveLength(1);
     expect(bundle[0]?.id).toBe("convention-rto");
+  });
+});
+
+describe("getCifPrintDocumentOrder", () => {
+  it("exclut la convention RTO pour G3F", () => {
+    expect(getCifPrintDocumentOrder("g3f")).toEqual([...CIF_PRINT_DOCUMENT_ORDER_G3F]);
+    expect(getCifPrintDocumentOrder("scpi")).toEqual([...CIF_PRINT_DOCUMENT_ORDER]);
   });
 });

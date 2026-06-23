@@ -76,6 +76,7 @@ import {
 } from "@/lib/souscription-cif/annexes-scpi-origine-fonds";
 import { ANNEXES_SCPI_PAGE8_BODY } from "@/lib/souscription-cif/annexes-rapport-scpi-page8";
 import {
+  buildAnnexesG3fSignatureColumns,
   buildAnnexesRapportFaitASegments,
   buildAnnexesRapportSignatureColumns,
 } from "@/lib/souscription-cif/annexes-rapport-signatures";
@@ -88,6 +89,29 @@ import {
   ANNEXES_CAPITAL_INVEST_COSTS_INTRO,
 } from "@/lib/souscription-cif/annexes-capital-invest-costs-table";
 import { ANNEXES_RAPPORT_DOCUMENT_TITLE } from "@/lib/souscription-cif/cif-documents";
+import {
+  ANNEXES_G3F_PAGE1_BODY_AFTER_SECTION,
+  ANNEXES_G3F_PAGE1_BODY_BEFORE_SECTION,
+  ANNEXES_G3F_PRODUCT_SECTION_TITLE,
+} from "@/lib/souscription-cif/annexes-rapport-g3f-page1";
+import { ANNEXES_G3F_SECTION5_BODY } from "@/lib/souscription-cif/annexes-rapport-g3f-page2";
+import { ANNEXES_G3F_SECTION6_BODY } from "@/lib/souscription-cif/annexes-rapport-g3f-page3";
+import {
+  ANNEXES_G3F_OBJECTIFS_SECTION1,
+  ANNEXES_G3F_OBJECTIFS_SECTION2_TITLE,
+  ANNEXES_G3F_OBJECTIFS_SECTION3_TITLE,
+  ANNEXES_G3F_OBJECTIFS_SECTION4_TITLE,
+  ANNEXES_G3F_SECTION7_NOTES,
+} from "@/lib/souscription-cif/annexes-rapport-g3f-objectifs";
+import { buildAnnexesG3fHorizonProfilRowViews } from "@/lib/souscription-cif/annexes-g3f-horizon-profil-table";
+import { ANNEXES_G3F_CARACTERISTIQUES_OPERATION_SECTIONS } from "@/lib/souscription-cif/annexes-g3f-caracteristiques-operation-table";
+import { ANNEXES_G3F_OBJECTIFS_PATRIMONIAUX_ROWS } from "@/lib/souscription-cif/annexes-g3f-objectifs-patrimoniaux-table";
+import {
+  ANNEXES_G3F_RECAP_ROW_TEMPLATES,
+  ANNEXES_G3F_RECAP_TABLE_HEADER,
+} from "@/lib/souscription-cif/annexes-g3f-recap-table";
+
+const ANNEXES_G3F_AFTER_MONTAGE_BODY = `${ANNEXES_G3F_SECTION5_BODY}\n\n${ANNEXES_G3F_SECTION6_BODY}`;
 import type { SouscriptionDossierFields } from "@/lib/souscription-cif/dossier-fields";
 import { SCPI_LM_PAGE1_FOOTER_DEFAULT } from "@/lib/souscription-cif/scpi-lettre-mission-page1";
 import {
@@ -386,6 +410,85 @@ function buildAnnexesScpiRapportPreview(
   };
 }
 
+function buildAnnexesG3fRapportPreview(
+  variables: Record<string, string | null>,
+  dossier: SouscriptionDossierFields,
+  footerOverride?: string | null,
+  profilRisqueSri?: number | null
+): ScpiLettreMissionPreview {
+  const footerSegments = buildCifDocumentFooterSegments(variables, footerOverride);
+
+  const page1: ScpiLmPagePreview = {
+    pageNumber: 1,
+    title: ANNEXES_RAPPORT_DOCUMENT_TITLE,
+    bodySegments: renderTemplateSegments(ANNEXES_G3F_PAGE1_BODY_BEFORE_SECTION, variables),
+    centeredSectionTitle: ANNEXES_G3F_PRODUCT_SECTION_TITLE,
+    bodySegmentsContinuation: renderTemplateSegments(
+      ANNEXES_G3F_PAGE1_BODY_AFTER_SECTION,
+      variables
+    ),
+    showG3fMontageDiagram: true,
+    bodySegmentsAfterG3fMontageDiagram: renderTemplateSegments(
+      ANNEXES_G3F_AFTER_MONTAGE_BODY,
+      variables
+    ),
+    footerSegments,
+  };
+
+  const page2: ScpiLmPagePreview = {
+    pageNumber: 2,
+    bodySegments: [],
+    rapportRecapTableHeader: ANNEXES_G3F_RECAP_TABLE_HEADER,
+    rapportRecapRows: ANNEXES_G3F_RECAP_ROW_TEMPLATES.map((row) => ({
+      title: row.title,
+      contentSegments: renderTemplateSegments(row.contentTemplate, variables),
+    })),
+    bodySegmentsAfterRecapTable: renderTemplateSegments(ANNEXES_G3F_OBJECTIFS_SECTION1, variables),
+    bodySegmentsAfterTable: renderTemplateSegments(ANNEXES_G3F_OBJECTIFS_SECTION2_TITLE, variables),
+    showAnnexesObjectifsPatrimoniauxTable: true,
+    annexesObjectifsPatrimoniauxRows: ANNEXES_G3F_OBJECTIFS_PATRIMONIAUX_ROWS,
+    objectifsPatrimoniauxVariant: "g3f",
+    bodySegmentsAfterObjectifsPatrimoniauxTable: renderTemplateSegments(
+      ANNEXES_G3F_OBJECTIFS_SECTION3_TITLE,
+      variables
+    ),
+    showAnnexesCaracteristiquesOperationTable: true,
+    annexesCaracteristiquesOperationSections: ANNEXES_G3F_CARACTERISTIQUES_OPERATION_SECTIONS,
+    bodySegmentsAfterCaracteristiquesOperationTable: renderTemplateSegments(
+      ANNEXES_G3F_OBJECTIFS_SECTION4_TITLE,
+      variables
+    ),
+    showAnnexesHorizonProfilTable: true,
+    annexesHorizonProfilRows: buildAnnexesG3fHorizonProfilRowViews(profilRisqueSri),
+    bodySegmentsAfterHorizonProfilTable: renderTemplateSegments(
+      ANNEXES_SCPI_PAGE7_SECTION5_INTRO,
+      variables
+    ),
+    showAnnexesOrigineFondsSection: true,
+    annexesOrigineFondsView: buildAnnexesScpiOrigineFondsView(dossier),
+    bodySegmentsAfterOrigineFonds: renderTemplateSegments(
+      ANNEXES_SCPI_PAGE7_CERTIFICATION,
+      variables
+    ),
+    bodySegmentsSection6Intro: renderTemplateSegments(ANNEXES_SCPI_PAGE7_SECTION6_INTRO, variables),
+    bodySegmentsSection7: renderTemplateSegments(ANNEXES_G3F_SECTION7_NOTES, variables),
+    bodySegmentsAfterSection7: buildAnnexesRapportFaitASegments(variables),
+    signatureColumns: buildAnnexesG3fSignatureColumns(variables),
+    footerSegments,
+  };
+
+  const missing = new Set<string>([
+    ...collectMissingFromPage(page1),
+    ...collectMissingFromPage(page2),
+  ]);
+  collectAnnexesOrigineFondsMissingKeys(dossier).forEach((k) => missing.add(k));
+
+  return {
+    pages: [page1, page2],
+    missingKeys: [...missing],
+  };
+}
+
 export function buildAnnexesRapportPreview(
   productType: SouscriptionCifProductType,
   variables: Record<string, string | null>,
@@ -395,6 +498,14 @@ export function buildAnnexesRapportPreview(
 ): ScpiLettreMissionPreview {
   if (productType === "capital-investissement") {
     return buildAnnexesCapitalInvestRapportPreview(
+      variables,
+      dossier,
+      footerOverride,
+      profilRisqueSri
+    );
+  }
+  if (productType === "g3f") {
+    return buildAnnexesG3fRapportPreview(
       variables,
       dossier,
       footerOverride,

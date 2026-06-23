@@ -81,6 +81,20 @@ function parseDossierFields(raw: unknown): SouscriptionDossierFields | null {
     ),
     descriptionsCapitalInvest:
       typeof o.descriptionsCapitalInvest === "string" ? o.descriptionsCapitalInvest : "",
+    g3fRendement: typeof o.g3fRendement === "string" ? o.g3fRendement : "",
+    g3fAnneeImpot: typeof o.g3fAnneeImpot === "string" ? o.g3fAnneeImpot : "",
+    g3fMontantImpotEur: typeof o.g3fMontantImpotEur === "string" ? o.g3fMontantImpotEur : "",
+    g3fReductionSouhaiteeEur:
+      typeof o.g3fReductionSouhaiteeEur === "string" ? o.g3fReductionSouhaiteeEur : "",
+    g3fMontantApportEur: typeof o.g3fMontantApportEur === "string" ? o.g3fMontantApportEur : "",
+    g3fFraisEnregistrementEur:
+      typeof o.g3fFraisEnregistrementEur === "string" ? o.g3fFraisEnregistrementEur : "",
+    g3fTotalApportEur: typeof o.g3fTotalApportEur === "string" ? o.g3fTotalApportEur : "",
+    g3fAnneeLoiFinances: typeof o.g3fAnneeLoiFinances === "string" ? o.g3fAnneeLoiFinances : "",
+    g3fAnneeSouscription:
+      typeof o.g3fAnneeSouscription === "string" ? o.g3fAnneeSouscription : "",
+    g3fAnneeDeclarationRevenus:
+      typeof o.g3fAnneeDeclarationRevenus === "string" ? o.g3fAnneeDeclarationRevenus : "",
     quotePartPercueConsultantCifEur:
       typeof o.quotePartPercueConsultantCifEur === "string"
         ? o.quotePartPercueConsultantCifEur

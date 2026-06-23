@@ -36,6 +36,26 @@ export type SouscriptionDossierFields = {
   capitalInvestAnnexeSouscriptions: CapitalInvestAnnexeSouscription[];
   /** Annexes Capital invest — fiches produit (texte libre, ex. millésime). */
   descriptionsCapitalInvest: string;
+  /** Annexes G3F — rendement affiché au § 3 (ex. « 11 % »). */
+  g3fRendement: string;
+  /** Annexes G3F — année de l'impôt estimé (§ calcul investissement). */
+  g3fAnneeImpot: string;
+  /** Annexes G3F — montant impôt estimé (€, saisi). */
+  g3fMontantImpotEur: string;
+  /** Annexes G3F — réduction d'impôt souhaitée (€). */
+  g3fReductionSouhaiteeEur: string;
+  /** Annexes G3F — montant apport nécessaire (€). */
+  g3fMontantApportEur: string;
+  /** Annexes G3F — frais d'enregistrement (€). */
+  g3fFraisEnregistrementEur: string;
+  /** Annexes G3F — total apport (€) ; si vide, apport + frais. */
+  g3fTotalApportEur: string;
+  /** Annexes G3F — année loi de finances (calendrier fiscal). */
+  g3fAnneeLoiFinances: string;
+  /** Annexes G3F — année de souscription. */
+  g3fAnneeSouscription: string;
+  /** Annexes G3F — année déclaration de revenus (dérive avril/mai et été dans le texte). */
+  g3fAnneeDeclarationRevenus: string;
   /** Annexes — attestation CIF : quote-part perçue consultant (€). */
   quotePartPercueConsultantCifEur: string;
   /** Annexes — provenance des fonds (§ 5 page 7). */
@@ -68,6 +88,16 @@ export function defaultSouscriptionDossierFields(): SouscriptionDossierFields {
     scpiAnnexeSouscriptions: [],
     capitalInvestAnnexeSouscriptions: [],
     descriptionsCapitalInvest: "",
+    g3fRendement: "",
+    g3fAnneeImpot: "",
+    g3fMontantImpotEur: "",
+    g3fReductionSouhaiteeEur: "",
+    g3fMontantApportEur: "",
+    g3fFraisEnregistrementEur: "",
+    g3fTotalApportEur: "",
+    g3fAnneeLoiFinances: "",
+    g3fAnneeSouscription: "",
+    g3fAnneeDeclarationRevenus: "",
     quotePartPercueConsultantCifEur: "",
     provenanceFonds: "",
     origineFondsSelected: [],

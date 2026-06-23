@@ -333,12 +333,18 @@ export function SouscriptionCifDossierForm({
                 ? "Annexes SCPI"
                 : productType === "capital-investissement"
                   ? "Annexes capital investissement"
-                  : "Annexes"}
+                  : productType === "g3f"
+                    ? "Annexes G3F"
+                    : "Annexes"}
             </CardTitle>
             <CardDescription>
               {productType === "scpi"
                 ? "Conseil, préconisations et fiches produits (catalogue)."
-                : "Conseil, souscriptions FCPI/FIP, taux EMT (DICI), préconisations, quote-part CIF et fiches produit."}
+                : productType === "capital-investissement"
+                  ? "Conseil, souscriptions FCPI/FIP, taux EMT (DICI), préconisations, quote-part CIF et fiches produit."
+                  : productType === "g3f"
+                    ? "Conseil, rendement Girardin et champs spécifiques au dispositif."
+                    : "Conseil et champs annexes."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -350,12 +356,150 @@ export function SouscriptionCifDossierForm({
                 value={value.conseil}
                 onChange={(e) => onChange({ conseil: e.target.value })}
               />
-              {(productType === "scpi" || productType === "capital-investissement") && (
+              {(productType === "scpi" ||
+                productType === "capital-investissement" ||
+                productType === "g3f") && (
                 <p className="text-xs text-muted-foreground">
                   Prérempli avec un texte type — à ajuster pour les annexes.
                 </p>
               )}
             </div>
+
+            {productType === "g3f" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="cif-g3f-rendement">Rendement</Label>
+                  <Input
+                    id="cif-g3f-rendement"
+                    value={value.g3fRendement}
+                    onChange={(e) => onChange({ g3fRendement: e.target.value })}
+                    placeholder="Ex. 11 %"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Affiché au § 3 « La rentabilité » (montant investi + rendement).
+                  </p>
+                </div>
+
+                <div
+                  id="cif-g3f-calcul"
+                  className="space-y-3 rounded-md border bg-muted/20 p-3 scroll-mt-4"
+                >
+                  <p className="text-sm font-medium">Calcul de l&apos;investissement (annexes)</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-annee-impot">Année impôt estimé</Label>
+                      <Input
+                        id="cif-g3f-annee-impot"
+                        value={value.g3fAnneeImpot}
+                        onChange={(e) => onChange({ g3fAnneeImpot: e.target.value })}
+                        placeholder="Ex. 2025"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-montant-impot">Montant impôt estimé (€)</Label>
+                      <Input
+                        id="cif-g3f-montant-impot"
+                        inputMode="decimal"
+                        value={value.g3fMontantImpotEur}
+                        onChange={(e) => onChange({ g3fMontantImpotEur: e.target.value })}
+                        placeholder="Ex. 25 000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-reduction-souhaitee">
+                        Réduction d&apos;impôt souhaitée (€)
+                      </Label>
+                      <Input
+                        id="cif-g3f-reduction-souhaitee"
+                        inputMode="decimal"
+                        value={value.g3fReductionSouhaiteeEur}
+                        onChange={(e) =>
+                          onChange({ g3fReductionSouhaiteeEur: e.target.value })
+                        }
+                        placeholder="Ex. 15 000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-montant-apport">Montant apport nécessaire (€)</Label>
+                      <Input
+                        id="cif-g3f-montant-apport"
+                        inputMode="decimal"
+                        value={value.g3fMontantApportEur}
+                        onChange={(e) => onChange({ g3fMontantApportEur: e.target.value })}
+                        placeholder="Ex. 12 000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-frais-enregistrement">
+                        Frais d&apos;enregistrement (€)
+                      </Label>
+                      <Input
+                        id="cif-g3f-frais-enregistrement"
+                        inputMode="decimal"
+                        value={value.g3fFraisEnregistrementEur}
+                        onChange={(e) =>
+                          onChange({ g3fFraisEnregistrementEur: e.target.value })
+                        }
+                        placeholder="Ex. 300"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-total-apport">Total apport (€)</Label>
+                      <Input
+                        id="cif-g3f-total-apport"
+                        inputMode="decimal"
+                        value={value.g3fTotalApportEur}
+                        onChange={(e) => onChange({ g3fTotalApportEur: e.target.value })}
+                        placeholder="Apport + frais si vide"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-sm font-medium pt-1">Calendrier fiscal LODEOM</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-annee-loi-finances">Année loi de finances</Label>
+                      <Input
+                        id="cif-g3f-annee-loi-finances"
+                        value={value.g3fAnneeLoiFinances}
+                        onChange={(e) => onChange({ g3fAnneeLoiFinances: e.target.value })}
+                        placeholder="Ex. 2025"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="cif-g3f-annee-souscription">Année souscription</Label>
+                      <Input
+                        id="cif-g3f-annee-souscription"
+                        value={value.g3fAnneeSouscription}
+                        onChange={(e) => onChange({ g3fAnneeSouscription: e.target.value })}
+                        placeholder="Ex. 2025"
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="cif-g3f-annee-declaration-revenus">
+                        Année déclaration revenus
+                      </Label>
+                      <Input
+                        id="cif-g3f-annee-declaration-revenus"
+                        value={value.g3fAnneeDeclarationRevenus}
+                        onChange={(e) =>
+                          onChange({ g3fAnneeDeclarationRevenus: e.target.value })
+                        }
+                        placeholder="Ex. 2027"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Dérive automatiquement « avril/mai » et « été » dans les annexes (même
+                        année).
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Alimente le cadre client, le calcul d&apos;apport et le recalcul du plafond des
+                    niches fiscales dans les annexes.
+                  </p>
+                </div>
+              </>
+            )}
 
             {productType === "scpi" && (
               <>
@@ -601,7 +745,9 @@ export function SouscriptionCifDossierForm({
               </div>
             )}
 
-            {(productType === "scpi" || productType === "capital-investissement") && (
+            {(productType === "scpi" ||
+              productType === "capital-investissement" ||
+              productType === "g3f") && (
               <>
             <div id="cif-provenance-fonds" className="space-y-2 scroll-mt-4">
               <Label>Provenance des fonds</Label>

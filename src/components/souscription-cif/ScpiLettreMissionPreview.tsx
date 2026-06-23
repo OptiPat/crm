@@ -24,6 +24,7 @@ import { AnnexesScpiOrigineFondsSection } from "@/components/souscription-cif/An
 import { AnnexesScpiProsConsTable } from "@/components/souscription-cif/AnnexesScpiProsConsTable";
 import { ScpiAmfRiskScaleTable } from "@/components/souscription-cif/ScpiAmfRiskScaleTable";
 import { CapitalInvestLifecycleDiagram } from "@/components/souscription-cif/CapitalInvestLifecycleDiagram";
+import { G3fMontageDiagram } from "@/components/souscription-cif/G3fMontageDiagram";
 import { CapitalInvestFiscaliteTable } from "@/components/souscription-cif/CapitalInvestFiscaliteTable";
 import { ScpiLmInstrumentsTable } from "@/components/souscription-cif/ScpiLmInstrumentsTable";
 import { RmRecapTable } from "@/components/souscription-cif/RmRecapTable";
@@ -92,6 +93,17 @@ export function ScpiLmBodyContent({
       )}
 
       {page.showCapitalInvestLifecycleDiagram && <CapitalInvestLifecycleDiagram />}
+
+      {page.showG3fMontageDiagram && <G3fMontageDiagram />}
+
+      {page.bodySegmentsAfterG3fMontageDiagram &&
+        page.bodySegmentsAfterG3fMontageDiagram.length > 0 && (
+          <CifProse
+            className={cn("mt-[4mm]", cifDocumentBodyProseClass)}
+            segments={page.bodySegmentsAfterG3fMontageDiagram}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+        )}
 
       {page.bodySegmentsAfterCapitalInvestLifecycleDiagram &&
         page.bodySegmentsAfterCapitalInvestLifecycleDiagram.length > 0 && (
@@ -215,6 +227,15 @@ export function ScpiLmBodyContent({
           <AnnexesScpiHorizonProfilTable rows={page.annexesHorizonProfilRows} />
         </>
       )}
+
+      {page.bodySegmentsAfterHorizonProfilTable &&
+        page.bodySegmentsAfterHorizonProfilTable.length > 0 && (
+          <CifProse
+            className={cn("mt-[4mm]", cifDocumentBodyProseClass)}
+            segments={page.bodySegmentsAfterHorizonProfilTable}
+            onMissingVariableClick={onMissingVariableClick}
+          />
+        )}
 
       {page.showAnnexesOrigineFondsSection && page.annexesOrigineFondsView && (
         <>
