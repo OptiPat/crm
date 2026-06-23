@@ -1,15 +1,29 @@
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 
+export type SentQueueItemPatch = {
+  subject?: string;
+  gmailMessageId?: string | null;
+  gmailThreadId?: string | null;
+};
+
 export function buildSentQueueItem(
   item: EtiquetteEmailQueueItem,
   sentAtSec: number,
-  subject?: string
+  patch?: string | SentQueueItemPatch
 ): EtiquetteEmailQueueItem {
+  const opts: SentQueueItemPatch =
+    typeof patch === "string" ? { subject: patch } : (patch ?? {});
+  const subject = opts.subject?.trim();
+
   return {
     ...item,
     email_date_envoi: sentAtSec,
     email_date_prevue: item.email_date_prevue,
-    template_sujet: subject?.trim() || item.template_sujet,
+    template_sujet: subject || item.template_sujet,
+    email_sent_subject: subject ?? item.email_sent_subject ?? null,
+    email_gmail_message_id:
+      opts.gmailMessageId ?? item.email_gmail_message_id ?? null,
+    email_gmail_thread_id: opts.gmailThreadId ?? item.email_gmail_thread_id ?? null,
     queue_issue: null,
     email_reponse_at: null,
     email_reponse_type: null,

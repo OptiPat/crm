@@ -121,6 +121,10 @@ export interface EtiquetteEmailQueueItem {
   contact_registre?: string | null;
   /** JSON campagne SCPI (periode, bulletin_resume) */
   campaign_variables?: string | null;
+  email_gmail_message_id?: string | null;
+  email_gmail_thread_id?: string | null;
+  /** Objet tel qu'envoyé (peut différer du modèle après édition). */
+  email_sent_subject?: string | null;
 }
 
 export type EtiquetteEmailQueueStatus =

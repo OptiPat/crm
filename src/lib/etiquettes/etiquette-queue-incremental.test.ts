@@ -37,5 +37,20 @@ describe("etiquette-queue-incremental", () => {
     expect(next.sent[0].contact_etiquette_id).toBe(42);
     expect(next.sent[0].email_date_envoi).toBe(sentAt);
     expect(next.sent[0].template_sujet).toBe("Objet final");
+    expect(next.sent[0].email_sent_subject).toBe("Objet final");
+  });
+
+  it("conserve les identifiants Gmail pour une réponse immédiate", () => {
+    const sentItem = buildSentQueueItem(
+      { ...base, email_gmail_message_id: null, email_gmail_thread_id: null },
+      1_700_000_000,
+      {
+        subject: "Objet final",
+        gmailMessageId: "msg-42",
+        gmailThreadId: "thread-9",
+      }
+    );
+    expect(sentItem.email_gmail_message_id).toBe("msg-42");
+    expect(sentItem.email_gmail_thread_id).toBe("thread-9");
   });
 });

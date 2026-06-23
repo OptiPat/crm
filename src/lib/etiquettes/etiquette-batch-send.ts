@@ -22,6 +22,8 @@ export interface EtiquetteBatchSendProgress {
     item: EtiquetteEmailQueueItem;
     subject: string;
     sentAtSec: number;
+    gmailMessageId?: string | null;
+    gmailThreadId?: string | null;
   };
 }
 
@@ -103,6 +105,8 @@ export async function sendEtiquetteBatch(input: {
         item,
         subject: preview.subject,
         sentAtSec: Math.floor(Date.now() / 1000),
+        gmailMessageId: sent.gmail_message_id,
+        gmailThreadId: sent.gmail_thread_id,
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

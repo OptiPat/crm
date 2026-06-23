@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { ContactInitialsAvatar } from "@/components/dashboard/dashboard-ui";
 import { ExchangeEmailReplyForm } from "@/components/interactions/ExchangeEmailReplyForm";
+import { inferQueueRowKindFromEtiquetteNom } from "@/lib/emails/campaign-email-reply";
 import type { ExchangeHistoryEntry } from "@/lib/api/tauri-interactions";
 import {
   exchangeContactName,
@@ -183,8 +184,8 @@ export function ExchangeHistoryDetailPanel({
                   </div>
                 ) : entry.email_reponse_type === "mail" ? (
                   <p className="text-sm text-muted-foreground italic">
-                    Réponse détectée — utilisez « Importer la réponse Gmail » ci-dessous
-                    pour afficher le texte complet.
+                    Réponse enregistrée — texte non stocké. Consultez le fil Gmail depuis la fiche
+                    Relation ou Suivi → Envois.
                   </p>
                 ) : entry.email_reponse_type === "rdv" ? (
                   <p className="text-sm text-muted-foreground leading-relaxed">
@@ -205,6 +206,7 @@ export function ExchangeHistoryDetailPanel({
 
             <ExchangeEmailReplyForm
               entry={entry}
+              queueRowKind={inferQueueRowKindFromEtiquetteNom(entry.etiquette_nom)}
               onSent={() => onRefresh?.()}
             />
           </>

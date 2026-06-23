@@ -66,11 +66,17 @@ function notifyListeners() {
 function patchCacheAfterSent(
   item: EtiquetteEmailQueueItem,
   subject: string,
-  sentAtSec: number
+  sentAtSec: number,
+  gmailMessageId?: string | null,
+  gmailThreadId?: string | null
 ): void {
   const prev = getEnvoisQueueCache();
   if (!prev) return;
-  const sentItem = buildSentQueueItem(item, sentAtSec, subject);
+  const sentItem = buildSentQueueItem(item, sentAtSec, {
+    subject,
+    gmailMessageId,
+    gmailThreadId,
+  });
   setEnvoisQueueCache({
     ...prev,
     ready: prev.ready.filter((row) => !isSameEtiquetteQueueItem(row, item)),
@@ -139,7 +145,12 @@ export function startIndividualEtiquetteEmailSend(input: {
   subject: string;
   body: string;
   body_html?: string | null;
-  onSent?: (meta: { subject: string; sentAtSec: number }) => void;
+  onSent?: (meta: {
+    subject: string;
+    sentAtSec: number;
+    gmailMessageId?: string | null;
+    gmailThreadId?: string | null;
+  }) => void;
 }): void {
   assertNoConcurrentSend();
 
@@ -177,13 +188,24 @@ export function startIndividualEtiquetteEmailSend(input: {
         return;
       }
       const sentAtSec = Math.floor(Date.now() / 1000);
-      patchCacheAfterSent(item, input.subject, sentAtSec);
+      patchCacheAfterSent(
+        item,
+        input.subject,
+        sentAtSec,
+        sent.gmail_message_id,
+        sent.gmail_thread_id
+      );
       notifyRelationChanged(item.contact_id, {
         skipQueueReload: true,
         skipEtiquettesChanged: true,
       });
       toast.success(`Email envoyé à ${name}`);
-      input.onSent?.({ subject: input.subject, sentAtSec });
+      input.onSent?.({
+        subject: input.subject,
+        sentAtSec,
+        gmailMessageId: sent.gmail_message_id,
+        gmailThreadId: sent.gmail_thread_id,
+      });
     } catch (error) {
       console.error("Error sending etiquette email:", error);
       const hint = error instanceof Error ? error.message : "Erreur lors de l'envoi";
@@ -209,7 +231,13 @@ export function startIndividualEtiquetteEmailSend(input: {
 export async function startEtiquetteBatchSend(input: {
   items: EtiquetteEmailQueueItem[];
   cgp?: CgpConfig | null;
-  onItemSent?: (item: EtiquetteEmailQueueItem, subject: string, sentAtSec: number) => void;
+  onItemSent?: (
+    item: EtiquetteEmailQueueItem,
+    subject: string,
+    sentAtSec: number,
+    gmailMessageId?: string | null,
+    gmailThreadId?: string | null
+  ) => void;
   onDone?: () => void;
 }): Promise<EtiquetteBatchSendProgress> {
   assertNoConcurrentSend();
@@ -239,9 +267,17 @@ export async function startEtiquetteBatchSend(input: {
           patchCacheAfterSent(
             p.lastSent.item,
             p.lastSent.subject,
-            p.lastSent.sentAtSec
+            p.lastSent.sentAtSec,
+            p.lastSent.gmailMessageId,
+            p.lastSent.gmailThreadId
           );
-          input.onItemSent?.(p.lastSent.item, p.lastSent.subject, p.lastSent.sentAtSec);
+          input.onItemSent?.(
+            p.lastSent.item,
+            p.lastSent.subject,
+            p.lastSent.sentAtSec,
+            p.lastSent.gmailMessageId,
+            p.lastSent.gmailThreadId
+          );
         }
       },
     });

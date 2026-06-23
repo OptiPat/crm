@@ -30,11 +30,3 @@ export interface EmailCampaignSyncResult {
 export async function syncEmailCampaignResponses(): Promise<EmailCampaignSyncResult> {
   return invoke<EmailCampaignSyncResult>("sync_email_campaign_responses");
 }
-
-export async function importCampaignReplyFromGmail(
-  contactEtiquetteId: number
-): Promise<string> {
-  return invoke<string>("import_campaign_reply_from_gmail", {
-    contactEtiquetteId,
-  });
-}

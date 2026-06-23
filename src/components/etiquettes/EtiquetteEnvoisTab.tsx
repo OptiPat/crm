@@ -10,7 +10,8 @@ import {
   AlertTriangle,
   RefreshCw,
   ExternalLink,
-  MessageSquare,
+  MessageSquareReply,
+  MailCheck,
   CalendarCheck,
   X,
   RotateCcw,
@@ -52,6 +53,7 @@ import {
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { EtiquetteEmailSendDialog } from "@/components/etiquettes/EtiquetteEmailSendDialog";
+import { EtiquetteEmailReplyDialog } from "@/components/etiquettes/EtiquetteEmailReplyDialog";
 import { ContactRegistreBadge } from "@/components/contacts/ContactRegistreSwitch";
 import {
   AlertDialog,
@@ -143,6 +145,7 @@ export function EtiquetteEnvoisTab({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchOpen, setBatchOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
+  const [replyItem, setReplyItem] = useState<EtiquetteEmailQueueItem | null>(null);
   const [cancelConfirmItem, setCancelConfirmItem] =
     useState<EtiquetteEmailQueueItem | null>(null);
   const [dismissConfirmItem, setDismissConfirmItem] =
@@ -357,8 +360,18 @@ export function EtiquetteEnvoisTab({
   }, [loadQueue]);
 
   const applyLocalEmailSent = useCallback(
-    (item: EtiquetteEmailQueueItem, subject: string, sentAtSec: number) => {
-      const sentItem = buildSentQueueItem(item, sentAtSec, subject);
+    (
+      item: EtiquetteEmailQueueItem,
+      subject: string,
+      sentAtSec: number,
+      gmailMessageId?: string | null,
+      gmailThreadId?: string | null
+    ) => {
+      const sentItem = buildSentQueueItem(item, sentAtSec, {
+        subject,
+        gmailMessageId,
+        gmailThreadId,
+      });
       setReady((prev) => prev.filter((row) => !isSameEtiquetteQueueItem(row, item)));
       setScheduled((prev) => prev.filter((row) => !isSameEtiquetteQueueItem(row, item)));
       setSent((prev) => [sentItem, ...prev.filter((row) => !isSameEtiquetteQueueItem(row, item))]);
@@ -497,6 +510,7 @@ export function EtiquetteEnvoisTab({
     mode === "scheduled" ||
     mode === "incomplete" ||
     mode === "cancelled" ||
+    mode === "sent" ||
     mode === "followup";
 
   const handleMarkResponse = async (
@@ -523,7 +537,7 @@ export function EtiquetteEnvoisTab({
         item.contact_etiquette_id,
         item.queue_row_kind ?? "etiquette"
       );
-      toast.success("Relance masquée pour cet envoi");
+      toast.success("Suivi retiré pour cet envoi");
       await loadQueue();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur");
@@ -760,6 +774,12 @@ export function EtiquetteEnvoisTab({
                       avant relance.
                     </p>
                   )}
+                {options.mode === "sent" && (
+                  <p className="text-xs text-muted-foreground">
+                    En attente de réponse client — clôturer quand le client a répondu ou retirer
+                    du suivi.
+                  </p>
+                )}
                 {options.mode === "followup" && (
                   <p className="text-xs text-amber-800">
                     Aucun retour enregistré — relance selon le délai du modèle (onglet Relance).
@@ -794,13 +814,14 @@ export function EtiquetteEnvoisTab({
                     ) : null}
                   </>
                 )}
-                {options.mode === "sent" && item.template_sujet && (
+                {(options.mode === "sent" || options.mode === "followup") &&
+                  (item.email_sent_subject?.trim() || item.template_sujet) && (
                   <p className="text-xs text-muted-foreground truncate">
-                    Objet : {item.template_sujet}
+                    Objet : {item.email_sent_subject?.trim() || item.template_sujet}
                   </p>
                 )}
               </div>
-              <div className="flex gap-2 shrink-0">
+              <div className="flex flex-wrap gap-2 shrink-0">
                 {options.mode === "ready" && (
                   <>
                     <Button
@@ -823,29 +844,44 @@ export function EtiquetteEnvoisTab({
                     </Button>
                   </>
                 )}
-                {options.mode === "followup" && (
+                {(options.mode === "sent" || options.mode === "followup") && (
                   <>
-                    {isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
+                    {options.mode === "followup" &&
+                      (isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
+                        <Button
+                          size="sm"
+                          disabled={relancing}
+                          onClick={() => void handlePrepareRelance([item])}
+                        >
+                          <RotateCcw className="h-4 w-4 mr-1" />
+                          Relancer
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground self-center">
+                          Relance désactivée sur ce modèle
+                        </span>
+                      ))}
                     <Button
                       size="sm"
-                      disabled={relancing}
-                      onClick={() => void handlePrepareRelance([item])}
+                      disabled={!item.contact_email?.trim()}
+                      title={
+                        item.contact_email?.trim()
+                          ? "Rédiger et envoyer une réponse"
+                          : "Email manquant sur la fiche contact"
+                      }
+                      onClick={() => setReplyItem(item)}
                     >
-                      <RotateCcw className="h-4 w-4 mr-1" />
-                      Relancer
+                      <MessageSquareReply className="h-4 w-4 mr-1" />
+                      Répondre
                     </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground self-center">
-                        Relance désactivée sur ce modèle
-                      </span>
-                    )}
                     <Button
                       size="sm"
                       variant="outline"
-                      title="Réponse par email"
+                      title="Le client a déjà répondu par email (sans rédiger ici)"
                       onClick={() => void handleMarkResponse(item, "mail")}
                     >
-                      <MessageSquare className="h-4 w-4" />
+                      <MailCheck className="h-4 w-4 mr-1" />
+                      Réponse reçue
                     </Button>
                     <Button
                       size="sm"
@@ -853,12 +889,13 @@ export function EtiquetteEnvoisTab({
                       title="RDV pris (Agenda)"
                       onClick={() => void handleMarkResponse(item, "rdv")}
                     >
-                      <CalendarCheck className="h-4 w-4" />
+                      <CalendarCheck className="h-4 w-4 mr-1" />
+                      RDV
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
-                      title="Ignorer le suivi"
+                      title="Retirer du suivi"
                       onClick={() => void handleDismissFollowup(item)}
                     >
                       <X className="h-4 w-4" />
@@ -1157,7 +1194,17 @@ export function EtiquetteEnvoisTab({
               )}
               {renderList(cancelled, { mode: "cancelled" })}
             </TabsContent>
-            <TabsContent value="sent" className="mt-4">
+            <TabsContent value="sent" className="mt-4 space-y-3">
+              {sent.length > 0 && (
+                <EtiquetteEnvoisSelectionBar
+                  items={sent}
+                  selectedIds={selectedIds}
+                  onSelectedIdsChange={setSelectedIds}
+                  removeDisabled={bulkRemoving}
+                  removeLabel={getEnvoisBulkRemoveLabel("dismissFollowup")}
+                  onRemoveSelection={() => openBulkRemove("dismissFollowup", sent)}
+                />
+              )}
               {renderList(sent, { mode: "sent" })}
             </TabsContent>
             <TabsContent value="followup" className="mt-4 space-y-3">
@@ -1211,10 +1258,26 @@ export function EtiquetteEnvoisTab({
         cgpConfig={cgpConfig}
         onSent={(meta) => {
           if (confirmItem && meta) {
-            applyLocalEmailSent(confirmItem, meta.subject, meta.sentAtSec);
+            applyLocalEmailSent(
+              confirmItem,
+              meta.subject,
+              meta.sentAtSec,
+              meta.gmailMessageId,
+              meta.gmailThreadId
+            );
           } else if (!meta) {
             void loadQueue({ silent: true });
           }
+        }}
+      />
+
+      <EtiquetteEmailReplyDialog
+        item={replyItem}
+        open={!!replyItem}
+        onOpenChange={(o) => !o && setReplyItem(null)}
+        onSent={() => {
+          void loadQueue();
+          onQueueChanged?.();
         }}
       />
 
@@ -1322,7 +1385,7 @@ export function EtiquetteEnvoisTab({
                   </p>
                 )}
                 {bulkConfirm?.action === "dismissFollowup" && (
-                  <p>Le suivi relance sera ignoré pour ces envois.</p>
+                  <p>Le suivi de réponse sera retiré pour ces envois.</p>
                 )}
                 <ul className="max-h-40 overflow-y-auto text-xs space-y-1 border rounded-md p-2 bg-muted/30">
                   {bulkConfirm?.items.map((item) => (

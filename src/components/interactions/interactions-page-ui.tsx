@@ -42,9 +42,10 @@ export function InteractionsPageHelp() {
           <strong className="text-foreground">Cette page</strong> est le journal des échanges
           enregistrés : appels, RDV, notes saisies à la main, et{" "}
           <strong className="text-foreground">une ligne par email campagne</strong> envoyé. C&apos;est
-          ici que vous <strong className="text-foreground">répondez</strong> ou{" "}
-          <strong className="text-foreground">importez la réponse Gmail</strong> après un envoi
-          groupé.
+          ici que vous <strong className="text-foreground">répondez</strong> au client depuis le CRM.
+          Si le client a déjà répondu, clôturez le suivi depuis{" "}
+          <strong className="text-foreground">Suivi → Envois</strong> (« Réponse reçue ») — la
+          détection Gmail tourne aussi en arrière-plan.
         </p>
         <p>
           <strong className="text-foreground">Fiche contact → Relation</strong> montre la vue 360°

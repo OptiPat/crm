@@ -40,6 +40,9 @@ impl Database {
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         COALESCE(ce.email_relance_active, 0),
+                        NULL,
+                        NULL,
+                        NULL,
                         NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
@@ -66,6 +69,9 @@ impl Database {
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         COALESCE(ce.email_relance_active, 0),
+                        NULL,
+                        NULL,
+                        NULL,
                         NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
@@ -98,6 +104,9 @@ impl Database {
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         COALESCE(ce.email_relance_active, 0),
+                        NULL,
+                        NULL,
+                        NULL,
                         NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
@@ -129,7 +138,10 @@ impl Database {
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         0,
-                        NULL
+                        NULL,
+                        ce.email_gmail_message_id,
+                        ce.email_gmail_thread_id,
+                        ce.email_sent_subject
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -156,7 +168,10 @@ impl Database {
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         0,
-                        NULL
+                        NULL,
+                        ce.email_gmail_message_id,
+                        ce.email_gmail_thread_id,
+                        ce.email_sent_subject
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -184,6 +199,9 @@ impl Database {
                         ce.email_reponse_at, ce.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         COALESCE(ce.email_relance_active, 0),
+                        NULL,
+                        NULL,
+                        NULL,
                         NULL
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
@@ -232,6 +250,9 @@ impl Database {
                 contact_registre: row.get(20)?,
                 email_is_relance: row.get::<_, i64>(21)? != 0,
                 campaign_variables: row.get(22).ok(),
+                email_gmail_message_id: row.get(23).ok(),
+                email_gmail_thread_id: row.get(24).ok(),
+                email_sent_subject: row.get(25).ok(),
             })
         };
 

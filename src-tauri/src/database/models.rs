@@ -631,6 +631,12 @@ pub struct EtiquetteEmailQueueItem {
     /// JSON campagne SCPI (periode, bulletin_resume) — file modèle n8n
     #[serde(default)]
     pub campaign_variables: Option<String>,
+    #[serde(default)]
+    pub email_gmail_message_id: Option<String>,
+    #[serde(default)]
+    pub email_gmail_thread_id: Option<String>,
+    #[serde(default)]
+    pub email_sent_subject: Option<String>,
 }
 
 /// Snapshot des files d'envoi (1 appel IPC au lieu de 6).

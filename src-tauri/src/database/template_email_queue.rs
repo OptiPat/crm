@@ -419,7 +419,10 @@ impl Database {
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         COALESCE(cte.email_relance_active, 0),
-                        cte.campaign_variables
+                        cte.campaign_variables,
+                        NULL,
+                        NULL,
+                        NULL
                  FROM contact_template_envois cte
                  {template_joins}
                  WHERE {TRIGGER_FILTER}
@@ -438,7 +441,10 @@ impl Database {
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         0,
-                        cte.campaign_variables
+                        cte.campaign_variables,
+                        NULL,
+                        NULL,
+                        NULL
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -463,7 +469,10 @@ impl Database {
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         0,
-                        cte.campaign_variables
+                        cte.campaign_variables,
+                        NULL,
+                        NULL,
+                        NULL
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -486,7 +495,10 @@ impl Database {
                         cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                         c.registre,
                         0,
-                        cte.campaign_variables
+                        cte.campaign_variables,
+                        NULL,
+                        NULL,
+                        NULL
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -511,7 +523,10 @@ impl Database {
                             cte.email_reponse_at, cte.email_reponse_type, c.date_dernier_contact,
                             c.registre,
                             0,
-                            cte.campaign_variables
+                            cte.campaign_variables,
+                            cte.email_gmail_message_id,
+                            cte.email_gmail_thread_id,
+                            cte.email_sent_subject
                      FROM contact_template_envois cte
                      INNER JOIN templates_email t ON cte.template_id = t.id
                      INNER JOIN contacts c ON cte.contact_id = c.id
@@ -555,6 +570,9 @@ impl Database {
                 contact_registre: row.get(19)?,
                 email_is_relance: row.get::<_, i64>(20).unwrap_or(0) != 0,
                 campaign_variables: row.get(21).ok(),
+                email_gmail_message_id: row.get(22).ok(),
+                email_gmail_thread_id: row.get(23).ok(),
+                email_sent_subject: row.get(24).ok(),
             })
         };
 

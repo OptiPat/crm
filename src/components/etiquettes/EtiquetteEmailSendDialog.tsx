@@ -32,7 +32,12 @@ interface EtiquetteEmailSendDialogProps {
   item: EtiquetteEmailQueueItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSent?: (meta?: { subject: string; sentAtSec: number }) => void;
+  onSent?: (meta?: {
+    subject: string;
+    sentAtSec: number;
+    gmailMessageId?: string | null;
+    gmailThreadId?: string | null;
+  }) => void;
   cgpConfig?: CgpConfig | null;
 }
 
