@@ -16,11 +16,23 @@ export const RM_ANALYSE_SITUATION_EXAMPLES_CAPITAL_INVEST: readonly string[] = [
   "Si le client est expérimenté ou souscrit déjà : préciser depuis combien d'années (ex. « régulièrement depuis 5 ans ») et en quoi la nouvelle souscription prolonge ou complète cette démarche.",
 ];
 
+export const RM_ANALYSE_SITUATION_EXAMPLES_G3F: readonly string[] = [
+  "Exemple : le client souhaite se reconvertir professionnellement d'ici X années — expliquer pourquoi le Girardin industriel l'aiderait dans son projet (réduction d'impôt immédiate, horizon moyen terme, apport maîtrisé).",
+  "Autre exemple : couplage Malraux, Girardin, SCPI, assurance-vie, retraite dans 15 ans, études des enfants, etc. — montrer la complémentarité dans l'allocation globale.",
+  "Girardin industriel avec réduction d'impôt : rattacher l'analyse à l'objectif « Optimisation fiscale / Réduction d'impôt » (Recueil / QPI) et expliquer en quoi le dispositif Girardin industriel (G3F) répond à cette attente (réduction immédiate, effet de levier, plafond niche).",
+  "Si le client a déjà recours à des dispositifs défiscalisants (Girardin, FCPI, FIP, Malraux…), le préciser et montrer la cohérence avec son historique et le plafond des niches fiscales.",
+  "Si une augmentation de revenus motive la démarche, la mentionner et lier la préconisation au montant d'impôt estimé et à la réduction d'impôt souhaitée.",
+  "Si le client est expérimenté ou souscrit déjà : préciser depuis combien d'années (ex. « régulièrement depuis 5 ans ») et en quoi la nouvelle souscription prolonge ou complète cette démarche.",
+];
+
 export function getRapportMissionAnalyseExamples(
   productType: "scpi" | "capital-investissement" | "g3f"
 ): readonly string[] {
   if (productType === "capital-investissement") {
     return RM_ANALYSE_SITUATION_EXAMPLES_CAPITAL_INVEST;
+  }
+  if (productType === "g3f") {
+    return RM_ANALYSE_SITUATION_EXAMPLES_G3F;
   }
   return RM_ANALYSE_SITUATION_EXAMPLES_SCPI;
 }
