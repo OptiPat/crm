@@ -593,7 +593,26 @@ export function InvestissementForm({
 
   const isEdit = !!investissement;
   const useSheet = isEdit || !!defaultContactId || !!defaultFoyerId;
-  const lockedContactContext = Boolean(defaultContactId && !investissementCommun);
+  const ownerContactId = investissement?.contact_id ?? null;
+  const ownerContact =
+    ownerContactId != null
+      ? contacts.find((c) => c.id === ownerContactId)
+      : undefined;
+  const lockedOwnerOnEdit =
+    isEdit &&
+    defaultContactId != null &&
+    ownerContactId === defaultContactId &&
+    !investissementCommun;
+  /** Verrouiller le client affiché seulement à la création ou pour le placement du contact ouvert. */
+  const lockedContactContext = Boolean(
+    defaultContactId && !investissementCommun && (!isEdit || lockedOwnerOnEdit)
+  );
+  const isOtherMemberEdit =
+    isEdit &&
+    defaultContactId != null &&
+    ownerContactId != null &&
+    ownerContactId !== defaultContactId &&
+    !investissementCommun;
   const defaultContact = defaultContactId
     ? contacts.find((c) => c.id === defaultContactId)
     : undefined;
@@ -640,7 +659,9 @@ export function InvestissementForm({
   }, [investissement, nomProduit, typeProduit, defaultContact, defaultFoyerId, foyers]);
 
   const formDescription = isEdit
-    ? "Modifiez les informations du placement."
+    ? ownerContact
+      ? `Placement de ${ownerContact.prenom} ${ownerContact.nom}.`
+      : "Modifiez les informations du placement."
     : lockedContactContext && defaultContact
       ? `Placement pour ${defaultContact.prenom} ${defaultContact.nom}.`
       : "Ajoutez un placement pour un client ou un foyer.";
@@ -672,6 +693,13 @@ export function InvestissementForm({
               <span className="text-muted-foreground">Client : </span>
               <span className="font-medium">
                 {defaultContact.prenom} {defaultContact.nom}
+              </span>
+            </div>
+          ) : isOtherMemberEdit && ownerContact ? (
+            <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+              <span className="text-muted-foreground">Client : </span>
+              <span className="font-medium">
+                {ownerContact.prenom} {ownerContact.nom}
               </span>
             </div>
           ) : (

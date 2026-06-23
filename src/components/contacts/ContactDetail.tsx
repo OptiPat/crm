@@ -40,7 +40,14 @@ import {
 } from "@/lib/contacts/contact-form-utils";
 import type { ContactFormSectionId } from "@/lib/contacts/contact-form-sections";
 import { ContactForm } from "./ContactForm";
-import { getInvestissementsByContact, deleteInvestissement, type Investissement, getInvestissementsByFoyer, getInvestissementsByFoyerContacts } from "@/lib/api/tauri-investissements";
+import {
+  getInvestissementsByContact,
+  deleteInvestissement,
+  getInvestissementById,
+  type Investissement,
+  getInvestissementsByFoyer,
+  getInvestissementsByFoyerContacts,
+} from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
 import { getAllFoyers, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
@@ -708,9 +715,16 @@ export function ContactDetail({
     onOpenChange(false);
   };
 
-  const handleEditInvestissement = (inv: Investissement) => {
+  const handleEditInvestissement = async (inv: Investissement) => {
     setSelectedInvestissement(inv);
     setShowInvestissementForm(true);
+    try {
+      const fresh = await getInvestissementById(inv.id);
+      setSelectedInvestissement(fresh);
+    } catch (error) {
+      console.error("Error loading investissement:", error);
+      toast.error("Impossible de recharger le placement — données affichées depuis la liste");
+    }
   };
 
   const handleDeleteInvestissement = async (inv: Investissement) => {
