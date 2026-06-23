@@ -9,20 +9,31 @@ L'utilisateur **n'exécute pas** les commandes de vérification. C'est **ton** t
 
 ## Quand lancer
 
-Après toute modification substantielle dans `src/`, `src-tauri/`, `scripts/`, ou les fichiers de config build/test :
+- **Fin de tâche** (ou avant de considérer le travail terminé) : **une** vérification selon l'arbre ci-dessous.
+- **Pendant l'itération** (debug / boucle correctif) : préférer `npx vitest run <fichier>` ou `npx tsc --noEmit` — pas relancer verify à chaque micro-fix.
+- En cas d'échec : corrige et **relance** jusqu'à vert (ou explique un blocage réel).
 
-1. Lance la vérification **avant** de considérer la tâche terminée.
-2. En cas d'échec : corrige et **relance** jusqu'à vert (ou explique un blocage réel).
+## Arbre de décision (source canonique)
 
-## Commandes (racine du dépôt `D:\crm` ou `$PSScriptRoot`)
+1. `git diff --name-only` (ou fichiers que tu as modifiés dans la tâche).
+2. **Aucun** fichier sous `src-tauri/`, ni `Cargo.toml` / `Cargo.lock` (racine ou `src-tauri`), ni `tauri.conf*` → `npm run verify:quick`
+3. Fichier(s) Rust / Tauri / migrations runtime → `npm run verify`
+4. Config build Vite, release, ou gros refactor UI build → `npm run verify:full`
+5. Question seule, doc, ou lecture sans modif code → **pas** de verify
 
 | Contexte | Commande |
 |----------|----------|
-| Défaut (TS + frontend + Rust) | `npm run verify` |
-| Frontend seulement (`.ts`/`.tsx` sans Rust) | `npm run verify:quick` |
-| Avant release / gros refactor UI build | `npm run verify:full` |
+| **Défaut agent** (modifs `src/**` seulement) | `npm run verify:quick` |
+| Modifs `src-tauri/**` ou schéma DB Rust | `npm run verify` |
+| Release / build Vite / `vite.config*` | `npm run verify:full` |
 
-Équivalent direct : `powershell -NoProfile -ExecutionPolicy Bypass -File ./verify.ps1`
+Équivalents directs :
+
+```powershell
+npm run verify:quick   # tsc + ESLint + Vitest (pas Cargo)
+npm run verify         # + Cargo test
+npm run verify:full    # + build Vite
+```
 
 PowerShell : utiliser `;` entre commandes, pas `&&`.
 
@@ -31,7 +42,8 @@ PowerShell : utiliser `;` entre commandes, pas `&&`.
 - **Ne pas** demander à l'utilisateur de lancer `verify` lui-même.
 - **Ne pas** faire `git commit` ni `git push` sauf demande explicite.
 - **Ne pas** sauter la vérification en disant « à lancer manuellement ».
+- **Ne pas** lancer `npm run verify` (Cargo) si la tâche n'a touché que `src/**`.
 
 ## Rapport
 
-Indique brièvement le résultat (ex. « verify OK — 52 Vitest, 12 Cargo ») seulement si pertinent pour la tâche ; pas de log complet inutile.
+Indique brièvement le résultat (ex. « verify:quick OK — 52 Vitest ») seulement si pertinent ; pas de log complet inutile.

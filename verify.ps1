@@ -2,8 +2,9 @@
 # Sans commit / push. Arret sur la premiere erreur.
 #
 # Agents (obligatoire apres changements de code) :
-#   npm run verify              # tsc + Vitest + Cargo
-#   npm run verify:quick          # frontend seulement
+#   npm run verify:quick          # defaut : src/** seulement (pas Cargo)
+#   npm run verify                # si src-tauri/** modifie
+#   npm run verify:full           # + build Vite (release)
 #
 # Options manuelles si besoin :
 #   .\verify.ps1 -Build -Icons

@@ -75,4 +75,4 @@ Vérification (verify/lints, agent et non utilisateur), conventions FR/UI / EN/c
 - [ ] Aucun fichier dépassant le seuil d'alerte sans justification.
 - [ ] Schéma DB modifié = migration Rust (+ Drizzle synchronisé).
 - [ ] `notify*Changed()` appelé après mutation.
-- [ ] `npm run verify` au vert.
+- [ ] Verify appropriée au vert (`verify:quick` ou `verify` selon `verification-automatique.mdc`).

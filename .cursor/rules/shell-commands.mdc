@@ -22,13 +22,13 @@ Environnement typique : **Windows + PowerShell**. Racine dépôt : `D:\crm` (ou 
 
 | Besoin | Commande |
 |--------|----------|
-| Défaut après modif code | `npm run verify` |
-| Frontend seul (`src/`, pas Rust) | `npm run verify:quick` |
-| + build Vite / release check | `npm run verify:full` |
+| **Défaut** (modifs `src/**` seulement) | `npm run verify:quick` |
+| Modifs `src-tauri/**` / Cargo | `npm run verify` |
+| Release / build Vite | `npm run verify:full` |
 | Lockfile avant release (CI = npm 10) | `npx npm@10.9.2 ci` |
 | Unix (CI / WSL) | `./scripts/verify.sh` |
 
-Détail du flux : `verification-automatique.mdc`, `AGENTS.md`.
+Arbre de décision complet : **`verification-automatique.mdc`** (source canonique).
 
 ## Tests unitaires
 

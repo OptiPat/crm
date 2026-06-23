@@ -62,9 +62,9 @@ Doc étiquettes : `docs/ETIQUETTES.md`. Doc chiffrement : `docs/CHIFFREMENT.md`.
 
 ## Après modification de code
 
-1. **Tests** — lancer via Shell (pas l’utilisateur) :
-   - défaut : `npm run verify`
-   - UI/TS seul : `npm run verify:quick`
+1. **Tests** — une verify à la fin de tâche via Shell (pas l’utilisateur) ; arbre dans `verification-automatique.mdc` :
+   - défaut (`src/**` seul) : `npm run verify:quick`
+   - Rust / Tauri : `npm run verify`
 2. **Linter** — `ReadLints` sur les fichiers **que tu as modifiés** (ou le dossier touché).
 3. Corriger erreurs introduites ; relancer verify si le fix touche la logique.
 4. Ne pas annoncer « terminé » si verify ou lints bloquants restent rouges.
