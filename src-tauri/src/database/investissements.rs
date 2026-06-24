@@ -464,8 +464,9 @@ impl super::Database {
                 frequence_versement = ?16,
                 reinvestissement_dividendes = ?17,
                 notes = ?18,
+                origine = ?19,
                 updated_at = unixepoch()
-            WHERE id = ?19",
+            WHERE id = ?20",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -485,6 +486,7 @@ impl super::Database {
                 &investissement.frequence_versement,
                 reinvestissement_dividendes,
                 &investissement.notes,
+                &origine,
                 id
             ],
         )?;
@@ -1190,5 +1192,71 @@ mod tests {
         let inv = db.get_investissement_by_id(id).unwrap();
         assert_eq!(inv.stellium_versements_nets_centimes, Some(1_000_000));
         assert_eq!(inv.stellium_perf_euro_centimes, Some(50_000));
+    }
+
+    #[test]
+    fn update_investissement_persists_origine() {
+        use super::super::models::NewInvestissement;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO contacts (categorie, nom, prenom, created_at, updated_at)
+                 VALUES ('CLIENT', 'DUPONT', 'Jean', 1, 1)",
+                [],
+            )
+            .unwrap();
+        let created = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "SCPI".into(),
+                partenaire_id: None,
+                nom_produit: "Epargne Pierre".into(),
+                numero_contrat: None,
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        db.update_investissement(
+            created.id,
+            &NewInvestissement {
+                contact_id: Some(1),
+                foyer_id: None,
+                type_produit: "SCPI".into(),
+                partenaire_id: None,
+                nom_produit: "Epargne Pierre".into(),
+                numero_contrat: None,
+                montant_initial: None,
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: Some(false),
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: Some(false),
+                notes: None,
+                origine: Some("EXISTANT_CLIENT".into()),
+            },
+        )
+        .unwrap();
+
+        let updated = db.get_investissement_by_id(created.id).unwrap();
+        assert_eq!(updated.origine, "EXISTANT_CLIENT");
     }
 }

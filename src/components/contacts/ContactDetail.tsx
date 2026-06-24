@@ -126,6 +126,9 @@ interface ContactDetailProps {
 
 type DetailTab = "synthese" | "relation" | "patrimoine" | "foyer";
 
+const CONTACT_DETAIL_TAB_TRIGGER =
+  "min-w-0 gap-1 px-1.5 sm:px-2 py-2 text-[11px] sm:text-xs md:text-sm sm:flex-1 sm:basis-0 overflow-hidden data-[state=active]:shadow-none data-[state=active]:ring-1 data-[state=active]:ring-border/80";
+
 export function ContactDetail({
   open,
   onOpenChange,
@@ -901,30 +904,32 @@ export function ContactDetail({
             onValueChange={(v) => setDetailTab(v as DetailTab)}
             className="w-full min-h-0 flex flex-col"
           >
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto shrink-0">
-              <TabsTrigger value="synthese" className="gap-1.5 text-xs sm:text-sm py-2">
+            <TabsList className="grid w-full grid-cols-2 sm:flex sm:flex-row h-auto shrink-0 p-1 gap-0.5">
+              <TabsTrigger value="synthese" className={CONTACT_DETAIL_TAB_TRIGGER}>
                 <LayoutGrid className="h-3.5 w-3.5 shrink-0" />
-                Synthèse
+                <span className="truncate min-w-0">Synthèse</span>
               </TabsTrigger>
-              <TabsTrigger value="relation" className="gap-1.5 text-xs sm:text-sm py-2">
+              <TabsTrigger value="relation" className={CONTACT_DETAIL_TAB_TRIGGER}>
                 <History className="h-3.5 w-3.5 shrink-0" />
-                Relation
+                <span className="truncate min-w-0">Relation</span>
               </TabsTrigger>
-              <TabsTrigger value="patrimoine" className="gap-1.5 text-xs sm:text-sm py-2">
+              <TabsTrigger value="patrimoine" className={CONTACT_DETAIL_TAB_TRIGGER}>
                 <Wallet className="h-3.5 w-3.5 shrink-0" />
-                Patrimoine
+                <span className="truncate min-w-0">Patrimoine</span>
                 {investissements.length > 0 && (
                   <Badge
                     variant="secondary"
-                    className="h-4 min-w-4 px-1 text-[10px] font-semibold tabular-nums"
+                    className="h-4 min-w-4 shrink-0 px-1 text-[10px] font-semibold tabular-nums"
                   >
                     {investissements.length}
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="foyer" className="gap-1.5 text-xs sm:text-sm py-2">
+              <TabsTrigger value="foyer" className={CONTACT_DETAIL_TAB_TRIGGER}>
                 <Home className="h-3.5 w-3.5 shrink-0" />
-                Couple / foyer
+                <span className="truncate min-w-0" title="Couple / foyer">
+                  <span className="hidden md:inline">Couple / </span>Foyer
+                </span>
               </TabsTrigger>
             </TabsList>
 

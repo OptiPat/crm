@@ -85,6 +85,7 @@ import {
   type Investissement,
   type NewInvestissement,
   type NomProduitSuggestion,
+  type OrigineInvestissement,
 } from "@/lib/api/tauri-investissements";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
@@ -241,6 +242,7 @@ export function InvestissementForm({
   const [reinvestissementDividendes, setReinvestissementDividendes] = useState(false);
   const [pourcentageReinvestissement, setPourcentageReinvestissement] = useState("100");
   const [notes, setNotes] = useState("");
+  const [origine, setOrigine] = useState<OrigineInvestissement>("MON_CONSEIL");
   const [exceltisChoice, setExceltisChoice] = useState<ExceltisFormChoice>({
     hasExceltis: false,
   });
@@ -411,6 +413,7 @@ export function InvestissementForm({
         setReinvestissementDividendes(investissement.reinvestissement_dividendes);
         setPourcentageReinvestissement(investissement.notes?.match(/Réinv\. (\d+)%/)?.[1] || "100");
         setNotes(stripStructuredDemembrementFromNotes(investissement.notes || ""));
+        setOrigine(investissement.origine);
         setLiveEncours({
           actuel: investissement.encours_actuel,
           date: investissement.encours_date,
@@ -471,6 +474,7 @@ export function InvestissementForm({
     setReinvestissementDividendes(false);
     setPourcentageReinvestissement("100");
     setNotes("");
+    setOrigine("MON_CONSEIL");
     setExceltisChoice({ hasExceltis: false });
     setLiveEncours({});
   };
@@ -559,6 +563,7 @@ export function InvestissementForm({
         frequence_versement: frequenceVersement || undefined,
         reinvestissement_dividendes: accepteReinvestissement ? reinvestissementDividendes : false,
         notes: finalNotes || undefined,
+        origine,
       };
 
       if (investissement) {
@@ -756,6 +761,31 @@ export function InvestissementForm({
               </Select>
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>Origine du placement</Label>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant={origine === "MON_CONSEIL" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setOrigine("MON_CONSEIL")}
+              >
+                Avec moi
+              </Button>
+              <Button
+                type="button"
+                variant={origine === "EXISTANT_CLIENT" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setOrigine("EXISTANT_CLIENT")}
+              >
+                À côté
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              « Avec moi » = souscrit avec votre conseil · « À côté » = patrimoine existant du client
+            </p>
+          </div>
 
           {/* Type de produit */}
           <div className="space-y-2">
