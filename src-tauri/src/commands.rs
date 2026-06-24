@@ -1948,6 +1948,24 @@ pub fn prepare_email_campaign_relance(
 }
 
 #[tauri::command]
+pub fn count_misplaced_sent_campaigns(db: State<'_, DbState>) -> Result<u32, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .count_misplaced_sent_campaigns()
+        .map_err(|e| format!("Failed to count misplaced sent campaigns: {}", e))
+}
+
+#[tauri::command]
+pub fn repair_misplaced_sent_campaigns(db: State<'_, DbState>) -> Result<u32, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .repair_misplaced_sent_campaigns()
+        .map_err(|e| format!("Failed to repair misplaced sent campaigns: {}", e))
+}
+
+#[tauri::command]
 pub async fn scan_stellium_exceltis_emails(
     app_handle: tauri::AppHandle,
 ) -> Result<crate::email::stellium_exceltis::StelliumExceltisScanResult, String> {

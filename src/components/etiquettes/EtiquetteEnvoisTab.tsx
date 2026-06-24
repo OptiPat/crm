@@ -35,6 +35,8 @@ import {
   restorePendingEmailCampaign,
   dismissCancelledPendingEmailCampaign,
   prepareEmailCampaignRelance,
+  countMisplacedSentCampaigns,
+  repairMisplacedSentCampaigns,
   getContrastColor,
   type EtiquetteEmailQueueItem,
 } from "@/lib/api/tauri-etiquettes";
@@ -169,6 +171,8 @@ export function EtiquetteEnvoisTab({
   const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
   const [scpiReadyOnly, setScpiReadyOnly] = useState(false);
   const [journalScpiOnly, setJournalScpiOnly] = useState(false);
+  const [misplacedSentCount, setMisplacedSentCount] = useState(0);
+  const [repairingMisplaced, setRepairingMisplaced] = useState(false);
   const queueRefreshGenRef = useRef(0);
   const { dashboard: scpiDashboard } = useScpiCampaignDashboard(dashboardRefreshKey);
 
@@ -226,10 +230,11 @@ export function EtiquetteEnvoisTab({
     try {
       if (!silent) setLoading(true);
       else setBackgroundRefreshing(true);
-      const [cgp, snap, emailConn] = await Promise.all([
+      const [cgp, snap, emailConn, misplacedCount] = await Promise.all([
         getCgpConfig(),
         getEnvoisSnapshot(null),
         getEmailConnectionStatus(),
+        countMisplacedSentCampaigns(),
       ]);
       if (!isRefreshGenerationCurrent(queueRefreshGenRef, token)) return;
       setCgpConfig(cgp);
@@ -240,6 +245,7 @@ export function EtiquetteEnvoisTab({
       setSent(snap.sent ?? []);
       setFollowup(snap.followup ?? []);
       setEmailStatus(emailConn);
+      setMisplacedSentCount(misplacedCount);
       setEnvoisQueueCache({
         ready: snap.ready,
         scheduled: snap.scheduled ?? [],
@@ -261,6 +267,46 @@ export function EtiquetteEnvoisTab({
       else setBackgroundRefreshing(false);
     }
   }, [onQueueChanged]);
+
+  const handleRepairMisplacedSent = async () => {
+    try {
+      setRepairingMisplaced(true);
+      const n = await repairMisplacedSentCampaigns();
+      const snap = await getEnvoisSnapshot(null);
+      setReady(snap.ready);
+      setScheduled(snap.scheduled ?? []);
+      setIncomplete(snap.incomplete ?? []);
+      setCancelled(snap.cancelled ?? []);
+      setSent(snap.sent ?? []);
+      setFollowup(snap.followup ?? []);
+      setMisplacedSentCount(await countMisplacedSentCampaigns());
+      if (n === 0) {
+        toast.message("Aucun envoi à restaurer");
+      } else {
+        const sentN = snap.sent?.length ?? 0;
+        const followN = snap.followup?.length ?? 0;
+        const tab =
+          followN > 0 && sentN === 0
+            ? "followup"
+            : sentN > 0 && followN === 0
+              ? "sent"
+              : followN >= sentN
+                ? "followup"
+                : "sent";
+        setSubTab(tab);
+        toast.success(
+          `${n} envoi${n > 1 ? "s" : ""} restauré${n > 1 ? "s" : ""} — voir onglet ${
+            tab === "followup" ? "À relancer" : "Envoyés"
+          }`
+        );
+      }
+      onQueueChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur lors de la restauration");
+    } finally {
+      setRepairingMisplaced(false);
+    }
+  };
 
   const scpiStaleReadyCount = useMemo(
     () =>
@@ -1047,6 +1093,34 @@ export function EtiquetteEnvoisTab({
           </div>
         </CardHeader>
         <CardContent>
+          {misplacedSentCount > 0 && (
+            <div className="mb-4 flex flex-col gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="text-sm text-amber-950">
+                <p className="font-medium">
+                  {misplacedSentCount} envoi{misplacedSentCount > 1 ? "s" : ""} déjà partis
+                  mais affiché{misplacedSentCount > 1 ? "s" : ""} en « Prêts à envoyer »
+                </p>
+                <p className="mt-1 text-amber-900/80">
+                  Restauration depuis le journal — sans renvoyer le mail. Les envois anciens
+                  (&gt; délai de suivi) réapparaîtront dans « À relancer ».
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="shrink-0 border-amber-300 bg-white hover:bg-amber-100"
+                disabled={loading || repairingMisplaced}
+                onClick={() => void handleRepairMisplacedSent()}
+              >
+                {repairingMisplaced ? (
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                )}
+                Restaurer le suivi ({misplacedSentCount})
+              </Button>
+            </div>
+          )}
           <Tabs value={subTab} onValueChange={(v) => setSubTab(v as typeof subTab)}>
             <TabsList>
               <TabsTrigger value="ready" className="gap-2">

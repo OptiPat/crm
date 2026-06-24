@@ -196,6 +196,8 @@ fn main() {
             restore_pending_email_campaign,
             dismiss_cancelled_pending_email_campaign,
             prepare_email_campaign_relance,
+            count_misplaced_sent_campaigns,
+            repair_misplaced_sent_campaigns,
             scan_stellium_exceltis_emails,
             get_stellium_exceltis_signals,
             dismiss_stellium_exceltis_signal,

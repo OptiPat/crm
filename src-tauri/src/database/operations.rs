@@ -3860,14 +3860,243 @@ mod database_integration_tests {
         );
 
         db.check_and_apply_auto_etiquettes().unwrap();
-        let row = db
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid),
+            "sans réponse client : ne pas remettre en file prête au recalcul"
+        );
+        let followup = db.get_etiquette_email_queue("followup").unwrap();
+        assert!(
+            followup.iter().any(|q| q.contact_id == cid),
+            "délai dépassé sans réponse : bascule en relance, pas en prêt à envoyer"
+        );
+        let row = followup
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("ligne relance");
+        assert_eq!(row.contact_registre.as_deref(), Some("VOUS"));
+        assert!(row.template_sujet.contains("vos"));
+    }
+
+    #[test]
+    fn repair_misplaced_sent_campaign_restores_from_send_log() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Tpl repair".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Campagne repair".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 60),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+            })
+            .unwrap();
+        let cid = db
+            .create_contact(NewContact {
+                email: Some("repair@example.com".into()),
+                ..sample_contact("Repair", "Alice")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+        db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+        let ce_id = db
             .get_etiquette_email_queue("ready")
             .unwrap()
             .into_iter()
             .find(|q| q.contact_id == cid)
-            .expect("campagne stale réouverte en file prête");
-        assert_eq!(row.contact_registre.as_deref(), Some("VOUS"));
-        assert!(row.template_sujet.contains("vos"));
+            .expect("file prête")
+            .contact_etiquette_id;
+
+        db.mark_etiquette_email_sent(
+            ce_id,
+            Some("gmail-msg-1"),
+            Some("gmail-thread-1"),
+            Some("Objet initial"),
+            Some("Corps initial"),
+            None,
+            None,
+        )
+        .unwrap();
+        assert_eq!(db.get_etiquette_email_queue("sent").unwrap().len(), 1);
+
+        db.get_connection()
+            .execute(
+                "UPDATE contact_etiquettes SET email_envoye = 0, email_date_envoi = NULL,
+                 email_date_prevue = ?1, email_gmail_message_id = NULL, email_gmail_thread_id = NULL
+                 WHERE id = ?2",
+                params![now, ce_id],
+            )
+            .unwrap();
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .any(|q| q.contact_id == cid)
+        );
+        assert_eq!(db.count_misplaced_sent_campaigns().unwrap(), 1);
+
+        let repaired = db.repair_misplaced_sent_campaigns().unwrap();
+        assert_eq!(repaired, 1);
+        assert_eq!(db.count_misplaced_sent_campaigns().unwrap(), 0);
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid)
+        );
+        assert!(
+            db.get_etiquette_email_queue("sent")
+                .unwrap()
+                .iter()
+                .any(|q| q.contact_id == cid)
+        );
+    }
+
+    #[test]
+    fn misplaced_sent_campaign_skips_reopen_ready_and_no_attendre_reponse() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl_no_wait = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Tpl sans attente".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: Some(r#"{"email_suivi_reponse":{"attendre_reponse":false}}"#.into()),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let tpl_answered = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Tpl avec trace reponse".into(),
+                sujet: "Bonjour".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        for (tpl_id, contact_email, nom) in [
+            (tpl_no_wait.id, "nowait@example.com", "NoWait"),
+            (tpl_answered.id, "answered@example.com", "Answered"),
+        ] {
+            let etiqu = db
+                .create_etiquette(NewEtiquette {
+                    nom: format!("Campagne {nom}"),
+                    couleur: None,
+                    icone: None,
+                    description: None,
+                    priorite: Some(0),
+                    auto_condition_type: None,
+                    auto_condition_config: None,
+                    auto_categories: None,
+                    email_template_id: Some(tpl_id),
+                    email_delai_jours: Some(0),
+                    email_envoi_prevu: Some(now - 60),
+                    email_envoi_heure: None,
+                    email_envoi_jours_semaine: None,
+                    email_actif: Some(true),
+                    is_default: Some(false),
+                    actif: None,
+                    segment_id: None,
+                })
+                .unwrap();
+            let cid = db
+                .create_contact(NewContact {
+                    email: Some(contact_email.into()),
+                    ..sample_contact(nom, "Test")
+                })
+                .unwrap()
+                .id
+                .unwrap();
+            db.attribuer_etiquette(cid, etiqu.id, Some("MANUEL".into()), None)
+                .unwrap();
+            let ce_id = db
+                .get_etiquette_email_queue("ready")
+                .unwrap()
+                .into_iter()
+                .find(|q| q.contact_id == cid)
+                .expect("file prête")
+                .contact_etiquette_id;
+            db.mark_etiquette_email_sent(
+                ce_id,
+                Some("gmail-msg"),
+                None,
+                Some("Objet"),
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+            db.get_connection()
+                .execute(
+                    "UPDATE contact_etiquettes SET email_envoye = 0, email_date_envoi = NULL,
+                     email_date_prevue = ?1
+                     WHERE id = ?2",
+                    params![now, ce_id],
+                )
+                .unwrap();
+            if nom == "Answered" {
+                db.get_connection()
+                    .execute(
+                        "UPDATE contact_etiquettes SET email_reponse_body = 'Merci'
+                         WHERE id = ?1",
+                        params![ce_id],
+                    )
+                    .unwrap();
+            }
+        }
+
+        assert_eq!(
+            db.count_misplaced_sent_campaigns().unwrap(),
+            0,
+            "pas de restauration pour réouverture volontaire ou sans attente de réponse"
+        );
     }
 
     #[test]

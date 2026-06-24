@@ -441,6 +441,16 @@ export async function dismissEmailCampaignFollowup(
   });
 }
 
+/** Envoi réel journalisé mais file repassée en « Prêts » (recalcul auto). */
+export async function countMisplacedSentCampaigns(): Promise<number> {
+  return invoke<number>("count_misplaced_sent_campaigns");
+}
+
+/** Restaure « en attente de réponse » depuis le journal — sans renvoyer. */
+export async function repairMisplacedSentCampaigns(): Promise<number> {
+  return invoke<number>("repair_misplaced_sent_campaigns");
+}
+
 export async function cancelPendingEmailCampaign(
   contactEtiquetteId: number,
   queueRowKind?: string | null

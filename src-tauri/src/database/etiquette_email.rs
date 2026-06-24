@@ -1074,15 +1074,10 @@ impl Database {
             return Ok(false);
         }
 
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-
         let (
             email_envoye,
             date_attribution,
-            email_date_envoi,
+            _email_date_envoi,
             email_reponse_at,
             email_suivi_ignore,
             email_annule,
@@ -1114,8 +1109,12 @@ impl Database {
             return Ok(false);
         }
 
-        let should_reopen = if email_suivi_ignore != 0 || email_reponse_at.is_some() {
+        // Réouverture = nouveau cycle après réponse enregistrée, ou campagne sans attente de retour.
+        // Ne pas réouvrir tant qu'il n'y a pas de réponse : la file « À relancer » gère le délai dépassé.
+        let should_reopen = if email_reponse_at.is_some() {
             true
+        } else if email_suivi_ignore != 0 {
+            false
         } else {
             let attendre_reponse = template_variables
                 .as_deref()
@@ -1123,19 +1122,7 @@ impl Database {
                 .and_then(|meta| meta.get("email_suivi_reponse")?.get("attendre_reponse")?.as_i64())
                 .unwrap_or(1)
                 != 0;
-            if !attendre_reponse {
-                true
-            } else if let Some(envoi) = email_date_envoi {
-                !matches_sent_followup_window(
-                    template_variables.as_deref(),
-                    envoi,
-                    now,
-                    DEFAULT_RELANCE_DELAI_JOURS,
-                    false,
-                )
-            } else {
-                true
-            }
+            !attendre_reponse
         };
 
         if !should_reopen {
@@ -1203,5 +1190,115 @@ impl Database {
             )));
         }
         Ok(())
+    }
+
+    /// Campagnes déjà envoyées (journal) mais repassées en « Prêts » par erreur de recalcul auto.
+    /// Exclut les réouvertures volontaires (réponse enregistrée, modèle sans attente de retour).
+    fn misplaced_sent_campaign_rows(
+        &self,
+    ) -> Result<Vec<(i64, i64, Option<String>, Option<String>)>> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let default_delai_jours = DEFAULT_RELANCE_DELAI_JOURS;
+
+        let mut stmt = self.conn.prepare(
+            "SELECT ce.id, l.created_at, l.gmail_message_id, l.subject, t.variables
+             FROM email_send_log l
+             INNER JOIN (
+               SELECT contact_etiquette_id, MAX(id) AS max_id
+               FROM email_send_log
+               WHERE status = 'success' AND contact_etiquette_id IS NOT NULL
+               GROUP BY contact_etiquette_id
+             ) latest ON latest.max_id = l.id
+             INNER JOIN contact_etiquettes ce ON ce.id = l.contact_etiquette_id
+             INNER JOIN etiquettes e ON ce.etiquette_id = e.id
+             LEFT JOIN templates_email t ON e.email_template_id = t.id
+             WHERE ce.email_envoye = 0
+               AND COALESCE(ce.email_annule, 0) = 0
+               AND ce.email_reponse_at IS NULL
+               AND ce.email_reponse_body IS NULL
+               AND (ce.email_reponse_gmail_message_id IS NULL
+                    OR TRIM(ce.email_reponse_gmail_message_id) = '')
+               AND COALESCE(ce.email_relance_active, 0) = 0
+               AND ce.email_date_envoi IS NULL
+               AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
+             ORDER BY l.created_at DESC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, i64>(1)?,
+                row.get::<_, Option<String>>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, Option<String>>(4)?,
+            ))
+        })?;
+        Ok(rows
+            .filter_map(|row| row.ok())
+            .filter(|(ce_id, sent_at, _, _, variables)| {
+                let in_sent = matches_sent_followup_window(
+                    variables.as_deref(),
+                    *sent_at,
+                    now,
+                    default_delai_jours,
+                    false,
+                );
+                let in_followup = matches_sent_followup_window(
+                    variables.as_deref(),
+                    *sent_at,
+                    now,
+                    default_delai_jours,
+                    true,
+                );
+                if !(in_sent || in_followup) {
+                    return false;
+                }
+                let _ = ce_id;
+                true
+            })
+            .map(|(ce_id, sent_at, gmail_message_id, subject, _)| {
+                (ce_id, sent_at, gmail_message_id, subject)
+            })
+            .collect())
+    }
+
+    pub fn count_misplaced_sent_campaigns(&self) -> Result<u32> {
+        let rows = self.misplaced_sent_campaign_rows()?;
+        Ok(rows.len().min(u32::MAX as usize) as u32)
+    }
+
+    /// Restaure le suivi « en attente de réponse » depuis le journal d'envoi (sans renvoyer).
+    pub fn repair_misplaced_sent_campaigns(&self) -> Result<u32> {
+        let rows = self.misplaced_sent_campaign_rows()?;
+        let mut repaired = 0u32;
+        for (ce_id, sent_at, gmail_message_id, subject) in rows {
+            let updated = self.conn.execute(
+                "UPDATE contact_etiquettes SET
+                    email_envoye = 1,
+                    email_date_envoi = ?1,
+                    email_date_prevue = NULL,
+                    email_reponse_at = NULL,
+                    email_reponse_type = NULL,
+                    email_reponse_body = NULL,
+                    email_reponse_gmail_message_id = NULL,
+                    email_suivi_ignore = 0,
+                    email_relance_active = 0,
+                    email_gmail_message_id = COALESCE(?2, email_gmail_message_id),
+                    email_sent_subject = COALESCE(email_sent_subject, ?3)
+                 WHERE id = ?4
+                   AND email_envoye = 0
+                   AND COALESCE(email_annule, 0) = 0
+                   AND email_reponse_at IS NULL
+                   AND COALESCE(email_relance_active, 0) = 0
+                   AND email_date_envoi IS NULL",
+                params![sent_at, gmail_message_id, subject, ce_id],
+            )?;
+            if updated > 0 {
+                repaired += 1;
+            }
+        }
+        Ok(repaired)
     }
 }
