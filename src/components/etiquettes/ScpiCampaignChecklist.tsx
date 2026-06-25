@@ -52,7 +52,7 @@ export function ScpiCampaignChecklist({
   const [apiSettings, setApiSettings] = useState<LocalApiSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [triggering, setTriggering] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
 
   const load = useCallback(async () => {

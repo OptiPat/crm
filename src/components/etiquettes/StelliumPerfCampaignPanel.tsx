@@ -45,7 +45,7 @@ export function StelliumPerfCampaignPanel({
   const [dashboard, setDashboard] = useState<StelliumPerfCampaignDashboard | null>(null);
   const [releve, setReleve] = useState<DiscoverStelliumPerfCampaignPrepareResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(true);
 
   const load = useCallback(async () => {
     try {

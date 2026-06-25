@@ -111,8 +111,33 @@ import { isScpiDigestStale } from "@/lib/emails/scpi-digest-stale";
 import { isScpiBulletinQueueItem } from "@/lib/emails/scpi-bulletin-preview-vars";
 import { filterReadyByScpiBatch } from "@/lib/emails/scpi-envois-filters";
 import { useScpiCampaignDashboard } from "@/hooks/useScpiCampaignDashboard";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+type EnvoisSubTab =
+  | "ready"
+  | "scheduled"
+  | "incomplete"
+  | "cancelled"
+  | "sent"
+  | "followup"
+  | "journal";
+
+function parseEnvoisSubTab(raw: string | null | undefined): EnvoisSubTab | null {
+  if (
+    raw === "ready" ||
+    raw === "scheduled" ||
+    raw === "incomplete" ||
+    raw === "cancelled" ||
+    raw === "sent" ||
+    raw === "followup" ||
+    raw === "journal"
+  ) {
+    return raw;
+  }
+  return null;
+}
 
 interface EtiquetteEnvoisTabProps {
   onOpenContact?: (contactId: number) => void;
@@ -135,15 +160,7 @@ export function EtiquetteEnvoisTab({
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(initialState.cgpConfig);
   const [loading, setLoading] = useState(initialState.loading);
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
-  const [subTab, setSubTab] = useState<
-    | "ready"
-    | "scheduled"
-    | "incomplete"
-    | "cancelled"
-    | "sent"
-    | "followup"
-    | "journal"
-  >("ready");
+  const [subTab, setSubTab] = useState<EnvoisSubTab>("ready");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [batchOpen, setBatchOpen] = useState(false);
   const [confirmItem, setConfirmItem] = useState<EtiquetteEmailQueueItem | null>(null);
@@ -208,21 +225,21 @@ export function EtiquetteEnvoisTab({
 
   useEffect(() => {
     const raw = sessionStorage.getItem("crm_nav_suivi_envois_subtab");
-    if (
-      raw === "ready" ||
-      raw === "scheduled" ||
-      raw === "incomplete" ||
-      raw === "cancelled" ||
-      raw === "sent" ||
-      raw === "followup" ||
-      raw === "journal"
-    ) {
-      setSubTab(raw);
+    const parsed = parseEnvoisSubTab(raw);
+    if (parsed) {
+      setSubTab(parsed);
       sessionStorage.removeItem("crm_nav_suivi_envois_subtab");
     }
     const focusId = consumeEnvoisContactFocus();
     if (focusId != null) setHighlightContactId(focusId);
   }, []);
+
+  useAppNavigationListener((detail) => {
+    if (detail.type !== "suivi" || detail.tab !== "envois") return;
+    const parsed = parseEnvoisSubTab(detail.envoisSubTab);
+    if (parsed) setSubTab(parsed);
+    if (detail.contactId != null) setHighlightContactId(detail.contactId);
+  });
 
   const loadQueue = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
