@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
+  ephemeralSendDateTimeToUnix,
   isArchivedEphemeralTemplate,
   isEphemeralAudienceValid,
   isEphemeralTemplate,
   parseEphemeralCampaignConfig,
   setEphemeralCampaignInMeta,
   stampNewEphemeralTemplateMeta,
+  unixToEphemeralSendDateLocal,
+  unixToEphemeralSendTimeLocal,
 } from "@/lib/emails/template-email-ephemeral";
 
 describe("template-email-ephemeral", () => {
@@ -39,6 +42,17 @@ describe("template-email-ephemeral", () => {
       { isEphemeral: true }
     );
     expect(isArchivedEphemeralTemplate(variables)).toBe(true);
+  });
+
+  it("combine date et heure planifiées", () => {
+    const ts = ephemeralSendDateTimeToUnix("2026-06-25", "19:30");
+    expect(ts).not.toBeNull();
+    expect(unixToEphemeralSendDateLocal(ts)).toBe("2026-06-25");
+    expect(unixToEphemeralSendTimeLocal(ts)).toBe("19:30");
+    expect(ephemeralSendDateTimeToUnix("")).toBeNull();
+    const withDefaultTime = ephemeralSendDateTimeToUnix("2026-06-25");
+    expect(unixToEphemeralSendDateLocal(withDefaultTime)).toBe("2026-06-25");
+    expect(unixToEphemeralSendTimeLocal(withDefaultTime)).toBe("09:00");
   });
 
   it("valide l'audience produits", () => {

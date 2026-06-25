@@ -178,3 +178,31 @@ export function buildEphemeralSyncFingerprint(input: {
     send_at: input.campaign.send_at,
   });
 }
+
+/** Heure par défaut quand une date planifiée est choisie sans heure explicite. */
+export const EPHEMERAL_DEFAULT_SEND_TIME = "09:00";
+
+export function unixToEphemeralSendDateLocal(ts: number | null): string {
+  if (ts == null) return "";
+  const d = new Date(ts * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function unixToEphemeralSendTimeLocal(ts: number | null): string {
+  if (ts == null) return EPHEMERAL_DEFAULT_SEND_TIME;
+  const d = new Date(ts * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function ephemeralSendDateTimeToUnix(
+  date: string,
+  time: string = EPHEMERAL_DEFAULT_SEND_TIME
+): number | null {
+  if (!date.trim()) return null;
+  const normalizedTime = time.trim() || EPHEMERAL_DEFAULT_SEND_TIME;
+  const ms = Date.parse(`${date}T${normalizedTime}`);
+  if (Number.isNaN(ms)) return null;
+  return Math.floor(ms / 1000);
+}

@@ -9,10 +9,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { CategoryTogglePills } from "@/components/etiquettes/etiquette-form-ui";
 import { TemplateEmailEphemeralProductFilter } from "@/components/emails/TemplateEmailEphemeralProductFilter";
-import type {
-  EphemeralCampaignAudience,
-  EphemeralReinvestFilter,
-  EphemeralVersementProgrammeFilter,
+import {
+  EPHEMERAL_DEFAULT_SEND_TIME,
+  ephemeralSendDateTimeToUnix,
+  unixToEphemeralSendDateLocal,
+  unixToEphemeralSendTimeLocal,
+  type EphemeralCampaignAudience,
+  type EphemeralReinvestFilter,
+  type EphemeralVersementProgrammeFilter,
 } from "@/lib/emails/template-email-ephemeral";
 
 const CONTACT_CATEGORIES = [
@@ -22,20 +26,6 @@ const CONTACT_CATEGORIES = [
   { value: "SUSPECT_CLIENT", label: "Suspect client" },
   { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },
 ] as const;
-
-function unixToDatetimeLocal(ts: number | null): string {
-  if (ts == null) return "";
-  const d = new Date(ts * 1000);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function datetimeLocalToUnix(value: string): number | null {
-  if (!value.trim()) return null;
-  const ms = Date.parse(value);
-  if (Number.isNaN(ms)) return null;
-  return Math.floor(ms / 1000);
-}
 
 type Props = {
   audience: EphemeralCampaignAudience;
@@ -146,15 +136,55 @@ export function TemplateEmailEphemeralAudiencePanel({
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="ephemeral-send-at">Date d&apos;envoi planifiée (optionnel)</Label>
-        <Input
-          id="ephemeral-send-at"
-          type="datetime-local"
-          value={unixToDatetimeLocal(sendAt)}
-          onChange={(e) => onSendAtChange(datetimeLocalToUnix(e.target.value))}
-        />
+        <Label className="text-sm font-medium">Envoi planifié (optionnel)</Label>
+        <div className="flex flex-wrap gap-4 items-end">
+          <div className="space-y-1">
+            <Label htmlFor="ephemeral-send-date" className="text-xs text-muted-foreground">
+              Date
+            </Label>
+            <Input
+              id="ephemeral-send-date"
+              type="date"
+              className="w-[180px]"
+              value={unixToEphemeralSendDateLocal(sendAt)}
+              onChange={(e) => {
+                const date = e.target.value;
+                if (!date) {
+                  onSendAtChange(null);
+                  return;
+                }
+                onSendAtChange(
+                  ephemeralSendDateTimeToUnix(
+                    date,
+                    sendAt != null
+                      ? unixToEphemeralSendTimeLocal(sendAt)
+                      : EPHEMERAL_DEFAULT_SEND_TIME
+                  )
+                );
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="ephemeral-send-time" className="text-xs text-muted-foreground">
+              Heure
+            </Label>
+            <Input
+              id="ephemeral-send-time"
+              type="time"
+              className="w-[140px]"
+              value={unixToEphemeralSendTimeLocal(sendAt)}
+              disabled={sendAt == null}
+              onChange={(e) => {
+                const date = unixToEphemeralSendDateLocal(sendAt);
+                if (!date) return;
+                onSendAtChange(ephemeralSendDateTimeToUnix(date, e.target.value));
+              }}
+            />
+          </div>
+        </div>
         <p className="text-xs text-muted-foreground">
-          Laissez vide pour mettre en file dès la préparation (Prêts à envoyer immédiatement).
+          Sans date : file dès la préparation (Prêts à envoyer). Avec date et heure : visible dans
+          Suivi → Envois à partir du créneau choisi.
         </p>
       </div>
     </div>

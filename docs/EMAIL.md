@@ -43,7 +43,7 @@ Modèle **jetable** pour un envoi ponctuel ciblé par produits, **sans créer d�
 | Audience | Types / noms de produit, réinvestissement et versements programmés (tous types d’investissement) |
 | Destinataires | Exclusions manuelles, puis **Enregistrer** → **Préparer / actualiser la file** |
 | Envoi | Suivi → Envois (file `contact_template_envois` + `campaign_batch_key`) |
-| Fin | Auto-archivage quand tout est envoyé et le suivi réponse est clos ; ou **Terminer la campagne** |
+| Fin | Auto-archivage quand tous les destinataires de la file ont reçu l’email ; ou **Terminer la campagne** |
 
 Règles :
 

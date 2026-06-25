@@ -673,22 +673,6 @@ impl Database {
             return Ok(false);
         }
 
-        let pending_followup: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contact_template_envois cte
-             INNER JOIN templates_email t ON cte.template_id = t.id
-             WHERE cte.template_id = ?1
-               AND COALESCE(cte.campaign_batch_key, '') = ?2
-               AND cte.email_envoye = 1
-               AND cte.email_reponse_at IS NULL
-               AND COALESCE(cte.email_suivi_ignore, 0) = 0
-               AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1",
-            params![template_id, batch_key],
-            |row| row.get(0),
-        )?;
-        if pending_followup > 0 {
-            return Ok(false);
-        }
-
         let any_rows: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM contact_template_envois
              WHERE template_id = ?1 AND COALESCE(campaign_batch_key, '') = ?2",
@@ -1023,6 +1007,42 @@ mod tests {
             )
             .unwrap();
         assert_eq!(pending_after, 0);
+    }
+
+    #[test]
+    fn ephemeral_auto_archives_after_all_sent_without_waiting_reply() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let template_id = create_ephemeral_template(&db, &audience);
+        let c1 = db
+            .create_contact(sample_contact("ALPHA", "Jean", "a@example.com"))
+            .unwrap();
+        let c1_id = c1.id.expect("contact id");
+        db.create_investissement(scpi_inv(c1_id, "Epargne Pierre", false))
+            .unwrap();
+        db.sync_ephemeral_campaign_queue(template_id).unwrap();
+
+        let row_id: i64 = db
+            .conn
+            .query_row(
+                "SELECT id FROM contact_template_envois WHERE contact_id = ?1 AND template_id = ?2",
+                params![c1_id, template_id],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        db.mark_template_email_sent(row_id, None, None, Some("Objet"), None, None, None)
+            .unwrap();
+
+        let cfg = db
+            .parse_ephemeral_campaign_config(
+                db.get_template_email_by_id(template_id)
+                    .unwrap()
+                    .variables
+                    .as_deref(),
+            )
+            .unwrap();
+        assert_eq!(cfg.status, "archived");
     }
 
     #[test]
