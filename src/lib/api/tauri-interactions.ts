@@ -49,6 +49,7 @@ export interface ExchangeHistoryEntry {
   contact_email?: string | null;
   contact_telephone?: string | null;
   contact_etiquette_id?: number | null;
+  queue_row_kind?: string | null;
   etiquette_nom?: string | null;
   sent_at?: number | null;
   sent_subject?: string | null;

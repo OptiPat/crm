@@ -1016,7 +1016,8 @@ impl Database {
     pub fn list_campaigns_pending_response_check(
         &self,
     ) -> Result<Vec<super::models::PendingCampaignResponseCheck>> {
-        let mut stmt = self.conn.prepare(
+        use super::template_email_queue::TEMPLATE_ENVOI_QUEUE_FILTER;
+        let sql = format!(
             "SELECT id, email, email_date_envoi, email_gmail_thread_id, queue_row_kind FROM (
                 SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id, 'etiquette' AS queue_row_kind
                 FROM contact_etiquettes ce
@@ -1035,11 +1036,7 @@ impl Database {
                 FROM contact_template_envois cte
                 INNER JOIN templates_email t ON cte.template_id = t.id
                 INNER JOIN contacts c ON cte.contact_id = c.id
-                WHERE json_extract(t.variables, '$.email_trigger.enabled') = 1
-                  AND (
-                    json_extract(t.variables, '$.email_trigger.condition_type') IS NOT NULL
-                    OR json_extract(t.variables, '$.email_trigger.trigger_type') = 'EVENEMENT_SOUSCRIPTION'
-                  )
+                WHERE {TEMPLATE_ENVOI_QUEUE_FILTER}
                   AND cte.email_envoye = 1
                   AND cte.email_date_envoi IS NOT NULL
                   AND cte.email_reponse_at IS NULL
@@ -1048,8 +1045,9 @@ impl Database {
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
              )
              ORDER BY email_date_envoi DESC
-             LIMIT 200",
-        )?;
+             LIMIT 200"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map([], |row| {
             Ok(super::models::PendingCampaignResponseCheck {
                 contact_etiquette_id: row.get(0)?,

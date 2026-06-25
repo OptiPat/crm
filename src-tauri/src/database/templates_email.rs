@@ -25,7 +25,11 @@ impl super::Database {
     pub fn get_all_templates_email(&self) -> Result<Vec<super::models::TemplateEmail>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, tutoiement_template_id, created_at, updated_at
-             FROM templates_email 
+             FROM templates_email
+             WHERE NOT (
+               COALESCE(json_extract(variables, '$.is_ephemeral'), 0) = 1
+               AND COALESCE(json_extract(variables, '$.ephemeral_campaign.status'), '') = 'archived'
+             )
              ORDER BY created_at DESC",
         )?;
 
@@ -117,6 +121,15 @@ impl super::Database {
     }
 
     pub fn delete_template_email(&self, id: i64) -> Result<()> {
+        let tpl = self.get_template_email_by_id(id)?;
+        if let Some(cfg) = self.parse_ephemeral_campaign_config(tpl.variables.as_deref()) {
+            if cfg.status != "archived" {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "Impossible de supprimer une campagne éphémère active — terminez-la d'abord"
+                        .into(),
+                ));
+            }
+        }
         self.conn.execute(
             "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
             params![id],

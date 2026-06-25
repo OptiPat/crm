@@ -1,6 +1,7 @@
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import type { ExchangeHistoryEntry } from "@/lib/api/tauri-interactions";
 import { isEmailCampaignEntry } from "@/lib/interactions/exchange-history-display";
+import { inferQueueRowKindFromEtiquetteNom } from "@/lib/emails/campaign-email-reply";
 import { getEtiquetteQueueItemKey } from "@/lib/etiquettes/etiquette-queue-item-key";
 import { textMatchesSearch } from "@/lib/search-utils";
 import { getInteractionTypeLabel } from "@/lib/interactions/interaction-display";
@@ -44,7 +45,7 @@ export function isExchangeThisWeek(
   return entry.sort_date >= weekStart;
 }
 
-/** Clé file pour une ligne journal (toujours `contact_etiquettes`). */
+/** Clé file pour une ligne journal (étiquette ou modèle). */
 export function getExchangeHistoryAwaitingKey(
   entry: ExchangeHistoryEntry
 ): string | null {
@@ -52,8 +53,10 @@ export function getExchangeHistoryAwaitingKey(
   if (ceId == null || ceId <= 0 || !isEmailCampaignEntry(entry)) {
     return null;
   }
+  const kind =
+    entry.queue_row_kind ?? inferQueueRowKindFromEtiquetteNom(entry.etiquette_nom);
   return getEtiquetteQueueItemKey({
-    queue_row_kind: "etiquette",
+    queue_row_kind: kind,
     contact_etiquette_id: ceId,
   });
 }

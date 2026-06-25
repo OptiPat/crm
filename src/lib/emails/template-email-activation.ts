@@ -4,6 +4,10 @@ import {
   parseTemplateEmailRelance,
 } from "@/lib/emails/template-email-relance";
 import { parseTemplateEmailTrigger } from "@/lib/emails/template-email-trigger";
+import {
+  isEphemeralTemplate,
+  parseEphemeralCampaignConfig,
+} from "@/lib/emails/template-email-ephemeral";
 
 export type TemplateActivationStatFilter =
   | "trigger"
@@ -93,6 +97,16 @@ export function getTemplateRelanceBadgeLabel(
     return `Relance J+${relance.delai_jours}`;
   }
   return "Relance";
+}
+
+export function getEphemeralCampaignBadgeLabel(
+  template: Pick<TemplateEmail, "variables">
+): string | null {
+  if (!isEphemeralTemplate(template.variables)) return null;
+  const cfg = parseEphemeralCampaignConfig(template.variables);
+  if (cfg?.status === "archived") return null;
+  if (cfg?.status === "prepared") return "Campagne éphémère · file prête";
+  return "Campagne éphémère";
 }
 
 export function computeTemplatesEmailPageStats(

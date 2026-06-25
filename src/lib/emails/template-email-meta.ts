@@ -1,4 +1,8 @@
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
+import {
+  isEphemeralTemplate,
+  stampNewEphemeralTemplateMeta,
+} from "@/lib/emails/template-email-ephemeral";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import {
@@ -280,7 +284,9 @@ export function duplicateTemplatePayload(source: TemplateEmail): {
     sujet: source.sujet,
     corps: source.corps,
     categorie: source.categorie,
-    variables: source.variables,
+    variables: isEphemeralTemplate(source.variables)
+      ? stampNewEphemeralTemplateMeta(null)
+      : source.variables,
     agenda_link_id: source.agenda_link_id,
   };
 }

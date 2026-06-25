@@ -18,6 +18,7 @@ import {
   getTemplateActivationFlags,
   getTemplateActivationPreviewHint,
   getTemplateRelanceBadgeLabel,
+  getEphemeralCampaignBadgeLabel,
   getTemplateTriggerShortLabel,
   TEMPLATE_ACTIVATION_MODE_OPTIONS,
   type TemplateActivationFlags,
@@ -168,9 +169,16 @@ export function TemplateActivationBadges({
   const flags = getTemplateActivationFlags(template, etiquetteLinkCount);
   const triggerLabel = getTemplateTriggerShortLabel(template);
   const relanceLabel = getTemplateRelanceBadgeLabel(template);
+  const ephemeralLabel = getEphemeralCampaignBadgeLabel(template);
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
+      {ephemeralLabel ? (
+        <TemplateActivationBadge className="border-violet-300 bg-violet-50 text-violet-950">
+          <Mail className="h-3 w-3 shrink-0" />
+          {ephemeralLabel}
+        </TemplateActivationBadge>
+      ) : null}
       {souscriptionDuplicateWarning ? (
         <TemplateSouscriptionDuplicateBadge title={souscriptionDuplicateWarning} />
       ) : null}

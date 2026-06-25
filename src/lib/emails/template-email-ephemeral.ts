@@ -1,0 +1,180 @@
+import {
+  parseTemplateEmailMeta,
+  TEMPLATE_CORPS_HTML_KEY,
+} from "@/lib/emails/template-email-html";
+
+export const EPHEMERAL_CAMPAIGN_KEY = "ephemeral_campaign";
+export const IS_EPHEMERAL_TEMPLATE_KEY = "is_ephemeral";
+
+export type EphemeralCampaignStatus = "draft" | "prepared" | "archived";
+
+export type EphemeralProduitsMatchMode = "all" | "any";
+
+export type EphemeralReinvestFilter = "any" | "inactive" | "active";
+
+export type EphemeralVersementProgrammeFilter = "any" | "inactive" | "active";
+
+export interface EphemeralCampaignAudience {
+  categories: string[];
+  types_produit: string[];
+  noms_produit: string[];
+  produits_match_mode: EphemeralProduitsMatchMode;
+  reinvestissement_dividendes: EphemeralReinvestFilter;
+  versement_programme: EphemeralVersementProgrammeFilter;
+}
+
+export interface EphemeralCampaignConfig {
+  status: EphemeralCampaignStatus;
+  batch_key: string | null;
+  audience: EphemeralCampaignAudience;
+  excluded_contact_ids: number[];
+  /** Timestamp Unix ou null = prêt dès validation */
+  send_at: number | null;
+  prepared_at: number | null;
+  archived_at: number | null;
+}
+
+export const DEFAULT_EPHEMERAL_CAMPAIGN_AUDIENCE: EphemeralCampaignAudience = {
+  categories: ["CLIENT"],
+  types_produit: [],
+  noms_produit: [],
+  produits_match_mode: "all",
+  reinvestissement_dividendes: "any",
+  versement_programme: "any",
+};
+
+export const DEFAULT_EPHEMERAL_CAMPAIGN: EphemeralCampaignConfig = {
+  status: "draft",
+  batch_key: null,
+  audience: DEFAULT_EPHEMERAL_CAMPAIGN_AUDIENCE,
+  excluded_contact_ids: [],
+  send_at: null,
+  prepared_at: null,
+  archived_at: null,
+};
+
+function parseAudience(raw: unknown): EphemeralCampaignAudience {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ...DEFAULT_EPHEMERAL_CAMPAIGN_AUDIENCE };
+  }
+  const o = raw as Record<string, unknown>;
+  const categories = Array.isArray(o.categories)
+    ? o.categories.filter((c): c is string => typeof c === "string")
+    : DEFAULT_EPHEMERAL_CAMPAIGN_AUDIENCE.categories;
+  const typesRaw = o.types_produit ?? o.typesProduit;
+  const types_produit = Array.isArray(typesRaw)
+    ? typesRaw.filter((t): t is string => typeof t === "string")
+    : [];
+  const nomsRaw = o.noms_produit ?? o.nomsProduit;
+  const noms_produit = Array.isArray(nomsRaw)
+    ? nomsRaw.filter((n): n is string => typeof n === "string")
+    : [];
+  const matchRaw = o.produits_match_mode ?? o.produitsMatchMode;
+  const produits_match_mode: EphemeralProduitsMatchMode = matchRaw === "any" ? "any" : "all";
+  const reinvestRaw = o.reinvestissement_dividendes ?? o.reinvestissementDividendes;
+  const reinvestissement_dividendes: EphemeralReinvestFilter =
+    reinvestRaw === "inactive" || reinvestRaw === "active" ? reinvestRaw : "any";
+  const versementRaw = o.versement_programme ?? o.versementProgramme;
+  const versement_programme: EphemeralVersementProgrammeFilter =
+    versementRaw === "inactive" || versementRaw === "active" ? versementRaw : "any";
+  return {
+    categories: categories.length > 0 ? categories : ["CLIENT"],
+    types_produit,
+    noms_produit,
+    produits_match_mode,
+    reinvestissement_dividendes,
+    versement_programme,
+  };
+}
+
+export function parseEphemeralCampaignConfig(
+  variables: string | null | undefined
+): EphemeralCampaignConfig | null {
+  const meta = parseTemplateEmailMeta(variables);
+  if (meta[IS_EPHEMERAL_TEMPLATE_KEY] !== true) return null;
+  const raw = meta[EPHEMERAL_CAMPAIGN_KEY];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { ...DEFAULT_EPHEMERAL_CAMPAIGN };
+  }
+  const o = raw as Record<string, unknown>;
+  const status: EphemeralCampaignStatus =
+    o.status === "prepared" || o.status === "archived" ? o.status : "draft";
+  const excludedRaw = o.excluded_contact_ids ?? o.excludedContactIds;
+  const excluded = Array.isArray(excludedRaw)
+    ? excludedRaw.filter((id): id is number => typeof id === "number")
+    : [];
+  return {
+    status,
+    batch_key: typeof o.batch_key === "string" ? o.batch_key : typeof o.batchKey === "string" ? o.batchKey : null,
+    audience: parseAudience(o.audience),
+    excluded_contact_ids: excluded,
+    send_at: typeof o.send_at === "number" ? o.send_at : typeof o.sendAt === "number" ? o.sendAt : null,
+    prepared_at:
+      typeof o.prepared_at === "number"
+        ? o.prepared_at
+        : typeof o.preparedAt === "number"
+          ? o.preparedAt
+          : null,
+    archived_at:
+      typeof o.archived_at === "number"
+        ? o.archived_at
+        : typeof o.archivedAt === "number"
+          ? o.archivedAt
+          : null,
+  };
+}
+
+export function isEphemeralTemplate(variables: string | null | undefined): boolean {
+  const meta = parseTemplateEmailMeta(variables);
+  return meta[IS_EPHEMERAL_TEMPLATE_KEY] === true;
+}
+
+export function isArchivedEphemeralTemplate(variables: string | null | undefined): boolean {
+  const cfg = parseEphemeralCampaignConfig(variables);
+  return cfg?.status === "archived";
+}
+
+export function isEphemeralAudienceValid(audience: EphemeralCampaignAudience): boolean {
+  return audience.types_produit.length > 0 || audience.noms_produit.length > 0;
+}
+
+export function setEphemeralCampaignInMeta(
+  variables: string | null | undefined,
+  config: EphemeralCampaignConfig,
+  options?: { isEphemeral?: boolean }
+): string {
+  const meta = parseTemplateEmailMeta(variables);
+  if (options?.isEphemeral === false) {
+    delete meta[IS_EPHEMERAL_TEMPLATE_KEY];
+    delete meta[EPHEMERAL_CAMPAIGN_KEY];
+  } else {
+    meta[IS_EPHEMERAL_TEMPLATE_KEY] = true;
+    meta[EPHEMERAL_CAMPAIGN_KEY] = config;
+  }
+  const keepCorpsHtml = meta[TEMPLATE_CORPS_HTML_KEY];
+  if (!keepCorpsHtml && Object.keys(meta).length === 0) return "{}";
+  return JSON.stringify(meta);
+}
+
+export function stampNewEphemeralTemplateMeta(variables: string | null | undefined): string {
+  return setEphemeralCampaignInMeta(variables, { ...DEFAULT_EPHEMERAL_CAMPAIGN }, { isEphemeral: true });
+}
+
+/** Empreinte des champs qui influencent la file (sync backend). */
+export function buildEphemeralSyncFingerprint(input: {
+  nom: string;
+  sujet: string;
+  corpsHtml: string;
+  agenda_link_id: string | null;
+  campaign: EphemeralCampaignConfig;
+}): string {
+  return JSON.stringify({
+    nom: input.nom.trim(),
+    sujet: input.sujet.trim(),
+    corpsHtml: input.corpsHtml.trim(),
+    agenda_link_id: input.agenda_link_id,
+    audience: input.campaign.audience,
+    excluded_contact_ids: [...input.campaign.excluded_contact_ids].sort((a, b) => a - b),
+    send_at: input.campaign.send_at,
+  });
+}

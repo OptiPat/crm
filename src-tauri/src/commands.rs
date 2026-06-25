@@ -708,6 +708,39 @@ pub fn seed_default_email_templates(
         .map_err(|e| format!("Failed to seed email templates: {}", e))
 }
 
+#[tauri::command]
+pub fn preview_ephemeral_campaign_audience(
+    db: State<'_, DbState>,
+    template_id: i64,
+) -> Result<crate::database::ephemeral_email_campaigns::EphemeralCampaignAudiencePreview, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .preview_ephemeral_campaign_audience(template_id)
+        .map_err(|e| format!("Failed to preview ephemeral campaign audience: {}", e))
+}
+
+#[tauri::command]
+pub fn sync_ephemeral_campaign_queue(
+    db: State<'_, DbState>,
+    template_id: i64,
+) -> Result<crate::database::ephemeral_email_campaigns::SyncEphemeralCampaignResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .sync_ephemeral_campaign_queue(template_id)
+        .map_err(|e| format!("Failed to sync ephemeral campaign queue: {}", e))
+}
+
+#[tauri::command]
+pub fn archive_ephemeral_campaign(db: State<'_, DbState>, template_id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .archive_ephemeral_campaign(template_id)
+        .map_err(|e| format!("Failed to archive ephemeral campaign: {}", e))
+}
+
 // ========== ALERTES ==========
 
 #[tauri::command]

@@ -61,7 +61,18 @@ describe("exchange-history-filters", () => {
     const templateOnly = buildAwaitingResponseIndex([
       { contact_etiquette_id: 10, contact_id: 1, queue_row_kind: "template" },
     ]);
-    expect(isExchangeAwaitingResponse(emailSent, templateOnly)).toBe(false);
+    expect(
+      isExchangeAwaitingResponse(
+        { ...emailSent, queue_row_kind: "etiquette" },
+        templateOnly
+      )
+    ).toBe(false);
+    expect(
+      isExchangeAwaitingResponse(
+        { ...emailSent, queue_row_kind: "template" },
+        templateOnly
+      )
+    ).toBe(true);
 
     const etiquetteOnly = buildAwaitingResponseIndex(sentQueueEtiquette);
     expect(isExchangeAwaitingResponse(emailSent, etiquetteOnly)).toBe(true);

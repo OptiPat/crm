@@ -11,6 +11,16 @@ use rusqlite::{params, Result};
 
 const TEMPLATE_QUEUE_COLOR: &str = "#6366F1";
 
+/// Filtre SQL partagé : déclencheur modèle actif OU campagne batch (`campaign_batch_key`).
+pub(crate) const TEMPLATE_ENVOI_QUEUE_FILTER: &str = "(
+    json_extract(t.variables, '$.email_trigger.enabled') = 1
+    AND (
+      json_extract(t.variables, '$.email_trigger.condition_type') IS NOT NULL
+      OR json_extract(t.variables, '$.email_trigger.trigger_type') = 'EVENEMENT_SOUSCRIPTION'
+    )
+    OR (COALESCE(cte.campaign_batch_key, '') != '')
+)";
+
 impl Database {
     pub fn migrate_contact_template_envois(&self) -> Result<()> {
         self.conn.execute(
@@ -323,13 +333,13 @@ impl Database {
             .unwrap()
             .as_secs() as i64;
 
-        let (contact_id, template_nom): (i64, String) = self.conn.query_row(
-            "SELECT cte.contact_id, t.nom
+        let (contact_id, template_id, template_nom): (i64, i64, String) = self.conn.query_row(
+            "SELECT cte.contact_id, cte.template_id, t.nom
              FROM contact_template_envois cte
              INNER JOIN templates_email t ON t.id = cte.template_id
              WHERE cte.id = ?1",
             params![row_id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )?;
 
         let sujet = email_subject.unwrap_or("");
@@ -380,6 +390,7 @@ impl Database {
             batch_id,
             mode,
         );
+        let _ = self.try_auto_archive_ephemeral_campaign(template_id);
         Ok(())
     }
 
@@ -389,14 +400,7 @@ impl Database {
         now: i64,
         default_delai_jours: i64,
     ) -> Result<Vec<EtiquetteEmailQueueItem>> {
-        const TRIGGER_FILTER: &str = "(
-            json_extract(t.variables, '$.email_trigger.enabled') = 1
-            AND (
-              json_extract(t.variables, '$.email_trigger.condition_type') IS NOT NULL
-              OR json_extract(t.variables, '$.email_trigger.trigger_type') = 'EVENEMENT_SOUSCRIPTION'
-            )
-            OR (cte.campaign_batch_key IS NOT NULL AND TRIM(cte.campaign_batch_key) != '')
-        )";
+        const TRIGGER_FILTER: &str = super::template_email_queue::TEMPLATE_ENVOI_QUEUE_FILTER;
 
         use super::template_formality_sql::{
             template_queue_fields_simple_sql, template_queue_fields_sql_cte,

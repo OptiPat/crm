@@ -801,6 +801,9 @@ pub struct ExchangeHistoryEntry {
     pub contact_email: Option<String>,
     pub contact_telephone: Option<String>,
     pub contact_etiquette_id: Option<i64>,
+    /// `etiquette` ou `template` — clé file Suivi → Envois pour le fil « sans réponse ».
+    #[serde(default = "default_queue_row_kind")]
+    pub queue_row_kind: String,
     pub etiquette_nom: Option<String>,
     pub sent_at: Option<i64>,
     pub sent_subject: Option<String>,

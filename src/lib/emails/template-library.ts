@@ -1,4 +1,5 @@
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
+import { isArchivedEphemeralTemplate } from "@/lib/emails/template-email-ephemeral";
 
 /** Modèle enfant référencé par `relance_template_id` d’un autre — géré dans l’onglet Relance du parent. */
 export function isRelanceChildTemplate(
@@ -27,5 +28,9 @@ export function isLinkedChildTemplate(
 }
 
 export function filterLibraryTemplates(templates: TemplateEmail[]): TemplateEmail[] {
-  return templates.filter((t) => !isLinkedChildTemplate(t.id, templates));
+  return templates.filter(
+    (t) =>
+      !isLinkedChildTemplate(t.id, templates) &&
+      !isArchivedEphemeralTemplate(t.variables)
+  );
 }

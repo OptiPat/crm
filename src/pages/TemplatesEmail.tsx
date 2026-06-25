@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Plus, Search, Sparkles, Tag, Zap, RefreshCw, Inbox } from "lucide-react";
+import { Plus, Search, Sparkles, Tag, Zap, RefreshCw, Inbox, ChevronDown } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import {
   getAllTemplatesEmail,
@@ -24,7 +24,9 @@ import {
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getEmailConnectionStatus, type EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
-import { TemplateEmailForm } from "@/components/emails/TemplateEmailForm";
+import { TemplateEmailForm, type TemplateEmailFormMode } from "@/components/emails/TemplateEmailForm";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { isEphemeralTemplate } from "@/lib/emails/template-email-ephemeral";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import {
   TemplateActivationModeFilters,
@@ -76,6 +78,7 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [formMode, setFormMode] = useState<TemplateEmailFormMode>("permanent");
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateEmail | null>(null);
   const [previewId, setPreviewId] = useState<number | null>(null);
   const [cgp, setCgp] = useState<Awaited<ReturnType<typeof getCgpConfig>> | null>(null);
@@ -299,6 +302,13 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
 
   const handleEdit = (template: TemplateEmail) => {
     setSelectedTemplate(template);
+    setFormMode(isEphemeralTemplate(template.variables) ? "ephemeral" : "permanent");
+    setShowForm(true);
+  };
+
+  const openCreateForm = (mode: TemplateEmailFormMode) => {
+    setSelectedTemplate(null);
+    setFormMode(mode);
     setShowForm(true);
   };
 
@@ -336,6 +346,7 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
   const handleFormClose = () => {
     setShowForm(false);
     setSelectedTemplate(null);
+    setFormMode("permanent");
   };
 
   const handleOpenEtiquette = (etiquetteId: number) => {
@@ -367,10 +378,33 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
             <Sparkles className="h-4 w-4" />
             Modèles par défaut
           </Button>
-          <Button size="sm" className="gap-2" onClick={() => setShowForm(true)}>
-            <Plus className="h-4 w-4" />
-            Nouveau modèle
-          </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="sm" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Créer
+                <ChevronDown className="h-3.5 w-3.5 opacity-70" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 p-2">
+              <div className="flex flex-col gap-1">
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => openCreateForm("permanent")}
+                >
+                  Nouveau modèle permanent
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="justify-start"
+                  onClick={() => openCreateForm("ephemeral")}
+                >
+                  Campagne éphémère
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -562,11 +596,16 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
 
       <TemplateEmailForm
         open={showForm}
-        onOpenChange={handleFormClose}
+        onOpenChange={(open) => {
+          if (!open) handleFormClose();
+        }}
         template={selectedTemplate}
+        formMode={formMode}
         onSuccess={async () => {
           await loadTemplates({ silent: true });
-          handleFormClose();
+          if (formMode === "permanent") {
+            handleFormClose();
+          }
         }}
       />
 

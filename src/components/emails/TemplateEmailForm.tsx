@@ -109,11 +109,26 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { TemplateEmailEphemeralAudiencePanel } from "@/components/emails/TemplateEmailEphemeralAudiencePanel";
+import { TemplateEmailEphemeralRecipientsPanel } from "@/components/emails/TemplateEmailEphemeralRecipientsPanel";
+import {
+  DEFAULT_EPHEMERAL_CAMPAIGN,
+  buildEphemeralSyncFingerprint,
+  isEphemeralAudienceValid,
+  isEphemeralTemplate,
+  parseEphemeralCampaignConfig,
+  setEphemeralCampaignInMeta,
+  stampNewEphemeralTemplateMeta,
+  type EphemeralCampaignConfig,
+} from "@/lib/emails/template-email-ephemeral";
+
+export type TemplateEmailFormMode = "permanent" | "ephemeral";
 
 interface TemplateEmailFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template?: TemplateEmail | null;
+  formMode?: TemplateEmailFormMode;
   onSuccess?: () => void | Promise<void>;
 }
 
@@ -121,12 +136,22 @@ export function TemplateEmailForm({
   open,
   onOpenChange,
   template,
+  formMode = "permanent",
   onSuccess,
 }: TemplateEmailFormProps) {
+  const isEphemeralMode =
+    formMode === "ephemeral" ||
+    (template != null && isEphemeralTemplate(template.variables));
+  type FormTab =
+    | "message"
+    | "tutoiement"
+    | "relance"
+    | "declencheur"
+    | "liaisons"
+    | "audience"
+    | "destinataires";
   const [loading, setLoading] = useState(false);
-  const [formTab, setFormTab] = useState<
-    "message" | "tutoiement" | "relance" | "declencheur" | "liaisons"
-  >("message");
+  const [formTab, setFormTab] = useState<FormTab>("message");
   const [relanceDraft, setRelanceDraft] = useState<TemplateRelanceDraft>({
     enabled: false,
     useSameMessage: true,
@@ -160,6 +185,15 @@ export function TemplateEmailForm({
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
   const [linkedEtiquetteIds, setLinkedEtiquetteIds] = useState<number[]>([]);
+  const [ephemeralCampaign, setEphemeralCampaign] = useState<EphemeralCampaignConfig>({
+    ...DEFAULT_EPHEMERAL_CAMPAIGN,
+  });
+  const [ephemeralAudienceInvalid, setEphemeralAudienceInvalid] = useState(false);
+  const [lastSavedEphemeralFingerprint, setLastSavedEphemeralFingerprint] = useState<
+    string | null
+  >(null);
+  const [persistedTemplateId, setPersistedTemplateId] = useState<number | null>(null);
+  const effectiveTemplateId = template?.id ?? persistedTemplateId;
   const [corpsHtml, setCorpsHtml] = useState("");
   const richEditorRef = useRef<HTMLDivElement>(null);
   const sujetInputRef = useRef<HTMLInputElement>(null);
@@ -256,6 +290,18 @@ export function TemplateEmailForm({
         })
         .catch(() => undefined);
     }
+    const ephemeralCfg =
+      parseEphemeralCampaignConfig(source.variables) ?? { ...DEFAULT_EPHEMERAL_CAMPAIGN };
+    setEphemeralCampaign(ephemeralCfg);
+    setLastSavedEphemeralFingerprint(
+      buildEphemeralSyncFingerprint({
+        nom: source.nom,
+        sujet: source.sujet,
+        corpsHtml: storedHtml ?? plainTextToTemplateHtml(source.corps),
+        agenda_link_id: source.agenda_link_id,
+        campaign: ephemeralCfg,
+      })
+    );
   }, []);
 
   const resetCreateForm = useCallback(() => {
@@ -290,10 +336,16 @@ export function TemplateEmailForm({
     setPreviewRegistre("VOUS");
     setPreviewContactId("sample");
     setLinkedEtiquetteIds([]);
+    setEphemeralCampaign({ ...DEFAULT_EPHEMERAL_CAMPAIGN });
+    setEphemeralAudienceInvalid(false);
+    setLastSavedEphemeralFingerprint(null);
   }, []);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setPersistedTemplateId(null);
+      return;
+    }
     setFormTab("message");
     void getCgpConfig().then(setCgp).catch(() => setCgp(null));
     void getAllContacts()
@@ -350,6 +402,21 @@ export function TemplateEmailForm({
 
   const agendaLinks = useMemo(() => normalizeAgendaLinks(cgp), [cgp]);
   const agendaVariables = useMemo(() => getAgendaVariableTokens(agendaLinks), [agendaLinks]);
+  const ephemeralSyncFingerprint = useMemo(
+    () =>
+      buildEphemeralSyncFingerprint({
+        nom: formData.nom,
+        sujet: formData.sujet,
+        corpsHtml,
+        agenda_link_id: formData.agenda_link_id ?? null,
+        campaign: ephemeralCampaign,
+      }),
+    [formData.nom, formData.sujet, formData.agenda_link_id, corpsHtml, ephemeralCampaign]
+  );
+  const needsSaveBeforeEphemeralSync =
+    isEphemeralMode &&
+    lastSavedEphemeralFingerprint != null &&
+    ephemeralSyncFingerprint !== lastSavedEphemeralFingerprint;
   const stelliumVariables = useMemo(
     () => (isStelliumPerfTemplateNom(formData.nom) ? STELLIUM_PERF_TEMPLATE_VARIABLES : []),
     [formData.nom]
@@ -424,6 +491,13 @@ export function TemplateEmailForm({
         return;
       }
     }
+    if (isEphemeralMode && !isEphemeralAudienceValid(ephemeralCampaign.audience)) {
+      toast.error("Audience : sélectionnez au moins un type ou un nom de produit");
+      setFormTab("audience");
+      setEphemeralAudienceInvalid(true);
+      return;
+    }
+    setEphemeralAudienceInvalid(false);
 
     setLoading(true);
     try {
@@ -504,7 +578,19 @@ export function TemplateEmailForm({
       }
 
       let variables = setTemplateCorpsHtmlInMeta(formData.variables, corpsHtml.trim() || null);
-      variables = setTemplateEmailTriggerInMeta(variables, emailTrigger);
+      if (isEphemeralMode) {
+        variables = setEphemeralCampaignInMeta(
+          stampNewEphemeralTemplateMeta(variables),
+          {
+            ...ephemeralCampaign,
+            audience: ephemeralCampaign.audience,
+          },
+          { isEphemeral: true }
+        );
+        variables = setTemplateEmailTriggerInMeta(variables, DEFAULT_TEMPLATE_EMAIL_TRIGGER);
+      } else {
+        variables = setTemplateEmailTriggerInMeta(variables, emailTrigger);
+      }
       variables = setTemplateEmailRelanceInMeta(variables, {
         enabled: relanceDraft.enabled,
         delai_jours: relanceDraft.enabled ? relanceDraft.delaiJours : null,
@@ -544,13 +630,21 @@ export function TemplateEmailForm({
       } else {
         const created = await createTemplateEmail(payload);
         templateId = created.id;
-        toast.success("Modèle créé");
+        toast.success(isEphemeralMode ? "Campagne enregistrée" : "Modèle créé");
       }
       if (templateId != null) {
+        setPersistedTemplateId(templateId);
+      }
+      if (templateId != null && !isEphemeralMode) {
         await setTemplateEtiquetteLinks(templateId, linkedEtiquetteIds);
         notifyEtiquettesChanged();
       }
       await onSuccess?.();
+      if (isEphemeralMode) {
+        setLastSavedEphemeralFingerprint(ephemeralSyncFingerprint);
+        setFormTab("destinataires");
+        return;
+      }
     } catch (error) {
       console.error("Error saving template:", error);
       toast.error("Erreur lors de l'enregistrement");
@@ -650,9 +744,19 @@ export function TemplateEmailForm({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
-          <DialogTitle>{template ? "Modifier le modèle" : "Nouveau modèle"}</DialogTitle>
+          <DialogTitle>
+            {template
+              ? isEphemeralMode
+                ? "Campagne éphémère"
+                : "Modifier le modèle"
+              : isEphemeralMode
+                ? "Nouvelle campagne éphémère"
+                : "Nouveau modèle"}
+          </DialogTitle>
           <DialogDescription>
-            Message, déclencheur, étiquettes et mise en forme — aperçu à droite.
+            {isEphemeralMode
+              ? "Message, cible produits, exclusions — suivi et relance comme un modèle classique."
+              : "Message, déclencheur, étiquettes et mise en forme — aperçu à droite."}
           </DialogDescription>
         </DialogHeader>
 
@@ -661,14 +765,15 @@ export function TemplateEmailForm({
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
               <Tabs
                 value={formTab}
-                onValueChange={(v) =>
-                  setFormTab(
-                    v as "message" | "tutoiement" | "relance" | "declencheur" | "liaisons"
-                  )
-                }
+                onValueChange={(v) => setFormTab(v as FormTab)}
                 className="flex flex-col flex-1 min-h-0"
               >
-                <TabsList className="mx-6 mt-4 grid w-auto grid-cols-5 shrink-0">
+                <TabsList
+                  className={cn(
+                    "mx-6 mt-4 grid w-auto shrink-0",
+                    isEphemeralMode ? "grid-cols-5" : "grid-cols-5"
+                  )}
+                >
                   <TabsTrigger value="message">Message</TabsTrigger>
                   <TabsTrigger value="tutoiement">
                     Tutoiement
@@ -682,18 +787,29 @@ export function TemplateEmailForm({
                       <span className="ml-1.5 text-[10px] text-orange-700">on</span>
                     )}
                   </TabsTrigger>
-                  <TabsTrigger value="declencheur">
-                    Déclencheur
-                    {emailTrigger.enabled && (
-                      <span className="ml-1.5 text-[10px] text-primary">on</span>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="liaisons">
-                    Étiquettes
-                    {linkedEtiquetteIds.length > 0 && (
-                      <span className="ml-1.5 text-[10px] text-primary">({linkedEtiquetteIds.length})</span>
-                    )}
-                  </TabsTrigger>
+                  {isEphemeralMode ? (
+                    <>
+                      <TabsTrigger value="audience">Audience</TabsTrigger>
+                      <TabsTrigger value="destinataires">Destinataires</TabsTrigger>
+                    </>
+                  ) : (
+                    <>
+                      <TabsTrigger value="declencheur">
+                        Déclencheur
+                        {emailTrigger.enabled && (
+                          <span className="ml-1.5 text-[10px] text-primary">on</span>
+                        )}
+                      </TabsTrigger>
+                      <TabsTrigger value="liaisons">
+                        Étiquettes
+                        {linkedEtiquetteIds.length > 0 && (
+                          <span className="ml-1.5 text-[10px] text-primary">
+                            ({linkedEtiquetteIds.length})
+                          </span>
+                        )}
+                      </TabsTrigger>
+                    </>
+                  )}
                 </TabsList>
 
                 <div className="flex-1 overflow-y-auto px-6 py-4 min-h-0">
@@ -848,6 +964,37 @@ export function TemplateEmailForm({
                       />
                     </div>
 
+                    {isEphemeralMode && agendaLinks.length > 0 && (
+                      <div className="space-y-2">
+                        <Label htmlFor="agenda-link-ephemeral">Lien Google Agenda</Label>
+                        <Select
+                          value={formData.agenda_link_id ?? "__none__"}
+                          onValueChange={(value) =>
+                            setFormData({
+                              ...formData,
+                              agenda_link_id: value === "__none__" ? null : value,
+                            })
+                          }
+                        >
+                          <SelectTrigger id="agenda-link-ephemeral">
+                            <SelectValue placeholder="Choisir un lien" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— Aucun</SelectItem>
+                            {agendaLinks.map((l) => (
+                              <SelectItem key={l.id} value={l.id}>
+                                {l.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Pour {"{{lien_agenda}}"} dans le message — liens définis dans Paramètres
+                          → Profil.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="space-y-2 lg:hidden">
                       <Label>Aperçu sur</Label>
                       <Select value={previewContactId} onValueChange={setPreviewContactId}>
@@ -983,6 +1130,51 @@ export function TemplateEmailForm({
                       </div>
                     )}
                   </TabsContent>
+
+                  {isEphemeralMode && (
+                    <>
+                      <TabsContent value="audience" className="mt-0 data-[state=inactive]:hidden">
+                        <TemplateEmailEphemeralAudiencePanel
+                          audience={ephemeralCampaign.audience}
+                          sendAt={ephemeralCampaign.send_at}
+                          onAudienceChange={(audience) =>
+                            setEphemeralCampaign((prev) => ({ ...prev, audience }))
+                          }
+                          onSendAtChange={(send_at) =>
+                            setEphemeralCampaign((prev) => ({ ...prev, send_at }))
+                          }
+                          highlightInvalid={ephemeralAudienceInvalid}
+                        />
+                      </TabsContent>
+                      <TabsContent
+                        value="destinataires"
+                        className="mt-0 data-[state=inactive]:hidden"
+                      >
+                        <TemplateEmailEphemeralRecipientsPanel
+                          templateId={effectiveTemplateId}
+                          excludedContactIds={ephemeralCampaign.excluded_contact_ids}
+                          needsSaveBeforeSync={needsSaveBeforeEphemeralSync}
+                          onExcludedChange={(excluded_contact_ids) =>
+                            setEphemeralCampaign((prev) => ({ ...prev, excluded_contact_ids }))
+                          }
+                          campaignStatus={ephemeralCampaign.status}
+                          onCampaignUpdated={async () => {
+                            const id = effectiveTemplateId;
+                            if (id == null) return;
+                            const fresh = await getTemplateEmailById(id);
+                            const cfg = parseEphemeralCampaignConfig(fresh.variables);
+                            if (cfg) {
+                              setEphemeralCampaign(cfg);
+                              if (cfg.status === "archived") {
+                                await onSuccess?.();
+                                onOpenChange(false);
+                              }
+                            }
+                          }}
+                        />
+                      </TabsContent>
+                    </>
+                  )}
                 </div>
               </Tabs>
             </div>

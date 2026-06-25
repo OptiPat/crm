@@ -49,4 +49,14 @@ describe("template-library", () => {
     const solo = base(12, { nom: "Autre" });
     expect(filterLibraryTemplates([parent, tu, solo]).map((t) => t.id)).toEqual([10, 12]);
   });
+
+  it("masque les campagnes éphémères archivées", () => {
+    const active = base(10, {
+      variables: JSON.stringify({ is_ephemeral: true, ephemeral_campaign: { status: "prepared" } }),
+    });
+    const archived = base(11, {
+      variables: JSON.stringify({ is_ephemeral: true, ephemeral_campaign: { status: "archived" } }),
+    });
+    expect(filterLibraryTemplates([active, archived]).map((t) => t.id)).toEqual([10]);
+  });
 });

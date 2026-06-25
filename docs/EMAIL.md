@@ -28,6 +28,30 @@ Pas d’envoi en arrière-plan tant qu’on n’a pas explicitement ajouté un s
 | Variables + aperçu | `etiquette-email-preview.ts` |
 | File d’envoi | `EtiquetteEnvoisTab`, `get_etiquette_email_queue` |
 | Envoi | `send_email` → OAuth (Gmail API / Microsoft Graph) |
+| Campagnes éphémères | `ephemeral_email_campaigns.rs`, onglets Audience / Destinataires du modèle |
+
+---
+
+## Campagnes email éphémères
+
+Modèle **jetable** pour un envoi ponctuel ciblé par produits, **sans créer d’étiquette**.
+
+| Étape | Action |
+|-------|--------|
+| Créer | Templates email → **Créer** → **Campagne éphémère** |
+| Message | Objet, corps, relance / suivi réponse comme un modèle permanent |
+| Audience | Types / noms de produit, réinvestissement et versements programmés (tous types d’investissement) |
+| Destinataires | Exclusions manuelles, puis **Enregistrer** → **Préparer / actualiser la file** |
+| Envoi | Suivi → Envois (file `contact_template_envois` + `campaign_batch_key`) |
+| Fin | Auto-archivage quand tout est envoyé et le suivi réponse est clos ; ou **Terminer la campagne** |
+
+Règles :
+
+- Les contacts inéligibles sont **retirés** de la file au prochain sync (pas de réactivation des annulations Suivi).
+- Le modèle **disparaît de la bibliothèque** une fois archivé ; l’historique d’envoi reste dans le journal des échanges.
+- Dupliquer une campagne archivée repart d’une **nouvelle** campagne vierge (pas de reprise du batch).
+
+Fichiers : `src/lib/emails/template-email-ephemeral.ts`, `src-tauri/src/database/ephemeral_email_campaigns.rs`.
 
 ---
 

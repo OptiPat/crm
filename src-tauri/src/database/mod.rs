@@ -43,6 +43,7 @@ pub mod taches;
 pub mod template_email_trigger;
 pub mod template_email_relance;
 pub mod template_email_queue;
+pub mod ephemeral_email_campaigns;
 pub mod template_formality_sql;
 
 pub struct Database {
