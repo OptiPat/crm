@@ -12,12 +12,16 @@ use oauth2::reqwest::http_client;
 use oauth2::{RefreshToken, TokenResponse};
 use tauri::{AppHandle, Manager};
 
-fn encode_mime_subject(subject: &str) -> String {
-    if subject.is_ascii() {
-        return subject.to_string();
+fn encode_mime_utf8_word(value: &str) -> String {
+    if value.is_ascii() {
+        return value.to_string();
     }
-    let b64 = base64::engine::general_purpose::STANDARD.encode(subject.as_bytes());
+    let b64 = base64::engine::general_purpose::STANDARD.encode(value.as_bytes());
     format!("=?UTF-8?B?{}?=", b64)
+}
+
+fn encode_mime_subject(subject: &str) -> String {
+    encode_mime_utf8_word(subject)
 }
 
 fn load_cgp_config(app: &AppHandle) -> CgpConfig {
@@ -89,11 +93,11 @@ fn format_addresses(
     to_name: Option<&str>,
 ) -> (String, String) {
     let from = match from_name {
-        Some(n) if !n.is_empty() => format!("{} <{}>", n, from_email),
+        Some(n) if !n.is_empty() => format!("{} <{}>", encode_mime_utf8_word(n), from_email),
         _ => from_email.to_string(),
     };
     let to = match to_name {
-        Some(n) if !n.is_empty() => format!("{} <{}>", n, to_email),
+        Some(n) if !n.is_empty() => format!("{} <{}>", encode_mime_utf8_word(n), to_email),
         _ => to_email.to_string(),
     };
     (from, to)
@@ -397,6 +401,23 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn to_header_encodes_non_ascii_display_name() {
+        let raw = build_rfc2822(
+            "cgp@example.com",
+            Some("Jean DUPONT"),
+            "celine@example.com",
+            Some("Céline CHUNG"),
+            "Sujet",
+            "Corps",
+            None,
+            None,
+        );
+        assert!(raw.contains("To: =?UTF-8?B?"));
+        assert!(raw.contains("<celine@example.com>"));
+        assert!(!raw.contains("To: Céline"));
+    }
 
     #[test]
     fn from_header_includes_cgp_display_name() {

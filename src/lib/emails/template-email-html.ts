@@ -1,6 +1,6 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
-import { buildSendEmailBodies } from "@/lib/emails/email-signature";
+import { buildSendEmailBodies, decodeHtmlEntities } from "@/lib/emails/email-signature";
 
 /** Clé JSON dans `templates_email.variables` (compatible newsletter_html). */
 export const TEMPLATE_CORPS_HTML_KEY = "corps_html";
@@ -279,12 +279,39 @@ export function htmlToPlainEmail(html: string): string {
   return lines.join("\n").trim();
 }
 
+/** Détecte une signature déjà présente (y compris après sanitize / normalisation Gmail). */
+export function htmlAlreadyContainsEmailSignature(
+  html: string,
+  signatureHtml: string | null | undefined,
+  plainSignature?: string | null
+): boolean {
+  const sig = signatureHtml?.trim();
+  if (!sig && !plainSignature?.trim()) return false;
+  if (sig && html.includes(sig)) return true;
+
+  const htmlPlain = htmlToPlainEmail(html).trim();
+  if (!htmlPlain) return false;
+
+  if (sig) {
+    const sigPlain = htmlToPlainEmail(sig).trim();
+    if (sigPlain && htmlPlain.endsWith(sigPlain)) return true;
+  }
+
+  const plainSig = plainSignature?.trim();
+  if (plainSig) {
+    const decoded = decodeHtmlEntities(plainSig);
+    if (htmlPlain.endsWith(decoded)) return true;
+  }
+  return false;
+}
+
 export function injectTemplateSignatureHtml(
   html: string,
-  signatureHtml: string | null | undefined
+  signatureHtml: string | null | undefined,
+  plainSignature?: string | null
 ): string {
   const sig = signatureHtml?.trim();
-  if (!sig || html.includes(sig)) {
+  if (!sig || htmlAlreadyContainsEmailSignature(html, signatureHtml, plainSignature)) {
     return html;
   }
   return `${html}${gmailBlankLineHtml()}${sig}`;
@@ -345,7 +372,8 @@ export function buildTemplateSendBodies(
     : normalizeTemplateEmailHtmlLikeGmail(trimmedHtml);
   const body_html = injectTemplateSignatureHtml(
     normalized,
-    cgp?.email_signature_html
+    cgp?.email_signature_html,
+    cgp?.email_signature
   );
   return { body: plainWithSignature, body_html };
 }
