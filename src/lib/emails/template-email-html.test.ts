@@ -86,6 +86,17 @@ describe("template-email-html", () => {
     expect(out).not.toContain("font-size");
   });
 
+  it("sanitize conserve les images de signature (data URL)", () => {
+    const img =
+      '<img src="data:image/png;base64,iVBORw0KGgo=" alt="Logo" width="120" height="40">';
+    const out = sanitizeTemplateEmailHtml(
+      `<div style="line-height:1.5;margin:0;padding:0">N° de SIREN 843139148</div>${img}`
+    );
+    expect(out).toContain("<img");
+    expect(out).toContain("data:image/png;base64");
+    expect(out).toContain('alt="Logo"');
+  });
+
   it("prepareTemplateHtmlForSend conserve tout le HTML bulletin", () => {
     const scpiVars = buildScpiBulletinPreviewVariables();
     const corpsHtml =

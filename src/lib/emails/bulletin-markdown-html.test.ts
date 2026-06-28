@@ -230,4 +230,93 @@ describe("bulletin-markdown-html", () => {
     expect(plain).toContain("Comete – T1 2026");
     expect(plain).not.toMatch(/^1\. Comete/m);
   });
+
+  it("dedupe Comete/Comète et retire les titres orphelins en fin de digest", () => {
+    const md = [
+      "Comete – T1 2026",
+      "",
+      "Comète – T1 2026",
+      "",
+      "1. Chiffres clés",
+      "Collecte nette : 132,2 M€",
+      "2. Ce trimestre",
+      "Dynamique soutenue.",
+      "3. Acquisitions",
+      "Pologne, Tarnobrzeg : logistique.",
+      "",
+      "---",
+      "",
+      "Transitions Europe – T1 2026",
+      "",
+      "Transitions Europe – T1 2026",
+      "",
+      "1. Chiffres clés",
+      "Collecte nette de 147 M€",
+      "",
+      "Excellente journée.",
+      "",
+      "Comete – T1 2026",
+      "Comète – T1 2026",
+      "Transitions Europe – T1 2026",
+      "Transitions Europe – T1 2026",
+    ].join("\n");
+    const plain = bulletinMarkdownToPlainEmail(md, true, "T1 2026");
+    expect(plain).toContain("Comète – T1 2026");
+    expect(plain).not.toMatch(/Comete – T1 2026/);
+    expect((plain.match(/Comète – T1 2026/g) ?? []).length).toBe(1);
+    expect((plain.match(/Transitions Europe – T1 2026/g) ?? []).length).toBe(1);
+    expect(plain).toContain("Excellente journée.");
+    expect(plain.trim().endsWith("Excellente journée.")).toBe(true);
+  });
+
+  it("rend le titre SCPI en gras meme avec puce Mistral (- Comète)", () => {
+    const md = [
+      "- Comete – T1 2026",
+      "",
+      "- Comète – T1 2026",
+      "",
+      "1. Chiffres clés",
+      "- Collecte nette de 132,2 M€",
+    ].join("\n");
+    const html = bulletinMarkdownToHtml(md, true, "T1 2026");
+    const plain = bulletinMarkdownToPlainEmail(md, true, "T1 2026");
+    expect(html).toContain("font-size:1.1em");
+    expect(html).not.toMatch(/<ul[^>]*>[\s\S]*Comète/);
+    expect((plain.match(/Comète – T1 2026/g) ?? []).length).toBe(1);
+    expect(plain).not.toMatch(/^• Comète/m);
+  });
+
+  it("reproduit le cas Coralie (multi) et Philippe (single) depuis digest prepare", () => {
+    const coralie = [
+      "Comete – T1 2026",
+      "Comète – T1 2026",
+      "",
+      "1. Chiffres clés",
+      "Collecte nette de 132,2 M€",
+      "2. Ce trimestre",
+      "Dynamique.",
+      "3. Acquisitions",
+      "Canada, Trans-Canada : entrepôt.",
+      "",
+      "---",
+      "",
+      "Transitions Europe – T1 2026",
+      "",
+      "1. Chiffres clés",
+      "Collecte nette : 147 M€",
+    ].join("\n");
+    const philippe = [
+      "- Comète – T1 2026",
+      "",
+      "1. Chiffres clés",
+      "Collecte nette de 132,2 M€",
+    ].join("\n");
+    const coraliePlain = bulletinMarkdownToPlainEmail(coralie, true, "T1 2026");
+    const philippeHtml = bulletinMarkdownToHtml(philippe, true, "T1 2026");
+    expect(coraliePlain).not.toMatch(/Comete – T1 2026/);
+    expect((coraliePlain.match(/Comète – T1 2026/g) ?? []).length).toBe(1);
+    expect((coraliePlain.match(/Transitions Europe – T1 2026/g) ?? []).length).toBe(1);
+    expect(philippeHtml).toContain("font-size:1.1em");
+    expect(philippeHtml).not.toMatch(/<li[^>]*>[\s\S]*Comète/);
+  });
 });

@@ -1,5 +1,5 @@
 /** Aligné sur `SCPI_CAMPAIGN_DIGEST_VERSION` (Rust). Incrémenter si le format digest change. */
-export const CURRENT_SCPI_DIGEST_VERSION = 1;
+export const CURRENT_SCPI_DIGEST_VERSION = 2;
 
 export function parseScpiDigestVersion(raw: string | null | undefined): number {
   if (!raw?.trim()) return 0;

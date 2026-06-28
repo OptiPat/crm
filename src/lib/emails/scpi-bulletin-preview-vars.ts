@@ -46,8 +46,8 @@ export function buildScpiBulletinPreviewVariables(
     scpi_count: String(scpiCount),
     scpi_intro_tu: intros.tu,
     scpi_intro_vous: intros.vous,
-    bulletin_resume: trimmed ? bulletinMarkdownToPlainEmail(trimmed, true) : "",
-    bulletin_resume_html: trimmed ? bulletinMarkdownToHtml(trimmed, true) : "",
+    bulletin_resume: trimmed ? bulletinMarkdownToPlainEmail(trimmed, true, periode) : "",
+    bulletin_resume_html: trimmed ? bulletinMarkdownToHtml(trimmed, true, periode) : "",
   };
 }
 
@@ -79,8 +79,8 @@ export function parseScpiCampaignVariables(
         typeof parsed.scpi_intro_vous === "string"
           ? parsed.scpi_intro_vous
           : intros.vous,
-      bulletin_resume: bulletin ? bulletinMarkdownToPlainEmail(bulletin, true) : "",
-      bulletin_resume_html: bulletin ? bulletinMarkdownToHtml(bulletin, true) : "",
+      bulletin_resume: bulletin ? bulletinMarkdownToPlainEmail(bulletin, true, periode) : "",
+      bulletin_resume_html: bulletin ? bulletinMarkdownToHtml(bulletin, true, periode) : "",
     };
   } catch {
     return {};

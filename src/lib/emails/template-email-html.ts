@@ -279,6 +279,72 @@ export function htmlToPlainEmail(html: string): string {
   return lines.join("\n").trim();
 }
 
+/** La signature HTML contient-elle une image (logo) ? */
+function signatureHtmlHasImage(signatureHtml: string | null | undefined): boolean {
+  return /<img[\s>]/i.test(signatureHtml ?? "");
+}
+
+/** Extrait les src des balises img (signature ou corps). */
+function extractHtmlImageSrcs(html: string): string[] {
+  const srcs: string[] = [];
+  const re = /\ssrc=["']([^"']+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    srcs.push(m[1]!);
+  }
+  return srcs;
+}
+
+/** Le corps HTML inclut-il l'image de la signature (data URL ou https) ? */
+function htmlContainsSignatureImage(html: string, signatureHtml: string): boolean {
+  if (!signatureHtmlHasImage(signatureHtml)) return true;
+  const sigSrcs = extractHtmlImageSrcs(signatureHtml).filter(isSafeEmailImageSrc);
+  if (sigSrcs.length === 0) return false;
+  return sigSrcs.some((src) => html.includes(src));
+}
+
+function isSafeEmailImageSrc(src: string): boolean {
+  const s = src.trim();
+  return /^data:image\//i.test(s) || /^https?:\/\//i.test(s);
+}
+
+/** Retire une signature texte/HTML incomplète (sans logo) en fin de message. */
+function stripTrailingEmailSignatureBlocks(
+  html: string,
+  plainSignature?: string | null,
+  signatureHtml?: string | null
+): string {
+  const refSig = plainSignature?.trim() || htmlToPlainEmail(signatureHtml ?? "");
+  if (!refSig.trim()) return html;
+
+  let out = html.trimEnd();
+  const sigHtml = signatureHtml?.trim();
+  if (sigHtml && out.includes(sigHtml)) {
+    const idx = out.lastIndexOf(sigHtml);
+    if (idx >= 0) {
+      out = out.slice(0, idx).trimEnd();
+      out = out.replace(
+        /(<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>\s*)$/i,
+        ""
+      );
+      return out;
+    }
+  }
+
+  const divTail =
+    /(<div style="line-height:1\.5;margin:0;padding:0">[\s\S]*?<\/div>\s*)+$/i;
+  let plain = htmlToPlainEmail(out);
+  while (plainTextContainsEmailSignature(plain, refSig)) {
+    const next = out.replace(divTail, "").trimEnd();
+    if (next === out) break;
+    out = next;
+    plain = htmlToPlainEmail(out);
+  }
+  return out
+    .replace(/(<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>\s*)$/i, "")
+    .trimEnd();
+}
+
 /** Détecte une signature déjà présente (y compris après sanitize / normalisation Gmail). */
 export function htmlAlreadyContainsEmailSignature(
   html: string,
@@ -292,14 +358,17 @@ export function htmlAlreadyContainsEmailSignature(
   const htmlPlain = htmlToPlainEmail(html).trim();
   if (!htmlPlain) return false;
 
-  if (plainTextContainsEmailSignature(htmlPlain, plainSignature)) return true;
+  const textPresent =
+    plainTextContainsEmailSignature(htmlPlain, plainSignature) ||
+    (sig ? plainTextContainsEmailSignature(htmlPlain, htmlToPlainEmail(sig)) : false);
 
-  if (sig) {
-    const sigPlain = htmlToPlainEmail(sig).trim();
-    if (plainTextContainsEmailSignature(htmlPlain, sigPlain)) return true;
+  if (!textPresent) return false;
+
+  if (sig && signatureHtmlHasImage(sig) && !htmlContainsSignatureImage(html, sig)) {
+    return false;
   }
 
-  return false;
+  return true;
 }
 
 export function injectTemplateSignatureHtml(
@@ -308,10 +377,20 @@ export function injectTemplateSignatureHtml(
   plainSignature?: string | null
 ): string {
   const sig = signatureHtml?.trim();
-  if (!sig || htmlAlreadyContainsEmailSignature(html, signatureHtml, plainSignature)) {
+  if (!sig) return html;
+
+  const needsImageRepair =
+    signatureHtmlHasImage(sig) && !htmlContainsSignatureImage(html, sig);
+
+  if (htmlAlreadyContainsEmailSignature(html, signatureHtml, plainSignature) && !needsImageRepair) {
     return html;
   }
-  return `${html}${gmailBlankLineHtml()}${sig}`;
+
+  const base = needsImageRepair
+    ? stripTrailingEmailSignatureBlocks(html, plainSignature, sig)
+    : html;
+
+  return `${base}${gmailBlankLineHtml()}${sig}`;
 }
 
 /** Slot temporaire : le normaliseur Gmail ne doit pas repasser sur le HTML bulletin / perf (blocs multiples). */
@@ -392,12 +471,35 @@ const ALLOWED_EMAIL_TAGS = new Set([
   "a",
   "div",
   "span",
+  "img",
 ]);
 
 function sanitizeEmailHtmlNode(el: Element): void {
   const children = [...el.children];
   for (const child of children) {
     const tag = child.tagName.toLowerCase();
+    if (tag === "img") {
+      const src = child.getAttribute("src")?.trim() ?? "";
+      if (!isSafeEmailImageSrc(src)) {
+        child.remove();
+        continue;
+      }
+      for (const attr of [...child.attributes]) {
+        if (
+          attr.name === "src" ||
+          attr.name === "alt" ||
+          attr.name === "width" ||
+          attr.name === "height"
+        ) {
+          continue;
+        }
+        if (attr.name === "style" && isGmailSafeStyle(attr.value)) {
+          continue;
+        }
+        child.removeAttribute(attr.name);
+      }
+      continue;
+    }
     if (!ALLOWED_EMAIL_TAGS.has(tag)) {
       while (child.firstChild) {
         el.insertBefore(child.firstChild, child);

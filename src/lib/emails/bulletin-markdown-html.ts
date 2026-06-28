@@ -118,8 +118,12 @@ function shouldUseCrmPeriode(periodClean: string, periode: string): boolean {
   return periodClean.length < 4 || !/\d/.test(periodClean);
 }
 
+function normalizeDashChars(s: string): string {
+  return s.replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "–");
+}
+
 function stripTitleMarkdownArtifacts(line: string): string {
-  let s = line.trim();
+  let s = normalizeDashChars(line.trim());
   if (s.startsWith("## ")) {
     s = s.slice(3).trim();
   } else if (s.startsWith("1.")) {
@@ -132,36 +136,100 @@ function stripTitleMarkdownArtifacts(line: string): string {
 }
 
 function productTitleDetectionLine(line: string): string {
-  return stripTitleMarkdownArtifacts(line).replace(/^\*\*|\*\*$/g, "").trim();
+  let s = stripTitleMarkdownArtifacts(line).replace(/^\*\*|\*\*$/g, "").trim();
+  if (s.startsWith("- ") || s.startsWith("* ")) {
+    s = s.slice(2).trim();
+  }
+  return s;
+}
+
+function foldProductTitleKey(line: string, periode = ""): string {
+  const bare = formatProductTitleLine(line, "", periode)
+    .replace(/^##\s+/, "")
+    .trim()
+    .replace(/–/g, "-");
+  return foldSubsectionKey(bare);
+}
+
+function preferProductTitleLine(candidate: string, current: string): boolean {
+  const c = candidate.trim();
+  const cur = current.trim();
+  if (c.startsWith("## ") && !cur.startsWith("## ")) return true;
+  if (!c.startsWith("## ") && cur.startsWith("## ")) return false;
+  const accentCount = (s: string) => (s.match(/[àâäéèêëïîôùûüç]/gi) ?? []).length;
+  const cAccents = accentCount(c);
+  const curAccents = accentCount(cur);
+  if (cAccents !== curAccents) return cAccents > curAccents;
+  return c.length > cur.length;
 }
 
 function titleDedupKey(line: string, periode = ""): string {
-  return formatProductTitleLine(line, "", periode)
-    .replace(/^##\s+/, "")
-    .trim()
-    .toLowerCase()
-    .replace(/–/g, "-");
+  return foldProductTitleKey(line, periode);
 }
 
-function stripTrailingDuplicateTitle(text: string, periode = ""): string {
-  const lines = text.split("\n");
-  const opening = lines.find((l) => isProductTitleLine(l));
-  if (!opening) return text;
-  const key = titleDedupKey(opening, periode);
+function stripTrailingProductTitleLines(lines: string[]): string[] {
   let end = lines.length;
   while (end > 0) {
-    const t = lines[end - 1]?.trim() ?? "";
+    const t = (lines[end - 1] ?? "").trim();
     if (!t) {
       end -= 1;
       continue;
     }
-    if (isProductTitleLine(t) && titleDedupKey(t, periode) === key && end > 1) {
+    if (isProductTitleLine(t)) {
       end -= 1;
       continue;
     }
     break;
   }
-  return lines.slice(0, end).join("\n");
+  return lines.slice(0, end);
+}
+
+function stripTrailingDuplicateTitle(text: string, periode = ""): string {
+  const lines = stripTrailingProductTitleLines(text.split("\n"));
+  return lines.join("\n");
+}
+
+function dedupeProductTitleLines(lines: string[], periode = ""): string[] {
+  const out: string[] = [];
+  const seenInBlock = new Set<string>();
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i]!;
+    const t = line.trim();
+    if (t === "---") {
+      seenInBlock.clear();
+      out.push(line);
+      i += 1;
+      continue;
+    }
+    if (isProductTitleLine(t)) {
+      const key = foldProductTitleKey(t, periode);
+      let best = line;
+      let j = i + 1;
+      while (j < lines.length) {
+        const tj = (lines[j] ?? "").trim();
+        if (!tj) {
+          j += 1;
+          continue;
+        }
+        if (!isProductTitleLine(tj)) break;
+        if (foldProductTitleKey(tj, periode) !== key) break;
+        if (preferProductTitleLine(lines[j]!, best)) best = lines[j]!;
+        j += 1;
+      }
+      if (seenInBlock.has(key)) {
+        i = j;
+        continue;
+      }
+      seenInBlock.add(key);
+      out.push(best);
+      i = j;
+      continue;
+    }
+    out.push(line);
+    i += 1;
+  }
+  return out;
 }
 
 function removeEmptySubsectionHeadings(lines: string[]): string[] {
@@ -186,31 +254,12 @@ function removeEmptySubsectionHeadings(lines: string[]): string[] {
   return out;
 }
 
-function dedupeProductTitleLines(lines: string[], periode = ""): string[] {
-  const out: string[] = [];
-  let firstTitleKey: string | null = null;
-  for (const line of lines) {
-    const t = line.trim();
-    if (isProductTitleLine(t)) {
-      const key = titleDedupKey(t, periode);
-      if (firstTitleKey === null) {
-        firstTitleKey = key;
-        out.push(line);
-        continue;
-      }
-      if (key === firstTitleKey) continue;
-    }
-    out.push(line);
-  }
-  return out;
-}
-
 function isProductTitleLine(line: string): boolean {
   return looksLikeProductPeriodLine(productTitleDetectionLine(line));
 }
 
 function formatProductTitleLine(line: string, displayName: string, periode = ""): string {
-  const rest = stripTitleMarkdownArtifacts(line);
+  const rest = productTitleDetectionLine(line);
   const dashIdx = (["–", "—", "-"] as const)
     .map((d) => rest.indexOf(d))
     .find((idx) => idx > 0) ?? -1;
@@ -448,11 +497,31 @@ function renderProductTitleHtml(title: string): string {
   );
 }
 
-function bulletinLinesForRender(markdown: string, prepared = false): string[] {
+function canonicalizeTitleLinesForRender(lines: string[], periode: string): string[] {
+  return lines.map((line) => {
+    const t = line.trim();
+    if (!t || t === "---") return line;
+    if (isProductTitleLine(t)) {
+      return formatProductTitleLine(t, "", periode);
+    }
+    return line;
+  });
+}
+
+function bulletinLinesForRender(
+  markdown: string,
+  prepared = false,
+  periode = ""
+): string[] {
   const raw = prepared
     ? markdown.replace(/\r\n/g, "\n").split("\n")
     : normalizeBulletinMarkdown(markdown);
-  return prefixAcquisitionBullets(raw);
+  return prefixAcquisitionBullets(
+    canonicalizeTitleLinesForRender(
+      stripTrailingProductTitleLines(dedupeProductTitleLines(raw, periode)),
+      periode
+    )
+  );
 }
 
 function normalizeBulletinMarkdown(markdown: string): string[] {
@@ -467,8 +536,12 @@ function normalizeBulletinMarkdown(markdown: string): string[] {
   return lines;
 }
 
-export function bulletinMarkdownToHtml(markdown: string, prepared = false): string {
-  const lines = bulletinLinesForRender(markdown, prepared);
+export function bulletinMarkdownToHtml(
+  markdown: string,
+  prepared = false,
+  periode = ""
+): string {
+  const lines = bulletinLinesForRender(markdown, prepared, periode);
   const blocks: string[] = [];
   let i = 0;
 
@@ -549,8 +622,12 @@ export function bulletinMarkdownToHtml(markdown: string, prepared = false): stri
   return blocks.join("");
 }
 
-export function bulletinMarkdownToPlainEmail(markdown: string, prepared = false): string {
-  const lines = bulletinLinesForRender(markdown, prepared);
+export function bulletinMarkdownToPlainEmail(
+  markdown: string,
+  prepared = false,
+  periode = ""
+): string {
+  const lines = bulletinLinesForRender(markdown, prepared, periode);
   const out: string[] = [];
   let i = 0;
 

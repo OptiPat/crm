@@ -261,35 +261,134 @@ fn preprocess_mistral_bulletin_line(line: &str) -> Option<String> {
     }
 }
 
+fn normalize_dash_chars(s: &str) -> String {
+    s.chars()
+        .map(|c| match c {
+            '\u{2010}'..='\u{2015}' | '\u{2212}' | '\u{FE58}' | '\u{FE63}' | '\u{FF0D}' => '–',
+            c => c,
+        })
+        .collect()
+}
+
 fn product_title_detection_line(line: &str) -> String {
-    let mut t = line.trim().to_string();
+    let mut t = normalize_dash_chars(line.trim());
+    while t.ends_with("**") {
+        t.truncate(t.len().saturating_sub(2));
+        t = t.trim_end().to_string();
+    }
     if t.starts_with("## ") {
         t = t.trim_start_matches('#').trim().to_string();
     } else if let Some(rest) = t.strip_prefix("1.") {
         t = rest.trim().to_string();
     }
+    if let Some(rest) = t.strip_prefix("- ") {
+        t = rest.trim().to_string();
+    } else if let Some(rest) = t.strip_prefix("* ") {
+        t = rest.trim().to_string();
+    }
     t.trim_matches('*').trim().to_string()
+}
+
+fn fold_product_title_key(line: &str, periode: &str) -> String {
+    let bare = format_product_title_line(line, "", periode)
+        .trim_start_matches("## ")
+        .trim()
+        .replace('–', "-");
+    fold_subsection_key(&bare)
+}
+
+fn prefer_product_title_line(candidate: &str, current: &str) -> bool {
+    let c = candidate.trim();
+    let cur = current.trim();
+    if c.starts_with("## ") && !cur.starts_with("## ") {
+        return true;
+    }
+    if !c.starts_with("## ") && cur.starts_with("## ") {
+        return false;
+    }
+    let accent_count = |s: &str| {
+        s.chars()
+            .filter(|ch| matches!(ch, 'à' | 'â' | 'ä' | 'é' | 'è' | 'ê' | 'ë' | 'ï' | 'î' | 'ô' | 'ù' | 'û' | 'ü' | 'ç'))
+            .count()
+    };
+    let c_accents = accent_count(c);
+    let cur_accents = accent_count(cur);
+    if c_accents != cur_accents {
+        return c_accents > cur_accents;
+    }
+    c.len() > cur.len()
 }
 
 fn dedupe_product_title_lines(lines: Vec<String>, periode: &str) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
-    let mut first_title_key: Option<String> = None;
-    for line in lines {
+    let mut seen_in_block: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut i = 0usize;
+    while i < lines.len() {
+        let line = lines[i].clone();
         let t = line.trim();
+        if t == "---" {
+            seen_in_block.clear();
+            out.push(line);
+            i += 1;
+            continue;
+        }
         if is_product_title_line(t) {
-            let key = title_dedup_key(t, periode);
-            if first_title_key.is_none() {
-                first_title_key = Some(key);
-                out.push(line);
+            let key = fold_product_title_key(t, periode);
+            let mut best = line.clone();
+            let mut j = i + 1;
+            while j < lines.len() {
+                let tj = lines[j].trim();
+                if tj.is_empty() {
+                    j += 1;
+                    continue;
+                }
+                if !is_product_title_line(tj) {
+                    break;
+                }
+                if fold_product_title_key(tj, periode) != key {
+                    break;
+                }
+                if prefer_product_title_line(&lines[j], &best) {
+                    best = lines[j].clone();
+                }
+                j += 1;
+            }
+            if seen_in_block.contains(&key) {
+                i = j;
                 continue;
             }
-            if first_title_key.as_deref() == Some(key.as_str()) {
-                continue;
-            }
+            seen_in_block.insert(key);
+            out.push(best);
+            i = j;
+            continue;
         }
         out.push(line);
+        i += 1;
     }
     out
+}
+
+fn strip_trailing_product_title_lines(lines: &[String]) -> Vec<String> {
+    let mut end = lines.len();
+    while end > 0 {
+        let t = lines[end - 1].trim();
+        if t.is_empty() {
+            end -= 1;
+            continue;
+        }
+        if is_product_title_line(t) {
+            end -= 1;
+            continue;
+        }
+        break;
+    }
+    lines[..end].to_vec()
+}
+
+/// Mistral laisse parfois le titre dupliqué en fin de résumé, avec « ** » orphelins.
+fn strip_trailing_duplicate_title(text: &str, _periode: &str) -> String {
+    let lines: Vec<String> = text.lines().map(String::from).collect();
+    strip_trailing_product_title_lines(&lines).join("\n")
 }
 
 fn looks_like_period_label(s: &str) -> bool {
@@ -477,73 +576,33 @@ fn should_use_crm_periode(period_clean: &str, periode: &str) -> bool {
     period_clean.len() < 4 || !period_clean.chars().any(|c| c.is_ascii_digit())
 }
 
-fn strip_title_markdown_artifacts(line: &str) -> String {
-    let mut s = line.trim().to_string();
-    while s.ends_with("**") {
-        s.truncate(s.len().saturating_sub(2));
-        s = s.trim_end().to_string();
-    }
-    s
-}
-
-fn title_dedup_key(line: &str, periode: &str) -> String {
-    format_product_title_line(line, "", periode)
-        .trim_start_matches("## ")
-        .trim()
-        .to_lowercase()
-        .replace('–', "-")
-}
-
-/// Mistral laisse parfois le titre dupliqué en fin de résumé, avec « ** » orphelins.
-fn strip_trailing_duplicate_title(text: &str, periode: &str) -> String {
-    let lines: Vec<String> = text.lines().map(String::from).collect();
-    if lines.is_empty() {
-        return String::new();
-    }
-    let opening_key = lines
-        .iter()
-        .find(|l| is_product_title_line(l))
-        .map(|l| title_dedup_key(l, periode));
-    let Some(opening_key) = opening_key else {
-        return text.to_string();
-    };
-    let mut end = lines.len();
-    while end > 0 {
-        let t = lines[end - 1].trim();
-        if t.is_empty() {
-            end -= 1;
-            continue;
-        }
-        if is_product_title_line(t) && title_dedup_key(t, periode) == opening_key && end > 1 {
-            end -= 1;
-            continue;
-        }
-        break;
-    }
-    lines[..end].join("\n")
-}
-
 fn is_product_title_line(line: &str) -> bool {
-    let trimmed = strip_title_markdown_artifacts(line);
-    if trimmed.starts_with("## ") {
-        return looks_like_product_period_line(trimmed.trim_start_matches('#').trim());
-    }
-    if trimmed.starts_with("1.") {
-        let rest = trimmed.strip_prefix("1.").unwrap_or(&trimmed).trim();
-        return looks_like_product_period_line(rest);
-    }
-    looks_like_product_period_line(trimmed.trim_matches('*').trim())
+    looks_like_product_period_line(&product_title_detection_line(line))
+}
+
+fn canonicalize_product_title_lines(
+    lines: Vec<String>,
+    display_name: &str,
+    periode: &str,
+) -> Vec<String> {
+    lines
+        .into_iter()
+        .map(|line| {
+            let t = line.trim();
+            if t == "---" {
+                return line;
+            }
+            if is_product_title_line(t) {
+                format_product_title_line(t, display_name, periode)
+            } else {
+                line
+            }
+        })
+        .collect()
 }
 
 fn format_product_title_line(line: &str, display_name: &str, periode: &str) -> String {
-    let trimmed = strip_title_markdown_artifacts(line);
-    let rest = if trimmed.starts_with("## ") {
-        trimmed.trim_start_matches('#').trim()
-    } else if trimmed.starts_with("1.") {
-        trimmed.strip_prefix("1.").unwrap_or(&trimmed).trim()
-    } else {
-        trimmed.trim_matches('*').trim()
-    };
+    let rest = product_title_detection_line(line);
     if let Some(dash_idx) = rest
         .find('–')
         .or_else(|| rest.find('—'))
@@ -566,7 +625,7 @@ fn format_product_title_line(line: &str, display_name: &str, periode: &str) -> S
     let name = if display_name.trim().is_empty() {
         rest
     } else {
-        display_name.trim()
+        display_name.trim().to_string()
     };
     format!("## {} – {}", name, periode.trim())
 }
@@ -773,14 +832,17 @@ fn normalize_bulletin_summary_markdown(
         out.push(normalized);
     }
 
-    let body = remove_empty_subsection_headings(dedupe_product_title_lines(
-        prefix_acquisition_bullets(out),
-        periode,
+    let body = remove_empty_subsection_headings(prefix_acquisition_bullets(
+        canonicalize_product_title_lines(
+            dedupe_product_title_lines(out, periode),
+            display_name,
+            periode,
+        ),
     ))
-        .join("\n")
-        .replace("\n\n\n", "\n\n")
-        .trim()
-        .to_string();
+    .join("\n")
+    .replace("\n\n\n", "\n\n")
+    .trim()
+    .to_string();
 
     if !saw_product_title && ensure_product_header {
         return format!(
@@ -835,7 +897,7 @@ fn scpi_intro_phrases(count: usize) -> (String, String) {
 
 const SCPI_TEMPLATE_VERSION: i64 = 4;
 /// Version du JSON `campaign_variables` (digest). Incrémenter si le format change.
-pub const SCPI_CAMPAIGN_DIGEST_VERSION: i64 = 1;
+pub const SCPI_CAMPAIGN_DIGEST_VERSION: i64 = 2;
 pub const SCPI_LAST_PREPARE_SETTING: &str = "scpi_last_campaign_prepare";
 
 fn build_scpi_campaign_variables_json(
@@ -1662,6 +1724,28 @@ mod tests {
         assert!(!resume.contains("1. Chiffres clés :"));
         assert!(!resume.contains("\n-\n"));
         assert!(!resume.contains("2. Ce trimestre\nComete – T1 2026"));
+    }
+
+    #[test]
+    fn build_bulletin_resume_dedupes_bullet_prefixed_titles() {
+        let bulletins = vec![ScpiBulletinInput {
+            nom_produit: "Comète".into(),
+            summary_markdown: [
+                "- Comete – T1 2026",
+                "",
+                "- Comète – T1 2026",
+                "",
+                "1. Chiffres clés",
+                "- Collecte nette : 132 M€",
+            ]
+            .join("\n"),
+            fichier_source: None,
+        }];
+        let resume = build_bulletin_resume(&bulletins, "T1 2026");
+        assert!(resume.contains("## Comète – T1 2026"));
+        assert!(!resume.contains("- Comete"));
+        assert!(!resume.contains("- Comète"));
+        assert_eq!(resume.matches("Comète – T1 2026").count(), 1);
     }
 
     #[test]
