@@ -1,6 +1,6 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
-import { buildSendEmailBodies, decodeHtmlEntities } from "@/lib/emails/email-signature";
+import { buildSendEmailBodies, plainTextContainsEmailSignature } from "@/lib/emails/email-signature";
 
 /** Clé JSON dans `templates_email.variables` (compatible newsletter_html). */
 export const TEMPLATE_CORPS_HTML_KEY = "corps_html";
@@ -292,16 +292,13 @@ export function htmlAlreadyContainsEmailSignature(
   const htmlPlain = htmlToPlainEmail(html).trim();
   if (!htmlPlain) return false;
 
+  if (plainTextContainsEmailSignature(htmlPlain, plainSignature)) return true;
+
   if (sig) {
     const sigPlain = htmlToPlainEmail(sig).trim();
-    if (sigPlain && htmlPlain.endsWith(sigPlain)) return true;
+    if (plainTextContainsEmailSignature(htmlPlain, sigPlain)) return true;
   }
 
-  const plainSig = plainSignature?.trim();
-  if (plainSig) {
-    const decoded = decodeHtmlEntities(plainSig);
-    if (htmlPlain.endsWith(decoded)) return true;
-  }
   return false;
 }
 
@@ -334,7 +331,10 @@ export function prepareTemplateHtmlForSend(
   vars: Record<string, string>
 ): string {
   const bulletinHtml = vars.bulletin_resume_html ?? "";
-  const slotVars = { ...vars };
+  const slotVars: Record<string, string> = {
+    ...vars,
+    bulletin_resume_html: bulletinHtml ? BULLETIN_RESUME_HTML_PLACEHOLDER : "",
+  };
   const perfSlots: { key: (typeof PERF_HTML_SLOT_KEYS)[number]; html: string }[] = [];
 
   for (const key of PERF_HTML_SLOT_KEYS) {

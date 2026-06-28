@@ -11,7 +11,7 @@ export function parseScpiDigestVersion(raw: string | null | undefined): number {
   }
 }
 
-/** Digest préparé avant une mise à jour CRM / template — relancer n8n prepare. */
+/** Digest préparé avant une mise à jour CRM / template — relancer Préparer. */
 export function isScpiDigestStale(
   raw: string | null | undefined,
   currentVersion = CURRENT_SCPI_DIGEST_VERSION

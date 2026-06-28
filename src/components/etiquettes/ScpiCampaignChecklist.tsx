@@ -5,21 +5,23 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
-  Copy,
+  FileUp,
   HelpCircle,
   Loader2,
-  Play,
   RefreshCw,
   Send,
+  Sparkles,
 } from "lucide-react";
 import {
   getScpiCampaignDashboard,
-  triggerScpiN8nWorkflow,
+  listenScpiBulletinProgress,
+  pickScpiBulletinPdfPaths,
+  prepareScpiBulletinsFromPdfs,
+  type ScpiBulletinProgress,
   type ScpiCampaignDashboard,
 } from "@/lib/api/tauri-scpi-campaign";
-import { getLocalApiSettings, type LocalApiSettings } from "@/lib/api/tauri-local-api";
+import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { formatEtiquetteSendDatetime } from "@/lib/etiquettes/etiquette-email-preview";
-import { SCPI_PDF_DROP_FOLDER } from "@/lib/emails/scpi-envois-filters";
 import { ScpiTrimestreGuideDialog } from "@/components/etiquettes/ScpiTrimestreGuideDialog";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -49,20 +51,16 @@ export function ScpiCampaignChecklist({
   onSendRemaining?: () => void;
 }) {
   const [dashboard, setDashboard] = useState<ScpiCampaignDashboard | null>(null);
-  const [apiSettings, setApiSettings] = useState<LocalApiSettings | null>(null);
   const [loading, setLoading] = useState(true);
-  const [triggering, setTriggering] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [progress, setProgress] = useState<ScpiBulletinProgress | null>(null);
   const [collapsed, setCollapsed] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [dash, settings] = await Promise.all([
-        getScpiCampaignDashboard(),
-        getLocalApiSettings(),
-      ]);
+      const dash = await getScpiCampaignDashboard();
       setDashboard(dash);
-      setApiSettings(settings);
     } catch (error) {
       console.error(error);
     } finally {
@@ -75,40 +73,40 @@ export function ScpiCampaignChecklist({
   }, [load, refreshKey]);
 
   const last = dashboard?.lastPrepare;
-  const webhookConfigured = Boolean(apiSettings?.scpiN8nWebhookUrl?.trim());
   const prepareDone = Boolean(last);
   const readyLive = dashboard?.readyCount ?? 0;
   const sentCount = dashboard?.sentSincePrepare ?? 0;
   const sendDone = prepareDone && readyLive === 0;
   const campaignActive = prepareDone && readyLive > 0;
 
-  const handleTrigger = async () => {
-    setTriggering(true);
+  const handlePrepare = async () => {
+    const paths = await pickScpiBulletinPdfPaths();
+    if (paths == null || paths.length === 0) return;
+
+    setPreparing(true);
+    setProgress(null);
+    let unlisten: (() => void) | undefined;
     try {
-      const msg = await triggerScpiN8nWorkflow();
-      toast.success(msg, {
-        description:
-          "n8n s'exécute en arrière-plan. Actualisez la file quand le workflow est terminé.",
+      unlisten = await listenScpiBulletinProgress((payload) => {
+        setProgress(payload);
+      });
+      const result = await prepareScpiBulletinsFromPdfs(paths);
+      toast.success(result.message, {
+        description: `${result.bulletinsCount} bulletin(s) · ${result.contactsQueued} contact(s) en file.`,
         duration: 8000,
       });
+      notifyEtiquettesChanged();
       await load();
       await onRefreshQueue?.();
     } catch (error) {
       console.error(error);
       toast.error(
-        error instanceof Error ? error.message : "Impossible de lancer le workflow n8n."
+        error instanceof Error ? error.message : "Impossible de préparer la campagne SCPI."
       );
     } finally {
-      setTriggering(false);
-    }
-  };
-
-  const copyDropFolder = async () => {
-    try {
-      await navigator.clipboard.writeText(SCPI_PDF_DROP_FOLDER);
-      toast.success("Chemin copié.");
-    } catch {
-      toast.error("Copie impossible.");
+      unlisten?.();
+      setPreparing(false);
+      setProgress(null);
     }
   };
 
@@ -157,7 +155,7 @@ export function ScpiCampaignChecklist({
                   </p>
                 ) : (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Aucune préparation — PDF → n8n → prepare CRM
+                    Aucune préparation — sélectionnez les PDF bulletins SCPI
                   </p>
                 )}
               </div>
@@ -176,21 +174,19 @@ export function ScpiCampaignChecklist({
                 <RefreshCw className="h-4 w-4 mr-1" />
                 Actualiser
               </Button>
-              {webhookConfigured ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={triggering}
-                  onClick={() => void handleTrigger()}
-                >
-                  {triggering ? (
-                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                  ) : (
-                    <Play className="h-4 w-4 mr-1" />
-                  )}
-                  n8n
-                </Button>
-              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                disabled={preparing}
+                onClick={() => void handlePrepare()}
+              >
+                {preparing ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4 mr-1" />
+                )}
+                Préparer
+              </Button>
               {campaignActive && onSendRemaining ? (
                 <Button type="button" size="sm" onClick={onSendRemaining}>
                   <Send className="h-4 w-4 mr-1" />
@@ -199,6 +195,9 @@ export function ScpiCampaignChecklist({
               ) : null}
             </div>
           </div>
+          {preparing && progress ? (
+            <p className="text-xs text-muted-foreground mt-2 pl-6">{progress.message}</p>
+          ) : null}
         </div>
 
         {!collapsed && (
@@ -207,30 +206,15 @@ export function ScpiCampaignChecklist({
               <li className="flex items-start gap-2">
                 <StepIcon done={false} />
                 <span className="text-muted-foreground">
-                  <strong className="text-foreground font-normal">1. PDF</strong> —{" "}
-                  <button
-                    type="button"
-                    className="text-primary underline"
-                    onClick={() => void copyDropFolder()}
-                  >
-                    {SCPI_PDF_DROP_FOLDER}
-                  </button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 ml-1 align-middle"
-                    title="Copier le chemin"
-                    onClick={() => void copyDropFolder()}
-                  >
-                    <Copy className="h-3.5 w-3.5" />
-                  </Button>
+                  <strong className="text-foreground font-normal">1. PDF</strong> — bouton{" "}
+                  <strong className="text-foreground font-normal">Préparer</strong> : sélectionnez
+                  un ou plusieurs bulletins (nom de fichier = nom SCPI CRM reconnu).
                 </span>
               </li>
               <li className="flex items-start gap-2">
                 <StepIcon done={prepareDone} />
                 <span>
-                  <strong className="font-normal">2. n8n → prepare CRM</strong>
+                  <strong className="font-normal">2. OCR + résumé Mistral → prepare CRM</strong>
                   {last ? (
                     <>
                       {" "}
@@ -254,7 +238,7 @@ export function ScpiCampaignChecklist({
                       .
                     </>
                   ) : (
-                    " — en attente du POST prepare."
+                    " — clé Mistral requise (Paramètres → Newsletter)."
                   )}
                 </span>
               </li>
@@ -290,25 +274,22 @@ export function ScpiCampaignChecklist({
             {staleReadyCount > 0 ? (
               <p className="text-xs text-amber-800 dark:text-amber-200 flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="border-amber-300 text-amber-900 bg-amber-50">
-                  Régénérer via n8n
+                  Régénérer
                 </Badge>
-                {staleReadyCount} ligne(s) avec digest obsolète — relancez n8n prepare.
+                {staleReadyCount} ligne(s) avec digest obsolète — relancez Préparer avec les PDF.
               </p>
             ) : null}
 
-            <p className="text-xs text-muted-foreground">
-              Un nouveau prepare remet en file les contacts retirés (✕). n8n doit être démarré,
-              workflow activé, CRM ouvert (API port {apiSettings?.port ?? 3001}).
+            <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+              <FileUp className="h-3.5 w-3.5 shrink-0" />
+              Un nouveau prepare remet en file les contacts retirés (✕). Durée typique : quelques
+              minutes pour 10+ bulletins (OCR Mistral).
             </p>
           </div>
         )}
       </div>
 
-      <ScpiTrimestreGuideDialog
-        open={guideOpen}
-        onOpenChange={setGuideOpen}
-        onCopyDropFolder={() => void copyDropFolder()}
-      />
+      <ScpiTrimestreGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
     </>
   );
 }

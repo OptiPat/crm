@@ -97,7 +97,7 @@ const SETTINGS_NAV: SettingsNavItem[] = [
   },
   {
     id: "integrations",
-    label: "Intégration n8n",
+    label: "API locale",
     description: "API locale anniversaires",
     icon: Workflow,
   },

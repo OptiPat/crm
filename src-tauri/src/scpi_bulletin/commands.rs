@@ -1,0 +1,54 @@
+use super::pipeline::{prepare_processed_scpi_bulletin_batch, process_scpi_bulletin_pdfs};
+use crate::commands::DbState;
+use crate::database::scpi_campaigns::PrepareScpiCampaignResult;
+use crate::newsletter::store::NewsletterStore;
+use tauri::{AppHandle, Manager, State};
+
+#[tauri::command]
+pub async fn prepare_scpi_bulletins_from_pdfs_cmd(
+    app: AppHandle,
+    _db: State<'_, DbState>,
+    pdf_paths: Vec<String>,
+) -> Result<PrepareScpiCampaignResult, String> {
+    let store = NewsletterStore::load(&app)?;
+    let api_key = store
+        .api_key
+        .clone()
+        .filter(|k| !k.trim().is_empty())
+        .ok_or(
+            "Clé API Mistral absente — Paramètres → Newsletter → clé Mistral (OCR + résumés SCPI).",
+        )?;
+    let paths: Vec<String> = pdf_paths
+        .into_iter()
+        .map(|p| p.trim().to_string())
+        .filter(|p| !p.is_empty())
+        .collect();
+
+    let app_handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        // Verrou SQLite court : liste des SCPI portefeuille uniquement.
+        let portfolio = {
+            let db = app_handle.state::<DbState>();
+            let db_guard = db.inner().lock().map_err(|_| "Base non accessible.")?;
+            let database = db_guard.as_ref().ok_or("Base non initialisée")?;
+            database
+                .list_scpi_product_names()
+                .map_err(|e| format!("Lecture portefeuille SCPI : {e}"))?
+        };
+
+        // OCR + Mistral sans mutex — le CRM reste utilisable pendant ce traitement.
+        let batch = process_scpi_bulletin_pdfs(&app_handle, &api_key, &paths, &portfolio)?;
+
+        // Verrou SQLite court : écriture file Envois.
+        let result = {
+            let db = app_handle.state::<DbState>();
+            let db_guard = db.inner().lock().map_err(|_| "Base non accessible.")?;
+            let database = db_guard.as_ref().ok_or("Base non initialisée")?;
+            prepare_processed_scpi_bulletin_batch(&app_handle, database, batch)?
+        };
+
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("Traitement interrompu : {e}"))?
+}

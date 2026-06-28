@@ -1,9 +1,6 @@
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { isScpiBulletinQueueItem } from "@/lib/emails/scpi-bulletin-preview-vars";
 
-/** Dossier n8n pour dépôt PDF (doc SCPI_TRIMESTRE.md). */
-export const SCPI_PDF_DROP_FOLDER = "D:\\n8n_bridge\\scpi\\a-traiter";
-
 export const SCPI_BULLETIN_TEMPLATE_LABEL = "Bulletin SCPI trimestriel";
 
 export function parseScpiQueuePeriod(

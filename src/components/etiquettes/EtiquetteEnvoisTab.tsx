@@ -366,7 +366,7 @@ export function EtiquetteEnvoisTab({
     if (blocked) {
       toast.warning(
         getCampaignTemplateSendBlockReason(blocked) ??
-          "Envoi SCPI bloqué — relancez n8n prepare."
+          "Envoi SCPI bloqué — relancez Préparer (checklist SCPI)."
       );
       return;
     }
@@ -857,9 +857,9 @@ export function EtiquetteEnvoisTab({
                   <Badge
                     variant="outline"
                     className="text-xs border-amber-300 text-amber-900 bg-amber-50"
-                    title="Digest préparé avant une mise à jour CRM ou du modèle — relancez n8n prepare, ne renvoyez pas tel quel."
+                    title="Digest préparé avant une mise à jour CRM ou du modèle — relancez Préparer, ne renvoyez pas tel quel."
                   >
-                    Régénérer via n8n
+                    Régénérer
                   </Badge>
                 ) : null}
                 {options.mode === "ready" && preview && (
@@ -1225,7 +1225,7 @@ export function EtiquetteEnvoisTab({
                       title={
                         selectedReadySendBlockReason ??
                         (selectedReadySendBlocked
-                          ? "Sélection avec envoi SCPI bloqué — relancez n8n prepare"
+                          ? "Sélection avec envoi SCPI bloqué — relancez Préparer"
                           : undefined)
                       }
                       onClick={() => setBatchOpen(true)}

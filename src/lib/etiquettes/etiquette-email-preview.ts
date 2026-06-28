@@ -149,7 +149,7 @@ export function getIncompleteQueueLabel(issue: string | null | undefined): strin
   return INCOMPLETE_LABELS[issue] ?? INCOMPLETE_LABELS.OTHER;
 }
 
-/** True si le mail SCPI n'a pas de résumé injecté (campagne n8n à relancer). */
+/** True si le mail SCPI n'a pas de résumé injecté (campagne à relancer). */
 export function isScpiBulletinContentMissing(item: EtiquetteEmailQueueItem): boolean {
   const hay = `${item.template_corps}\n${getTemplateCorpsHtml(item.template_variables) ?? ""}`;
   if (!templateUsesScpiBulletinVariables(hay)) return false;
@@ -174,10 +174,10 @@ export function getScpiBulletinSendBlockReason(
 ): string | null {
   if (!isScpiBulletinQueueItem(item)) return null;
   if (isScpiBulletinContentMissing(item)) {
-    return "Résumé bulletins absent — relancez n8n prepare";
+    return "Résumé bulletins absent — relancez Préparer (checklist SCPI)";
   }
   if (isScpiDigestStale(item.campaign_variables)) {
-    return "Digest périmé — relancez n8n prepare (ne pas renvoyer tel quel)";
+    return "Digest périmé — relancez Préparer (ne pas renvoyer tel quel)";
   }
   return null;
 }

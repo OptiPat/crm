@@ -17,6 +17,36 @@ export function decodeHtmlEntities(text: string): string {
     .replace(/&#39;/g, "'");
 }
 
+/** Compare signatures après conversion HTML (•) ou import Gmail (-). */
+export function normalizePlainForSignatureCompare(text: string): string {
+  return decodeHtmlEntities(text)
+    .replace(/\r\n/g, "\n")
+    .replace(/[•·▪▫◦]/g, "-")
+    .replace(/\u00a0/g, " ")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function signaturePlainFingerprint(plain: string): string {
+  const lines = normalizePlainForSignatureCompare(plain).split("\n");
+  return lines.slice(0, 2).join("\n");
+}
+
+export function plainTextContainsEmailSignature(
+  haystack: string,
+  signature: string | null | undefined
+): boolean {
+  const sig = signature?.trim();
+  if (!sig || !haystack.trim()) return false;
+  const normHay = normalizePlainForSignatureCompare(haystack);
+  const normSig = normalizePlainForSignatureCompare(sig);
+  if (normSig.length >= 8 && normHay.includes(normSig)) return true;
+  const fp = signaturePlainFingerprint(sig);
+  return fp.length >= 8 && normHay.includes(fp);
+}
+
 export function signatureLooksLikeHtml(signature: string | null | undefined): boolean {
   if (!signature?.trim()) return false;
   return /<[a-z][\s\S]*>/i.test(signature);
@@ -31,7 +61,7 @@ export function appendEmailSignature(
   if (!sig) return body;
   const decoded = decodeHtmlEntities(sig);
   const trimmedBody = body.trimEnd();
-  if (trimmedBody.endsWith(decoded)) return body;
+  if (plainTextContainsEmailSignature(trimmedBody, decoded)) return body;
   return `${trimmedBody}\n\n--\n${decoded}`;
 }
 

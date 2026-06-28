@@ -1,5 +1,5 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
-import { appendEmailSignature, decodeHtmlEntities } from "@/lib/emails/email-signature";
+import { appendEmailSignature, plainTextContainsEmailSignature } from "@/lib/emails/email-signature";
 import {
   stripOrphanStelliumFormalityHtml,
   stripOrphanStelliumFormalityLines,
@@ -12,16 +12,10 @@ import {
 } from "@/lib/emails/template-email-html";
 
 function plainBodyAlreadyHasSignature(plain: string, cgp: CgpConfig | null): boolean {
-  const tail = plain.trimEnd();
-  const plainSig = cgp?.email_signature?.trim();
-  if (plainSig) {
-    const decoded = decodeHtmlEntities(plainSig);
-    if (tail.endsWith(decoded) || tail.endsWith(`--\n${decoded}`)) return true;
-  }
+  if (plainTextContainsEmailSignature(plain, cgp?.email_signature)) return true;
   const htmlSig = cgp?.email_signature_html?.trim();
   if (htmlSig) {
-    const fromHtml = htmlToPlainEmail(htmlSig).trim();
-    if (fromHtml && tail.endsWith(fromHtml)) return true;
+    return plainTextContainsEmailSignature(plain, htmlToPlainEmail(htmlSig));
   }
   return false;
 }

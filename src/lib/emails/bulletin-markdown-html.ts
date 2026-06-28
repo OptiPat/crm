@@ -1,4 +1,4 @@
-/** Markdown court (résumés n8n SCPI) → HTML Gmail-safe pour {{bulletin_resume_html}}. */
+/** Markdown court (résumés SCPI Mistral) → HTML Gmail-safe pour {{bulletin_resume_html}}. */
 
 const GMAIL_LINE = "line-height:1.5;margin:0;padding:0";
 
@@ -13,20 +13,102 @@ function blankLine(): string {
 
 const SUBSECTION_TITLES = ["Chiffres clés", "Ce trimestre", "Acquisitions"] as const;
 
+function subsectionTitleCandidate(rest: string): string {
+  return rest.trim().replace(/:\s*$/, "").trim();
+}
+
+function foldSubsectionKey(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .trim();
+}
+
 function isSubsectionTitle(rest: string): boolean {
-  const r = rest.trim();
-  return SUBSECTION_TITLES.some((title) => r.toLowerCase() === title.toLowerCase());
+  return canonicalSubsectionTitle(rest) !== null;
+}
+
+function canonicalSubsectionTitle(rest: string): (typeof SUBSECTION_TITLES)[number] | null {
+  const key = foldSubsectionKey(subsectionTitleCandidate(rest));
+  if (key === "chiffres cles") return "Chiffres clés";
+  if (key === "ce trimestre") return "Ce trimestre";
+  if (key === "acquisitions") return "Acquisitions";
+  return null;
+}
+
+function subsectionDisplayNumber(title: (typeof SUBSECTION_TITLES)[number]): number {
+  if (title === "Chiffres clés") return 1;
+  if (title === "Ce trimestre") return 2;
+  return 3;
+}
+
+function looksLikePeriodLabel(s: string): boolean {
+  const t = s.trim();
+  if (!t) return false;
+  const lower = t.toLowerCase();
+  if (/^t[1-4](\s+20\d{2})?$/i.test(t)) return true;
+  if (/^20\d{2}$/.test(t)) return true;
+  if (lower.includes("trimestre") || lower.includes("semestre")) return true;
+  if (/^t[1-4]\s+20\d{2}$/i.test(t)) return true;
+  return false;
+}
+
+function periodPartAfterDash(line: string, dashIdx: number): string {
+  return line
+    .slice(dashIdx + 1)
+    .trim()
+    .replace(/^[–—-]\s*/, "");
+}
+
+function looksLikeProductPeriodLine(s: string): boolean {
+  const t = s.trim();
+  if (!t || isSubsectionTitle(t) || t.startsWith("- ") || t.startsWith("* ")) {
+    return false;
+  }
+  // Ligne d'acquisition « Pays : ville, … » — pas un titre SCPI.
+  if (t.includes(":") && !/[–—]/.test(t)) return false;
+  for (const dash of ["–", "—", "-"] as const) {
+    const idx = t.indexOf(dash);
+    if (idx <= 0 || idx >= t.length - 1) continue;
+    const period = periodPartAfterDash(t, idx);
+    if (looksLikePeriodLabel(period)) return true;
+    // Titre SCPI dont la période OCR est coupée (« Comète – T » + « 2026 » lignes suivantes).
+    if (period.length <= 6 && !period.includes(":")) return true;
+  }
+  return false;
+}
+
+function unwrapMistralMarkdownLine(line: string): string {
+  let t = line.trim();
+  if (!t || t === "**" || t === "*" || t === "***") return "";
+  if (t.startsWith("**") && t.endsWith("**") && t.length > 4) {
+    return t.slice(2, -2).trim();
+  }
+  while (t.startsWith("**")) {
+    t = t.slice(2).trimStart();
+  }
+  while (t.endsWith("**")) {
+    t = t.slice(0, -2).trimEnd();
+  }
+  return t;
 }
 
 function normalizeSubsectionLine(line: string): string {
-  const trimmed = line.trim();
+  const trimmed = unwrapMistralMarkdownLine(line);
+  if (!trimmed) return "";
+  const titleOnly = canonicalSubsectionTitle(trimmed);
+  if (titleOnly) {
+    return `${subsectionDisplayNumber(titleOnly)}. ${titleOnly}`;
+  }
   const dotIdx = trimmed.indexOf(".");
-  if (dotIdx <= 0) return line;
+  if (dotIdx <= 0) return trimmed;
   const num = Number.parseInt(trimmed.slice(0, dotIdx).trim(), 10);
-  if (!Number.isFinite(num) || num < 2 || num > 9) return line;
+  if (!Number.isFinite(num) || num < 1 || num > 4) return trimmed;
   const rest = trimmed.slice(dotIdx + 1).trim();
-  if (!isSubsectionTitle(rest)) return line;
-  return `**${rest}**`;
+  const title = canonicalSubsectionTitle(rest);
+  if (!title) return trimmed;
+  return `${subsectionDisplayNumber(title)}. ${title}`;
 }
 
 function shouldUseCrmPeriode(periodClean: string, periode: string): boolean {
@@ -38,15 +120,24 @@ function shouldUseCrmPeriode(periodClean: string, periode: string): boolean {
 
 function stripTitleMarkdownArtifacts(line: string): string {
   let s = line.trim();
-  if (!s.startsWith("1.")) return line;
+  if (s.startsWith("## ")) {
+    s = s.slice(3).trim();
+  } else if (s.startsWith("1.")) {
+    s = s.slice(2).trim();
+  }
   while (s.endsWith("**")) {
     s = s.slice(0, -2).trimEnd();
   }
   return s;
 }
 
+function productTitleDetectionLine(line: string): string {
+  return stripTitleMarkdownArtifacts(line).replace(/^\*\*|\*\*$/g, "").trim();
+}
+
 function titleDedupKey(line: string, periode = ""): string {
-  return fixProductTitleLine(stripTitleMarkdownArtifacts(line), "", periode)
+  return formatProductTitleLine(line, "", periode)
+    .replace(/^##\s+/, "")
     .trim()
     .toLowerCase()
     .replace(/–/g, "-");
@@ -54,7 +145,7 @@ function titleDedupKey(line: string, periode = ""): string {
 
 function stripTrailingDuplicateTitle(text: string, periode = ""): string {
   const lines = text.split("\n");
-  const opening = lines.find((l) => l.trim().startsWith("1."));
+  const opening = lines.find((l) => isProductTitleLine(l));
   if (!opening) return text;
   const key = titleDedupKey(opening, periode);
   let end = lines.length;
@@ -64,7 +155,7 @@ function stripTrailingDuplicateTitle(text: string, periode = ""): string {
       end -= 1;
       continue;
     }
-    if (t.startsWith("1.") && titleDedupKey(t, periode) === key && end > 1) {
+    if (isProductTitleLine(t) && titleDedupKey(t, periode) === key && end > 1) {
       end -= 1;
       continue;
     }
@@ -73,33 +164,93 @@ function stripTrailingDuplicateTitle(text: string, periode = ""): string {
   return lines.slice(0, end).join("\n");
 }
 
-function fixProductTitleLine(line: string, displayName: string, periode = ""): string {
-  const trimmed = stripTitleMarkdownArtifacts(line).trim();
-  if (!trimmed.startsWith("1.")) return line;
-  const rest = trimmed.slice(2).trim();
-  const dashIdx = rest.search(/[–-]/);
-  if (dashIdx < 0) {
-    const name = displayName.trim() || rest;
-    return periode.trim() ? `1. ${name} – ${periode.trim()}` : `1. ${name}`;
+function removeEmptySubsectionHeadings(lines: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    const t = lines[i]?.trim() ?? "";
+    if (isSubsectionHeadingLine(t)) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j]?.trim()) j += 1;
+      const next = lines[j]?.trim() ?? "";
+      if (
+        !next ||
+        isSubsectionHeadingLine(next) ||
+        next.startsWith("## ") ||
+        isProductTitleLine(next)
+      ) {
+        continue;
+      }
+    }
+    out.push(lines[i]!);
   }
-  const dash = rest[dashIdx]!;
-  const periodClean = rest.slice(dashIdx + 1).trim().replace(/^[–-]\s*/, "");
-  const name = displayName.trim() || rest.slice(0, dashIdx).trim();
-  if (shouldUseCrmPeriode(periodClean, periode)) {
-    return `1. ${name} ${dash} ${periode.trim()}`;
-  }
-  return `1. ${name} ${dash} ${periodClean}`;
+  return out;
 }
 
-/** Après OCR : « 1. Comète – T » puis « 1 » / « 2026 » sur des lignes séparées. */
+function dedupeProductTitleLines(lines: string[], periode = ""): string[] {
+  const out: string[] = [];
+  let firstTitleKey: string | null = null;
+  for (const line of lines) {
+    const t = line.trim();
+    if (isProductTitleLine(t)) {
+      const key = titleDedupKey(t, periode);
+      if (firstTitleKey === null) {
+        firstTitleKey = key;
+        out.push(line);
+        continue;
+      }
+      if (key === firstTitleKey) continue;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+function isProductTitleLine(line: string): boolean {
+  return looksLikeProductPeriodLine(productTitleDetectionLine(line));
+}
+
+function formatProductTitleLine(line: string, displayName: string, periode = ""): string {
+  const rest = stripTitleMarkdownArtifacts(line);
+  const dashIdx = (["–", "—", "-"] as const)
+    .map((d) => rest.indexOf(d))
+    .find((idx) => idx > 0) ?? -1;
+  if (dashIdx < 0) {
+    const name = displayName.trim() || rest;
+    return periode.trim() ? `## ${name} – ${periode.trim()}` : `## ${name}`;
+  }
+  const dash = rest[dashIdx]!;
+  const periodClean = rest.slice(dashIdx + 1).trim().replace(/^[–—-]\s*/, "");
+  const name = displayName.trim() || rest.slice(0, dashIdx).trim();
+  if (shouldUseCrmPeriode(periodClean, periode)) {
+    return `## ${name} ${dash} ${periode.trim()}`;
+  }
+  return `## ${name} ${dash} ${periodClean}`;
+}
+
+function preprocessMistralBulletinLine(line: string): string | null {
+  const t = line.trim();
+  if (!t) return "";
+  if (t === "-" || t === "–" || t === "—" || t === "**" || t === "*" || t === "***") {
+    return null;
+  }
+  if (t.startsWith("- ") || t.startsWith("* ")) {
+    const rest = unwrapMistralMarkdownLine(t.slice(2).trim());
+    if (/^[1-4]\.\s+/.test(rest)) return rest;
+    return line;
+  }
+  return unwrapMistralMarkdownLine(line);
+}
+
 function removeSplitPeriodFragments(lines: string[]): string[] {
   if (lines.length === 0) return lines;
   const first = lines[0]?.trim() ?? "";
-  if (!first.startsWith("1.")) return lines;
-  const rest = first.slice(2).trim();
-  const dashIdx = rest.search(/[–-]/);
+  if (!isProductTitleLine(first)) return lines;
+  const rest = stripTitleMarkdownArtifacts(first);
+  const dashIdx = (["–", "—", "-"] as const)
+    .map((d) => rest.indexOf(d))
+    .find((idx) => idx > 0) ?? -1;
   const periodClean =
-    dashIdx >= 0 ? rest.slice(dashIdx + 1).trim().replace(/^[–-]\s*/, "") : "";
+    dashIdx >= 0 ? rest.slice(dashIdx + 1).trim().replace(/^[–—-]\s*/, "") : "";
   if (periodClean.length >= 4 && /\d/.test(periodClean)) return lines;
   let skip = 1;
   while (skip < lines.length) {
@@ -118,76 +269,92 @@ function removeSplitPeriodFragments(lines: string[]): string[] {
   return [lines[0]!, ...lines.slice(skip)];
 }
 
-/** Nettoie le markdown Mistral/n8n avant rendu email (aligné Rust build_bulletin_resume). */
 export function normalizeScpiBulletinMarkdown(
   markdown: string,
   displayName = "",
-  periode = ""
+  periode = "",
+  ensureProductHeader = true
 ): string {
   const lines = removeSplitPeriodFragments(
     mergeOrphanYearWithPreviousLine(
       collapseVerticalYearLines(markdown).replace(/\r\n/g, "\n").split("\n")
     )
   );
-  const hasNumberedTitle = lines.some((l) => l.trim().startsWith("1."));
   let start = 0;
-  if (hasNumberedTitle) {
-    while (start < lines.length && lines[start]?.trim().startsWith("## ")) start += 1;
-    while (start < lines.length && !lines[start]?.trim()) start += 1;
+  while (start < lines.length) {
+    const t = lines[start]?.trim() ?? "";
+    if (t.startsWith("## ") && !looksLikeProductPeriodLine(t.slice(3).trim())) {
+      start += 1;
+      continue;
+    }
+    if (t.startsWith("## ") && looksLikeProductPeriodLine(t.slice(3).trim())) break;
+    if (t.startsWith("1.") && looksLikeProductPeriodLine(t.slice(2).trim())) break;
+    if (looksLikeProductPeriodLine(productTitleDetectionLine(t))) break;
+    if (!t) {
+      start += 1;
+      continue;
+    }
+    break;
   }
 
   const out: string[] = [];
-  let firstContent = true;
+  let sawProductTitle = false;
   for (const line of lines.slice(start)) {
-    if (!line.trim()) {
+    const preprocessed = preprocessMistralBulletinLine(line);
+    if (preprocessed === null) continue;
+    if (!preprocessed.trim()) {
       if (out.length > 0 && out[out.length - 1]?.trim()) out.push("");
       continue;
     }
-    const expanded = fixGluedYearSubsection(line);
+    const expanded = fixGluedYearSubsection(preprocessed);
     let normalized = normalizeSubsectionLine(expanded);
-    if (firstContent && normalized.trim().startsWith("1.")) {
-      normalized = fixProductTitleLine(normalized, displayName, periode);
+    if (isProductTitleLine(normalized)) {
+      normalized = formatProductTitleLine(normalized, displayName, periode);
+      sawProductTitle = true;
     }
-    firstContent = false;
     out.push(normalized);
   }
-  return stripTrailingDuplicateTitle(out.join("\n").replace(/\n{3,}/g, "\n\n").trim(), periode);
+
+  const body = removeEmptySubsectionHeadings(
+    prefixAcquisitionBullets(dedupeProductTitleLines(out, periode))
+  )
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (!sawProductTitle && ensureProductHeader && displayName.trim()) {
+    return `## ${displayName.trim()} – ${periode.trim()}\n\n${body}`.trim();
+  }
+  return stripTrailingDuplicateTitle(body, periode);
 }
 
 export function normalizeScpiBulletinDigest(markdown: string, periode = ""): string {
   const blocks = markdown.split(/\n---\n/);
   if (blocks.length <= 1) {
-    return normalizeScpiBulletinMarkdown(markdown, "", periode);
+    return normalizeScpiBulletinMarkdown(markdown, "", periode, false);
   }
   return blocks
-    .map((block) => normalizeScpiBulletinMarkdown(block.trim(), "", periode))
+    .map((block) => normalizeScpiBulletinMarkdown(block.trim(), "", periode, true))
     .filter(Boolean)
     .join("\n\n---\n\n");
 }
 
-/** Mistral colle « 20262. Chiffres » (année + section) sur une seule ligne. */
 function fixGluedYearSubsection(line: string): string {
   return line.replace(
-    /(\d{4})([2-9]\.\s+(?:Chiffres clés|Ce trimestre|Acquisitions))/g,
+    /(\d{4})([1-4]\.\s+(?:Chiffres clés|Ce trimestre|Acquisitions))/g,
     "$1\n$2"
   );
 }
 
-/** Mistral/OCR : année « 2026 » sur plusieurs lignes (2 / 0 / 2 / 6). */
 function collapseVerticalYearLines(markdown: string): string {
   let s = markdown.replace(/\r\n/g, "\n");
-  // 2\n0\n2\n6. suite
   s = s.replace(
     /(?:^|\n)(\d)\s*\n\s*(\d)\s*\n\s*(\d)\s*\n\s*(\d)([.,;:)\s]|$)/g,
     (match, a, b, c, d, after) => {
       const year = `${a}${b}${c}${d}`;
-      if (/^20[0-9]{2}$/.test(year)) {
-        return `\n${year}${after}`;
-      }
-      return match;
+      return /^20[0-9]{2}$/.test(year) ? `\n${year}${after}` : match;
     }
   );
-  // 2\n0\n2\n6 seuls (sans ponctuation sur la dernière ligne)
   s = s.replace(
     /(?:^|\n)(\d)\s*\n\s*(\d)\s*\n\s*(\d)\s*\n\s*(\d)\s*(?=\n)/g,
     (match, a, b, c, d) => {
@@ -198,7 +365,6 @@ function collapseVerticalYearLines(markdown: string): string {
   return s;
 }
 
-/** Après recollage vertical, « 2026. Malgré… » reste parfois seul sur une ligne. */
 function mergeOrphanYearWithPreviousLine(lines: string[]): string[] {
   const out: string[] = [];
   for (const line of lines) {
@@ -217,9 +383,8 @@ function mergeOrphanYearWithPreviousLine(lines: string[]): string[] {
 }
 
 const INLINE_SUBSECTION_LOOKAHEAD =
-  /(?=[2-9]\.\s+(?:Chiffres clés|Ce trimestre|Acquisitions))/g;
+  /(?=[1-4]\.\s+(?:Chiffres clés|Ce trimestre|Acquisitions))/g;
 
-/** Mistral colle parfois « 20262. Chiffres » — on repère les sous-sections numérotées. */
 function expandInlineNumberedSections(line: string): string[] {
   const fixed = fixGluedYearSubsection(line);
   if (!INLINE_SUBSECTION_LOOKAHEAD.test(fixed)) return [fixed];
@@ -231,19 +396,79 @@ function expandInlineNumberedSections(line: string): string[] {
   return parts.length > 1 ? parts : [fixed];
 }
 
+function isSubsectionHeadingLine(trimmed: string): boolean {
+  const m = trimmed.match(/^([1-3])\.\s+(.+)$/i);
+  if (!m) return false;
+  return canonicalSubsectionTitle(m[2]!) !== null;
+}
+
+function subsectionHeadingCanonical(trimmed: string): (typeof SUBSECTION_TITLES)[number] | null {
+  const m = trimmed.match(/^([1-3])\.\s+(.+)$/i);
+  if (!m) return null;
+  return canonicalSubsectionTitle(m[2]!);
+}
+
+function isAcquisitionContentLine(trimmed: string): boolean {
+  if (!trimmed || /^[-*]\s+/.test(trimmed)) return false;
+  if (isSubsectionHeadingLine(trimmed)) return false;
+  if (trimmed.startsWith("## ") || isProductTitleLine(trimmed)) return false;
+  if (/^---+$/.test(trimmed)) return false;
+  return /^[^:\n]+,\s+[^:\n]+:\s+.+/.test(trimmed);
+}
+
+function prefixAcquisitionBullets(lines: string[]): string[] {
+  const out: string[] = [];
+  let inAcquisitions = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    const section = subsectionHeadingCanonical(trimmed);
+    if (section) {
+      inAcquisitions = section === "Acquisitions";
+      out.push(line);
+      continue;
+    }
+    if (trimmed.startsWith("## ") || isProductTitleLine(trimmed)) {
+      inAcquisitions = false;
+      out.push(line);
+      continue;
+    }
+    if (inAcquisitions && isAcquisitionContentLine(trimmed)) {
+      out.push(`- ${trimmed}`);
+      continue;
+    }
+    out.push(line);
+  }
+  return out;
+}
+
+function renderProductTitleHtml(title: string): string {
+  return lineDiv(
+    `<strong style="font-size:1.1em">${inlineMarkdownToHtml(title)}</strong>`,
+    "margin-top:14px"
+  );
+}
+
+function bulletinLinesForRender(markdown: string, prepared = false): string[] {
+  const raw = prepared
+    ? markdown.replace(/\r\n/g, "\n").split("\n")
+    : normalizeBulletinMarkdown(markdown);
+  return prefixAcquisitionBullets(raw);
+}
+
 function normalizeBulletinMarkdown(markdown: string): string[] {
   const normalized = normalizeScpiBulletinDigest(markdown);
   const lines: string[] = [];
   for (const raw of normalized.replace(/\r\n/g, "\n").split("\n")) {
     for (const segment of expandInlineNumberedSections(raw)) {
-      lines.push(normalizeSubsectionLine(segment));
+      const normalizedLine = normalizeSubsectionLine(segment);
+      if (normalizedLine.trim()) lines.push(normalizedLine);
     }
   }
   return lines;
 }
 
-export function bulletinMarkdownToHtml(markdown: string): string {
-  const lines = normalizeBulletinMarkdown(markdown);
+export function bulletinMarkdownToHtml(markdown: string, prepared = false): string {
+  const lines = bulletinLinesForRender(markdown, prepared);
   const blocks: string[] = [];
   let i = 0;
 
@@ -265,37 +490,51 @@ export function bulletinMarkdownToHtml(markdown: string): string {
     }
 
     if (trimmed.startsWith("## ")) {
-      blocks.push(
-        lineDiv(inlineMarkdownToHtml(trimmed.slice(3)), "font-weight:700;margin-top:14px")
-      );
+      blocks.push(renderProductTitleHtml(trimmed.slice(3)));
       i += 1;
       continue;
     }
 
-    if (/^\d+\.\s+/.test(trimmed)) {
+    if (isProductTitleLine(trimmed) && !isSubsectionHeadingLine(trimmed)) {
+      blocks.push(renderProductTitleHtml(productTitleDetectionLine(trimmed)));
+      i += 1;
+      continue;
+    }
+
+    if (isSubsectionHeadingLine(trimmed)) {
       blocks.push(
-        lineDiv(inlineMarkdownToHtml(trimmed), "font-weight:700;margin-top:12px")
+        lineDiv(`<strong>${inlineMarkdownToHtml(trimmed)}</strong>`, "margin-top:10px")
       );
       i += 1;
       continue;
     }
 
     if (/^\*\*.+\*\*$/.test(trimmed)) {
-      blocks.push(
-        lineDiv(inlineMarkdownToHtml(trimmed), "font-weight:700;margin-top:10px")
-      );
+      blocks.push(lineDiv(inlineMarkdownToHtml(trimmed), "font-weight:700;margin-top:10px"));
       i += 1;
       continue;
     }
 
-    if (/^[-*]\s+/.test(trimmed)) {
+    if (/^[-*]\s+/.test(trimmed) || isAcquisitionContentLine(trimmed)) {
       const items: string[] = [];
-      while (i < lines.length && /^[-*]\s+/.test((lines[i] ?? "").trim())) {
-        const bullet = (lines[i] ?? "").trim().replace(/^[-*]\s+/, "");
-        items.push(
-          `<li style="margin:0;padding:0;line-height:1.5">${inlineMarkdownToHtml(bullet)}</li>`
-        );
-        i += 1;
+      while (i < lines.length) {
+        const row = (lines[i] ?? "").trim();
+        if (!row) break;
+        if (/^[-*]\s+/.test(row)) {
+          items.push(
+            `<li style="margin:0;padding:0;line-height:1.5">${inlineMarkdownToHtml(row.replace(/^[-*]\s+/, ""))}</li>`
+          );
+          i += 1;
+          continue;
+        }
+        if (isAcquisitionContentLine(row)) {
+          items.push(
+            `<li style="margin:0;padding:0;line-height:1.5">${inlineMarkdownToHtml(row)}</li>`
+          );
+          i += 1;
+          continue;
+        }
+        break;
       }
       blocks.push(
         `<ul style="margin:4px 0;padding-left:1.25em;line-height:1.5">${items.join("")}</ul>`
@@ -310,30 +549,53 @@ export function bulletinMarkdownToHtml(markdown: string): string {
   return blocks.join("");
 }
 
-/** Version lisible pour le corps texte brut ({{bulletin_resume}}). */
-export function bulletinMarkdownToPlainEmail(markdown: string): string {
-  const lines = normalizeBulletinMarkdown(markdown);
+export function bulletinMarkdownToPlainEmail(markdown: string, prepared = false): string {
+  const lines = bulletinLinesForRender(markdown, prepared);
   const out: string[] = [];
+  let i = 0;
 
-  for (const raw of lines) {
-    const trimmed = raw.trim();
+  while (i < lines.length) {
+    const trimmed = (lines[i] ?? "").trim();
     if (!trimmed) {
       if (out.length > 0 && out[out.length - 1] !== "") out.push("");
+      i += 1;
       continue;
     }
     if (/^---+$/.test(trimmed)) {
       out.push("", "—", "");
+      i += 1;
       continue;
     }
     if (trimmed.startsWith("## ")) {
       out.push("", trimmed.slice(3).replace(/\*\*(.+?)\*\*/g, "$1"), "");
+      i += 1;
       continue;
     }
-    if (/^[-*]\s+/.test(trimmed)) {
-      out.push(`• ${trimmed.replace(/^[-*]\s+/, "").replace(/\*\*(.+?)\*\*/g, "$1")}`);
+    if (isProductTitleLine(trimmed) && !isSubsectionHeadingLine(trimmed)) {
+      out.push("", productTitleDetectionLine(trimmed), "");
+      i += 1;
+      continue;
+    }
+    if (isSubsectionHeadingLine(trimmed)) {
+      out.push(trimmed.replace(/\*\*(.+?)\*\*/g, "$1"));
+      i += 1;
+      continue;
+    }
+    if (/^[-*]\s+/.test(trimmed) || isAcquisitionContentLine(trimmed)) {
+      while (i < lines.length) {
+        const row = (lines[i] ?? "").trim();
+        if (!row) break;
+        if (/^[-*]\s+/.test(row) || isAcquisitionContentLine(row)) {
+          out.push(`• ${row.replace(/^[-*]\s+/, "").replace(/\*\*(.+?)\*\*/g, "$1")}`);
+          i += 1;
+          continue;
+        }
+        break;
+      }
       continue;
     }
     out.push(trimmed.replace(/\*\*(.+?)\*\*/g, "$1"));
+    i += 1;
   }
 
   return out.join("\n").replace(/\n{3,}/g, "\n\n").trim();

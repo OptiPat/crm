@@ -71,16 +71,25 @@ fn clean_inferred_produit_name(name: &str) -> String {
     name.to_string()
 }
 
-/// Extrait le nom SCPI depuis la ligne « 1. Nom – période » du résumé Mistral.
+/// Extrait le nom SCPI depuis le titre du résumé Mistral (## ou « 1. Nom – période »).
 fn infer_produit_from_summary(summary: &str) -> Option<String> {
     for line in summary.lines() {
-        let mut t = line.trim().trim_start_matches('#').trim();
+        let mut t = line.trim();
+        if t.starts_with("## ") {
+            t = t.trim_start_matches('#').trim();
+        }
         t = t.trim_matches('*').trim();
-        let rest = t.strip_prefix("1.")?.trim();
-        let name = if let Some(dash_idx) = rest.find('–').or_else(|| rest.find('-')) {
-            rest[..dash_idx].trim()
+        if let Some(rest) = t.strip_prefix("1.") {
+            t = rest.trim();
+        }
+        let name = if let Some(dash_idx) = t
+            .find('–')
+            .or_else(|| t.find('—'))
+            .or_else(|| t.find('-'))
+        {
+            t[..dash_idx].trim()
         } else {
-            rest
+            continue;
         };
         let name = clean_inferred_produit_name(name);
         if name.len() >= MIN_PRODUIT_MATCH_LEN {
@@ -164,27 +173,297 @@ fn bulletin_match_key(bulletin: &ScpiBulletinInput) -> String {
 
 const SUBSECTION_TITLES: &[&str] = &["Chiffres clés", "Ce trimestre", "Acquisitions"];
 
+fn subsection_title_candidate(rest: &str) -> &str {
+    rest.trim().trim_end_matches(':').trim()
+}
+
+fn fold_subsection_key(s: &str) -> String {
+    s.to_lowercase()
+        .chars()
+        .map(|c| match c {
+            'é' | 'è' | 'ê' | 'ë' => 'e',
+            'à' | 'â' | 'ä' => 'a',
+            'ù' | 'û' | 'ü' => 'u',
+            'ô' | 'ö' => 'o',
+            'î' | 'ï' => 'i',
+            'ç' => 'c',
+            other => other,
+        })
+        .collect()
+}
+
 fn is_subsection_title(rest: &str) -> bool {
-    let r = rest.trim();
-    SUBSECTION_TITLES
-        .iter()
-        .any(|title| r.eq_ignore_ascii_case(title))
+    canonical_subsection_title(rest).is_some()
+}
+
+fn canonical_subsection_title(rest: &str) -> Option<&'static str> {
+    let key = fold_subsection_key(subsection_title_candidate(rest));
+    match key.as_str() {
+        "chiffres cles" => Some("Chiffres clés"),
+        "ce trimestre" => Some("Ce trimestre"),
+        "acquisitions" => Some("Acquisitions"),
+        _ => None,
+    }
+}
+
+fn unwrap_mistral_markdown_line(line: &str) -> String {
+    let mut t = line.trim().to_string();
+    if t.is_empty() || t == "**" || t == "*" || t == "***" {
+        return String::new();
+    }
+    if t.starts_with("**") && t.ends_with("**") && t.len() > 4 {
+        return t[2..t.len() - 2].trim().to_string();
+    }
+    while t.starts_with("**") {
+        t = t.trim_start_matches('*').trim().to_string();
+    }
+    while t.ends_with("**") {
+        t.truncate(t.len().saturating_sub(2));
+        t = t.trim_end().to_string();
+    }
+    t
+}
+
+fn preprocess_mistral_bulletin_line(line: &str) -> Option<String> {
+    let t = line.trim();
+    if t.is_empty() {
+        return Some(String::new());
+    }
+    if t == "-"
+        || t == "–"
+        || t == "—"
+        || t == "**"
+        || t == "*"
+        || t == "***"
+    {
+        return None;
+    }
+    if let Some(stripped) = t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
+        let unwrapped = unwrap_mistral_markdown_line(stripped);
+        if unwrapped.starts_with("1.")
+            || unwrapped.starts_with("2.")
+            || unwrapped.starts_with("3.")
+            || unwrapped.starts_with("4.")
+        {
+            return if unwrapped.is_empty() {
+                None
+            } else {
+                Some(unwrapped)
+            };
+        }
+        return Some(line.to_string());
+    }
+    let unwrapped = unwrap_mistral_markdown_line(line);
+    if unwrapped.is_empty() {
+        None
+    } else {
+        Some(unwrapped)
+    }
+}
+
+fn product_title_detection_line(line: &str) -> String {
+    let mut t = line.trim().to_string();
+    if t.starts_with("## ") {
+        t = t.trim_start_matches('#').trim().to_string();
+    } else if let Some(rest) = t.strip_prefix("1.") {
+        t = rest.trim().to_string();
+    }
+    t.trim_matches('*').trim().to_string()
+}
+
+fn dedupe_product_title_lines(lines: Vec<String>, periode: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut first_title_key: Option<String> = None;
+    for line in lines {
+        let t = line.trim();
+        if is_product_title_line(t) {
+            let key = title_dedup_key(t, periode);
+            if first_title_key.is_none() {
+                first_title_key = Some(key);
+                out.push(line);
+                continue;
+            }
+            if first_title_key.as_deref() == Some(key.as_str()) {
+                continue;
+            }
+        }
+        out.push(line);
+    }
+    out
+}
+
+fn looks_like_period_label(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() {
+        return false;
+    }
+    let lower = t.to_lowercase();
+    if lower.contains("trimestre") || lower.contains("semestre") {
+        return true;
+    }
+    if t.len() == 4 && t.chars().all(|c| c.is_ascii_digit()) && t.starts_with("20") {
+        return true;
+    }
+    if t.len() >= 2
+        && (lower.starts_with('t') || lower.starts_with("t"))
+        && lower.as_bytes().get(1).is_some_and(|b| b.is_ascii_digit())
+    {
+        return t.contains("20") || t.len() <= 3;
+    }
+    false
+}
+
+fn period_part_after_dash(line: &str, dash_idx: usize) -> &str {
+    line[dash_idx..]
+        .trim()
+        .trim_start_matches(['–', '—', '-'])
+        .trim()
+}
+
+fn looks_like_product_period_line(s: &str) -> bool {
+    let t = s.trim();
+    if t.is_empty() || is_subsection_title(t) || t.starts_with("- ") || t.starts_with("* ") {
+        return false;
+    }
+    if t.contains(':') && !t.contains('–') && !t.contains('—') {
+        return false;
+    }
+    for idx in [t.find('–'), t.find('—'), t.find('-')] {
+        if let Some(i) = idx {
+            if i == 0 || i >= t.len().saturating_sub(1) {
+                continue;
+            }
+            if looks_like_period_label(period_part_after_dash(t, i)) {
+                return true;
+            }
+            let period = period_part_after_dash(t, i);
+            if !period.is_empty() && period.len() <= 6 && !period.contains(':') {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn is_subsection_heading_line(line: &str) -> bool {
+    subsection_heading_canonical(line).is_some()
+}
+
+fn subsection_heading_canonical(line: &str) -> Option<&'static str> {
+    let t = line.trim();
+    for n in 1..=3 {
+        let prefix = format!("{n}.");
+        if let Some(rest) = t.strip_prefix(&prefix) {
+            if let Some(title) = canonical_subsection_title(rest.trim()) {
+                return Some(title);
+            }
+        }
+    }
+    None
+}
+
+fn is_acquisition_content_line(line: &str) -> bool {
+    let t = line.trim();
+    if t.is_empty() || t.starts_with("- ") || t.starts_with("* ") {
+        return false;
+    }
+    if subsection_heading_canonical(t).is_some() {
+        return false;
+    }
+    if t.starts_with("## ") || is_product_title_line(t) {
+        return false;
+    }
+    t.contains(": ") && t.contains(',')
+}
+
+fn prefix_acquisition_bullets(lines: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut in_acquisitions = false;
+    for line in lines {
+        let trimmed = line.trim();
+        if let Some(section) = subsection_heading_canonical(trimmed) {
+            in_acquisitions = section == "Acquisitions";
+            out.push(line);
+            continue;
+        }
+        if trimmed.starts_with("## ") || is_product_title_line(trimmed) {
+            in_acquisitions = false;
+            out.push(line);
+            continue;
+        }
+        if in_acquisitions && is_acquisition_content_line(trimmed) && !trimmed.starts_with("- ") {
+            out.push(format!("- {trimmed}"));
+            continue;
+        }
+        out.push(line);
+    }
+    out
+}
+
+fn remove_empty_subsection_headings(lines: Vec<String>) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0usize;
+    while i < lines.len() {
+        let t = lines[i].trim();
+        if is_subsection_heading_line(t) {
+            let mut j = i + 1;
+            while j < lines.len() && lines[j].trim().is_empty() {
+                j += 1;
+            }
+            let next = lines.get(j).map(|l| l.trim()).unwrap_or("");
+            if next.is_empty()
+                || is_subsection_heading_line(next)
+                || next.starts_with("## ")
+                || is_product_title_line(next)
+            {
+                i += 1;
+                continue;
+            }
+        }
+        out.push(lines[i].clone());
+        i += 1;
+    }
+    out
+}
+
+fn legacy_subsection_number(num: u32, rest: &str) -> Option<u32> {
+    if !(1..=4).contains(&num) || !is_subsection_title(rest) {
+        return None;
+    }
+    canonical_subsection_title(rest).map(|title| match title {
+        "Chiffres clés" => 1,
+        "Ce trimestre" => 2,
+        "Acquisitions" => 3,
+        _ => num,
+    })
 }
 
 fn normalize_subsection_line(line: &str) -> String {
-    let trimmed = line.trim();
+    let trimmed = unwrap_mistral_markdown_line(line);
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if let Some(title) = canonical_subsection_title(&trimmed) {
+        let num = match title {
+            "Chiffres clés" => 1,
+            "Ce trimestre" => 2,
+            "Acquisitions" => 3,
+            _ => return trimmed,
+        };
+        return format!("{num}. {title}");
+    }
     if let Some(dot_idx) = trimmed.find('.') {
         let num_str = trimmed[..dot_idx].trim();
         if let Ok(num) = num_str.parse::<u32>() {
-            if (2..=9).contains(&num) {
-                let rest = trimmed[dot_idx + 1..].trim();
-                if is_subsection_title(rest) {
-                    return format!("**{rest}**");
+            let rest = trimmed[dot_idx + 1..].trim();
+            if let Some(canonical) = canonical_subsection_title(rest) {
+                if let Some(normalized) = legacy_subsection_number(num, rest) {
+                    return format!("{normalized}. {canonical}");
                 }
             }
         }
     }
-    line.to_string()
+    trimmed
 }
 
 fn should_use_crm_periode(period_clean: &str, periode: &str) -> bool {
@@ -208,7 +487,8 @@ fn strip_title_markdown_artifacts(line: &str) -> String {
 }
 
 fn title_dedup_key(line: &str, periode: &str) -> String {
-    fix_product_title_line(line, "", periode)
+    format_product_title_line(line, "", periode)
+        .trim_start_matches("## ")
         .trim()
         .to_lowercase()
         .replace('–', "-")
@@ -222,7 +502,7 @@ fn strip_trailing_duplicate_title(text: &str, periode: &str) -> String {
     }
     let opening_key = lines
         .iter()
-        .find(|l| l.trim().starts_with("1."))
+        .find(|l| is_product_title_line(l))
         .map(|l| title_dedup_key(l, periode));
     let Some(opening_key) = opening_key else {
         return text.to_string();
@@ -234,7 +514,7 @@ fn strip_trailing_duplicate_title(text: &str, periode: &str) -> String {
             end -= 1;
             continue;
         }
-        if t.starts_with("1.") && title_dedup_key(t, periode) == opening_key && end > 1 {
+        if is_product_title_line(t) && title_dedup_key(t, periode) == opening_key && end > 1 {
             end -= 1;
             continue;
         }
@@ -243,13 +523,32 @@ fn strip_trailing_duplicate_title(text: &str, periode: &str) -> String {
     lines[..end].join("\n")
 }
 
-fn fix_product_title_line(line: &str, display_name: &str, periode: &str) -> String {
+fn is_product_title_line(line: &str) -> bool {
     let trimmed = strip_title_markdown_artifacts(line);
-    if !trimmed.starts_with("1.") {
-        return line.to_string();
+    if trimmed.starts_with("## ") {
+        return looks_like_product_period_line(trimmed.trim_start_matches('#').trim());
     }
-    let rest = trimmed.strip_prefix("1.").unwrap_or(&trimmed).trim();
-    if let Some(dash_idx) = rest.find('–').or_else(|| rest.find('-')) {
+    if trimmed.starts_with("1.") {
+        let rest = trimmed.strip_prefix("1.").unwrap_or(&trimmed).trim();
+        return looks_like_product_period_line(rest);
+    }
+    looks_like_product_period_line(trimmed.trim_matches('*').trim())
+}
+
+fn format_product_title_line(line: &str, display_name: &str, periode: &str) -> String {
+    let trimmed = strip_title_markdown_artifacts(line);
+    let rest = if trimmed.starts_with("## ") {
+        trimmed.trim_start_matches('#').trim()
+    } else if trimmed.starts_with("1.") {
+        trimmed.strip_prefix("1.").unwrap_or(&trimmed).trim()
+    } else {
+        trimmed.trim_matches('*').trim()
+    };
+    if let Some(dash_idx) = rest
+        .find('–')
+        .or_else(|| rest.find('—'))
+        .or_else(|| rest.find('-'))
+    {
         let name = if display_name.trim().is_empty() {
             rest[..dash_idx].trim()
         } else {
@@ -257,25 +556,25 @@ fn fix_product_title_line(line: &str, display_name: &str, periode: &str) -> Stri
         };
         let period_clean = rest[dash_idx..]
             .trim()
-            .trim_start_matches(['–', '-'])
+            .trim_start_matches(['–', '—', '-'])
             .trim();
         if should_use_crm_periode(period_clean, periode) {
-            return format!("1. {} – {}", name, periode.trim());
+            return format!("## {} – {}", name, periode.trim());
         }
-        return format!("1. {} – {}", name, period_clean);
+        return format!("## {} – {}", name, period_clean);
     }
     let name = if display_name.trim().is_empty() {
         rest
     } else {
         display_name.trim()
     };
-    format!("1. {} – {}", name, periode.trim())
+    format!("## {} – {}", name, periode.trim())
 }
 
 fn fix_glued_year_subsection(line: &str) -> String {
     let mut result = line.to_string();
     for title in SUBSECTION_TITLES {
-        for num in 2..=9 {
+        for num in 1..=4 {
             let needle = format!("{num}. {title}");
             if let Some(pos) = result.find(&needle) {
                 if pos >= 4 {
@@ -360,23 +659,29 @@ fn try_merge_vertical_year_block(lines: &[String], i: usize) -> Option<(String, 
     Some((format!("{year}{suffix}"), 4))
 }
 
-/// Après OCR : « 1. Comète – T » puis « 1 » / « 2026 » sur des lignes séparées.
+/// Après OCR : « ## Comète – T » puis « 1 » / « 2026 » sur des lignes séparées.
 fn remove_split_period_fragments(lines: Vec<String>) -> Vec<String> {
     if lines.is_empty() {
         return lines;
     }
     let first = lines[0].trim();
-    if !first.starts_with("1.") {
+    if !is_product_title_line(first) {
         return lines;
     }
-    let rest = first.strip_prefix("1.").unwrap_or(first).trim();
+    let rest = if first.starts_with("## ") {
+        first.trim_start_matches('#').trim()
+    } else if first.starts_with("1.") {
+        first.strip_prefix("1.").unwrap_or(first).trim()
+    } else {
+        first
+    };
     let period_clean = rest
         .find('–')
         .or_else(|| rest.find('-'))
         .map(|idx| {
             rest[idx..]
                 .trim()
-                .trim_start_matches(['–', '-'])
+                .trim_start_matches(['–', '—', '-'])
                 .trim()
         })
         .unwrap_or("");
@@ -408,6 +713,7 @@ fn normalize_bulletin_summary_markdown(
     summary: &str,
     display_name: &str,
     periode: &str,
+    ensure_product_header: bool,
 ) -> String {
     let collapsed = collapse_vertical_year_lines(summary);
     let lines: Vec<String> = remove_split_period_fragments(
@@ -417,44 +723,68 @@ fn normalize_bulletin_summary_markdown(
             .collect(),
     );
 
-    let has_numbered_title = lines.iter().any(|l| l.trim().starts_with("1."));
     let mut start = 0usize;
-    if has_numbered_title {
-        while start < lines.len() && lines[start].trim().starts_with("## ") {
+    while start < lines.len() {
+        let t = lines[start].trim();
+        if t.starts_with("## ") {
+            let rest = t.trim_start_matches('#').trim();
+            if looks_like_product_period_line(rest) {
+                break;
+            }
             start += 1;
+            continue;
         }
-        while start < lines.len() && lines[start].trim().is_empty() {
+        if t.starts_with("1.") {
+            let rest = t.strip_prefix("1.").unwrap_or(t).trim();
+            if looks_like_product_period_line(rest) {
+                break;
+            }
+        }
+        if looks_like_product_period_line(&product_title_detection_line(t)) {
+            break;
+        }
+        if t.is_empty() {
             start += 1;
+            continue;
         }
+        break;
     }
 
     let mut out: Vec<String> = Vec::new();
-    let mut first_content = true;
+    let mut saw_product_title = false;
     for line in lines.into_iter().skip(start) {
-        if line.trim().is_empty() {
+        let Some(preprocessed) = preprocess_mistral_bulletin_line(&line) else {
+            continue;
+        };
+        if preprocessed.trim().is_empty() {
             if out.last().is_some_and(|l| !l.trim().is_empty()) {
                 out.push(String::new());
             }
             continue;
         }
-        let mut normalized = normalize_subsection_line(&line);
-        if first_content && normalized.trim().starts_with("1.") {
-            normalized = fix_product_title_line(&normalized, display_name, periode);
-            first_content = false;
-        } else {
-            first_content = false;
+        let mut normalized = normalize_subsection_line(&preprocessed);
+        if normalized.trim().is_empty() {
+            continue;
+        }
+        if is_product_title_line(&normalized) {
+            normalized = format_product_title_line(&normalized, display_name, periode);
+            saw_product_title = true;
         }
         out.push(normalized);
     }
 
-    let body = out.join("\n")
+    let body = remove_empty_subsection_headings(dedupe_product_title_lines(
+        prefix_acquisition_bullets(out),
+        periode,
+    ))
+        .join("\n")
         .replace("\n\n\n", "\n\n")
         .trim()
         .to_string();
 
-    if !body.lines().any(|l| l.trim().starts_with("1.")) {
+    if !saw_product_title && ensure_product_header {
         return format!(
-            "1. {} – {}\n\n{}",
+            "## {} – {}\n\n{}",
             display_name.trim(),
             periode.trim(),
             body
@@ -472,6 +802,7 @@ fn build_bulletin_resume(bulletins: &[ScpiBulletinInput], periode: &str) -> Stri
             bulletins[0].summary_markdown.trim(),
             bulletins[0].nom_produit.trim(),
             periode,
+            false,
         );
     }
     bulletins
@@ -481,6 +812,7 @@ fn build_bulletin_resume(bulletins: &[ScpiBulletinInput], periode: &str) -> Stri
                 b.summary_markdown.trim(),
                 b.nom_produit.trim(),
                 periode,
+                true,
             )
         })
         .collect::<Vec<_>>()
@@ -1223,6 +1555,116 @@ mod tests {
     }
 
     #[test]
+    fn bulletin_summary_keeps_acquisition_lines_with_hyphens() {
+        let bulletins = vec![ScpiBulletinInput {
+            nom_produit: "Comète".into(),
+            summary_markdown: [
+                "Comete – T1 2026",
+                "",
+                "1. Chiffres clés",
+                "Collecte : 132 M€",
+                "2. Ce trimestre",
+                "Dynamique au Canada.",
+                "3. Acquisitions",
+                "Canada, Trans-Canada : entrepôt.",
+                "Royaume-Uni, Édimbourg : mixte.",
+            ]
+            .join("\n"),
+            fichier_source: None,
+        }];
+        let resume = build_bulletin_resume(
+            &vec![
+                bulletins[0].clone(),
+                ScpiBulletinInput {
+                    nom_produit: "Transitions Europe".into(),
+                    summary_markdown: "Transitions Europe – T1 2026\n\n1. Chiffres clés\nOK".into(),
+                    fichier_source: None,
+                },
+            ],
+            "T1 2026",
+        );
+        assert!(resume.contains("Trans-Canada"));
+        assert!(resume.contains("Royaume-Uni"));
+        assert_eq!(resume.matches("Comète – T1 2026").count(), 1);
+    }
+
+    #[test]
+    fn bulletin_summary_normalizes_broken_mistral_bold_and_repeated_titles() {
+        let bulletins = vec![
+            ScpiBulletinInput {
+                nom_produit: "Comète".into(),
+                summary_markdown: [
+                    "Comete – T1 2026",
+                    "",
+                    "**",
+                    "1. Chiffres clés**",
+                    "Collecte nette de 132,2 M€.",
+                    "**",
+                    "2. Ce trimestre**",
+                    "Comete – T1 2026",
+                    "**",
+                    "3. Acquisitions**",
+                    "Pologne, Tarnobrzeg : actif logistique.",
+                    "Comete – T1 2026",
+                    "Comete – T1 2026",
+                    "Espagne, Getafe : loisirs.",
+                ]
+                .join("\n"),
+                fichier_source: None,
+            },
+            ScpiBulletinInput {
+                nom_produit: "Transitions Europe".into(),
+                summary_markdown:
+                    "Transitions Europe – T1 2026\n\n1. Chiffres clés\nCollecte : 147 M€".into(),
+                fichier_source: None,
+            },
+        ];
+        let resume = build_bulletin_resume(&bulletins, "T1 2026");
+        assert!(!resume.contains("**"));
+        assert!(resume.contains("1. Chiffres clés"));
+        assert!(resume.contains("Pologne, Tarnobrzeg"));
+        assert_eq!(resume.matches("Comète – T1 2026").count(), 1);
+    }
+
+    #[test]
+    fn bulletin_summary_normalizes_mistral_dash_format_and_duplicate_title() {
+        let bulletins = vec![ScpiBulletinInput {
+            nom_produit: "Comète".into(),
+            summary_markdown: [
+                "Comete – T1 2026",
+                "",
+                "-",
+                "1. Chiffres clés :",
+                "La collecte nette atteint 132,2 M€.",
+                "-",
+                "2. Ce trimestre :",
+                "Comete – T1 2026",
+                "-",
+                "3. Acquisitions :",
+                "Pologne, Tarnobrzeg : Actif logistique.",
+            ]
+            .join("\n"),
+            fichier_source: None,
+        }];
+        let resume = build_bulletin_resume(
+            &vec![
+                bulletins[0].clone(),
+                ScpiBulletinInput {
+                    nom_produit: "Transitions Europe".into(),
+                    summary_markdown: "Transitions Europe – T1 2026\n\n1. Chiffres clés\nCollecte : 147 M€".into(),
+                    fichier_source: None,
+                },
+            ],
+            "T1 2026",
+        );
+        assert!(resume.contains("## Comète – T1 2026"));
+        assert!(resume.contains("1. Chiffres clés"));
+        assert!(!resume.contains("1. Chiffres clés :"));
+        assert!(!resume.contains("\n-\n"));
+        assert!(!resume.contains("2. Ce trimestre\nComete – T1 2026"));
+    }
+
+    #[test]
     fn build_bulletin_resume_single_omits_product_header() {
         let bulletins = vec![ScpiBulletinInput {
             nom_produit: "Comète".into(),
@@ -1231,7 +1673,7 @@ mod tests {
         }];
         let resume = build_bulletin_resume(&bulletins, "T1 2026");
         assert!(!resume.contains("## Comète"));
-        assert!(resume.contains("**Chiffres clés**"));
+        assert!(resume.contains("1. Chiffres clés"));
         assert!(resume.contains("Collecte : 132 M€"));
     }
 
@@ -1255,7 +1697,7 @@ mod tests {
             fichier_source: None,
         }];
         let resume = build_bulletin_resume(&bulletins, "T1 2026");
-        assert!(resume.contains("1. Comète – T1 2026"));
+        assert!(resume.contains("## Comète – T1 2026"));
         assert!(resume.contains("distribution 2026. Malgré"));
         assert!(!resume.contains("– T\n1\n2026"));
     }
@@ -1276,12 +1718,12 @@ mod tests {
             fichier_source: None,
         }];
         let resume = build_bulletin_resume(&bulletins, "T1 2026");
-        assert!(resume.contains("1. Epargne Pierre Europe – T1 2026"));
-        assert!(resume.contains("**Chiffres clés**"));
+        assert!(resume.contains("## Epargne Pierre Europe – T1 2026"));
+        assert!(resume.contains("1. Chiffres clés"));
         assert!(!resume.contains("1er trimestre"));
         assert!(!resume.contains("2026**"));
         assert_eq!(
-            resume.matches("1. Epargne Pierre Europe – T1 2026").count(),
+            resume.matches("## Epargne Pierre Europe – T1 2026").count(),
             1
         );
     }
@@ -1302,11 +1744,10 @@ mod tests {
             },
         ];
         let resume = build_bulletin_resume(&bulletins, "T1 2026");
-        assert!(!resume.contains("## Comète"));
         assert!(!resume.contains("## Europe"));
-        assert!(resume.contains("1. Comète – T1 2026"));
-        assert!(resume.contains("1. Transitions Europe – T1 2026"));
-        assert!(resume.contains("**Chiffres clés**"));
+        assert!(resume.contains("## Comète – T1 2026"));
+        assert!(resume.contains("## Transitions Europe – T1 2026"));
+        assert!(resume.contains("1. Chiffres clés"));
         assert!(resume.contains("\n\n---\n\n"));
     }
 

@@ -91,7 +91,7 @@ export const EMAIL_TEMPLATE_VARIABLES: {
     token: "{{periode}}",
     key: "periode",
     label: "Période bulletin SCPI",
-    hint: "Ex. T1 2026 — campagne n8n",
+    hint: "Ex. T1 2026 — campagne bulletins",
   },
   {
     token: "{{scpi_intro_tu}}",
@@ -109,7 +109,7 @@ export const EMAIL_TEMPLATE_VARIABLES: {
     token: "{{bulletin_resume}}",
     key: "bulletin_resume",
     label: "Résumé bulletins SCPI (texte)",
-    hint: "Contenu agrégé injecté par n8n",
+    hint: "Contenu agrégé injecté par Préparer SCPI",
   },
   {
     token: "{{bulletin_resume_html}}",

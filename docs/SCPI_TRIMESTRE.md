@@ -1,41 +1,30 @@
 # Bulletins SCPI trimestriels — workflow CGP
 
-Checklist à chaque trimestre (T1, T2, T3, T4). Durée typique : dépôt PDF → envoi clients en ~30 min.
+Checklist à chaque trimestre (T1, T2, T3, T4). Durée typique : sélection PDF → envoi clients en ~30 min.
 
-## 1. Déposer les PDF
+## 1. Préparer la campagne (dans le CRM)
 
-- Dossier Windows : `D:\n8n_bridge\scpi\a-traiter\`
+- **Suivi → Envois** — checklist **Campagne bulletins SCPI** → bouton **Préparer**
+- Sélectionner un ou plusieurs PDF bulletins reçus des sociétés de gestion
 - Nom de fichier : inclure le **nom SCPI** reconnu dans le CRM (`nom_produit` investissement), ex. `Comete_T1_2026.pdf`, `Transitions_Europe_T1_2026.pdf`
-- Plusieurs PDF possibles (10+)
 
-## 2. Lancer n8n
+## 2. Traitement automatique
 
-**Depuis le CRM (recommandé)** — Suivi → Envois → **Lancer workflow n8n** (après avoir collé l’URL webhook ci-dessous dans Paramètres → Intégrations).
+- **OCR Mistral** sur chaque PDF (bulletins scannés ou layout complexe)
+- **Résumé Mistral** (markdown court par SCPI)
+- **Prepare CRM** : matching `nom_produit` ↔ investissements clients → file **Suivi → Envois → Prêts à envoyer**
 
-**URL webhook production** (workflow activé, n8n démarré — pas besoin d’ouvrir la page n8n) :
+**Prérequis** : clé API Mistral dans **Paramètres → Newsletter** (même clé que les newsletters).
 
-`http://localhost:5678/webhook/scpi-campagne-trimestre`
+Le CRM aligne chaque bulletin sur le **nom SCPI le plus long** présent en portefeuille (ex. `Transitions_Europe_T1.pdf` → `Transitions Europe`, pas `Europe`).
 
-**Alternative** : bouton manuel **« Lancer résumé bulletins »** dans n8n (même workflow).
-
-- Mistral produit un `.md` par bulletin dans `D:\n8n_bridge\scpi\resumes\`
-- PDF archivés dans `traites\`
-- Fin du workflow : `POST prepare` automatique vers le CRM
-
-## 3. Préparer la campagne CRM
-
-- **Avant le prepare** (recommandé) : `GET /api/scpi/products` avec le même token Bearer → liste des `nom_produit` SCPI présents dans le portefeuille CRM. n8n choisit le nom **le plus long** qui matche le fichier PDF (ex. `Transitions_Europe_T1.pdf` → `Transitions Europe`, pas `Europe`).
-- Fin du workflow n8n : appel `POST /api/scpi/campaigns/prepare` (Bearer token Paramètres → Intégrations)
-- Corps JSON : `{ "periode": "T1 2026", "bulletins": [ { "nom_produit": "…", "summary_markdown": "…" } ] }`
-- Le CRM matche `nom_produit` ↔ investissements SCPI clients et remplit **Suivi → Envois → Prêts à envoyer**
-
-## 4. Contrôler avant envoi
+## 3. Contrôler avant envoi
 
 - Ouvrir **1 contact** : bouton envoi → dialogue avec **objet + corps HTML** (digest complet)
-- Vérifier les noms SCPI et le contenu ; corriger le prompt n8n si besoin, puis **relancer prepare** (étape 3)
-- **Retirer** / **Ne plus proposer** = nettoyer la file (pas définitif) ; relancer n8n au trimestre suivant ou après prepare
+- Vérifier les noms SCPI et le contenu ; relancer **Préparer** si besoin
+- **Retirer** / **Ne plus proposer** = nettoyer la file (pas définitif) ; relancer au trimestre suivant ou après prepare
 
-## 5. Envoyer
+## 4. Envoyer
 
 - Envoi individuel (aperçu) ou **sélection + envoi groupé**
 - Historique : onglet **Journal** (pas Envoyés / À relancer pour les bulletins SCPI)
@@ -44,17 +33,13 @@ Checklist à chaque trimestre (T1, T2, T3, T4). Durée typique : dépôt PDF →
 
 | Situation | Action |
 |-----------|--------|
-| Digest ancien après mise à jour CRM | Relancer n8n prepare (étape 3) |
+| Digest ancien après mise à jour CRM | Relancer Préparer (étape 1) |
 | Client absent de la file | Vérifier email, catégorie CLIENT, investissement SCPI + `nom_produit` |
 | Déjà envoyé ce trimestre | Normal : pas de doublon même période |
-| Enfant foyer | SCPI **foyer commun** : pas d’envoi ; SCPI **perso** : oui |
+| Enfant foyer | SCPI **foyer commun** : pas d'envoi ; SCPI **perso** : oui |
 
-## URLs & token
+## API locale (optionnel — anniversaires n8n)
 
-**Paramètres → Intégrations** : port API locale, token Bearer, URLs n8n Docker :
-
-- `GET …/api/scpi/products` — noms SCPI du portefeuille
-- `POST …/api/scpi/campaigns/prepare` — remplir la file Envois
-- **Webhook n8n (CRM → workflow)** : `http://localhost:5678/webhook/scpi-campagne-trimestre`
+**Paramètres → Intégrations** : API HTTP locale (anniversaires, intégrations externes). Les bulletins SCPI ne passent **plus** par n8n.
 
 Modèle email : **Bulletin SCPI trimestriel** (+ variante tu). Variables injectées : `{{periode}}`, `{{scpi_intro_tu}}`, `{{bulletin_resume_html}}`, etc.

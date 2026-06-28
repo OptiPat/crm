@@ -95,7 +95,7 @@ export function EnvoisQueueHelp() {
         </p>
         <p>
           <strong className="text-foreground">Campagnes email</strong> — En haut de l&apos;onglet :{" "}
-          <strong>bulletins SCPI</strong> (PDF → n8n → prepare) et{" "}
+          <strong>bulletins SCPI</strong> (PDF → Mistral → prepare) et{" "}
           <strong>Perf Stellium AV/PER</strong> (import encours → prepare). Contrôlez l&apos;aperçu
           avant envoi groupé. Modèle Stellium : Modèles email.
         </p>

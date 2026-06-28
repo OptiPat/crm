@@ -17,7 +17,6 @@ export function ParametresIntegrationsSection() {
   const [settings, setSettings] = useState<LocalApiSettings | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [port, setPort] = useState("3001");
-  const [scpiN8nWebhookUrl, setScpiN8nWebhookUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -28,10 +27,9 @@ export function ParametresIntegrationsSection() {
       setSettings(data);
       setEnabled(data.enabled);
       setPort(String(data.port));
-      setScpiN8nWebhookUrl(data.scpiN8nWebhookUrl ?? "");
     } catch (error) {
       console.error(error);
-      toast.error("Impossible de charger l'intégration n8n.");
+      toast.error("Impossible de charger l'intégration API locale.");
     } finally {
       setLoading(false);
     }
@@ -58,9 +56,9 @@ export function ParametresIntegrationsSection() {
     }
     setSaving(true);
     try {
-      const data = await saveLocalApiSettings(enabled, parsedPort, scpiN8nWebhookUrl);
+      const data = await saveLocalApiSettings(enabled, parsedPort);
       setSettings(data);
-      toast.success("Intégration n8n enregistrée.");
+      toast.success("API locale enregistrée.");
     } catch (error) {
       console.error(error);
       toast.error("Enregistrement impossible.");
@@ -85,7 +83,7 @@ export function ParametresIntegrationsSection() {
 
   if (loading) {
     return (
-      <SettingsPanel title="Intégration n8n" description="Chargement…">
+      <SettingsPanel title="API locale" description="Chargement…">
         <p className="text-sm text-muted-foreground">Chargement…</p>
       </SettingsPanel>
     );
@@ -94,8 +92,8 @@ export function ParametresIntegrationsSection() {
   return (
     <div className="space-y-6">
       <SettingsPanel
-        title="Intégration n8n"
-        description="API locale pour n8n (anniversaires, campagnes SCPI). Le CRM doit être ouvert et déverrouillé."
+        title="API locale"
+        description="HTTP locale pour intégrations externes (ex. anniversaires n8n). Les bulletins SCPI se préparent dans Suivi → Envois."
         action={
           <Workflow className="h-5 w-5 text-muted-foreground" aria-hidden />
         }
@@ -140,58 +138,6 @@ export function ParametresIntegrationsSection() {
               </div>
 
               <div className="grid gap-2">
-                <Label>URL produits SCPI (GET, n8n Docker)</Label>
-                <div className="flex gap-2">
-                  <Input readOnly value={settings.scpiProductsUrl} />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => void copy(settings.scpiProductsUrl, "URL produits SCPI")}
-                    aria-label="Copier l'URL produits SCPI"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Liste des <code className="text-[11px]">nom_produit</code> SCPI du portefeuille — pour
-                  aligner les bulletins n8n avant le POST prepare.
-                </p>
-              </div>
-
-              <div className="grid gap-2">
-                <Label>URL campagnes SCPI (POST, n8n Docker)</Label>
-                <div className="flex gap-2">
-                  <Input readOnly value={settings.scpiCampaignsUrl} />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => void copy(settings.scpiCampaignsUrl, "URL SCPI")}
-                    aria-label="Copier l'URL SCPI"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="scpi-n8n-webhook">URL webhook n8n — campagne SCPI (production)</Label>
-                <Input
-                  id="scpi-n8n-webhook"
-                  value={scpiN8nWebhookUrl}
-                  onChange={(e) => setScpiN8nWebhookUrl(e.target.value)}
-                  placeholder="http://localhost:5678/webhook/scpi-campagne-trimestre"
-                  className="font-mono text-xs"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Nœud Webhook en début de workflow (URL production). Bouton « Lancer workflow n8n »
-                  dans Suivi → Envois. n8n doit tourner (service/Docker) et le workflow être activé —
-                  la page n8n dans le navigateur n&apos;est pas nécessaire.
-                </p>
-              </div>
-
-              <div className="grid gap-2">
                 <Label>Token (header Authorization: Bearer …)</Label>
                 <div className="flex gap-2">
                   <Input readOnly value={settings.token} className="font-mono text-xs" />
@@ -220,8 +166,8 @@ export function ParametresIntegrationsSection() {
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            Bulletins SCPI : après le workflow n8n, les mails digest apparaissent dans Suivi → Envois
-            (modèle « Bulletin SCPI trimestriel »). Anniversaires : Telegram = rappel CGP uniquement.
+            Bulletins SCPI : bouton <strong>Préparer</strong> dans Suivi → Envois (OCR + résumé
+            Mistral intégrés). Clé Mistral : Paramètres → Newsletter.
           </p>
 
           <Button onClick={() => void handleSave()} disabled={saving}>

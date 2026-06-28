@@ -19,6 +19,30 @@ describe("buildEditedHtmlEmailSendBodies", () => {
     expect(body).toContain("Point clé");
   });
 
+  it("n'ajoute pas une seconde signature si les puces diffèrent (- vs •)", () => {
+    const signatureHtml =
+      '<div style="font-size:12px">N° de SIREN 843139148<br>Inscrit à l&#39;Orias sous le n°19000736<br>- Mandataire d&#39;intermédiaire en opérations de banque</div>';
+    const messageHtml =
+      '<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Bonjour Luc,</div></div>' +
+      GMAIL_BLANK +
+      '<div style="font-size:12px">N° de SIREN 843139148</div>' +
+      '<div style="font-size:12px">Inscrit à l&#39;Orias sous le n°19000736</div>' +
+      '<div style="font-size:12px">• Mandataire d&#39;intermédiaire en opérations de banque</div>';
+    const previewLike = normalizeTemplateEmailHtmlLikeGmail(
+      sanitizeTemplateEmailHtml(messageHtml)
+    );
+    const cgp = {
+      wizard_completed: true,
+      wizard_step: 4,
+      email_signature:
+        "N° de SIREN 843139148\nInscrit à l'Orias sous le n°19000736\n- Mandataire d'intermédiaire en opérations de banque",
+      email_signature_html: signatureHtml,
+    };
+    const { body_html } = buildEditedHtmlEmailSendBodies(previewLike, cgp);
+    expect(body_html.match(/843139148/g)?.length).toBe(1);
+    expect(body_html.match(/19000736/g)?.length).toBe(1);
+  });
+
   it("n'ajoute pas une seconde signature si l'aperçu en contient déjà une", () => {
     const signatureHtml =
       '<div style="font-size:12px">N° de SIREN 843139148<br>Inscrit à l&#39;Orias</div>';

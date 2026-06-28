@@ -192,7 +192,7 @@ export function ParametresNewsletterSection({
     <div className="space-y-6">
       <SettingsPanel
         title="Clé API Mistral"
-        description="Nécessaire pour générer les newsletters (Relation client → Newsletter). Clé stockée localement et chiffrée — console.mistral.ai"
+        description="Newsletters et bulletins SCPI (OCR + résumés Mistral). Clé stockée localement et chiffrée — console.mistral.ai"
       >
         <div className="space-y-4">
           <div className="space-y-2">

@@ -93,6 +93,7 @@ describe("template-email-html", () => {
     const out = prepareTemplateHtmlForSend(corpsHtml, scpiVars);
     expect(out).toContain("Comète");
     expect(out).toContain("Collecte nette");
-    expect(out).toContain("Collecte nette");
+    expect(out).toContain("<strong");
+    expect(out).toContain("font-size:1.1em");
   });
 });

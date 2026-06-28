@@ -21,7 +21,7 @@ static RUNTIME_TOKEN: Mutex<Option<Arc<RwLock<String>>>> = Mutex::new(None);
 
 pub use commands::{
     get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
-    save_local_api_settings_cmd, trigger_scpi_n8n_workflow_cmd,
+    save_local_api_settings_cmd,
 };
 
 pub fn start_for_app(app: &AppHandle, db: &Database) -> Result<(), String> {

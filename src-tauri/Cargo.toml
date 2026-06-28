@@ -24,7 +24,7 @@ tauri-plugin-fs = "2.5"
 base64 = "0.21"
 tauri-plugin-process = "2"
 oauth2 = { version = "4.4", features = ["reqwest"] }
-reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
 url = "2"
 walkdir = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }

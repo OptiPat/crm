@@ -11,6 +11,7 @@ mod email;
 mod export_archive;
 mod local_api;
 mod newsletter;
+mod scpi_bulletin;
 mod system_commands;
 
 use auth::commands::*;
@@ -21,8 +22,9 @@ use email::commands::*;
 use email::oauth_commands::*;
 use local_api::{
     get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
-    save_local_api_settings_cmd, trigger_scpi_n8n_workflow_cmd,
+    save_local_api_settings_cmd,
 };
+use scpi_bulletin::prepare_scpi_bulletins_from_pdfs_cmd;
 use newsletter::*;
 use std::sync::Mutex;
 use system_commands::*;
@@ -214,7 +216,7 @@ fn main() {
             save_local_api_settings_cmd,
             regenerate_local_api_token_cmd,
             get_scpi_campaign_dashboard_cmd,
-            trigger_scpi_n8n_workflow_cmd,
+            prepare_scpi_bulletins_from_pdfs_cmd,
             get_cgp_config,
             save_cgp_config,
             is_wizard_completed,
