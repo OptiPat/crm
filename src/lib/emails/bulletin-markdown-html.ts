@@ -163,10 +163,6 @@ function preferProductTitleLine(candidate: string, current: string): boolean {
   return c.length > cur.length;
 }
 
-function titleDedupKey(line: string, periode = ""): string {
-  return foldProductTitleKey(line, periode);
-}
-
 function stripTrailingProductTitleLines(lines: string[]): string[] {
   let end = lines.length;
   while (end > 0) {
@@ -184,7 +180,7 @@ function stripTrailingProductTitleLines(lines: string[]): string[] {
   return lines.slice(0, end);
 }
 
-function stripTrailingDuplicateTitle(text: string, periode = ""): string {
+function stripTrailingDuplicateTitle(text: string): string {
   const lines = stripTrailingProductTitleLines(text.split("\n"));
   return lines.join("\n");
 }
@@ -374,7 +370,7 @@ export function normalizeScpiBulletinMarkdown(
   if (!sawProductTitle && ensureProductHeader && displayName.trim()) {
     return `## ${displayName.trim()} – ${periode.trim()}\n\n${body}`.trim();
   }
-  return stripTrailingDuplicateTitle(body, periode);
+  return stripTrailingDuplicateTitle(body);
 }
 
 export function normalizeScpiBulletinDigest(markdown: string, periode = ""): string {

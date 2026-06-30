@@ -5,10 +5,17 @@ import { DEFAULT_APP_DISPLAY_NAME, DEFAULT_APP_LOGO_URL } from "@/lib/app-brandi
 async function logoCacheBust(path: string): Promise<string> {
   try {
     const meta = await stat(path);
-    const mtime =
-      "mtime" in meta && meta.mtime != null
-        ? new Date(meta.mtime as string | number).getTime()
-        : Date.now();
+    let mtime = Date.now();
+    if ("mtime" in meta && meta.mtime != null) {
+      const raw = meta.mtime;
+      if (raw instanceof Date) {
+        mtime = raw.getTime();
+      } else if (typeof raw === "number") {
+        mtime = raw;
+      } else if (typeof raw === "string") {
+        mtime = new Date(raw).getTime();
+      }
+    }
     return `${meta.size}-${mtime}`;
   } catch {
     return String(Date.now());
