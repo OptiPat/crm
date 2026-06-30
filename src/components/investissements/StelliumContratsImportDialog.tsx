@@ -70,12 +70,15 @@ export function StelliumContratsImportDialog({
   open,
   onOpenChange,
   onApplied,
+  onPrepared,
   onOpenInvestissement,
   investissementsVersion = 0,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplied?: () => void;
+  /** Après « Préparer emails perf » depuis la modale. */
+  onPrepared?: () => void;
   /** Ouvre la fiche investissement CRM (ex. depuis la page portefeuille). */
   onOpenInvestissement?: (investissementId: number) => void;
   /** Incrémenté après reload CRM (formulaire, import…) pour rafraîchir l’aperçu. */
@@ -525,6 +528,7 @@ export function StelliumContratsImportDialog({
                 disabled={busy || importPrepareInput == null}
                 className="gap-1.5"
                 label="Préparer emails perf"
+                onPrepared={onPrepared}
               />
             </>
           )}

@@ -64,7 +64,11 @@ export function StelliumPerfPrepareCampaignButton({
       disabled={disabled || busy}
       onClick={() => void handleClick()}
     >
-      {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+      {busy ? (
+        <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+      ) : (
+        <Mail className="h-4 w-4 mr-1" />
+      )}
       {label}
     </Button>
   );

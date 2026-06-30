@@ -4,10 +4,11 @@ import {
   CheckCircle2,
   ChevronDown,
   Circle,
-  LineChart,
+  FileUp,
   Loader2,
   RefreshCw,
 } from "lucide-react";
+import { StelliumContratsImportDialog } from "@/components/investissements/StelliumContratsImportDialog";
 import {
   discoverStelliumPerfCampaignPrepareInput,
   discoverResponseToPrepareInput,
@@ -46,6 +47,8 @@ export function StelliumPerfCampaignPanel({
   const [releve, setReleve] = useState<DiscoverStelliumPerfCampaignPrepareResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [collapsed, setCollapsed] = useState(true);
+  const [showImport, setShowImport] = useState(false);
+  const [investissementsVersion, setInvestissementsVersion] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -71,6 +74,12 @@ export function StelliumPerfCampaignPanel({
     await onRefreshQueue?.();
   };
 
+  const handleImportApplied = async () => {
+    setInvestissementsVersion((v) => v + 1);
+    await load();
+    await onRefreshQueue?.();
+  };
+
   const last = dashboard?.lastPrepare;
   const prepareDone = Boolean(last);
   const readyLive = dashboard?.readyCount ?? 0;
@@ -83,7 +92,7 @@ export function StelliumPerfCampaignPanel({
     ? "Chargement…"
     : releve
       ? `${releve.periode} · ${releve.contractCount} contrat${releve.contractCount > 1 ? "s" : ""} éligibles`
-      : "Aucun relevé — import Investissements → Contrats Stellium";
+      : "Aucun relevé — importez le fichier Contrats Stellium";
 
   if (loading && !dashboard) {
     return (
@@ -119,7 +128,6 @@ export function StelliumPerfCampaignPanel({
                 collapsed && "-rotate-90"
               )}
             />
-            <LineChart className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" aria-hidden />
             <div>
               <p className="text-sm font-medium">Perf Stellium AV/PER</p>
               {last ? (
@@ -132,7 +140,16 @@ export function StelliumPerfCampaignPanel({
               )}
             </div>
           </button>
-          <div className="flex flex-wrap gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 shrink-0 ml-auto">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowImport(true)}
+            >
+              <FileUp className="h-4 w-4 mr-1" />
+              Import Stellium
+            </Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => void load()}>
               <RefreshCw className="h-4 w-4 mr-1" />
               Actualiser
@@ -162,18 +179,29 @@ export function StelliumPerfCampaignPanel({
                   <>
                     {" "}
                     —{" "}
+                    <button
+                      type="button"
+                      className="text-primary underline"
+                      onClick={() => setShowImport(true)}
+                    >
+                      Importer le fichier Contrats Stellium
+                    </button>
                     {onOpenInvestissements ? (
-                      <button
-                        type="button"
-                        className="text-primary underline"
-                        onClick={onOpenInvestissements}
-                      >
-                        Investissements → import Contrats Stellium
-                      </button>
+                      <>
+                        {" "}
+                        (ou{" "}
+                        <button
+                          type="button"
+                          className="text-primary underline"
+                          onClick={onOpenInvestissements}
+                        >
+                          page Investissements
+                        </button>
+                        ).
+                      </>
                     ) : (
-                      "Investissements → import Contrats Stellium"
+                      "."
                     )}
-                    .
                   </>
                 )}
               </span>
@@ -264,6 +292,14 @@ export function StelliumPerfCampaignPanel({
           </p>
         </div>
       )}
+
+      <StelliumContratsImportDialog
+        open={showImport}
+        onOpenChange={setShowImport}
+        investissementsVersion={investissementsVersion}
+        onApplied={() => void handleImportApplied()}
+        onPrepared={() => void handlePrepared()}
+      />
     </div>
   );
 }
