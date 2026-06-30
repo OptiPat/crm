@@ -1,16 +1,17 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { AlertCircle, Eye, EyeOff, ShieldCheck } from "lucide-react";
-import { APP_DISPLAY_NAME, APP_LOGO_URL } from "@/lib/app-branding";
 
 interface UnlockScreenProps {
   onUnlocked: () => void;
 }
 
 export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
+  const { displayName, logoSrc } = useAppBranding();
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
@@ -37,14 +38,14 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
       <div className="w-full max-w-lg space-y-8">
         <header className="flex items-center justify-center gap-4 sm:gap-5">
           <img
-            src={APP_LOGO_URL}
+            src={logoSrc}
             alt=""
             width={80}
             height={80}
-            className="h-16 w-16 sm:h-20 sm:w-20 shrink-0 object-contain"
+            className="h-16 w-16 sm:h-20 sm:w-20 shrink-0 object-contain rounded-xl bg-white p-1"
           />
           <h1 className="text-3xl sm:text-4xl font-serif font-bold text-primary tracking-tight leading-tight">
-            {APP_DISPLAY_NAME}
+            {displayName}
           </h1>
         </header>
 

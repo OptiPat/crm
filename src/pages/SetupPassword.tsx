@@ -11,13 +11,14 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Eye, EyeOff, Lock } from "lucide-react";
-import { APP_DISPLAY_NAME } from "@/lib/app-branding";
+import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
 
 interface SetupPasswordProps {
   onPasswordCreated: () => void;
 }
 
 export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
+  const { displayName } = useAppBranding();
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -79,7 +80,7 @@ export function SetupPassword({ onPasswordCreated }: SetupPasswordProps) {
             <Lock className="h-8 w-8 text-primary" />
           </div>
           <h1 className="text-3xl font-serif font-bold text-primary mb-2">
-            Bienvenue dans {APP_DISPLAY_NAME}
+            Bienvenue dans {displayName}
           </h1>
           <p className="text-muted-foreground">
             Créez un mot de passe pour protéger l'accès au CRM sur ce poste

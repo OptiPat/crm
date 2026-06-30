@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { APP_DISPLAY_NAME } from "@/lib/app-branding";
+import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
 import {
   User,
   Mail,
@@ -67,6 +67,7 @@ const PARTENAIRES_POPULAIRES = [
 ];
 
 export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
+  const { displayName } = useAppBranding();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   
@@ -219,7 +220,7 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-serif font-bold text-primary mb-2">
-          Configuration de {APP_DISPLAY_NAME}
+          Configuration de {displayName}
         </h1>
         <p className="text-muted-foreground">
           Quelques étapes pour personnaliser votre application

@@ -18,6 +18,7 @@ import { ParametresNewsletterSection } from "@/components/settings/ParametresNew
 import { ParametresCustomFieldsSection } from "@/components/settings/ParametresCustomFieldsSection";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
+import { notifyAppBrandingChanged } from "@/lib/api/tauri-app-branding";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { getAppInfo, listDbBackups, type DbBackupEntry } from "@/lib/api/tauri-system";
 import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
@@ -260,6 +261,7 @@ export function Parametres() {
     try {
       await saveCgpConfig(cgpConfig);
       setSavedSnapshot(configSnapshotKey(cgpConfig));
+      notifyAppBrandingChanged();
       toast.success("Paramètres enregistrés");
     } catch (error) {
       console.error("Erreur sauvegarde profil:", error);

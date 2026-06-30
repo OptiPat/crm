@@ -1,5 +1,8 @@
-/** Nom affiché dans l'interface (modifiable sans impact sur la base de données). */
-export const APP_DISPLAY_NAME = "CRM W.Y.S";
+/** Valeurs par défaut (build) — personnalisables via Paramètres → Application. */
+export const DEFAULT_APP_DISPLAY_NAME = "CRM W.Y.S";
+export const DEFAULT_APP_LOGO_URL = "/app-logo.png";
 
-/** Logo application (carré bleu WYS, sans marge) — `public/app-logo.png`. */
-export const APP_LOGO_URL = "/app-logo.png";
+/** @deprecated Préférer useAppBranding() pour l'affichage dynamique. */
+export const APP_DISPLAY_NAME = DEFAULT_APP_DISPLAY_NAME;
+/** @deprecated Préférer useAppBranding() pour l'affichage dynamique. */
+export const APP_LOGO_URL = DEFAULT_APP_LOGO_URL;

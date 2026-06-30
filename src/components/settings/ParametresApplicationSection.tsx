@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
+import { ParametresAppBrandingSection } from "@/components/settings/ParametresAppBrandingSection";
 import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
@@ -13,6 +14,8 @@ export function ParametresApplicationSection() {
 
   return (
     <div className="space-y-6">
+      <ParametresAppBrandingSection />
+
       <SettingsPanel
         title="Mises à jour"
         description="Vérification au démarrage. Vos données restent sur cet ordinateur."

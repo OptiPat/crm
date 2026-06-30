@@ -21,6 +21,7 @@ import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
 import { Newsletter } from "@/pages/Newsletter";
+import { AppBrandingProvider } from "@/components/app-branding/AppBrandingProvider";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { AppUpdateProvider } from "@/components/system/app-update-context";
 import { isWizardCompleted } from "@/lib/api/tauri-settings";
@@ -30,7 +31,7 @@ import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import type { ContactDetailTabHint } from "@/lib/investissements/investissement-navigation";
 
-function App() {
+function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
@@ -287,4 +288,10 @@ function App() {
   }
 }
 
-export default App;
+export default function App() {
+  return (
+    <AppBrandingProvider>
+      <AppInner />
+    </AppBrandingProvider>
+  );
+}

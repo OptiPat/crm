@@ -29,7 +29,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { APP_DISPLAY_NAME, APP_LOGO_URL } from "@/lib/app-branding";
+import { useAppBranding } from "@/components/app-branding/AppBrandingProvider";
 import { getAppInfo } from "@/lib/api/tauri-system";
 import { useEffect, useState } from "react";
 
@@ -144,6 +144,7 @@ function formatSidebarVersion(version: string, collapsed: boolean): string {
 }
 
 export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
+  const { displayName, logoSrc } = useAppBranding();
   const [collapsed, setCollapsed] = useState(false);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [groupsOpen, setGroupsOpen] = useGroupOpen(currentPage, navGroups);
@@ -296,18 +297,18 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
           )}
         >
           <img
-            src={APP_LOGO_URL}
+            src={logoSrc}
             alt=""
             width={40}
             height={40}
             className={cn(
-              "shrink-0 object-contain",
+              "shrink-0 object-contain rounded-lg bg-white p-0.5",
               collapsed ? "h-9 w-9" : "h-10 w-10"
             )}
           />
           {!collapsed && (
             <h2 className="text-lg font-serif font-bold text-primary truncate">
-              {APP_DISPLAY_NAME}
+              {displayName}
             </h2>
           )}
         </div>

@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_branding;
 mod auth;
 mod backup;
 mod commands;
@@ -14,6 +15,7 @@ mod newsletter;
 mod scpi_bulletin;
 mod system_commands;
 
+use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
 use auth::commands::*;
 use auth::AuthManager;
 use commands::*;
@@ -222,6 +224,10 @@ fn main() {
             is_wizard_completed,
             complete_wizard,
             update_wizard_step,
+            // App branding (hors base — visible avant déverrouillage)
+            get_app_branding,
+            save_app_branding,
+            apply_app_branding_os,
             // Auth
             is_first_launch,
             is_database_unlocked,

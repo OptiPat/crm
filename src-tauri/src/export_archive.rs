@@ -20,6 +20,7 @@ Contenu (tout le dossier applicatif, sauf backups/ internes) :
 - documents/              : PDF et pieces jointes
 - logos/                  : logo du cabinet
 - auth.json               : verrou d'acces (hash mot de passe)
+- branding.json           : nom et logo affiches dans l'application (ecran de connexion)
 - secrets.key             : cle locale de chiffrement des secrets
 - email_oauth.json        : connexion email OAuth (tokens chiffres)
 - newsletter_config.json  : reglages newsletter / Mistral (si presents)
