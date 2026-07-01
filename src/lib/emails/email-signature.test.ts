@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildEmailHtmlBody,
   decodeHtmlEntities,
+  stripPlainBodyEmailSignature,
 } from "./email-signature";
 
 describe("email-signature", () => {
@@ -19,5 +20,13 @@ describe("email-signature", () => {
     });
     expect(html).toContain("logo.png");
     expect(html).toContain("Bonjour");
+    expect(html).not.toContain("margin:0 0 0.5em");
+    expect(html).toContain('line-height:1.5;margin:0;padding:0');
+  });
+
+  it("stripPlainBodyEmailSignature retire le bloc -- signature", () => {
+    const body = "Bonjour,\n\nMessage.\n\n--\nCordialement,\nJean DUPONT";
+    const stripped = stripPlainBodyEmailSignature(body, "Cordialement,\nJean DUPONT");
+    expect(stripped).toBe("Bonjour,\n\nMessage.");
   });
 });

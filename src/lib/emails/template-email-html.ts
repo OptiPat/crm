@@ -1,6 +1,6 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
-import { buildSendEmailBodies, plainTextContainsEmailSignature } from "@/lib/emails/email-signature";
+import { buildSendEmailBodies, plainTextContainsEmailSignature, normalizePlainForSignatureCompare, signaturePlainFingerprint } from "@/lib/emails/email-signature";
 
 /** Clé JSON dans `templates_email.variables` (compatible newsletter_html). */
 export const TEMPLATE_CORPS_HTML_KEY = "corps_html";
@@ -79,10 +79,112 @@ function isBlankLineContent(innerHtml: string): boolean {
     .trim();
 }
 
+/** Retire les `<br>` finaux (artefact contentEditable) qui doublent l'espacement à l'envoi Gmail. */
+function stripEditorTrailingBrFromLineInner(innerHtml: string): string {
+  let s = innerHtml.trim();
+  if (isBlankLineContent(s)) return s;
+  while (/<br\s*\/?>\s*$/i.test(s)) {
+    s = s.replace(/<br\s*\/?>\s*$/i, "").trimEnd();
+  }
+  return s;
+}
+
+function collapseConsecutiveGmailBlankLines(lines: string[]): string[] {
+  const blank = gmailBlankLineHtml();
+  const out: string[] = [];
+  for (const line of lines) {
+    if (line === blank && out.at(-1) === blank) continue;
+    out.push(line);
+  }
+  return out;
+}
+
+function isGmailBlankLineEntry(line: string): boolean {
+  return line === gmailBlankLineHtml();
+}
+
+function isListBlockLine(line: string): boolean {
+  return /^<(ul|ol)\b/i.test(line.trim());
+}
+
+function isTextBlockLine(line: string): boolean {
+  const t = line.trim();
+  return t.startsWith('<div style="line-height:1.5') && !isGmailBlankLineEntry(t);
+}
+
+/** Retire une ligne vide Gmail entre un paragraphe et une liste (ou l'inverse). */
+function compactBlankLinesAroundLists(lines: string[]): string[] {
+  const out = [...lines];
+  let i = 0;
+  while (i < out.length) {
+    if (
+      i + 2 < out.length &&
+      isTextBlockLine(out[i]!) &&
+      isGmailBlankLineEntry(out[i + 1]!) &&
+      isListBlockLine(out[i + 2]!)
+    ) {
+      out.splice(i + 1, 1);
+      continue;
+    }
+    if (
+      i + 2 < out.length &&
+      isListBlockLine(out[i]!) &&
+      isGmailBlankLineEntry(out[i + 1]!) &&
+      isTextBlockLine(out[i + 2]!)
+    ) {
+      out.splice(i + 1, 1);
+      continue;
+    }
+    i += 1;
+  }
+  return out;
+}
+
+function finalizeGmailLineBlocks(lines: string[]): string[] {
+  return compactBlankLinesAroundLists(collapseConsecutiveGmailBlankLines(lines));
+}
+
+function flattenListItemInnerHtml(innerHtml: string): string {
+  let s = innerHtml.trim();
+  for (let pass = 0; pass < 3; pass++) {
+    const wrapped = s.match(/^<(div|p)(?:\s[^>]*)?>([\s\S]*)<\/\1>$/i);
+    if (!wrapped) break;
+    const inner = wrapped[2]!.trim();
+    if (/<(?:ul|ol|table|img)\b/i.test(inner)) break;
+    s = inner;
+  }
+  return stripEditorTrailingBrFromLineInner(s);
+}
+
+/** Aplatit les `<div>` / `<p>` imbriqués (artefacts contentEditable, surtout dans les puces). */
+function flattenRichEditorHtmlDom(root: Element): void {
+  for (const li of root.querySelectorAll("li")) {
+    li.innerHTML = flattenListItemInnerHtml(li.innerHTML);
+  }
+  for (const block of root.querySelectorAll("div, p")) {
+    const only = block.firstElementChild;
+    if (
+      block.childElementCount === 1 &&
+      only &&
+      /^(DIV|P)$/i.test(only.tagName) &&
+      !only.querySelector("ul, ol, table, img")
+    ) {
+      block.innerHTML = only.innerHTML;
+    }
+  }
+}
+
+function endsWithGmailBlankLine(html: string): boolean {
+  return /<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>\s*$/i.test(
+    html.trimEnd()
+  );
+}
+
 function styleListElement(el: Element): void {
   el.setAttribute("style", GMAIL_LIST_STYLE);
   for (const li of el.querySelectorAll("li")) {
     li.setAttribute("style", GMAIL_LIST_ITEM_STYLE);
+    li.innerHTML = flattenListItemInnerHtml(li.innerHTML);
   }
 }
 
@@ -124,6 +226,7 @@ function isGmailSafeStyle(style: string): boolean {
 /** Une ligne Gmail par Entrée ; ligne vide = `<div><br></div>` (comme la rédaction Gmail). */
 function normalizeTemplateEmailHtmlLikeGmailWithDom(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
+  flattenRichEditorHtmlDom(doc.body);
   const lines: string[] = [];
 
   const appendBlock = (el: Element) => {
@@ -156,7 +259,7 @@ function normalizeTemplateEmailHtmlLikeGmailWithDom(html: string): string {
       }
       return;
     }
-    const inner = el.innerHTML.trim();
+    const inner = stripEditorTrailingBrFromLineInner(el.innerHTML.trim());
     if (isBlankLineContent(inner)) {
       lines.push(gmailBlankLineHtml());
     } else {
@@ -183,7 +286,7 @@ function normalizeTemplateEmailHtmlLikeGmailWithDom(html: string): string {
   };
 
   walk(doc.body);
-  return wrapGmailHtmlBody(lines.join(""));
+  return wrapGmailHtmlBody(finalizeGmailLineBlocks(lines).join(""));
 }
 
 function normalizeTemplateEmailHtmlLikeGmailWithRegex(html: string): string {
@@ -202,6 +305,11 @@ function normalizeTemplateEmailHtmlLikeGmailWithRegex(html: string): string {
       block = block.replace(/<ul(?:\s[^>]*)?>/i, `<ul style="${GMAIL_LIST_STYLE}">`);
       block = block.replace(/<ol(?:\s[^>]*)?>/i, `<ol style="${GMAIL_LIST_STYLE}">`);
       block = block.replace(/<li(?:\s[^>]*)?>/gi, `<li style="${GMAIL_LIST_ITEM_STYLE}">`);
+      block = block.replace(
+        /<li([^>]*)>([\s\S]*?)<\/li>/gi,
+        (_match, attrs: string, inner: string) =>
+          `<li${attrs}>${flattenListItemInnerHtml(inner)}</li>`
+      );
       lines.push(block);
       rest = rest.slice(listMatch[0].length);
       continue;
@@ -209,7 +317,7 @@ function normalizeTemplateEmailHtmlLikeGmailWithRegex(html: string): string {
 
     const blockMatch = rest.match(/^<(p|div)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i);
     if (blockMatch) {
-      const inner = blockMatch[2].trim();
+      const inner = stripEditorTrailingBrFromLineInner(blockMatch[2].trim());
       lines.push(isBlankLineContent(inner) ? gmailBlankLineHtml() : gmailTextLineHtml(inner));
       rest = rest.slice(blockMatch[0].length);
       continue;
@@ -224,9 +332,20 @@ function normalizeTemplateEmailHtmlLikeGmailWithRegex(html: string): string {
     break;
   }
 
-  return wrapGmailHtmlBody(lines.join(""));
+  return wrapGmailHtmlBody(finalizeGmailLineBlocks(lines).join(""));
 }
 
+/** HTML éditeur → format Gmail canonique (aperçu, test, enregistrement). */
+export function canonicalizeTemplateCorpsHtml(html: string): string {
+  const sanitized = sanitizeTemplateEmailHtml(html.trim());
+  if (!sanitized) return "";
+  return normalizeTemplateEmailHtmlLikeGmail(sanitized).replace(
+    /^<div dir="ltr">([\s\S]*)<\/div>$/i,
+    "$1"
+  );
+}
+
+/** @deprecated alias — préparation envoi Gmail */
 export function normalizeTemplateEmailHtmlLikeGmail(html: string): string {
   const trimmed = html.trim();
   if (!trimmed) return "";
@@ -308,6 +427,78 @@ function isSafeEmailImageSrc(src: string): boolean {
   return /^data:image\//i.test(s) || /^https?:\/\//i.test(s);
 }
 
+/** Balises img de la signature (bannière / logo) pour réparation sans dupliquer le texte. */
+function extractSignatureImageMarkup(signatureHtml: string): string {
+  if (typeof DOMParser === "undefined") {
+    return (signatureHtml.match(/<img[\s\S]*?>/gi) ?? [])
+      .filter((tag) => {
+        const m = tag.match(/\ssrc=["']([^"']+)["']/i);
+        return m != null && isSafeEmailImageSrc(m[1]!);
+      })
+      .join("<br>");
+  }
+  const doc = new DOMParser().parseFromString(signatureHtml, "text/html");
+  const parts: string[] = [];
+  for (const img of doc.body.querySelectorAll("img")) {
+    const src = img.getAttribute("src")?.trim() ?? "";
+    if (isSafeEmailImageSrc(src)) {
+      parts.push(img.outerHTML);
+    }
+  }
+  return parts.join("<br>");
+}
+
+function signatureTextPresentInHtml(
+  html: string,
+  plainSignature?: string | null,
+  signatureHtml?: string | null
+): boolean {
+  const htmlPlain = htmlToPlainEmail(html);
+  if (!htmlPlain.trim()) return false;
+  if (plainSignature?.trim() && plainTextContainsEmailSignature(htmlPlain, plainSignature)) {
+    return true;
+  }
+  const sig = signatureHtml?.trim();
+  return sig ? plainTextContainsEmailSignature(htmlPlain, htmlToPlainEmail(sig)) : false;
+}
+
+/** Insère la bannière/logo avant le bloc texte déjà présent (sans recoller tout le HTML signature). */
+function prependSignatureImagesToExistingText(
+  html: string,
+  imgMarkup: string,
+  plainSignature: string | null | undefined,
+  signatureHtml: string
+): string {
+  if (!imgMarkup.trim()) return html;
+
+  const msgBefore = messagePlainWithoutSignature(html, plainSignature, signatureHtml);
+  const withoutSig = stripTrailingEmailSignatureBlocks(html, plainSignature, signatureHtml);
+  if (withoutSig.length < html.length && msgBefore.trim()) {
+    const msgAfter = messagePlainWithoutSignature(withoutSig, plainSignature, signatureHtml);
+    if (msgAfter.trim().length >= msgBefore.trim().length * 0.5) {
+      return `${withoutSig}${gmailBlankLineHtml()}${signatureHtml}`;
+    }
+  }
+
+  const refSig = plainSignature?.trim() || htmlToPlainEmail(signatureHtml);
+  const anchorLine =
+    refSig
+      .split("\n")
+      .map((l) => l.trim())
+      .find((l) => l.length >= 8) ?? signaturePlainFingerprint(refSig);
+  if (anchorLine.length >= 8) {
+    const needle = anchorLine.slice(0, Math.min(24, anchorLine.length));
+    const idx = html.indexOf(needle);
+    if (idx >= 0) {
+      const divStart = html.lastIndexOf("<div", idx);
+      const insertAt = divStart >= 0 ? divStart : idx;
+      return `${html.slice(0, insertAt)}${imgMarkup}${gmailBlankLineHtml()}${html.slice(insertAt)}`;
+    }
+  }
+
+  return `${html}${gmailBlankLineHtml()}${imgMarkup}`;
+}
+
 /** Retire une signature texte/HTML incomplète (sans logo) en fin de message. */
 function stripTrailingEmailSignatureBlocks(
   html: string,
@@ -343,6 +534,56 @@ function stripTrailingEmailSignatureBlocks(
   return out
     .replace(/(<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>\s*)$/i, "")
     .trimEnd();
+}
+
+/** Texte du message sans la signature (pour ne pas effacer le corps à la réparation logo). */
+function messagePlainWithoutSignature(
+  html: string,
+  plainSignature?: string | null,
+  signatureHtml?: string | null
+): string {
+  const plain = htmlToPlainEmail(html).trim();
+  const sigPlain = (plainSignature?.trim() || htmlToPlainEmail(signatureHtml ?? "")).trim();
+  if (!plain || !sigPlain) return plain;
+  const norm = normalizePlainForSignatureCompare(plain);
+  const normSig = normalizePlainForSignatureCompare(sigPlain);
+  if (normSig.length >= 8 && norm.endsWith(normSig)) {
+    return norm.slice(0, norm.length - normSig.length).trim();
+  }
+  const fp = normSig.split("\n").slice(0, 2).join("\n");
+  if (fp.length >= 8 && norm.includes(fp)) {
+    const idx = norm.lastIndexOf(fp);
+    if (idx > 0) return norm.slice(0, idx).trim();
+  }
+  return plain;
+}
+
+function stripTrailingSignaturePreservingMessage(
+  html: string,
+  plainSignature?: string | null,
+  signatureHtml?: string | null
+): string {
+  const stripped = stripTrailingEmailSignatureBlocks(html, plainSignature, signatureHtml);
+  const before = messagePlainWithoutSignature(html, plainSignature, signatureHtml);
+  const after = messagePlainWithoutSignature(stripped, plainSignature, signatureHtml);
+  if (before.trim() && !after.trim()) return html;
+  if (before.trim().length >= 8 && after.trim().length < before.trim().length * 0.5) {
+    return html;
+  }
+  return stripped;
+}
+
+/** Retire la signature CGP du HTML complet (éditeur « Confirmer l'envoi » — corps seul). */
+export function extractMessageHtmlWithoutSignature(
+  html: string,
+  cgp: CgpConfig | null | undefined
+): string {
+  const trimmed = html.trim();
+  if (!trimmed) return "";
+  const sigHtml = cgp?.email_signature_html?.trim();
+  const plainSig = cgp?.email_signature?.trim();
+  if (!sigHtml && !plainSig) return trimmed;
+  return stripTrailingSignaturePreservingMessage(trimmed, plainSig, sigHtml);
 }
 
 /** Détecte une signature déjà présente (y compris après sanitize / normalisation Gmail). */
@@ -386,11 +627,21 @@ export function injectTemplateSignatureHtml(
     return html;
   }
 
+  if (needsImageRepair && signatureTextPresentInHtml(html, plainSignature, sig)) {
+    const imgMarkup = extractSignatureImageMarkup(sig);
+    if (imgMarkup) {
+      return prependSignatureImagesToExistingText(html, imgMarkup, plainSignature, sig);
+    }
+    return html;
+  }
+
   const base = needsImageRepair
-    ? stripTrailingEmailSignatureBlocks(html, plainSignature, sig)
+    ? stripTrailingSignaturePreservingMessage(html, plainSignature, sig)
     : html;
 
-  return `${base}${gmailBlankLineHtml()}${sig}`;
+  return endsWithGmailBlankLine(base)
+    ? `${base}${sig}`
+    : `${base}${gmailBlankLineHtml()}${sig}`;
 }
 
 /** Slot temporaire : le normaliseur Gmail ne doit pas repasser sur le HTML bulletin / perf (blocs multiples). */

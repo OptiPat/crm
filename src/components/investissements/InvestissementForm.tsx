@@ -152,6 +152,8 @@ interface InvestissementFormProps {
   onEncoursUpdated?: () => void;
 }
 
+const PARTENAIRE_NONE_VALUE = "__none__";
+
 function InvestissementFormSection({
   sectionKey,
   children,
@@ -901,11 +903,17 @@ export function InvestissementForm({
                 Créer un partenaire
               </Button>
             </div>
-            <Select value={partenaireId} onValueChange={setPartenaireId}>
+            <Select
+              value={partenaireId || PARTENAIRE_NONE_VALUE}
+              onValueChange={(value) =>
+                setPartenaireId(value === PARTENAIRE_NONE_VALUE ? "" : value)
+              }
+            >
               <SelectTrigger>
                 <SelectValue placeholder="Sélectionnez un partenaire (optionnel)" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={PARTENAIRE_NONE_VALUE}>— Aucun</SelectItem>
                 {partenaires.map((partenaire) => (
                   <SelectItem key={partenaire.id} value={partenaire.id.toString()}>
                     {partenaire.raison_sociale}

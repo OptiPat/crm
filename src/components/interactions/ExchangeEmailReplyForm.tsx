@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { readRichTextEditorHtml } from "@/components/emails/rich-text-email-editor-utils";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { sendEmail } from "@/lib/api/tauri-email";
 import { dismissEmailCampaignFollowup } from "@/lib/api/tauri-etiquettes";
@@ -30,6 +31,7 @@ export function ExchangeEmailReplyForm({
   const [bodyHtml, setBodyHtml] = useState("");
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(null);
   const [sending, setSending] = useState(false);
+  const editorElementRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setSubject(defaultCampaignReplySubject(entry));
@@ -56,7 +58,13 @@ export function ExchangeEmailReplyForm({
     setSending(true);
     try {
       const cgp = cgpConfig ?? (await getCgpConfig());
-      const { body: plainBody, body_html } = buildEditedHtmlEmailSendBodies(bodyHtml, cgp);
+      const htmlSource =
+        readRichTextEditorHtml(editorElementRef.current).trim() || bodyHtml.trim();
+      if (!htmlSource) {
+        toast.error("Écrivez un message avant d'envoyer.");
+        return;
+      }
+      const { body: plainBody, body_html } = buildEditedHtmlEmailSendBodies(htmlSource, cgp);
       await sendEmail({
         to_email: contactEmail,
         to_name: exchangeContactName(entry),
@@ -110,6 +118,7 @@ export function ExchangeEmailReplyForm({
       <div className="space-y-2">
         <Label htmlFor="reply-body-html">Votre message</Label>
         <RichTextEmailEditor
+          editorElementRef={editorElementRef}
           value={bodyHtml}
           onChange={setBodyHtml}
           minHeight="min(40vh, 280px)"
@@ -126,14 +135,17 @@ export function ExchangeEmailReplyForm({
           type="button"
           className="gap-1"
           disabled={!canSend || sending || !subject.trim() || !messageReady}
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => void handleSend()}
         >
-          {sending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Mail className="h-4 w-4" />
-          )}
-          Envoyer la réponse
+          <span className="inline-flex items-center gap-1">
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4" />
+            )}
+            Envoyer la réponse
+          </span>
         </Button>
       </div>
     </section>

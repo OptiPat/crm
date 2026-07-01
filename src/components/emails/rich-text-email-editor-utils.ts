@@ -1,4 +1,8 @@
-import { sanitizeTemplateEmailHtml, normalizeTemplateEmailHtmlLikeGmail } from "@/lib/emails/template-email-html";
+import {
+  canonicalizeTemplateCorpsHtml,
+  sanitizeTemplateEmailHtml,
+  normalizeTemplateEmailHtmlLikeGmail,
+} from "@/lib/emails/template-email-html";
 
 export function normalizeEditorHtml(html: string): string {
   const trimmed = html.trim();
@@ -14,12 +18,26 @@ export function sanitizeEditorHtml(html: string): string {
 
 /** Au blur / enregistrement : format Gmail (div par ligne). */
 export function finalizeEditorHtmlForStorage(html: string): string {
-  const sanitized = sanitizeTemplateEmailHtml(html.trim());
-  if (!sanitized) return "";
-  return normalizeTemplateEmailHtmlLikeGmail(sanitized).replace(
-    /^<div dir="ltr">([\s\S]*)<\/div>$/i,
-    "$1"
-  );
+  return canonicalizeTemplateCorpsHtml(html);
+}
+
+/** Lit le HTML courant de l'éditeur (DOM), y compris la dernière frappe non encore flushée en state. */
+export function readRichTextEditorHtml(editorEl: HTMLDivElement | null): string {
+  if (!editorEl) return "";
+  const raw = editorEl.innerHTML.trim();
+  if (!raw || raw === "<br>" || raw === "<div><br></div>") return "";
+
+  const visibleText = (editorEl.textContent ?? "").replace(/\u00a0/g, " ").trim();
+  if (!visibleText) return "";
+
+  const finalized = finalizeEditorHtmlForStorage(raw);
+  if (finalized.trim()) return finalized;
+
+  const sanitized = sanitizeTemplateEmailHtml(raw);
+  if (sanitized.trim()) return normalizeTemplateEmailHtmlLikeGmail(sanitized);
+
+  const fallback = sanitizeEditorHtml(raw);
+  return fallback.trim() ? fallback : "";
 }
 
 /** Restaure une sélection sauvegardée dans l'éditeur. */

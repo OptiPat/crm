@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
+import { CgpEmailSignaturePreview } from "@/components/emails/CgpEmailSignaturePreview";
 import { CheckCircle2 } from "lucide-react";
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
@@ -21,6 +22,9 @@ import {
   renderEtiquetteEmailPreview,
 } from "@/lib/etiquettes/etiquette-email-preview";
 import { buildEditedHtmlEmailSendBodies } from "@/lib/etiquettes/etiquette-email-send-bodies";
+import { readRichTextEditorHtml } from "@/components/emails/rich-text-email-editor-utils";
+import { stripPlainBodyEmailSignature } from "@/lib/emails/email-signature";
+import { extractMessageHtmlWithoutSignature } from "@/lib/emails/template-email-html";
 import {
   isEtiquetteEmailSendActive,
   isEtiquetteQueueItemBatchLocked,
@@ -53,10 +57,13 @@ export function EtiquetteEmailSendDialog({
   const [bodyPlain, setBodyPlain] = useState("");
   const [htmlMode, setHtmlMode] = useState(true);
   const [cgpConfig, setCgpConfig] = useState<CgpConfig | null>(cgpConfigProp ?? null);
+  const editorElementRef = useRef<HTMLDivElement>(null);
+  const bodyDirtyRef = useRef(false);
 
   useEffect(() => {
     if (!open || !item) return;
     let cancelled = false;
+    bodyDirtyRef.current = false;
     void (async () => {
       try {
         const cgp = cgpConfigProp ?? (await getCgpConfig());
@@ -66,11 +73,11 @@ export function EtiquetteEmailSendDialog({
         setSubject(preview.subject);
         if (preview.body_html?.trim()) {
           setHtmlMode(true);
-          setBodyHtml(preview.body_html);
-          setBodyPlain(preview.body);
+          setBodyHtml(extractMessageHtmlWithoutSignature(preview.body_html, cgp));
+          setBodyPlain(stripPlainBodyEmailSignature(preview.body, cgp.email_signature));
         } else {
           setHtmlMode(false);
-          setBodyPlain(preview.body);
+          setBodyPlain(stripPlainBodyEmailSignature(preview.body, cgp.email_signature));
           setBodyHtml("");
         }
       } catch (error) {
@@ -94,7 +101,7 @@ export function EtiquetteEmailSendDialog({
   const messageReady = htmlMode ? bodyHtml.trim().length > 0 : bodyPlain.trim().length > 0;
 
   const handleSend = () => {
-    if (!item?.contact_email || !cgpConfig || !messageReady) return;
+    if (!item?.contact_email || !cgpConfig) return;
     if (batchLocked) {
       toast.warning("Cet envoi fait partie d'une salve en cours.");
       return;
@@ -113,12 +120,44 @@ export function EtiquetteEmailSendDialog({
     let body_html: string | null;
 
     if (htmlMode) {
-      const built = buildEditedHtmlEmailSendBodies(bodyHtml, cgpConfig);
-      body = built.body;
-      body_html = built.body_html;
+      if (!bodyDirtyRef.current) {
+        const preview = renderEtiquetteEmailPreview(
+          { ...item, template_sujet: subjectTrim },
+          cgpConfig
+        );
+        body = preview.body;
+        body_html = preview.body_html;
+      } else {
+        const el = editorElementRef.current;
+        const htmlSource =
+          readRichTextEditorHtml(el).trim() || bodyHtml.trim();
+        const visibleText = (el?.textContent ?? "").replace(/\u00a0/g, " ").trim();
+        if (!htmlSource && visibleText) {
+          toast.error(
+            "Impossible de lire le message édité — cliquez dans le texte puis réessayez."
+          );
+          return;
+        }
+        if (!htmlSource) {
+          toast.error("Le message est vide — vérifiez le contenu avant d'envoyer.");
+          return;
+        }
+        const built = buildEditedHtmlEmailSendBodies(htmlSource, cgpConfig);
+        body = built.body;
+        body_html = built.body_html;
+      }
+      if (!body.trim() && !(body_html?.trim())) {
+        toast.error("Le message est vide après préparation — réessayez ou rouvrez la fenêtre.");
+        return;
+      }
     } else {
+      const plainSource = bodyPlain.trim();
+      if (!plainSource) {
+        toast.error("Le message est vide.");
+        return;
+      }
       const preview = renderEtiquetteEmailPreview(
-        { ...item, template_sujet: subjectTrim, template_corps: bodyPlain },
+        { ...item, template_sujet: subjectTrim, template_corps: plainSource },
         cgpConfig
       );
       body = preview.body;
@@ -159,8 +198,8 @@ export function EtiquetteEmailSendDialog({
                 </p>
               )}
               <p className="text-xs">
-                Objet et message modifiables ci-dessous — la mise en forme est conservée à
-                l&apos;envoi.
+                Objet et message modifiables ci-dessous — la signature est affichée séparément et
+                conservée telle qu&apos;en Paramètres.
               </p>
             </div>
           </DialogDescription>
@@ -185,9 +224,13 @@ export function EtiquetteEmailSendDialog({
             <Label htmlFor={htmlMode ? "confirm-body-html" : "confirm-body"}>Message</Label>
             {htmlMode ? (
               <RichTextEmailEditor
+                editorElementRef={editorElementRef}
                 value={bodyHtml}
-                onChange={setBodyHtml}
-                minHeight="min(50vh, 360px)"
+                onChange={(html, meta) => {
+                  if (meta?.edited) bodyDirtyRef.current = true;
+                  setBodyHtml(html);
+                }}
+                minHeight="9rem"
                 showFooter={false}
                 ariaLabel="Message à envoyer"
               />
@@ -206,6 +249,15 @@ export function EtiquetteEmailSendDialog({
               </p>
             ) : null}
           </div>
+
+          <CgpEmailSignaturePreview
+            html={cgpConfig?.email_signature_html}
+            plain={
+              cgpConfig?.email_signature_html?.trim()
+                ? null
+                : cgpConfig?.email_signature
+            }
+          />
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -213,6 +265,7 @@ export function EtiquetteEmailSendDialog({
           </Button>
           <Button
             onClick={handleSend}
+            onMouseDown={(e) => e.preventDefault()}
             disabled={sendBlocked || !subject.trim() || !messageReady || !item?.contact_email}
           >
             <>

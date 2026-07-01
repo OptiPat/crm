@@ -5,18 +5,19 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import {
-  archiveEphemeralCampaign,
   previewEphemeralCampaignAudience,
   syncEphemeralCampaignQueue,
   type EphemeralCampaignAudiencePreview,
 } from "@/lib/api/tauri-ephemeral-campaign";
-import { RefreshCw, Users, Archive, Play } from "lucide-react";
+import { RefreshCw, Users, Play } from "lucide-react";
 import { toast } from "sonner";
 
 type Props = {
   templateId: number | null;
   excludedContactIds: number[];
   needsSaveBeforeSync?: boolean;
+  bootstrapPending?: boolean;
+  onRequestSave?: () => Promise<void>;
   onExcludedChange: (ids: number[]) => void;
   campaignStatus: string;
   onCampaignUpdated?: () => void | Promise<void>;
@@ -26,6 +27,8 @@ export function TemplateEmailEphemeralRecipientsPanel({
   templateId,
   excludedContactIds,
   needsSaveBeforeSync = false,
+  bootstrapPending = false,
+  onRequestSave,
   onExcludedChange,
   campaignStatus,
   onCampaignUpdated,
@@ -33,7 +36,6 @@ export function TemplateEmailEphemeralRecipientsPanel({
   const [preview, setPreview] = useState<EphemeralCampaignAudiencePreview | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [syncing, setSyncing] = useState(false);
-  const [archiving, setArchiving] = useState(false);
   const [search, setSearch] = useState("");
 
   const excludedSet = useMemo(() => new Set(excludedContactIds), [excludedContactIds]);
@@ -69,7 +71,7 @@ export function TemplateEmailEphemeralRecipientsPanel({
       setPreview(data);
     } catch (error) {
       console.error(error);
-      toast.error("Impossible de calculer la cible");
+      toast.error("Impossible de calculer la liste");
     } finally {
       setLoadingPreview(false);
     }
@@ -108,37 +110,35 @@ export function TemplateEmailEphemeralRecipientsPanel({
     if (templateId == null) return;
     setSyncing(true);
     try {
+      if (needsSaveBeforeSync && onRequestSave) {
+        await onRequestSave();
+      }
       const result = await syncEphemeralCampaignQueue(templateId);
       toast.success(result.message);
+      toast.info("Envoyez depuis Suivi → Envois → Prêts à envoyer", { duration: 6000 });
       await loadPreview();
       await onCampaignUpdated?.();
     } catch (error) {
       console.error(error);
-      toast.error("Erreur lors de la préparation de la file");
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg !== "validation" && msg !== "Enregistrement déjà en cours" && msg !== "closed") {
+        toast.error(
+          msg.includes("Failed")
+            ? "Erreur lors de la préparation de la file"
+            : msg.replace(/^Failed to [^:]+:\s*/i, "")
+        );
+      }
     } finally {
       setSyncing(false);
-    }
-  };
-
-  const handleArchive = async () => {
-    if (templateId == null) return;
-    setArchiving(true);
-    try {
-      await archiveEphemeralCampaign(templateId);
-      toast.success("Campagne archivée — modèle retiré de la bibliothèque");
-      await onCampaignUpdated?.();
-    } catch (error) {
-      console.error(error);
-      toast.error("Erreur lors de l'archivage");
-    } finally {
-      setArchiving(false);
     }
   };
 
   if (templateId == null) {
     return (
       <p className="text-sm text-center text-muted-foreground py-8 border border-dashed rounded-lg">
-        Enregistrez le modèle pour calculer la cible et préparer la file d&apos;envoi.
+        {bootstrapPending
+          ? "Enregistrement en cours — calcul de la cible…"
+          : "Renseignez nom, objet, message et audience — l’onglet enregistre automatiquement pour afficher la liste."}
       </p>
     );
   }
@@ -178,42 +178,37 @@ export function TemplateEmailEphemeralRecipientsPanel({
             onClick={() => void loadPreview()}
           >
             <RefreshCw className={`h-4 w-4 ${loadingPreview ? "animate-spin" : ""}`} />
-            Actualiser la cible
+            Actualiser la liste
           </Button>
           <Button
             type="button"
             size="sm"
             className="gap-1.5"
-            disabled={syncing || campaignStatus === "archived" || needsSaveBeforeSync}
+            disabled={syncing || campaignStatus === "archived"}
             onClick={() => void handleSync()}
           >
             <Play className="h-4 w-4" />
-            {syncing ? "Préparation…" : "Préparer / actualiser la file"}
+            {syncing
+              ? "Préparation…"
+              : needsSaveBeforeSync
+                ? "Enregistrer et préparer la campagne"
+                : "Préparer la campagne"}
           </Button>
-          {campaignStatus !== "archived" && (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="gap-1.5"
-              disabled={archiving}
-              onClick={() => void handleArchive()}
-            >
-              <Archive className="h-4 w-4" />
-              Terminer la campagne
-            </Button>
-          )}
         </div>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Décochez un contact pour l&apos;exclure, puis <strong>enregistrez le modèle</strong>. Les
-        contacts qui ne matchent plus les filtres sortent des Prêts non envoyés au prochain «
-        Préparer / actualiser la file ».
+        Décochez un contact pour l&apos;exclure, puis{" "}
+        <strong>Préparer la campagne</strong>. Les envois se font dans{" "}
+        <strong>Suivi → Envois → Prêts à envoyer</strong>. Pour tout arrêter :{" "}
+        <strong>Abandonner</strong> (bas de la fenêtre) ou{" "}
+        <strong>Modèles → supprimer</strong>. Après le dernier envoi, la campagne disparaît
+        automatiquement de la bibliothèque.
       </p>
       {needsSaveBeforeSync && (
         <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-          Enregistrez le modèle avant de préparer ou actualiser la file d&apos;envoi.
+          Modifications non enregistrées (message, audience ou exclusions) — le bouton ci-dessus
+          enregistre puis prépare la campagne.
         </p>
       )}
 

@@ -2,7 +2,7 @@ import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { sendEmail } from "@/lib/api/tauri-email";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
-import { setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
+import { canonicalizeTemplateCorpsHtml, setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
 import {
   renderTemplatePreview,
   SAMPLE_PREVIEW_CONTACT,
@@ -34,9 +34,12 @@ export async function sendTemplateTestToSelf(params: {
   }
 
   const contact = params.contact ?? SAMPLE_PREVIEW_CONTACT;
+  const corpsHtmlCanonical = params.corpsHtml?.trim()
+    ? canonicalizeTemplateCorpsHtml(params.corpsHtml.trim())
+    : null;
   const variables = setTemplateCorpsHtmlInMeta(
     params.templateVariables ?? null,
-    params.corpsHtml?.trim() || null
+    corpsHtmlCanonical
   );
   const preview = renderTemplatePreview(
     params.sujet,
@@ -45,7 +48,7 @@ export async function sendTemplateTestToSelf(params: {
     params.cgp,
     params.agendaLinkId,
     variables,
-    params.corpsHtml,
+    corpsHtmlCanonical,
     { templateNom: params.templateNom, registre: params.registre }
   );
 

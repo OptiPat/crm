@@ -26,7 +26,8 @@ import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getEmailConnectionStatus, type EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { TemplateEmailForm, type TemplateEmailFormMode } from "@/components/emails/TemplateEmailForm";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { isEphemeralTemplate } from "@/lib/emails/template-email-ephemeral";
+import { isEphemeralTemplate, parseEphemeralCampaignConfig } from "@/lib/emails/template-email-ephemeral";
+import { archiveEphemeralCampaign } from "@/lib/api/tauri-ephemeral-campaign";
 import { TemplateEmailPreviewPanel } from "@/components/emails/TemplateEmailPreviewPanel";
 import {
   TemplateActivationModeFilters,
@@ -337,11 +338,35 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
     } catch (error) {
       console.error("Error deleting template:", error);
       const msg = error instanceof Error ? error.message : String(error);
-      toast.error(msg.includes("Failed") ? "Erreur lors de la suppression" : msg);
+      const detail = msg.replace(/^Failed to delete template:\s*/i, "").trim();
+      toast.error(detail || "Erreur lors de la suppression");
     } finally {
       setDeleteBusy(false);
     }
   };
+
+  const handleArchiveEphemeral = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    try {
+      await archiveEphemeralCampaign(deleteTarget.id);
+      toast.success("Campagne annulée — retirée de la bibliothèque");
+      if (previewId === deleteTarget.id) setPreviewId(null);
+      setDeleteTarget(null);
+      await loadTemplates();
+    } catch (error) {
+      console.error("Error archiving ephemeral campaign:", error);
+      toast.error("Erreur lors de la clôture de la campagne");
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+
+  const deleteTargetEphemeral =
+    deleteTarget != null && isEphemeralTemplate(deleteTarget.variables);
+  const deleteTargetEphemeralActive =
+    deleteTargetEphemeral &&
+    parseEphemeralCampaignConfig(deleteTarget.variables)?.status !== "archived";
 
   const handleFormClose = () => {
     setShowForm(false);
@@ -620,26 +645,47 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
             <AlertDialogTitle>Supprimer ce modèle ?</AlertDialogTitle>
             <AlertDialogDescription>
               {deleteTarget ? (
-                <>
-                  <strong>{deleteTarget.nom}</strong> sera définitivement supprimé. Les étiquettes
-                  liées seront détachées ; les modèles qui l&apos;utilisaient comme relance le
-                  seront aussi.
-                </>
+                deleteTargetEphemeralActive ? (
+                  <>
+                    <strong>{deleteTarget.nom}</strong> est une campagne éphémère active. Annulez-la
+                    pour la retirer de la bibliothèque (l&apos;historique d&apos;envoi reste sur les
+                    fiches ; les envois non effectués en file sont supprimés). La suppression directe
+                    n&apos;est pas possible tant que la campagne n&apos;est pas annulée.
+                  </>
+                ) : (
+                  <>
+                    <strong>{deleteTarget.nom}</strong> sera définitivement supprimé. Les étiquettes
+                    liées seront détachées ; les modèles qui l&apos;utilisaient comme relance le
+                    seront aussi.
+                  </>
+                )
               ) : null}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={deleteBusy}>Annuler</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={deleteBusy}
-              onClick={(e) => {
-                e.preventDefault();
-                void handleDeleteConfirm();
-              }}
-            >
-              {deleteBusy ? "Suppression…" : "Supprimer"}
-            </AlertDialogAction>
+            {deleteTargetEphemeralActive ? (
+              <AlertDialogAction
+                disabled={deleteBusy}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleArchiveEphemeral();
+                }}
+              >
+                {deleteBusy ? "Annulation…" : "Annuler la campagne"}
+              </AlertDialogAction>
+            ) : (
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={deleteBusy}
+                onClick={(e) => {
+                  e.preventDefault();
+                  void handleDeleteConfirm();
+                }}
+              >
+                {deleteBusy ? "Suppression…" : "Supprimer"}
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

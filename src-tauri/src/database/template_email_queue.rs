@@ -11,6 +11,18 @@ use rusqlite::{params, Result};
 
 const TEMPLATE_QUEUE_COLOR: &str = "#6366F1";
 
+/// Relance activée sur le modèle (clé absente = activée sauf campagne éphémère).
+const TEMPLATE_RELANCE_ENABLED_SQL: &str = "COALESCE(
+    json_extract(t.variables, '$.email_relance.enabled'),
+    CASE WHEN COALESCE(json_extract(t.variables, '$.is_ephemeral'), 0) = 1 THEN 0 ELSE 1 END
+) = 1";
+
+/// Suivi réponse requis (clé absente = oui sauf campagne éphémère).
+const TEMPLATE_ATTENDRE_REPONSE_SQL: &str = "COALESCE(
+    json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'),
+    CASE WHEN COALESCE(json_extract(t.variables, '$.is_ephemeral'), 0) = 1 THEN 0 ELSE 1 END
+) = 1";
+
 /// Filtre SQL partagé : déclencheur modèle actif OU campagne batch (`campaign_batch_key`).
 pub(crate) const TEMPLATE_ENVOI_QUEUE_FILTER: &str = "(
     json_extract(t.variables, '$.email_trigger.enabled') = 1
@@ -515,9 +527,9 @@ impl Database {
             ),
             "sent" | "followup" => {
                 let relance_filter = if queue_status == "followup" {
-                    " AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1"
+                    format!(" AND {TEMPLATE_RELANCE_ENABLED_SQL}")
                 } else {
-                    ""
+                    String::new()
                 };
                 format!(
                     "SELECT cte.id, cte.contact_id, c.nom, c.prenom, c.email, c.telephone,
@@ -540,7 +552,7 @@ impl Database {
                        AND cte.email_reponse_at IS NULL
                        AND COALESCE(cte.email_suivi_ignore, 0) = 0
                        AND COALESCE(t.categorie, '') != 'NEWSLETTER'
-                       AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
+                       AND {TEMPLATE_ATTENDRE_REPONSE_SQL}
                        {relance_filter}
                        AND c.email IS NOT NULL AND TRIM(c.email) != ''"
                 )
@@ -603,7 +615,8 @@ impl Database {
             .unwrap()
             .as_secs() as i64;
         let updated = self.conn.execute(
-            "UPDATE contact_template_envois SET
+            &format!(
+                "UPDATE contact_template_envois SET
                 email_envoye = 0,
                 email_date_prevue = ?1,
                 email_reponse_at = NULL,
@@ -616,8 +629,9 @@ impl Database {
                AND EXISTS (
                  SELECT 1 FROM templates_email t
                  WHERE t.id = contact_template_envois.template_id
-                   AND COALESCE(json_extract(t.variables, '$.email_relance.enabled'), 1) = 1
-               )",
+                   AND {TEMPLATE_RELANCE_ENABLED_SQL}
+               )"
+            ),
             params![now, row_id],
         )?;
         if updated == 0 {

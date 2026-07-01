@@ -7,6 +7,7 @@ import type { CgpConfig } from "@/lib/api/tauri-settings";
 import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import {
   buildTemplateSendBodies,
+  canonicalizeTemplateCorpsHtml,
   getTemplateCorpsHtml,
   prepareTemplateHtmlForSend,
 } from "@/lib/emails/template-email-html";
@@ -237,9 +238,11 @@ export function renderTemplatePreview(
   );
   const body = appendEmailSignature(plainCore, cgp?.email_signature);
   const htmlSource = corpsHtmlStored
-    ? usesStelliumPerf
-      ? repairStelliumTemplateHtmlForRegistre(corpsHtmlStored, registre)
-      : corpsHtmlStored
+    ? canonicalizeTemplateCorpsHtml(
+        usesStelliumPerf
+          ? repairStelliumTemplateHtmlForRegistre(corpsHtmlStored, registre)
+          : corpsHtmlStored
+      )
     : null;
   const bodyHtmlCore = htmlSource
     ? stripOrphanStelliumFormalityHtml(

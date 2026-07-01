@@ -2,6 +2,7 @@ import { replaceTemplateVariables } from "@/lib/api/tauri-templates-email";
 import { appendEmailSignature } from "@/lib/emails/email-signature";
 import {
   buildTemplateSendBodies,
+  canonicalizeTemplateCorpsHtml,
   getTemplateCorpsHtml,
   prepareTemplateHtmlForSend,
 } from "@/lib/emails/template-email-html";
@@ -96,9 +97,11 @@ export function renderEtiquetteEmailPreview(
   }
 
   const htmlTemplate = corpsHtmlStored
-    ? stelliumRepair
-      ? repairStelliumTemplateHtmlForRegistre(corpsHtmlStored, item.contact_registre)
-      : corpsHtmlStored
+    ? canonicalizeTemplateCorpsHtml(
+        stelliumRepair
+          ? repairStelliumTemplateHtmlForRegistre(corpsHtmlStored, item.contact_registre)
+          : corpsHtmlStored
+      )
     : null;
   const bodyHtmlCore = htmlTemplate
     ? stripOrphanStelliumFormalityHtml(

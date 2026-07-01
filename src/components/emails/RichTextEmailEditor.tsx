@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, type RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -33,7 +33,7 @@ export type RichTextEmailEditorVariant = "default" | "sectionTitle";
 
 type RichTextEmailEditorProps = {
   value: string;
-  onChange: (html: string) => void;
+  onChange: (html: string, meta?: { edited?: boolean }) => void;
   className?: string;
   minHeight?: string;
   placeholder?: string;
@@ -43,6 +43,8 @@ type RichTextEmailEditorProps = {
   ariaLabel?: string;
   /** Aperçu du style titre de section dans le composeur. */
   variant?: RichTextEmailEditorVariant;
+  /** Accès au nœud contentEditable (flush DOM à l'envoi). */
+  editorElementRef?: RefObject<HTMLDivElement | null>;
 };
 
 /** Empêche la barre d'outils de voler le focus / la sélection de l'éditeur. */
@@ -62,10 +64,20 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
       showFooter = true,
       ariaLabel = "Message du modèle",
       variant = "default",
+      editorElementRef,
     },
     forwardedRef
   ) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const assignEditorRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      editorRef.current = node;
+      if (editorElementRef) {
+        (editorElementRef as { current: HTMLDivElement | null }).current = node;
+      }
+    },
+    [editorElementRef]
+  );
   useImperativeHandle(forwardedRef, () => editorRef.current as HTMLDivElement);
   const lastEmitted = useRef(value);
   const savedSelectionRef = useRef<Range | null>(null);
@@ -114,17 +126,23 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
     syncFromValue();
   }, [syncFromValue]);
 
-  const emitChange = (finalize = false) => {
+  const emitChange = (finalize = false, edited = false) => {
     const el = editorRef.current;
     if (!el) return;
+    const visibleText = (el.textContent ?? "").replace(/\u00a0/g, " ").trim();
     const raw = normalizeEditorHtml(el.innerHTML);
-    const html = finalize ? finalizeEditorHtmlForStorage(raw) : sanitizeEditorHtml(raw);
-    if (finalize && html !== el.innerHTML) {
+    let html = finalize ? finalizeEditorHtmlForStorage(el.innerHTML) : sanitizeEditorHtml(raw);
+
+    if (finalize && !html.trim() && visibleText) {
+      html = sanitizeEditorHtml(el.innerHTML);
+    }
+
+    if (finalize && html !== el.innerHTML && html.trim()) {
       el.innerHTML = html;
     }
     if (html === lastEmitted.current) return;
     lastEmitted.current = html;
-    onChange(html);
+    onChange(html, edited ? { edited: true } : undefined);
   };
 
   const runWithSavedSelection = (action: () => void) => {
@@ -139,7 +157,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
     runWithSavedSelection(() => {
       execRichEditorCommand(editorRef.current, command, savedSelectionRef.current, valueArg);
       captureSelection();
-      emitChange();
+      emitChange(false, true);
     });
   };
 
@@ -156,7 +174,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
       const applied = applyRichEditorFontSize(el, sizePx, savedSelectionRef.current);
       if (applied) {
         captureSelection();
-        emitChange();
+        emitChange(false, true);
       } else {
         window.alert("Sélectionnez du texte avant de choisir une taille.");
       }
@@ -246,7 +264,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           onClick={() => {
             exitRichEditorList(editorRef.current, savedSelectionRef.current);
             captureSelection();
-            emitChange();
+            emitChange(false, true);
           }}
         >
           <ListX className="h-4 w-4" />
@@ -263,7 +281,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         </Button>
       </div>
       <div
-        ref={editorRef}
+        ref={assignEditorRef}
         contentEditable
         role="textbox"
         aria-multiline
@@ -284,7 +302,7 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
             : ["text-sm", "[&_div]:leading-normal [&_>div]:m-0 [&_p]:my-0 [&_p]:leading-normal"],
         )}
         style={{ "--editor-min-h": minHeight } as React.CSSProperties}
-        onInput={() => emitChange(false)}
+        onInput={() => emitChange(false, true)}
         onKeyUp={captureSelection}
         onMouseUp={captureSelection}
         onKeyDownCapture={(e) => {
@@ -292,12 +310,12 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
           if (!el) return;
           if (handleRichEditorListEnter(el, e.nativeEvent)) {
             captureSelection();
-            emitChange(false);
+            emitChange(false, true);
           }
         }}
         onBlur={() => {
           captureSelection();
-          emitChange(true);
+          emitChange(false, false);
         }}
       />
       {showFooter ?

@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { parseTemplateEmailRelance } from "@/lib/emails/template-email-relance";
+import { parseTemplateEmailSuiviReponse } from "@/lib/emails/template-email-suivi-reponse";
 import {
+  DEFAULT_EPHEMERAL_CAMPAIGN,
   ephemeralSendDateTimeToUnix,
   isArchivedEphemeralTemplate,
   isEphemeralAudienceValid,
   isEphemeralTemplate,
+  mergeEphemeralCampaignForSave,
   parseEphemeralCampaignConfig,
   setEphemeralCampaignInMeta,
   stampNewEphemeralTemplateMeta,
@@ -18,6 +22,23 @@ describe("template-email-ephemeral", () => {
     const cfg = parseEphemeralCampaignConfig(variables);
     expect(cfg?.status).toBe("draft");
     expect(cfg?.audience.categories).toEqual(["CLIENT"]);
+    expect(parseTemplateEmailRelance(variables).enabled).toBe(false);
+    expect(parseTemplateEmailSuiviReponse(variables).attendre_reponse).toBe(false);
+  });
+
+  it("conserve prepared en base si l'état local est encore draft", () => {
+    const local = { ...DEFAULT_EPHEMERAL_CAMPAIGN, status: "draft" as const };
+    const stored = {
+      ...DEFAULT_EPHEMERAL_CAMPAIGN,
+      status: "prepared" as const,
+      batch_key: "ephemeral-1-batch",
+      prepared_at: 1_700_000_000,
+    };
+    const merged = mergeEphemeralCampaignForSave(local, stored);
+    expect(merged.status).toBe("prepared");
+    expect(merged.batch_key).toBe("ephemeral-1-batch");
+    expect(merged.prepared_at).toBe(1_700_000_000);
+    expect(merged.audience).toEqual(local.audience);
   });
 
   it("masque les campagnes archivées", () => {

@@ -9,6 +9,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
@@ -21,6 +31,7 @@ import {
   getTemplateCorpsHtml,
   htmlToPlainEmail,
   plainTextToTemplateHtml,
+  canonicalizeTemplateCorpsHtml,
   sanitizeTemplateEmailHtml,
   setTemplateCorpsHtmlInMeta,
 } from "@/lib/emails/template-email-html";
@@ -81,6 +92,7 @@ import {
 import { getAllEtiquettes, type Etiquette } from "@/lib/api/tauri-etiquettes";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { archiveEphemeralCampaign } from "@/lib/api/tauri-ephemeral-campaign";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
   EMAIL_TEMPLATE_VARIABLES,
@@ -107,7 +119,7 @@ import {
 } from "@/lib/etiquettes/type-produit-condition";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { TemplateEmailEphemeralAudiencePanel } from "@/components/emails/TemplateEmailEphemeralAudiencePanel";
 import { TemplateEmailEphemeralRecipientsPanel } from "@/components/emails/TemplateEmailEphemeralRecipientsPanel";
@@ -116,6 +128,7 @@ import {
   buildEphemeralSyncFingerprint,
   isEphemeralAudienceValid,
   isEphemeralTemplate,
+  mergeEphemeralCampaignForSave,
   parseEphemeralCampaignConfig,
   setEphemeralCampaignInMeta,
   stampNewEphemeralTemplateMeta,
@@ -197,6 +210,17 @@ export function TemplateEmailForm({
   const [corpsHtml, setCorpsHtml] = useState("");
   const richEditorRef = useRef<HTMLDivElement>(null);
   const sujetInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const ephemeralSaveIntentRef = useRef<"default" | "sync" | "tab">("default");
+  const openedWithTemplateIdRef = useRef<number | null>(null);
+  const [confirmAbandonOnClose, setConfirmAbandonOnClose] = useState(false);
+  const [destinatairesTabPending, setDestinatairesTabPending] = useState(false);
+  const [abandonConfirmOpen, setAbandonConfirmOpen] = useState(false);
+  const [abandoning, setAbandoning] = useState(false);
+  const saveBeforeSyncRef = useRef<{
+    resolve: () => void;
+    reject: (reason?: unknown) => void;
+  } | null>(null);
   const sujetSelectionRef = useRef({ start: 0, end: 0 });
   const editorSelectionRef = useRef<Range | null>(null);
   const [formData, setFormData] = useState<NewTemplateEmail>({
@@ -293,11 +317,14 @@ export function TemplateEmailForm({
     const ephemeralCfg =
       parseEphemeralCampaignConfig(source.variables) ?? { ...DEFAULT_EPHEMERAL_CAMPAIGN };
     setEphemeralCampaign(ephemeralCfg);
+    const htmlForFingerprint = canonicalizeTemplateCorpsHtml(
+      (storedHtml ?? plainTextToTemplateHtml(source.corps)).trim()
+    );
     setLastSavedEphemeralFingerprint(
       buildEphemeralSyncFingerprint({
         nom: source.nom,
         sujet: source.sujet,
-        corpsHtml: storedHtml ?? plainTextToTemplateHtml(source.corps),
+        corpsHtml: htmlForFingerprint,
         agenda_link_id: source.agenda_link_id,
         campaign: ephemeralCfg,
       })
@@ -305,11 +332,12 @@ export function TemplateEmailForm({
   }, []);
 
   const resetCreateForm = useCallback(() => {
+    const ephemeralDefaults = isEphemeralMode;
     setFormData({
       nom: "",
       sujet: "",
       corps: "",
-      categorie: "RELANCE",
+      categorie: ephemeralDefaults ? "AUTRE" : "RELANCE",
       variables: null,
       agenda_link_id: null,
       relance_template_id: null,
@@ -322,7 +350,7 @@ export function TemplateEmailForm({
       useSameMessage: true,
       sujet: "",
       corpsHtml: "",
-      attendreReponse: true,
+      attendreReponse: !ephemeralDefaults,
       delaiJours: DEFAULT_TEMPLATE_EMAIL_RELANCE.delai_jours ?? 7,
       envoiHeure: DEFAULT_TEMPLATE_EMAIL_RELANCE.envoi_heure ?? "18:30",
       envoiJours: null,
@@ -339,20 +367,25 @@ export function TemplateEmailForm({
     setEphemeralCampaign({ ...DEFAULT_EPHEMERAL_CAMPAIGN });
     setEphemeralAudienceInvalid(false);
     setLastSavedEphemeralFingerprint(null);
-  }, []);
+    setConfirmAbandonOnClose(false);
+  }, [isEphemeralMode]);
 
   useEffect(() => {
     if (!open) {
       setPersistedTemplateId(null);
+      setAbandonConfirmOpen(false);
+      setConfirmAbandonOnClose(false);
       return;
     }
+    openedWithTemplateIdRef.current = template?.id ?? null;
+    setConfirmAbandonOnClose(isEphemeralMode && template?.id == null);
     setFormTab("message");
     void getCgpConfig().then(setCgp).catch(() => setCgp(null));
     void getAllContacts()
       .then((list) => setContacts(list.filter((c) => c.email?.trim())))
       .catch(() => setContacts([]));
     void getAllEtiquettes().then(setEtiquettes).catch(() => setEtiquettes([]));
-  }, [open, template?.id]);
+  }, [open, template?.id, isEphemeralMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -402,21 +435,86 @@ export function TemplateEmailForm({
 
   const agendaLinks = useMemo(() => normalizeAgendaLinks(cgp), [cgp]);
   const agendaVariables = useMemo(() => getAgendaVariableTokens(agendaLinks), [agendaLinks]);
+
+  const canonicalizeCorpsHtmlForSave = useCallback(
+    (html: string) => canonicalizeTemplateCorpsHtml(html.trim()),
+    []
+  );
+
   const ephemeralSyncFingerprint = useMemo(
     () =>
       buildEphemeralSyncFingerprint({
         nom: formData.nom,
         sujet: formData.sujet,
-        corpsHtml,
+        corpsHtml: canonicalizeCorpsHtmlForSave(corpsHtml),
         agenda_link_id: formData.agenda_link_id ?? null,
         campaign: ephemeralCampaign,
       }),
-    [formData.nom, formData.sujet, formData.agenda_link_id, corpsHtml, ephemeralCampaign]
+    [
+      formData.nom,
+      formData.sujet,
+      formData.agenda_link_id,
+      corpsHtml,
+      ephemeralCampaign,
+      canonicalizeCorpsHtmlForSave,
+    ]
   );
+
+  const rejectPendingEphemeralSave = (reason?: unknown) => {
+    saveBeforeSyncRef.current?.reject(reason);
+    saveBeforeSyncRef.current = null;
+    ephemeralSaveIntentRef.current = "default";
+  };
+
   const needsSaveBeforeEphemeralSync =
     isEphemeralMode &&
     lastSavedEphemeralFingerprint != null &&
     ephemeralSyncFingerprint !== lastSavedEphemeralFingerprint;
+
+  /** Brouillon non persisté au départ — abandon à la fermeture tant qu’il n’a pas été enregistré. */
+  const shouldConfirmAbandonEphemeral = useCallback((): boolean => {
+    return (
+      confirmAbandonOnClose &&
+      effectiveTemplateId != null &&
+      ephemeralCampaign.status === "draft"
+    );
+  }, [confirmAbandonOnClose, effectiveTemplateId, ephemeralCampaign.status]);
+
+  const closeForm = useCallback(() => {
+    rejectPendingEphemeralSave(new Error("closed"));
+    onOpenChange(false);
+  }, [onOpenChange]);
+
+  const handleRequestClose = useCallback(() => {
+    if (shouldConfirmAbandonEphemeral()) {
+      setAbandonConfirmOpen(true);
+      return;
+    }
+    closeForm();
+  }, [shouldConfirmAbandonEphemeral, closeForm]);
+
+  const handleConfirmAbandon = async () => {
+    const id = effectiveTemplateId;
+    if (id == null) {
+      setAbandonConfirmOpen(false);
+      closeForm();
+      return;
+    }
+    setAbandoning(true);
+    try {
+      await archiveEphemeralCampaign(id);
+      toast.success("Campagne abandonnée");
+      setAbandonConfirmOpen(false);
+      await onSuccess?.();
+      closeForm();
+    } catch (error) {
+      console.error(error);
+      toast.error("Impossible d'abandonner la campagne");
+    } finally {
+      setAbandoning(false);
+    }
+  };
+
   const stelliumVariables = useMemo(
     () => (isStelliumPerfTemplateNom(formData.nom) ? STELLIUM_PERF_TEMPLATE_VARIABLES : []),
     [formData.nom]
@@ -451,9 +549,14 @@ export function TemplateEmailForm({
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    const plainCorps = htmlToPlainEmail(corpsHtml) || formData.corps.trim();
+    const corpsHtmlForSave = canonicalizeCorpsHtmlForSave(corpsHtml);
+    const plainCorps = htmlToPlainEmail(corpsHtmlForSave) || formData.corps.trim();
     if (!formData.nom.trim() || !formData.sujet.trim() || !plainCorps) {
       toast.error("Nom, objet et message sont obligatoires");
+      if (isEphemeralMode && ephemeralSaveIntentRef.current !== "default") {
+        setFormTab("message");
+      }
+      rejectPendingEphemeralSave(new Error("validation"));
       return;
     }
     if (relanceDraft.enabled && !relanceDraft.useSameMessage) {
@@ -461,6 +564,7 @@ export function TemplateEmailForm({
       if (!relanceDraft.sujet.trim() || !relPlain) {
         toast.error("Relance : renseignez l'objet et le message (onglet Relance)");
         setFormTab("relance");
+        rejectPendingEphemeralSave(new Error("validation"));
         return;
       }
       if (tutoiementDraft.enabled) {
@@ -470,6 +574,7 @@ export function TemplateEmailForm({
             "Relance : renseignez aussi l'objet et le message tutoiement (onglet Relance)"
           );
           setFormTab("relance");
+          rejectPendingEphemeralSave(new Error("validation"));
           return;
         }
       }
@@ -479,6 +584,7 @@ export function TemplateEmailForm({
       if (!tutoiementDraft.sujet.trim() || !tuPlain) {
         toast.error("Tutoiement : renseignez l'objet et le message (onglet Tutoiement)");
         setFormTab("tutoiement");
+        rejectPendingEphemeralSave(new Error("validation"));
         return;
       }
     }
@@ -488,6 +594,7 @@ export function TemplateEmailForm({
       if (!isTypeProduitConditionValid(types, nomsProduit)) {
         toast.error("Déclencheur : sélectionnez au moins un type ou un nom de produit");
         setFormTab("declencheur");
+        rejectPendingEphemeralSave(new Error("validation"));
         return;
       }
     }
@@ -495,15 +602,18 @@ export function TemplateEmailForm({
       toast.error("Audience : sélectionnez au moins un type ou un nom de produit");
       setFormTab("audience");
       setEphemeralAudienceInvalid(true);
+      rejectPendingEphemeralSave(new Error("validation"));
       return;
     }
     setEphemeralAudienceInvalid(false);
 
     setLoading(true);
+    const saveIntentAtStart = ephemeralSaveIntentRef.current;
     try {
       let linkedTuId = tutoiementTemplateId;
       if (tutoiementDraft.enabled) {
-        const tuPlain = htmlToPlainEmail(tutoiementDraft.corpsHtml);
+        const tuCorpsHtml = canonicalizeCorpsHtmlForSave(tutoiementDraft.corpsHtml);
+        const tuPlain = htmlToPlainEmail(tuCorpsHtml);
         const tuNom = buildTutoiementTemplateNom(formData.nom);
         const tuPayload: NewTemplateEmail = {
           nom: tuNom,
@@ -512,10 +622,7 @@ export function TemplateEmailForm({
           categorie: formData.categorie,
           variables: stampStelliumPerfTemplateMeta(
             stampScpiBulletinTemplateMeta(
-              setTemplateCorpsHtmlInMeta(
-                tutoiementVariables,
-                tutoiementDraft.corpsHtml.trim() || null
-              ),
+              setTemplateCorpsHtmlInMeta(tutoiementVariables, tuCorpsHtml || null),
               tuNom
             ),
             tuNom
@@ -534,20 +641,19 @@ export function TemplateEmailForm({
 
       let linkedRelanceId = relanceTemplateId;
       if (relanceDraft.enabled && !relanceDraft.useSameMessage) {
-        const relPlain = htmlToPlainEmail(relanceDraft.corpsHtml);
+        const relCorpsHtml = canonicalizeCorpsHtmlForSave(relanceDraft.corpsHtml);
+        const relPlain = htmlToPlainEmail(relCorpsHtml);
         const relNom = buildRelanceTemplateNom(formData.nom);
         let linkedRelanceTuId = relanceTuTemplateId;
         if (tutoiementDraft.enabled) {
-          const relTuPlain = htmlToPlainEmail(relanceTuDraft.corpsHtml);
+          const relTuCorpsHtml = canonicalizeCorpsHtmlForSave(relanceTuDraft.corpsHtml);
+          const relTuPlain = htmlToPlainEmail(relTuCorpsHtml);
           const relTuPayload: NewTemplateEmail = {
             nom: buildTutoiementTemplateNom(relNom),
             sujet: relanceTuDraft.sujet.trim(),
             corps: relTuPlain,
             categorie: "RELANCE",
-            variables: setTemplateCorpsHtmlInMeta(
-              null,
-              relanceTuDraft.corpsHtml.trim() || null
-            ),
+            variables: setTemplateCorpsHtmlInMeta(null, relTuCorpsHtml || null),
             agenda_link_id: formData.agenda_link_id,
             relance_template_id: null,
             tutoiement_template_id: null,
@@ -564,7 +670,7 @@ export function TemplateEmailForm({
           sujet: relanceDraft.sujet.trim(),
           corps: relPlain,
           categorie: "RELANCE",
-          variables: setTemplateCorpsHtmlInMeta(null, relanceDraft.corpsHtml.trim() || null),
+          variables: setTemplateCorpsHtmlInMeta(null, relCorpsHtml || null),
           agenda_link_id: formData.agenda_link_id,
           relance_template_id: null,
           tutoiement_template_id: tutoiementDraft.enabled ? linkedRelanceTuId : null,
@@ -577,34 +683,54 @@ export function TemplateEmailForm({
         }
       }
 
-      let variables = setTemplateCorpsHtmlInMeta(formData.variables, corpsHtml.trim() || null);
+      let variables = setTemplateCorpsHtmlInMeta(formData.variables, corpsHtmlForSave || null);
+      let ephemeralCampaignSaved = ephemeralCampaign;
       if (isEphemeralMode) {
+        let campaignForSave = ephemeralCampaign;
+        if (effectiveTemplateId != null) {
+          try {
+            const fresh = await getTemplateEmailById(effectiveTemplateId);
+            campaignForSave = mergeEphemeralCampaignForSave(
+              ephemeralCampaign,
+              parseEphemeralCampaignConfig(fresh.variables)
+            );
+          } catch {
+            // garde l'état local
+          }
+        }
+        ephemeralCampaignSaved = {
+          ...campaignForSave,
+          audience: ephemeralCampaign.audience,
+          excluded_contact_ids: ephemeralCampaign.excluded_contact_ids,
+          send_at: ephemeralCampaign.send_at,
+        };
+        const baseVars =
+          effectiveTemplateId == null
+            ? stampNewEphemeralTemplateMeta(variables)
+            : variables;
         variables = setEphemeralCampaignInMeta(
-          stampNewEphemeralTemplateMeta(variables),
-          {
-            ...ephemeralCampaign,
-            audience: ephemeralCampaign.audience,
-          },
+          baseVars,
+          ephemeralCampaignSaved,
           { isEphemeral: true }
         );
         variables = setTemplateEmailTriggerInMeta(variables, DEFAULT_TEMPLATE_EMAIL_TRIGGER);
       } else {
         variables = setTemplateEmailTriggerInMeta(variables, emailTrigger);
       }
+      const relanceEnabled = relanceDraft.enabled;
       variables = setTemplateEmailRelanceInMeta(variables, {
-        enabled: relanceDraft.enabled,
-        delai_jours: relanceDraft.enabled ? relanceDraft.delaiJours : null,
+        enabled: relanceEnabled,
+        delai_jours: relanceEnabled ? relanceDraft.delaiJours : null,
         envoi_heure:
-          relanceDraft.enabled && relanceDraft.envoiHeure.trim()
+          relanceEnabled && relanceDraft.envoiHeure.trim()
             ? relanceDraft.envoiHeure.trim()
             : null,
-        envoi_jours_semaine:
-          relanceDraft.enabled
-            ? serializeEmailEnvoiJoursSemaine(relanceDraft.envoiJours)
-            : null,
+        envoi_jours_semaine: relanceEnabled
+          ? serializeEmailEnvoiJoursSemaine(relanceDraft.envoiJours)
+          : null,
       });
       variables = setTemplateEmailSuiviReponseInMeta(variables, {
-        attendre_reponse: relanceDraft.attendreReponse,
+        attendre_reponse: relanceEnabled ? relanceDraft.attendreReponse : false,
       });
       variables = stampStelliumPerfTemplateMeta(
         stampScpiBulletinTemplateMeta(variables, formData.nom),
@@ -619,21 +745,42 @@ export function TemplateEmailForm({
           ? relanceDraft.useSameMessage
             ? null
             : linkedRelanceId
-          : formData.relance_template_id,
+          : null,
         tutoiement_template_id: tutoiementDraft.enabled ? linkedTuId : null,
       };
 
-      let templateId = template?.id;
-      if (template) {
-        await updateTemplateEmail(template.id, payload);
-        toast.success("Modèle enregistré");
+      const existingId = effectiveTemplateId;
+      let templateId = existingId;
+      if (existingId != null) {
+        await updateTemplateEmail(existingId, payload);
+        if (!isEphemeralMode || saveIntentAtStart === "default") {
+          toast.success(isEphemeralMode ? "Campagne enregistrée" : "Modèle enregistré");
+        }
       } else {
         const created = await createTemplateEmail(payload);
         templateId = created.id;
-        toast.success(isEphemeralMode ? "Campagne enregistrée" : "Modèle créé");
+        if (!isEphemeralMode || saveIntentAtStart === "default") {
+          toast.success(isEphemeralMode ? "Campagne enregistrée" : "Modèle créé");
+        }
       }
       if (templateId != null) {
         setPersistedTemplateId(templateId);
+      }
+      if (isEphemeralMode) {
+        setConfirmAbandonOnClose(false);
+        setEphemeralCampaign(ephemeralCampaignSaved);
+        setLastSavedEphemeralFingerprint(
+          buildEphemeralSyncFingerprint({
+            nom: formData.nom,
+            sujet: formData.sujet,
+            corpsHtml: corpsHtmlForSave,
+            agenda_link_id: formData.agenda_link_id ?? null,
+            campaign: ephemeralCampaignSaved,
+          })
+        );
+        ephemeralSaveIntentRef.current = "default";
+        saveBeforeSyncRef.current?.resolve();
+        saveBeforeSyncRef.current = null;
       }
       if (templateId != null && !isEphemeralMode) {
         await setTemplateEtiquetteLinks(templateId, linkedEtiquetteIds);
@@ -641,12 +788,16 @@ export function TemplateEmailForm({
       }
       await onSuccess?.();
       if (isEphemeralMode) {
-        setLastSavedEphemeralFingerprint(ephemeralSyncFingerprint);
-        setFormTab("destinataires");
+        if (saveIntentAtStart === "default") {
+          setFormTab("destinataires");
+        }
         return;
       }
     } catch (error) {
       console.error("Error saving template:", error);
+      saveBeforeSyncRef.current?.reject(error);
+      saveBeforeSyncRef.current = null;
+      ephemeralSaveIntentRef.current = "default";
       toast.error("Erreur lors de l'enregistrement");
     } finally {
       setLoading(false);
@@ -740,8 +891,66 @@ export function TemplateEmailForm({
     );
   };
 
+  const requestEphemeralSave = useCallback((): Promise<void> => {
+    if (saveBeforeSyncRef.current) {
+      return Promise.reject(new Error("Enregistrement déjà en cours"));
+    }
+    return new Promise((resolve, reject) => {
+      saveBeforeSyncRef.current = { resolve, reject };
+      ephemeralSaveIntentRef.current = "sync";
+      formRef.current?.requestSubmit();
+    });
+  }, []);
+
+  const requestEphemeralSaveForTab = useCallback((): Promise<void> => {
+    if (effectiveTemplateId != null && !needsSaveBeforeEphemeralSync) {
+      return Promise.resolve();
+    }
+    if (saveBeforeSyncRef.current) {
+      return Promise.reject(new Error("Enregistrement déjà en cours"));
+    }
+    return new Promise((resolve, reject) => {
+      saveBeforeSyncRef.current = { resolve, reject };
+      ephemeralSaveIntentRef.current = "tab";
+      formRef.current?.requestSubmit();
+    });
+  }, [effectiveTemplateId, needsSaveBeforeEphemeralSync]);
+
+  const handleFormTabChange = useCallback(
+    (next: FormTab) => {
+      if (next === formTab) return;
+      if (
+        next === "destinataires" &&
+        isEphemeralMode &&
+        (effectiveTemplateId == null || needsSaveBeforeEphemeralSync)
+      ) {
+        setDestinatairesTabPending(true);
+        void requestEphemeralSaveForTab()
+          .then(() => setFormTab("destinataires"))
+          .catch(() => undefined)
+          .finally(() => setDestinatairesTabPending(false));
+        return;
+      }
+      setFormTab(next);
+    },
+    [
+      formTab,
+      isEphemeralMode,
+      effectiveTemplateId,
+      needsSaveBeforeEphemeralSync,
+      requestEphemeralSaveForTab,
+    ]
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) onOpenChange(true);
+        else handleRequestClose();
+      }}
+    >
       <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>
@@ -760,12 +969,12 @@ export function TemplateEmailForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
+        <form ref={formRef} noValidate onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0">
           <div className="flex flex-1 min-h-0 flex-col lg:flex-row">
             <div className="flex-1 min-h-0 flex flex-col min-w-0">
               <Tabs
                 value={formTab}
-                onValueChange={(v) => setFormTab(v as FormTab)}
+                onValueChange={(v) => handleFormTabChange(v as FormTab)}
                 className="flex flex-col flex-1 min-h-0"
               >
                 <TabsList
@@ -790,7 +999,12 @@ export function TemplateEmailForm({
                   {isEphemeralMode ? (
                     <>
                       <TabsTrigger value="audience">Audience</TabsTrigger>
-                      <TabsTrigger value="destinataires">Destinataires</TabsTrigger>
+                      <TabsTrigger value="destinataires" disabled={destinatairesTabPending}>
+                        Destinataires
+                        {destinatairesTabPending ? (
+                          <Loader2 className="ml-1.5 h-3 w-3 animate-spin" />
+                        ) : null}
+                      </TabsTrigger>
                     </>
                   ) : (
                     <>
@@ -821,7 +1035,6 @@ export function TemplateEmailForm({
                         value={formData.nom}
                         onChange={(e) => setFormData({ ...formData, nom: e.target.value })}
                         placeholder="Ex. Rappel déclaration IR"
-                        required
                         autoFocus
                       />
                     </div>
@@ -853,7 +1066,6 @@ export function TemplateEmailForm({
                         onFocus={captureSujetSelection}
                         onBlur={captureSujetSelection}
                         placeholder="Ex. {{prenom}}, votre déclaration d'impôts"
-                        required
                       />
                     </div>
 
@@ -1154,6 +1366,8 @@ export function TemplateEmailForm({
                           templateId={effectiveTemplateId}
                           excludedContactIds={ephemeralCampaign.excluded_contact_ids}
                           needsSaveBeforeSync={needsSaveBeforeEphemeralSync}
+                          bootstrapPending={destinatairesTabPending || loading}
+                          onRequestSave={requestEphemeralSave}
                           onExcludedChange={(excluded_contact_ids) =>
                             setEphemeralCampaign((prev) => ({ ...prev, excluded_contact_ids }))
                           }
@@ -1231,8 +1445,8 @@ export function TemplateEmailForm({
           </div>
 
           <DialogFooter className="px-6 py-4 border-t shrink-0 gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
+            <Button type="button" variant="outline" onClick={handleRequestClose}>
+              {shouldConfirmAbandonEphemeral() ? "Abandonner" : "Annuler"}
             </Button>
             <Button type="submit" disabled={loading}>
               {loading ? "Enregistrement…" : "Enregistrer"}
@@ -1241,5 +1455,31 @@ export function TemplateEmailForm({
         </form>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={abandonConfirmOpen} onOpenChange={setAbandonConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Abandonner cette campagne ?</AlertDialogTitle>
+          <AlertDialogDescription>
+            La campagne sera retirée de la bibliothèque. Les envois non effectués déjà en file
+            seront annulés. L&apos;historique des envois déjà partis reste sur les fiches contact.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={abandoning}>Continuer la préparation</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={abandoning}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            onClick={(e) => {
+              e.preventDefault();
+              void handleConfirmAbandon();
+            }}
+          >
+            {abandoning ? "Abandon…" : "Abandonner la campagne"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

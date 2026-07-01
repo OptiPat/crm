@@ -26,6 +26,9 @@ export function buildEditedHtmlEmailSendBodies(
   cgp: CgpConfig | null
 ): { body: string; body_html: string } {
   const sanitized = sanitizeTemplateEmailHtml(bodyHtml.trim());
+  if (!sanitized.trim()) {
+    return { body: "", body_html: "" };
+  }
   const normalized = stripOrphanStelliumFormalityHtml(
     normalizeTemplateEmailHtmlLikeGmail(sanitized)
   );
@@ -39,5 +42,11 @@ export function buildEditedHtmlEmailSendBodies(
     cgp,
     { htmlAlreadyNormalized: true }
   );
-  return { body, body_html: body_html ?? normalized };
+  const htmlOut = body_html ?? normalized;
+  const plainOut = body.trim();
+  const htmlPlain = htmlToPlainEmail(htmlOut).trim();
+  if (!plainOut && !htmlPlain) {
+    return { body: "", body_html: "" };
+  }
+  return { body, body_html: htmlOut };
 }

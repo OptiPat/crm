@@ -52,6 +52,24 @@ export function signatureLooksLikeHtml(signature: string | null | undefined): bo
   return /<[a-z][\s\S]*>/i.test(signature);
 }
 
+/** Retire la signature texte en fin de corps (édition « Confirmer l'envoi » — corps seul). */
+export function stripPlainBodyEmailSignature(
+  body: string,
+  signature: string | null | undefined
+): string {
+  const sig = signature?.trim();
+  if (!sig || !body.trim()) return body;
+  const decoded = decodeHtmlEntities(sig);
+  const msg = body.trimEnd();
+  if (msg.endsWith(`--\n${decoded}`)) {
+    return msg.slice(0, -(decoded.length + 3)).trimEnd();
+  }
+  if (msg.endsWith(decoded)) {
+    return msg.slice(0, -decoded.length).replace(/\n\n--\s*$/, "").trimEnd();
+  }
+  return body;
+}
+
 /** Ajoute la signature CGP en fin de message (texte brut). */
 export function appendEmailSignature(
   body: string,
@@ -74,9 +92,14 @@ function escapeHtml(text: string): string {
 }
 
 function plainToHtmlParagraphs(text: string): string {
-  return escapeHtml(text)
-    .split(/\n/)
-    .map((line) => (line.trim() === "" ? "<br>" : `<p style="margin:0 0 0.5em 0">${line}</p>`))
+  const lineStyle = "line-height:1.5;margin:0;padding:0";
+  return text
+    .split("\n")
+    .map((line) =>
+      line.trim() === ""
+        ? `<div style="${lineStyle}"><br></div>`
+        : `<div style="${lineStyle}">${escapeHtml(line)}</div>`
+    )
     .join("");
 }
 

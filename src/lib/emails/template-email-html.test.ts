@@ -8,6 +8,7 @@ import {
   buildTemplateSendBodies,
   sanitizeTemplateEmailHtml,
   prepareTemplateHtmlForSend,
+  extractMessageHtmlWithoutSignature,
 } from "./template-email-html";
 import { buildScpiBulletinPreviewVariables } from "./scpi-bulletin-preview-vars";
 
@@ -106,5 +107,23 @@ describe("template-email-html", () => {
     expect(out).toContain("Collecte nette");
     expect(out).toContain("<strong");
     expect(out).toContain("font-size:1.1em");
+  });
+
+  it("extractMessageHtmlWithoutSignature retire la signature en fin de HTML", () => {
+    const signatureHtml = "<div>Sig line</div>";
+    const blank = '<div style="line-height:1.5;margin:0;padding:0"><br></div>';
+    const full =
+      '<div dir="ltr"><div style="line-height:1.5;margin:0;padding:0">Message</div></div>' +
+      blank +
+      signatureHtml;
+    const cgp = {
+      wizard_completed: true,
+      wizard_step: 4,
+      email_signature: "Sig line",
+      email_signature_html: signatureHtml,
+    };
+    const msg = extractMessageHtmlWithoutSignature(full, cgp);
+    expect(msg).toContain("Message");
+    expect(msg).not.toContain("Sig line");
   });
 });

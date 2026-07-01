@@ -2,6 +2,8 @@ import {
   parseTemplateEmailMeta,
   TEMPLATE_CORPS_HTML_KEY,
 } from "@/lib/emails/template-email-html";
+import { setTemplateEmailRelanceInMeta } from "@/lib/emails/template-email-relance";
+import { setTemplateEmailSuiviReponseInMeta } from "@/lib/emails/template-email-suivi-reponse";
 
 export const EPHEMERAL_CAMPAIGN_KEY = "ephemeral_campaign";
 export const IS_EPHEMERAL_TEMPLATE_KEY = "is_ephemeral";
@@ -156,8 +158,45 @@ export function setEphemeralCampaignInMeta(
   return JSON.stringify(meta);
 }
 
+const EPHEMERAL_STATUS_RANK: Record<EphemeralCampaignStatus, number> = {
+  draft: 0,
+  prepared: 1,
+  archived: 2,
+};
+
+/** Conserve prepared/archived en base si l'état React n'a pas encore rattrapé la sync. */
+export function mergeEphemeralCampaignForSave(
+  local: EphemeralCampaignConfig,
+  stored: EphemeralCampaignConfig | null
+): EphemeralCampaignConfig {
+  if (!stored) return local;
+  if (EPHEMERAL_STATUS_RANK[stored.status] > EPHEMERAL_STATUS_RANK[local.status]) {
+    return {
+      ...local,
+      status: stored.status,
+      batch_key: stored.batch_key,
+      prepared_at: stored.prepared_at,
+      archived_at: stored.archived_at,
+    };
+  }
+  return local;
+}
+
 export function stampNewEphemeralTemplateMeta(variables: string | null | undefined): string {
-  return setEphemeralCampaignInMeta(variables, { ...DEFAULT_EPHEMERAL_CAMPAIGN }, { isEphemeral: true });
+  let meta = setEphemeralCampaignInMeta(
+    variables,
+    { ...DEFAULT_EPHEMERAL_CAMPAIGN },
+    { isEphemeral: true }
+  );
+  meta =
+    setTemplateEmailRelanceInMeta(meta, {
+      enabled: false,
+      delai_jours: null,
+      envoi_heure: null,
+      envoi_jours_semaine: null,
+    }) ?? meta;
+  meta = setTemplateEmailSuiviReponseInMeta(meta, { attendre_reponse: false }) ?? meta;
+  return meta;
 }
 
 /** Empreinte des champs qui influencent la file (sync backend). */
@@ -176,6 +215,7 @@ export function buildEphemeralSyncFingerprint(input: {
     audience: input.campaign.audience,
     excluded_contact_ids: [...input.campaign.excluded_contact_ids].sort((a, b) => a - b),
     send_at: input.campaign.send_at,
+    // status / batch_key exclus : gérés par sync, pas par l'empreinte « brouillon »
   });
 }
 
