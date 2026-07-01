@@ -48,7 +48,7 @@ export function listContactsWithBirthdayToday(
     .filter(
       (c) =>
         c.date_naissance != null &&
-        c.date_naissance > 0 &&
+        c.date_naissance !== 0 &&
         c.statut_suivi !== "ARCHIVE" &&
         isBirthdayToday(c.date_naissance, ref)
     )

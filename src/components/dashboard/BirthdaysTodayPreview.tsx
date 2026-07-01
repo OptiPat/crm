@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { getAllContacts } from "@/lib/api/tauri-contacts";
-import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
-  formatAgeLabel,
-  listContactsWithBirthdayToday,
-  type ContactBirthdayToday,
-} from "@/lib/contacts/contact-birthday";
+  listBirthdaysToday,
+  runBirthdayTelegramIfDue,
+  type BirthdayContactToday,
+} from "@/lib/api/tauri-birthday-telegram";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { formatAgeLabel } from "@/lib/contacts/contact-birthday";
 import {
   CONTACT_DISPLAY_CATEGORY_LABELS,
   getDisplayCategorieBadgeClass,
@@ -18,13 +18,16 @@ export function BirthdaysTodayPreview({
 }: {
   onOpenContact?: (contactId: number) => void;
 }) {
-  const [birthdays, setBirthdays] = useState<ContactBirthdayToday[]>([]);
+  const [birthdays, setBirthdays] = useState<BirthdayContactToday[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     try {
-      const all = await getAllContacts();
-      setBirthdays(listContactsWithBirthdayToday(all));
+      const list = await listBirthdaysToday();
+      setBirthdays(list);
+      void runBirthdayTelegramIfDue().catch((error) => {
+        console.error("Rappels Telegram anniversaires:", error);
+      });
     } catch (error) {
       console.error("Erreur anniversaires:", error);
       setBirthdays([]);
@@ -71,7 +74,7 @@ export function BirthdaysTodayPreview({
                     {c.prenom} {c.nom}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatAgeLabel(c.age)}
+                    {c.age != null ? formatAgeLabel(c.age) : "—"}
                   </p>
                 </div>
                 <Badge

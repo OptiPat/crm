@@ -4,6 +4,17 @@ use super::{
 };
 use rusqlite::{params, Result};
 
+fn parse_optional_date_iso(date_str: &str) -> Option<i64> {
+    use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+    if let Ok(dt) = DateTime::parse_from_rfc3339(date_str) {
+        return Some(dt.timestamp());
+    }
+    NaiveDate::parse_from_str(date_str.trim(), "%Y-%m-%d")
+        .ok()
+        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .map(|ndt| Utc.from_utc_datetime(&ndt).timestamp())
+}
+
 impl Database {
     fn validate_contact_identity(nom: &str, prenom: &str) -> Result<()> {
         if nom.trim().is_empty() || prenom.trim().is_empty() {
@@ -76,11 +87,10 @@ impl Database {
                     .map(|dt| dt.timestamp())
             });
 
-        let date_naissance_timestamp = new_contact.date_naissance.and_then(|date_str| {
-            DateTime::parse_from_rfc3339(&date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
+        let date_naissance_timestamp = new_contact
+            .date_naissance
+            .as_ref()
+            .and_then(|date_str| parse_optional_date_iso(date_str));
 
         let registre = super::contact_row::normalize_contact_registre(new_contact.registre.as_deref());
 
@@ -284,7 +294,12 @@ impl Database {
         Ok((foyers, investments))
     }
 
-    pub fn update_contact(&self, id: i64, contact: &NewContact) -> Result<Contact> {
+pub fn update_contact(
+        &self,
+        id: i64,
+        contact: &NewContact,
+        birthday_in_payload: bool,
+    ) -> Result<Contact> {
         use chrono::DateTime;
 
         Self::validate_contact_identity(&contact.nom, &contact.prenom)?;
@@ -329,11 +344,15 @@ impl Database {
             .clone()
             .unwrap_or_else(|| "ACTIF".to_string());
 
-        let date_naissance_timestamp = contact.date_naissance.as_ref().and_then(|date_str| {
-            DateTime::parse_from_rfc3339(date_str)
-                .ok()
-                .map(|dt| dt.timestamp())
-        });
+        let existing = self.get_contact_by_id(id)?;
+        let date_naissance_timestamp = if birthday_in_payload {
+            match contact.date_naissance.as_deref() {
+                None | Some("") => None,
+                Some(date_str) => parse_optional_date_iso(date_str),
+            }
+        } else {
+            existing.date_naissance
+        };
 
         self.conn.execute(
             "UPDATE contacts SET 
@@ -492,6 +511,103 @@ mod tests {
             )
             .unwrap();
         db.get_connection().last_insert_rowid()
+    }
+
+    fn sample_contact(nom: &str, prenom: &str) -> crate::database::models::NewContact {
+        crate::database::models::NewContact {
+            categorie: "CLIENT".into(),
+            nom: nom.into(),
+            prenom: prenom.into(),
+            statut_suivi: Some("ACTIF".into()),
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            filleul_categorie: None,
+            parrain_id: None,
+            prescripteur_id: None,
+            civilite: None,
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            pays: None,
+            date_naissance: None,
+            lieu_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            regime_matrimonial: None,
+            revenus_annuels: None,
+            charges_emprunts: None,
+            objectifs_patrimoniaux: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            notes: None,
+            registre: None,
+            famille_regroupement_exclu: None,
+            epargne_precaution_souhaitee: None,
+        }
+    }
+
+    #[test]
+    fn update_contact_preserves_birthday_when_not_in_payload() {
+        use crate::database::models::NewContact;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let created = db
+            .create_contact(NewContact {
+                date_naissance: Some("1990-07-01T00:00:00.000Z".into()),
+                ..sample_contact("Dupont", "Jean")
+            })
+            .unwrap();
+        let id = created.id.unwrap();
+        let birthday = created.date_naissance;
+
+        db.update_contact(
+            id,
+            &NewContact {
+                email: Some("jean@example.com".into()),
+                ..sample_contact("Dupont", "Jean")
+            },
+            false,
+        )
+        .unwrap();
+
+        let reloaded = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reloaded.date_naissance, birthday);
+        assert_eq!(reloaded.email.as_deref(), Some("jean@example.com"));
+    }
+
+    #[test]
+    fn update_contact_clears_birthday_when_empty_string_in_payload() {
+        use crate::database::models::NewContact;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let created = db
+            .create_contact(NewContact {
+                date_naissance: Some("1990-07-01T00:00:00.000Z".into()),
+                ..sample_contact("Martin", "Paul")
+            })
+            .unwrap();
+        let id = created.id.unwrap();
+
+        db.update_contact(
+            id,
+            &NewContact {
+                date_naissance: Some("".into()),
+                ..sample_contact("Martin", "Paul")
+            },
+            true,
+        )
+        .unwrap();
+
+        let reloaded = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reloaded.date_naissance, None);
     }
 
     #[test]

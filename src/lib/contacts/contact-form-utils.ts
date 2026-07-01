@@ -326,9 +326,34 @@ export function getFieldErrors(formData: NewContact): FieldErrors {
   return errors;
 }
 
-export function buildSubmitPayload(formData: NewContact): NewContact {
+/** `YYYY-MM-DD` ou `JJ/MM/AAAA` → ISO UTC (date de naissance). */
+export function parseBirthdayFieldToIso(field?: string): string | undefined {
+  if (!field?.trim()) return undefined;
+  const fromInput = dateFieldToIso(field);
+  if (fromInput) return fromInput;
+  const fr = field.trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (!fr) return undefined;
+  const day = parseInt(fr[1], 10);
+  const month = parseInt(fr[2], 10);
+  const year = parseInt(fr[3], 10);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toISOString();
+}
+
+export function buildSubmitPayload(
+  formData: NewContact,
+  options?: { alwaysSendBirthday?: boolean }
+): NewContact {
   const clientActif = isClientActif(formData.categorie);
   const filleulActif = isFilleulStatut(formData.filleul_categorie);
+  const birthdayRaw = formData.date_naissance?.trim() ?? "";
+  let date_naissance: string | undefined;
+  if (options?.alwaysSendBirthday) {
+    date_naissance = birthdayRaw ? parseBirthdayFieldToIso(birthdayRaw) : "";
+  } else {
+    date_naissance = birthdayRaw ? parseBirthdayFieldToIso(birthdayRaw) : undefined;
+  }
 
   return {
     ...formData,
@@ -352,7 +377,7 @@ export function buildSubmitPayload(formData: NewContact): NewContact {
     date_prochain_suivi_filleul: filleulActif
       ? dateFieldToIso(formData.date_prochain_suivi_filleul)
       : undefined,
-    date_naissance: dateFieldToIso(formData.date_naissance),
+    date_naissance,
     lieu_naissance: formData.lieu_naissance?.trim() || undefined,
     pays: formData.pays?.trim() || undefined,
     regime_matrimonial: formData.regime_matrimonial?.trim() || undefined,

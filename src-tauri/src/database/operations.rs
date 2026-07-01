@@ -1277,6 +1277,7 @@ mod database_integration_tests {
                 date_dernier_contact: Some(recent_iso),
                 ..sample_contact("Martin", "Paul")
             },
+            false,
         )
         .unwrap();
 
@@ -1574,6 +1575,7 @@ mod database_integration_tests {
                     email: Some("jean@example.com".into()),
                     ..sample_contact("NOM2", "Jean")
                 },
+                false,
             )
             .unwrap();
 
@@ -4964,6 +4966,7 @@ mod database_integration_tests {
                 categorie: "PROSPECT".into(),
                 ..sample_contact("CatChange", "Bob")
             },
+            false,
         )
         .unwrap();
 
@@ -5019,6 +5022,7 @@ mod database_integration_tests {
                 categorie: "PROSPECT".into(),
                 ..sample_contact("FullRecalc", "Ann")
             },
+            false,
         )
         .unwrap();
 

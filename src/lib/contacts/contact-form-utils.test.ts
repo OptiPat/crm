@@ -12,10 +12,41 @@ import {
   normalizeImportCivilite,
   normalizeImportStatut,
   normalizeImportTmi,
+  parseBirthdayFieldToIso,
   resolveImportContactCategories,
   suiviDatesOverrides,
 } from "./contact-form-utils";
 import type { Contact } from "@/lib/api/tauri-contacts";
+
+describe("parseBirthdayFieldToIso", () => {
+  it("accepte YYYY-MM-DD", () => {
+    expect(parseBirthdayFieldToIso("1993-07-01")).toBe("1993-07-01T00:00:00.000Z");
+  });
+
+  it("accepte JJ/MM/AAAA", () => {
+    expect(parseBirthdayFieldToIso("01/07/1993")).toBe("1993-07-01T00:00:00.000Z");
+  });
+
+  it("renvoie undefined si vide ou invalide", () => {
+    expect(parseBirthdayFieldToIso("")).toBeUndefined();
+    expect(parseBirthdayFieldToIso("abc")).toBeUndefined();
+  });
+});
+
+describe("buildSubmitPayload alwaysSendBirthday", () => {
+  it("inclut date_naissance vide pour effacement explicite", () => {
+    const payload = buildSubmitPayload(
+      { nom: "X", prenom: "Jean", categorie: "CLIENT", date_naissance: "" },
+      { alwaysSendBirthday: true }
+    );
+    expect(payload.date_naissance).toBe("");
+  });
+
+  it("omet date_naissance si absent et alwaysSendBirthday false", () => {
+    const payload = buildSubmitPayload({ nom: "X", prenom: "Jean", categorie: "CLIENT" });
+    expect(payload.date_naissance).toBeUndefined();
+  });
+});
 
 describe("defaultProchainSuiviClient", () => {
   it("propose J+1 an", () => {

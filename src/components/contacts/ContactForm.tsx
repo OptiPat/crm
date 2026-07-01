@@ -79,6 +79,7 @@ import {
   type SituationFamiliale,
   SELECT_NONE,
   buildSubmitPayload,
+  parseBirthdayFieldToIso,
   contactToFormData,
   defaultProchainSuiviClient,
   defaultProchainSuiviForClientStatut,
@@ -650,7 +651,13 @@ export function ContactForm({
     setLoading(true);
 
     try {
-      const dataToSubmit = buildSubmitPayload(formData);
+      const birthdayRaw = formData.date_naissance?.trim() ?? "";
+      if (birthdayRaw && !parseBirthdayFieldToIso(birthdayRaw)) {
+        toast.error("Date de naissance invalide (utilisez le calendrier ou jj/mm/aaaa).");
+        setLoading(false);
+        return;
+      }
+      const dataToSubmit = buildSubmitPayload(formData, { alwaysSendBirthday: true });
       if (contact) {
         const updated = await updateContact(contact.id, dataToSubmit);
         // Le contact est déjà enregistré : un échec de la fiscalité (foyer) ne

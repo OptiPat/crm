@@ -31,6 +31,18 @@ describe("contact-birthday", () => {
     expect(computeAgeAtDate(unix, ref)).toBe(36);
   });
 
+  it("inclut les naissances avant 1970 (timestamp Unix négatif)", () => {
+    const ref = new Date(2026, 6, 1); // 1er juillet 2026 local
+    const unix = dateInputToUnix("1963-07-01")!;
+    expect(unix).toBeLessThan(0);
+    expect(isBirthdayToday(unix, ref)).toBe(true);
+    const list = listContactsWithBirthdayToday(
+      [contact({ id: 9, prenom: "Bruno", nom: "DUPONT", date_naissance: unix })],
+      ref
+    );
+    expect(list).toHaveLength(1);
+  });
+
   it("liste les contacts concernés", () => {
     const ref = new Date(2026, 2, 10);
     const unix = dateInputToUnix("1985-03-10")!;

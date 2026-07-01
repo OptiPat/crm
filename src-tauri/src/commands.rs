@@ -138,14 +138,20 @@ pub fn update_contact(
     app: AppHandle,
     db: State<'_, DbState>,
     id: i64,
-    contact: NewContact,
+    contact: serde_json::Value,
     skip_post_save_hooks: Option<bool>,
 ) -> Result<Contact, String> {
+    let birthday_in_payload = contact
+        .as_object()
+        .is_some_and(|fields| fields.contains_key("date_naissance"));
+    let contact: NewContact = serde_json::from_value(contact)
+        .map_err(|e| format!("Payload contact invalide : {e}"))?;
+
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .update_contact(id, &contact)
+        .update_contact(id, &contact, birthday_in_payload)
         .map_err(|e| format!("Failed to update contact: {}", e))?;
     if !skip_post_save_hooks.unwrap_or(false) {
         let _ = database.check_auto_etiquettes_for_contact(id);

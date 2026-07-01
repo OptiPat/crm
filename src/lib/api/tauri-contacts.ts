@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { runBirthdayTelegramIfDue } from "@/lib/api/tauri-birthday-telegram";
 
 export interface Contact {
   id: number;
@@ -145,6 +146,9 @@ export async function updateContact(
   if (!options?.skipPostSaveHooks) {
     notifyContactsChanged({ patchedContact: updated });
     notifyEtiquettesChanged();
+    void runBirthdayTelegramIfDue().catch((error) => {
+      console.error("Rappels Telegram anniversaires:", error);
+    });
   }
   return updated;
 }

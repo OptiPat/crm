@@ -177,7 +177,7 @@ pub fn list_birthdays_today_from_connection(conn: &Connection) -> Result<Vec<Bir
         "SELECT id, civilite, nom, prenom, categorie, registre, date_naissance, foyer_id
          FROM contacts
          WHERE date_naissance IS NOT NULL
-           AND date_naissance > 0
+           AND date_naissance != 0
            AND statut_suivi != 'ARCHIVE'
          ORDER BY nom COLLATE NOCASE, prenom COLLATE NOCASE",
     )?;
@@ -359,6 +359,28 @@ mod tests {
         let list = list_birthdays_today_from_connection(&conn).unwrap();
         assert_eq!(list.len(), 3);
         assert!(list.iter().any(|c| c.categorie == "PRESCRIPTEUR"));
+    }
+
+    #[test]
+    fn includes_pre_1970_birthday_today() {
+        let conn = Connection::open_in_memory().unwrap();
+        init_minimal_contacts_table(&conn);
+        init_investissements_table(&conn);
+
+        let (month, day) = today_month_day_local();
+        // Naissance avant l'epoch Unix (ex. 1963) — timestamp négatif, même jour/mois.
+        let unix = Utc
+            .with_ymd_and_hms(1963, month, day, 0, 0, 0)
+            .single()
+            .unwrap()
+            .timestamp();
+        assert!(unix < 0, "test fixture must be pre-1970");
+
+        seed_contact(&conn, "Dupont", "Bruno", "CLIENT", unix, "ACTIF");
+
+        let list = list_birthdays_today_from_connection(&conn).unwrap();
+        assert_eq!(list.len(), 1);
+        assert_eq!(list[0].prenom, "Bruno");
     }
 
     #[test]

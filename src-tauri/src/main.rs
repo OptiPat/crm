@@ -3,6 +3,7 @@
 
 mod app_branding;
 mod auth;
+mod birthday_notifications;
 mod backup;
 mod commands;
 mod documents_storage;
@@ -22,6 +23,11 @@ use commands::*;
 use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
+use birthday_notifications::{
+    get_birthday_telegram_settings_cmd, list_birthdays_today_cmd, run_birthday_telegram_if_due_cmd,
+    save_birthday_telegram_settings_cmd, send_birthday_telegram_reminders_now_cmd,
+    test_birthday_telegram_cmd,
+};
 use local_api::{
     get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
     save_local_api_settings_cmd,
@@ -217,6 +223,12 @@ fn main() {
             get_local_api_settings_cmd,
             save_local_api_settings_cmd,
             regenerate_local_api_token_cmd,
+            get_birthday_telegram_settings_cmd,
+            save_birthday_telegram_settings_cmd,
+            list_birthdays_today_cmd,
+            run_birthday_telegram_if_due_cmd,
+            send_birthday_telegram_reminders_now_cmd,
+            test_birthday_telegram_cmd,
             get_scpi_campaign_dashboard_cmd,
             prepare_scpi_bulletins_from_pdfs_cmd,
             get_cgp_config,

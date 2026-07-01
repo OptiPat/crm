@@ -26,6 +26,7 @@ fn open_database(app: &AppHandle, db: &State<'_, DbState>) -> Result<(), String>
         eprintln!("⚠️ API locale n8n : {e}");
     }
     *db.lock().unwrap() = Some(database);
+    crate::birthday_notifications::spawn_run_if_due(app);
     Ok(())
 }
 
@@ -98,6 +99,7 @@ pub fn unlock(
     match db.try_lock() {
         Ok(guard) => {
             if guard.is_some() {
+                crate::birthday_notifications::spawn_run_if_due(&app);
                 return Ok(true);
             }
             drop(guard);
