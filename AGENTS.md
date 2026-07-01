@@ -8,7 +8,7 @@ Après des changements de code, lance **automatiquement** (Shell, sans demander 
 cd D:\crm
 npm run verify:quick   # défaut : modifs src/** seulement (pas Cargo)
 npm run verify         # si src-tauri/** ou Cargo modifié
-npm run verify:full    # release / build Vite
+npm run verify:full    # release / build Vite / bump / tag (obligatoire avant publication)
 ```
 
 Arbre complet et règles : `.cursor/rules/verification-automatique.mdc`.

@@ -633,6 +633,41 @@ impl Database {
         )
     }
 
+    /// Variantes tu / relance créées pour une campagne éphémère (modèles auxiliaires).
+    fn ephemeral_linked_template_ids(&self, tpl: &super::models::TemplateEmail) -> Vec<i64> {
+        let mut ids = Vec::new();
+        if let Some(tu_id) = tpl.tutoiement_template_id {
+            ids.push(tu_id);
+        }
+        if let Some(rel_id) = tpl.relance_template_id {
+            if let Ok(rel_tpl) = self.get_template_email_by_id(rel_id) {
+                if let Some(rel_tu_id) = rel_tpl.tutoiement_template_id {
+                    ids.push(rel_tu_id);
+                }
+            }
+            ids.push(rel_id);
+        }
+        ids
+    }
+
+    pub(crate) fn delete_ephemeral_linked_templates(
+        &self,
+        tpl: &super::models::TemplateEmail,
+    ) -> Result<()> {
+        let child_ids = self.ephemeral_linked_template_ids(tpl);
+        self.conn.execute(
+            "UPDATE templates_email SET tutoiement_template_id = NULL, relance_template_id = NULL WHERE id = ?1",
+            params![tpl.id],
+        )?;
+        for child_id in child_ids {
+            if self.template_linked_by_other_parent(child_id, tpl.id)? {
+                continue;
+            }
+            self.delete_auxiliary_template_email(child_id)?;
+        }
+        Ok(())
+    }
+
     pub fn archive_ephemeral_campaign(&self, template_id: i64) -> Result<()> {
         let tpl = self.get_template_email_by_id(template_id)?;
         let cfg = self
@@ -650,7 +685,8 @@ impl Database {
         self.patch_ephemeral_campaign_in_variables(template_id, |cfg| {
             cfg.status = "archived".to_string();
             cfg.archived_at = Some(now);
-        })
+        })?;
+        self.delete_ephemeral_linked_templates(&tpl)
     }
 
     pub(crate) fn try_auto_archive_ephemeral_campaign(&self, template_id: i64) -> Result<bool> {
@@ -943,6 +979,103 @@ mod tests {
         assert!(db.delete_template_email(template_id).is_err());
         db.archive_ephemeral_campaign(template_id).unwrap();
         db.delete_template_email(template_id).unwrap();
+    }
+
+    #[test]
+    fn ephemeral_archive_removes_linked_tutoiement_from_library() {
+        use crate::database::models::NewTemplateEmail;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let template_id = create_ephemeral_template(&db, &audience);
+        let tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Campagne test (tu)".into(),
+                sujet: "Objet tu".into(),
+                corps: "Corps tu".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let parent = db.get_template_email_by_id(template_id).unwrap();
+        db.update_template_email(
+            template_id,
+            &NewTemplateEmail {
+                nom: parent.nom,
+                sujet: parent.sujet,
+                corps: parent.corps,
+                categorie: parent.categorie,
+                variables: parent.variables,
+                agenda_link_id: parent.agenda_link_id,
+                relance_template_id: parent.relance_template_id,
+                tutoiement_template_id: Some(tu.id),
+            },
+        )
+        .unwrap();
+
+        db.archive_ephemeral_campaign(template_id).unwrap();
+
+        let visible = db.get_all_templates_email().unwrap();
+        assert!(visible.iter().all(|t| t.id != template_id && t.id != tu.id));
+        assert!(db.get_template_email_by_id(tu.id).is_err());
+    }
+
+    #[test]
+    fn ephemeral_archive_keeps_shared_tutoiement_used_by_permanent() {
+        use crate::database::models::NewTemplateEmail;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = ephemeral_audience_all_scpi(&["Epargne Pierre"]);
+        let tu = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi (tu)".into(),
+                sujet: "Objet tu".into(),
+                corps: "Corps tu".into(),
+                categorie: "SUIVI_ANNUEL".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let permanent_id = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi permanent".into(),
+                sujet: "Objet".into(),
+                corps: "Corps".into(),
+                categorie: "SUIVI_ANNUEL".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: Some(tu.id),
+            })
+            .unwrap()
+            .id;
+        let ephemeral_id = create_ephemeral_template(&db, &audience);
+        let parent = db.get_template_email_by_id(ephemeral_id).unwrap();
+        db.update_template_email(
+            ephemeral_id,
+            &NewTemplateEmail {
+                nom: parent.nom,
+                sujet: parent.sujet,
+                corps: parent.corps,
+                categorie: parent.categorie,
+                variables: parent.variables,
+                agenda_link_id: parent.agenda_link_id,
+                relance_template_id: parent.relance_template_id,
+                tutoiement_template_id: Some(tu.id),
+            },
+        )
+        .unwrap();
+
+        db.archive_ephemeral_campaign(ephemeral_id).unwrap();
+
+        assert!(db.get_template_email_by_id(tu.id).is_ok());
+        let permanent = db.get_template_email_by_id(permanent_id).unwrap();
+        assert_eq!(permanent.tutoiement_template_id, Some(tu.id));
     }
 
     #[test]

@@ -699,7 +699,7 @@ impl Database {
         Ok(total)
     }
 
-    fn contact_ids_for_foyer(&self, foyer_id: i64) -> Result<Vec<i64>> {
+    pub(crate) fn contact_ids_for_foyer(&self, foyer_id: i64) -> Result<Vec<i64>> {
         let mut stmt = self
             .conn
             .prepare("SELECT id FROM contacts WHERE foyer_id = ?1")?;

@@ -380,7 +380,9 @@ impl super::Database {
         }
 
         let id = self.conn.last_insert_rowid();
-        self.get_investissement_by_id(id)
+        let inv = self.get_investissement_by_id(id)?;
+        self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
+        Ok(inv)
     }
 
     pub fn get_investissement_by_id(&self, id: i64) -> Result<super::models::Investissement> {
@@ -514,12 +516,90 @@ impl super::Database {
             )?;
         }
 
-        self.get_investissement_by_id(id)
+        let inv = self.get_investissement_by_id(id)?;
+        self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
+        Ok(inv)
     }
 
     pub fn delete_investissement(&self, id: i64) -> Result<()> {
+        let inv = self.get_investissement_by_id(id).ok();
         self.conn
             .execute("DELETE FROM investissements WHERE id = ?1", params![id])?;
+        if let Some(inv) = inv {
+            self.sync_contacts_statut_suivi_after_investissement_change(
+                inv.contact_id,
+                inv.foyer_id,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Investissements actifs rattachés au contact (perso + foyer commun).
+    pub(crate) fn count_active_investissements_for_contact_scope(
+        &self,
+        contact_id: i64,
+        foyer_id: Option<i64>,
+    ) -> Result<i64> {
+        let sql = format!(
+            "SELECT COUNT(*) FROM investissements WHERE {}",
+            Self::INVESTISSEMENT_SCOPE_WHERE
+        );
+        self.conn
+            .query_row(&sql, params![contact_id, foyer_id], |row| row.get(0))
+    }
+
+    /// Plus d'encours actif → suivi en pause ; réouverture / nouvel encours → suivi actif.
+    pub(crate) fn sync_contact_statut_suivi_for_encours(&self, contact_id: i64) -> Result<bool> {
+        let contact = self.get_contact_by_id(contact_id)?;
+        if contact.categorie != "CLIENT" {
+            return Ok(false);
+        }
+
+        let active_count = self.count_active_investissements_for_contact_scope(
+            contact_id,
+            contact.foyer_id,
+        )?;
+
+        if active_count == 0 {
+            if contact.statut_suivi != "ACTIF" {
+                return Ok(false);
+            }
+            self.conn.execute(
+                "UPDATE contacts SET statut_suivi = 'EN_PAUSE', updated_at = unixepoch() WHERE id = ?1",
+                params![contact_id],
+            )?;
+            self.auto_close_obsolete_suivi_alertes_for_contact(contact_id)?;
+            return Ok(true);
+        }
+
+        if contact.statut_suivi == "EN_PAUSE" {
+            self.conn.execute(
+                "UPDATE contacts SET statut_suivi = 'ACTIF', updated_at = unixepoch() WHERE id = ?1",
+                params![contact_id],
+            )?;
+            return Ok(true);
+        }
+
+        Ok(false)
+    }
+
+    pub(crate) fn sync_contacts_statut_suivi_after_investissement_change(
+        &self,
+        contact_id: Option<i64>,
+        foyer_id: Option<i64>,
+    ) -> Result<()> {
+        let mut seen = Vec::new();
+        if let Some(cid) = contact_id {
+            let _ = self.sync_contact_statut_suivi_for_encours(cid)?;
+            seen.push(cid);
+        }
+        if let Some(fid) = foyer_id {
+            for cid in self.contact_ids_for_foyer(fid)? {
+                if !seen.contains(&cid) {
+                    let _ = self.sync_contact_statut_suivi_for_encours(cid)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -543,7 +623,9 @@ impl super::Database {
              WHERE id = ?2",
             params![timestamp, id],
         )?;
-        self.get_investissement_by_id(id)
+        let inv = self.get_investissement_by_id(id)?;
+        self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
+        Ok(inv)
     }
 
     pub fn reopen_investissement(&self, id: i64) -> Result<super::models::Investissement> {
@@ -555,7 +637,9 @@ impl super::Database {
              WHERE id = ?1",
             params![id],
         )?;
-        self.get_investissement_by_id(id)
+        let inv = self.get_investissement_by_id(id)?;
+        self.sync_contacts_statut_suivi_after_investissement_change(inv.contact_id, inv.foyer_id)?;
+        Ok(inv)
     }
 
     pub fn get_valorisations_by_investissement(

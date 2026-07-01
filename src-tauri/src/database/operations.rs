@@ -113,7 +113,7 @@ impl Database {
     // ==================== MOTEUR AUTOMATIQUE ETIQUETTES ====================
 
     /// Investissements actifs du contact OU du foyer commun (hors clôturés).
-    const INVESTISSEMENT_SCOPE_WHERE: &'static str =
+    pub(crate) const INVESTISSEMENT_SCOPE_WHERE: &'static str =
         "(contact_id = ?1 OR (?2 IS NOT NULL AND foyer_id = ?2)) AND COALESCE(statut, 'ACTIF') = 'ACTIF'";
 
     /// Au moins un investissement (contact ou foyer) correspond aux filtres.
@@ -742,6 +742,12 @@ mod database_integration_tests {
 
         db.close_investissement(inv.id, Some(1_700_000_000)).unwrap();
 
+        let contact_after = db.get_contact_by_id(contact_id).unwrap();
+        assert_eq!(
+            contact_after.statut_suivi, "EN_PAUSE",
+            "dernier encours clôturé → suivi client en pause"
+        );
+
         let stats_after = db.get_dashboard_stats().unwrap();
         assert!((stats_after.encours_placements - 0.0).abs() < 0.01);
         assert!((stats_after.panier_moyen - 50_000.0).abs() < 0.01);
@@ -750,6 +756,49 @@ mod database_integration_tests {
         assert_eq!(refreshed.statut, "CLOTURE");
         assert_eq!(refreshed.date_cloture, Some(1_700_000_000));
         assert!(!refreshed.versement_programme);
+    }
+
+    #[test]
+    fn reopen_investissement_reactivates_paused_client_suivi() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Rouvert", "Marie")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV".into(),
+                numero_contrat: None,
+                montant_initial: Some(1_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        db.close_investissement(inv.id, None).unwrap();
+        assert_eq!(
+            db.get_contact_by_id(contact_id).unwrap().statut_suivi,
+            "EN_PAUSE"
+        );
+
+        db.reopen_investissement(inv.id).unwrap();
+        assert_eq!(
+            db.get_contact_by_id(contact_id).unwrap().statut_suivi,
+            "ACTIF"
+        );
     }
 
     #[test]

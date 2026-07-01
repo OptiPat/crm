@@ -19,13 +19,15 @@ L'utilisateur **n'exécute pas** les commandes de vérification. C'est **ton** t
 2. **Aucun** fichier sous `src-tauri/`, ni `Cargo.toml` / `Cargo.lock` (racine ou `src-tauri`), ni `tauri.conf*` → `npm run verify:quick`
 3. Fichier(s) Rust / Tauri / migrations runtime → `npm run verify`
 4. Config build Vite, release, ou gros refactor UI build → `npm run verify:full`
-5. Question seule, doc, ou lecture sans modif code → **pas** de verify
+5. **Publication / bump / tag** (`publication-version.mdc`) → **`npm run verify:full`** avant commit version ou `release-tag.ps1`
+6. Question seule, doc, ou lecture sans modif code → **pas** de verify
 
 | Contexte | Commande |
 |----------|----------|
 | **Défaut agent** (modifs `src/**` seulement) | `npm run verify:quick` |
 | Modifs `src-tauri/**` ou schéma DB Rust | `npm run verify` |
 | Release / build Vite / `vite.config*` | `npm run verify:full` |
+| **Bump / tag / release** | **`npm run verify:full`** (cf. `publication-version.mdc`) |
 
 Équivalents directs :
 

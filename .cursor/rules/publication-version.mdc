@@ -15,7 +15,10 @@ Quand l'utilisateur demande de **publier**, **release**, **tagger**, **bump** ou
 
 ## Avant bump / tag (checklist)
 
-1. **`npm run verify`** vert sur `main`.
+1. **`npm run verify:full`** vert sur `main` — **obligatoire** avant toute publication.
+   - Le workflow release exécute `npm run build` (`tsc && vite build`) via `beforeBuildCommand` Tauri.
+   - `verify:quick` / `verify` ne lancent **pas** ce build → des erreurs tsc ou Vite passent en CI.
+   - Si `src-tauri/**` modifié : `verify:full` inclut déjà Cargo via le script (utiliser `npm run verify` puis `npm run build` si besoin de séparer).
 2. **Lockfile = npm 10 (CI)** — GitHub Actions (Node 22) utilise npm 10 ; npm 11 local masque les trous du lockfile.
    ```powershell
    npx npm@10.9.2 install          # si deps modifiées

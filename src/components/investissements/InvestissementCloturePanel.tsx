@@ -40,7 +40,9 @@ export function InvestissementCloturePanel({
       const updated = await closeInvestissement(investissement.id, {
         date_cloture: dateFieldToIso(dateCloture),
       });
-      toast.success("Investissement clôturé — sorti de l'encours");
+      toast.success(
+        "Investissement clôturé — sorti de l'encours. Suivi client en pause si plus d'encours actif."
+      );
       onChanged?.(updated);
     } catch (error) {
       console.error(error);
@@ -61,7 +63,7 @@ export function InvestissementCloturePanel({
     setSaving(true);
     try {
       const updated = await reopenInvestissement(investissement.id);
-      toast.success("Investissement rouvert");
+      toast.success("Investissement rouvert — suivi client réactivé si nécessaire");
       onChanged?.(updated);
     } catch (error) {
       console.error(error);
@@ -77,7 +79,9 @@ export function InvestissementCloturePanel({
         <h3 className="text-sm font-medium">Sortie d&apos;encours</h3>
         <p className="text-xs text-muted-foreground mt-1">
           Clôturer retire le placement de votre encours actuel tout en conservant
-          l&apos;historique dans vos statistiques de vente.
+          l&apos;historique dans vos statistiques de vente. Si c&apos;était le
+          dernier encours actif du client, son suivi passe automatiquement en
+          pause.
         </p>
       </div>
 

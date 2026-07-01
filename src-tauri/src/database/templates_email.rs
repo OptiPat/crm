@@ -5,6 +5,30 @@
 
 use rusqlite::{params, Result};
 
+/// Visibilité bibliothèque Modèles email : campagnes éphémères archivées et variantes liées (tu / relance).
+const TEMPLATE_EMAIL_LIBRARY_VISIBLE_WHERE: &str = "
+    NOT (
+        COALESCE(json_extract(variables, '$.is_ephemeral'), 0) = 1
+        AND COALESCE(json_extract(variables, '$.ephemeral_campaign.status'), '') = 'archived'
+    )
+    AND id NOT IN (
+        SELECT p.tutoiement_template_id FROM templates_email p
+        WHERE p.tutoiement_template_id IS NOT NULL
+          AND COALESCE(json_extract(p.variables, '$.is_ephemeral'), 0) = 1
+          AND COALESCE(json_extract(p.variables, '$.ephemeral_campaign.status'), '') = 'archived'
+        UNION ALL
+        SELECT p.relance_template_id FROM templates_email p
+        WHERE p.relance_template_id IS NOT NULL
+          AND COALESCE(json_extract(p.variables, '$.is_ephemeral'), 0) = 1
+          AND COALESCE(json_extract(p.variables, '$.ephemeral_campaign.status'), '') = 'archived'
+        UNION ALL
+        SELECT r.tutoiement_template_id FROM templates_email p
+        INNER JOIN templates_email r ON r.id = p.relance_template_id
+        WHERE r.tutoiement_template_id IS NOT NULL
+          AND COALESCE(json_extract(p.variables, '$.is_ephemeral'), 0) = 1
+          AND COALESCE(json_extract(p.variables, '$.ephemeral_campaign.status'), '') = 'archived'
+    )";
+
 impl super::Database {
     fn map_template_email_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<super::models::TemplateEmail> {
         Ok(super::models::TemplateEmail {
@@ -23,15 +47,13 @@ impl super::Database {
     }
 
     pub fn get_all_templates_email(&self) -> Result<Vec<super::models::TemplateEmail>> {
-        let mut stmt = self.conn.prepare(
+        let sql = format!(
             "SELECT id, nom, sujet, corps, categorie, variables, agenda_link_id, relance_template_id, tutoiement_template_id, created_at, updated_at
              FROM templates_email
-             WHERE NOT (
-               COALESCE(json_extract(variables, '$.is_ephemeral'), 0) = 1
-               AND COALESCE(json_extract(variables, '$.ephemeral_campaign.status'), '') = 'archived'
-             )
-             ORDER BY created_at DESC",
-        )?;
+             WHERE {TEMPLATE_EMAIL_LIBRARY_VISIBLE_WHERE}
+             ORDER BY created_at DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
         let templates = stmt.query_map([], Self::map_template_email_row)?;
 
@@ -120,6 +142,36 @@ impl super::Database {
         self.get_template_email_by_id(id)
     }
 
+    /// Supprime un modèle auxiliaire (tu / relance) sans contrôle éphémère.
+    pub(crate) fn delete_auxiliary_template_email(&self, id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
+            params![id],
+        )?;
+        self.conn.execute(
+            "UPDATE templates_email SET tutoiement_template_id = NULL WHERE tutoiement_template_id = ?1",
+            params![id],
+        )?;
+        self.conn
+            .execute("DELETE FROM templates_email WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// True si un autre modèle (hors `exclude_parent_id`) référence encore `child_id`.
+    pub(crate) fn template_linked_by_other_parent(
+        &self,
+        child_id: i64,
+        exclude_parent_id: i64,
+    ) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM templates_email
+             WHERE id != ?1 AND (tutoiement_template_id = ?2 OR relance_template_id = ?2)",
+            params![exclude_parent_id, child_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
     pub fn delete_template_email(&self, id: i64) -> Result<()> {
         let tpl = self.get_template_email_by_id(id)?;
         if let Some(cfg) = self.parse_ephemeral_campaign_config(tpl.variables.as_deref()) {
@@ -129,6 +181,7 @@ impl super::Database {
                         .into(),
                 ));
             }
+            self.delete_ephemeral_linked_templates(&tpl)?;
         }
         self.conn.execute(
             "UPDATE templates_email SET relance_template_id = NULL WHERE relance_template_id = ?1",
