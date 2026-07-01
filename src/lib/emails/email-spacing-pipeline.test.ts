@@ -10,8 +10,6 @@ import {
   prepareTemplateHtmlForSend,
 } from "@/lib/emails/template-email-html";
 
-const BLANK = '<div style="line-height:1.5;margin:0;padding:0"><br></div>';
-
 function countBlankLines(html: string): number {
   return (html.match(/<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>/g) ?? [])
     .length;

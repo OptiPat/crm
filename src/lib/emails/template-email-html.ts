@@ -93,7 +93,7 @@ function collapseConsecutiveGmailBlankLines(lines: string[]): string[] {
   const blank = gmailBlankLineHtml();
   const out: string[] = [];
   for (const line of lines) {
-    if (line === blank && out.at(-1) === blank) continue;
+    if (line === blank && out.length > 0 && out[out.length - 1] === blank) continue;
     out.push(line);
   }
   return out;
