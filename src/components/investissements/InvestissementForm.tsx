@@ -276,7 +276,9 @@ export function InvestissementForm({
   const showNumeroContratField = isNumeroContratEligible(typeProduit);
 
   const showVersementsSection =
-    !!editingInvestissement && isVersementComplementaireEligible(typeProduit);
+    !!editingInvestissement &&
+    isActifEncours &&
+    isVersementComplementaireEligible(typeProduit);
 
   const showExceltisSection =
     !investissement &&

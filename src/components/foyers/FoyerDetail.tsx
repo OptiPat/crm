@@ -52,6 +52,7 @@ import { InvestissementCard } from "@/components/investissements/InvestissementC
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 
 interface FoyerDetailProps {
@@ -400,6 +401,7 @@ export function FoyerDetail({
                             : "member"
                         }
                         actions={
+                          isInvestissementActifEncours(inv) &&
                           isPlacementEncoursEligible(inv.type_produit) ? (
                             <Button
                               variant="outline"
