@@ -5,6 +5,7 @@ import {
   getEffectiveEncoursCentimes,
   isPlacementEncoursEligible,
 } from "@/lib/investissements/investissement-encours";
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 import { compareInvestissementsScpiCreditFirst } from "@/lib/investissements/investissement-scpi-reinvest";
 import { groupPatrimoineByCategory } from "@/lib/investissements/patrimoine-tab-utils";
 
@@ -48,11 +49,20 @@ export const INVESTISSEMENT_PORTFOLIO_GROUP_LABELS: Record<
 export function getPatrimoineLineAmountCentimes(
   inv: Pick<
     InvestissementWithDetails,
-    "type_produit" | "encours_actuel" | "montant_initial"
+    "type_produit" | "encours_actuel" | "montant_initial" | "statut"
   >
 ): number {
-  if (isPlacementEncoursEligible(inv.type_produit)) {
+  if (
+    isInvestissementActifEncours(inv) &&
+    isPlacementEncoursEligible(inv.type_produit)
+  ) {
     return getEffectiveEncoursCentimes(inv);
+  }
+  if (!isInvestissementActifEncours(inv)) {
+    if (isPlacementEncoursEligible(inv.type_produit)) {
+      return 0;
+    }
+    return inv.montant_initial ?? 0;
   }
   return inv.montant_initial ?? 0;
 }

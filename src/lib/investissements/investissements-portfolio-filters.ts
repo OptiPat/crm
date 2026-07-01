@@ -1,5 +1,6 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 
 /** Placement éligible encours sans valorisation saisie (champ vide). */
 export function isSansEncoursRenseigne(
@@ -10,9 +11,13 @@ export function isSansEncoursRenseigne(
 }
 
 export function isSansEncoursAvecMoi(
-  inv: Pick<Investissement, "type_produit" | "encours_actuel" | "origine">
+  inv: Pick<Investissement, "type_produit" | "encours_actuel" | "origine" | "statut">
 ): boolean {
-  return inv.origine === "MON_CONSEIL" && isSansEncoursRenseigne(inv);
+  return (
+    isInvestissementActifEncours(inv) &&
+    inv.origine === "MON_CONSEIL" &&
+    isSansEncoursRenseigne(inv)
+  );
 }
 
 export function filterSansEncoursRenseigne<

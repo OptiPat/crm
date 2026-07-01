@@ -1,4 +1,5 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 
 /** Produits financiers dont l'encours peut évoluer (aligné dashboard). */
 export const PLACEMENT_ENCOURS_TYPES = [
@@ -37,6 +38,7 @@ export function computeEncoursPlacementsStats(
   let count = 0;
   for (const inv of investissements) {
     if (seenIds.has(inv.id)) continue;
+    if (!isInvestissementActifEncours(inv)) continue;
     if (avecMoiOnly && inv.origine !== "MON_CONSEIL") continue;
     if (!isPlacementEncoursEligible(inv.type_produit)) continue;
     const amount = getEffectiveEncoursCentimes(inv);
@@ -49,9 +51,13 @@ export function computeEncoursPlacementsStats(
 }
 
 export function isEncoursAvecMoiEligible(
-  inv: Pick<Investissement, "origine" | "type_produit">
+  inv: Pick<Investissement, "origine" | "type_produit" | "statut">
 ): boolean {
-  return inv.origine === "MON_CONSEIL" && isPlacementEncoursEligible(inv.type_produit);
+  return (
+    isInvestissementActifEncours(inv) &&
+    inv.origine === "MON_CONSEIL" &&
+    isPlacementEncoursEligible(inv.type_produit)
+  );
 }
 
 export function filterEncoursPlacementsAvecMoi<T extends Investissement>(items: T[]): T[] {

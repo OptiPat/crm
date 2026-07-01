@@ -4,6 +4,12 @@ use rusqlite::{params, Result};
 
 pub(crate) const REDUCTION_IMPOT_ETIQUETTE_CANONICAL: &str = "Réduction d'impôt fin d'année";
 
+/// Investissement compté dans l'encours (hors clôturés).
+pub(crate) const INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I: &str =
+    "COALESCE(i.statut, 'ACTIF') = 'ACTIF'";
+pub(crate) const INVESTISSEMENT_ACTIF_ENCOURS_WHERE: &str =
+    "COALESCE(statut, 'ACTIF') = 'ACTIF'";
+
 /// Encours = dernière valorisation (ou montant initial) + versements complémentaires postérieurs.
 pub(crate) const EFFECTIVE_ENCOURS_SQL_I: &str = "(
     COALESCE(
@@ -106,9 +112,9 @@ impl Database {
 
     // ==================== MOTEUR AUTOMATIQUE ETIQUETTES ====================
 
-    /// Investissements du contact OU du foyer commun (si le contact est membre du foyer).
+    /// Investissements actifs du contact OU du foyer commun (hors clôturés).
     const INVESTISSEMENT_SCOPE_WHERE: &'static str =
-        "(contact_id = ?1 OR (?2 IS NOT NULL AND foyer_id = ?2))";
+        "(contact_id = ?1 OR (?2 IS NOT NULL AND foyer_id = ?2)) AND COALESCE(statut, 'ACTIF') = 'ACTIF'";
 
     /// Au moins un investissement (contact ou foyer) correspond aux filtres.
     /// `types` et `noms_produit` sont combinés en ET sur la même ligne ; l'un des deux peut être vide.
@@ -688,6 +694,62 @@ mod database_integration_tests {
         let stats = db.get_dashboard_stats().unwrap();
         assert!((stats.encours_placements - 30_000.0).abs() < 0.01);
         assert!((stats.panier_moyen - 20_000.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn closed_investissement_excluded_from_encours_kept_in_panier_moyen() {
+        let db = test_db();
+        let contact = db.create_contact(sample_contact("Vendu", "Luc")).unwrap();
+        let contact_id = contact.id.unwrap();
+
+        let inv = db
+            .create_investissement(NewInvestissement {
+                contact_id: Some(contact_id),
+                foyer_id: None,
+                type_produit: "ASSURANCE_VIE".into(),
+                partenaire_id: None,
+                nom_produit: "AV clôturée".into(),
+                numero_contrat: None,
+                montant_initial: Some(5_000_000),
+                date_souscription: None,
+                date_fin_demembrement: None,
+                date_fin_pret: None,
+                mensualite_credit: None,
+                credit_crd: None,
+                loyer_mensuel: None,
+                versement_programme: None,
+                montant_versement_programme: None,
+                frequence_versement: None,
+                reinvestissement_dividendes: None,
+                notes: None,
+                origine: Some("MON_CONSEIL".into()),
+            })
+            .unwrap();
+
+        db.create_investissement_valorisation(NewInvestissementValorisation {
+            investissement_id: inv.id,
+            montant: 6_000_000,
+            date_valorisation: None,
+            notes: None,
+            stellium_versements_nets_centimes: None,
+            stellium_perf_euro_centimes: None,
+        })
+        .unwrap();
+
+        let stats_before = db.get_dashboard_stats().unwrap();
+        assert!((stats_before.encours_placements - 60_000.0).abs() < 0.01);
+        assert!((stats_before.panier_moyen - 50_000.0).abs() < 0.01);
+
+        db.close_investissement(inv.id, Some(1_700_000_000)).unwrap();
+
+        let stats_after = db.get_dashboard_stats().unwrap();
+        assert!((stats_after.encours_placements - 0.0).abs() < 0.01);
+        assert!((stats_after.panier_moyen - 50_000.0).abs() < 0.01);
+
+        let refreshed = db.get_investissement_by_id(inv.id).unwrap();
+        assert_eq!(refreshed.statut, "CLOTURE");
+        assert_eq!(refreshed.date_cloture, Some(1_700_000_000));
+        assert!(!refreshed.versement_programme);
     }
 
     #[test]

@@ -498,6 +498,7 @@ impl Database {
         self.migrate_add_date_fin_pret()?;
         self.migrate_add_investissement_immo_financing_fields()?;
         self.migrate_add_investissement_numero_contrat()?;
+        self.migrate_add_investissement_statut()?;
         self.migrate_investissement_valorisations()?;
         self.migrate_stellium_fields_on_valorisations()?;
 
@@ -1567,6 +1568,25 @@ impl Database {
             println!("✅ Migration appliquée : colonne date_fin_pret ajoutée aux investissements");
         }
 
+        Ok(())
+    }
+
+    /// Migration : statut ACTIF/CLOTURE + date de clôture (sortie encours sans perte stats).
+    fn migrate_add_investissement_statut(&self) -> Result<()> {
+        if !self.table_has_column("investissements", "statut")? {
+            self.conn.execute(
+                "ALTER TABLE investissements ADD COLUMN statut TEXT NOT NULL DEFAULT 'ACTIF'",
+                [],
+            )?;
+            println!("✅ Migration appliquée : colonne statut sur investissements");
+        }
+        if !self.table_has_column("investissements", "date_cloture")? {
+            self.conn.execute(
+                "ALTER TABLE investissements ADD COLUMN date_cloture INTEGER",
+                [],
+            )?;
+            println!("✅ Migration appliquée : colonne date_cloture sur investissements");
+        }
         Ok(())
     }
 

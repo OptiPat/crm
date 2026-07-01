@@ -60,111 +60,115 @@ fn salutation(registre: Registre, prenom: &str) -> String {
     }
 }
 
-fn closing(registre: Registre) -> &'static str {
+fn closing_line(registre: Registre) -> &'static str {
     match registre {
-        Registre::Tu => "à très vite",
-        Registre::Vous => "à bientôt",
+        Registre::Tu => "À très vite.",
+        Registre::Vous => "À bientôt.",
     }
+}
+
+/// Salutation + corps + formule de politesse, sans emoji (SMS / WhatsApp).
+fn compose_message(prenom: &str, registre: Registre, body: &str) -> String {
+    let sal = salutation(registre, prenom);
+    format!(
+        "{sal}, joyeux anniversaire !\n{body}\n{}",
+        closing_line(registre)
+    )
 }
 
 fn angle_performance(prenom: &str, registre: Registre, genre: Genre) -> String {
-    let sal = salutation(registre, prenom);
-    let end = closing(registre);
-    match (registre, genre) {
-        (Registre::Tu, Genre::F) => format!(
-            "{sal}, joyeux anniversaire ! Si ton sourire et ton expérience étaient un actif financier, le rendement de cette année ferait sauter la banque — {end}. 📈"
-        ),
-        (Registre::Vous, Genre::F) => format!(
-            "{sal}, joyeux anniversaire ! Si votre sourire et votre expérience étaient un actif financier, le rendement de cette année ferait sauter la banque — {end}. 📈"
-        ),
-        (Registre::Tu, _) => format!(
-            "{sal}, joyeux anniversaire ! Si ton expérience et ta présence étaient un actif financier, le rendement de cette année ferait sauter la banque — {end}. 📈"
-        ),
-        (Registre::Vous, _) => format!(
-            "{sal}, joyeux anniversaire ! Si votre expérience et votre présence étaient un actif financier, le rendement de cette année ferait sauter la banque — {end}. 📈"
-        ),
-    }
+    let body = match (registre, genre) {
+        (Registre::Tu, Genre::F) => {
+            "Si ton sourire et ton expérience étaient un actif financier, le rendement de cette année ferait sauter la banque !"
+        }
+        (Registre::Vous, Genre::F) => {
+            "Si votre sourire et votre expérience étaient un actif financier, le rendement de cette année ferait sauter la banque !"
+        }
+        (Registre::Tu, _) => {
+            "Si ton expérience et ta présence étaient un actif financier, le rendement de cette année ferait sauter la banque !"
+        }
+        (Registre::Vous, _) => {
+            "Si votre expérience et votre présence étaient un actif financier, le rendement de cette année ferait sauter la banque !"
+        }
+    };
+    compose_message(prenom, registre, body)
 }
 
 fn angle_fiscal(prenom: &str, registre: Registre, genre: Genre) -> String {
-    let sal = salutation(registre, prenom);
-    let end = closing(registre);
     let intro = "S'il y avait un impôt sur l'élégance qui augmente chaque année, ";
-    match (registre, genre) {
-        (Registre::Tu, Genre::F) => format!(
-            "{sal}, joyeux anniversaire ! {intro}tu serais lourdement taxée pour cause de surperformance — {end}. 🥂"
-        ),
-        (Registre::Tu, Genre::M) => format!(
-            "{sal}, joyeux anniversaire ! {intro}tu serais lourdement taxé pour cause de surperformance — {end}. 🥂"
-        ),
-        (Registre::Tu, Genre::N) => format!(
-            "{sal}, joyeux anniversaire ! {intro}ta surperformance te placerait dans la tranche la plus élevée — {end}. 🥂"
-        ),
-        (Registre::Vous, Genre::F) => format!(
-            "{sal}, joyeux anniversaire ! {intro}vous seriez lourdement taxée pour cause de surperformance — {end}. 🥂"
-        ),
-        (Registre::Vous, Genre::M) => format!(
-            "{sal}, joyeux anniversaire ! {intro}vous seriez lourdement taxé pour cause de surperformance — {end}. 🥂"
-        ),
-        (Registre::Vous, Genre::N) => format!(
-            "{sal}, joyeux anniversaire ! {intro}votre surperformance vous placerait dans la tranche la plus élevée — {end}. 🥂"
-        ),
-    }
+    let body = match (registre, genre) {
+        (Registre::Tu, Genre::F) => {
+            format!("{intro}tu serais lourdement taxée pour cause de surperformance !")
+        }
+        (Registre::Tu, Genre::M) => {
+            format!("{intro}tu serais lourdement taxé pour cause de surperformance !")
+        }
+        (Registre::Tu, Genre::N) => {
+            format!("{intro}ta surperformance te placerait dans la tranche la plus élevée !")
+        }
+        (Registre::Vous, Genre::F) => {
+            format!("{intro}vous seriez lourdement taxée pour cause de surperformance !")
+        }
+        (Registre::Vous, Genre::M) => {
+            format!("{intro}vous seriez lourdement taxé pour cause de surperformance !")
+        }
+        (Registre::Vous, Genre::N) => {
+            format!("{intro}votre surperformance vous placerait dans la tranche la plus élevée !")
+        }
+    };
+    compose_message(prenom, registre, &body)
 }
 
 fn angle_sympathie(prenom: &str, registre: Registre, genre: Genre) -> String {
-    let sal = salutation(registre, prenom);
-    let end = closing(registre);
     let intro =
         "Heureusement que le capital sympathie est totalement exonéré d'impôt, car ";
-    match (registre, genre) {
+    let body = match (registre, genre) {
         (Registre::Tu, Genre::F) => format!(
-            "{sal}, joyeux anniversaire ! {intro}ta surperformance de l'année t'aurait rendue lourdement imposable — {end}. 🎉"
+            "{intro}ta surperformance de l'année t'aurait rendue lourdement imposable !"
         ),
         (Registre::Vous, Genre::F) => format!(
-            "{sal}, joyeux anniversaire ! {intro}votre surperformance de l'année vous aurait rendue lourdement imposable — {end}. 🎉"
+            "{intro}votre surperformance de l'année vous aurait rendue lourdement imposable !"
         ),
-        (Registre::Tu, _) => format!(
-            "{sal}, joyeux anniversaire ! {intro}ta surperformance de l'année t'aurait rendu lourdement imposable — {end}. 🎉"
-        ),
+        (Registre::Tu, _) => {
+            format!("{intro}ta surperformance de l'année t'aurait rendu lourdement imposable !")
+        }
         (Registre::Vous, _) => format!(
-            "{sal}, joyeux anniversaire ! {intro}votre surperformance de l'année vous aurait rendu lourdement imposable — {end}. 🎉"
+            "{intro}votre surperformance de l'année vous aurait rendu lourdement imposable !"
         ),
-    }
+    };
+    compose_message(prenom, registre, &body)
 }
 
 fn angle_inflation(prenom: &str, registre: Registre) -> String {
-    let sal = salutation(registre, prenom);
-    let end = closing(registre);
-    match registre {
-        Registre::Tu => format!(
-            "{sal}, joyeux anniversaire ! Si le temps qui passe était soumis à l'inflation, ton énergie et ta bonne humeur resteraient le meilleur moyen de protéger ton capital — {end}. 🚀"
-        ),
-        Registre::Vous => format!(
-            "{sal}, joyeux anniversaire ! Si le temps qui passe était soumis à l'inflation, votre énergie et votre bonne humeur resteraient le meilleur moyen de protéger votre capital — {end}. 🚀"
-        ),
-    }
+    let body = match registre {
+        Registre::Tu => {
+            "Si le temps qui passe était soumis à l'inflation, ton énergie et ta bonne humeur resteraient le meilleur moyen de protéger ton capital !"
+        }
+        Registre::Vous => {
+            "Si le temps qui passe était soumis à l'inflation, votre énergie et votre bonne humeur resteraient le meilleur moyen de protéger votre capital !"
+        }
+    };
+    compose_message(prenom, registre, body)
 }
 
 fn angle_prestige(prenom: &str, registre: Registre) -> String {
-    let sal = salutation(registre, prenom);
-    let end = closing(registre);
-    format!(
-        "{sal}, joyeux anniversaire ! C'est le propre des très grands investissements : chaque année qui passe ajoute une couche de prestige et de valeur — {end}. 📈"
+    compose_message(
+        prenom,
+        registre,
+        "C'est le propre des très grands investissements : chaque année qui passe ajoute une couche de prestige et de valeur !",
     )
 }
 
 fn angle_capital_temps(prenom: &str, registre: Registre) -> String {
-    let sal = salutation(registre, prenom);
-    let end = closing(registre);
-    match registre {
-        Registre::Tu => format!(
-            "{sal}, joyeux anniversaire ! Ton capital temps produit des intérêts composés depuis des années, et aujourd'hui le rendement est juste historique — {end}. 🎁"
-        ),
-        Registre::Vous => format!(
-            "{sal}, joyeux anniversaire ! Votre capital temps produit des intérêts composés depuis des années, et aujourd'hui le rendement est juste historique — {end}. 🎁"
-        ),
-    }
+    let body = match registre {
+        Registre::Tu => {
+            "Ton capital temps produit des intérêts composés depuis des années, et aujourd'hui le rendement est juste historique !"
+        }
+        Registre::Vous => {
+            "Votre capital temps produit des intérêts composés depuis des années, et aujourd'hui le rendement est juste historique !"
+        }
+    };
+    compose_message(prenom, registre, body)
 }
 
 type AngleFn = fn(&str, Registre, Genre) -> String;
@@ -229,10 +233,25 @@ mod tests {
     }
 
     #[test]
+    fn angle_fiscal_tu_male_multiline_without_emoji() {
+        let msg = angle_fiscal("Bruno", Registre::Tu, Genre::M);
+        assert_eq!(
+            msg,
+            "Salut Bruno, joyeux anniversaire !\n\
+             S'il y avait un impôt sur l'élégance qui augmente chaque année, \
+             tu serais lourdement taxé pour cause de surperformance !\n\
+             À très vite."
+        );
+        assert!(!msg.contains('📈'));
+        assert!(!msg.contains('🥂'));
+    }
+
+    #[test]
     fn angle_fiscal_vous_feminine() {
         let msg = angle_fiscal("Alice", Registre::Vous, Genre::F);
         assert!(msg.contains("taxée"));
-        assert!(msg.contains("Bonjour Alice"));
+        assert!(msg.starts_with("Bonjour Alice, joyeux anniversaire !\n"));
+        assert!(msg.ends_with("À bientôt."));
     }
 
     #[test]
@@ -251,14 +270,14 @@ mod tests {
         let m1 = generate_message("Paul", Registre::Tu, Genre::M, &mut rng1);
         let m2 = generate_message("Paul", Registre::Tu, Genre::M, &mut rng2);
         assert_eq!(m1, m2);
-        assert!(m1.starts_with("Salut Paul"));
+        assert!(m1.starts_with("Salut Paul, joyeux anniversaire !\n"));
     }
 
     #[test]
     fn telegram_format_matches_n8n() {
         let text = format_telegram_notification(
             "Alice DUPONT",
-            "Bonjour Alice, joyeux anniversaire ! Test — à bientôt. 📈",
+            "Bonjour Alice, joyeux anniversaire !\nTest.\nÀ bientôt.",
         );
         assert!(text.starts_with("Anniversaire : Alice DUPONT"));
         assert!(text.contains("Bonjour Alice"));

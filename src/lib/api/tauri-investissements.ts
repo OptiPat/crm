@@ -3,6 +3,7 @@ import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 export type OrigineInvestissement = "MON_CONSEIL" | "EXISTANT_CLIENT";
+export type InvestissementStatut = "ACTIF" | "CLOTURE";
 
 export interface Investissement {
   id: number;
@@ -26,6 +27,8 @@ export interface Investissement {
   reinvestissement_dividendes: boolean;
   notes?: string;
   origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+  statut?: InvestissementStatut;
+  date_cloture?: number;
   encours_actuel?: number;
   encours_date?: number;
   /** Souscription initiale + versements complémentaires (centimes). */
@@ -86,6 +89,8 @@ export interface InvestissementWithDetails {
   reinvestissement_dividendes: boolean;
   notes?: string;
   origine: OrigineInvestissement; // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+  statut?: InvestissementStatut;
+  date_cloture?: number;
   encours_actuel?: number;
   encours_date?: number;
   montant_investi_total?: number;
@@ -93,6 +98,10 @@ export interface InvestissementWithDetails {
   stellium_perf_euro_centimes?: number;
   created_at: number;
   updated_at: number;
+}
+
+export interface CloseInvestissementPayload {
+  date_cloture?: string;
 }
 
 export interface NomProduitSuggestion {
@@ -172,4 +181,24 @@ export async function deleteInvestissement(id: number): Promise<void> {
   await invoke<void>("delete_investissement", { id });
   notifyContactsChanged();
   notifyInvestissementsChanged();
+}
+
+export async function closeInvestissement(
+  id: number,
+  payload?: CloseInvestissementPayload
+): Promise<Investissement> {
+  const updated = await invoke<Investissement>("close_investissement", {
+    id,
+    payload: payload ?? {},
+  });
+  notifyContactsChanged();
+  notifyInvestissementsChanged();
+  return updated;
+}
+
+export async function reopenInvestissement(id: number): Promise<Investissement> {
+  const updated = await invoke<Investissement>("reopen_investissement", { id });
+  notifyContactsChanged();
+  notifyInvestissementsChanged();
+  return updated;
 }

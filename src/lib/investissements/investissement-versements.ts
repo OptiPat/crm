@@ -1,3 +1,5 @@
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
+
 /** Produits acceptant des versements complémentaires ponctuels. */
 export const VERSEMENT_COMPLEMENTAIRE_TYPES = [
   "ASSURANCE_VIE",
@@ -15,6 +17,7 @@ export type AvPerType = (typeof AV_PER_TYPES)[number];
 type VersementProgrammeFields = {
   id?: number;
   origine?: string;
+  statut?: string;
   type_produit?: string;
   versement_programme?: boolean;
   montant_versement_programme?: number | null;
@@ -65,6 +68,7 @@ export function computeAvPerVersementProgrammeCoverageStats(
       seenIds.add(inv.id);
     }
     if (avecMoiOnly && inv.origine !== "MON_CONSEIL") continue;
+    if (!isInvestissementActifEncours(inv)) continue;
     if (!isAvPerType(inv.type_produit)) continue;
     total += 1;
     if (hasActiveVersementProgramme(inv)) withVp += 1;
@@ -83,7 +87,10 @@ export function filterAvPerSansVersementProgramme<
   T extends VersementProgrammeFields & { type_produit?: string; origine?: string },
 >(investissements: T[]): T[] {
   return investissements.filter(
-    (inv) => isAvPerAvecMoi(inv) && !hasActiveVersementProgramme(inv)
+    (inv) =>
+      isInvestissementActifEncours(inv) &&
+      isAvPerAvecMoi(inv) &&
+      !hasActiveVersementProgramme(inv)
   );
 }
 
@@ -138,6 +145,7 @@ export function computeVersementsProgrammesAnnuelStats(
       seenIds.add(inv.id);
     }
     if (avecMoiOnly && inv.origine !== "MON_CONSEIL") continue;
+    if (!isInvestissementActifEncours(inv)) continue;
     if (!inv.versement_programme) continue;
     const montant = inv.montant_versement_programme;
     if (montant == null || montant <= 0) continue;

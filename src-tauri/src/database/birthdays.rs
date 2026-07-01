@@ -16,6 +16,9 @@ pub struct BirthdayContactToday {
     pub registre: String,
     pub age: Option<i32>,
     pub birth_date: String,
+    /// Mobile / téléphone (SMS, WhatsApp).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub telephone: Option<String>,
     /// Libelle humain du type produit principal (ex. « assurance-vie », « SCPI »), sans nom de fonds.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub patrimoine_type: Option<String>,
@@ -128,8 +131,9 @@ pub fn pick_patrimoine_type(
         .query_row(
             "SELECT i.type_produit
          FROM investissements i
-         WHERE i.contact_id = ?1
-            OR (?2 IS NOT NULL AND i.foyer_id = ?2)
+         WHERE (i.contact_id = ?1
+            OR (?2 IS NOT NULL AND i.foyer_id = ?2))
+           AND COALESCE(i.statut, 'ACTIF') = 'ACTIF'
          ORDER BY
            CASE WHEN i.origine = 'MON_CONSEIL' THEN 0 ELSE 1 END,
            COALESCE(i.montant_initial, 0) DESC,
@@ -154,6 +158,7 @@ fn map_row_to_candidate(
     registre: Option<String>,
     date_naissance: i64,
     foyer_id: Option<i64>,
+    telephone: Option<String>,
 ) -> Result<BirthdayContactToday> {
     let now = Local::now();
     let age = compute_age_at_date(date_naissance, now);
@@ -168,13 +173,14 @@ fn map_row_to_candidate(
         registre: normalize_registre(registre),
         age: Some(age),
         birth_date: format_birth_date_label(date_naissance),
+        telephone,
         patrimoine_type,
     })
 }
 
 pub fn list_birthdays_today_from_connection(conn: &Connection) -> Result<Vec<BirthdayContactToday>> {
     let mut stmt = conn.prepare(
-        "SELECT id, civilite, nom, prenom, categorie, registre, date_naissance, foyer_id
+        "SELECT id, civilite, nom, prenom, categorie, registre, date_naissance, foyer_id, telephone
          FROM contacts
          WHERE date_naissance IS NOT NULL
            AND date_naissance != 0
@@ -192,12 +198,23 @@ pub fn list_birthdays_today_from_connection(conn: &Connection) -> Result<Vec<Bir
             row.get::<_, Option<String>>(5)?,
             row.get::<_, i64>(6)?,
             row.get::<_, Option<i64>>(7)?,
+            row.get::<_, Option<String>>(8)?,
         ))
     })?;
 
     let mut out = Vec::new();
     for row in rows {
-        let (id, civilite, nom, prenom, categorie, registre, date_naissance, foyer_id) = row?;
+        let (
+            id,
+            civilite,
+            nom,
+            prenom,
+            categorie,
+            registre,
+            date_naissance,
+            foyer_id,
+            telephone,
+        ) = row?;
         if is_birthday_today(date_naissance) {
             out.push(map_row_to_candidate(
                 conn,
@@ -209,10 +226,73 @@ pub fn list_birthdays_today_from_connection(conn: &Connection) -> Result<Vec<Bir
                 registre,
                 date_naissance,
                 foyer_id,
+                telephone,
             )?);
         }
     }
     Ok(out)
+}
+
+pub fn get_birthday_contact_today_by_id(
+    conn: &Connection,
+    contact_id: i64,
+) -> Result<Option<BirthdayContactToday>> {
+    let row = conn
+        .query_row(
+            "SELECT id, civilite, nom, prenom, categorie, registre, date_naissance, foyer_id, telephone
+             FROM contacts
+             WHERE id = ?1
+               AND date_naissance IS NOT NULL
+               AND date_naissance != 0
+               AND statut_suivi != 'ARCHIVE'",
+            params![contact_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, String>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, i64>(6)?,
+                    row.get::<_, Option<i64>>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                ))
+            },
+        )
+        .optional()?;
+
+    let Some((
+        id,
+        civilite,
+        nom,
+        prenom,
+        categorie,
+        registre,
+        date_naissance,
+        foyer_id,
+        telephone,
+    )) = row
+    else {
+        return Ok(None);
+    };
+
+    if !is_birthday_today(date_naissance) {
+        return Ok(None);
+    }
+
+    Ok(Some(map_row_to_candidate(
+        conn,
+        id,
+        civilite,
+        nom,
+        prenom,
+        categorie,
+        registre,
+        date_naissance,
+        foyer_id,
+        telephone,
+    )?))
 }
 
 #[cfg(test)]
@@ -249,6 +329,7 @@ mod tests {
                 date_naissance INTEGER,
                 statut_suivi TEXT NOT NULL DEFAULT 'ACTIF',
                 foyer_id INTEGER,
+                telephone TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );",
@@ -275,6 +356,8 @@ mod tests {
                 reinvestissement_dividendes INTEGER NOT NULL DEFAULT 0,
                 notes TEXT,
                 origine TEXT NOT NULL DEFAULT 'MON_CONSEIL',
+                statut TEXT NOT NULL DEFAULT 'ACTIF',
+                date_cloture INTEGER,
                 created_at INTEGER NOT NULL DEFAULT 1,
                 updated_at INTEGER NOT NULL DEFAULT 1
             );",

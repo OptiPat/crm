@@ -16,6 +16,7 @@ export interface BirthdayContactToday {
   registre: string;
   age?: number | null;
   birthDate: string;
+  telephone?: string | null;
 }
 
 export async function getBirthdayTelegramSettings(): Promise<BirthdayTelegramSettings> {
@@ -50,6 +51,17 @@ export async function testBirthdayTelegram(): Promise<void> {
 
 export async function listBirthdaysToday(): Promise<BirthdayContactToday[]> {
   return invoke<BirthdayContactToday[]>("list_birthdays_today_cmd");
+}
+
+export interface BirthdayMessageDraft {
+  contactId: number;
+  message: string;
+}
+
+export async function generateBirthdayMessageDraft(
+  contactId: number
+): Promise<BirthdayMessageDraft> {
+  return invoke<BirthdayMessageDraft>("generate_birthday_message_draft_cmd", { contactId });
 }
 
 /** Envoie les rappels Telegram pour les nouveaux anniversaires du jour (sans doublon). */

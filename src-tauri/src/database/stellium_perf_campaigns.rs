@@ -1398,11 +1398,13 @@ impl Database {
         };
 
         let mut stmt = self.conn.prepare(
-            "SELECT DISTINCT investissement_id FROM investissement_valorisations
-             WHERE (stellium_versements_nets_centimes IS NOT NULL
-                    OR stellium_perf_euro_centimes IS NOT NULL)
-               AND ABS(date_valorisation - ?1) <= 86400
-             ORDER BY investissement_id",
+            "SELECT DISTINCT v.investissement_id FROM investissement_valorisations v
+             INNER JOIN investissements i ON i.id = v.investissement_id
+             WHERE COALESCE(i.statut, 'ACTIF') = 'ACTIF'
+               AND (v.stellium_versements_nets_centimes IS NOT NULL
+                    OR v.stellium_perf_euro_centimes IS NOT NULL)
+               AND ABS(v.date_valorisation - ?1) <= 86400
+             ORDER BY v.investissement_id",
         )?;
         let investissement_ids: Vec<i64> = stmt
             .query_map(params![releve_date], |row| row.get(0))?

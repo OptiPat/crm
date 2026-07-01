@@ -4,15 +4,44 @@ use super::runner::{
 use super::settings::{
     get_birthday_telegram_settings, save_birthday_telegram_settings, BirthdayTelegramSettingsPayload,
 };
+use super::messages::generate_draft;
 use crate::commands::DbState;
-use crate::database::birthdays::{list_birthdays_today_from_connection, BirthdayContactToday};
+use crate::database::birthdays::{
+    get_birthday_contact_today_by_id, list_birthdays_today_from_connection, BirthdayContactToday,
+};
+use rand::thread_rng;
+use serde::Serialize;
 use tauri::{AppHandle, State};
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BirthdayMessageDraftPayload {
+    pub contact_id: i64,
+    pub message: String,
+}
 
 #[tauri::command]
 pub fn list_birthdays_today_cmd(db: State<'_, DbState>) -> Result<Vec<BirthdayContactToday>, String> {
     let guard = db.lock().map_err(|e| e.to_string())?;
     let database = guard.as_ref().ok_or("Base non ouverte")?;
     list_birthdays_today_from_connection(database.connection()).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn generate_birthday_message_draft_cmd(
+    db: State<'_, DbState>,
+    contact_id: i64,
+) -> Result<BirthdayMessageDraftPayload, String> {
+    let guard = db.lock().map_err(|e| e.to_string())?;
+    let database = guard.as_ref().ok_or("Base non ouverte")?;
+    let contact = get_birthday_contact_today_by_id(database.connection(), contact_id)
+        .map_err(|e| e.to_string())?
+        .ok_or("Contact introuvable ou pas anniversaire aujourd'hui.")?;
+    let draft = generate_draft(&contact, &mut thread_rng());
+    Ok(BirthdayMessageDraftPayload {
+        contact_id,
+        message: draft.message,
+    })
 }
 
 #[tauri::command]

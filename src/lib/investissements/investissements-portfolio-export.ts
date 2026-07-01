@@ -6,6 +6,10 @@ import {
 } from "@/lib/investissements/investissement-encours";
 import { hasScpiCredit } from "@/lib/investissements/investissement-scpi-reinvest";
 import { hasActiveVersementProgramme } from "@/lib/investissements/investissement-versements";
+import {
+  getInvestissementStatutLabel,
+  isInvestissementActifEncours,
+} from "@/lib/investissements/investissement-statut";
 
 export const INVESTISSEMENTS_CSV_HEADERS = [
   "Produit",
@@ -22,6 +26,8 @@ export const INVESTISSEMENTS_CSV_HEADERS = [
   "Foyer",
   "Partenaire",
   "Origine",
+  "Statut",
+  "Date clôture",
   "Date souscription",
   "Fin démembrement",
   "Crédit SCPI",
@@ -34,7 +40,9 @@ function euroFromCentimes(centimes?: number | null): string {
 }
 
 export function investissementToCsvRow(inv: InvestissementWithDetails): string[] {
-  const encoursEligible = isPlacementEncoursEligible(inv.type_produit);
+  const encoursEligible =
+    isInvestissementActifEncours(inv) &&
+    isPlacementEncoursEligible(inv.type_produit);
   const encoursCentimes = encoursEligible ? getEffectiveEncoursCentimes(inv) : null;
   const hasVp = hasActiveVersementProgramme(inv);
 
@@ -53,6 +61,8 @@ export function investissementToCsvRow(inv: InvestissementWithDetails): string[]
     inv.foyer_nom ?? "",
     inv.partenaire_nom ?? "",
     inv.origine === "MON_CONSEIL" ? "Avec moi" : "À côté",
+    getInvestissementStatutLabel(inv.statut),
+    inv.date_cloture ? formatCalendarDateFr(inv.date_cloture) : "",
     inv.date_souscription ? formatCalendarDateFr(inv.date_souscription) : "",
     inv.date_fin_demembrement ? formatCalendarDateFr(inv.date_fin_demembrement) : "",
     hasScpiCredit(inv) ? "Oui" : "Non",

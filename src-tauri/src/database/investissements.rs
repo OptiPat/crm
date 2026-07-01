@@ -8,7 +8,7 @@ const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit
     montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
     mensualite_credit, credit_crd, loyer_mensuel,
     versement_programme, montant_versement_programme, frequence_versement,
-    reinvestissement_dividendes, notes, origine, created_at, updated_at";
+    reinvestissement_dividendes, notes, origine, statut, date_cloture, created_at, updated_at";
 
 fn normalize_numero_contrat(value: Option<String>) -> Option<String> {
     value.and_then(|s| {
@@ -46,13 +46,17 @@ impl super::Database {
             origine: row
                 .get::<_, String>(19)
                 .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-            created_at: row.get(20)?,
-            updated_at: row.get(21)?,
-            encours_actuel: row.get(22)?,
-            encours_date: row.get(23)?,
-            montant_investi_total: row.get(24)?,
-            stellium_versements_nets_centimes: row.get(25)?,
-            stellium_perf_euro_centimes: row.get(26)?,
+            statut: row
+                .get::<_, String>(20)
+                .unwrap_or_else(|_| "ACTIF".to_string()),
+            date_cloture: row.get(21)?,
+            created_at: row.get(22)?,
+            updated_at: row.get(23)?,
+            encours_actuel: row.get(24)?,
+            encours_date: row.get(25)?,
+            montant_investi_total: row.get(26)?,
+            stellium_versements_nets_centimes: row.get(27)?,
+            stellium_perf_euro_centimes: row.get(28)?,
         })
     }
 
@@ -153,7 +157,7 @@ impl super::Database {
                     i.nom_produit, i.numero_contrat, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
                     i.mensualite_credit, i.credit_crd, i.loyer_mensuel,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
-                    i.reinvestissement_dividendes, i.notes, i.origine, i.created_at, i.updated_at,
+                    i.reinvestissement_dividendes, i.notes, i.origine, i.statut, i.date_cloture, i.created_at, i.updated_at,
                     {}
              FROM investissements i
              LEFT JOIN contacts c ON i.contact_id = c.id
@@ -206,13 +210,17 @@ impl super::Database {
                 origine: row
                     .get::<_, String>(23)
                     .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
-                created_at: row.get(24)?,
-                updated_at: row.get(25)?,
-                encours_actuel: row.get(26)?,
-                encours_date: row.get(27)?,
-                montant_investi_total: row.get(28)?,
-                stellium_versements_nets_centimes: row.get(29)?,
-                stellium_perf_euro_centimes: row.get(30)?,
+                statut: row
+                    .get::<_, String>(24)
+                    .unwrap_or_else(|_| "ACTIF".to_string()),
+                date_cloture: row.get(25)?,
+                created_at: row.get(26)?,
+                updated_at: row.get(27)?,
+                encours_actuel: row.get(28)?,
+                encours_date: row.get(29)?,
+                montant_investi_total: row.get(30)?,
+                stellium_versements_nets_centimes: row.get(31)?,
+                stellium_perf_euro_centimes: row.get(32)?,
             })
         })?;
 
@@ -393,11 +401,18 @@ impl super::Database {
     ) -> Result<super::models::Investissement> {
         use chrono::DateTime;
 
-        let versement_programme = if investissement.versement_programme.unwrap_or(false) {
+        let mut versement_programme = if investissement.versement_programme.unwrap_or(false) {
             1
         } else {
             0
         };
+        if self
+            .get_investissement_by_id(id)
+            .ok()
+            .is_some_and(|i| i.statut == "CLOTURE")
+        {
+            versement_programme = 0;
+        }
         let reinvestissement_dividendes =
             if investissement.reinvestissement_dividendes.unwrap_or(false) {
                 1
@@ -506,6 +521,41 @@ impl super::Database {
         self.conn
             .execute("DELETE FROM investissements WHERE id = ?1", params![id])?;
         Ok(())
+    }
+
+    pub fn close_investissement(
+        &self,
+        id: i64,
+        date_cloture: Option<i64>,
+    ) -> Result<super::models::Investissement> {
+        let timestamp = date_cloture.unwrap_or_else(|| {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs() as i64
+        });
+        self.conn.execute(
+            "UPDATE investissements SET
+                statut = 'CLOTURE',
+                date_cloture = ?1,
+                versement_programme = 0,
+                updated_at = unixepoch()
+             WHERE id = ?2",
+            params![timestamp, id],
+        )?;
+        self.get_investissement_by_id(id)
+    }
+
+    pub fn reopen_investissement(&self, id: i64) -> Result<super::models::Investissement> {
+        self.conn.execute(
+            "UPDATE investissements SET
+                statut = 'ACTIF',
+                date_cloture = NULL,
+                updated_at = unixepoch()
+             WHERE id = ?1",
+            params![id],
+        )?;
+        self.get_investissement_by_id(id)
     }
 
     pub fn get_valorisations_by_investissement(
@@ -753,6 +803,7 @@ impl super::Database {
             "SELECT id, contact_id, foyer_id, nom_produit, date_fin_demembrement
              FROM investissements
              WHERE type_produit = 'SCPI_DEMEMBREMENT'
+               AND COALESCE(statut, 'ACTIF') = 'ACTIF'
                AND date_fin_demembrement IS NOT NULL
                AND date_fin_demembrement > ?1
                AND date_fin_demembrement <= ?2",

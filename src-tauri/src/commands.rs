@@ -8,7 +8,7 @@ use crate::database::{
         Foyer, Investissement, InvestissementWithDetails, MonthlyStats, NewAlerte, NewContact,
         NomProduitSuggestion,
         NewDocument, NewEtiquette, NewFamille, NewFoyer, NewInvestissement, NewInvestissementValorisation,
-        NewInvestissementVersement, NewPartenaire,
+        NewInvestissementVersement, NewPartenaire, CloseInvestissementPayload,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation,
         InvestissementVersement, NewInteraction,
         NewTemplateEmail, NewSegment, NewTache, Partenaire,
@@ -1078,6 +1078,42 @@ pub fn delete_investissement(db: State<'_, DbState>, id: i64) -> Result<(), Stri
         let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id, None);
     }
     Ok(())
+}
+
+#[tauri::command]
+pub fn close_investissement(
+    db: State<'_, DbState>,
+    id: i64,
+    payload: CloseInvestissementPayload,
+) -> Result<Investissement, String> {
+    use chrono::DateTime;
+
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    let date_cloture = payload.date_cloture.and_then(|date_str| {
+        DateTime::parse_from_rfc3339(&date_str)
+            .ok()
+            .map(|dt| dt.timestamp())
+    });
+
+    let inv = database
+        .close_investissement(id, date_cloture)
+        .map_err(|e| format!("Failed to close investissement: {}", e))?;
+    let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id, None);
+    Ok(inv)
+}
+
+#[tauri::command]
+pub fn reopen_investissement(db: State<'_, DbState>, id: i64) -> Result<Investissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    let inv = database
+        .reopen_investissement(id)
+        .map_err(|e| format!("Failed to reopen investissement: {}", e))?;
+    let _ = database.sync_auto_etiquettes_after_investissement(inv.contact_id, inv.foyer_id, None);
+    Ok(inv)
 }
 
 #[tauri::command]

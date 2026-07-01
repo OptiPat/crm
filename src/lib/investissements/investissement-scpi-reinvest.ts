@@ -1,3 +1,5 @@
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
+
 /** SCPI en pleine propriété (hors démembrement / fiscale). */
 export const SCPI_PLEINE_PROPRIETE_TYPES = ["SCPI"] as const;
 
@@ -6,6 +8,7 @@ export type ScpiPleineProprieteType = (typeof SCPI_PLEINE_PROPRIETE_TYPES)[numbe
 type ScpiReinvestFields = {
   id?: number;
   origine?: string;
+  statut?: string;
   type_produit?: string;
   reinvestissement_dividendes?: boolean;
   date_fin_pret?: number | null;
@@ -91,6 +94,7 @@ export function computeScpiReinvestissementCoverageStats(
       seenIds.add(inv.id);
     }
     if (avecMoiOnly && inv.origine !== "MON_CONSEIL") continue;
+    if (!isInvestissementActifEncours(inv)) continue;
     if (!isScpiPleineProprieteType(inv.type_produit)) continue;
     total += 1;
     if (hasActiveReinvestissementDividendes(inv)) withReinvest += 1;
@@ -111,7 +115,10 @@ export function filterScpiSansReinvestissementDividendes<T extends ScpiReinvestF
   investissements: T[]
 ): T[] {
   return investissements.filter(
-    (inv) => isScpiPleineProprieteAvecMoi(inv) && !hasActiveReinvestissementDividendes(inv)
+    (inv) =>
+      isInvestissementActifEncours(inv) &&
+      isScpiPleineProprieteAvecMoi(inv) &&
+      !hasActiveReinvestissementDividendes(inv)
   );
 }
 

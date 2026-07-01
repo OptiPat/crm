@@ -49,6 +49,10 @@ import { StelliumContratsImportDialog } from "@/components/investissements/Stell
 import { VirtualizedInvestissementsPortfolio } from "@/components/investissements/VirtualizedInvestissementsPortfolio";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
+  matchesStatutFilter,
+  type StatutFilter,
+} from "@/lib/investissements/investissement-statut";
+import {
   computeEncoursPlacementsStats,
   filterEncoursPlacementsAvecMoi,
   isPlacementEncoursEligible,
@@ -162,6 +166,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
   const [sansVpFilter, setSansVpFilter] = useState(false);
   const [sansReinvestFilter, setSansReinvestFilter] = useState(false);
   const [encoursPlacementsFilter, setEncoursPlacementsFilter] = useState(false);
+  const [statutFilter, setStatutFilter] = useState<StatutFilter>("all");
   const [showCreatePicker, setShowCreatePicker] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [createContactId, setCreateContactId] = useState<number | undefined>();
@@ -462,8 +467,16 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     [investissements]
   );
 
+  const countByStatut = useMemo(
+    () => ({
+      actifs: investissements.filter((i) => matchesStatutFilter(i.statut, "actifs")).length,
+      clotures: investissements.filter((i) => matchesStatutFilter(i.statut, "clotures")).length,
+    }),
+    [investissements]
+  );
+
   const filteredInvestissements = useMemo(() => {
-    let list = investissements;
+    let list = investissements.filter((i) => matchesStatutFilter(i.statut, statutFilter));
 
     if (sansReinvestFilter) {
       list = filterScpiSansReinvestissementDividendes(list);
@@ -504,6 +517,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     sansReinvestFilter,
     encoursPlacementsFilter,
     sortKey,
+    statutFilter,
   ]);
 
   const hasNarrowingFilters =
@@ -541,6 +555,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     searchQuery.trim() !== "" ||
     typeFilters.length > 0 ||
     partenaireFilters.length > 0 ||
+    statutFilter !== "all" ||
     sansVpFilter ||
     sansReinvestFilter ||
     encoursPlacementsFilter ||
@@ -552,6 +567,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     setSearchQuery("");
     setTypeFilters([]);
     setPartenaireFilters([]);
+    setStatutFilter("all");
     clearStatFilters();
     setSortKey("date_desc");
     setGroupMode("category");
@@ -860,6 +876,34 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
                   onClick={() => setOrigineFilters([])}
                 >
                   Toutes origines
+                </Button>
+              )}
+              <span className="text-xs text-muted-foreground self-center mr-1 ml-2">Statut :</span>
+              <OrigineFilterPill
+                active={statutFilter === "actifs"}
+                label="Actifs"
+                count={countByStatut.actifs}
+                onClick={() =>
+                  setStatutFilter((f) => (f === "actifs" ? "all" : "actifs"))
+                }
+              />
+              <OrigineFilterPill
+                active={statutFilter === "clotures"}
+                label="Clôturés"
+                count={countByStatut.clotures}
+                onClick={() =>
+                  setStatutFilter((f) => (f === "clotures" ? "all" : "clotures"))
+                }
+              />
+              {statutFilter !== "all" && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setStatutFilter("all")}
+                >
+                  Tous statuts
                 </Button>
               )}
               {hasActiveFilters && (

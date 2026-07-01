@@ -61,3 +61,39 @@ export const PARTENAIRE_TYPE_FILTER_OPTIONS = [
   { value: "ASSUREUR", label: "Assureurs" },
   { value: "PROMOTEUR", label: "Promoteurs" },
 ] as const;
+
+const ASSUREUR_PRODUIT_TYPES = new Set([
+  "ASSURANCE_VIE",
+  "PER",
+  "CONTRAT_CAPITALISATION",
+  "EPARGNE_SALARIALE",
+]);
+
+const FIP_PRODUIT_TYPES = new Set(["FIP_FCPI", "FCPR", "G3F"]);
+
+const SCPI_PRODUIT_TYPES = new Set(["SCPI", "SCPI_DEMEMBREMENT", "SCPI_FISCALE"]);
+
+const IMMO_PRODUIT_TYPES = new Set([
+  "IMMOBILIER",
+  "PINEL",
+  "DENORMANDIE",
+  "JEANBRUN",
+  "MALRAUX",
+  "MONUMENT_HISTORIQUE",
+  "DEFICIT_FONCIER",
+  "LMNP",
+  "LMP",
+  "NUE_PROPRIETE",
+  "RESIDENCE_PRINCIPALE",
+  "LOCATIF_CLASSIQUE",
+  "LOCATIF",
+]);
+
+/** Type partenaire suggéré lors de la création depuis un placement. */
+export function suggestPartenaireTypeForProduit(typeProduit: string): string {
+  if (ASSUREUR_PRODUIT_TYPES.has(typeProduit)) return "ASSUREUR";
+  if (FIP_PRODUIT_TYPES.has(typeProduit)) return "SOCIETE_GESTION_FIP";
+  if (SCPI_PRODUIT_TYPES.has(typeProduit)) return "SOCIETE_GESTION_SCPI";
+  if (IMMO_PRODUIT_TYPES.has(typeProduit)) return "PROMOTEUR";
+  return "SOCIETE_GESTION_SCPI";
+}

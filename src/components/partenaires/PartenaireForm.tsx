@@ -23,10 +23,18 @@ interface PartenaireFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   partenaire?: Partenaire | null;
+  /** Pré-sélection du type à la création (ex. depuis un placement). */
+  defaultTypePartenaire?: string;
   onSuccess: (partenaireId?: number) => void;
 }
 
-export function PartenaireForm({ open, onOpenChange, partenaire, onSuccess }: PartenaireFormProps) {
+export function PartenaireForm({
+  open,
+  onOpenChange,
+  partenaire,
+  defaultTypePartenaire,
+  onSuccess,
+}: PartenaireFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<NewPartenaire>({
     type_partenaire: partenaire?.type_partenaire || "SOCIETE_GESTION_SCPI",
@@ -37,11 +45,14 @@ export function PartenaireForm({ open, onOpenChange, partenaire, onSuccess }: Pa
   useEffect(() => {
     if (open) {
       setFormData({
-        type_partenaire: partenaire?.type_partenaire || "SOCIETE_GESTION_SCPI",
+        type_partenaire:
+          partenaire?.type_partenaire ||
+          defaultTypePartenaire ||
+          "SOCIETE_GESTION_SCPI",
         raison_sociale: partenaire?.raison_sociale || "",
       });
     }
-  }, [open, partenaire]);
+  }, [open, partenaire, defaultTypePartenaire]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

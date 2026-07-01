@@ -23,6 +23,7 @@ import {
   parseDemembrementDuree,
   parseModeDetention,
 } from "@/lib/investissements/investissement-demembrement";
+import { isInvestissementCloture } from "@/lib/investissements/investissement-statut";
 import { cn } from "@/lib/utils";
 import {
   Landmark,
@@ -97,11 +98,13 @@ export function InvestissementCard({
     formatScpiCreditLabel(inv, formatEuroCentimes, (ts) =>
       ts != null ? formatCalendarDateFr(ts) : ""
     );
+  const isCloture = isInvestissementCloture(inv);
 
   return (
     <div
       className={cn(
         "p-3 border border-border/80 rounded-lg bg-card transition-colors",
+        isCloture && "opacity-75 bg-muted/30",
         interactive &&
           "cursor-pointer hover:bg-accent/50 hover:border-primary/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
       )}
@@ -141,6 +144,14 @@ export function InvestissementCard({
             )}
             {inv.origine === "EXISTANT_CLIENT" && (
               <span className="text-xs text-gray-500 italic">à côté</span>
+            )}
+            {isCloture && (
+              <Badge className="text-xs font-medium px-2 py-0.5 border-transparent bg-gray-200 text-gray-700">
+                Clôturé
+                {inv.date_cloture
+                  ? ` · ${formatCalendarDateFr(inv.date_cloture)}`
+                  : ""}
+              </Badge>
             )}
             {proprietaireLabel &&
               (onProprietaireClick ? (

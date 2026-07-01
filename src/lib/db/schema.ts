@@ -256,6 +256,12 @@ export const investissements = sqliteTable("investissements", {
   origine: text("origine", {
     enum: ["MON_CONSEIL", "EXISTANT_CLIENT"],
   }).default("MON_CONSEIL").notNull(),
+
+  /** ACTIF = dans l'encours ; CLOTURE = sorti de l'encours, conservé en stats. */
+  statut: text("statut", {
+    enum: ["ACTIF", "CLOTURE"],
+  }).default("ACTIF").notNull(),
+  dateCloture: integer("date_cloture", { mode: "timestamp" }),
   
   // Timestamps
   createdAt: integer("created_at", { mode: "timestamp" })

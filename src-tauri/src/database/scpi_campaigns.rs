@@ -988,6 +988,7 @@ impl Database {
         let mut stmt = self.conn.prepare(
             "SELECT DISTINCT TRIM(nom_produit) FROM investissements
              WHERE type_produit IN ('SCPI', 'SCPI_DEMEMBREMENT', 'SCPI_FISCALE')
+               AND COALESCE(statut, 'ACTIF') = 'ACTIF'
                AND TRIM(COALESCE(nom_produit, '')) != ''
              ORDER BY nom_produit COLLATE NOCASE",
         )?;
@@ -1174,6 +1175,7 @@ impl Database {
             "SELECT DISTINCT TRIM(nom_produit) FROM investissements
              WHERE contact_id = ?1
                AND type_produit IN ('SCPI', 'SCPI_DEMEMBREMENT', 'SCPI_FISCALE')
+               AND COALESCE(statut, 'ACTIF') = 'ACTIF'
                AND TRIM(nom_produit) != ''",
         )?;
         let mut noms: Vec<String> = stmt
@@ -1186,6 +1188,7 @@ impl Database {
                     "SELECT DISTINCT TRIM(nom_produit) FROM investissements
                      WHERE foyer_id = ?1
                        AND type_produit IN ('SCPI', 'SCPI_DEMEMBREMENT', 'SCPI_FISCALE')
+                       AND COALESCE(statut, 'ACTIF') = 'ACTIF'
                        AND TRIM(nom_produit) != ''",
                 )?;
                 let foyer_noms: Vec<String> = foyer_stmt

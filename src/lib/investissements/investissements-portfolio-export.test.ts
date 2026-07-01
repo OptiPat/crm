@@ -22,6 +22,7 @@ function baseInv(
     frequence_versement: "MENSUEL",
     reinvestissement_dividendes: false,
     origine: "MON_CONSEIL",
+    statut: "ACTIF",
     created_at: 0,
     updated_at: 0,
     ...overrides,
@@ -51,6 +52,6 @@ describe("investissements-portfolio-export", () => {
     );
     expect(row[3]).toBe("");
     expect(row[4]).toBe("Non");
-    expect(row[16]).toBe("Oui");
+    expect(row[18]).toBe("Oui");
   });
 });

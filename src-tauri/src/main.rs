@@ -24,9 +24,9 @@ use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
 use birthday_notifications::{
-    get_birthday_telegram_settings_cmd, list_birthdays_today_cmd, run_birthday_telegram_if_due_cmd,
-    save_birthday_telegram_settings_cmd, send_birthday_telegram_reminders_now_cmd,
-    test_birthday_telegram_cmd,
+    generate_birthday_message_draft_cmd, get_birthday_telegram_settings_cmd, list_birthdays_today_cmd,
+    run_birthday_telegram_if_due_cmd, save_birthday_telegram_settings_cmd,
+    send_birthday_telegram_reminders_now_cmd, test_birthday_telegram_cmd,
 };
 use local_api::{
     get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
@@ -149,6 +149,8 @@ fn main() {
             get_investissement_by_id,
             update_investissement,
             delete_investissement,
+            close_investissement,
+            reopen_investissement,
             get_valorisations_by_investissement,
             create_investissement_valorisation,
             prepare_stellium_perf_campaign,
@@ -226,6 +228,7 @@ fn main() {
             get_birthday_telegram_settings_cmd,
             save_birthday_telegram_settings_cmd,
             list_birthdays_today_cmd,
+            generate_birthday_message_draft_cmd,
             run_birthday_telegram_if_due_cmd,
             send_birthday_telegram_reminders_now_cmd,
             test_birthday_telegram_cmd,

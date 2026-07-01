@@ -132,7 +132,7 @@ pub fn open_document_file(path: String) -> Result<(), String> {
     open_path_with_system_default(p).map_err(|e| e.to_string())
 }
 
-/// Ouvre une URL HTTPS dans le navigateur (webview Tauri ne gère pas les liens externes).
+/// Ouvre une URL externe (https, ou sms: pour Phone Link / mobile).
 pub fn open_url_in_browser(url: &str) -> Result<(), String> {
     if cfg!(target_os = "windows") {
         let escaped = url.replace('\'', "''");
@@ -182,10 +182,45 @@ pub fn open_gmail_message(
 #[tauri::command]
 pub fn open_external_url(url: String) -> Result<(), String> {
     let u = url.trim();
-    if !(u.starts_with("https://") || u.starts_with("http://")) {
+    if !is_allowed_external_url(u) {
         return Err("URL non autorisée.".into());
     }
     open_url_in_browser(u)
+}
+
+fn is_allowed_external_url(url: &str) -> bool {
+    url.starts_with("https://") || url.starts_with("http://") || is_allowed_sms_url(url)
+}
+
+fn is_allowed_sms_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("sms:") else {
+        return false;
+    };
+    let phone_part = rest.split('?').next().unwrap_or(rest);
+    let digits = phone_part.trim_start_matches('+');
+    !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
+}
+
+#[cfg(test)]
+mod open_external_url_tests {
+    use super::{is_allowed_external_url, is_allowed_sms_url};
+
+    #[test]
+    fn allows_https_and_wa_me() {
+        assert!(is_allowed_external_url("https://wa.me/33612345678?text=hi"));
+    }
+
+    #[test]
+    fn allows_sms_with_body() {
+        assert!(is_allowed_sms_url("sms:+33612345678?body=Hello"));
+        assert!(is_allowed_external_url("sms:+33612345678?body=Hello"));
+    }
+
+    #[test]
+    fn rejects_unknown_schemes() {
+        assert!(!is_allowed_external_url("javascript:alert(1)"));
+        assert!(!is_allowed_sms_url("sms:abc"));
+    }
 }
 
 pub(crate) fn open_path_with_system_default(path: &std::path::Path) -> std::io::Result<()> {

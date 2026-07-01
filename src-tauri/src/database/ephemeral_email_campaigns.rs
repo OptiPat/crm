@@ -133,7 +133,8 @@ struct ScopedInvestment {
     versement_programme: bool,
 }
 
-const INVESTISSEMENT_SCOPE_WHERE: &str = "(contact_id = ?1 OR (?2 IS NOT NULL AND foyer_id = ?2))";
+const INVESTISSEMENT_SCOPE_WHERE: &str =
+    "(contact_id = ?1 OR (?2 IS NOT NULL AND foyer_id = ?2)) AND COALESCE(statut, 'ACTIF') = 'ACTIF'";
 
 impl Database {
     pub fn template_is_ephemeral(&self, variables: Option<&str>) -> bool {

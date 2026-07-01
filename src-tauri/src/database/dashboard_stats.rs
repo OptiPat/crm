@@ -4,7 +4,10 @@
 //! Comportement inchangé : ces méthodes sont couvertes par les tests d'intégration
 //! `dashboard_encours_*`, `get_yearly_activity_stats_*` et `panier_moyen_*`.
 
-use super::operations::EFFECTIVE_ENCOURS_SQL_I;
+use super::operations::{
+    EFFECTIVE_ENCOURS_SQL_I, INVESTISSEMENT_ACTIF_ENCOURS_WHERE,
+    INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I,
+};
 use rusqlite::{params, Result};
 
 impl super::Database {
@@ -24,6 +27,7 @@ impl super::Database {
                 "SELECT COALESCE(SUM({EFFECTIVE_ENCOURS_SQL_I}), 0) FROM investissements i
              WHERE i.type_produit IN ('ASSURANCE_VIE', 'PER', 'CONTRAT_CAPITALISATION', 'EPARGNE_SALARIALE', 'FIP_FCPI', 'FCPR')
                AND i.origine = 'MON_CONSEIL'
+               AND {INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I}
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
                     OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))"
             ),
@@ -38,7 +42,8 @@ impl super::Database {
         // MENSUEL x12, TRIMESTRIEL x4, SEMESTRIEL x2, ANNUEL x1
         // Inclut TOUS les investissements avec versement programmé activé
         let versements_programmes_annuels: f64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(
+            &format!(
+                "SELECT COALESCE(SUM(
                 CASE 
                     WHEN frequence_versement = 'MENSUEL' THEN montant_versement_programme * 12
                     WHEN frequence_versement = 'TRIMESTRIEL' THEN montant_versement_programme * 4
@@ -51,8 +56,10 @@ impl super::Database {
                AND montant_versement_programme IS NOT NULL
                AND montant_versement_programme > 0
                AND origine = 'MON_CONSEIL'
+               AND {INVESTISSEMENT_ACTIF_ENCOURS_WHERE}
                AND ((contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = contact_id))
-                    OR (foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = foyer_id)))",
+                    OR (foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = foyer_id)))"
+            ),
             [],
             |row| {
                 let centimes: i64 = row.get(0)?;
@@ -62,11 +69,14 @@ impl super::Database {
 
         // Nombre de biens immobiliers
         let nombre_biens_immobiliers: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM investissements i
+            &format!(
+                "SELECT COUNT(*) FROM investissements i
              WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'JEANBRUN', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE')
                AND i.origine = 'MON_CONSEIL'
+               AND {INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I}
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
-                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))",
+                    OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))"
+            ),
             [],
             |row| row.get(0),
         ).unwrap_or(0);
@@ -271,6 +281,7 @@ impl super::Database {
                 "SELECT i.type_produit, COALESCE(SUM({EFFECTIVE_ENCOURS_SQL_I}), 0) as total
              FROM investissements i
              WHERE i.origine = 'MON_CONSEIL'
+               AND {INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I}
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
                     OR (i.foyer_id IS NOT NULL AND EXISTS (SELECT 1 FROM foyers f WHERE f.id = i.foyer_id)))
              GROUP BY i.type_produit

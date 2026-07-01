@@ -1,8 +1,10 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import type { PartenaireListMeta } from "@/components/partenaires/PartenaireSummaryCard";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 
 export function partenaireEncoursContribution(inv: Investissement): number {
+  if (!isInvestissementActifEncours(inv)) return 0;
   if (inv.origine !== "MON_CONSEIL") return 0;
   return getEffectiveEncoursCentimes(inv);
 }

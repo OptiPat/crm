@@ -17,6 +17,7 @@ function sampleInv(
     versement_programme: false,
     reinvestissement_dividendes: false,
     origine: "MON_CONSEIL",
+    statut: "ACTIF",
     created_at: 0,
     updated_at: 0,
     ...overrides,
@@ -64,6 +65,15 @@ describe("investissement-encours", () => {
     const inv = sampleInv({ id: 42, montant_initial: 1_500_000 });
     const stats = computeEncoursPlacementsStats([inv, { ...inv }]);
     expect(stats.encoursCentimes).toBe(1_500_000);
+    expect(stats.count).toBe(1);
+  });
+
+  it("exclut les investissements clôturés de l'encours", () => {
+    const stats = computeEncoursPlacementsStats([
+      sampleInv({ id: 1, montant_initial: 1_000_000 }),
+      sampleInv({ id: 2, statut: "CLOTURE", montant_initial: 2_000_000 }),
+    ]);
+    expect(stats.encoursCentimes).toBe(1_000_000);
     expect(stats.count).toBe(1);
   });
 

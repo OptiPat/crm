@@ -77,6 +77,8 @@ const KNOWN_TYPE_PRODUITS = new Set<string>([
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers } from "@/lib/api/tauri-foyers";
 import { getAllPartenaires } from "@/lib/api/tauri-partenaires";
+import { PartenaireForm } from "@/components/partenaires/PartenaireForm";
+import { suggestPartenaireTypeForProduit } from "@/lib/partenaires/partenaire-display";
 import {
   createInvestissement,
   updateInvestissement,
@@ -89,7 +91,9 @@ import {
 } from "@/lib/api/tauri-investissements";
 import { InvestissementEncoursPanel } from "@/components/investissements/InvestissementEncoursPanel";
 import { InvestissementVersementsPanel } from "@/components/investissements/InvestissementVersementsPanel";
+import { InvestissementCloturePanel } from "@/components/investissements/InvestissementCloturePanel";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
+import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
 import {
   formatNomProduit,
   isNumeroContratEligible,
@@ -129,6 +133,7 @@ import {
 } from "@/lib/investissements/investissement-immo-financing";
 import { toast } from "sonner";
 import type { LucideIcon } from "lucide-react";
+import { Plus } from "lucide-react";
 import {
   getVisibleInvestissementFormSections,
   INVESTISSEMENT_FORM_SECTION_ICON_CLASS,
@@ -253,14 +258,25 @@ export function InvestissementForm({
   const [nomProduitSuggestions, setNomProduitSuggestions] = useState<
     NomProduitSuggestion[]
   >([]);
+  const [liveInvestissement, setLiveInvestissement] = useState<Investissement | null>(
+    null
+  );
+  const [showPartenaireForm, setShowPartenaireForm] = useState(false);
+
+  const editingInvestissement = liveInvestissement ?? investissement ?? null;
+  const isActifEncours = editingInvestissement
+    ? isInvestissementActifEncours(editingInvestissement)
+    : true;
 
   const showEncoursSection =
-    !!investissement && isPlacementEncoursEligible(typeProduit);
+    !!editingInvestissement &&
+    isActifEncours &&
+    isPlacementEncoursEligible(typeProduit);
 
   const showNumeroContratField = isNumeroContratEligible(typeProduit);
 
   const showVersementsSection =
-    !!investissement && isVersementComplementaireEligible(typeProduit);
+    !!editingInvestissement && isVersementComplementaireEligible(typeProduit);
 
   const showExceltisSection =
     !investissement &&
@@ -418,8 +434,10 @@ export function InvestissementForm({
           actuel: investissement.encours_actuel,
           date: investissement.encours_date,
         });
+        setLiveInvestissement(investissement);
       } else {
         resetForm();
+        setLiveInvestissement(null);
         // Si un contact par défaut est fourni, le pré-sélectionner
         if (defaultContactId) {
           setContactId(defaultContactId.toString());
@@ -625,7 +643,8 @@ export function InvestissementForm({
   const sectionVisibility = useMemo(
     () => ({
       financement: scpiFinancing || immoFinancing,
-      versements: accepteVersementProgramme || accepteReinvestissement,
+      versements:
+        isActifEncours && (accepteVersementProgramme || accepteReinvestissement),
       suivi: showEncoursSection || showVersementsSection,
     }),
     [
@@ -633,6 +652,7 @@ export function InvestissementForm({
       immoFinancing,
       accepteVersementProgramme,
       accepteReinvestissement,
+      isActifEncours,
       showEncoursSection,
       showVersementsSection,
     ]
@@ -866,7 +886,19 @@ export function InvestissementForm({
 
           {/* Partenaire */}
           <div className="space-y-2">
-            <Label htmlFor="partenaire">Partenaire</Label>
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="partenaire">Partenaire</Label>
+              <Button
+                type="button"
+                variant="link"
+                size="sm"
+                className="h-auto px-0 text-xs gap-1"
+                onClick={() => setShowPartenaireForm(true)}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Créer un partenaire
+              </Button>
+            </div>
             <Select value={partenaireId} onValueChange={setPartenaireId}>
               <SelectTrigger>
                 <SelectValue placeholder="Sélectionnez un partenaire (optionnel)" />
@@ -1157,7 +1189,7 @@ export function InvestissementForm({
         </>
       )}
 
-      {(accepteVersementProgramme || accepteReinvestissement) && (
+      {(accepteVersementProgramme || accepteReinvestissement) && isActifEncours && (
         <>
           <Separator />
           <InvestissementFormSection sectionKey="versements">
@@ -1250,16 +1282,16 @@ export function InvestissementForm({
         </>
       )}
 
-      {(showVersementsSection || showEncoursSection) && investissement && (
+      {(showVersementsSection || showEncoursSection) && editingInvestissement && (
         <>
           <Separator />
           <InvestissementFormSection sectionKey="suivi">
-          {showVersementsSection && investissement && (
+          {showVersementsSection && editingInvestissement && (
             <InvestissementVersementsPanel
-              investissementId={investissement.id}
+              investissementId={editingInvestissement.id}
               onUpdated={async () => {
                 try {
-                  const refreshed = await getInvestissementById(investissement.id);
+                  const refreshed = await getInvestissementById(editingInvestissement.id);
                   setLiveEncours({
                     actuel: refreshed.encours_actuel,
                     date: refreshed.encours_date,
@@ -1272,16 +1304,16 @@ export function InvestissementForm({
             />
           )}
 
-          {showEncoursSection && investissement && (
+          {showEncoursSection && editingInvestissement && (
             <InvestissementEncoursPanel
-              investissementId={investissement.id}
-              montantInitial={investissement.montant_initial}
-              dateSouscription={investissement.date_souscription}
-              encoursActuel={liveEncours.actuel ?? investissement.encours_actuel}
-              encoursDate={liveEncours.date ?? investissement.encours_date}
+              investissementId={editingInvestissement.id}
+              montantInitial={editingInvestissement.montant_initial}
+              dateSouscription={editingInvestissement.date_souscription}
+              encoursActuel={liveEncours.actuel ?? editingInvestissement.encours_actuel}
+              encoursDate={liveEncours.date ?? editingInvestissement.encours_date}
               onUpdated={async () => {
                 try {
-                  const refreshed = await getInvestissementById(investissement.id);
+                  const refreshed = await getInvestissementById(editingInvestissement.id);
                   setLiveEncours({
                     actuel: refreshed.encours_actuel,
                     date: refreshed.encours_date,
@@ -1294,6 +1326,20 @@ export function InvestissementForm({
             />
           )}
           </InvestissementFormSection>
+        </>
+      )}
+
+      {editingInvestissement && (
+        <>
+          <Separator />
+          <InvestissementCloturePanel
+            investissement={editingInvestissement}
+            onChanged={(updated) => {
+              setLiveInvestissement(updated);
+              setVersementProgramme(false);
+              onSuccess();
+            }}
+          />
         </>
       )}
 
@@ -1333,30 +1379,56 @@ export function InvestissementForm({
     </form>
   );
 
-  return useSheet ? (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
-      >
-        <div className="shrink-0 border-b px-6 py-4">
-          <SheetHeader>
-            <SheetTitle>{formTitle}</SheetTitle>
-            <SheetDescription>{formDescription}</SheetDescription>
-          </SheetHeader>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
-      </SheetContent>
-    </Sheet>
-  ) : (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{formTitle}</DialogTitle>
-          <DialogDescription>{formDescription}</DialogDescription>
-        </DialogHeader>
-        {formBody}
-      </DialogContent>
-    </Dialog>
+  const partenaireFormModal = (
+    <PartenaireForm
+      open={showPartenaireForm}
+      onOpenChange={setShowPartenaireForm}
+      defaultTypePartenaire={
+        typeProduit ? suggestPartenaireTypeForProduit(typeProduit) : undefined
+      }
+      onSuccess={async (newId) => {
+        try {
+          const partenairesData = await getAllPartenaires();
+          setPartenaires(partenairesData);
+          if (newId != null) {
+            setPartenaireId(String(newId));
+          }
+        } catch (error) {
+          console.error("Error reloading partenaires:", error);
+        }
+      }}
+    />
+  );
+
+  return (
+    <>
+      {useSheet ? (
+        <Sheet open={open} onOpenChange={onOpenChange}>
+          <SheetContent
+            side="right"
+            className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
+          >
+            <div className="shrink-0 border-b px-6 py-4">
+              <SheetHeader>
+                <SheetTitle>{formTitle}</SheetTitle>
+                <SheetDescription>{formDescription}</SheetDescription>
+              </SheetHeader>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{formTitle}</DialogTitle>
+              <DialogDescription>{formDescription}</DialogDescription>
+            </DialogHeader>
+            {formBody}
+          </DialogContent>
+        </Dialog>
+      )}
+      {partenaireFormModal}
+    </>
   );
 }

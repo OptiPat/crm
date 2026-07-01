@@ -357,6 +357,9 @@ pub struct Investissement {
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
     pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+    /// ACTIF = dans l'encours ; CLOTURE = sorti de l'encours, conservé en stats.
+    pub statut: String,
+    pub date_cloture: Option<i64>,
     /// Dernière valorisation saisie (centimes), si renseignée.
     pub encours_actuel: Option<i64>,
     /// Date de la dernière valorisation (timestamp Unix).
@@ -427,6 +430,8 @@ pub struct InvestissementWithDetails {
     pub reinvestissement_dividendes: bool,
     pub notes: Option<String>,
     pub origine: String, // "MON_CONSEIL" ou "EXISTANT_CLIENT"
+    pub statut: String,
+    pub date_cloture: Option<i64>,
     pub encours_actuel: Option<i64>,
     pub encours_date: Option<i64>,
     pub montant_investi_total: Option<i64>,
@@ -434,6 +439,12 @@ pub struct InvestissementWithDetails {
     pub stellium_perf_euro_centimes: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CloseInvestissementPayload {
+    /// ISO 8601 (RFC3339) ; défaut = aujourd'hui côté backend.
+    pub date_cloture: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
