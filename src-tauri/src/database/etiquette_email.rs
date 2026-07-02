@@ -43,7 +43,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        COALESCE(e.rendement_cible, '')
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -72,7 +73,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        COALESCE(e.rendement_cible, '')
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -107,7 +109,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        COALESCE(e.rendement_cible, '')
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -141,7 +144,8 @@ impl Database {
                         NULL,
                         ce.email_gmail_message_id,
                         ce.email_gmail_thread_id,
-                        ce.email_sent_subject
+                        ce.email_sent_subject,
+                        COALESCE(e.rendement_cible, '')
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -171,7 +175,8 @@ impl Database {
                         NULL,
                         ce.email_gmail_message_id,
                         ce.email_gmail_thread_id,
-                        ce.email_sent_subject
+                        ce.email_sent_subject,
+                        COALESCE(e.rendement_cible, '')
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -202,7 +207,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        COALESCE(e.rendement_cible, '')
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -253,6 +259,7 @@ impl Database {
                 email_gmail_message_id: row.get(23).ok(),
                 email_gmail_thread_id: row.get(24).ok(),
                 email_sent_subject: row.get(25).ok(),
+                rendement_exceltis: row.get(26).unwrap_or_else(|_| String::new()),
             })
         };
 

@@ -295,9 +295,10 @@ impl super::Database {
                 nom: "Exceltis — remboursement et arbitrage".into(),
                 sujet: "Exceltis {{millesime}} — remboursement et prochaines étapes, {{prenom}}".into(),
                 corps: "Bonjour {{prenom}} {{nom}},\n\n\
-Stellium vient de procéder au remboursement de votre support Exceltis {{millesime}}.\n\n\
+Stellium vient de procéder au remboursement de votre support {{etiquette_nom}} avec une performance de {{rendement_exceltis}}.\n\
+Ils seront officiellement disponibles d'ici 2 à 3 semaines.\n\n\
 Concrètement :\n\
-• les fonds sont de nouveau disponibles sur votre contrat ;\n\
+• les fonds seront de nouveau disponibles sur votre contrat ;\n\
 • c'est le moment de faire le point : réinvestissement, arbitrage vers d'autres supports, ou maintien en trésorerie selon votre stratégie.\n\n\
 Je vous propose d'en discuter lors d'un court échange. Vous pouvez réserver un créneau ici : {{lien_agenda}}\n\n\
 Si vous préférez, répondez à ce message ou appelez-moi au {{cgp_telephone}}.\n\n\

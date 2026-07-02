@@ -90,4 +90,16 @@ describe("renderTemplatePreview", () => {
     expect(out.subject).toBe("Bonjour Marie");
     expect(out.body).toContain("Paul");
   });
+
+  it("remplace les variables Exceltis dont rendement_exceltis", () => {
+    const out = renderTemplatePreview(
+      "Exceltis {{millesime}} — {{prenom}}",
+      "Support {{etiquette_nom}} — performance {{rendement_exceltis}}.",
+      SAMPLE_PREVIEW_CONTACT,
+      null
+    );
+    expect(out.subject).toBe("Exceltis Février 2025 — Marie");
+    expect(out.body).toContain("Exceltis — Février 2025");
+    expect(out.body).toContain("performance 9 %/an");
+  });
 });

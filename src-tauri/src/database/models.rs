@@ -611,6 +611,8 @@ pub struct Etiquette {
     pub segment_id: Option<i64>,
     /// Pipeline de suivi campagne (kanban Suivi)
     pub pipeline_actif: bool,
+    /// Performance cible affichée dans les mails Exceltis (ex. « 9 %/an »)
+    pub rendement_cible: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -637,6 +639,7 @@ pub struct NewEtiquette {
     pub is_default: Option<bool>, // Défaut: false
     pub actif: Option<bool>,      // Défaut: true
     pub segment_id: Option<i64>,
+    pub rendement_cible: Option<String>,
 }
 
 /// Action automatique rattachée à une étiquette (déclenchée à l'attribution AUTO).
@@ -735,6 +738,9 @@ pub struct EtiquetteEmailQueueItem {
     pub email_gmail_thread_id: Option<String>,
     #[serde(default)]
     pub email_sent_subject: Option<String>,
+    /// Rendement cible Exceltis (colonne étiquette) — balise `{{rendement_exceltis}}`
+    #[serde(default)]
+    pub rendement_exceltis: String,
 }
 
 /// Snapshot des files d'envoi (1 appel IPC au lieu de 6).
@@ -831,6 +837,8 @@ pub struct EtiquetteWithCount {
     pub is_default: bool,
     pub actif: bool,
     pub segment_id: Option<i64>,
+    pub pipeline_actif: bool,
+    pub rendement_cible: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
     pub contact_count: i64, // Nombre de contacts avec cette étiquette

@@ -322,6 +322,7 @@ pub fn ensure_newsletter_etiquette(
                 is_default: Some(true),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .map_err(|e| format!("Création étiquette Newsletter: {}", e))?;
         (created_etiq.id, true)
@@ -378,6 +379,7 @@ pub fn activate_newsletter_campaign(
                 is_default: Some(etiquette.is_default),
                 actif: Some(etiquette.actif),
                 segment_id: etiquette.segment_id,
+                rendement_cible: etiquette.rendement_cible.clone(),
             },
         )
         .map_err(|e| format!("Activation campagne: {}", e))?;
@@ -484,6 +486,7 @@ pub fn prepare_newsletter_edition(
                 is_default: Some(etiquette.is_default),
                 actif: Some(etiquette.actif),
                 segment_id: etiquette.segment_id,
+                rendement_cible: etiquette.rendement_cible.clone(),
             },
         )
         .map_err(|e| format!("Activation campagne: {}", e))?;

@@ -59,6 +59,7 @@ export function buildTemplateVariables(
     ),
     millesime,
     etiquette_nom: item.etiquette_nom,
+    rendement_exceltis: item.rendement_exceltis?.trim() ?? "",
     ...parseCampaignVariables(item.campaign_variables),
   };
 }

@@ -51,6 +51,8 @@ type Props = {
   templates: TemplateEmail[];
   nom: string;
   isAuto: boolean;
+  rendementCible: string;
+  onRendementCibleChange: (v: string) => void;
   isEventSouscription?: boolean;
   highlightField?: EtiquetteFormFieldId | null;
 };
@@ -77,6 +79,8 @@ export function EtiquetteEmailCampaignFields({
   templates,
   nom,
   isAuto,
+  rendementCible,
+  onRendementCibleChange,
   isEventSouscription = false,
   highlightField = null,
 }: Props) {
@@ -221,20 +225,40 @@ export function EtiquetteEmailCampaignFields({
           </div>
 
           {isExceltis ? (
-            <div className="space-y-2">
-              <Label className="text-sm font-medium">
-                <span className="text-muted-foreground font-normal mr-1.5">2.</span>
-                Déclenchement
-              </Label>
-              <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 px-4 py-3 space-y-2 text-sm">
-                <p className="leading-relaxed">
-                  <strong>Aucune date à saisir.</strong> Les contacts taggés entrent en file dès que
-                  Stellium envoie le mail « Remboursement Exceltis » correspondant à cette gamme et ce
-                  millésime (détection Gmail automatique).
-                </p>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  <span className="text-muted-foreground font-normal mr-1.5">2.</span>
+                  Déclenchement
+                </Label>
+                <div className="rounded-lg border border-amber-200/80 bg-amber-50/50 px-4 py-3 space-y-2 text-sm">
+                  <p className="leading-relaxed">
+                    <strong>Aucune date à saisir.</strong> Les contacts taggés entrent en file dès que
+                    Stellium envoie le mail « Remboursement Exceltis » correspondant à cette gamme et ce
+                    millésime (détection Gmail automatique).
+                  </p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    Posez l&apos;étiquette sur les fiches contact, activez la campagne ci-dessus, puis
+                    attendez le scan Stellium (Paramètres → Email ou sync en arrière-plan).
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="exceltis-rendement-cible" className="text-sm font-medium">
+                  <span className="text-muted-foreground font-normal mr-1.5">3.</span>
+                  Rendement cible
+                </Label>
+                <Input
+                  id="exceltis-rendement-cible"
+                  value={rendementCible}
+                  onChange={(e) => onRendementCibleChange(e.target.value)}
+                  placeholder="ex. 9 %/an"
+                  className="max-w-xs"
+                />
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Posez l&apos;étiquette sur les fiches contact, activez la campagne ci-dessus, puis
-                  attendez le scan Stellium (Paramètres → Email ou sync en arrière-plan).
+                  Inséré dans le modèle via la balise{" "}
+                  <code className="text-[11px] bg-muted px-1 rounded">{"{{rendement_exceltis}}"}</code>{" "}
+                  (ex. « avec une performance de 9 %/an »).
                 </p>
               </div>
             </div>

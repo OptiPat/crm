@@ -89,6 +89,12 @@ export const EMAIL_TEMPLATE_VARIABLES: {
     hint: "Campagne liée (ex. Exceltis — Août 2026)",
   },
   {
+    token: "{{rendement_exceltis}}",
+    key: "rendement_exceltis",
+    label: "Rendement Exceltis",
+    hint: "Ex. 9 %/an — saisi sur l'étiquette Exceltis",
+  },
+  {
     token: "{{periode}}",
     key: "periode",
     label: "Période bulletin SCPI",
@@ -193,6 +199,7 @@ export const SAMPLE_PREVIEW_CONTACT = {
 export const SAMPLE_EXCELITIS_TEMPLATE_VARS = {
   millesime: "Février 2025",
   etiquette_nom: "Exceltis — Février 2025",
+  rendement_exceltis: "9 %/an",
 } as const;
 
 export function renderTemplatePreview(

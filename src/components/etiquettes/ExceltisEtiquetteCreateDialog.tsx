@@ -8,6 +8,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -46,6 +47,7 @@ export function ExceltisEtiquetteCreateDialog({
   const [gamme, setGamme] = useState<ExceltisGamme>("Rendement");
   const [month, setMonth] = useState(defaultMillesime?.month ?? 1);
   const [year, setYear] = useState(defaultMillesime?.year ?? new Date().getFullYear());
+  const [rendementCible, setRendementCible] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
   const yearOptions = useMemo(() => buildYearOptions(new Date().getFullYear()), []);
@@ -58,6 +60,7 @@ export function ExceltisEtiquetteCreateDialog({
     setGamme("Rendement");
     setMonth(next?.month ?? 1);
     setYear(next?.year ?? new Date().getFullYear());
+    setRendementCible("");
     setSubmitting(false);
   }, [open]);
 
@@ -69,7 +72,13 @@ export function ExceltisEtiquetteCreateDialog({
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      const { nom, created } = await ensureExceltisEtiquette(gamme, month, year);
+      const { nom, created } = await ensureExceltisEtiquette(
+        gamme,
+        month,
+        year,
+        undefined,
+        rendementCible
+      );
       notifyEtiquettesChanged();
       if (created) {
         toast.success(`Étiquette « ${nom} » créée`);
@@ -176,6 +185,20 @@ export function ExceltisEtiquetteCreateDialog({
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="exceltis-rendement-create">Rendement cible (optionnel)</Label>
+            <Input
+              id="exceltis-rendement-create"
+              value={rendementCible}
+              onChange={(e) => setRendementCible(e.target.value)}
+              placeholder="ex. 9 %/an"
+            />
+            <p className="text-xs text-muted-foreground">
+              Utilisé dans le mail via{" "}
+              <code className="text-[11px] bg-muted px-1 rounded">{"{{rendement_exceltis}}"}</code>
+            </p>
           </div>
 
           <div className="rounded-md border border-amber-200/80 bg-amber-50/50 px-3 py-2.5 space-y-1">

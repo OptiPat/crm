@@ -137,6 +137,7 @@ pub fn etiquette_schedule_from_trigger(trigger: &TemplateEmailTriggerConfig) -> 
         actif: true,
         segment_id: None,
         pipeline_actif: false,
+        rendement_cible: None,
         created_at: 0,
         updated_at: 0,
     }

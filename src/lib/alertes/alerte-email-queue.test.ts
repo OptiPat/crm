@@ -44,6 +44,7 @@ const etiquettes: EtiquetteWithCount[] = [
     actif: true,
     segment_id: null,
     pipeline_actif: false,
+    rendement_cible: null,
     created_at: 1,
     updated_at: 1,
     contact_count: 1,

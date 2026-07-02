@@ -589,6 +589,7 @@ impl Database {
                 email_gmail_message_id: row.get(22).ok(),
                 email_gmail_thread_id: row.get(23).ok(),
                 email_sent_subject: row.get(24).ok(),
+                rendement_exceltis: String::new(),
             })
         };
 

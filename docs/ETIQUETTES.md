@@ -196,7 +196,8 @@ Tests frontend : `src/lib/etiquettes/etiquettes-filter.test.ts`, `etiquette-emai
 | **Millésime** | Parsé depuis le sujet ou le corps (mot « Rendement » optionnel). |
 | **Date « à partir du … »** | Indique quand le fond se désinvestit ; ensuite arbitrage / réinvestissement possible. Affichée dans Suivi et notifications. |
 | **Fin de cycle** | Retrait d’étiquette **manuel** ; le mail ne retire rien automatiquement. |
-| **Campagne email** | Modèle **Exceltis — remboursement et arbitrage** (`{{millesime}}`, `{{etiquette_nom}}`) — suggéré à la création de l’étiquette ; relance = modèle « suite sans réponse ». |
+| **Campagne email** | Modèle **Exceltis — remboursement et arbitrage** (`{{millesime}}`, `{{etiquette_nom}}`, `{{rendement_exceltis}}`) — suggéré à la création de l’étiquette ; relance = modèle « suite sans réponse ». |
+| **Rendement cible** | Saisi sur l'étiquette (création ou onglet Email), ex. `9 %/an` — balise `{{rendement_exceltis}}` dans le modèle et la relance. |
 
 Scan automatique au démarrage du CRM (compte Google connecté), puis environ toutes les 5 minutes. Paramètres → Email : scan manuel possible.
 

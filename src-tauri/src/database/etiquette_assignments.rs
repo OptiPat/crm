@@ -302,6 +302,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -324,6 +325,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -348,6 +350,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -370,6 +373,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -392,6 +396,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -414,6 +419,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -436,6 +442,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -458,6 +465,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -483,6 +491,7 @@ impl Database {
             is_default: Some(true),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         })?;
         created += 1;
 
@@ -761,6 +770,7 @@ impl Database {
                             is_default: Some(true),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
                         .is_ok()
                     {

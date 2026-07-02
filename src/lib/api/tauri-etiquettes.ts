@@ -32,6 +32,8 @@ export interface Etiquette {
   segment_id: number | null;
   /** Pipeline kanban de suivi campagne */
   pipeline_actif: boolean;
+  /** Performance cible campagne Exceltis (ex. « 9 %/an ») */
+  rendement_cible: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -57,6 +59,7 @@ export interface NewEtiquette {
   is_default?: boolean;       // Défaut: false
   actif?: boolean;            // Défaut: true
   segment_id?: number | null;
+  rendement_cible?: string | null;
 }
 
 export interface ContactEtiquette {
@@ -125,6 +128,8 @@ export interface EtiquetteEmailQueueItem {
   email_gmail_thread_id?: string | null;
   /** Objet tel qu'envoyé (peut différer du modèle après édition). */
   email_sent_subject?: string | null;
+  /** Rendement cible Exceltis — balise {{rendement_exceltis}} */
+  rendement_exceltis?: string;
 }
 
 export type EtiquetteEmailQueueStatus =

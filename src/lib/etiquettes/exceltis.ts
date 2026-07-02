@@ -281,7 +281,8 @@ export async function ensureExceltisEtiquette(
   gamme: ExceltisGamme,
   month: number,
   year: number,
-  etiquettes?: Etiquette[]
+  etiquettes?: Etiquette[],
+  rendementCible?: string | null
 ): Promise<ExceltisEtiquetteEnsureResult> {
   const nom = formatExceltisEtiquetteNom(gamme, month, year);
   const existing = await findExceltisEtiquetteByKey(gamme, month, year, etiquettes);
@@ -291,6 +292,7 @@ export async function ensureExceltisEtiquette(
 
   const templates = await getAllTemplatesEmail();
   const emailTemplate = templates.find((t) => t.nom === EXCELITIS_EMAIL_TEMPLATE_NOM);
+  const rendement = rendementCible?.trim() || null;
   const etiquette = await createEtiquette({
     nom,
     couleur: "#EAB308",
@@ -303,6 +305,7 @@ export async function ensureExceltisEtiquette(
     auto_condition_type: null,
     auto_condition_config: null,
     auto_categories: null,
+    rendement_cible: rendement,
   });
   return { nom, etiquette, created: true };
 }

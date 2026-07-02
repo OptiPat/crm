@@ -535,6 +535,7 @@ impl Database {
         self.migrate_fix_agenda_template_token_typos()?;
         self.migrate_email_send_log()?;
         self.migrate_etiquette_pipeline()?;
+        self.migrate_etiquette_rendement_cible()?;
         self.migrate_calendar_events()?;
         self.migrate_contacts_google_sync()?;
         self.migrate_google_contact_name_proposal_dismissals()?;
@@ -827,6 +828,17 @@ impl Database {
                 [],
             )?;
             println!("✅ Migration: pipeline_status sur contact_etiquettes");
+        }
+        Ok(())
+    }
+
+    fn migrate_etiquette_rendement_cible(&self) -> Result<()> {
+        if !self.table_has_column("etiquettes", "rendement_cible")? {
+            self.conn.execute(
+                "ALTER TABLE etiquettes ADD COLUMN rendement_cible TEXT",
+                [],
+            )?;
+            println!("✅ Migration: rendement_cible sur etiquettes");
         }
         Ok(())
     }

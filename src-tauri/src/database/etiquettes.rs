@@ -15,7 +15,7 @@ impl Database {
                     auto_condition_type, auto_condition_config, auto_categories,
                     email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
                     email_envoi_jours_semaine, email_actif, is_default, actif, segment_id,
-                    pipeline_actif, created_at, updated_at";
+                    pipeline_actif, rendement_cible, created_at, updated_at";
 
     fn map_etiquette_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Etiquette> {
         Ok(Etiquette {
@@ -38,8 +38,9 @@ impl Database {
             actif: row.get::<_, i64>(16)? != 0,
             segment_id: row.get(17)?,
             pipeline_actif: row.get::<_, i64>(18)? != 0,
-            created_at: row.get(19)?,
-            updated_at: row.get(20)?,
+            rendement_cible: row.get(19)?,
+            created_at: row.get(20)?,
+            updated_at: row.get(21)?,
         })
     }
 
@@ -241,6 +242,7 @@ impl Database {
                     e.auto_condition_type, e.auto_condition_config, e.auto_categories,
                     e.email_template_id, e.email_delai_jours, e.email_envoi_prevu, e.email_envoi_heure,
                     e.email_envoi_jours_semaine, e.email_actif, e.is_default, e.actif, e.segment_id,
+                    e.pipeline_actif, e.rendement_cible,
                     e.created_at, e.updated_at,
                     COALESCE((SELECT COUNT(*) FROM contact_etiquettes ce WHERE ce.etiquette_id = e.id), 0) as contact_count
              FROM etiquettes e
@@ -267,9 +269,11 @@ impl Database {
                 is_default: row.get::<_, i64>(15)? != 0,
                 actif: row.get::<_, i64>(16)? != 0,
                 segment_id: row.get(17)?,
-                created_at: row.get(18)?,
-                updated_at: row.get(19)?,
-                contact_count: row.get(20)?,
+                pipeline_actif: row.get::<_, i64>(18)? != 0,
+                rendement_cible: row.get(19)?,
+                created_at: row.get(20)?,
+                updated_at: row.get(21)?,
+                contact_count: row.get(22)?,
             })
         })?;
 
@@ -386,8 +390,9 @@ impl Database {
             "INSERT INTO etiquettes (nom, couleur, icone, description, priorite,
                                     auto_condition_type, auto_condition_config, auto_categories,
                                     email_template_id, email_delai_jours, email_envoi_prevu, email_envoi_heure,
-                                    email_envoi_jours_semaine, email_actif, is_default, actif, segment_id) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
+                                    email_envoi_jours_semaine, email_actif, is_default, actif, segment_id,
+                                    rendement_cible) 
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -406,6 +411,7 @@ impl Database {
                 is_default,
                 actif,
                 etiquette.segment_id,
+                &etiquette.rendement_cible,
             ],
         )?;
 
@@ -466,8 +472,9 @@ impl Database {
                 is_default = ?15,
                 actif = ?16,
                 segment_id = ?17,
+                rendement_cible = ?18,
                 updated_at = unixepoch()
-            WHERE id = ?18",
+            WHERE id = ?19",
             params![
                 &etiquette.nom,
                 &couleur,
@@ -486,6 +493,7 @@ impl Database {
                 is_default,
                 actif,
                 etiquette.segment_id,
+                &etiquette.rendement_cible,
                 id
             ],
         )?;

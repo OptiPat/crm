@@ -693,6 +693,7 @@ impl Database {
             email_gmail_message_id: row.get(23).ok(),
             email_gmail_thread_id: row.get(24).ok(),
             email_sent_subject: row.get(25).ok(),
+            rendement_exceltis: String::new(),
         })
     }
 
@@ -994,6 +995,7 @@ mod tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -1082,6 +1084,7 @@ mod tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -1160,6 +1163,7 @@ mod tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 

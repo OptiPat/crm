@@ -1994,6 +1994,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2068,6 +2069,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2199,6 +2201,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2338,6 +2341,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2429,6 +2433,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2517,6 +2522,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2603,6 +2609,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2689,6 +2696,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2764,6 +2772,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .expect("campagne Exceltis sans date/heure doit être enregistrable");
 
@@ -2787,6 +2796,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             },
         )
         .expect("mise à jour campagne Exceltis sans date/heure");
@@ -2839,6 +2849,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -2887,6 +2898,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             },
         )
         .unwrap();
@@ -2962,6 +2974,87 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn exceltis_email_queue_includes_rendement_cible() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+        use crate::email::stellium_exceltis::format_exceltis_etiquette_nom;
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Exceltis tpl rendement".into(),
+                sujet: "Exceltis {{millesime}}".into(),
+                corps: "Perf {{rendement_exceltis}}".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let nom = format_exceltis_etiquette_nom(Some("Rendement"), 2, 2025).unwrap();
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: nom.clone(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(50),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(1),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+                rendement_cible: Some("9 %/an".into()),
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("rendement@example.com".into()),
+                ..sample_contact("DUPONT", "Marie")
+            })
+            .unwrap();
+
+        db.attribuer_etiquette(contact.id.unwrap(), etiqu.id, Some("MANUEL".into()), None)
+            .unwrap();
+
+        let state_json = serde_json::json!({
+            "signals": [{
+                "gmailMessageId": "sim-rendement",
+                "subject": "Remboursement Exceltis Rendement Février 2025",
+                "millesimeLabel": "Février 2025",
+                "etiquetteNom": nom,
+                "etiquetteId": etiqu.id,
+                "contactCount": 1,
+                "receivedAt": now - 60,
+            }]
+        });
+        db.set_setting("stellium_exceltis_signals_v1", &state_json.to_string())
+            .unwrap();
+        db.sync_exceltis_etiquette_email_schedule(etiqu.id).unwrap();
+
+        let ready = db.get_etiquette_email_queue("ready").unwrap();
+        let row = ready
+            .iter()
+            .find(|q| q.etiquette_id == etiqu.id)
+            .expect("ligne ready Exceltis");
+        assert_eq!(row.rendement_exceltis, "9 %/an");
+    }
+
+    #[test]
     fn auto_recalc_keeps_cancelled_suivi_out_of_ready_queue() {
         use crate::database::models::{NewEtiquette, NewTemplateEmail};
 
@@ -3011,6 +3104,7 @@ mod database_integration_tests {
                 is_default: Some(etiqu_before.is_default),
                 actif: Some(etiqu_before.actif),
                 segment_id: etiqu_before.segment_id,
+                rendement_cible: etiqu_before.rendement_cible.clone(),
             },
         )
         .unwrap();
@@ -3109,6 +3203,7 @@ mod database_integration_tests {
                 is_default: Some(etiqu_before.is_default),
                 actif: Some(etiqu_before.actif),
                 segment_id: etiqu_before.segment_id,
+                rendement_cible: etiqu_before.rendement_cible.clone(),
             },
         )
         .unwrap();
@@ -3197,6 +3292,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -3488,6 +3584,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             }
         }
 
@@ -3749,6 +3846,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             }
         }
 
@@ -3969,6 +4067,7 @@ mod database_integration_tests {
                 is_default: Some(etiqu_before.is_default),
                 actif: Some(etiqu_before.actif),
                 segment_id: etiqu_before.segment_id,
+                rendement_cible: etiqu_before.rendement_cible.clone(),
             },
         )
         .unwrap();
@@ -4065,6 +4164,7 @@ mod database_integration_tests {
                 is_default: Some(etiqu_before.is_default),
                 actif: Some(etiqu_before.actif),
                 segment_id: etiqu_before.segment_id,
+                rendement_cible: etiqu_before.rendement_cible.clone(),
             },
         )
         .unwrap();
@@ -4170,6 +4270,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
         let cid = db
@@ -4292,8 +4393,9 @@ mod database_integration_tests {
                     email_actif: Some(true),
                     is_default: Some(false),
                     actif: None,
-                    segment_id: None,
-                })
+            segment_id: None,
+            rendement_cible: None,
+        })
                 .unwrap();
             let cid = db
                 .create_contact(NewContact {
@@ -4390,7 +4492,8 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
             segment_id: None,
-            })
+            rendement_cible: None,
+        })
             .unwrap();
 
         let contact = db
@@ -4511,7 +4614,8 @@ mod database_integration_tests {
                 is_default: Some(false),
             actif: None,
             segment_id: None,
-            })
+            rendement_cible: None,
+        })
             .unwrap();
 
         let assigned = db.check_and_apply_auto_etiquettes().unwrap();
@@ -4584,6 +4688,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -4679,6 +4784,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -4777,6 +4883,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -4817,7 +4924,8 @@ mod database_integration_tests {
                 is_default: Some(true),
                 actif: None,
             segment_id: None,
-            })
+            rendement_cible: None,
+        })
             .unwrap();
         db.create_etiquette(NewEtiquette {
             nom: "RDV fin d'année".into(),
@@ -4837,6 +4945,7 @@ mod database_integration_tests {
             is_default: Some(true),
                 actif: None,
                 segment_id: None,
+                rendement_cible: None,
             })
         .unwrap();
 
@@ -4915,7 +5024,8 @@ mod database_integration_tests {
                 is_default: Some(false),
             actif: None,
             segment_id: None,
-            })
+            rendement_cible: None,
+        })
             .unwrap();
 
         db.check_auto_etiquettes_for_contact(cid).unwrap();
@@ -4972,6 +5082,7 @@ mod database_integration_tests {
             is_default: Some(false),
             actif: None,
             segment_id: None,
+            rendement_cible: None,
         };
         db.create_etiquette(mk()).unwrap();
         let err = db.create_etiquette(mk()).unwrap_err();
@@ -5009,6 +5120,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -5035,6 +5147,7 @@ mod database_integration_tests {
                 is_default: Some(etiqu.is_default),
                 actif: Some(false),
                 segment_id: None,
+                rendement_cible: None,
             },
         )
         .unwrap();
@@ -5100,7 +5213,8 @@ mod database_integration_tests {
                 is_default: Some(false),
             actif: None,
             segment_id: None,
-            })
+            rendement_cible: None,
+        })
             .unwrap_err();
         assert!(
             err.to_string().contains("catégorie"),
@@ -5136,6 +5250,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -5201,6 +5316,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 
@@ -5257,6 +5373,7 @@ mod database_integration_tests {
                 is_default: Some(false),
                 actif: Some(true),
                 segment_id: None,
+                rendement_cible: None,
             })
             .unwrap();
 

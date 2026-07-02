@@ -63,6 +63,7 @@ import { EtiquetteEmailCampaignFields } from "@/components/etiquettes/EtiquetteE
 import { EtiquetteTacheActionFields } from "@/components/etiquettes/EtiquetteTacheActionFields";
 import { setEtiquettePipelineActif } from "@/lib/api/tauri-pipeline";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { isExceltisEtiquetteNom } from "@/lib/etiquettes/exceltis";
 import {
   CONDITION_TYPE_LABELS,
   type ConditionType,
@@ -212,6 +213,7 @@ export function EtiquetteForm({
   const [emailEnvoiJours, setEmailEnvoiJours] = useState<EmailEnvoiJourCode[] | null>(
     null
   );
+  const [rendementCible, setRendementCible] = useState("");
   const [eventTypesProduit, setEventTypesProduit] = useState<string[]>([]);
   const [eventAChaqueSouscription, setEventAChaqueSouscription] = useState(true);
 
@@ -424,6 +426,7 @@ export function EtiquetteForm({
         
         // Email
         setEmailActif(source.email_actif);
+        setRendementCible(source.rendement_cible?.trim() ?? "");
         setEmailDelaiJours(source.email_delai_jours ?? 0);
         setEmailTemplateId(source.email_template_id);
         if (source.email_envoi_heure) {
@@ -477,6 +480,7 @@ export function EtiquetteForm({
         setEmailEnvoiJours(null);
         setEmailEnvoiLocal("");
         setEmailDelaiJours(0);
+        setRendementCible("");
         setEventTypesProduit([]);
         setEventAChaqueSouscription(true);
         setTacheActif(false);
@@ -611,20 +615,27 @@ export function EtiquetteForm({
     };
   }, [open, etiquette?.id, duplicateFrom?.id]);
 
-  // Rafraîchir le modèle email depuis la base (liaison faite côté Templates email).
+  // Rafraîchir champs campagne depuis la base (modèle, rendement Exceltis, pipeline).
   useEffect(() => {
-    if (!open || !etiquette?.id) return;
+    const sourceId = etiquette?.id ?? duplicateFrom?.id;
+    if (!open || !sourceId) return;
     let cancelled = false;
-    void getEtiquetteById(etiquette.id)
+    void getEtiquetteById(sourceId)
       .then((fresh) => {
         if (cancelled) return;
-        setEmailTemplateId(fresh.email_template_id);
+        if (etiquette?.id) {
+          setEmailTemplateId(fresh.email_template_id);
+        }
+        setRendementCible(fresh.rendement_cible?.trim() ?? "");
+        if (etiquette?.id) {
+          setPipelineActif(fresh.pipeline_actif);
+        }
       })
       .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [open, etiquette?.id]);
+  }, [open, etiquette?.id, duplicateFrom?.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -750,6 +761,9 @@ export function EtiquetteForm({
         email_actif: emailActif,
         is_default: duplicateFrom ? false : etiquette?.is_default || false,
         actif,
+        rendement_cible: isExceltisEtiquetteNom(nom.trim())
+          ? rendementCible.trim() || null
+          : null,
       };
 
       let savedId: number;
@@ -1575,6 +1589,8 @@ export function EtiquetteForm({
                   templates={templates}
                   nom={nom}
                   isAuto={isAuto}
+                  rendementCible={rendementCible}
+                  onRendementCibleChange={setRendementCible}
                   isEventSouscription={conditionType === "EVENEMENT_SOUSCRIPTION"}
                   highlightField={fieldHighlight}
                 />
