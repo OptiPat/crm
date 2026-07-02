@@ -21,7 +21,6 @@ const mk = (id: number, nom: string, actif: boolean): Etiquette =>
     email_envoi_jours_semaine: null,
     email_actif: false,
     is_default: false,
-    actif,
     segment_id: null,
     pipeline_actif: false,
     rendement_cible: null,

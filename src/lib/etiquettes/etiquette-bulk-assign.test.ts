@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Contact } from "@/lib/api/tauri-contacts";
 import {
   bulkAssignResultMessage,
   filterContactsForBulkAssign,
@@ -6,9 +7,25 @@ import {
 
 describe("etiquette-bulk-assign", () => {
   it("filterContactsForBulkAssign exclut les déjà tagués", () => {
-    const contacts = [
-      { id: 1, nom: "DUPONT", prenom: "Jean", categorie: "CLIENT" },
-      { id: 2, nom: "LEGRAND", prenom: "Paul", categorie: "CLIENT" },
+    const contacts: Contact[] = [
+      {
+        id: 1,
+        nom: "DUPONT",
+        prenom: "Jean",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      },
+      {
+        id: 2,
+        nom: "LEGRAND",
+        prenom: "Paul",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      },
     ];
     const filtered = filterContactsForBulkAssign(contacts, new Set([1]));
     expect(filtered.map((c) => c.id)).toEqual([2]);

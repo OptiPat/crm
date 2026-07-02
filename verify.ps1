@@ -59,6 +59,7 @@ if ($Icons) {
 
 Invoke-VerifyStep 'TypeScript (tsc --noEmit)' {
     npx tsc --noEmit
+    if ($LASTEXITCODE -ne 0) { throw "tsc a detecte des erreurs TypeScript." }
 }
 
 Invoke-VerifyStep 'ESLint (regles hooks)' {
@@ -81,6 +82,7 @@ if (-not $Quick) {
 if ($Build) {
     Invoke-VerifyStep 'Build frontend (tsc + Vite)' {
         npm run build
+        if ($LASTEXITCODE -ne 0) { throw "npm run build a echoue (tsc ou Vite)." }
     }
 }
 

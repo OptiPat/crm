@@ -982,6 +982,24 @@ export function EtiquetteForm({
                     />
                   </div>
 
+                  {isExceltisEtiquetteNom(nom.trim()) && (
+                    <div className="space-y-2">
+                      <Label htmlFor="exceltis-rendement-cible">Rendement cible (optionnel)</Label>
+                      <Input
+                        id="exceltis-rendement-cible"
+                        value={rendementCible}
+                        onChange={(e) => setRendementCible(e.target.value)}
+                        placeholder="ex. 9 %/an"
+                        className="max-w-xs"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Inséré dans le modèle via{" "}
+                        <code className="text-[11px] bg-muted px-1 rounded">{"{{rendement_exceltis}}"}</code>{" "}
+                        (ex. « avec une performance de 9 %/an »).
+                      </p>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <Label>Couleur</Label>
                     <div className="flex flex-wrap gap-2">
@@ -1589,8 +1607,6 @@ export function EtiquetteForm({
                   templates={templates}
                   nom={nom}
                   isAuto={isAuto}
-                  rendementCible={rendementCible}
-                  onRendementCibleChange={setRendementCible}
                   isEventSouscription={conditionType === "EVENEMENT_SOUSCRIPTION"}
                   highlightField={fieldHighlight}
                 />
