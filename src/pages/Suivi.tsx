@@ -14,7 +14,9 @@ import { SuiviAlertesTab } from "@/components/suivi/SuiviAlertesTab";
 import { SuiviEtiquetteContactRow } from "@/components/suivi/SuiviEtiquetteContactRow";
 import { SuiviSegmentsTab } from "@/components/suivi/SuiviSegmentsTab";
 import { navigateToInteractions } from "@/lib/navigation/interactions-navigation";
-import { type Contact } from "@/lib/api/tauri-contacts";
+import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
+import { DashboardContactDetailSheet } from "@/components/dashboard/DashboardContactDetailSheet";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import {
   getAllEtiquettesWithCount,
   getContactsByEtiquette,
@@ -84,6 +86,9 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   const [treatedThisWeek, setTreatedThisWeek] = useState(0);
   const [scpiReadyCount, setScpiReadyCount] = useState(0);
   const [scpiPeriode, setScpiPeriode] = useState<string | null>(null);
+  const [suiviContactDetail, setSuiviContactDetail] = useState<Contact | null>(null);
+  const [suiviContactIds, setSuiviContactIds] = useState<number[]>([]);
+  const [contactDetailOpen, setContactDetailOpen] = useState(false);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const alertesTabLoadedRef = useRef(false);
@@ -424,6 +429,42 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     }
   };
 
+  const loadSuiviContact = useCallback(async (contactId: number) => {
+    const contact = await getContactById(contactId);
+    setSuiviContactDetail(contact);
+    setContactDetailOpen(true);
+  }, []);
+
+  const openSuiviContactSheet = useCallback<DashboardDrillDownOpenContact>(
+    async (contactId, contactIds) => {
+      try {
+        if (contactIds?.length) setSuiviContactIds(contactIds);
+        await loadSuiviContact(contactId);
+      } catch (error) {
+        console.error("Erreur chargement contact:", error);
+        toast.error("Impossible d'ouvrir le contact");
+      }
+    },
+    [loadSuiviContact]
+  );
+
+  const selectSuiviContact = useCallback(
+    async (contactId: number) => {
+      try {
+        await loadSuiviContact(contactId);
+      } catch (error) {
+        console.error("Erreur chargement contact:", error);
+        toast.error("Impossible d'ouvrir le contact");
+      }
+    },
+    [loadSuiviContact]
+  );
+
+  const refreshAfterContactEdit = useCallback(() => {
+    void fetchAlertesList({ silent: true });
+    void loadTreatedThisWeek();
+  }, [fetchAlertesList, loadTreatedThisWeek]);
+
   const openHistorique = (contactId: number) => {
     if (onNavigate) {
       navigateToInteractions(onNavigate, contactId, currentPage);
@@ -461,7 +502,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
             totalContactsAvecEtiquettes={totalContactsAvecEtiquettes}
             treatedThisWeek={treatedThisWeek}
             onNavigate={onNavigate}
-            onOpenContact={onOpenContact || onNavigate ? openContact : undefined}
+            onOpenContact={openSuiviContactSheet}
             onOpenHistorique={onNavigate ? openHistorique : undefined}
             onOpenEtiquettesTab={() => handleTabChange("etiquettes")}
             onOpenEnvoisTab={() => handleTabChange("envois")}
@@ -634,6 +675,20 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
             excludeFromAuto
           );
         }}
+      />
+
+      <DashboardContactDetailSheet
+        open={contactDetailOpen}
+        onOpenChange={(open) => {
+          setContactDetailOpen(open);
+          if (!open) setSuiviContactDetail(null);
+        }}
+        contact={suiviContactDetail}
+        contactIds={suiviContactIds}
+        onSelectContactId={selectSuiviContact}
+        onContactRefreshed={setSuiviContactDetail}
+        onNavigate={onNavigate}
+        onUpdate={refreshAfterContactEdit}
       />
     </div>
   );

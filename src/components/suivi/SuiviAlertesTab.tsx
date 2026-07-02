@@ -72,6 +72,7 @@ import {
 } from "@/lib/alertes/alerte-email-queue";
 import { suiviAlerteToRef } from "@/lib/suivi/suivi-alerte-ref";
 import { getContactById, updateContact } from "@/lib/api/tauri-contacts";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { getAllTaches } from "@/lib/api/tauri-taches";
 import {
   addMonthsLocal,
@@ -95,7 +96,7 @@ export type SuiviAlertesTabProps = {
   totalContactsAvecEtiquettes: number;
   treatedThisWeek: number;
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
   onOpenHistorique?: (contactId: number) => void;
   onOpenEtiquettesTab: () => void;
   onOpenEnvoisTab: () => void;
@@ -180,6 +181,18 @@ export function SuiviAlertesTab({
         searchQuery: prefs.searchQuery,
       }),
     [prefs]
+  );
+
+  const alerteContactIds = useMemo(
+    () => alertesFiltered.map((a) => a.contact_id),
+    [alertesFiltered]
+  );
+
+  const openAlerteContact = useCallback(
+    (contactId: number) => {
+      onOpenContact?.(contactId, alerteContactIds);
+    },
+    [onOpenContact, alerteContactIds]
   );
 
   const loadTachesForIndicator = useCallback(async () => {
@@ -325,7 +338,7 @@ export function SuiviAlertesTab({
         case "send": {
           if (!resolution.item.contact_email?.trim()) {
             toast.warning("Ajoutez l'email du contact avant d'envoyer.");
-            onOpenContact?.(alerte.contact_id);
+            onOpenContact?.(alerte.contact_id, alerteContactIds);
             return;
           }
           if (isEtiquetteQueueItemBatchLocked(resolution.item)) {
@@ -418,7 +431,7 @@ export function SuiviAlertesTab({
       hasLinkedTache={contactIdsWithTache.has(alerte.contact_id)}
       selected={selectedIds.has(alerte.alerte_id)}
       onToggleSelect={() => toggleSelect(alerte.alerte_id)}
-      onOpenContact={onOpenContact || onNavigate ? onOpenContact : undefined}
+      onOpenContact={onOpenContact ? openAlerteContact : undefined}
       onOpenHistorique={onOpenHistorique}
       onTraiter={() => openTraiterDialog(alerte)}
       onReporter={(mois) => void handleReporterSuivi(alerte, mois)}

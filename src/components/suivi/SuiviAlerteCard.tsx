@@ -202,7 +202,7 @@ export function SuiviAlerteCard({
                 className="gap-1"
                 onClick={() => onOpenContact(alerte.contact_id)}
               >
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink className="h-4 w-4" aria-hidden />
                 <span className="hidden sm:inline">Fiche</span>
               </Button>
             )}
