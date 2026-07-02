@@ -97,6 +97,13 @@ export const contacts = sqliteTable("contacts", {
   })
     .default("ACTIF")
     .notNull(),
+
+  // Funnel commercial (R1 → client)
+  dateR1: integer("date_r1", { mode: "timestamp" }),
+  // Funnel filleul (invitation JD / PO)
+  typeInvitationFilleul: text("type_invitation_filleul"),
+  dateInvitationFilleul: integer("date_invitation_filleul", { mode: "timestamp" }),
+  presenceInvitationFilleul: integer("presence_invitation_filleul"),
   
   // Notes
   notes: text("notes"),

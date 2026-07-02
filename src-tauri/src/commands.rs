@@ -892,12 +892,19 @@ pub fn get_monthly_stats(db: State<'_, DbState>) -> Result<Vec<MonthlyStats>, St
 #[tauri::command]
 pub fn get_yearly_activity_stats(
     db: State<'_, DbState>,
+    period_start: Option<i64>,
+    period_end: Option<i64>,
+    bucket: Option<String>,
 ) -> Result<Vec<YearlyActivityStats>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .get_yearly_activity_stats()
+        .get_yearly_activity_stats(
+            period_start,
+            period_end,
+            bucket.as_deref(),
+        )
         .map_err(|e| format!("Failed to get yearly activity stats: {}", e))
 }
 
@@ -924,24 +931,28 @@ pub fn get_pipeline_stats(db: State<'_, DbState>) -> Result<PipelineStats, Strin
 #[tauri::command]
 pub fn get_conversion_client_stats(
     db: State<'_, DbState>,
+    period_start: Option<i64>,
+    period_end: Option<i64>,
 ) -> Result<ConversionClientStats, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .get_conversion_client_stats()
+        .get_conversion_client_stats(period_start, period_end)
         .map_err(|e| format!("Failed to get conversion client stats: {}", e))
 }
 
 #[tauri::command]
 pub fn get_conversion_filleul_stats(
     db: State<'_, DbState>,
+    period_start: Option<i64>,
+    period_end: Option<i64>,
 ) -> Result<ConversionFilleulStats, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .get_conversion_filleul_stats()
+        .get_conversion_filleul_stats(period_start, period_end)
         .map_err(|e| format!("Failed to get conversion filleul stats: {}", e))
 }
 

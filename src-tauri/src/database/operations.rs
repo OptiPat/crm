@@ -429,7 +429,7 @@ mod database_integration_tests {
         assert_eq!(refreshed.encours_actuel, Some(12_500_00));
         assert_eq!(refreshed.montant_investi_total, Some(12_500_00));
 
-        let yearly = db.get_yearly_activity_stats().unwrap();
+        let yearly = db.get_yearly_activity_stats(None, None, None).unwrap();
         let y2025 = yearly.iter().find(|s| s.year == 2025).unwrap();
         assert_eq!(y2025.clients, 1);
         assert!((y2025.panier_moyen - 2_500.0).abs() < 0.01);
@@ -1107,7 +1107,7 @@ mod database_integration_tests {
         investissement_with_souscription(&db, bob.id.unwrap(), 2024, 6, 5_000_00);
         investissement_with_souscription(&db, alice.id.unwrap(), 2025, 1, 20_000_00);
 
-        let stats = db.get_yearly_activity_stats().unwrap();
+        let stats = db.get_yearly_activity_stats(None, None, None).unwrap();
         assert_eq!(stats.len(), 2);
 
         let y2024 = stats.iter().find(|s| s.year == 2024).unwrap();
@@ -1117,6 +1117,138 @@ mod database_integration_tests {
         let y2025 = stats.iter().find(|s| s.year == 2025).unwrap();
         assert_eq!(y2025.clients, 1);
         assert!((y2025.panier_moyen - 20_000.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn get_yearly_activity_stats_filters_by_period_and_month_bucket() {
+        let db = test_db();
+        let alice = db.create_contact(sample_contact("Dupont", "Alice")).unwrap();
+        let contact_id = alice.id.unwrap();
+
+        investissement_with_souscription(&db, contact_id, 2024, 3, 10_000_00);
+        investissement_with_souscription(&db, contact_id, 2024, 8, 5_000_00);
+        investissement_with_souscription(&db, contact_id, 2025, 2, 20_000_00);
+
+        let start = chrono::Utc
+            .with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let end = chrono::Utc
+            .with_ymd_and_hms(2024, 12, 31, 23, 59, 59)
+            .unwrap()
+            .timestamp();
+
+        let stats = db
+            .get_yearly_activity_stats(Some(start), Some(end), Some("month"))
+            .unwrap();
+        assert_eq!(stats.len(), 2);
+        assert!(stats.iter().any(|s| s.label == "2024-03"));
+        assert!(stats.iter().any(|s| s.label == "2024-08"));
+        assert!(!stats.iter().any(|s| s.label.starts_with("2025")));
+    }
+
+    #[test]
+    fn get_conversion_client_stats_filters_by_r1_period() {
+        let db = test_db();
+        let c1 = db.create_contact(sample_contact("Dupont", "Alice")).unwrap();
+        let c2 = db.create_contact(sample_contact("Martin", "Bob")).unwrap();
+        let id1 = c1.id.unwrap();
+        let id2 = c2.id.unwrap();
+
+        db.update_contact(
+            id1,
+            &NewContact {
+                date_r1: Some("2024-06-01T00:00:00+00:00".into()),
+                ..sample_contact("Dupont", "Alice")
+            },
+            false,
+        )
+        .unwrap();
+        db.update_contact(
+            id2,
+            &NewContact {
+                date_r1: Some("2025-06-01T00:00:00+00:00".into()),
+                ..sample_contact("Martin", "Bob")
+            },
+            false,
+        )
+        .unwrap();
+
+        investissement_with_souscription(&db, id1, 2024, 7, 10_000_00);
+
+        let start = chrono::Utc
+            .with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let end = chrono::Utc
+            .with_ymd_and_hms(2024, 12, 31, 23, 59, 59)
+            .unwrap()
+            .timestamp();
+
+        let stats = db
+            .get_conversion_client_stats(Some(start), Some(end))
+            .unwrap();
+        assert_eq!(stats.rdv_r1, 1);
+        assert_eq!(stats.signatures, 1);
+        assert_eq!(stats.signatures_portfolio, 1);
+    }
+
+    #[test]
+    fn get_conversion_filleul_stats_filters_by_invitation_period() {
+        let db = test_db();
+        let f1 = db
+            .create_contact(NewContact {
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                ..sample_contact("Legrand", "Paul")
+            })
+            .unwrap();
+        let f2 = db
+            .create_contact(NewContact {
+                filleul_categorie: Some("FILLEUL".into()),
+                ..sample_contact("Bernard", "Luc")
+            })
+            .unwrap();
+
+        db.update_contact(
+            f1.id.unwrap(),
+            &NewContact {
+                type_invitation_filleul: Some("JD".into()),
+                date_invitation_filleul: Some("2024-03-10T00:00:00+00:00".into()),
+                presence_invitation_filleul: Some(1),
+                filleul_categorie: Some("PROSPECT_FILLEUL".into()),
+                ..sample_contact("Legrand", "Paul")
+            },
+            false,
+        )
+        .unwrap();
+        db.update_contact(
+            f2.id.unwrap(),
+            &NewContact {
+                type_invitation_filleul: Some("PO".into()),
+                date_invitation_filleul: Some("2025-01-15T00:00:00+00:00".into()),
+                presence_invitation_filleul: Some(1),
+                filleul_categorie: Some("FILLEUL".into()),
+                ..sample_contact("Bernard", "Luc")
+            },
+            false,
+        )
+        .unwrap();
+
+        let start = chrono::Utc
+            .with_ymd_and_hms(2024, 1, 1, 0, 0, 0)
+            .unwrap()
+            .timestamp();
+        let end = chrono::Utc
+            .with_ymd_and_hms(2024, 12, 31, 23, 59, 59)
+            .unwrap()
+            .timestamp();
+
+        let stats = db
+            .get_conversion_filleul_stats(Some(start), Some(end))
+            .unwrap();
+        assert_eq!(stats.invites, 1);
+        assert_eq!(stats.presents, 1);
+        assert_eq!(stats.convertis, 0);
     }
 
     #[test]

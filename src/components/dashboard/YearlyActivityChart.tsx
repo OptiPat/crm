@@ -15,6 +15,11 @@ import {
   type YearlyActivityStats,
 } from "@/lib/api/tauri-dashboard";
 import {
+  activityChartTitle,
+  formatActivityBucketLabel,
+  type DashboardPeriodGranularity,
+} from "@/lib/dashboard/dashboard-period-filter";
+import {
   CHART_AXIS_STROKE,
   CHART_GRID_STROKE,
   DASHBOARD_PRIMARY,
@@ -29,30 +34,44 @@ import {
 
 const PANIER_COLOR = "#8B5CF6";
 
-export function YearlyActivityChart() {
+interface YearlyActivityChartProps {
+  periodStart: number;
+  periodEnd: number;
+  bucket: DashboardPeriodGranularity;
+}
+
+export function YearlyActivityChart({
+  periodStart,
+  periodEnd,
+  bucket,
+}: YearlyActivityChartProps) {
   const [data, setData] = useState<YearlyActivityStats[]>([]);
   const [loading, setLoading] = useState(true);
 
   const chartData = useMemo(
-    () => data.map((d) => ({ ...d, yearLabel: String(d.year) })),
-    [data]
+    () =>
+      data.map((d) => ({
+        ...d,
+        bucketLabel: formatActivityBucketLabel(d.label, bucket),
+      })),
+    [data, bucket]
   );
 
   useEffect(() => {
     (async () => {
       try {
         setLoading(true);
-        setData(await getYearlyActivityStats());
+        setData(await getYearlyActivityStats(periodStart, periodEnd, bucket));
       } catch (error) {
         console.error("Erreur statistiques annuelles:", error);
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [periodStart, periodEnd, bucket]);
 
   return (
-    <DashboardPanel title="Activité par année" className="h-full">
+    <DashboardPanel title={activityChartTitle(bucket)} className="h-full">
       {loading ? (
         <ChartLoading height={300} />
       ) : data.length === 0 ? (
@@ -66,7 +85,7 @@ export function YearlyActivityChart() {
           <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID_STROKE} vertical={false} />
             <XAxis
-              dataKey="yearLabel"
+              dataKey="bucketLabel"
               stroke={CHART_AXIS_STROKE}
               tick={{ fontSize: 11 }}
               tickLine={false}
@@ -100,10 +119,10 @@ export function YearlyActivityChart() {
             <Tooltip
               content={({ active, payload }) => {
                 if (!active || !payload?.length) return null;
-                const row = payload[0].payload as YearlyActivityStats & { yearLabel: string };
+                const row = payload[0].payload as YearlyActivityStats & { bucketLabel: string };
                 return (
                   <ChartTooltipBox>
-                    <p className="font-medium">{row.year}</p>
+                    <p className="font-medium">{row.bucketLabel}</p>
                     <p className="text-primary font-semibold">
                       {row.clients} client{row.clients > 1 ? "s" : ""}
                     </p>

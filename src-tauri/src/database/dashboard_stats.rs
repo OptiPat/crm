@@ -4,11 +4,82 @@
 //! Comportement inchangé : ces méthodes sont couvertes par les tests d'intégration
 //! `dashboard_encours_*`, `get_yearly_activity_stats_*` et `panier_moyen_*`.
 
+
 use super::operations::{
     EFFECTIVE_ENCOURS_SQL_I, INVESTISSEMENT_ACTIF_ENCOURS_WHERE,
     INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I,
 };
 use rusqlite::{params, Result};
+
+fn activity_bucket_format(bucket: Option<&str>) -> &'static str {
+    match bucket {
+        Some("month") => "%Y-%m",
+        Some("day") => "%Y-%m-%d",
+        _ => "%Y",
+    }
+}
+
+fn bucket_sort_key(bucket: &str) -> i32 {
+    let digits: String = bucket.chars().filter(|c| c.is_ascii_digit()).collect();
+    digits.parse().unwrap_or(0)
+}
+
+fn activity_stats_sql(bucket_fmt: &str, with_period: bool) -> String {
+    let period_souscription = if with_period {
+        " AND i.date_souscription >= ?1 AND i.date_souscription <= ?2"
+    } else {
+        ""
+    };
+    let period_versement = if with_period {
+        " AND vr.date_versement >= ?1 AND vr.date_versement <= ?2"
+    } else {
+        ""
+    };
+
+    format!(
+        "SELECT bucket, COUNT(DISTINCT contact_id) AS clients, COALESCE(SUM(amount_centimes), 0) AS total_centimes
+         FROM (
+             SELECT
+                 strftime('{bucket_fmt}', datetime(i.date_souscription, 'unixepoch')) AS bucket,
+                 i.contact_id AS contact_id,
+                 COALESCE(i.montant_initial, 0) AS amount_centimes
+             FROM investissements i
+             WHERE i.origine = 'MON_CONSEIL'
+               AND i.date_souscription IS NOT NULL
+               AND i.contact_id IS NOT NULL
+               AND COALESCE(i.montant_initial, 0) > 0
+               AND EXISTS (
+                   SELECT 1 FROM contacts c
+                   WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
+               ){period_souscription}
+             UNION ALL
+             SELECT
+                 strftime('{bucket_fmt}', datetime(vr.date_versement, 'unixepoch')) AS bucket,
+                 i.contact_id AS contact_id,
+                 vr.montant AS amount_centimes
+             FROM investissement_versements vr
+             INNER JOIN investissements i ON i.id = vr.investissement_id
+             WHERE i.origine = 'MON_CONSEIL'
+               AND vr.date_versement IS NOT NULL
+               AND i.contact_id IS NOT NULL
+               AND EXISTS (
+                   SELECT 1 FROM contacts c
+                   WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
+               ){period_versement}
+         ) flows
+         WHERE bucket IS NOT NULL
+         GROUP BY bucket
+         ORDER BY bucket ASC"
+    )
+}
+
+fn conversion_period_clause(column: &str, with_period: bool) -> String {
+    if with_period {
+        format!(" AND {column} >= ?1 AND {column} <= ?2")
+    } else {
+        String::new()
+    }
+}
 
 impl super::Database {
     // ========== DASHBOARD STATS ==========
@@ -196,45 +267,24 @@ impl super::Database {
         Ok(stats)
     }
 
-    /// Clients et panier moyen par année — souscriptions initiales + versements complémentaires.
-    pub fn get_yearly_activity_stats(&self) -> Result<Vec<super::models::YearlyActivityStats>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT year, COUNT(DISTINCT contact_id) AS clients, COALESCE(SUM(amount_centimes), 0) AS total_centimes
-             FROM (
-                 SELECT
-                     CAST(strftime('%Y', datetime(i.date_souscription, 'unixepoch')) AS INTEGER) AS year,
-                     i.contact_id AS contact_id,
-                     COALESCE(i.montant_initial, 0) AS amount_centimes
-                 FROM investissements i
-                 WHERE i.origine = 'MON_CONSEIL'
-                   AND i.date_souscription IS NOT NULL
-                   AND i.contact_id IS NOT NULL
-                   AND COALESCE(i.montant_initial, 0) > 0
-                   AND EXISTS (
-                       SELECT 1 FROM contacts c
-                       WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
-                   )
-                 UNION ALL
-                 SELECT
-                     CAST(strftime('%Y', datetime(vr.date_versement, 'unixepoch')) AS INTEGER) AS year,
-                     i.contact_id AS contact_id,
-                     vr.montant AS amount_centimes
-                 FROM investissement_versements vr
-                 INNER JOIN investissements i ON i.id = vr.investissement_id
-                 WHERE i.origine = 'MON_CONSEIL'
-                   AND i.contact_id IS NOT NULL
-                   AND EXISTS (
-                       SELECT 1 FROM contacts c
-                       WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
-                   )
-             ) flows
-             GROUP BY year
-             ORDER BY year ASC",
-        )?;
+    /// Clients et panier moyen — souscriptions initiales + versements complémentaires.
+    /// Sans période : groupé par année. Avec période : bucket `year` | `month` | `day`.
+    pub fn get_yearly_activity_stats(
+        &self,
+        period_start: Option<i64>,
+        period_end: Option<i64>,
+        bucket: Option<&str>,
+    ) -> Result<Vec<super::models::YearlyActivityStats>> {
+        let with_period = matches!((period_start, period_end), (Some(_), Some(_)));
+        let bucket_fmt = activity_bucket_format(bucket);
+        let sql = activity_stats_sql(bucket_fmt, with_period);
 
-        let stats = stmt
-            .query_map([], |row| {
-                let year: i32 = row.get(0)?;
+        let stats = if with_period {
+            let start = period_start.unwrap();
+            let end = period_end.unwrap();
+            let mut stmt = self.conn.prepare(&sql)?;
+            let rows = stmt.query_map(params![start, end], |row| {
+                let bucket: String = row.get(0)?;
                 let clients: i64 = row.get(1)?;
                 let total_centimes: i64 = row.get(2)?;
                 let total_euros = total_centimes as f64 / 100.0;
@@ -244,12 +294,34 @@ impl super::Database {
                     0.0
                 };
                 Ok(super::models::YearlyActivityStats {
-                    year,
+                    year: bucket_sort_key(&bucket),
+                    label: bucket,
                     clients,
                     panier_moyen,
                 })
-            })?
-            .collect::<Result<Vec<_>>>()?;
+            })?;
+            rows.collect::<Result<Vec<_>>>()?
+        } else {
+            let mut stmt = self.conn.prepare(&sql)?;
+            let rows = stmt.query_map([], |row| {
+                let bucket: String = row.get(0)?;
+                let clients: i64 = row.get(1)?;
+                let total_centimes: i64 = row.get(2)?;
+                let total_euros = total_centimes as f64 / 100.0;
+                let panier_moyen = if clients > 0 {
+                    total_euros / clients as f64
+                } else {
+                    0.0
+                };
+                Ok(super::models::YearlyActivityStats {
+                    year: bucket_sort_key(&bucket),
+                    label: bucket.clone(),
+                    clients,
+                    panier_moyen,
+                })
+            })?;
+            rows.collect::<Result<Vec<_>>>()?
+        };
 
         Ok(stats)
     }
@@ -340,30 +412,81 @@ impl super::Database {
         })
     }
 
-    pub fn get_conversion_client_stats(&self) -> Result<super::models::ConversionClientStats> {
-        let rdv_r1: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE date_r1 IS NOT NULL",
-            [],
-            |row| row.get(0),
-        )?;
+    pub fn get_conversion_client_stats(
+        &self,
+        period_start: Option<i64>,
+        period_end: Option<i64>,
+    ) -> Result<super::models::ConversionClientStats> {
+        let with_period = matches!((period_start, period_end), (Some(_), Some(_)));
+        let r1_period = conversion_period_clause("date_r1", with_period);
 
-        let signatures: i64 = self.conn.query_row(
-            "SELECT COUNT(DISTINCT c.id) FROM contacts c
-             INNER JOIN investissements i ON i.contact_id = c.id
-             WHERE c.date_r1 IS NOT NULL
-               AND i.origine = 'MON_CONSEIL'",
-            [],
-            |row| row.get(0),
-        )?;
+        let rdv_r1: i64 = if with_period {
+            let start = period_start.unwrap();
+            let end = period_end.unwrap();
+            self.conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM contacts
+                     WHERE date_r1 IS NOT NULL{r1_period}"
+                ),
+                params![start, end],
+                |row| row.get(0),
+            )?
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM contacts WHERE date_r1 IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )?
+        };
 
-        let signatures_portfolio: i64 = self.conn.query_row(
-            "SELECT COUNT(DISTINCT i.contact_id) FROM investissements i
-             WHERE i.origine = 'MON_CONSEIL'
-               AND i.contact_id IS NOT NULL
-               AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id)",
-            [],
-            |row| row.get(0),
-        )?;
+        let signatures: i64 = if with_period {
+            let start = period_start.unwrap();
+            let end = period_end.unwrap();
+            self.conn.query_row(
+                &format!(
+                    "SELECT COUNT(DISTINCT c.id) FROM contacts c
+                     INNER JOIN investissements i ON i.contact_id = c.id
+                     WHERE c.date_r1 IS NOT NULL
+                       AND i.origine = 'MON_CONSEIL'
+                       AND c.date_r1 >= ?1 AND c.date_r1 <= ?2"
+                ),
+                params![start, end],
+                |row| row.get(0),
+            )?
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(DISTINCT c.id) FROM contacts c
+                 INNER JOIN investissements i ON i.contact_id = c.id
+                 WHERE c.date_r1 IS NOT NULL
+                   AND i.origine = 'MON_CONSEIL'",
+                [],
+                |row| row.get(0),
+            )?
+        };
+
+        let signatures_portfolio: i64 = if with_period {
+            let start = period_start.unwrap();
+            let end = period_end.unwrap();
+            self.conn.query_row(
+                "SELECT COUNT(DISTINCT i.contact_id) FROM investissements i
+                 WHERE i.origine = 'MON_CONSEIL'
+                   AND i.contact_id IS NOT NULL
+                   AND i.date_souscription IS NOT NULL
+                   AND i.date_souscription >= ?1 AND i.date_souscription <= ?2
+                   AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id)",
+                params![start, end],
+                |row| row.get(0),
+            )?
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(DISTINCT i.contact_id) FROM investissements i
+                 WHERE i.origine = 'MON_CONSEIL'
+                   AND i.contact_id IS NOT NULL
+                   AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id)",
+                [],
+                |row| row.get(0),
+            )?
+        };
 
         let taux_conversion = if rdv_r1 > 0 {
             (signatures as f64 / rdv_r1 as f64) * 100.0
@@ -379,28 +502,76 @@ impl super::Database {
         })
     }
 
-    pub fn get_conversion_filleul_stats(&self) -> Result<super::models::ConversionFilleulStats> {
-        let invites: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE date_invitation_filleul IS NOT NULL",
-            [],
-            |row| row.get(0),
-        )?;
+    pub fn get_conversion_filleul_stats(
+        &self,
+        period_start: Option<i64>,
+        period_end: Option<i64>,
+    ) -> Result<super::models::ConversionFilleulStats> {
+        let with_period = matches!((period_start, period_end), (Some(_), Some(_)));
+        let invite_period = conversion_period_clause("date_invitation_filleul", with_period);
 
-        let presents: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts
-             WHERE presence_invitation_filleul = 1
-               AND date_invitation_filleul IS NOT NULL",
-            [],
-            |row| row.get(0),
-        )?;
+        let invites: i64 = if with_period {
+            let start = period_start.unwrap();
+            let end = period_end.unwrap();
+            self.conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM contacts
+                     WHERE date_invitation_filleul IS NOT NULL{invite_period}"
+                ),
+                params![start, end],
+                |row| row.get(0),
+            )?
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM contacts WHERE date_invitation_filleul IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )?
+        };
 
-        let convertis: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts
-             WHERE filleul_categorie = 'FILLEUL'
-               AND date_invitation_filleul IS NOT NULL",
-            [],
-            |row| row.get(0),
-        )?;
+        let presents: i64 = if with_period {
+            let start = period_start.unwrap();
+            let end = period_end.unwrap();
+            self.conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM contacts
+                     WHERE presence_invitation_filleul = 1
+                       AND date_invitation_filleul IS NOT NULL{invite_period}"
+                ),
+                params![start, end],
+                |row| row.get(0),
+            )?
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM contacts
+                 WHERE presence_invitation_filleul = 1
+                   AND date_invitation_filleul IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )?
+        };
+
+        let convertis: i64 = if with_period {
+            let start = period_start.unwrap();
+            let end = period_end.unwrap();
+            self.conn.query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM contacts
+                     WHERE filleul_categorie = 'FILLEUL'
+                       AND date_invitation_filleul IS NOT NULL{invite_period}"
+                ),
+                params![start, end],
+                |row| row.get(0),
+            )?
+        } else {
+            self.conn.query_row(
+                "SELECT COUNT(*) FROM contacts
+                 WHERE filleul_categorie = 'FILLEUL'
+                   AND date_invitation_filleul IS NOT NULL",
+                [],
+                |row| row.get(0),
+            )?
+        };
 
         let taux_presence = if invites > 0 {
             (presents as f64 / invites as f64) * 100.0

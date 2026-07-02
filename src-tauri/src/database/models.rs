@@ -365,7 +365,10 @@ pub struct MonthlyStats {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct YearlyActivityStats {
+    /// Clé de tri (YYYY, YYYYMM ou YYYYMMDD selon le bucket).
     pub year: i32,
+    /// Libellé d'affichage (ex. « 2026 », « 2026-03 », « 2026-03-15 »).
+    pub label: String,
     pub clients: i64,
     pub panier_moyen: f64,
 }

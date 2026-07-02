@@ -84,7 +84,13 @@ function FunnelSteps({ steps }: { steps: FunnelStep[] }) {
   );
 }
 
-function ClientConversionCard({ stats }: { stats: ConversionClientStats }) {
+function ClientConversionCard({
+  stats,
+  periodLabel,
+}: {
+  stats: ConversionClientStats;
+  periodLabel: string;
+}) {
   const steps: FunnelStep[] = [
     {
       label: "R1 renseignés",
@@ -102,8 +108,15 @@ function ClientConversionCard({ stats }: { stats: ConversionClientStats }) {
 
   if (stats.rdv_r1 === 0 && stats.signatures_portfolio === 0) {
     return (
-      <DashboardPanel title="Conversion client" description="Premier RDV → solution patrimoniale avec vous">
-        <ChartEmpty height={220} title="Aucun R1 renseigné" subtitle="Indiquez la date R1 sur vos contacts pour suivre le taux de conversion." />
+      <DashboardPanel
+        title="Conversion client"
+        description={`Premier RDV → solution patrimoniale « avec moi » · ${periodLabel}`}
+      >
+        <ChartEmpty
+          height={220}
+          title="Aucun R1 sur la période"
+          subtitle="Élargissez la plage de dates ou renseignez la date R1 sur vos contacts."
+        />
       </DashboardPanel>
     );
   }
@@ -111,7 +124,7 @@ function ClientConversionCard({ stats }: { stats: ConversionClientStats }) {
   return (
     <DashboardPanel
       title="Conversion client"
-      description="Premier RDV → solution patrimoniale « avec moi »"
+      description={`Premier RDV → solution patrimoniale « avec moi » · ${periodLabel}`}
     >
       <div className="space-y-4">
         <FunnelHero
@@ -123,7 +136,8 @@ function ClientConversionCard({ stats }: { stats: ConversionClientStats }) {
           <FunnelSteps steps={steps} />
         ) : (
           <p className="text-sm text-muted-foreground rounded-lg border border-dashed px-3 py-2.5">
-            Renseignez la <strong>date R1</strong> sur vos prospects pour activer le funnel de conversion.
+            Aucun R1 sur la période sélectionnée. Élargissez la plage ou renseignez la{" "}
+            <strong>date R1</strong> sur vos prospects.
           </p>
         )}
         {stats.signatures_portfolio > 0 && (
@@ -132,7 +146,7 @@ function ClientConversionCard({ stats }: { stats: ConversionClientStats }) {
             <span className="font-semibold text-foreground tabular-nums">
               {stats.signatures_portfolio}
             </span>{" "}
-            contact{stats.signatures_portfolio > 1 ? "s" : ""} (historique inclus)
+            contact{stats.signatures_portfolio > 1 ? "s" : ""} sur la période
           </p>
         )}
       </div>
@@ -140,7 +154,13 @@ function ClientConversionCard({ stats }: { stats: ConversionClientStats }) {
   );
 }
 
-function FilleulConversionCard({ stats }: { stats: ConversionFilleulStats }) {
+function FilleulConversionCard({
+  stats,
+  periodLabel,
+}: {
+  stats: ConversionFilleulStats;
+  periodLabel: string;
+}) {
   const steps: FunnelStep[] = [
     {
       label: "Invitations JD / PO",
@@ -164,10 +184,13 @@ function FilleulConversionCard({ stats }: { stats: ConversionFilleulStats }) {
 
   if (stats.invites === 0) {
     return (
-      <DashboardPanel title="Conversion filleul" description="Invitation → présence → statut filleul">
+      <DashboardPanel
+        title="Conversion filleul"
+        description={`Invitation → présence → statut filleul · ${periodLabel}`}
+      >
         <ChartEmpty
           height={220}
-          title="Aucune invitation enregistrée"
+          title="Aucune invitation sur la période"
           subtitle="Indiquez une invitation JD ou PO sur vos contacts filleuls."
         />
       </DashboardPanel>
@@ -175,7 +198,10 @@ function FilleulConversionCard({ stats }: { stats: ConversionFilleulStats }) {
   }
 
   return (
-    <DashboardPanel title="Conversion filleul" description="Invitation → présence → statut filleul">
+    <DashboardPanel
+      title="Conversion filleul"
+      description={`Invitation → présence → statut filleul · ${periodLabel}`}
+    >
       <div className="space-y-4">
         <div className="grid grid-cols-2 gap-3">
           <FunnelHero
@@ -195,7 +221,17 @@ function FilleulConversionCard({ stats }: { stats: ConversionFilleulStats }) {
   );
 }
 
-export function ConversionFunnelPanel() {
+interface ConversionFunnelPanelProps {
+  periodStart: number;
+  periodEnd: number;
+  periodLabel: string;
+}
+
+export function ConversionFunnelPanel({
+  periodStart,
+  periodEnd,
+  periodLabel,
+}: ConversionFunnelPanelProps) {
   const [client, setClient] = useState<ConversionClientStats | null>(null);
   const [filleul, setFilleul] = useState<ConversionFilleulStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -205,8 +241,8 @@ export function ConversionFunnelPanel() {
       try {
         setLoading(true);
         const [c, f] = await Promise.all([
-          getConversionClientStats(),
-          getConversionFilleulStats(),
+          getConversionClientStats(periodStart, periodEnd),
+          getConversionFilleulStats(periodStart, periodEnd),
         ]);
         setClient(c);
         setFilleul(f);
@@ -216,7 +252,7 @@ export function ConversionFunnelPanel() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [periodStart, periodEnd]);
 
   if (loading) {
     return (
@@ -229,8 +265,8 @@ export function ConversionFunnelPanel() {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-      {client ? <ClientConversionCard stats={client} /> : null}
-      {filleul ? <FilleulConversionCard stats={filleul} /> : null}
+      {client ? <ClientConversionCard stats={client} periodLabel={periodLabel} /> : null}
+      {filleul ? <FilleulConversionCard stats={filleul} periodLabel={periodLabel} /> : null}
     </div>
   );
 }

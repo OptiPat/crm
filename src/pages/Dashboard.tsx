@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
 import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { ConversionFunnelPanel } from "@/components/dashboard/ConversionFunnelPanel";
+import { DashboardPeriodFilterBar } from "@/components/dashboard/DashboardPeriodFilter";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { DashboardTodayGrid } from "@/components/dashboard/DashboardTodayGrid";
 import { QuickActions } from "@/components/dashboard/QuickActions";
@@ -33,6 +34,16 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
+import {
+  activityBucketGranularity,
+  normalizeDateRange,
+  resolveDashboardDateRange,
+  type DashboardDateRangeFilter,
+} from "@/lib/dashboard/dashboard-period-filter";
+import {
+  loadDashboardDateRange,
+  saveDashboardDateRange,
+} from "@/lib/dashboard/dashboard-date-range-preferences";
 
 interface DashboardProps {
   currentPage?: string;
@@ -45,6 +56,20 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [chartsRefreshKey, setChartsRefreshKey] = useState(0);
+  const [dateRange, setDateRange] = useState<DashboardDateRangeFilter>(loadDashboardDateRange);
+  const handleDateRangeChange = useCallback((next: DashboardDateRangeFilter) => {
+    const normalized = normalizeDateRange(next);
+    setDateRange(normalized);
+    saveDashboardDateRange(normalized);
+  }, []);
+  const periodRange = useMemo(
+    () => resolveDashboardDateRange(dateRange),
+    [dateRange]
+  );
+  const activityBucket = useMemo(
+    () => activityBucketGranularity(dateRange.from, dateRange.to),
+    [dateRange]
+  );
 
   const loadStats = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -250,15 +275,26 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
         title="Activité"
         subtitle="Souscriptions et funnel commercial"
       >
+        <DashboardPeriodFilterBar value={dateRange} onChange={handleDateRangeChange} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          <YearlyActivityChart key={`year-${chartsRefreshKey}`} />
+          <YearlyActivityChart
+            key={`year-${chartsRefreshKey}`}
+            periodStart={periodRange.start}
+            periodEnd={periodRange.end}
+            bucket={activityBucket}
+          />
           <PipelineChart
             key={`pipe-${chartsRefreshKey}`}
             onNavigate={onNavigate}
             currentPage={currentPage}
           />
         </div>
-        <ConversionFunnelPanel key={`conv-${chartsRefreshKey}`} />
+        <ConversionFunnelPanel
+          key={`conv-${chartsRefreshKey}`}
+          periodStart={periodRange.start}
+          periodEnd={periodRange.end}
+          periodLabel={periodRange.label}
+        />
       </DashboardCollapsibleSection>
     </div>
   );

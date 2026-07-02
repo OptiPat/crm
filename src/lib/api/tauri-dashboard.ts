@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { DashboardPeriodGranularity } from "@/lib/dashboard/dashboard-period-filter";
 
 export interface DashboardStats {
   total_clients: number;
@@ -24,6 +25,7 @@ export interface MonthlyStats {
 
 export interface YearlyActivityStats {
   year: number;
+  label: string;
   clients: number;
   panier_moyen: number;
 }
@@ -41,9 +43,9 @@ export interface PipelineStats {
 
 export interface ConversionClientStats {
   rdv_r1: number;
-  /** R1 renseigné + au moins une solution « avec moi ». */
+  /** R1 renseigné dans la période + au moins une solution « avec moi ». */
   signatures: number;
-  /** Portefeuille total signé « avec moi ». */
+  /** Contacts signés « avec moi » (souscription datée dans la période filtrée). */
   signatures_portfolio: number;
   taux_conversion: number;
 }
@@ -80,8 +82,36 @@ export async function getMonthlyStats(): Promise<MonthlyStats[]> {
   return invoke<MonthlyStats[]>("get_monthly_stats");
 }
 
-export async function getYearlyActivityStats(): Promise<YearlyActivityStats[]> {
-  return invoke<YearlyActivityStats[]>("get_yearly_activity_stats");
+export async function getYearlyActivityStats(
+  periodStart: number,
+  periodEnd: number,
+  bucket: DashboardPeriodGranularity
+): Promise<YearlyActivityStats[]> {
+  return invoke<YearlyActivityStats[]>("get_yearly_activity_stats", {
+    periodStart,
+    periodEnd,
+    bucket,
+  });
+}
+
+export async function getConversionClientStats(
+  periodStart: number,
+  periodEnd: number
+): Promise<ConversionClientStats> {
+  return invoke<ConversionClientStats>("get_conversion_client_stats", {
+    periodStart,
+    periodEnd,
+  });
+}
+
+export async function getConversionFilleulStats(
+  periodStart: number,
+  periodEnd: number
+): Promise<ConversionFilleulStats> {
+  return invoke<ConversionFilleulStats>("get_conversion_filleul_stats", {
+    periodStart,
+    periodEnd,
+  });
 }
 
 export async function getProductStats(): Promise<ProductStats[]> {
@@ -90,14 +120,6 @@ export async function getProductStats(): Promise<ProductStats[]> {
 
 export async function getPipelineStats(): Promise<PipelineStats> {
   return invoke<PipelineStats>("get_pipeline_stats");
-}
-
-export async function getConversionClientStats(): Promise<ConversionClientStats> {
-  return invoke<ConversionClientStats>("get_conversion_client_stats");
-}
-
-export async function getConversionFilleulStats(): Promise<ConversionFilleulStats> {
-  return invoke<ConversionFilleulStats>("get_conversion_filleul_stats");
 }
 
 export async function getAlertesWithContacts(
