@@ -312,6 +312,28 @@ export async function attribuerEtiquette(
   return result;
 }
 
+export interface BulkEtiquetteAssignResult {
+  assigned: number;
+  skipped: number;
+}
+
+/**
+ * Attribue une étiquette à plusieurs contacts (MANUEL). Les contacts déjà tagués sont ignorés.
+ */
+export async function attribuerEtiquetteBulk(
+  contactIds: number[],
+  etiquetteId: number
+): Promise<BulkEtiquetteAssignResult> {
+  const result = await invoke<BulkEtiquetteAssignResult>("attribuer_etiquette_bulk", {
+    contactIds,
+    etiquetteId,
+  });
+  if (result.assigned > 0) {
+    notifyTachesChanged();
+  }
+  return result;
+}
+
 /**
  * Retire une étiquette d'un contact
  */

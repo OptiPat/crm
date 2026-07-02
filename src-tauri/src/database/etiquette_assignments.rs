@@ -17,6 +17,77 @@ impl Database {
         Ok(count.max(0) as u32)
     }
 
+    /// True si le contact porte déjà l'étiquette.
+    pub fn contact_has_etiquette(&self, contact_id: i64, etiquette_id: i64) -> Result<bool> {
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_etiquettes WHERE contact_id = ?1 AND etiquette_id = ?2",
+            params![contact_id, etiquette_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Attribution manuelle groupée — transaction tout-ou-rien, ids dupliqués ignorés.
+    pub fn attribuer_etiquette_bulk(
+        &self,
+        etiquette_id: i64,
+        contact_ids: Vec<i64>,
+    ) -> Result<(u32, u32)> {
+        self.get_etiquette_by_id(etiquette_id)?;
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        let mut unique_ids = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for id in contact_ids {
+            if seen.insert(id) {
+                unique_ids.push(id);
+            }
+        }
+
+        if unique_ids.is_empty() {
+            return Ok((0, 0));
+        }
+
+        self.conn.execute("BEGIN IMMEDIATE", [])?;
+        match self.attribuer_etiquette_bulk_inner(etiquette_id, &unique_ids, now) {
+            Ok(counts) => {
+                self.conn.execute("COMMIT", [])?;
+                Ok(counts)
+            }
+            Err(e) => {
+                let _ = self.conn.execute("ROLLBACK", []);
+                Err(e)
+            }
+        }
+    }
+
+    fn attribuer_etiquette_bulk_inner(
+        &self,
+        etiquette_id: i64,
+        contact_ids: &[i64],
+        now: i64,
+    ) -> Result<(u32, u32)> {
+        let mut assigned = 0u32;
+        let mut skipped = 0u32;
+
+        for &contact_id in contact_ids {
+            if self.contact_has_etiquette(contact_id, etiquette_id)? {
+                skipped += 1;
+                continue;
+            }
+
+            self.attribuer_etiquette(contact_id, etiquette_id, Some("MANUEL".into()), None)?;
+            let _ = self.apply_etiquette_tache_action(contact_id, etiquette_id, now);
+            assigned += 1;
+        }
+
+        Ok((assigned, skipped))
+    }
+
     /// Attribuer une étiquette à un contact
     pub fn attribuer_etiquette(
         &self,

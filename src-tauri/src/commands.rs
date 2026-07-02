@@ -1473,6 +1473,29 @@ pub fn attribuer_etiquette(
     Ok(result)
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkEtiquetteAssignResult {
+    pub assigned: u32,
+    pub skipped: u32,
+}
+
+#[tauri::command]
+pub fn attribuer_etiquette_bulk(
+    db: State<'_, DbState>,
+    contact_ids: Vec<i64>,
+    etiquette_id: i64,
+) -> Result<BulkEtiquetteAssignResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    let (assigned, skipped) = database
+        .attribuer_etiquette_bulk(etiquette_id, contact_ids)
+        .map_err(|e| format!("Failed bulk etiquette assign: {e}"))?;
+
+    Ok(BulkEtiquetteAssignResult { assigned, skipped })
+}
+
 #[tauri::command]
 pub fn retirer_etiquette(
     db: State<'_, DbState>,

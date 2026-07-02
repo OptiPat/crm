@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Users, X, ChevronRight, Search } from "lucide-react";
+import { Users, X, ChevronRight, Search, UserPlus } from "lucide-react";
 import {
   getContactsByEtiquette,
   getAllContactEtiquettesDetails,
@@ -17,6 +17,7 @@ import {
   RemoveAutoEtiquetteDialog,
   type RemoveAutoEtiquetteTarget,
 } from "@/components/etiquettes/RemoveAutoEtiquetteDialog";
+import { EtiquetteBulkAssignDialog } from "@/components/etiquettes/EtiquetteBulkAssignDialog";
 import { getClientLabel, getFilleulLabel } from "@/lib/contacts/contact-form-utils";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { textMatchesSearch } from "@/lib/search-utils";
@@ -41,6 +42,7 @@ export function EtiquetteContactsPanel({
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [contactAttribuePar, setContactAttribuePar] = useState<Record<number, string>>({});
   const [removeTarget, setRemoveTarget] = useState<RemoveAutoEtiquetteTarget | null>(null);
+  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -169,6 +171,16 @@ export function EtiquetteContactsPanel({
             />
           </div>
         )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2 w-full"
+          onClick={() => setBulkAssignOpen(true)}
+        >
+          <UserPlus className="h-4 w-4 mr-2" />
+          Ajouter des contacts
+        </Button>
       </CardHeader>
       <CardContent className="flex-1 min-h-0 overflow-y-auto pt-0">
         {loading ? (
@@ -266,6 +278,18 @@ export function EtiquetteContactsPanel({
         onConfirm={(excludeFromAuto) => {
           if (!removeTarget) return;
           void confirmRetirer(removeTarget.contactId, excludeFromAuto);
+        }}
+      />
+
+      <EtiquetteBulkAssignDialog
+        open={bulkAssignOpen}
+        onOpenChange={setBulkAssignOpen}
+        etiquetteId={etiquette.id}
+        etiquetteNom={etiquette.nom}
+        alreadyTaggedIds={contacts.map((c) => c.id).filter((id): id is number => id != null)}
+        onAssigned={() => {
+          void loadContacts();
+          onContactsChanged?.();
         }}
       />
     </Card>

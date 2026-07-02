@@ -177,6 +177,7 @@ fn main() {
             get_etiquettes_by_contact,
             get_all_contact_etiquettes_details,
             attribuer_etiquette,
+            attribuer_etiquette_bulk,
             retirer_etiquette,
             exclude_contact_auto_etiquette,
             clear_auto_etiquette_exclusion,

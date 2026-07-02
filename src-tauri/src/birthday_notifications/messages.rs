@@ -333,8 +333,9 @@ pub fn format_telegram_notification(name: &str, message: &str) -> String {
     format!("Anniversaire : {name}\n\n{message}")
 }
 
-/// Toutes les variantes intégrées (aperçu UI), sans tirage aléatoire.
-pub fn list_builtin_previews() -> (Vec<String>, Vec<String>) {
+/// Toutes les variantes intégrées (aperçu UI), sans tirage aléatoire — tests uniquement.
+#[cfg(test)]
+fn list_builtin_previews() -> (Vec<String>, Vec<String>) {
     let tu: Vec<String> = build_angle_pool(Genre::M)
         .iter()
         .map(|angle| angle("Paul", Registre::Tu, Genre::M))
