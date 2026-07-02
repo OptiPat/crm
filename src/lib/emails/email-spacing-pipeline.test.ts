@@ -73,7 +73,7 @@ describe("pipeline espacement email bilan", () => {
     expect(out).not.toMatch(/investissements ;<br>/);
     expect(out).toContain("<ul");
     expect(out).toContain("<b>Ce sera l'occasion de :</b>");
-    expect(countBlankLines(out)).toBe(2);
+    expect(countBlankLines(out)).toBe(3);
   });
 
   it("br entre divs ou trailing br : trailing br retiré, br seul = une ligne vide", () => {
@@ -115,7 +115,7 @@ valider la stratégie ;`;
     expect(countBlankLines(html)).toBe(3);
   });
 
-  it("compacte les lignes vides autour des listes ul", () => {
+  it("compacte la ligne vide avant une liste ul, conserve celle après", () => {
     const withGaps =
       "<div>Intro</div><div><br></div>" +
       "<div><b>Ce sera l'occasion de :</b></div><div><br></div>" +
@@ -123,7 +123,25 @@ valider la stratégie ;`;
       "<div>Suite du message.</div>";
     const out = normalizeTemplateEmailHtmlLikeGmail(withGaps);
     expect(out).toContain("<ul");
+    expect(out).toContain("Suite du message.");
+    // blank après Intro ; blank après la liste (aération avant le paragraphe suivant)
+    expect(countBlankLines(out)).toBe(2);
+    const listIdx = out.indexOf("</ul>");
+    const suiteIdx = out.indexOf("Suite du message.");
+    expect(listIdx).toBeGreaterThan(-1);
+    expect(suiteIdx).toBeGreaterThan(listIdx);
+    expect(out.slice(listIdx, suiteIdx)).toMatch(
+      /<div style="line-height:1\.5;margin:0;padding:0"><br><\/div>/
+    );
+  });
+
+  it("conserve une ligne vide après liste ul (comportement Gmail)", () => {
+    const html =
+      "<ul><li>Premier point</li><li>Deuxième point</li></ul>" +
+      "<div><br></div><div>Paragraphe suivant.</div>";
+    const out = normalizeTemplateEmailHtmlLikeGmail(html);
     expect(countBlankLines(out)).toBe(1);
+    expect(out.indexOf("</ul>")).toBeLessThan(out.indexOf("Paragraphe suivant."));
   });
 
   it("aplatit li > div (contentEditable) sans blank div supplémentaire", () => {

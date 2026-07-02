@@ -24,6 +24,7 @@ import { Label } from "@/components/ui/label";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
 import {
   insertTextInRichEditor,
+  readRichTextEditorHtml,
   saveRichEditorSelection,
 } from "@/components/emails/rich-text-email-editor-utils";
 import { insertTextInPlainField } from "@/lib/emails/insert-text-at-cursor";
@@ -209,6 +210,7 @@ export function TemplateEmailForm({
   const effectiveTemplateId = template?.id ?? persistedTemplateId;
   const [corpsHtml, setCorpsHtml] = useState("");
   const richEditorRef = useRef<HTMLDivElement>(null);
+  const tuRichEditorRef = useRef<HTMLDivElement>(null);
   const sujetInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const ephemeralSaveIntentRef = useRef<"default" | "sync" | "tab">("default");
@@ -612,7 +614,9 @@ export function TemplateEmailForm({
     try {
       let linkedTuId = tutoiementTemplateId;
       if (tutoiementDraft.enabled) {
-        const tuCorpsHtml = canonicalizeCorpsHtmlForSave(tutoiementDraft.corpsHtml);
+        const tuRawHtml =
+          readRichTextEditorHtml(tuRichEditorRef.current) || tutoiementDraft.corpsHtml;
+        const tuCorpsHtml = canonicalizeCorpsHtmlForSave(tuRawHtml);
         const tuPlain = htmlToPlainEmail(tuCorpsHtml);
         const tuNom = buildTutoiementTemplateNom(formData.nom);
         const tuPayload: NewTemplateEmail = {
@@ -637,6 +641,8 @@ export function TemplateEmailForm({
           const createdTu = await createTemplateEmail(tuPayload);
           linkedTuId = createdTu.id;
         }
+        setTutoiementDraft((prev) => ({ ...prev, corpsHtml: tuCorpsHtml }));
+        setTutoiementVariables(tuPayload.variables ?? null);
       }
 
       let linkedRelanceId = relanceTemplateId;
@@ -813,6 +819,12 @@ export function TemplateEmailForm({
       variables: setTemplateCorpsHtmlInMeta(prev.variables, normalized || null),
     }));
   };
+
+  const applyTuCorpsHtml = useCallback((html: string) => {
+    const normalized = sanitizeTemplateEmailHtml(html.trim());
+    setTutoiementDraft((prev) => ({ ...prev, corpsHtml: normalized }));
+    setTutoiementVariables((prev) => setTemplateCorpsHtmlInMeta(prev, normalized || null));
+  }, []);
 
   const captureSujetSelection = useCallback(() => {
     const el = sujetInputRef.current;
@@ -1242,6 +1254,8 @@ export function TemplateEmailForm({
                     <TemplateEmailTutoiementPanel
                       draft={tutoiementDraft}
                       onChange={setTutoiementDraft}
+                      onCorpsHtmlChange={applyTuCorpsHtml}
+                      editorElementRef={tuRichEditorRef}
                       parentNom={formData.nom}
                     />
                   </TabsContent>

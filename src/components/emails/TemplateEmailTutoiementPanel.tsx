@@ -4,6 +4,7 @@ import { Switch } from "@/components/ui/switch";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import { Users } from "lucide-react";
+import type { RefObject } from "react";
 
 export type TemplateTutoiementDraft = {
   enabled: boolean;
@@ -14,10 +15,18 @@ export type TemplateTutoiementDraft = {
 type Props = {
   draft: TemplateTutoiementDraft;
   onChange: (next: TemplateTutoiementDraft) => void;
+  onCorpsHtmlChange: (html: string) => void;
+  editorElementRef?: RefObject<HTMLDivElement | null>;
   parentNom: string;
 };
 
-export function TemplateEmailTutoiementPanel({ draft, onChange, parentNom }: Props) {
+export function TemplateEmailTutoiementPanel({
+  draft,
+  onChange,
+  onCorpsHtmlChange,
+  editorElementRef,
+  parentNom,
+}: Props) {
   const patch = (partial: Partial<TemplateTutoiementDraft>) =>
     onChange({ ...draft, ...partial });
 
@@ -68,7 +77,8 @@ export function TemplateEmailTutoiementPanel({ draft, onChange, parentNom }: Pro
             <Label>Message (tu)</Label>
             <RichTextEmailEditor
               value={draft.corpsHtml}
-              onChange={(html) => patch({ corpsHtml: html })}
+              onChange={onCorpsHtmlChange}
+              editorElementRef={editorElementRef}
               placeholder="Rédigez la version tutoiement (ton, te, tiens…)"
             />
           </div>

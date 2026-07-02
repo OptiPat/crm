@@ -112,8 +112,8 @@ function isTextBlockLine(line: string): boolean {
   return t.startsWith('<div style="line-height:1.5') && !isGmailBlankLineEntry(t);
 }
 
-/** Retire une ligne vide Gmail entre un paragraphe et une liste (ou l'inverse). */
-function compactBlankLinesAroundLists(lines: string[]): string[] {
+/** Retire une ligne vide Gmail entre un paragraphe d'intro et une liste (pas après la liste). */
+function compactBlankLinesBeforeLists(lines: string[]): string[] {
   const out = [...lines];
   let i = 0;
   while (i < out.length) {
@@ -126,22 +126,13 @@ function compactBlankLinesAroundLists(lines: string[]): string[] {
       out.splice(i + 1, 1);
       continue;
     }
-    if (
-      i + 2 < out.length &&
-      isListBlockLine(out[i]!) &&
-      isGmailBlankLineEntry(out[i + 1]!) &&
-      isTextBlockLine(out[i + 2]!)
-    ) {
-      out.splice(i + 1, 1);
-      continue;
-    }
     i += 1;
   }
   return out;
 }
 
 function finalizeGmailLineBlocks(lines: string[]): string[] {
-  return compactBlankLinesAroundLists(collapseConsecutiveGmailBlankLines(lines));
+  return compactBlankLinesBeforeLists(collapseConsecutiveGmailBlankLines(lines));
 }
 
 function flattenListItemInnerHtml(innerHtml: string): string {
@@ -193,12 +184,35 @@ const GMAIL_SAFE_STYLE_VALUES: Record<string, RegExp> = {
   margin: /^0$/,
   padding: /^0$/,
   "padding-left": /^1\.25em$/,
-  "font-weight": /^(700|bold)$/,
+  "font-weight": /^(700|bold|600|bolder)$/,
   "font-style": /^italic$/,
   "text-decoration": /^underline$/,
   color: /^inherit$/,
   "font-size": /^(\d+(\.\d+)?px|\d+(\.\d+)?em)$/,
 };
+
+function isBoldFontWeight(value: string): boolean {
+  const fw = value.trim().toLowerCase();
+  if (fw === "bold" || fw === "bolder" || fw === "700" || fw === "600") return true;
+  const n = Number.parseInt(fw, 10);
+  return Number.isFinite(n) && n >= 600;
+}
+
+function extractFontWeightFromStyle(style: string): string | null {
+  const m = /font-weight\s*:\s*([^;]+)/i.exec(style);
+  return m ? m[1]!.trim() : null;
+}
+
+/** Chrome/contentEditable produit souvent `<span style="font-weight: bolder">` — convertir en `<b>`. */
+function promoteBoldStyleSpansToSemanticTags(root: Element): void {
+  for (const el of [...root.querySelectorAll("span[style]")]) {
+    const fw = extractFontWeightFromStyle(el.getAttribute("style") ?? "");
+    if (!fw || !isBoldFontWeight(fw)) continue;
+    const b = root.ownerDocument.createElement("b");
+    b.innerHTML = el.innerHTML;
+    el.replaceWith(b);
+  }
+}
 
 function isGmailSafeStyle(style: string): boolean {
   const s = style.replace(/\s/g, "").toLowerCase();
@@ -786,6 +800,10 @@ export function sanitizeTemplateEmailHtml(html: string): string {
     return trimmed
       .replace(/<script[\s\S]*?<\/script>/gi, "")
       .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(
+        /<span\b([^>]*?\sstyle="[^"]*font-weight\s*:\s*(?:bold|bolder|700|600)[^"]*"[^>]*)>([\s\S]*?)<\/span>/gi,
+        "<b>$2</b>"
+      )
       .replace(/\sstyle="([^"]*)"/gi, (full, style: string) =>
         isGmailSafeStyle(style) ? full : ""
       )
@@ -794,6 +812,7 @@ export function sanitizeTemplateEmailHtml(html: string): string {
       );
   }
   const doc = new DOMParser().parseFromString(trimmed, "text/html");
+  promoteBoldStyleSpansToSemanticTags(doc.body);
   sanitizeEmailHtmlNode(doc.body);
   return doc.body.innerHTML.trim();
 }

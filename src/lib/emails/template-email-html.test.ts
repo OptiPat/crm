@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalizeTemplateCorpsHtml,
   getTemplateCorpsHtml,
   htmlToPlainEmail,
   plainTextToTemplateHtml,
@@ -59,6 +60,22 @@ describe("template-email-html", () => {
     expect(body_html).toContain('line-height:1.5;margin:0;padding:0');
     expect(body_html).toContain("Message.");
     expect(body_html).toContain("<p>Sig</p>");
+  });
+
+  it("sanitize convertit font-weight bolder en balise b", () => {
+    const out = sanitizeTemplateEmailHtml(
+      '<div><span style="font-weight: bolder">Gras</span> normal</div>'
+    );
+    expect(out).toMatch(/<b>Gras<\/b>/);
+    expect(out).not.toContain("font-weight");
+  });
+
+  it("canonicalize conserve le gras après enregistrement", () => {
+    const out = canonicalizeTemplateCorpsHtml(
+      '<div><span style="font-weight: bolder">Important</span></div><div><br></div><div>Suite.</div>'
+    );
+    expect(out).toMatch(/<b>Important<\/b>/);
+    expect(out).toContain("Suite.");
   });
 
   it("sanitize retire script et garde le gras", () => {
