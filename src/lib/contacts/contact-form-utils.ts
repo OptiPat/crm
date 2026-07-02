@@ -225,6 +225,10 @@ const BASE_EMPTY: NewContact = {
   date_prochain_suivi: "",
   date_dernier_contact_filleul: "",
   date_prochain_suivi_filleul: "",
+  date_r1: "",
+  type_invitation_filleul: undefined,
+  date_invitation_filleul: "",
+  presence_invitation_filleul: undefined,
   statut_suivi: "ACTIF",
   registre: "VOUS",
   notes: "",
@@ -284,6 +288,10 @@ export function contactToFormData(contact: Contact): NewContact {
     situation_familiale: contact.situation_familiale || undefined,
     date_dernier_contact_filleul: toDateInput(contact.date_dernier_contact_filleul),
     date_prochain_suivi_filleul: toDateInput(contact.date_prochain_suivi_filleul),
+    date_r1: toDateInput(contact.date_r1),
+    type_invitation_filleul: contact.type_invitation_filleul ?? undefined,
+    date_invitation_filleul: toDateInput(contact.date_invitation_filleul),
+    presence_invitation_filleul: contact.presence_invitation_filleul ?? undefined,
     nom: contact.nom || "",
     prenom: contact.prenom || "",
     email: contact.email || "",
@@ -377,6 +385,20 @@ export function buildSubmitPayload(
     date_prochain_suivi_filleul: filleulActif
       ? dateFieldToIso(formData.date_prochain_suivi_filleul)
       : undefined,
+    date_r1: clientActif ? dateFieldToIso(formData.date_r1) : "",
+    type_invitation_filleul: filleulActif
+      ? formData.type_invitation_filleul || undefined
+      : null,
+    date_invitation_filleul: filleulActif
+      ? dateFieldToIso(formData.date_invitation_filleul)
+      : "",
+    presence_invitation_filleul: filleulActif
+      ? formData.presence_invitation_filleul === 1
+        ? 1
+        : formData.presence_invitation_filleul === 0
+          ? 0
+          : undefined
+      : null,
     date_naissance,
     lieu_naissance: formData.lieu_naissance?.trim() || undefined,
     pays: formData.pays?.trim() || undefined,

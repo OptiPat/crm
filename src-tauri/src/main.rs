@@ -138,6 +138,8 @@ fn main() {
             get_yearly_activity_stats,
             get_product_stats,
             get_pipeline_stats,
+            get_conversion_client_stats,
+            get_conversion_filleul_stats,
             get_alertes_with_contacts,
             get_all_investissements,
             get_nom_produit_suggestions,

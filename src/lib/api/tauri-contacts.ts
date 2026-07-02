@@ -45,6 +45,13 @@ export interface Contact {
   // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
   date_dernier_contact_filleul?: number;
   date_prochain_suivi_filleul?: number;
+  /** Date du premier RDV (R1). */
+  date_r1?: number;
+  /** Invitation filleul : JD ou PO. */
+  type_invitation_filleul?: string | null;
+  date_invitation_filleul?: number;
+  /** 1 = présent, 0 = absent. */
+  presence_invitation_filleul?: number | null;
   statut_suivi: string;
   /** `VOUS` (défaut) ou `TU` — variante du modèle email lié */
   registre?: string | null;
@@ -90,6 +97,10 @@ export interface NewContact {
   // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
   date_dernier_contact_filleul?: string;
   date_prochain_suivi_filleul?: string;
+  date_r1?: string;
+  type_invitation_filleul?: string | null;
+  date_invitation_filleul?: string;
+  presence_invitation_filleul?: number | null;
   statut_suivi?: string;
   registre?: string | null;
   notes?: string;

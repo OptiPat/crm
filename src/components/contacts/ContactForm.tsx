@@ -1,14 +1,6 @@
 import { useState, useEffect, useRef, useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -718,6 +710,9 @@ export function ContactForm({
         parrain_id: undefined,
         date_dernier_contact_filleul: "",
         date_prochain_suivi_filleul: "",
+        type_invitation_filleul: undefined,
+        date_invitation_filleul: "",
+        presence_invitation_filleul: undefined,
       }));
     } else {
       setFormData((prev) => ({
@@ -737,6 +732,7 @@ export function ContactForm({
         prescripteur_id: undefined,
         date_dernier_contact: "",
         date_prochain_suivi: "",
+        date_r1: "",
       }));
     } else if (value === "AUCUN") {
       setFormData((prev) => ({
@@ -745,6 +741,7 @@ export function ContactForm({
         prescripteur_id: undefined,
         date_dernier_contact: "",
         date_prochain_suivi: "",
+        date_r1: "",
       }));
     } else {
       setFormData((prev) => ({
@@ -758,7 +755,7 @@ export function ContactForm({
 
   const formFields = (
     <>
-      {isEdit && <ContactFormSectionNav sections={editSections} />}
+      {!isPrescripteurForm && <ContactFormSectionNav sections={editSections} />}
 
       {(isEdit || (formData.nom && formData.prenom)) && (
         <ContactFormSummary
@@ -1196,7 +1193,7 @@ export function ContactForm({
             à vos clients depuis leur fiche (champ Prescripteur).
           </p>
         ) : (
-          <>
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Statut client</Label>
@@ -1256,46 +1253,141 @@ export function ContactForm({
               </Select>
             </div>
             {clientActif && (
-              <div className="grid grid-cols-2 gap-4">
-                <DateFieldWithShortcuts
-                  id="date_dernier_contact"
-                  label="Dernier contact (client)"
-                  value={formData.date_dernier_contact}
-                  onChange={(v) => setFormData((prev) => ({ ...prev, date_dernier_contact: v }))}
-                />
-                <DateFieldWithShortcuts
-                  id="date_prochain_suivi"
-                  label="Prochain suivi (client)"
-                  value={formData.date_prochain_suivi}
-                  onChange={(v) => setFormData((prev) => ({ ...prev, date_prochain_suivi: v }))}
-                  showFollowUpShortcuts
-                  followUpMonths={formData.categorie === "CLIENT" ? 12 : 6}
-                />
-              </div>
+              <>
+                <Separator />
+                <div className="grid grid-cols-2 gap-4">
+                  <DateFieldWithShortcuts
+                    id="date_r1"
+                    label="Premier RDV (R1)"
+                    value={formData.date_r1 ?? ""}
+                    onChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        date_r1: v,
+                        categorie:
+                          v &&
+                          (prev.categorie === "AUCUN" || prev.categorie === "SUSPECT_CLIENT")
+                            ? "PROSPECT_CLIENT"
+                            : prev.categorie,
+                      }))
+                    }
+                  />
+                  <DateFieldWithShortcuts
+                    id="date_dernier_contact"
+                    label="Dernier contact (client)"
+                    value={formData.date_dernier_contact}
+                    onChange={(v) => setFormData((prev) => ({ ...prev, date_dernier_contact: v }))}
+                  />
+                  <DateFieldWithShortcuts
+                    id="date_prochain_suivi"
+                    label="Prochain suivi (client)"
+                    value={formData.date_prochain_suivi}
+                    onChange={(v) => setFormData((prev) => ({ ...prev, date_prochain_suivi: v }))}
+                    showFollowUpShortcuts
+                    followUpMonths={formData.categorie === "CLIENT" ? 12 : 6}
+                  />
+                </div>
+              </>
             )}
             {filleulActif && (
-              <div className="grid grid-cols-2 gap-4">
-                <DateFieldWithShortcuts
-                  id="date_dernier_contact_filleul"
-                  label="Dernier contact (filleul)"
-                  value={formData.date_dernier_contact_filleul}
-                  onChange={(v) =>
-                    setFormData((prev) => ({ ...prev, date_dernier_contact_filleul: v }))
-                  }
-                />
-                <DateFieldWithShortcuts
-                  id="date_prochain_suivi_filleul"
-                  label="Prochain suivi (filleul)"
-                  value={formData.date_prochain_suivi_filleul}
-                  onChange={(v) =>
-                    setFormData((prev) => ({ ...prev, date_prochain_suivi_filleul: v }))
-                  }
-                  showFollowUpShortcuts
-                  followUpMonths={6}
-                />
-              </div>
+              <>
+                <Separator />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Type d&apos;invitation (JD / PO)</Label>
+                    <Select
+                      value={formData.type_invitation_filleul || SELECT_NONE}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          type_invitation_filleul: value === SELECT_NONE ? undefined : value,
+                          filleul_categorie:
+                            value !== SELECT_NONE &&
+                            (!prev.filleul_categorie ||
+                              prev.filleul_categorie === "SUSPECT_FILLEUL")
+                              ? "PROSPECT_FILLEUL"
+                              : prev.filleul_categorie,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Choisir…" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SELECT_NONE}>Aucune</SelectItem>
+                        <SelectItem value="JD">Journée Découverte (JD)</SelectItem>
+                        <SelectItem value="PO">PO</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <DateFieldWithShortcuts
+                    id="date_invitation_filleul"
+                    label="Date d'invitation"
+                    value={formData.date_invitation_filleul ?? ""}
+                    onChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        date_invitation_filleul: v,
+                        filleul_categorie:
+                          v &&
+                          prev.type_invitation_filleul &&
+                          (!prev.filleul_categorie ||
+                            prev.filleul_categorie === "SUSPECT_FILLEUL")
+                            ? "PROSPECT_FILLEUL"
+                            : prev.filleul_categorie,
+                      }))
+                    }
+                  />
+                  <div className="space-y-2">
+                    <Label>Présence à l&apos;invitation</Label>
+                    <Select
+                      value={
+                        formData.presence_invitation_filleul === 1
+                          ? "present"
+                          : formData.presence_invitation_filleul === 0
+                            ? "absent"
+                            : SELECT_NONE
+                      }
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          presence_invitation_filleul:
+                            value === "present" ? 1 : value === "absent" ? 0 : undefined,
+                        }))
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Non renseigné" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={SELECT_NONE}>Non renseigné</SelectItem>
+                        <SelectItem value="present">Présent</SelectItem>
+                        <SelectItem value="absent">Absent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <DateFieldWithShortcuts
+                    id="date_dernier_contact_filleul"
+                    label="Dernier contact (filleul)"
+                    value={formData.date_dernier_contact_filleul}
+                    onChange={(v) =>
+                      setFormData((prev) => ({ ...prev, date_dernier_contact_filleul: v }))
+                    }
+                  />
+                  <DateFieldWithShortcuts
+                    id="date_prochain_suivi_filleul"
+                    label="Prochain suivi (filleul)"
+                    value={formData.date_prochain_suivi_filleul}
+                    onChange={(v) =>
+                      setFormData((prev) => ({ ...prev, date_prochain_suivi_filleul: v }))
+                    }
+                    showFollowUpShortcuts
+                    followUpMonths={6}
+                  />
+                </div>
+              </>
             )}
-          </>
+          </div>
         )}
       </FormSection>
 
@@ -1411,18 +1503,9 @@ export function ContactForm({
   );
 
   const formBody = (
-    <form
-      onSubmit={handleSubmit}
-      className={isEdit ? "flex min-h-0 flex-1 flex-col" : "space-y-6"}
-    >
-      <div className={isEdit ? "min-h-0 flex-1 space-y-6 overflow-y-auto pr-1" : "contents"}>
-        {formFields}
-      </div>
-      {isEdit ? (
-        <SheetFooter className="mt-0 shrink-0 border-t bg-background pt-4">{formFooter}</SheetFooter>
-      ) : (
-        <DialogFooter className="pt-2">{formFooter}</DialogFooter>
-      )}
+    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">{formFields}</div>
+      <SheetFooter className="mt-0 shrink-0 border-t bg-background pt-4">{formFooter}</SheetFooter>
     </form>
   );
 
@@ -1443,32 +1526,20 @@ export function ContactForm({
 
   return (
     <>
-      {isEdit ? (
-        <Sheet open={open} onOpenChange={handleOpenChange}>
-          <SheetContent
-            side="right"
-            className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
-          >
-            <div className="shrink-0 border-b px-6 py-4">
-              <SheetHeader>
-                <SheetTitle>{title}</SheetTitle>
-                <SheetDescription>{description}</SheetDescription>
-              </SheetHeader>
-            </div>
-            <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
-          </SheetContent>
-        </Sheet>
-      ) : (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{title}</DialogTitle>
-              <DialogDescription>{description}</DialogDescription>
-            </DialogHeader>
-            {formBody}
-          </DialogContent>
-        </Dialog>
-      )}
+      <Sheet open={open} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
+        >
+          <div className="shrink-0 border-b px-6 py-4">
+            <SheetHeader>
+              <SheetTitle>{title}</SheetTitle>
+              <SheetDescription>{description}</SheetDescription>
+            </SheetHeader>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
         <AlertDialogContent>

@@ -13,6 +13,7 @@ use crate::database::{
         InvestissementVersement, NewInteraction,
         NewTemplateEmail, NewSegment, NewTache, Partenaire,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
+        ConversionClientStats, ConversionFilleulStats,
         TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
         CalendarEventEntry, CalendarSyncResult,
     },
@@ -918,6 +919,30 @@ pub fn get_pipeline_stats(db: State<'_, DbState>) -> Result<PipelineStats, Strin
     database
         .get_pipeline_stats()
         .map_err(|e| format!("Failed to get pipeline stats: {}", e))
+}
+
+#[tauri::command]
+pub fn get_conversion_client_stats(
+    db: State<'_, DbState>,
+) -> Result<ConversionClientStats, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_conversion_client_stats()
+        .map_err(|e| format!("Failed to get conversion client stats: {}", e))
+}
+
+#[tauri::command]
+pub fn get_conversion_filleul_stats(
+    db: State<'_, DbState>,
+) -> Result<ConversionFilleulStats, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_conversion_filleul_stats()
+        .map_err(|e| format!("Failed to get conversion filleul stats: {}", e))
 }
 
 #[tauri::command]

@@ -43,6 +43,13 @@ pub struct Contact {
     // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
     pub date_dernier_contact_filleul: Option<i64>,
     pub date_prochain_suivi_filleul: Option<i64>,
+    /// Date du premier RDV commercial (R1).
+    pub date_r1: Option<i64>,
+    /// Invitation réseau filleul : `JD` (Journée Découverte) ou `PO`.
+    pub type_invitation_filleul: Option<String>,
+    pub date_invitation_filleul: Option<i64>,
+    /// Présence à l'invitation : `Some(1)` présent, `Some(0)` absent, `None` non renseigné.
+    pub presence_invitation_filleul: Option<i64>,
     pub statut_suivi: String,
     /// `VOUS` (défaut) ou `TU` — choix du modèle email lié à l'envoi
     pub registre: Option<String>,
@@ -60,7 +67,7 @@ pub struct Contact {
     pub google_synced_at: Option<i64>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NewContact {
     pub famille_id: Option<i64>,
     pub foyer_id: Option<i64>,
@@ -97,12 +104,68 @@ pub struct NewContact {
     // 🔥 Dates de suivi FILLEUL (indépendantes des clients)
     pub date_dernier_contact_filleul: Option<String>,
     pub date_prochain_suivi_filleul: Option<String>,
+    #[serde(default)]
+    pub date_r1: Option<String>,
+    #[serde(default)]
+    pub type_invitation_filleul: Option<String>,
+    #[serde(default)]
+    pub date_invitation_filleul: Option<String>,
+    /// `0` absent, `1` présent, `None` ou absent = non renseigné.
+    #[serde(default)]
+    pub presence_invitation_filleul: Option<i64>,
     pub statut_suivi: Option<String>,
     #[serde(default)]
     pub registre: Option<String>,
     pub notes: Option<String>,
     #[serde(default)]
     pub famille_regroupement_exclu: Option<bool>,
+}
+
+impl Default for NewContact {
+    fn default() -> Self {
+        Self {
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            categorie: "AUCUN".into(),
+            filleul_categorie: None,
+            parrain_id: None,
+            prescripteur_id: None,
+            civilite: None,
+            nom: String::new(),
+            prenom: String::new(),
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            pays: None,
+            date_naissance: None,
+            lieu_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            regime_matrimonial: None,
+            revenus_annuels: None,
+            charges_emprunts: None,
+            epargne_precaution_souhaitee: None,
+            objectifs_patrimoniaux: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            date_r1: None,
+            type_invitation_filleul: None,
+            date_invitation_filleul: None,
+            presence_invitation_filleul: None,
+            statut_suivi: None,
+            registre: None,
+            notes: None,
+            famille_regroupement_exclu: None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -318,6 +381,27 @@ pub struct PipelineStats {
     pub suspects: i64,  // Nombre total de suspects
     pub prospects: i64, // Nombre total de prospects
     pub clients: i64,   // Nombre total de clients
+}
+
+/// Funnel client : R1 → signature (investissement « avec moi »).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConversionClientStats {
+    pub rdv_r1: i64,
+    /// Contacts avec R1 renseigné et au moins une solution « avec moi ».
+    pub signatures: i64,
+    /// Ensemble du portefeuille signé « avec moi » (historique inclus).
+    pub signatures_portfolio: i64,
+    pub taux_conversion: f64,
+}
+
+/// Funnel filleul : invitation → présence → conversion filleul.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ConversionFilleulStats {
+    pub invites: i64,
+    pub presents: i64,
+    pub convertis: i64,
+    pub taux_presence: f64,
+    pub taux_conversion: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

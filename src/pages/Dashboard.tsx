@@ -4,6 +4,7 @@ import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
 import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart";
 import { PipelineChart } from "@/components/dashboard/PipelineChart";
+import { ConversionFunnelPanel } from "@/components/dashboard/ConversionFunnelPanel";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
 import { DashboardTodayGrid } from "@/components/dashboard/DashboardTodayGrid";
 import { QuickActions } from "@/components/dashboard/QuickActions";
@@ -257,6 +258,7 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
             currentPage={currentPage}
           />
         </div>
+        <ConversionFunnelPanel key={`conv-${chartsRefreshKey}`} />
       </DashboardCollapsibleSection>
     </div>
   );

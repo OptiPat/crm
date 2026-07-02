@@ -229,6 +229,33 @@ describe("contactToFormData", () => {
     expect(payload.categorie).toBe("CLIENT");
     expect(payload.date_prochain_suivi).toBeTruthy();
   });
+
+  it("efface les champs funnel client quand statut AUCUN", () => {
+    const payload = buildSubmitPayload({
+      ...getEmptyForm("clients"),
+      nom: "Dupont",
+      prenom: "Jean",
+      categorie: "AUCUN",
+      date_r1: "2026-03-15",
+    });
+    expect(payload.date_r1).toBe("");
+  });
+
+  it("efface les champs funnel filleul quand statut filleul retiré", () => {
+    const payload = buildSubmitPayload({
+      ...getEmptyForm("filleuls"),
+      nom: "Bernard",
+      prenom: "Luc",
+      categorie: "AUCUN",
+      filleul_categorie: undefined,
+      type_invitation_filleul: "JD",
+      date_invitation_filleul: "2026-03-15",
+      presence_invitation_filleul: 1,
+    });
+    expect(payload.type_invitation_filleul).toBeNull();
+    expect(payload.date_invitation_filleul).toBe("");
+    expect(payload.presence_invitation_filleul).toBeNull();
+  });
 });
 
 describe("formatPhoneInput", () => {

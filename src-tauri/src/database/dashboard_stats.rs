@@ -339,4 +339,87 @@ impl super::Database {
             clients,
         })
     }
+
+    pub fn get_conversion_client_stats(&self) -> Result<super::models::ConversionClientStats> {
+        let rdv_r1: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE date_r1 IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let signatures: i64 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT c.id) FROM contacts c
+             INNER JOIN investissements i ON i.contact_id = c.id
+             WHERE c.date_r1 IS NOT NULL
+               AND i.origine = 'MON_CONSEIL'",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let signatures_portfolio: i64 = self.conn.query_row(
+            "SELECT COUNT(DISTINCT i.contact_id) FROM investissements i
+             WHERE i.origine = 'MON_CONSEIL'
+               AND i.contact_id IS NOT NULL
+               AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id)",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let taux_conversion = if rdv_r1 > 0 {
+            (signatures as f64 / rdv_r1 as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(super::models::ConversionClientStats {
+            rdv_r1,
+            signatures,
+            signatures_portfolio,
+            taux_conversion,
+        })
+    }
+
+    pub fn get_conversion_filleul_stats(&self) -> Result<super::models::ConversionFilleulStats> {
+        let invites: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE date_invitation_filleul IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let presents: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts
+             WHERE presence_invitation_filleul = 1
+               AND date_invitation_filleul IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let convertis: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts
+             WHERE filleul_categorie = 'FILLEUL'
+               AND date_invitation_filleul IS NOT NULL",
+            [],
+            |row| row.get(0),
+        )?;
+
+        let taux_presence = if invites > 0 {
+            (presents as f64 / invites as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        let taux_conversion = if invites > 0 {
+            (convertis as f64 / invites as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        Ok(super::models::ConversionFilleulStats {
+            invites,
+            presents,
+            convertis,
+            taux_presence,
+            taux_conversion,
+        })
+    }
 }

@@ -15,6 +15,53 @@ fn parse_optional_date_iso(date_str: &str) -> Option<i64> {
         .map(|ndt| Utc.from_utc_datetime(&ndt).timestamp())
 }
 
+fn parse_optional_date_field(date_str: &Option<String>) -> Option<i64> {
+    date_str
+        .as_ref()
+        .filter(|s| !s.trim().is_empty())
+        .and_then(|s| parse_optional_date_iso(s))
+}
+
+fn normalize_invitation_type(value: &Option<String>) -> Option<String> {
+    match value.as_deref().map(str::trim) {
+        Some("JD") => Some("JD".into()),
+        Some("PO") => Some("PO".into()),
+        _ => None,
+    }
+}
+
+fn normalize_presence(value: Option<i64>) -> Option<i64> {
+    match value {
+        Some(0) => Some(0),
+        Some(1) => Some(1),
+        _ => None,
+    }
+}
+
+/// R1 → prospect client ; invitation JD/PO → prospect filleul.
+fn apply_funnel_side_effects(contact: &mut NewContact) {
+    let has_r1 = contact
+        .date_r1
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+    if has_r1 && (contact.categorie == "AUCUN" || contact.categorie == "SUSPECT_CLIENT") {
+        contact.categorie = "PROSPECT_CLIENT".into();
+    }
+
+    let has_invitation = contact
+        .date_invitation_filleul
+        .as_ref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+        && normalize_invitation_type(&contact.type_invitation_filleul).is_some();
+    if has_invitation {
+        if contact.filleul_categorie.as_deref() == Some("SUSPECT_FILLEUL") {
+            contact.filleul_categorie = Some("PROSPECT_FILLEUL".into());
+        }
+    }
+}
+
 impl Database {
     fn validate_contact_identity(nom: &str, prenom: &str) -> Result<()> {
         if nom.trim().is_empty() || prenom.trim().is_empty() {
@@ -52,7 +99,9 @@ impl Database {
     pub fn create_contact(&self, new_contact: NewContact) -> Result<Contact> {
         use chrono::DateTime;
 
+        let mut new_contact = new_contact;
         Self::validate_contact_identity(&new_contact.nom, &new_contact.prenom)?;
+        apply_funnel_side_effects(&mut new_contact);
 
         let statut = new_contact.statut_suivi.unwrap_or("ACTIF".to_string());
 
@@ -87,6 +136,13 @@ impl Database {
                     .map(|dt| dt.timestamp())
             });
 
+        let date_r1_timestamp = parse_optional_date_field(&new_contact.date_r1);
+        let date_invitation_filleul_timestamp =
+            parse_optional_date_field(&new_contact.date_invitation_filleul);
+        let type_invitation_filleul = normalize_invitation_type(&new_contact.type_invitation_filleul);
+        let presence_invitation_filleul =
+            normalize_presence(new_contact.presence_invitation_filleul);
+
         let date_naissance_timestamp = new_contact
             .date_naissance
             .as_ref()
@@ -101,8 +157,9 @@ impl Database {
                 regime_matrimonial, revenus_annuels, charges_emprunts, objectifs_patrimoniaux,
                 source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                 date_dernier_contact_filleul, date_prochain_suivi_filleul,
+                date_r1, type_invitation_filleul, date_invitation_filleul, presence_invitation_filleul,
                 statut_suivi, registre, notes, epargne_precaution_souhaitee
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39)",
             params![
                 new_contact.famille_id,
                 new_contact.foyer_id,
@@ -135,6 +192,10 @@ impl Database {
                 date_prochain_suivi_timestamp,
                 date_dernier_contact_filleul_timestamp,
                 date_prochain_suivi_filleul_timestamp,
+                date_r1_timestamp,
+                type_invitation_filleul,
+                date_invitation_filleul_timestamp,
+                presence_invitation_filleul,
                 statut,
                 registre,
                 new_contact.notes,
@@ -302,7 +363,9 @@ pub fn update_contact(
     ) -> Result<Contact> {
         use chrono::DateTime;
 
+        let mut contact = contact.clone();
         Self::validate_contact_identity(&contact.nom, &contact.prenom)?;
+        apply_funnel_side_effects(&mut contact);
 
         // Convertir les dates ISO string en timestamps Unix - CLIENTS
         let date_dernier_contact_timestamp =
@@ -337,6 +400,13 @@ pub fn update_contact(
                     .ok()
                     .map(|dt| dt.timestamp())
             });
+
+        let date_r1_timestamp = parse_optional_date_field(&contact.date_r1);
+        let date_invitation_filleul_timestamp =
+            parse_optional_date_field(&contact.date_invitation_filleul);
+        let type_invitation_filleul = normalize_invitation_type(&contact.type_invitation_filleul);
+        let presence_invitation_filleul =
+            normalize_presence(contact.presence_invitation_filleul);
 
         // 🔥 statut_suivi est NOT NULL, donc on met une valeur par défaut
         let statut_suivi = contact
@@ -385,15 +455,19 @@ pub fn update_contact(
                 date_prochain_suivi = ?27,
                 date_dernier_contact_filleul = ?28,
                 date_prochain_suivi_filleul = ?29,
-                statut_suivi = ?30,
-                registre = ?31,
-                notes = ?32,
-                role_foyer = ?33,
-                role_famille = ?34,
-                famille_regroupement_exclu = ?35,
-                epargne_precaution_souhaitee = ?36,
+                date_r1 = ?30,
+                type_invitation_filleul = ?31,
+                date_invitation_filleul = ?32,
+                presence_invitation_filleul = ?33,
+                statut_suivi = ?34,
+                registre = ?35,
+                notes = ?36,
+                role_foyer = ?37,
+                role_famille = ?38,
+                famille_regroupement_exclu = ?39,
+                epargne_precaution_souhaitee = ?40,
                 updated_at = unixepoch()
-            WHERE id = ?37",
+            WHERE id = ?41",
             params![
                 &contact.famille_id,
                 &contact.foyer_id,
@@ -424,6 +498,10 @@ pub fn update_contact(
                 date_prochain_suivi_timestamp,
                 date_dernier_contact_filleul_timestamp,
                 date_prochain_suivi_filleul_timestamp,
+                date_r1_timestamp,
+                type_invitation_filleul,
+                date_invitation_filleul_timestamp,
+                presence_invitation_filleul,
                 &statut_suivi,
                 super::contact_row::normalize_contact_registre(contact.registre.as_deref()),
                 &contact.notes,
@@ -547,6 +625,10 @@ mod tests {
             date_prochain_suivi: None,
             date_dernier_contact_filleul: None,
             date_prochain_suivi_filleul: None,
+            date_r1: None,
+            type_invitation_filleul: None,
+            date_invitation_filleul: None,
+            presence_invitation_filleul: None,
             notes: None,
             registre: None,
             famille_regroupement_exclu: None,

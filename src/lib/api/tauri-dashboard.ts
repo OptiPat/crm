@@ -39,6 +39,23 @@ export interface PipelineStats {
   clients: number;     // Nombre de clients
 }
 
+export interface ConversionClientStats {
+  rdv_r1: number;
+  /** R1 renseigné + au moins une solution « avec moi ». */
+  signatures: number;
+  /** Portefeuille total signé « avec moi ». */
+  signatures_portfolio: number;
+  taux_conversion: number;
+}
+
+export interface ConversionFilleulStats {
+  invites: number;
+  presents: number;
+  convertis: number;
+  taux_presence: number;
+  taux_conversion: number;
+}
+
 export interface AlerteWithContact {
   alerte_id: number;
   contact_id: number;
@@ -73,6 +90,14 @@ export async function getProductStats(): Promise<ProductStats[]> {
 
 export async function getPipelineStats(): Promise<PipelineStats> {
   return invoke<PipelineStats>("get_pipeline_stats");
+}
+
+export async function getConversionClientStats(): Promise<ConversionClientStats> {
+  return invoke<ConversionClientStats>("get_conversion_client_stats");
+}
+
+export async function getConversionFilleulStats(): Promise<ConversionFilleulStats> {
+  return invoke<ConversionFilleulStats>("get_conversion_filleul_stats");
 }
 
 export async function getAlertesWithContacts(

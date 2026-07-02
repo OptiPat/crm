@@ -542,6 +542,7 @@ impl Database {
         self.migrate_add_contact_pays()?;
         self.migrate_add_contact_rio_financial_fields()?;
         self.migrate_add_contact_fiscal_fields()?;
+        self.migrate_add_contact_funnel_fields()?;
         self.migrate_add_foyer_ir_net()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
         self.migrate_documents_connaissances_financieres()?;
@@ -714,6 +715,34 @@ impl Database {
         }
         if added {
             println!("✅ Migration fiscalité contacts appliquée");
+        }
+        Ok(())
+    }
+
+    /// R1 client + invitation filleul (JD/PO) et présence.
+    fn migrate_add_contact_funnel_fields(&self) -> Result<()> {
+        let columns: [(&str, &str); 4] = [
+            ("date_r1", "INTEGER"),
+            ("type_invitation_filleul", "TEXT"),
+            ("date_invitation_filleul", "INTEGER"),
+            ("presence_invitation_filleul", "INTEGER"),
+        ];
+        let mut added = false;
+        for (name, sql_type) in columns {
+            if self.table_has_column("contacts", name)? {
+                continue;
+            }
+            if !added {
+                println!("🔄 Migration : funnel contact (R1, invitation filleul)...");
+                added = true;
+            }
+            self.conn.execute(
+                &format!("ALTER TABLE contacts ADD COLUMN {name} {sql_type}"),
+                [],
+            )?;
+        }
+        if added {
+            println!("✅ Migration funnel contact appliquée");
         }
         Ok(())
     }
