@@ -34,3 +34,16 @@ export function filterLibraryTemplates(templates: TemplateEmail[]): TemplateEmai
       !isArchivedEphemeralTemplate(t.variables)
   );
 }
+
+/** Campagne étiquette : toujours le modèle parent (pas relance / tu lié). */
+export function resolveCampaignTemplateId(
+  templateId: number,
+  templates: TemplateEmail[]
+): number {
+  if (!isLinkedChildTemplate(templateId, templates)) return templateId;
+  const parent = templates.find(
+    (t) =>
+      t.tutoiement_template_id === templateId || t.relance_template_id === templateId
+  );
+  return parent?.id ?? templateId;
+}

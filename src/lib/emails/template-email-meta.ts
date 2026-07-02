@@ -36,6 +36,7 @@ import {
   templateUsesStelliumPerfVariables,
 } from "@/lib/emails/stellium-perf-preview-vars";
 import { isStelliumPerfTemplateNom } from "@/lib/emails/stellium-template-meta";
+import { filterLibraryTemplates } from "@/lib/emails/template-library";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
 
 export type EmailTemplateCategory =
@@ -266,18 +267,19 @@ export function suggestTemplateIdForEtiquette(
   etiquetteNom: string,
   templates: TemplateEmail[]
 ): number | null {
+  const library = filterLibraryTemplates(templates);
   const trimmed = etiquetteNom.trim();
   if (trimmed) {
-    const exact = templates.find((t) => t.nom.trim() === trimmed);
+    const exact = library.find((t) => t.nom.trim() === trimmed);
     if (exact) return exact.id;
   }
   if (isExceltisEtiquetteNom(etiquetteNom)) {
-    const exceltis = templates.find((t) => t.nom === EXCELITIS_EMAIL_TEMPLATE_NOM);
+    const exceltis = library.find((t) => t.nom === EXCELITIS_EMAIL_TEMPLATE_NOM);
     if (exceltis) return exceltis.id;
   }
   const targetNom = ETIQUETTE_NOM_TO_TEMPLATE_NOM[etiquetteNom];
   if (!targetNom) return null;
-  const found = templates.find((t) => t.nom === targetNom);
+  const found = library.find((t) => t.nom === targetNom);
   return found?.id ?? null;
 }
 

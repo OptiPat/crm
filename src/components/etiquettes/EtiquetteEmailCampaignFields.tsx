@@ -21,6 +21,7 @@ import {
   getTemplateCategoryMeta,
   suggestTemplateIdForEtiquette,
 } from "@/lib/emails/template-email-meta";
+import { filterLibraryTemplates, resolveCampaignTemplateId } from "@/lib/emails/template-library";
 import {
   formatEmailCampaignSummary,
   type EmailEnvoiMode,
@@ -80,12 +81,26 @@ export function EtiquetteEmailCampaignFields({
   isEventSouscription = false,
   highlightField = null,
 }: Props) {
-  const selectedTemplate = templates.find((t) => t.id === emailTemplateId) ?? null;
+  const selectableTemplates = useMemo(
+    () => filterLibraryTemplates(templates),
+    [templates]
+  );
+
+  const resolvedTemplateId =
+    emailTemplateId != null
+      ? resolveCampaignTemplateId(emailTemplateId, templates)
+      : null;
+
+  const selectedTemplate =
+    resolvedTemplateId != null
+      ? (templates.find((t) => t.id === resolvedTemplateId) ?? null)
+      : null;
+
   const isExceltis = isExceltisEtiquetteNom(nom);
 
   const templatesByCategory = useMemo(() => {
     const map = new Map<string, TemplateEmail[]>();
-    for (const t of templates) {
+    for (const t of selectableTemplates) {
       const cat = t.categorie || "AUTRE";
       if (!map.has(cat)) map.set(cat, []);
       map.get(cat)!.push(t);
@@ -94,7 +109,7 @@ export function EtiquetteEmailCampaignFields({
       ...c,
       items: (map.get(c.id) ?? []).sort((a, b) => a.nom.localeCompare(b.nom, "fr")),
     })).filter((g) => g.items.length > 0);
-  }, [templates]);
+  }, [selectableTemplates]);
 
   const summary = formatEmailCampaignSummary({
     active: emailActif,
@@ -120,6 +135,15 @@ export function EtiquetteEmailCampaignFields({
     } else {
       toast.info("Aucun modèle correspondant — créez-en un dans Modèles email");
     }
+  };
+
+  const handleTemplateChange = (value: string) => {
+    if (!value) {
+      onTemplateIdChange(null);
+      return;
+    }
+    const id = parseInt(value, 10);
+    onTemplateIdChange(resolveCampaignTemplateId(id, templates));
   };
 
   return (
@@ -176,7 +200,7 @@ export function EtiquetteEmailCampaignFields({
                 variant="outline"
                 size="sm"
                 className="h-8 text-xs gap-1"
-                disabled={!nom.trim() || templates.length === 0}
+                disabled={!nom.trim() || selectableTemplates.length === 0}
                 onClick={handleSuggest}
               >
                 <Wand2 className="h-3.5 w-3.5" />
@@ -184,8 +208,8 @@ export function EtiquetteEmailCampaignFields({
               </Button>
             </div>
             <Select
-              value={emailTemplateId?.toString() || ""}
-              onValueChange={(v) => onTemplateIdChange(v ? parseInt(v, 10) : null)}
+              value={resolvedTemplateId?.toString() || ""}
+              onValueChange={handleTemplateChange}
             >
               <SelectTrigger
                 id="email-template"
@@ -213,10 +237,18 @@ export function EtiquetteEmailCampaignFields({
               </SelectContent>
             </Select>
             {selectedTemplate && (
-              <p className="text-xs text-muted-foreground">
-                Catégorie {getTemplateCategoryMeta(selectedTemplate.categorie).label}
-                {selectedTemplate.sujet ? ` — objet : « ${selectedTemplate.sujet} »` : ""}
-              </p>
+              <div className="space-y-1">
+                <p className="text-xs text-muted-foreground">
+                  Catégorie {getTemplateCategoryMeta(selectedTemplate.categorie).label}
+                  {selectedTemplate.sujet ? ` — objet : « ${selectedTemplate.sujet} »` : ""}
+                </p>
+                {selectedTemplate.tutoiement_template_id != null && (
+                  <p className="text-xs text-muted-foreground">
+                    Variante tutoiement envoyée automatiquement selon le registre du contact
+                    (fiche contact).
+                  </p>
+                )}
+              </div>
             )}
           </div>
 

@@ -4,6 +4,7 @@ import {
   filterLibraryTemplates,
   isRelanceChildTemplate,
   isTutoiementChildTemplate,
+  resolveCampaignTemplateId,
 } from "@/lib/emails/template-library";
 
 const base = (id: number, overrides: Partial<TemplateEmail> = {}): TemplateEmail => ({
@@ -48,6 +49,13 @@ describe("template-library", () => {
     const tu = base(11, { nom: "Campagne (tu)" });
     const solo = base(12, { nom: "Autre" });
     expect(filterLibraryTemplates([parent, tu, solo]).map((t) => t.id)).toEqual([10, 12]);
+  });
+
+  it("résout un modèle enfant vers le parent pour campagne étiquette", () => {
+    const parent = base(10, { tutoiement_template_id: 11 });
+    const tu = base(11, { nom: "Girardin (tu)" });
+    expect(resolveCampaignTemplateId(11, [parent, tu])).toBe(10);
+    expect(resolveCampaignTemplateId(10, [parent, tu])).toBe(10);
   });
 
   it("masque les campagnes éphémères archivées", () => {

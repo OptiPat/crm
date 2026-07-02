@@ -59,6 +59,7 @@ import {
   type EmailEnvoiJourCode,
 } from "@/lib/emails/email-envoi-schedule";
 import { suggestTemplateIdForEtiquette } from "@/lib/emails/template-email-meta";
+import { resolveCampaignTemplateId } from "@/lib/emails/template-library";
 import { EtiquetteEmailCampaignFields } from "@/components/etiquettes/EtiquetteEmailCampaignFields";
 import { EtiquetteTacheActionFields } from "@/components/etiquettes/EtiquetteTacheActionFields";
 import { setEtiquettePipelineActif } from "@/lib/api/tauri-pipeline";
@@ -324,6 +325,14 @@ export function EtiquetteForm({
         .catch(console.error);
     }
   }, [open, reloadSegments]);
+
+  useEffect(() => {
+    if (!open || emailTemplateId == null || templates.length === 0) return;
+    const resolved = resolveCampaignTemplateId(emailTemplateId, templates);
+    if (resolved !== emailTemplateId) {
+      setEmailTemplateId(resolved);
+    }
+  }, [open, emailTemplateId, templates]);
 
   // Initialiser le formulaire quand on ouvre/change d'étiquette
   useEffect(() => {
@@ -745,7 +754,10 @@ export function EtiquetteForm({
         auto_condition_config: isAuto && !linkedSegmentId ? autoConditionConfig : null,
         auto_categories: isAuto && !linkedSegmentId ? autoCategories : null,
         segment_id: linkedSegmentId,
-        email_template_id: emailActif ? emailTemplateId : null,
+        email_template_id:
+          emailActif && emailTemplateId != null
+            ? resolveCampaignTemplateId(emailTemplateId, templates)
+            : null,
         email_delai_jours:
           emailActif && emailEnvoiMode === "eligibility" ? emailDelaiJours : 0,
         email_envoi_prevu:
