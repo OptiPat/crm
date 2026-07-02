@@ -3,6 +3,8 @@
 use crate::database::birthdays::BirthdayContactToday;
 use rand::seq::SliceRandom;
 
+use super::message_settings::{BirthdayMessageProfileBodies, BirthdayMessageSettingsPayload};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Genre {
     M,
@@ -53,6 +55,8 @@ fn extract_prenom(prenom: &str, display_name: &str) -> String {
         .to_string()
 }
 
+pub const PRENOM_PLACEHOLDER: &str = "{prenom}";
+
 fn salutation(registre: Registre, prenom: &str) -> String {
     match registre {
         Registre::Tu => format!("Salut {prenom}"),
@@ -67,13 +71,40 @@ fn closing_line(registre: Registre) -> &'static str {
     }
 }
 
-/// Salutation + corps + formule de politesse, sans emoji (SMS / WhatsApp).
+/// Message complet (salutation + corps + formule), sans emoji (SMS / WhatsApp).
 fn compose_message(prenom: &str, registre: Registre, body: &str) -> String {
     let sal = salutation(registre, prenom);
     format!(
         "{sal}, joyeux anniversaire !\n{body}\n{}",
         closing_line(registre)
     )
+}
+
+/// Variante éditables : message complet avec `{prenom}` (pas corps seul).
+pub fn is_full_variant_template(text: &str) -> bool {
+    text.lines()
+        .next()
+        .unwrap_or("")
+        .trim()
+        .contains("joyeux anniversaire")
+}
+
+pub fn wrap_body_as_full_variant(body: &str, registre: Registre) -> String {
+    let body = body.trim();
+    if body.is_empty() {
+        return String::new();
+    }
+    if is_full_variant_template(body) {
+        return body.to_string();
+    }
+    compose_message(PRENOM_PLACEHOLDER, registre, body)
+}
+
+pub fn apply_variant_template(template: &str, prenom: &str) -> String {
+    template
+        .replace(PRENOM_PLACEHOLDER, prenom)
+        .trim()
+        .to_string()
 }
 
 fn angle_performance(prenom: &str, registre: Registre, genre: Genre) -> String {
@@ -187,22 +218,103 @@ fn build_angle_pool(genre: Genre) -> Vec<AngleFn> {
     pool
 }
 
+fn custom_bodies_for<'a>(
+    settings: &'a BirthdayMessageSettingsPayload,
+    registre: Registre,
+    genre: Genre,
+) -> &'a [String] {
+    let profile = &settings.profile;
+    let primary: &[String] = match (registre, genre) {
+        (Registre::Tu, Genre::M) => &profile.tu_m,
+        (Registre::Tu, Genre::F) => &profile.tu_f,
+        (Registre::Tu, Genre::N) => &profile.tu_n,
+        (Registre::Vous, Genre::M) => &profile.vous_m,
+        (Registre::Vous, Genre::F) => &profile.vous_f,
+        (Registre::Vous, Genre::N) => &profile.vous_n,
+    };
+    if !primary.is_empty() {
+        return primary;
+    }
+    match (registre, genre) {
+        (Registre::Tu, Genre::N) if !profile.tu_m.is_empty() => &profile.tu_m,
+        (Registre::Tu, Genre::N) if !profile.tu_f.is_empty() => &profile.tu_f,
+        (Registre::Vous, Genre::N) if !profile.vous_m.is_empty() => &profile.vous_m,
+        (Registre::Vous, Genre::N) if !profile.vous_f.is_empty() => &profile.vous_f,
+        (Registre::Tu, _) if !settings.bodies_tu.is_empty() => &settings.bodies_tu,
+        (Registre::Vous, _) if !settings.bodies_vous.is_empty() => &settings.bodies_vous,
+        _ => &[],
+    }
+}
+
+fn builtin_bodies_for(registre: Registre, genre: Genre) -> Vec<String> {
+    let profile = list_builtin_bodies_full();
+    match (registre, genre) {
+        (Registre::Tu, Genre::M) => profile.tu_m,
+        (Registre::Tu, Genre::F) => profile.tu_f,
+        (Registre::Tu, Genre::N) => profile.tu_n,
+        (Registre::Vous, Genre::M) => profile.vous_m,
+        (Registre::Vous, Genre::F) => profile.vous_f,
+        (Registre::Vous, Genre::N) => profile.vous_n,
+    }
+}
+
+fn try_builtin_profile_template(
+    prenom: &str,
+    registre: Registre,
+    genre: Genre,
+    rng: &mut impl rand::Rng,
+) -> Option<String> {
+    let bodies = builtin_bodies_for(registre, genre);
+    let template = bodies.choose(rng)?;
+    Some(apply_variant_template(template, prenom))
+}
+
+fn try_custom_message(
+    prenom: &str,
+    registre: Registre,
+    genre: Genre,
+    settings: &BirthdayMessageSettingsPayload,
+    rng: &mut impl rand::Rng,
+) -> Option<String> {
+    if !settings.use_custom {
+        return None;
+    }
+    let bodies = custom_bodies_for(settings, registre, genre);
+    let template = bodies.choose(rng)?;
+    let full = wrap_body_as_full_variant(template, registre);
+    Some(apply_variant_template(&full, prenom))
+}
+
 pub fn generate_message(
     prenom: &str,
     registre: Registre,
     genre: Genre,
     rng: &mut impl rand::Rng,
+    settings: &BirthdayMessageSettingsPayload,
 ) -> String {
+    if settings.use_custom {
+        if let Some(msg) = try_custom_message(prenom, registre, genre, settings, rng) {
+            return msg;
+        }
+        // Tranche profil vide : intégrés de la même tranche (pas les angles live).
+        if let Some(msg) = try_builtin_profile_template(prenom, registre, genre, rng) {
+            return msg;
+        }
+    }
     let pool = build_angle_pool(genre);
     let angle = pool.choose(rng).copied().unwrap_or(angle_performance);
     angle(prenom, registre, genre)
 }
 
-pub fn generate_draft(contact: &BirthdayContactToday, rng: &mut impl rand::Rng) -> BirthdayDraft {
+pub fn generate_draft(
+    contact: &BirthdayContactToday,
+    rng: &mut impl rand::Rng,
+    settings: &BirthdayMessageSettingsPayload,
+) -> BirthdayDraft {
     let prenom = extract_prenom(&contact.prenom, &contact.display_name);
     let registre = normalize_registre(&contact.registre);
     let genre = genre_from_civilite(contact.civilite.as_deref());
-    let message = generate_message(&prenom, registre, genre, rng);
+    let message = generate_message(&prenom, registre, genre, rng, settings);
     let name = if contact.display_name.trim().is_empty() {
         format!("{} {}", contact.prenom.trim(), contact.nom.trim())
             .trim()
@@ -221,9 +333,93 @@ pub fn format_telegram_notification(name: &str, message: &str) -> String {
     format!("Anniversaire : {name}\n\n{message}")
 }
 
+/// Toutes les variantes intégrées (aperçu UI), sans tirage aléatoire.
+pub fn list_builtin_previews() -> (Vec<String>, Vec<String>) {
+    let tu: Vec<String> = build_angle_pool(Genre::M)
+        .iter()
+        .map(|angle| angle("Paul", Registre::Tu, Genre::M))
+        .collect();
+    let vous: Vec<String> = build_angle_pool(Genre::F)
+        .iter()
+        .map(|angle| angle("Alice", Registre::Vous, Genre::F))
+        .collect();
+    (tu, vous)
+}
+
+fn list_builtin_bodies_for(registre: Registre, genre: Genre) -> Vec<String> {
+    build_angle_pool(genre)
+        .iter()
+        .map(|angle| angle(PRENOM_PLACEHOLDER, registre, genre))
+        .collect()
+}
+
+/// Corps éditables par registre (tu/vous) et genre (M/F/N).
+pub fn list_builtin_bodies_full() -> BirthdayMessageProfileBodies {
+    BirthdayMessageProfileBodies {
+        tu_m: list_builtin_bodies_for(Registre::Tu, Genre::M),
+        tu_f: list_builtin_bodies_for(Registre::Tu, Genre::F),
+        tu_n: list_builtin_bodies_for(Registre::Tu, Genre::N),
+        vous_m: list_builtin_bodies_for(Registre::Vous, Genre::M),
+        vous_f: list_builtin_bodies_for(Registre::Vous, Genre::F),
+        vous_n: list_builtin_bodies_for(Registre::Vous, Genre::N),
+    }
+}
+
+/// Legacy — tu masculin, vous féminin (messages complets).
+#[allow(dead_code)]
+pub fn list_builtin_bodies() -> (Vec<String>, Vec<String>) {
+    let profile = list_builtin_bodies_full();
+    (profile.tu_m.clone(), profile.vous_f.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn list_builtin_bodies_full_has_six_per_profile() {
+        let profile = list_builtin_bodies_full();
+        assert_eq!(profile.tu_m.len(), 6);
+        assert_eq!(profile.tu_f.len(), 6);
+        assert_eq!(profile.tu_n.len(), 5);
+        assert_ne!(profile.tu_m[0], profile.tu_f[0]);
+    }
+
+    #[test]
+    fn custom_message_uses_gender_profile() {
+        use super::super::message_settings::BirthdayMessageProfileBodies;
+        let settings = BirthdayMessageSettingsPayload {
+            use_custom: true,
+            bodies_tu: vec![],
+            bodies_vous: vec![],
+            profile: BirthdayMessageProfileBodies {
+                tu_f: vec!["Corps féminin tu.".into()],
+                ..Default::default()
+            },
+        };
+        use rand::SeedableRng;
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let msg = try_custom_message("Alice", Registre::Tu, Genre::F, &settings, &mut rng);
+        assert!(msg.unwrap().contains("Corps féminin tu."));
+    }
+
+    #[test]
+    fn list_builtin_bodies_include_salutation_and_closing() {
+        let profile = list_builtin_bodies_full();
+        assert!(profile.tu_m[0].starts_with("Salut {prenom}, joyeux anniversaire !"));
+        assert!(profile.tu_m[0].ends_with("À très vite."));
+        assert!(profile.vous_f[0].starts_with("Bonjour {prenom}, joyeux anniversaire !"));
+        assert!(profile.vous_f[0].ends_with("À bientôt."));
+    }
+
+    #[test]
+    fn list_builtin_previews_exposes_six_variants_per_registre() {
+        let (tu, vous) = list_builtin_previews();
+        assert_eq!(tu.len(), 6);
+        assert_eq!(vous.len(), 6);
+        assert!(tu[0].starts_with("Salut Paul, joyeux anniversaire !"));
+        assert!(vous[0].starts_with("Bonjour Alice, joyeux anniversaire !"));
+    }
 
     #[test]
     fn genre_from_civilite_maps_mme_and_m() {
@@ -263,12 +459,89 @@ mod tests {
     }
 
     #[test]
+    fn custom_body_replaces_prenom_in_full_template() {
+        use rand::SeedableRng;
+        let settings = BirthdayMessageSettingsPayload {
+            use_custom: true,
+            bodies_tu: vec![],
+            bodies_vous: vec![],
+            profile: {
+                use super::super::message_settings::BirthdayMessageProfileBodies;
+                BirthdayMessageProfileBodies {
+                    tu_m: vec![
+                        "Salut {prenom}, joyeux anniversaire !\nProfite bien de ta journée {prenom} !\nÀ très vite."
+                            .into(),
+                    ],
+                    ..Default::default()
+                }
+            },
+        };
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let msg = generate_message("Paul", Registre::Tu, Genre::M, &mut rng, &settings);
+        assert_eq!(
+            msg,
+            "Salut Paul, joyeux anniversaire !\nProfite bien de ta journée Paul !\nÀ très vite."
+        );
+    }
+
+    #[test]
+    fn custom_body_only_legacy_wraps_salutation_closing() {
+        use rand::SeedableRng;
+        let settings = BirthdayMessageSettingsPayload {
+            use_custom: true,
+            bodies_tu: vec!["Profite bien de ta journée {prenom} !".into()],
+            bodies_vous: vec![],
+            profile: BirthdayMessageProfileBodies::default(),
+        };
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let msg = generate_message("Paul", Registre::Tu, Genre::M, &mut rng, &settings);
+        assert_eq!(
+            msg,
+            "Salut Paul, joyeux anniversaire !\nProfite bien de ta journée Paul !\nÀ très vite."
+        );
+    }
+
+    #[test]
+    fn custom_mode_empty_slice_uses_builtin_profile_templates() {
+        use rand::SeedableRng;
+        let settings = BirthdayMessageSettingsPayload {
+            use_custom: true,
+            bodies_tu: vec![],
+            bodies_vous: vec![],
+            profile: BirthdayMessageProfileBodies {
+                tu_m: vec!["Salut {prenom}, joyeux anniversaire !\nPerso tu.\nÀ très vite.".into()],
+                ..Default::default()
+            },
+        };
+        let mut rng = rand::rngs::StdRng::seed_from_u64(99);
+        let msg = generate_message("Alice", Registre::Vous, Genre::F, &mut rng, &settings);
+        assert!(msg.starts_with("Bonjour Alice, joyeux anniversaire !"));
+        assert!(!msg.contains("Perso tu."));
+    }
+
+    #[test]
+    fn custom_vous_picks_vous_list() {
+        use rand::SeedableRng;
+        let settings = BirthdayMessageSettingsPayload {
+            use_custom: true,
+            bodies_tu: vec![],
+            bodies_vous: vec!["Belle journée à vous.".into()],
+            profile: BirthdayMessageProfileBodies::default(),
+        };
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let msg = generate_message("Alice", Registre::Vous, Genre::F, &mut rng, &settings);
+        assert!(msg.starts_with("Bonjour Alice, joyeux anniversaire !"));
+        assert!(msg.contains("Belle journée à vous."));
+    }
+
+    #[test]
     fn generate_message_is_deterministic_with_seeded_rng() {
         use rand::SeedableRng;
+        let settings = BirthdayMessageSettingsPayload::default();
         let mut rng1 = rand::rngs::StdRng::seed_from_u64(42);
         let mut rng2 = rand::rngs::StdRng::seed_from_u64(42);
-        let m1 = generate_message("Paul", Registre::Tu, Genre::M, &mut rng1);
-        let m2 = generate_message("Paul", Registre::Tu, Genre::M, &mut rng2);
+        let m1 = generate_message("Paul", Registre::Tu, Genre::M, &mut rng1, &settings);
+        let m2 = generate_message("Paul", Registre::Tu, Genre::M, &mut rng2, &settings);
         assert_eq!(m1, m2);
         assert!(m1.starts_with("Salut Paul, joyeux anniversaire !\n"));
     }

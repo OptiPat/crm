@@ -1,4 +1,5 @@
 use super::messages::{format_telegram_notification, generate_draft};
+use super::message_settings::load_birthday_message_settings;
 use super::settings::{
     load_notified_contact_ids, load_runtime_config, save_notified_contact_ids,
     BirthdayTelegramRuntime,
@@ -116,9 +117,10 @@ fn send_pending_messages(
 
     let mut rng = thread_rng();
     let mut messages_sent = 0u32;
+    let message_settings = with_open_database(db_state, |db| load_birthday_message_settings(db))?;
 
     for contact in &pending {
-        let draft = generate_draft(contact, &mut rng);
+        let draft = generate_draft(contact, &mut rng, &message_settings);
         let text = format_telegram_notification(&draft.name, &draft.message);
         match send_telegram_message(&config.bot_token, &config.chat_id, &text) {
             Ok(()) => {

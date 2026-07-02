@@ -1,12 +1,15 @@
 mod commands;
+mod message_settings;
 mod messages;
 mod runner;
 mod settings;
 mod telegram;
 
 pub use commands::{
-    generate_birthday_message_draft_cmd, get_birthday_telegram_settings_cmd, list_birthdays_today_cmd,
-    run_birthday_telegram_if_due_cmd, save_birthday_telegram_settings_cmd,
+    generate_birthday_message_draft_cmd, get_birthday_builtin_bodies_cmd,
+    get_birthday_message_settings_cmd,
+    get_birthday_telegram_settings_cmd, list_birthdays_today_cmd, run_birthday_telegram_if_due_cmd,
+    save_birthday_message_settings_cmd, save_birthday_telegram_settings_cmd,
     send_birthday_telegram_reminders_now_cmd, test_birthday_telegram_cmd,
 };
 pub use runner::run_if_due_on_db_state;

@@ -58,6 +58,42 @@ export interface BirthdayMessageDraft {
   message: string;
 }
 
+export interface BirthdayMessageProfileBodies {
+  tuM: string[];
+  tuF: string[];
+  tuN: string[];
+  vousM: string[];
+  vousF: string[];
+  vousN: string[];
+}
+
+export interface BirthdayMessageSettings {
+  useCustom: boolean;
+  bodiesTu: string[];
+  bodiesVous: string[];
+  profile: BirthdayMessageProfileBodies;
+}
+
+export interface BirthdayBuiltinBodies {
+  profile: BirthdayMessageProfileBodies;
+}
+
+export async function getBirthdayBuiltinBodies(): Promise<BirthdayBuiltinBodies> {
+  return invoke<BirthdayBuiltinBodies>("get_birthday_builtin_bodies_cmd");
+}
+
+export async function getBirthdayMessageSettings(): Promise<BirthdayMessageSettings> {
+  return invoke<BirthdayMessageSettings>("get_birthday_message_settings_cmd");
+}
+
+export async function saveBirthdayMessageSettings(
+  settings: BirthdayMessageSettings
+): Promise<BirthdayMessageSettings> {
+  return invoke<BirthdayMessageSettings>("save_birthday_message_settings_cmd", {
+    settings,
+  });
+}
+
 export async function generateBirthdayMessageDraft(
   contactId: number
 ): Promise<BirthdayMessageDraft> {

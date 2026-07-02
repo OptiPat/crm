@@ -24,8 +24,8 @@ use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
 use birthday_notifications::{
-    generate_birthday_message_draft_cmd, get_birthday_telegram_settings_cmd, list_birthdays_today_cmd,
-    run_birthday_telegram_if_due_cmd, save_birthday_telegram_settings_cmd,
+    generate_birthday_message_draft_cmd, get_birthday_builtin_bodies_cmd, get_birthday_message_settings_cmd, get_birthday_telegram_settings_cmd, list_birthdays_today_cmd,
+    run_birthday_telegram_if_due_cmd, save_birthday_message_settings_cmd, save_birthday_telegram_settings_cmd,
     send_birthday_telegram_reminders_now_cmd, test_birthday_telegram_cmd,
 };
 use local_api::{
@@ -229,6 +229,9 @@ fn main() {
             save_birthday_telegram_settings_cmd,
             list_birthdays_today_cmd,
             generate_birthday_message_draft_cmd,
+            get_birthday_message_settings_cmd,
+            get_birthday_builtin_bodies_cmd,
+            save_birthday_message_settings_cmd,
             run_birthday_telegram_if_due_cmd,
             send_birthday_telegram_reminders_now_cmd,
             test_birthday_telegram_cmd,

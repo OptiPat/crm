@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { Copy } from "lucide-react";
 import { SmsBrandIcon, WhatsAppBrandIcon } from "@/components/icons/MessagingBrandIcons";
 import { toast } from "sonner";
 import {
+  BirthdayMessagesSettingsButton,
+  BirthdayMessagesSettingsSheet,
+} from "@/components/dashboard/BirthdayMessagesSettingsSheet";
+import {
   generateBirthdayMessageDraft,
+  getBirthdayMessageSettings,
   listBirthdaysToday,
   runBirthdayTelegramIfDue,
   type BirthdayContactToday,
@@ -22,6 +28,16 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
+
+async function copyBirthdayMessage(contact: BirthdayContactToday): Promise<void> {
+  try {
+    const draft = await generateBirthdayMessageDraft(contact.id);
+    await navigator.clipboard.writeText(draft.message);
+    toast.success("Message copié dans le presse-papiers.");
+  } catch (error) {
+    toast.error(`Copie impossible : ${String(error)}`);
+  }
+}
 
 async function openBirthdayMessage(
   contact: BirthdayContactToday,
@@ -61,6 +77,17 @@ export function BirthdaysTodayPreview({
 }) {
   const [birthdays, setBirthdays] = useState<BirthdayContactToday[]>([]);
   const [loading, setLoading] = useState(true);
+  const [messagesSettingsOpen, setMessagesSettingsOpen] = useState(false);
+  const [customMessagesActive, setCustomMessagesActive] = useState(false);
+
+  const refreshCustomMessagesFlag = useCallback(async () => {
+    try {
+      const settings = await getBirthdayMessageSettings();
+      setCustomMessagesActive(settings.useCustom);
+    } catch {
+      setCustomMessagesActive(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -69,13 +96,14 @@ export function BirthdaysTodayPreview({
       void runBirthdayTelegramIfDue().catch((error) => {
         console.error("Rappels Telegram anniversaires:", error);
       });
+      await refreshCustomMessagesFlag();
     } catch (error) {
       console.error("Erreur anniversaires:", error);
       setBirthdays([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshCustomMessagesFlag]);
 
   useEffect(() => {
     void load();
@@ -89,7 +117,18 @@ export function BirthdaysTodayPreview({
       : "Aucun anniversaire aujourd'hui";
 
   return (
-    <DashboardPanel title="Anniversaires du jour" description={description} className="h-full">
+    <>
+      <DashboardPanel
+        title="Anniversaires du jour"
+        description={description}
+        className="h-full"
+        action={
+          <BirthdayMessagesSettingsButton
+            customActive={customMessagesActive}
+            onOpen={() => setMessagesSettingsOpen(true)}
+          />
+        }
+      >
       {loading ? (
         <div className="space-y-2">
           {Array.from({ length: 2 }).map((_, i) => (
@@ -126,6 +165,20 @@ export function BirthdaysTodayPreview({
                   </div>
                 </button>
                 <div className="flex items-center gap-0.5 pr-2 shrink-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    title="Copier le message"
+                    aria-label="Copier le message anniversaire"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void copyBirthdayMessage(c);
+                    }}
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
                   <Button
                     type="button"
                     variant="ghost"
@@ -168,6 +221,13 @@ export function BirthdaysTodayPreview({
           })}
         </ul>
       )}
-    </DashboardPanel>
+      </DashboardPanel>
+      <BirthdayMessagesSettingsSheet
+        open={messagesSettingsOpen}
+        onOpenChange={setMessagesSettingsOpen}
+        birthdays={birthdays}
+        onSaved={() => void refreshCustomMessagesFlag()}
+      />
+    </>
   );
 }
