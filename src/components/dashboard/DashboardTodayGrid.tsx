@@ -2,6 +2,7 @@ import { TachesPreview } from "./TachesPreview";
 import { CalendarTodayPreview } from "./CalendarTodayPreview";
 import { BirthdaysTodayPreview } from "./BirthdaysTodayPreview";
 import { ScpiCampaignPreview } from "./ScpiCampaignPreview";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 export function DashboardTodayGrid({
   onNavigate,
@@ -9,7 +10,7 @@ export function DashboardTodayGrid({
   currentPage,
 }: {
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
   currentPage?: string;
 }) {
   return (

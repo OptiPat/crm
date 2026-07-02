@@ -24,24 +24,26 @@ fn bucket_sort_key(bucket: &str) -> i32 {
     digits.parse().unwrap_or(0)
 }
 
-fn activity_stats_sql(bucket_fmt: &str, with_period: bool) -> String {
-    let period_souscription = if with_period {
-        " AND i.date_souscription >= ?1 AND i.date_souscription <= ?2"
+fn activity_period_filter_clauses(with_period: bool) -> (&'static str, &'static str) {
+    if with_period {
+        (
+            " AND i.date_souscription >= ?1 AND i.date_souscription <= ?2",
+            " AND vr.date_versement >= ?1 AND vr.date_versement <= ?2",
+        )
     } else {
-        ""
-    };
-    let period_versement = if with_period {
-        " AND vr.date_versement >= ?1 AND vr.date_versement <= ?2"
-    } else {
-        ""
-    };
+        ("", "")
+    }
+}
 
+fn activity_souscription_branch(bucket_fmt: Option<&str>, period_clause: &str) -> String {
+    let bucket_select = match bucket_fmt {
+        Some(fmt) => format!(
+            "strftime('{fmt}', datetime(i.date_souscription, 'unixepoch')) AS bucket,\n                 "
+        ),
+        None => String::new(),
+    };
     format!(
-        "SELECT bucket, COUNT(DISTINCT contact_id) AS clients, COALESCE(SUM(amount_centimes), 0) AS total_centimes
-         FROM (
-             SELECT
-                 strftime('{bucket_fmt}', datetime(i.date_souscription, 'unixepoch')) AS bucket,
-                 i.contact_id AS contact_id,
+        "SELECT {bucket_select}i.contact_id AS contact_id,
                  COALESCE(i.montant_initial, 0) AS amount_centimes
              FROM investissements i
              WHERE i.origine = 'MON_CONSEIL'
@@ -51,11 +53,19 @@ fn activity_stats_sql(bucket_fmt: &str, with_period: bool) -> String {
                AND EXISTS (
                    SELECT 1 FROM contacts c
                    WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
-               ){period_souscription}
-             UNION ALL
-             SELECT
-                 strftime('{bucket_fmt}', datetime(vr.date_versement, 'unixepoch')) AS bucket,
-                 i.contact_id AS contact_id,
+               ){period_clause}"
+    )
+}
+
+fn activity_versement_branch(bucket_fmt: Option<&str>, period_clause: &str) -> String {
+    let bucket_select = match bucket_fmt {
+        Some(fmt) => format!(
+            "strftime('{fmt}', datetime(vr.date_versement, 'unixepoch')) AS bucket,\n                 "
+        ),
+        None => String::new(),
+    };
+    format!(
+        "SELECT {bucket_select}i.contact_id AS contact_id,
                  vr.montant AS amount_centimes
              FROM investissement_versements vr
              INNER JOIN investissements i ON i.id = vr.investissement_id
@@ -65,11 +75,45 @@ fn activity_stats_sql(bucket_fmt: &str, with_period: bool) -> String {
                AND EXISTS (
                    SELECT 1 FROM contacts c
                    WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
-               ){period_versement}
-         ) flows
+               ){period_clause}"
+    )
+}
+
+fn activity_flows_union_sql(with_period: bool, bucket_fmt: Option<&str>) -> String {
+    let (period_souscription, period_versement) = activity_period_filter_clauses(with_period);
+    format!(
+        "{} UNION ALL {}",
+        activity_souscription_branch(bucket_fmt, period_souscription),
+        activity_versement_branch(bucket_fmt, period_versement)
+    )
+}
+
+fn activity_stats_sql(bucket_fmt: &str, with_period: bool) -> String {
+    format!(
+        "SELECT bucket, COUNT(DISTINCT contact_id) AS clients, COALESCE(SUM(amount_centimes), 0) AS total_centimes
+         FROM ({}) flows
          WHERE bucket IS NOT NULL
          GROUP BY bucket
-         ORDER BY bucket ASC"
+         ORDER BY bucket ASC",
+        activity_flows_union_sql(with_period, Some(bucket_fmt))
+    )
+}
+
+fn activity_period_summary_sql(with_period: bool) -> String {
+    format!(
+        "SELECT COUNT(DISTINCT contact_id) AS clients, COALESCE(SUM(amount_centimes), 0) AS total_centimes
+         FROM ({}) flows",
+        activity_flows_union_sql(with_period, None)
+    )
+}
+
+fn activity_bucket_contacts_sql(bucket_fmt: &str) -> String {
+    format!(
+        "SELECT DISTINCT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+         FROM contacts c
+         INNER JOIN ({}) flows ON flows.contact_id = c.id AND flows.bucket = ?3
+         ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC",
+        activity_flows_union_sql(true, Some(bucket_fmt))
     )
 }
 
@@ -324,6 +368,34 @@ impl super::Database {
         };
 
         Ok(stats)
+    }
+
+    /// Totaux sur la période (souscriptions + versements « avec moi »), alignés sur le graphique activité.
+    pub fn get_activity_period_summary(
+        &self,
+        period_start: i64,
+        period_end: i64,
+    ) -> Result<super::models::ActivityPeriodSummary> {
+        let sql = activity_period_summary_sql(true);
+        self.conn.query_row(
+            &sql,
+            params![period_start, period_end],
+            |row| {
+                let clients: i64 = row.get(0)?;
+                let total_centimes: i64 = row.get(1)?;
+                let total = total_centimes as f64 / 100.0;
+                let panier_moyen = if clients > 0 {
+                    total / clients as f64
+                } else {
+                    0.0
+                };
+                Ok(super::models::ActivityPeriodSummary {
+                    clients,
+                    total,
+                    panier_moyen,
+                })
+            },
+        )
     }
 
     fn format_month(timestamp: i64) -> String {
@@ -592,5 +664,128 @@ impl super::Database {
             taux_presence,
             taux_conversion,
         })
+    }
+
+    fn map_dashboard_stat_contact(row: &rusqlite::Row<'_>) -> rusqlite::Result<super::models::DashboardStatContact> {
+        Ok(super::models::DashboardStatContact {
+            contact_id: row.get(0)?,
+            nom: row.get(1)?,
+            prenom: row.get(2)?,
+            categorie: row.get(3)?,
+            filleul_categorie: row.get(4)?,
+            date_r1: row.get(5)?,
+            date_invitation_filleul: row.get(6)?,
+        })
+    }
+
+    fn query_dashboard_stat_contacts(&self, sql: &str, params: &[&dyn rusqlite::ToSql]) -> Result<Vec<super::models::DashboardStatContact>> {
+        let mut stmt = self.conn.prepare(sql)?;
+        let rows = stmt.query_map(params, Self::map_dashboard_stat_contact)?;
+        rows.collect::<Result<Vec<_>>>()
+    }
+
+    /// Clients actifs ayant eu une souscription ou versement « avec moi » dans le bucket demandé.
+    pub fn get_activity_bucket_contacts(
+        &self,
+        period_start: i64,
+        period_end: i64,
+        bucket_key: &str,
+        bucket: Option<&str>,
+    ) -> Result<Vec<super::models::DashboardStatContact>> {
+        let bucket_fmt = activity_bucket_format(bucket);
+        let sql = activity_bucket_contacts_sql(bucket_fmt);
+        self.query_dashboard_stat_contacts(
+            &sql,
+            &[
+                &period_start as &dyn rusqlite::ToSql,
+                &period_end,
+                &bucket_key,
+            ],
+        )
+    }
+
+    /// Liste drill-down conversion client : `r1` | `signatures` | `portfolio`.
+    pub fn get_conversion_client_contacts(
+        &self,
+        period_start: i64,
+        period_end: i64,
+        segment: &str,
+    ) -> Result<Vec<super::models::DashboardStatContact>> {
+        let sql = match segment {
+            "r1" => format!(
+                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                 FROM contacts c
+                 WHERE c.date_r1 IS NOT NULL
+                   AND c.date_r1 >= ?1 AND c.date_r1 <= ?2
+                 ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
+            ),
+            "signatures" => format!(
+                "SELECT DISTINCT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                 FROM contacts c
+                 INNER JOIN investissements i ON i.contact_id = c.id
+                 WHERE c.date_r1 IS NOT NULL
+                   AND i.origine = 'MON_CONSEIL'
+                   AND c.date_r1 >= ?1 AND c.date_r1 <= ?2
+                 ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
+            ),
+            "portfolio" => format!(
+                "SELECT DISTINCT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                 FROM contacts c
+                 INNER JOIN investissements i ON i.contact_id = c.id
+                 WHERE i.origine = 'MON_CONSEIL'
+                   AND i.contact_id IS NOT NULL
+                   AND i.date_souscription IS NOT NULL
+                   AND i.date_souscription >= ?1 AND i.date_souscription <= ?2
+                 ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
+            ),
+            _ => return Ok(Vec::new()),
+        };
+        self.query_dashboard_stat_contacts(
+            &sql,
+            &[
+                &period_start as &dyn rusqlite::ToSql,
+                &period_end,
+            ],
+        )
+    }
+
+    /// Liste drill-down conversion filleul : `invites` | `presents` | `convertis`.
+    pub fn get_conversion_filleul_contacts(
+        &self,
+        period_start: i64,
+        period_end: i64,
+        segment: &str,
+    ) -> Result<Vec<super::models::DashboardStatContact>> {
+        let invite_period = conversion_period_clause("date_invitation_filleul", true);
+        let sql = match segment {
+            "invites" => format!(
+                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                 FROM contacts c
+                 WHERE c.date_invitation_filleul IS NOT NULL{invite_period}
+                 ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
+            ),
+            "presents" => format!(
+                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                 FROM contacts c
+                 WHERE c.presence_invitation_filleul = 1
+                   AND c.date_invitation_filleul IS NOT NULL{invite_period}
+                 ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
+            ),
+            "convertis" => format!(
+                "SELECT c.id, c.nom, c.prenom, c.categorie, c.filleul_categorie, c.date_r1, c.date_invitation_filleul
+                 FROM contacts c
+                 WHERE c.filleul_categorie = 'FILLEUL'
+                   AND c.date_invitation_filleul IS NOT NULL{invite_period}
+                 ORDER BY c.nom COLLATE NOCASE ASC, c.prenom COLLATE NOCASE ASC"
+            ),
+            _ => return Ok(Vec::new()),
+        };
+        self.query_dashboard_stat_contacts(
+            &sql,
+            &[
+                &period_start as &dyn rusqlite::ToSql,
+                &period_end,
+            ],
+        )
     }
 }

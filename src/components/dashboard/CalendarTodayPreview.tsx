@@ -10,6 +10,7 @@ import {
   notifyRelationChanged,
   subscribeRelationChanged,
 } from "@/lib/etiquettes/etiquette-events";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { DashboardPanel } from "./dashboard-ui";
 import { toast } from "sonner";
 
@@ -23,7 +24,7 @@ function formatTime(unix: number): string {
 export function CalendarTodayPreview({
   onOpenContact,
 }: {
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
 }) {
   const [events, setEvents] = useState<CalendarEventEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +56,7 @@ export function CalendarTodayPreview({
   };
 
   const pending = events.filter((e) => !e.rdv_effectue);
+  const pendingContactIds = pending.map((e) => e.contact_id);
 
   const description = loading
     ? "Chargement…"
@@ -90,7 +92,7 @@ export function CalendarTodayPreview({
                 <button
                   type="button"
                   className="flex-1 text-left truncate hover:underline"
-                  onClick={() => onOpenContact?.(ev.contact_id)}
+                  onClick={() => onOpenContact?.(ev.contact_id, pendingContactIds)}
                 >
                   {name}
                 </button>

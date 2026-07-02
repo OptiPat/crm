@@ -44,19 +44,60 @@ import {
   loadDashboardDateRange,
   saveDashboardDateRange,
 } from "@/lib/dashboard/dashboard-date-range-preferences";
+import { DashboardContactDetailSheet } from "@/components/dashboard/DashboardContactDetailSheet";
+import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
+import { toast } from "sonner";
 
 interface DashboardProps {
   currentPage?: string;
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
 }
 
-export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardProps) {
+export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [chartsRefreshKey, setChartsRefreshKey] = useState(0);
   const [dateRange, setDateRange] = useState<DashboardDateRangeFilter>(loadDashboardDateRange);
+  const [drillDownContact, setDrillDownContact] = useState<Contact | null>(null);
+  const [drillDownContactIds, setDrillDownContactIds] = useState<number[]>([]);
+  const [contactDetailOpen, setContactDetailOpen] = useState(false);
+
+  const loadDrillDownContact = useCallback(async (contactId: number) => {
+    const contact = await getContactById(contactId);
+    setDrillDownContact(contact);
+    setContactDetailOpen(true);
+  }, []);
+
+  const openDrillDownContact = useCallback<DashboardDrillDownOpenContact>(
+    async (contactId, contactIds) => {
+      try {
+        if (contactIds?.length) setDrillDownContactIds(contactIds);
+        await loadDrillDownContact(contactId);
+      } catch (error) {
+        console.error("Erreur chargement contact:", error);
+        toast.error("Impossible d'ouvrir le contact");
+      }
+    },
+    [loadDrillDownContact]
+  );
+
+  const selectDrillDownContact = useCallback(
+    async (contactId: number) => {
+      try {
+        await loadDrillDownContact(contactId);
+      } catch (error) {
+        console.error("Erreur chargement contact:", error);
+        toast.error("Impossible d'ouvrir le contact");
+      }
+    },
+    [loadDrillDownContact]
+  );
+
+  const refreshDashboardData = useCallback(() => {
+    setChartsRefreshKey((k) => k + 1);
+  }, []);
+
   const handleDateRangeChange = useCallback((next: DashboardDateRangeFilter) => {
     const normalized = normalizeDateRange(next);
     setDateRange(normalized);
@@ -139,7 +180,6 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
   }, [refreshAll]);
 
   const retryLoad = () => {
-    setRefreshKey((k) => k + 1);
     void loadStats(false);
   };
 
@@ -242,16 +282,14 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
 
       <DashboardCockpitSection>
         <DashboardTodayGrid
-          key={`today-${refreshKey}`}
           currentPage={currentPage}
           onNavigate={onNavigate}
-          onOpenContact={onOpenContact}
+          onOpenContact={openDrillDownContact}
         />
         <AlertsPreview
-          key={`alerts-${refreshKey}`}
           currentPage={currentPage}
           onNavigate={onNavigate}
-          onOpenContact={onOpenContact}
+          onOpenContact={openDrillDownContact}
         />
       </DashboardCockpitSection>
 
@@ -278,10 +316,12 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
         <DashboardPeriodFilterBar value={dateRange} onChange={handleDateRangeChange} />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
           <YearlyActivityChart
-            key={`year-${chartsRefreshKey}`}
             periodStart={periodRange.start}
             periodEnd={periodRange.end}
             bucket={activityBucket}
+            dataRefreshSignal={chartsRefreshKey}
+            activeContactId={contactDetailOpen ? drillDownContact?.id : null}
+            onOpenContact={openDrillDownContact}
           />
           <PipelineChart
             key={`pipe-${chartsRefreshKey}`}
@@ -290,12 +330,28 @@ export function Dashboard({ currentPage, onNavigate, onOpenContact }: DashboardP
           />
         </div>
         <ConversionFunnelPanel
-          key={`conv-${chartsRefreshKey}`}
           periodStart={periodRange.start}
           periodEnd={periodRange.end}
           periodLabel={periodRange.label}
+          dataRefreshSignal={chartsRefreshKey}
+          activeContactId={contactDetailOpen ? drillDownContact?.id : null}
+          onOpenContact={openDrillDownContact}
         />
       </DashboardCollapsibleSection>
+
+      <DashboardContactDetailSheet
+        open={contactDetailOpen}
+        onOpenChange={(open) => {
+          setContactDetailOpen(open);
+          if (!open) setDrillDownContact(null);
+        }}
+        contact={drillDownContact}
+        contactIds={drillDownContactIds}
+        onSelectContactId={selectDrillDownContact}
+        onContactRefreshed={setDrillDownContact}
+        onNavigate={onNavigate}
+        onUpdate={refreshDashboardData}
+      />
     </div>
   );
 }

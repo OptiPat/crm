@@ -18,10 +18,11 @@ import { cn } from "@/lib/utils";
 import { spawnedNextTacheToastMessage } from "@/lib/taches/tache-recurrence-ui";
 import { toast } from "sonner";
 import { DashboardPanel } from "./dashboard-ui";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 interface TachesPreviewProps {
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
 }
 
 const MAX_PREVIEW = 5;
@@ -49,6 +50,9 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
   }, [load]);
 
   const visibles = taches.slice(0, MAX_PREVIEW);
+  const previewContactIds = visibles.flatMap(
+    (t) => t.contacts?.map((c) => c.contact_id) ?? []
+  );
 
   const handleDone = async (tache: Tache) => {
     try {
@@ -140,7 +144,9 @@ export function TachesPreview({ onNavigate, onOpenContact }: TachesPreviewProps)
                     type="button"
                     className="text-xs text-muted-foreground hover:text-foreground shrink-0 max-w-[5rem] truncate"
                     title={`Ouvrir ${firstContact.prenom} ${firstContact.nom}`}
-                    onClick={() => onOpenContact(firstContact.contact_id)}
+                    onClick={() =>
+                      onOpenContact(firstContact.contact_id, previewContactIds)
+                    }
                   >
                     {firstContact.prenom} {firstContact.nom.charAt(0)}.
                     {extraCount > 0 ? ` +${extraCount}` : ""}

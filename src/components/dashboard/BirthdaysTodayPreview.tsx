@@ -28,6 +28,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 async function copyBirthdayMessage(contact: BirthdayContactToday): Promise<void> {
   try {
@@ -73,7 +74,7 @@ async function openBirthdayMessage(
 export function BirthdaysTodayPreview({
   onOpenContact,
 }: {
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
 }) {
   const [birthdays, setBirthdays] = useState<BirthdayContactToday[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,7 +153,7 @@ export function BirthdaysTodayPreview({
                 <button
                   type="button"
                   className="flex flex-1 min-w-0 items-center gap-3 p-3 text-left hover:bg-accent/50 transition-colors rounded-l-xl"
-                  onClick={() => onOpenContact?.(c.id)}
+                  onClick={() => onOpenContact?.(c.id, birthdays.map((b) => b.id))}
                 >
                   <ContactInitialsAvatar prenom={c.prenom} nom={c.nom} className="h-10 w-10" />
                   <div className="flex-1 min-w-0">

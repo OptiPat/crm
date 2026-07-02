@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activityBucketGranularity,
+  activityChartDrillHint,
   formatActivityBucketLabel,
   formatDashboardPeriodLabel,
   localDayEndUnix,
@@ -84,5 +85,13 @@ describe("activityBucketGranularity", () => {
   it("seuil 45 jours → jour, 46 → mois", () => {
     expect(activityBucketGranularity("2026-01-01", "2026-02-14")).toBe("day");
     expect(activityBucketGranularity("2026-01-01", "2026-02-15")).toBe("month");
+  });
+});
+
+describe("activityChartDrillHint", () => {
+  it("adapte le libellé au bucket", () => {
+    expect(activityChartDrillHint("year")).toBe("une barre (année)");
+    expect(activityChartDrillHint("month")).toBe("un mois");
+    expect(activityChartDrillHint("day")).toBe("un jour");
   });
 });

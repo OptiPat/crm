@@ -150,7 +150,6 @@ function AppInner() {
           <Dashboard
             currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
       case "contacts":
@@ -224,7 +223,6 @@ function AppInner() {
           <Dashboard
             currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
     }

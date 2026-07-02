@@ -149,6 +149,12 @@ export function activityChartTitle(bucket: DashboardPeriodGranularity): string {
   return "Activité par jour";
 }
 
+export function activityChartDrillHint(bucket: DashboardPeriodGranularity): string {
+  if (bucket === "year") return "une barre (année)";
+  if (bucket === "month") return "un mois";
+  return "un jour";
+}
+
 /** @deprecated Utiliser `DashboardDateRangeFilter`. */
 export type DashboardPeriodFilter = DashboardDateRangeFilter;
 

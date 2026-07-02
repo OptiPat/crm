@@ -30,6 +30,13 @@ export interface YearlyActivityStats {
   panier_moyen: number;
 }
 
+export interface ActivityPeriodSummary {
+  clients: number;
+  /** Souscriptions initiales + versements complémentaires sur la période (euros). */
+  total: number;
+  panier_moyen: number;
+}
+
 export interface ProductStats {
   type_produit: string;   // Type de produit
   montant: number;        // Montant en euros
@@ -57,6 +64,19 @@ export interface ConversionFilleulStats {
   taux_presence: number;
   taux_conversion: number;
 }
+
+export interface DashboardStatContact {
+  contact_id: number;
+  nom: string;
+  prenom: string;
+  categorie: string;
+  filleul_categorie?: string | null;
+  date_r1?: number | null;
+  date_invitation_filleul?: number | null;
+}
+
+export type ConversionClientSegment = "r1" | "signatures" | "portfolio";
+export type ConversionFilleulSegment = "invites" | "presents" | "convertis";
 
 export interface AlerteWithContact {
   alerte_id: number;
@@ -94,6 +114,16 @@ export async function getYearlyActivityStats(
   });
 }
 
+export async function getActivityPeriodSummary(
+  periodStart: number,
+  periodEnd: number
+): Promise<ActivityPeriodSummary> {
+  return invoke<ActivityPeriodSummary>("get_activity_period_summary", {
+    periodStart,
+    periodEnd,
+  });
+}
+
 export async function getConversionClientStats(
   periodStart: number,
   periodEnd: number
@@ -111,6 +141,44 @@ export async function getConversionFilleulStats(
   return invoke<ConversionFilleulStats>("get_conversion_filleul_stats", {
     periodStart,
     periodEnd,
+  });
+}
+
+export async function getActivityBucketContacts(
+  periodStart: number,
+  periodEnd: number,
+  bucketKey: string,
+  bucket: DashboardPeriodGranularity
+): Promise<DashboardStatContact[]> {
+  return invoke<DashboardStatContact[]>("get_activity_bucket_contacts", {
+    periodStart,
+    periodEnd,
+    bucketKey,
+    bucket,
+  });
+}
+
+export async function getConversionClientContacts(
+  periodStart: number,
+  periodEnd: number,
+  segment: ConversionClientSegment
+): Promise<DashboardStatContact[]> {
+  return invoke<DashboardStatContact[]>("get_conversion_client_contacts", {
+    periodStart,
+    periodEnd,
+    segment,
+  });
+}
+
+export async function getConversionFilleulContacts(
+  periodStart: number,
+  periodEnd: number,
+  segment: ConversionFilleulSegment
+): Promise<DashboardStatContact[]> {
+  return invoke<DashboardStatContact[]>("get_conversion_filleul_contacts", {
+    periodStart,
+    periodEnd,
+    segment,
   });
 }
 

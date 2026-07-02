@@ -15,12 +15,13 @@ import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { getAlerteTraceInfo } from "@/lib/alertes/alerte-trace";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { ContactInitialsAvatar, DashboardPanel } from "./dashboard-ui";
 
 interface AlertsPreviewProps {
   currentPage?: string;
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
 }
 
 function formatLastContact(timestamp: number | null) {
@@ -70,17 +71,22 @@ export function AlertsPreview({ currentPage, onNavigate, onOpenContact }: Alerts
   }, [loadPreview]);
 
   const openAlert = (alerte: AlerteWithContact) => {
-    if (onNavigate) {
-      navigateToSuivi(onNavigate, "alertes", undefined, alerte.contact_id, currentPage);
+    if (onOpenContact) {
+      onOpenContact(
+        alerte.contact_id,
+        alertes.map((a) => a.contact_id)
+      );
       return;
     }
-    onOpenContact?.(alerte.contact_id);
+    if (onNavigate) {
+      navigateToSuivi(onNavigate, "alertes", undefined, alerte.contact_id, currentPage);
+    }
   };
 
   const panelDescription = loading
     ? "Chargement…"
     : alertes.length > 0
-      ? `${alertes.length} contact${alertes.length > 1 ? "s" : ""} — clic pour traiter dans Suivi`
+      ? `${alertes.length} contact${alertes.length > 1 ? "s" : ""} — clic pour ouvrir la fiche`
       : "Rien à traiter pour le moment";
 
   return (

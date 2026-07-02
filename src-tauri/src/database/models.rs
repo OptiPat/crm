@@ -373,6 +373,15 @@ pub struct YearlyActivityStats {
     pub panier_moyen: f64,
 }
 
+/// Synthèse activité sur une période (total souscrit + panier moyen global).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ActivityPeriodSummary {
+    pub clients: i64,
+    /// Montant total souscriptions initiales + versements complémentaires (euros).
+    pub total: f64,
+    pub panier_moyen: f64,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ProductStats {
     pub type_produit: String, // Type de produit
@@ -405,6 +414,18 @@ pub struct ConversionFilleulStats {
     pub convertis: i64,
     pub taux_presence: f64,
     pub taux_conversion: f64,
+}
+
+/// Contact léger pour listes drill-down du dashboard (activité, conversion).
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DashboardStatContact {
+    pub contact_id: i64,
+    pub nom: String,
+    pub prenom: String,
+    pub categorie: String,
+    pub filleul_categorie: Option<String>,
+    pub date_r1: Option<i64>,
+    pub date_invitation_filleul: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

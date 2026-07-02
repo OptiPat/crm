@@ -13,7 +13,7 @@ use crate::database::{
         InvestissementVersement, NewInteraction,
         NewTemplateEmail, NewSegment, NewTache, Partenaire,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
-        ConversionClientStats, ConversionFilleulStats,
+        ConversionClientStats, ConversionFilleulStats, DashboardStatContact, ActivityPeriodSummary,
         TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
         CalendarEventEntry, CalendarSyncResult,
     },
@@ -909,6 +909,20 @@ pub fn get_yearly_activity_stats(
 }
 
 #[tauri::command]
+pub fn get_activity_period_summary(
+    db: State<'_, DbState>,
+    period_start: i64,
+    period_end: i64,
+) -> Result<ActivityPeriodSummary, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_activity_period_summary(period_start, period_end)
+        .map_err(|e| format!("Failed to get activity period summary: {}", e))
+}
+
+#[tauri::command]
 pub fn get_product_stats(db: State<'_, DbState>) -> Result<Vec<ProductStats>, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -954,6 +968,83 @@ pub fn get_conversion_filleul_stats(
     database
         .get_conversion_filleul_stats(period_start, period_end)
         .map_err(|e| format!("Failed to get conversion filleul stats: {}", e))
+}
+
+fn validate_conversion_client_segment(segment: &str) -> Result<(), String> {
+    if matches!(segment, "r1" | "signatures" | "portfolio") {
+        Ok(())
+    } else {
+        Err(format!("Segment conversion client invalide: {segment}"))
+    }
+}
+
+fn validate_conversion_filleul_segment(segment: &str) -> Result<(), String> {
+    if matches!(segment, "invites" | "presents" | "convertis") {
+        Ok(())
+    } else {
+        Err(format!("Segment conversion filleul invalide: {segment}"))
+    }
+}
+
+fn validate_activity_bucket(bucket: Option<&str>) -> Result<(), String> {
+    match bucket {
+        None | Some("year") | Some("month") | Some("day") => Ok(()),
+        Some(value) => Err(format!("Granularité activité invalide: {value}")),
+    }
+}
+
+#[tauri::command]
+pub fn get_activity_bucket_contacts(
+    db: State<'_, DbState>,
+    period_start: i64,
+    period_end: i64,
+    bucket_key: String,
+    bucket: Option<String>,
+) -> Result<Vec<DashboardStatContact>, String> {
+    validate_activity_bucket(bucket.as_deref())?;
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_activity_bucket_contacts(
+            period_start,
+            period_end,
+            &bucket_key,
+            bucket.as_deref(),
+        )
+        .map_err(|e| format!("Failed to get activity bucket contacts: {}", e))
+}
+
+#[tauri::command]
+pub fn get_conversion_client_contacts(
+    db: State<'_, DbState>,
+    period_start: i64,
+    period_end: i64,
+    segment: String,
+) -> Result<Vec<DashboardStatContact>, String> {
+    validate_conversion_client_segment(&segment)?;
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_conversion_client_contacts(period_start, period_end, &segment)
+        .map_err(|e| format!("Failed to get conversion client contacts: {}", e))
+}
+
+#[tauri::command]
+pub fn get_conversion_filleul_contacts(
+    db: State<'_, DbState>,
+    period_start: i64,
+    period_end: i64,
+    segment: String,
+) -> Result<Vec<DashboardStatContact>, String> {
+    validate_conversion_filleul_segment(&segment)?;
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_conversion_filleul_contacts(period_start, period_end, &segment)
+        .map_err(|e| format!("Failed to get conversion filleul contacts: {}", e))
 }
 
 #[tauri::command]
