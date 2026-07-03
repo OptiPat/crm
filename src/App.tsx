@@ -28,8 +28,6 @@ import { isWizardCompleted } from "@/lib/api/tauri-settings";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
-import { requestOpenContact } from "@/lib/navigation/app-navigation";
-import type { ContactDetailTabHint } from "@/lib/investissements/investissement-navigation";
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -135,14 +133,6 @@ function AppInner() {
     })();
   }, [isAuthenticated, showWizard]);
 
-  const openContact = (contactId: number, tab?: ContactDetailTabHint) => {
-    requestOpenContact(contactId, {
-      tab,
-      currentPage,
-      setCurrentPage,
-    });
-  };
-
   const renderPage = () => {
     switch (currentPage) {
       case "dashboard":
@@ -167,18 +157,12 @@ function AppInner() {
       case "partenaires":
         return <Partenaires onNavigate={setCurrentPage} />;
       case "investissements":
-        return (
-          <Investissements
-            onOpenContact={(contactId) => openContact(contactId, "patrimoine")}
-            onNavigate={setCurrentPage}
-          />
-        );
+        return <Investissements onNavigate={setCurrentPage} />;
       case "interactions":
         return (
           <Interactions
             currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
       case "taches":
@@ -192,27 +176,16 @@ function AppInner() {
           <Suivi
             currentPage={currentPage}
             onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => openContact(contactId)}
           />
         );
       case "etiquettes":
-        return (
-          <Etiquettes
-            onOpenContact={(contactId) => openContact(contactId)}
-          />
-        );
+        return <Etiquettes onNavigate={setCurrentPage} />;
       case "documents":
-        return (
-          <Documents
-            onNavigate={setCurrentPage}
-            onOpenContact={(contactId) => openContact(contactId)}
-          />
-        );
+        return <Documents onNavigate={setCurrentPage} />;
       case "souscription-cif":
         return (
           <SouscriptionCif
             currentPage={currentPage}
-            onOpenContact={(contactId) => openContact(contactId, "patrimoine")}
             onNavigate={setCurrentPage}
           />
         );

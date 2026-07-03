@@ -20,8 +20,8 @@ import { textMatchesSearch } from "@/lib/search-utils";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import {
   navigateAppPage,
-  requestOpenContact,
 } from "@/lib/navigation/app-navigation";
+import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSheetProvider";
 import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
 import { navigateToPartenaires } from "@/lib/navigation/partenaires-navigation";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
@@ -67,6 +67,7 @@ const EMPTY_DATA: GlobalSearchData = {
 };
 
 export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
+  const { openContactSheet, openContactWithTab } = useGlobalContactDetailSheet();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [data, setData] = useState<GlobalSearchData>(() => getGlobalSearchCache() ?? EMPTY_DATA);
@@ -166,10 +167,7 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
         sublabel: [c.email, c.ville].filter(Boolean).join(" · ") || undefined,
         icon: Users,
         onSelect: () => {
-          requestOpenContact(c.id, {
-            currentPage,
-            setCurrentPage: onPageChange,
-          });
+          void openContactSheet(c.id);
           close();
         },
       }));
@@ -201,11 +199,7 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
           icon: Wallet,
           onSelect: () => {
             if (inv.contact_id != null) {
-              requestOpenContact(inv.contact_id, {
-                tab: "patrimoine",
-                currentPage,
-                setCurrentPage: onPageChange,
-              });
+              void openContactWithTab(inv.contact_id, "patrimoine");
             } else {
               navigateAppPage(currentPage, onPageChange, "investissements");
             }
@@ -283,10 +277,7 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
           icon: FileText,
           onSelect: () => {
             if (d.contact_id != null) {
-              requestOpenContact(d.contact_id, {
-                currentPage,
-                setCurrentPage: onPageChange,
-              });
+              void openContactSheet(d.contact_id);
             } else {
               navigateAppPage(currentPage, onPageChange, "documents");
             }
@@ -302,7 +293,7 @@ export function GlobalSearch({ currentPage, onPageChange }: GlobalSearchProps) {
       { label: "Partenaires", results: partenaireResults },
       { label: "Documents", results: documentResults },
     ].filter((g) => g.results.length > 0);
-  }, [query, data, contactsById, currentPage, onPageChange, close]);
+  }, [query, data, contactsById, currentPage, onPageChange, close, openContactSheet, openContactWithTab]);
 
   const hasResults = groups.length > 0;
 

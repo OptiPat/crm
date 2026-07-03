@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Filter } from "lucide-react";
@@ -16,10 +16,11 @@ import {
 } from "@/lib/api/tauri-segments";
 import { SuiviEtiquetteContactRow } from "@/components/suivi/SuiviEtiquetteContactRow";
 import type { Contact } from "@/lib/api/tauri-contacts";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { toast } from "sonner";
 
 interface SuiviSegmentsTabProps {
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
 }
 
 export function SuiviSegmentsTab({ onOpenContact }: SuiviSegmentsTabProps) {
@@ -68,6 +69,10 @@ export function SuiviSegmentsTab({ onOpenContact }: SuiviSegmentsTabProps) {
   }, [selectedId]);
 
   const selected = segments.find((s) => String(s.id) === selectedId);
+  const segmentContactIds = useMemo(
+    () => contacts.map((c) => c.id).filter((id): id is number => id != null),
+    [contacts]
+  );
 
   return (
     <Card>
@@ -119,7 +124,7 @@ export function SuiviSegmentsTab({ onOpenContact }: SuiviSegmentsTabProps) {
                 contact={c}
                 onOpenContact={
                   onOpenContact && c.id != null
-                    ? () => onOpenContact(c.id!)
+                    ? () => onOpenContact(c.id!, segmentContactIds)
                     : undefined
                 }
               />

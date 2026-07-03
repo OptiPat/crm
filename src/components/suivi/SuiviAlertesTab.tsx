@@ -216,7 +216,7 @@ export function SuiviAlertesTab({
       setAlerteATraiter(alerte);
       setDateDernierSuivi(todayLocal());
     } else if (onOpenContact) {
-      onOpenContact(pendingContactId);
+      onOpenContact(pendingContactId, alerteContactIds);
     } else if (onNavigate) {
       sessionStorage.setItem("crm_open_contact_id", String(pendingContactId));
       onNavigate("contacts");
@@ -226,6 +226,7 @@ export function SuiviAlertesTab({
     pendingContactId,
     loading,
     alertes,
+    alerteContactIds,
     onOpenContact,
     onNavigate,
     onPendingContactConsumed,

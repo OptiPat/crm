@@ -10,6 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,7 +19,7 @@ export function EtiquettePipelineBoard({
   onOpenContact,
 }: {
   etiquetteId: number;
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
 }) {
   const [contacts, setContacts] = useState<EtiquettePipelineContact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -39,6 +40,11 @@ export function EtiquettePipelineBoard({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const contactIds = useMemo(
+    () => contacts.map((c) => c.contact_id),
+    [contacts]
+  );
 
   const byStatus = useMemo(() => {
     const map = new Map<PipelineStatus, EtiquettePipelineContact[]>();
@@ -93,7 +99,7 @@ export function EtiquettePipelineBoard({
                     <button
                       type="button"
                       className="text-left font-medium hover:underline truncate"
-                      onClick={() => onOpenContact?.(c.contact_id)}
+                      onClick={() => onOpenContact?.(c.contact_id, contactIds)}
                     >
                       {c.contact_prenom} {c.contact_nom}
                     </button>

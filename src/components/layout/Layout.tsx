@@ -6,6 +6,7 @@ import { EtiquetteEmailSendBanner } from "@/components/etiquettes/EtiquetteEmail
 import { useBackgroundSync } from "@/hooks/useBackgroundSync";
 import { Sidebar } from "./Sidebar";
 import { Header } from "./Header";
+import { ContactDetailSheetProvider } from "./ContactDetailSheetProvider";
 
 interface LayoutProps {
   children: ReactNode;
@@ -18,24 +19,24 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
   useBackgroundSync();
 
   return (
-    <div className="min-h-screen bg-background flex">
-      <Sidebar currentPage={currentPage} onPageChange={onPageChange} />
-      
-      <div className="flex-1 flex flex-col">
-        <Header
-          onLogout={onLogout}
-          currentPage={currentPage}
-          onPageChange={onPageChange}
-        />
-        <AppNotificationsBar onPageChange={onPageChange} currentPage={currentPage} />
-        <EtiquetteEmailSendBanner />
-        <BackgroundActivityBanner />
-        <AppUpdateBanner />
+    <ContactDetailSheetProvider onNavigate={onPageChange}>
+      <div className="min-h-screen bg-background flex">
+        <Sidebar currentPage={currentPage} onPageChange={onPageChange} />
 
-        <main className="flex-1 p-6 overflow-auto">
-          {children}
-        </main>
+        <div className="flex-1 flex flex-col">
+          <Header
+            onLogout={onLogout}
+            currentPage={currentPage}
+            onPageChange={onPageChange}
+          />
+          <AppNotificationsBar onPageChange={onPageChange} currentPage={currentPage} />
+          <EtiquetteEmailSendBanner />
+          <BackgroundActivityBanner />
+          <AppUpdateBanner />
+
+          <main className="flex-1 p-6 overflow-auto">{children}</main>
+        </div>
       </div>
-    </div>
+    </ContactDetailSheetProvider>
   );
 }

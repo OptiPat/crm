@@ -32,7 +32,7 @@ import {
 import { getAlertesNonTraitees } from "@/lib/api/tauri-alertes";
 import { subscribeTachesChanged } from "@/lib/taches/tache-events";
 import { subscribeAlertesChanged } from "@/lib/alertes/alert-events";
-import { requestOpenContact } from "@/lib/navigation/app-navigation";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { consumeTachesNavigationIntent } from "@/lib/navigation/taches-navigation";
 import {
@@ -124,6 +124,11 @@ export function Taches({ onNavigate }: TachesProps) {
     };
   }, [load]);
 
+  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
+    onNavigate,
+    onUpdate: () => void load(),
+  });
+
   const echeanceCounts = useMemo(
     () => countTachesByEcheanceStat(taches),
     [taches]
@@ -160,6 +165,16 @@ export function Taches({ onNavigate }: TachesProps) {
       }),
     [taches, prefs]
   );
+
+  const tacheContactIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const t of filtered) {
+      for (const c of t.contacts) {
+        ids.add(c.contact_id);
+      }
+    }
+    return [...ids];
+  }, [filtered]);
 
   const sections = useMemo(
     () => groupTachesBySection(filtered),
@@ -276,10 +291,7 @@ export function Taches({ onNavigate }: TachesProps) {
   };
 
   const openContact = (contactId: number) => {
-    requestOpenContact(contactId, {
-      currentPage: "taches",
-      setCurrentPage: onNavigate,
-    });
+    void openContactSheet(contactId, tacheContactIds);
   };
 
   const toggleEcheanceFilter = (filter: TacheEcheanceStatFilter | null) => {
@@ -463,6 +475,8 @@ export function Taches({ onNavigate }: TachesProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {contactDetailSheet}
     </div>
   );
 }

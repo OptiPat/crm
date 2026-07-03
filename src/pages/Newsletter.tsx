@@ -100,6 +100,7 @@ import { isResumableNewsletterEdition } from "@/lib/newsletter/newsletter-editio
 import { mergeNewsletterAudienceFilters } from "@/lib/newsletter/newsletter-audience-utils";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import { toast } from "sonner";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 
 function buildHtmlOptions(
   cgp: CgpConfig | null,
@@ -220,6 +221,13 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
   const batchAbortRef = useRef<AbortController | null>(null);
   const [audiencePreview, setAudiencePreview] = useState<NewsletterAudiencePreview | null>(null);
   const [resumingEditionId, setResumingEditionId] = useState<number | null>(null);
+
+  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({ onNavigate });
+
+  const audienceContactIds = useMemo(
+    () => audiencePreview?.recipients.map((r) => r.contactId).filter((id) => id > 0) ?? [],
+    [audiencePreview]
+  );
 
   const load = useCallback(async () => {
     const [s, cgpConfig, emailSt] = await Promise.all([
@@ -744,7 +752,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
             }
             onFiltersChange={setAudienceFilters}
             onPreviewChange={setAudiencePreview}
-            onOpenContact={(id) => onNavigate?.(`contact-${id}`)}
+            onOpenContact={(id, ids) => void openContactSheet(id, ids ?? audienceContactIds)}
           />
 
           {preparedQueueCount != null && preparedQueueCount > 0 && (
@@ -1018,7 +1026,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
           <NewsletterHistoryPanel
             refreshKey={historyRefreshKey}
             initialExpandedEditionId={historyExpandEditionId}
-            onOpenContact={(id) => onNavigate?.(`contact-${id}`)}
+            onOpenContact={(id, ids) => void openContactSheet(id, ids)}
             onResumeSend={(edition) => void handleResumeSend(edition)}
             resumingEditionId={resumingEditionId}
           />
@@ -1166,6 +1174,8 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
           </Button>
         </CardContent>
       </Card>
+
+      {contactDetailSheet}
     </div>
   );
 }

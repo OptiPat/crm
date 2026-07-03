@@ -14,10 +14,12 @@ import {
   newsletterEditionStatusLabel,
 } from "@/lib/newsletter/newsletter-edition-resume";
 
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
+
 type NewsletterHistoryPanelProps = {
   refreshKey?: number;
   initialExpandedEditionId?: number | null;
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
   onResumeSend?: (edition: NewsletterEditionSummary) => void;
   resumingEditionId?: number | null;
 };
@@ -179,7 +181,11 @@ export function NewsletterHistoryPanel({
                           Détail…
                         </p>
                       : <ul className="text-sm max-h-56 overflow-y-auto space-y-1.5">
-                          {detail.recipients.map((r) => (
+                          {(() => {
+                            const editionContactIds = detail.recipients.map(
+                              (recipient) => recipient.contactId
+                            );
+                            return detail.recipients.map((r) => (
                             <li
                               key={r.contactEtiquetteId}
                               className="flex flex-wrap items-baseline gap-x-2"
@@ -188,7 +194,9 @@ export function NewsletterHistoryPanel({
                                 <button
                                   type="button"
                                   className="font-medium underline-offset-2 hover:underline"
-                                  onClick={() => onOpenContact(r.contactId)}
+                                  onClick={() =>
+                                    onOpenContact(r.contactId, editionContactIds)
+                                  }
                                 >
                                   {r.prenom} {r.nom}
                                 </button>
@@ -205,7 +213,8 @@ export function NewsletterHistoryPanel({
                                 <span className="text-xs text-destructive">— {r.errorMessage}</span>
                               : <span className="text-xs text-muted-foreground">— en attente</span>}
                             </li>
-                          ))}
+                            ));
+                          })()}
                         </ul>
                       }
                     </div>

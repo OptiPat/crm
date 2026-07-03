@@ -44,10 +44,7 @@ import {
   loadDashboardDateRange,
   saveDashboardDateRange,
 } from "@/lib/dashboard/dashboard-date-range-preferences";
-import { DashboardContactDetailSheet } from "@/components/dashboard/DashboardContactDetailSheet";
-import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
-import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
-import { toast } from "sonner";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 
 interface DashboardProps {
   currentPage?: string;
@@ -59,44 +56,20 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [chartsRefreshKey, setChartsRefreshKey] = useState(0);
   const [dateRange, setDateRange] = useState<DashboardDateRangeFilter>(loadDashboardDateRange);
-  const [drillDownContact, setDrillDownContact] = useState<Contact | null>(null);
-  const [drillDownContactIds, setDrillDownContactIds] = useState<number[]>([]);
-  const [contactDetailOpen, setContactDetailOpen] = useState(false);
-
-  const loadDrillDownContact = useCallback(async (contactId: number) => {
-    const contact = await getContactById(contactId);
-    setDrillDownContact(contact);
-    setContactDetailOpen(true);
-  }, []);
-
-  const openDrillDownContact = useCallback<DashboardDrillDownOpenContact>(
-    async (contactId, contactIds) => {
-      try {
-        if (contactIds?.length) setDrillDownContactIds(contactIds);
-        await loadDrillDownContact(contactId);
-      } catch (error) {
-        console.error("Erreur chargement contact:", error);
-        toast.error("Impossible d'ouvrir le contact");
-      }
-    },
-    [loadDrillDownContact]
-  );
-
-  const selectDrillDownContact = useCallback(
-    async (contactId: number) => {
-      try {
-        await loadDrillDownContact(contactId);
-      } catch (error) {
-        console.error("Erreur chargement contact:", error);
-        toast.error("Impossible d'ouvrir le contact");
-      }
-    },
-    [loadDrillDownContact]
-  );
 
   const refreshDashboardData = useCallback(() => {
     setChartsRefreshKey((k) => k + 1);
   }, []);
+
+  const {
+    openContactSheet: openDrillDownContact,
+    sheet: contactDetailSheet,
+    isOpen: contactDetailOpen,
+    activeContactId: drillDownActiveContactId,
+  } = useContactDetailSheet({
+    onNavigate,
+    onUpdate: refreshDashboardData,
+  });
 
   const handleDateRangeChange = useCallback((next: DashboardDateRangeFilter) => {
     const normalized = normalizeDateRange(next);
@@ -320,7 +293,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
             periodEnd={periodRange.end}
             bucket={activityBucket}
             dataRefreshSignal={chartsRefreshKey}
-            activeContactId={contactDetailOpen ? drillDownContact?.id : null}
+            activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
             onOpenContact={openDrillDownContact}
           />
           <PipelineChart
@@ -334,24 +307,12 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
           periodEnd={periodRange.end}
           periodLabel={periodRange.label}
           dataRefreshSignal={chartsRefreshKey}
-          activeContactId={contactDetailOpen ? drillDownContact?.id : null}
+          activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
           onOpenContact={openDrillDownContact}
         />
       </DashboardCollapsibleSection>
 
-      <DashboardContactDetailSheet
-        open={contactDetailOpen}
-        onOpenChange={(open) => {
-          setContactDetailOpen(open);
-          if (!open) setDrillDownContact(null);
-        }}
-        contact={drillDownContact}
-        contactIds={drillDownContactIds}
-        onSelectContactId={selectDrillDownContact}
-        onContactRefreshed={setDrillDownContact}
-        onNavigate={onNavigate}
-        onUpdate={refreshDashboardData}
-      />
+      {contactDetailSheet}
     </div>
   );
 }

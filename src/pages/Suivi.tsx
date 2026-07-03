@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
@@ -14,9 +14,8 @@ import { SuiviAlertesTab } from "@/components/suivi/SuiviAlertesTab";
 import { SuiviEtiquetteContactRow } from "@/components/suivi/SuiviEtiquetteContactRow";
 import { SuiviSegmentsTab } from "@/components/suivi/SuiviSegmentsTab";
 import { navigateToInteractions } from "@/lib/navigation/interactions-navigation";
-import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
-import { DashboardContactDetailSheet } from "@/components/dashboard/DashboardContactDetailSheet";
-import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
+import { type Contact } from "@/lib/api/tauri-contacts";
 import {
   getAllEtiquettesWithCount,
   getContactsByEtiquette,
@@ -59,10 +58,9 @@ import { countUniqueTaggedContacts } from "@/lib/etiquettes/etiquettes-unique-co
 interface SuiviProps {
   currentPage?: string;
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
 }
 
-export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
+export function Suivi({ currentPage, onNavigate }: SuiviProps) {
   const [alertes, setAlertes] = useState<AlerteWithContact[]>([]);
   const [loading, setLoading] = useState(true);
   const [etiquettes, setEtiquettes] = useState<EtiquetteWithCount[]>([]);
@@ -86,9 +84,6 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
   const [treatedThisWeek, setTreatedThisWeek] = useState(0);
   const [scpiReadyCount, setScpiReadyCount] = useState(0);
   const [scpiPeriode, setScpiPeriode] = useState<string | null>(null);
-  const [suiviContactDetail, setSuiviContactDetail] = useState<Contact | null>(null);
-  const [suiviContactIds, setSuiviContactIds] = useState<number[]>([]);
-  const [contactDetailOpen, setContactDetailOpen] = useState(false);
   const activeTabRef = useRef(activeTab);
   activeTabRef.current = activeTab;
   const alertesTabLoadedRef = useRef(false);
@@ -244,7 +239,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     }
   }, [sortEtiquettes]);
 
-  const handleSelectEtiquette = async (etiquette: EtiquetteWithCount) => {
+  const handleSelectEtiquette = useCallback(async (etiquette: EtiquetteWithCount) => {
     setSelectedEtiquette(etiquette);
     setLoadingContacts(true);
     try {
@@ -261,7 +256,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
     } finally {
       setLoadingContacts(false);
     }
-  };
+  }, []);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- volontairement non mémoïsée ; l'effet consommateur est gardé par des refs (chargement 1× par onglet)
   const loadEtiquettes = async () => {
@@ -354,7 +349,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
       void handleSelectEtiquette(etiqu);
       setPendingEtiquetteId(null);
     }
-  }, [pendingEtiquetteId, loadingEtiquettes, etiquettes]);
+  }, [pendingEtiquetteId, loadingEtiquettes, etiquettes, handleSelectEtiquette]);
 
   const confirmRetirerEtiquetteContact = async (
     contactId: number,
@@ -420,50 +415,24 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
 
   const totalContactsAvecEtiquettes = uniqueContactsTagged;
 
-  const openContact = (contactId: number) => {
-    if (onOpenContact) {
-      onOpenContact(contactId);
-    } else if (onNavigate) {
-      sessionStorage.setItem("crm_open_contact_id", String(contactId));
-      onNavigate("contacts");
-    }
-  };
-
-  const loadSuiviContact = useCallback(async (contactId: number) => {
-    const contact = await getContactById(contactId);
-    setSuiviContactDetail(contact);
-    setContactDetailOpen(true);
-  }, []);
-
-  const openSuiviContactSheet = useCallback<DashboardDrillDownOpenContact>(
-    async (contactId, contactIds) => {
-      try {
-        if (contactIds?.length) setSuiviContactIds(contactIds);
-        await loadSuiviContact(contactId);
-      } catch (error) {
-        console.error("Erreur chargement contact:", error);
-        toast.error("Impossible d'ouvrir le contact");
-      }
-    },
-    [loadSuiviContact]
-  );
-
-  const selectSuiviContact = useCallback(
-    async (contactId: number) => {
-      try {
-        await loadSuiviContact(contactId);
-      } catch (error) {
-        console.error("Erreur chargement contact:", error);
-        toast.error("Impossible d'ouvrir le contact");
-      }
-    },
-    [loadSuiviContact]
+  const etiquetteContactIds = useMemo(
+    () => etiquetteContacts.map((c) => c.id).filter((id): id is number => id != null),
+    [etiquetteContacts]
   );
 
   const refreshAfterContactEdit = useCallback(() => {
     void fetchAlertesList({ silent: true });
     void loadTreatedThisWeek();
-  }, [fetchAlertesList, loadTreatedThisWeek]);
+    if (selectedEtiquette) {
+      void handleSelectEtiquette(selectedEtiquette);
+    }
+  }, [fetchAlertesList, loadTreatedThisWeek, selectedEtiquette, handleSelectEtiquette]);
+
+  const { openContactSheet: openSuiviContactSheet, sheet: contactDetailSheet } =
+    useContactDetailSheet({
+      onNavigate,
+      onUpdate: refreshAfterContactEdit,
+    });
 
   const openHistorique = (contactId: number) => {
     if (onNavigate) {
@@ -607,7 +576,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
                 {selectedEtiquette?.pipeline_actif && (
                   <EtiquettePipelineBoard
                     etiquetteId={selectedEtiquette.id}
-                    onOpenContact={openContact}
+                    onOpenContact={openSuiviContactSheet}
                   />
                 )}
                 {!selectedEtiquette ? (
@@ -635,7 +604,10 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
                         key={contact.id}
                         contact={contact}
                         onOpenContact={
-                          onOpenContact || onNavigate ? openContact : undefined
+                          contact.id != null
+                            ? (contactId) =>
+                                openSuiviContactSheet(contactId, etiquetteContactIds)
+                            : undefined
                         }
                         onOpenEnvois={handleOpenEnvoisForContact}
                         onRetirerEtiquette={handleRetirerEtiquetteContact}
@@ -649,17 +621,13 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
         </TabsContent>
 
         <TabsContent value="segments" className="mt-4">
-          <SuiviSegmentsTab
-            onOpenContact={
-              onOpenContact || onNavigate ? openContact : undefined
-            }
-          />
+          <SuiviSegmentsTab onOpenContact={openSuiviContactSheet} />
         </TabsContent>
 
         <TabsContent value="envois" className="mt-4">
           <EtiquetteEnvoisTab
             onQueueChanged={() => void loadEmailQueueCount()}
-            onOpenContact={openContact}
+            onOpenContact={openSuiviContactSheet}
             onNavigate={onNavigate}
           />
         </TabsContent>
@@ -677,19 +645,7 @@ export function Suivi({ currentPage, onNavigate, onOpenContact }: SuiviProps) {
         }}
       />
 
-      <DashboardContactDetailSheet
-        open={contactDetailOpen}
-        onOpenChange={(open) => {
-          setContactDetailOpen(open);
-          if (!open) setSuiviContactDetail(null);
-        }}
-        contact={suiviContactDetail}
-        contactIds={suiviContactIds}
-        onSelectContactId={selectSuiviContact}
-        onContactRefreshed={setSuiviContactDetail}
-        onNavigate={onNavigate}
-        onUpdate={refreshAfterContactEdit}
-      />
+      {contactDetailSheet}
     </div>
   );
 }

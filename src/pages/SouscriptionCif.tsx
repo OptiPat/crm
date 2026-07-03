@@ -22,6 +22,7 @@ import { loadFoyerInvestissements } from "@/lib/foyers/foyer-utils";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { buildDefaultConseil } from "@/lib/souscription-cif/build-default-annexes-fields";
 import { buildMesPreconisationsFromCapitalInvestSouscriptions } from "@/lib/souscription-cif/capital-invest-annexe-souscriptions";
@@ -107,7 +108,6 @@ const CGP_PROFILE_KEYS = new Set([
 
 type SouscriptionCifProps = {
   currentPage?: string;
-  onOpenContact?: (contactId: number) => void;
   onNavigate?: (page: string) => void;
 };
 
@@ -115,7 +115,7 @@ function readInitialDraft() {
   return loadSouscriptionCifDraft();
 }
 
-export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: SouscriptionCifProps) {
+export function SouscriptionCif({ currentPage, onNavigate }: SouscriptionCifProps) {
   const initialDraft = useMemo(() => readInitialDraft(), []);
 
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -138,6 +138,11 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
   const pendingFocusFieldIdRef = useRef<string | null>(null);
   const previousContactIdRef = useRef<number | undefined>(initialDraft?.selectedContactId);
   const selectedContactIdRef = useRef<number | undefined>(initialDraft?.selectedContactId);
+
+  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
+    onNavigate,
+    defaultTab: "patrimoine",
+  });
 
   useEffect(() => {
     selectedContactIdRef.current = selectedContactId;
@@ -496,8 +501,8 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
           behavior: "smooth",
           block: "start",
         });
-        if (selectedContactId != null && onOpenContact) {
-          onOpenContact(selectedContactId);
+        if (selectedContactId != null) {
+          void openContactSheet(selectedContactId);
         }
         return;
       }
@@ -509,7 +514,7 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
         (key === "date_document" || key === "client_lieu_naissance");
       setActiveDocument(sharedOnRto ? "convention-rto" : focus.document);
     },
-    [activeDocument, currentPage, onNavigate, onOpenContact, selectedContactId]
+    [activeDocument, currentPage, onNavigate, openContactSheet, selectedContactId]
   );
 
   useEffect(() => {
@@ -590,13 +595,9 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
               contacts={clientContacts.length > 0 ? clientContacts : contacts}
               value={selectedContactId}
               onChange={handleContactChange}
-              onOpenContact={
-                onOpenContact
-                  ? (contact) => {
-                      if (contact.id) onOpenContact(contact.id);
-                    }
-                  : undefined
-              }
+              onOpenContact={(contact) => {
+                if (contact.id) void openContactSheet(contact.id);
+              }}
               badgeFn={(c) => getClientCategorieLabel(c.categorie) ?? c.categorie}
             />
           )}
@@ -751,6 +752,8 @@ export function SouscriptionCif({ currentPage, onOpenContact, onNavigate }: Sous
           </div>
         </div>
       )}
+
+      {contactDetailSheet}
     </div>
   );
 }

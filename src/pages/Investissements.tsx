@@ -109,12 +109,12 @@ import { navigateToPartenaires } from "@/lib/navigation/partenaires-navigation";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 type InvestissementsProps = {
-  onOpenContact?: (contactId: number) => void;
   onNavigate?: (page: string) => void;
 };
 
@@ -155,7 +155,7 @@ function OrigineFilterPill({
   );
 }
 
-export function Investissements({ onOpenContact, onNavigate }: InvestissementsProps) {
+export function Investissements({ onNavigate }: InvestissementsProps) {
   const [investissements, setInvestissements] = useState<InvestissementWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
   const [prefsLoaded, setPrefsLoaded] = useState(false);
@@ -235,6 +235,12 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     subscribeInvestissementsChanged
   );
 
+  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
+    onNavigate,
+    onUpdate: () => void loadInvestissements(),
+    defaultTab: "patrimoine",
+  });
+
   const goToDocuments = () => {
     if (onNavigate) {
       navigateAppPage("investissements", onNavigate, "documents");
@@ -302,13 +308,9 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
   }, []);
 
   const openInvestissementOwner = useCallback(
-    async (inv: InvestissementWithDetails) => {
-      if (!onOpenContact) {
-        toast.error("Navigation vers la fiche contact indisponible");
-        return;
-      }
+    async (inv: InvestissementWithDetails, contactIds?: number[]) => {
       if (inv.contact_id != null && inv.contact_id > 0) {
-        onOpenContact(inv.contact_id);
+        await openContactSheet(inv.contact_id, contactIds);
         return;
       }
       if (inv.foyer_id != null && inv.foyer_id > 0) {
@@ -320,7 +322,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
             return;
           }
           if (valid.length === 1) {
-            onOpenContact(valid[0].id!);
+            await openContactSheet(valid[0].id!, contactIds);
             toast.info(
               `Placement commun au ${inv.foyer_nom?.trim() || "foyer"} — fiche ouverte sur le patrimoine`
             );
@@ -335,7 +337,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
       }
       toast.error("Ce placement n'est lié à aucune fiche contact");
     },
-    [onOpenContact]
+    [openContactSheet]
   );
 
   const stats = useMemo(
@@ -520,6 +522,14 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
     statutFilter,
   ]);
 
+  const portfolioContactIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const inv of filteredInvestissements) {
+      if (inv.contact_id != null && inv.contact_id > 0) ids.add(inv.contact_id);
+    }
+    return [...ids];
+  }, [filteredInvestissements]);
+
   const hasNarrowingFilters =
     sansVpFilter ||
     sansReinvestFilter ||
@@ -648,12 +658,8 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
         partenaireNom={inv.partenaire_nom}
         proprietaireLabel={ownerLabel || undefined}
         proprietaireVariant={inv.foyer_id ? "foyer" : "member"}
-        onOpenContactClick={
-          onOpenContact ? () => void openInvestissementOwner(inv) : undefined
-        }
-        onProprietaireClick={
-          onOpenContact ? () => void openInvestissementOwner(inv) : undefined
-        }
+        onOpenContactClick={() => void openInvestissementOwner(inv, portfolioContactIds)}
+        onProprietaireClick={() => void openInvestissementOwner(inv, portfolioContactIds)}
         onPartenaireClick={
           onNavigate && inv.partenaire_id != null
             ? () => openPartenaireFromCard(inv.partenaire_id!, inv.id)
@@ -1113,7 +1119,7 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
         }}
         foyerNom={foyerPicker?.inv.foyer_nom?.trim() || "Foyer commun"}
         members={foyerPicker?.members ?? []}
-        onSelectContact={(contactId) => onOpenContact?.(contactId)}
+        onSelectContact={(contactId) => void openContactSheet(contactId, portfolioContactIds)}
         onOpenFoyer={
           foyerPicker?.inv.foyer_id && onNavigate
             ? () => openFoyerFromPicker(foyerPicker.inv.foyer_id!)
@@ -1197,6 +1203,8 @@ export function Investissements({ onOpenContact, onNavigate }: InvestissementsPr
         onOpenInvestissement={(id) => void openInvestissementFromImport(id)}
         investissementsVersion={investissementsListVersion}
       />
+
+      {contactDetailSheet}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
 } from "@/lib/navigation/interactions-navigation";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import {
   exchangeContactName,
   exchangeEntryKey,
@@ -62,10 +63,9 @@ import {
 interface InteractionsProps {
   currentPage?: string;
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
 }
 
-export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
+export function Interactions({ onNavigate }: InteractionsProps) {
   const [prefs, setPrefs] = useState<InteractionsPagePreferences>(() =>
     loadInteractionsPagePreferences()
   );
@@ -155,14 +155,10 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
 
   useInteractionsAutoRefresh(load);
 
-  const openContact = (contactId: number) => {
-    if (onOpenContact) {
-      onOpenContact(contactId);
-    } else if (onNavigate) {
-      sessionStorage.setItem("crm_open_contact_id", String(contactId));
-      onNavigate("contacts");
-    }
-  };
+  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
+    onNavigate,
+    onUpdate: () => void load(),
+  });
 
   const filtered = useMemo(
     () =>
@@ -188,6 +184,22 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
   const grouped = useMemo(
     () => groupExchangeHistoryByYearMonth(filtered),
     [filtered]
+  );
+
+  const interactionContactIds = useMemo(
+    () => [
+      ...new Set(
+        filtered.map((entry) => entry.contact_id).filter((id) => id != null && id > 0)
+      ),
+    ],
+    [filtered]
+  );
+
+  const openContact = useCallback(
+    (contactId: number) => {
+      void openContactSheet(contactId, interactionContactIds);
+    },
+    [openContactSheet, interactionContactIds]
   );
 
   const contactFilterLabel = useMemo(() => {
@@ -284,10 +296,7 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
     onDelete: !isEmailCampaignEntry(entry)
       ? () => void handleDelete(entry)
       : undefined,
-    onOpenContact:
-      onOpenContact || onNavigate
-        ? () => openContact(entry.contact_id)
-        : undefined,
+    onOpenContact: () => openContact(entry.contact_id),
     onNavigateSuiviEnvois:
       onNavigate && isEmailCampaignEntry(entry)
         ? () => navigateToSuivi(onNavigate, "envois")
@@ -342,11 +351,7 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
           {contactFilterId != null && contactFilterLabel && (
             <InteractionsContactFilterBanner
               label={contactFilterLabel}
-              onOpenContact={
-                onOpenContact || onNavigate
-                  ? () => openContact(contactFilterId)
-                  : undefined
-              }
+              onOpenContact={() => openContact(contactFilterId)}
               onClear={() => {
                 setContactFilterId(null);
                 setSelectedEntry(null);
@@ -456,6 +461,8 @@ export function Interactions({ onNavigate, onOpenContact }: InteractionsProps) {
         }
         onSuccess={() => void load()}
       />
+
+      {contactDetailSheet}
     </div>
   );
 }

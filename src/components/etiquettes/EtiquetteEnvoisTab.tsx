@@ -114,6 +114,7 @@ import { useScpiCampaignDashboard } from "@/hooks/useScpiCampaignDashboard";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 type EnvoisSubTab =
   | "ready"
@@ -140,7 +141,7 @@ function parseEnvoisSubTab(raw: string | null | undefined): EnvoisSubTab | null 
 }
 
 interface EtiquetteEnvoisTabProps {
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
   onQueueChanged?: () => void;
   onNavigate?: (page: string) => void;
 }
@@ -714,6 +715,9 @@ export function EtiquetteEnvoisTab({
       mode: "ready" | "scheduled" | "incomplete" | "cancelled" | "sent" | "followup";
     }
   ) => {
+    const listContactIds = items
+      .map((item) => item.contact_id)
+      .filter((id) => id > 0);
     if (loading) {
       return (
         <div className="text-center py-8 text-muted-foreground">Chargement...</div>
@@ -973,7 +977,7 @@ export function EtiquetteEnvoisTab({
                         variant="outline"
                         onClick={() => {
                           if (onOpenContact) {
-                            onOpenContact(item.contact_id);
+                            onOpenContact(item.contact_id, listContactIds);
                           } else {
                             toast.info(
                               `Ajoutez l'email de ${item.contact_prenom} ${item.contact_nom} depuis l'onglet Contacts.`

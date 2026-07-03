@@ -57,7 +57,6 @@ import {
   type DocumentsPortfolioGroup,
   type DocumentsPortfolioSort,
 } from "@/lib/documents/documents-portfolio-utils";
-import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { toast } from "sonner";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeDocumentsChanged } from "@/lib/documents/document-events";
@@ -79,6 +78,7 @@ import {
 import { textMatchesSearch } from "@/lib/search-utils";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { useDocumentsPageDragDrop } from "@/hooks/useDocumentsPageDragDrop";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import {
   detectDroppedDocumentImport,
   isStelliumDropKind,
@@ -93,10 +93,9 @@ import { cn } from "@/lib/utils";
 
 type DocumentsProps = {
   onNavigate?: (page: string) => void;
-  onOpenContact?: (contactId: number) => void;
 };
 
-export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
+export function Documents({ onNavigate }: DocumentsProps) {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [contactsById, setContactsById] = useState<Record<number, Contact>>({});
   const [loading, setLoading] = useState(true);
@@ -183,6 +182,11 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
 
   useEventAutoRefresh(loadDocuments, subscribeDocumentsChanged, subscribeContactsChanged);
 
+  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
+    onNavigate,
+    onUpdate: () => void loadDocuments(),
+  });
+
   const pageStats = useMemo(
     () => computeDocumentsPageStats(documents),
     [documents]
@@ -230,6 +234,14 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
     () => groupDocumentsPortfolio(sortedDocuments, effectiveGroupMode, contactsById),
     [sortedDocuments, effectiveGroupMode, contactsById]
   );
+
+  const documentContactIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const doc of filteredDocuments) {
+      if (doc.contact_id != null) ids.add(doc.contact_id);
+    }
+    return [...ids];
+  }, [filteredDocuments]);
 
   const contactFilterLabel = useMemo(() => {
     if (contactFilterId == null) return null;
@@ -365,14 +377,7 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
   };
 
   const openClient = (contactId: number) => {
-    if (onOpenContact) {
-      onOpenContact(contactId);
-    } else if (onNavigate) {
-      requestOpenContact(contactId, {
-        setCurrentPage: onNavigate,
-        currentPage: "documents",
-      });
-    }
+    void openContactSheet(contactId, documentContactIds);
   };
 
   const handlePreviewDocument = (doc: Document) => {
@@ -540,11 +545,9 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
                   value={contactFilterId ?? undefined}
                   onChange={(id) => setContactFilterId(id ?? null)}
                   onOpenContact={
-                    onOpenContact
-                      ? (c) => {
-                          if (c.id) openClient(c.id);
-                        }
-                      : undefined
+                    (c) => {
+                      if (c.id) openClient(c.id);
+                    }
                   }
                 />
               </div>
@@ -820,6 +823,8 @@ export function Documents({ onNavigate, onOpenContact }: DocumentsProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {contactDetailSheet}
     </div>
   );
 }

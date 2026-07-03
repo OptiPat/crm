@@ -46,13 +46,13 @@ import {
 import { getPartenaireTypeInfo } from "@/lib/partenaires/partenaire-display";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribePartenairesChanged } from "@/lib/partenaires/partenaire-events";
 import { subscribeInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import { navigateToFoyers } from "@/lib/navigation/foyers-navigation";
-import { requestOpenContact } from "@/lib/navigation/app-navigation";
 import { cn } from "@/lib/utils";
 
 type PartenairesProps = {
@@ -119,6 +119,15 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
     subscribeInvestissementsChanged,
     subscribeFoyersChanged
   );
+
+  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
+    onNavigate,
+    onUpdate: () => void loadPartenaires(),
+  });
+
+  const handleOpenContact = (contactId: number, contactIds?: number[]) => {
+    void openContactSheet(contactId, contactIds);
+  };
 
   const metaParId = useMemo(
     () => buildMetaParPartenaireId(investissements),
@@ -288,15 +297,6 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
       r.partenaire.type_partenaire === "SOCIETE_GESTION" ||
       r.partenaire.type_partenaire === "SOCIETE_GESTION_FIP"
   ).length;
-
-  const handleOpenContact = (contactId: number) => {
-    if (onNavigate) {
-      requestOpenContact(contactId, {
-        setCurrentPage: onNavigate,
-        currentPage: "partenaires",
-      });
-    }
-  };
 
   const handleOpenFoyer = (foyerId: number) => {
     if (onNavigate) {
@@ -581,6 +581,8 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
           onOpenContact={handleOpenContact}
         />
       )}
+
+      {contactDetailSheet}
     </div>
   );
 }

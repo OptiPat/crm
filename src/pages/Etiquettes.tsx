@@ -69,6 +69,7 @@ import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { consumeEtiquetteEditFocus } from "@/lib/navigation/etiquettes-navigation";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 
 const PAGE_FILTERS: { id: EtiquettePageFilter; label: string }[] = [
   { id: "all", label: "Toutes" },
@@ -122,11 +123,7 @@ function FilterPill({
   );
 }
 
-interface EtiquettesProps {
-  onOpenContact?: (contactId: number) => void;
-}
-
-export function Etiquettes({ onOpenContact }: EtiquettesProps) {
+export function Etiquettes({ onNavigate }: { onNavigate?: (page: string) => void }) {
   const isWide = useMediaQuery("(min-width: 1024px)");
   const [etiquettes, setEtiquettes] = useState<EtiquetteWithCount[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,7 +177,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     }
   }, [sortEtiquettes, refreshSegmentLookup]);
 
-  const loadEtiquettes = async () => {
+  const loadEtiquettes = useCallback(async () => {
     try {
       setLoading(true);
       let data = await getAllEtiquettesWithCount();
@@ -216,7 +213,13 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [sortEtiquettes, refreshSegmentLookup]);
+
+  const { openContactSheet: openEtiquetteContactSheet, sheet: contactDetailSheet } =
+    useContactDetailSheet({
+      onNavigate,
+      onUpdate: () => void loadEtiquettes(),
+    });
 
   useEffect(() => {
     void loadEtiquettes();
@@ -345,15 +348,6 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     } finally {
       setSyncing(false);
     }
-  };
-
-  const openContactFromEtiquette = (contactId: number, label: string) => {
-    if (!onOpenContact) {
-      toast.error("Navigation vers la fiche contact indisponible");
-      return;
-    }
-    onOpenContact(contactId);
-    toast.success(`Ouverture de ${label}`);
   };
 
   const listBlock = (
@@ -503,11 +497,7 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
     <EtiquetteContactsPanel
       etiquette={viewingContacts}
       onClose={() => setViewingContacts(null)}
-      onOpenContact={
-        onOpenContact
-          ? (contactId, label) => openContactFromEtiquette(contactId, label)
-          : undefined
-      }
+      onOpenContact={openEtiquetteContactSheet}
       onContactsChanged={loadEtiquettes}
       className={cn("min-h-[320px]", isWide && "h-full lg:min-h-0")}
     />
@@ -675,6 +665,8 @@ export function Etiquettes({ onOpenContact }: EtiquettesProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {contactDetailSheet}
     </div>
   );
 }

@@ -23,11 +23,12 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import { textMatchesSearch } from "@/lib/search-utils";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 interface EtiquetteContactsPanelProps {
   etiquette: EtiquetteWithCount;
   onClose: () => void;
-  onOpenContact?: (contactId: number, label: string) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
   onContactsChanged?: () => void;
   className?: string;
 }
@@ -83,6 +84,11 @@ export function EtiquetteContactsPanel({
         )
       ),
     [contacts, searchQuery]
+  );
+
+  const panelContactIds = useMemo(
+    () => filteredContacts.map((c) => c.id).filter((id): id is number => id != null),
+    [filteredContacts]
   );
 
   const confirmRetirer = async (contactId: number, excludeFromAuto: boolean) => {
@@ -218,7 +224,7 @@ export function EtiquetteContactsPanel({
                   tabIndex={onOpenContact && contact.id ? 0 : undefined}
                   onClick={() => {
                     if (onOpenContact && contact.id) {
-                      onOpenContact(contact.id, label);
+                      onOpenContact(contact.id, panelContactIds);
                     }
                   }}
                   onKeyDown={(e) => {
@@ -228,7 +234,7 @@ export function EtiquetteContactsPanel({
                       (e.key === "Enter" || e.key === " ")
                     ) {
                       e.preventDefault();
-                      onOpenContact(contact.id, label);
+                      onOpenContact(contact.id, panelContactIds);
                     }
                   }}
                   className={cn(

@@ -36,6 +36,8 @@ import { InvestissementCard } from "@/components/investissements/InvestissementC
 import { PartenaireForm } from "./PartenaireForm";
 import { cn } from "@/lib/utils";
 
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
+
 interface PartenaireDetailProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,7 +46,7 @@ interface PartenaireDetailProps {
   onUpdate: () => void;
   embedded?: boolean;
   preloadedInvestissements?: Investissement[];
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
 }
 
 function DetailField({
@@ -278,18 +280,23 @@ export function PartenaireDetail({
             </p>
           ) : (
             <div className="space-y-3">
-              {investissements.map((inv) => (
+              {(() => {
+                const detailContactIds = investissements
+                  .map((item) => item.contact_id)
+                  .filter((id): id is number => id != null && id > 0);
+                return investissements.map((inv) => (
                 <InvestissementCard
                   key={inv.id}
                   inv={inv}
                   partenaireNom={partenaire.raison_sociale}
                   onOpenContactClick={
                     onOpenContact && inv.contact_id
-                      ? () => onOpenContact(inv.contact_id!)
+                      ? () => onOpenContact(inv.contact_id!, detailContactIds)
                       : undefined
                   }
                 />
-              ))}
+                ));
+              })()}
             </div>
           )}
         </CardContent>

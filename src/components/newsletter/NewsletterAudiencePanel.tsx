@@ -31,6 +31,7 @@ import {
 } from "@/lib/newsletter/newsletter-audience-utils";
 import { textMatchesSearch } from "@/lib/search-utils";
 import { cn } from "@/lib/utils";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 type NewsletterAudiencePanelProps = {
   mode?: "edition" | "settings";
@@ -38,7 +39,7 @@ type NewsletterAudiencePanelProps = {
   onFiltersChange: (next: NewsletterAudienceFilters) => void;
   settingsAudienceFilters?: NewsletterAudienceFilters;
   settingsExcludeContactIds?: number[];
-  onOpenContact?: (contactId: number) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
   onPreviewChange?: (preview: NewsletterAudiencePreview | null) => void;
 };
 
@@ -385,7 +386,12 @@ export function NewsletterAudiencePanel({
                             variant="ghost"
                             size="sm"
                             className="shrink-0 h-7 px-2 text-xs"
-                            onClick={() => onOpenContact(member.contactId)}
+                            onClick={() =>
+                              onOpenContact(
+                                member.contactId,
+                                filteredMembers.map((m) => m.contactId)
+                              )
+                            }
                           >
                             Fiche
                           </Button>
