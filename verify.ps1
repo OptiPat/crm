@@ -76,6 +76,7 @@ Invoke-VerifyStep 'Tests frontend (Vitest)' {
 if (-not $Quick) {
     Invoke-VerifyStep 'Tests backend (Cargo)' {
         cargo test --manifest-path src-tauri/Cargo.toml
+        if ($LASTEXITCODE -ne 0) { throw "cargo test a echoue." }
     }
 }
 

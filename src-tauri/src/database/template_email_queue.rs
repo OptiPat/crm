@@ -57,6 +57,9 @@ impl Database {
                 email_reponse_gmail_message_id TEXT,
                 email_suivi_ignore INTEGER NOT NULL DEFAULT 0,
                 email_annule INTEGER NOT NULL DEFAULT 0,
+                relance_canal TEXT,
+                relance_canal_at INTEGER,
+                relance_canal_message TEXT,
                 created_at INTEGER NOT NULL DEFAULT (unixepoch()),
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
                 FOREIGN KEY (template_id) REFERENCES templates_email(id) ON DELETE CASCADE
@@ -73,6 +76,27 @@ impl Database {
              ON contact_template_envois (contact_id)",
             [],
         )?;
+        if !self.table_has_column("contact_template_envois", "relance_canal")? {
+            self.conn.execute(
+                "ALTER TABLE contact_template_envois ADD COLUMN relance_canal TEXT",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal sur contact_template_envois");
+        }
+        if !self.table_has_column("contact_template_envois", "relance_canal_at")? {
+            self.conn.execute(
+                "ALTER TABLE contact_template_envois ADD COLUMN relance_canal_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal_at sur contact_template_envois");
+        }
+        if !self.table_has_column("contact_template_envois", "relance_canal_message")? {
+            self.conn.execute(
+                "ALTER TABLE contact_template_envois ADD COLUMN relance_canal_message TEXT",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal_message sur contact_template_envois");
+        }
         Ok(())
     }
 
