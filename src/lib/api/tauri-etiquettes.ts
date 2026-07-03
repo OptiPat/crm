@@ -130,6 +130,10 @@ export interface EtiquetteEmailQueueItem {
   email_sent_subject?: string | null;
   /** Rendement cible Exceltis — balise {{rendement_exceltis}} */
   rendement_exceltis?: string;
+  /** Relance SMS/WhatsApp depuis « À relancer » */
+  relance_canal?: string | null;
+  relance_canal_at?: number | null;
+  relance_canal_message?: string | null;
 }
 
 export type EtiquetteEmailQueueStatus =
@@ -514,6 +518,20 @@ export async function prepareEmailCampaignRelance(
 ): Promise<void> {
   return invoke<void>("prepare_email_campaign_relance", {
     contactEtiquetteId,
+    queueRowKind: queueRowKind ?? "etiquette",
+  });
+}
+
+export async function markEmailCampaignMessagingRelance(
+  contactEtiquetteId: number,
+  canal: "sms" | "whatsapp",
+  message?: string | null,
+  queueRowKind?: string | null
+): Promise<void> {
+  return invoke<void>("mark_email_campaign_messaging_relance", {
+    contactEtiquetteId,
+    canal,
+    message: message ?? null,
     queueRowKind: queueRowKind ?? "etiquette",
   });
 }

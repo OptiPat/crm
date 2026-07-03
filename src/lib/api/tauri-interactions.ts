@@ -41,7 +41,7 @@ export const INTERACTION_TYPES = [
 ] as const;
 
 export interface ExchangeHistoryEntry {
-  entry_kind: "manual" | "email_campagne";
+  entry_kind: "manual" | "email_campagne" | "messaging_relance";
   sort_date: number;
   contact_id: number;
   contact_nom: string;
@@ -69,6 +69,10 @@ export interface ExchangeHistoryEntry {
   sujet?: string | null;
   contenu?: string | null;
   created_at?: number | null;
+  /** Relance SMS/WhatsApp (`entry_kind` = `messaging_relance`). */
+  relance_canal?: string | null;
+  relance_canal_at?: number | null;
+  relance_canal_message?: string | null;
 }
 
 export async function getAllInteractionsWithContacts(): Promise<InteractionWithContact[]> {

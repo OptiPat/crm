@@ -5,8 +5,11 @@ import {
   exchangeContactName,
   exchangeListSubtitle,
   exchangeListTitle,
+  getMessagingRelanceChannelLabel,
   isEmailCampaignEntry,
+  isMessagingRelanceEntry,
 } from "@/lib/interactions/exchange-history-display";
+import { SmsBrandIcon, WhatsAppBrandIcon } from "@/components/icons/MessagingBrandIcons";
 import { getInteractionTypeLabel } from "@/lib/interactions/interaction-display";
 import type { ExchangeHistoryEntry } from "@/lib/api/tauri-interactions";
 import { cn } from "@/lib/utils";
@@ -23,8 +26,11 @@ export function ExchangeHistoryListRow({
   onClick: () => void;
 }) {
   const isEmail = isEmailCampaignEntry(entry);
+  const isMessaging = isMessagingRelanceEntry(entry);
   const name = exchangeContactName(entry);
-  const typeLabel = isEmail
+  const typeLabel = isMessaging
+    ? getMessagingRelanceChannelLabel(entry.relance_canal)
+    : isEmail
     ? "Email"
     : getInteractionTypeLabel(entry.type_interaction ?? "AUTRE");
 
@@ -47,7 +53,13 @@ export function ExchangeHistoryListRow({
             selected ? "bg-primary/10" : "bg-muted"
           )}
         >
-          {isEmail ? (
+          {isMessaging ? (
+            entry.relance_canal === "whatsapp" ? (
+              <WhatsAppBrandIcon className="h-4 w-4" />
+            ) : (
+              <SmsBrandIcon className="h-4 w-4" />
+            )
+          ) : isEmail ? (
             <Mail className="h-4 w-4 text-primary" />
           ) : (
             <FileText className="h-4 w-4 text-primary" />

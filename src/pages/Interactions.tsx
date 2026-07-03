@@ -31,7 +31,7 @@ import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import {
   exchangeContactName,
   exchangeEntryKey,
-  isEmailCampaignEntry,
+  isCampaignRelatedExchangeEntry,
   loadExchangeHistory,
   manualEntryToInteraction,
 } from "@/lib/interactions/exchange-history-display";
@@ -292,13 +292,13 @@ export function Interactions({ onNavigate }: InteractionsProps) {
   const detailPanelProps = (entry: ExchangeHistoryEntry) => ({
     entry,
     onClose: () => setSelectedEntry(null),
-    onEdit: !isEmailCampaignEntry(entry) ? () => startEdit(entry) : undefined,
-    onDelete: !isEmailCampaignEntry(entry)
+    onEdit: !isCampaignRelatedExchangeEntry(entry) ? () => startEdit(entry) : undefined,
+    onDelete: !isCampaignRelatedExchangeEntry(entry)
       ? () => void handleDelete(entry)
       : undefined,
     onOpenContact: () => openContact(entry.contact_id),
     onNavigateSuiviEnvois:
-      onNavigate && isEmailCampaignEntry(entry)
+      onNavigate && isCampaignRelatedExchangeEntry(entry)
         ? () => navigateToSuivi(onNavigate, "envois")
         : undefined,
     onRefresh: () => void load(),

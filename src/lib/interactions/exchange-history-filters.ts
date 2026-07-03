@@ -1,6 +1,10 @@
 import type { EtiquetteEmailQueueItem } from "@/lib/api/tauri-etiquettes";
 import type { ExchangeHistoryEntry } from "@/lib/api/tauri-interactions";
-import { isEmailCampaignEntry } from "@/lib/interactions/exchange-history-display";
+import {
+  isCampaignRelatedExchangeEntry,
+  isEmailCampaignEntry,
+  isMessagingRelanceEntry,
+} from "@/lib/interactions/exchange-history-display";
 import { inferQueueRowKindFromEtiquetteNom } from "@/lib/emails/campaign-email-reply";
 import { getEtiquetteQueueItemKey } from "@/lib/etiquettes/etiquette-queue-item-key";
 import { textMatchesSearch } from "@/lib/search-utils";
@@ -109,7 +113,7 @@ export function countExchangesByStat(
   let emailCampagne = 0;
   let manual = 0;
   for (const entry of entries) {
-    if (isEmailCampaignEntry(entry)) emailCampagne += 1;
+    if (isCampaignRelatedExchangeEntry(entry)) emailCampagne += 1;
     else manual += 1;
     if (isExchangeThisWeek(entry)) thisWeek += 1;
   }
@@ -134,9 +138,9 @@ export function matchesExchangeStatFilter(
     case "this_week":
       return isExchangeThisWeek(entry);
     case "email_campagne":
-      return isEmailCampaignEntry(entry);
+      return isCampaignRelatedExchangeEntry(entry);
     case "manual":
-      return !isEmailCampaignEntry(entry);
+      return !isCampaignRelatedExchangeEntry(entry);
     default:
       return true;
   }
@@ -159,17 +163,21 @@ export function filterExchangeHistoryList(
     }
     if (
       state.kindFilter === "email_campagne" &&
-      !isEmailCampaignEntry(item)
+      !isCampaignRelatedExchangeEntry(item)
     ) {
       return false;
     }
-    if (state.kindFilter === "manual" && isEmailCampaignEntry(item)) {
+    if (state.kindFilter === "manual" && isCampaignRelatedExchangeEntry(item)) {
       return false;
     }
     if (!matchesExchangeStatFilter(item, state.statFilter, awaiting)) {
       return false;
     }
-    const typeValue = isEmailCampaignEntry(item)
+    const typeValue = isMessagingRelanceEntry(item)
+      ? item.relance_canal === "whatsapp"
+        ? "WHATSAPP"
+        : "SMS"
+      : isEmailCampaignEntry(item)
       ? "EMAIL"
       : item.type_interaction ?? "AUTRE";
     const matchesType =

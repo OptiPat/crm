@@ -694,6 +694,9 @@ impl Database {
             email_gmail_thread_id: row.get(24).ok(),
             email_sent_subject: row.get(25).ok(),
             rendement_exceltis: String::new(),
+            relance_canal: None,
+            relance_canal_at: None,
+            relance_canal_message: None,
         })
     }
 

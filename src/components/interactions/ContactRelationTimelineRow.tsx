@@ -22,8 +22,10 @@ import type { Interaction } from "@/lib/api/tauri-interactions";
 import {
   emailRelationSubtitle,
   emailRelationTitle,
+  messagingRelationTitle,
   type ContactRelationTimelineItem,
 } from "@/lib/interactions/contact-relation-timeline";
+import { SmsBrandIcon, WhatsAppBrandIcon } from "@/components/icons/MessagingBrandIcons";
 import { getSentSubjectLabel } from "@/lib/interactions/exchange-history-display";
 import { getDocumentMetaLines } from "@/lib/documents/document-display";
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
@@ -345,6 +347,46 @@ export function ContactRelationTimelineRow({
   onDelete?: (interactionId: number) => void;
   onOpenHistorique?: () => void;
 }) {
+  if (item.kind === "messaging") {
+    const { entry } = item;
+    const relanceAt = entry.relance_canal_at ?? entry.sort_date;
+
+    return (
+      <li className="relative flex flex-col gap-2 p-3 pl-1 border border-border/80 rounded-lg bg-card text-sm">
+        <div className="flex items-start gap-3 min-w-0">
+          <span className="p-2 rounded-lg bg-emerald-50 shrink-0 h-fit">
+            {entry.relance_canal === "whatsapp" ? (
+              <WhatsAppBrandIcon className="h-4 w-4" />
+            ) : (
+              <SmsBrandIcon className="h-4 w-4" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2 mb-0.5">
+              <Badge variant="outline" className="text-xs">
+                Relance {entry.relance_canal === "whatsapp" ? "WhatsApp" : "SMS"}
+              </Badge>
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {formatInteractionDate(relanceAt)}
+              </span>
+            </div>
+            <p className="font-medium leading-snug">{messagingRelationTitle(entry)}</p>
+            {entry.relance_canal_message?.trim() && (
+              <p className="text-xs text-muted-foreground mt-1 whitespace-pre-wrap">
+                {entry.relance_canal_message.trim()}
+              </p>
+            )}
+            {entry.sent_at ? (
+              <p className="text-xs text-muted-foreground mt-1">
+                Suite à l&apos;email du {formatInteractionDate(entry.sent_at)}
+              </p>
+            ) : null}
+          </div>
+        </div>
+      </li>
+    );
+  }
+
   if (item.kind === "email") {
     const { entry } = item;
     const reponseBody = entry.email_reponse_body?.trim();

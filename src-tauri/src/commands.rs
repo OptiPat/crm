@@ -2102,6 +2102,26 @@ pub fn mark_email_campaign_response(
 }
 
 #[tauri::command]
+pub fn mark_email_campaign_messaging_relance(
+    db: State<'_, DbState>,
+    contact_etiquette_id: i64,
+    canal: String,
+    message: Option<String>,
+    queue_row_kind: Option<String>,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_email_campaign_messaging_relance(
+            contact_etiquette_id,
+            &canal,
+            message.as_deref(),
+            queue_row_kind.as_deref(),
+        )
+        .map_err(|e| format!("Failed to mark messaging relance: {}", e))
+}
+
+#[tauri::command]
 pub fn dismiss_email_campaign_followup(
     db: State<'_, DbState>,
     contact_etiquette_id: i64,

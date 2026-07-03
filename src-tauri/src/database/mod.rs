@@ -1079,6 +1079,48 @@ impl Database {
             )?;
             println!("✅ Migration: email_relance_active sur contact_etiquettes");
         }
+        if !self.table_has_column("contact_etiquettes", "relance_canal")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN relance_canal TEXT",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "relance_canal_at")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN relance_canal_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal_at sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_etiquettes", "relance_canal_message")? {
+            self.conn.execute(
+                "ALTER TABLE contact_etiquettes ADD COLUMN relance_canal_message TEXT",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal_message sur contact_etiquettes");
+        }
+        if !self.table_has_column("contact_template_envois", "relance_canal")? {
+            self.conn.execute(
+                "ALTER TABLE contact_template_envois ADD COLUMN relance_canal TEXT",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal sur contact_template_envois");
+        }
+        if !self.table_has_column("contact_template_envois", "relance_canal_at")? {
+            self.conn.execute(
+                "ALTER TABLE contact_template_envois ADD COLUMN relance_canal_at INTEGER",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal_at sur contact_template_envois");
+        }
+        if !self.table_has_column("contact_template_envois", "relance_canal_message")? {
+            self.conn.execute(
+                "ALTER TABLE contact_template_envois ADD COLUMN relance_canal_message TEXT",
+                [],
+            )?;
+            println!("✅ Migration: relance_canal_message sur contact_template_envois");
+        }
         if !self.table_has_column("contact_etiquettes", "email_sent_subject")? {
             self.conn.execute(
                 "ALTER TABLE contact_etiquettes ADD COLUMN email_sent_subject TEXT",

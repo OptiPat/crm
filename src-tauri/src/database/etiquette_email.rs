@@ -44,7 +44,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        COALESCE(e.rendement_cible, '')
+                        COALESCE(e.rendement_cible, ''),
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -74,7 +75,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        COALESCE(e.rendement_cible, '')
+                        COALESCE(e.rendement_cible, ''),
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -110,7 +112,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        COALESCE(e.rendement_cible, '')
+                        COALESCE(e.rendement_cible, ''),
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -145,7 +148,8 @@ impl Database {
                         ce.email_gmail_message_id,
                         ce.email_gmail_thread_id,
                         ce.email_sent_subject,
-                        COALESCE(e.rendement_cible, '')
+                        COALESCE(e.rendement_cible, ''),
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -176,7 +180,8 @@ impl Database {
                         ce.email_gmail_message_id,
                         ce.email_gmail_thread_id,
                         ce.email_sent_subject,
-                        COALESCE(e.rendement_cible, '')
+                        COALESCE(e.rendement_cible, ''),
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -208,7 +213,8 @@ impl Database {
                         NULL,
                         NULL,
                         NULL,
-                        COALESCE(e.rendement_cible, '')
+                        COALESCE(e.rendement_cible, ''),
+                        ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                  INNER JOIN contacts c ON ce.contact_id = c.id
@@ -260,6 +266,9 @@ impl Database {
                 email_gmail_thread_id: row.get(24).ok(),
                 email_sent_subject: row.get(25).ok(),
                 rendement_exceltis: row.get(26).unwrap_or_else(|_| String::new()),
+                relance_canal: row.get(27).ok(),
+                relance_canal_at: row.get(28).ok(),
+                relance_canal_message: row.get(29).ok(),
             })
         };
 
@@ -292,6 +301,19 @@ impl Database {
         });
 
         if queue_status == "sent" {
+            // Garder en priorité les relances SMS/WhatsApp (toujours en attente de réponse).
+            items.sort_by(|a, b| {
+                let pa = super::template_email_relance::has_messaging_relance_recorded(a);
+                let pb = super::template_email_relance::has_messaging_relance_recorded(b);
+                pb.cmp(&pa)
+                    .then_with(|| {
+                        let da = a.email_date_envoi.unwrap_or(0);
+                        let db = b.email_date_envoi.unwrap_or(0);
+                        db.cmp(&da)
+                    })
+                    .then_with(|| a.contact_nom.cmp(&b.contact_nom))
+                    .then_with(|| a.contact_prenom.cmp(&b.contact_prenom))
+            });
             items.truncate(100);
         }
 
@@ -657,7 +679,7 @@ impl Database {
         rdv_event_at: Option<i64>,
         queue_row_kind: Option<&str>,
     ) -> Result<()> {
-        let allowed = ["mail", "rdv", "autre"];
+        let allowed = ["mail", "rdv", "autre", "sms", "whatsapp"];
         if !allowed.contains(&response_type) {
             return Err(rusqlite::Error::InvalidParameterName(format!(
                 "Type de réponse invalide: {}",
@@ -818,6 +840,65 @@ impl Database {
                 Err(e)
             }
         }
+    }
+
+    /// Relance SMS/WhatsApp depuis « À relancer » (trace sortante, reste en attente de réponse).
+    pub fn mark_email_campaign_messaging_relance(
+        &self,
+        row_id: i64,
+        canal: &str,
+        message: Option<&str>,
+        queue_row_kind: Option<&str>,
+    ) -> Result<()> {
+        let allowed = ["sms", "whatsapp"];
+        if !allowed.contains(&canal) {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Canal invalide: {}",
+                canal
+            )));
+        }
+
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let table = if email_queue_row_is_template(queue_row_kind) {
+            "contact_template_envois"
+        } else {
+            "contact_etiquettes"
+        };
+
+        let message_stored: Option<String> = message.map(|m| {
+            const MAX: usize = 500;
+            if m.chars().count() <= MAX {
+                m.to_string()
+            } else {
+                m.chars().take(MAX).collect()
+            }
+        });
+
+        let updated = self.conn.execute(
+            &format!(
+                "UPDATE {table} SET
+                    relance_canal = ?1,
+                    relance_canal_at = ?2,
+                    relance_canal_message = ?3
+                 WHERE id = ?4
+                   AND email_envoye = 1
+                   AND email_reponse_at IS NULL
+                   AND COALESCE(email_suivi_ignore, 0) = 0
+                   AND (relance_canal IS NULL OR TRIM(relance_canal) = '')"
+            ),
+            params![canal, now, message_stored.as_deref(), row_id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::InvalidParameterName(format!(
+                "Envoi introuvable ou relance messaging déjà enregistrée: {}",
+                row_id
+            )));
+        }
+        Ok(())
     }
 
     /// Ne plus proposer de relance pour cet envoi.
@@ -1194,6 +1275,7 @@ impl Database {
                 email_gmail_message_id = NULL,
                 email_gmail_thread_id = NULL
              WHERE id = ?2 AND email_envoye = 1
+               AND (relance_canal IS NULL OR TRIM(relance_canal) = '')
                AND EXISTS (
                  SELECT 1 FROM etiquettes e
                  LEFT JOIN templates_email t ON e.email_template_id = t.id

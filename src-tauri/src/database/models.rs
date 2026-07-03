@@ -762,6 +762,13 @@ pub struct EtiquetteEmailQueueItem {
     /// Rendement cible Exceltis (colonne étiquette) — balise `{{rendement_exceltis}}`
     #[serde(default)]
     pub rendement_exceltis: String,
+    /// Relance manuelle SMS/WhatsApp depuis « À relancer » (`sms` | `whatsapp`).
+    #[serde(default)]
+    pub relance_canal: Option<String>,
+    #[serde(default)]
+    pub relance_canal_at: Option<i64>,
+    #[serde(default)]
+    pub relance_canal_message: Option<String>,
 }
 
 /// Snapshot des files d'envoi (1 appel IPC au lieu de 6).
@@ -952,6 +959,13 @@ pub struct ExchangeHistoryEntry {
     pub sujet: Option<String>,
     pub contenu: Option<String>,
     pub created_at: Option<i64>,
+    /// Relance SMS/WhatsApp (`entry_kind` = `messaging_relance`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relance_canal: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relance_canal_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relance_canal_message: Option<String>,
 }
 
 // ==================== TACHES ====================

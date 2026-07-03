@@ -6,6 +6,13 @@ use super::email_schedule::{calendar_slot_on_anchor_day, send_at_eligibility_slo
 use super::models::EtiquetteEmailQueueItem;
 use serde::Deserialize;
 
+pub fn has_messaging_relance_recorded(item: &EtiquetteEmailQueueItem) -> bool {
+    item.relance_canal
+        .as_deref()
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false)
+}
+
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(default)]
 pub struct TemplateEmailRelanceConfig {
@@ -78,6 +85,9 @@ pub fn filter_queue_by_relance_schedule(
     items
         .into_iter()
         .filter(|item| {
+            if has_messaging_relance_recorded(item) {
+                return !want_followup;
+            }
             let Some(envoi) = item.email_date_envoi else {
                 return false;
             };
@@ -109,5 +119,52 @@ mod tests {
         let envoi = 1_700_000_000i64;
         let due = resolve_relance_due_at(None, envoi, 5);
         assert_eq!(due, envoi + 5 * 86_400);
+    }
+
+    #[test]
+    fn messaging_relance_excluded_from_followup_bucket() {
+        use super::super::models::EtiquetteEmailQueueItem;
+
+        let envoi = 1_700_000_000i64;
+        let now = envoi + 10 * 86_400;
+        let item = EtiquetteEmailQueueItem {
+            queue_row_kind: "etiquette".to_string(),
+            contact_etiquette_id: 1,
+            contact_id: 1,
+            contact_nom: "DUPONT".into(),
+            contact_prenom: "Jean".into(),
+            contact_email: Some("j@example.com".into()),
+            contact_telephone: Some("0612345678".into()),
+            etiquette_id: 1,
+            etiquette_nom: "Suivi".into(),
+            etiquette_couleur: "#000".into(),
+            email_date_prevue: None,
+            email_date_envoi: Some(envoi),
+            template_sujet: String::new(),
+            template_corps: String::new(),
+            template_agenda_link_id: None,
+            template_variables: None,
+            template_categorie: None,
+            queue_issue: None,
+            email_reponse_at: None,
+            email_reponse_type: None,
+            contact_date_dernier_contact: None,
+            email_is_relance: false,
+            contact_registre: Some("VOUS".into()),
+            campaign_variables: None,
+            email_gmail_message_id: None,
+            email_gmail_thread_id: None,
+            email_sent_subject: None,
+            rendement_exceltis: String::new(),
+            relance_canal: Some("whatsapp".into()),
+            relance_canal_at: Some(now),
+            relance_canal_message: Some("Bonjour Jean, ".into()),
+        };
+
+        let followup = filter_queue_by_relance_schedule(vec![item.clone()], "followup", now, 5);
+        assert!(followup.is_empty());
+
+        let sent = filter_queue_by_relance_schedule(vec![item], "sent", now, 5);
+        assert_eq!(sent.len(), 1);
     }
 }

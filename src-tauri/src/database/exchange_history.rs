@@ -276,7 +276,102 @@ impl Database {
             sujet: None,
             contenu: None,
             created_at: None,
+            relance_canal: None,
+            relance_canal_at: None,
+            relance_canal_message: None,
         })
+    }
+
+    fn messaging_relance_entry_from_row(
+        row: &rusqlite::Row<'_>,
+        queue_row_kind: &str,
+    ) -> rusqlite::Result<super::models::ExchangeHistoryEntry> {
+        let relance_at: i64 = row.get(8)?;
+        Ok(super::models::ExchangeHistoryEntry {
+            entry_kind: "messaging_relance".into(),
+            sort_date: relance_at,
+            contact_id: row.get(1)?,
+            contact_nom: row.get(2)?,
+            contact_prenom: row.get(3)?,
+            contact_email: row.get(4)?,
+            contact_telephone: row.get(5)?,
+            contact_etiquette_id: Some(row.get(0)?),
+            queue_row_kind: queue_row_kind.to_string(),
+            etiquette_nom: Some(row.get(6)?),
+            sent_at: row.get(10)?,
+            sent_subject: None,
+            sent_body: None,
+            sent_template_nom: None,
+            template_sujet: None,
+            template_corps: None,
+            template_agenda_link_id: None,
+            email_gmail_message_id: None,
+            email_gmail_thread_id: None,
+            email_reponse_at: None,
+            email_reponse_type: None,
+            email_reponse_body: None,
+            email_reponse_gmail_message_id: None,
+            interaction_id: None,
+            type_interaction: None,
+            sujet: None,
+            contenu: None,
+            created_at: None,
+            relance_canal: row.get(7)?,
+            relance_canal_at: Some(relance_at),
+            relance_canal_message: row.get(9)?,
+        })
+    }
+
+    fn append_messaging_relance_entries(
+        &self,
+        entries: &mut Vec<super::models::ExchangeHistoryEntry>,
+        only_contact_id: Option<i64>,
+    ) -> Result<()> {
+        if !self.table_has_column("contact_etiquettes", "relance_canal")? {
+            return Ok(());
+        }
+
+        let mut ce_stmt = self.conn.prepare(
+            "SELECT ce.id, ce.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                    COALESCE(e.nom, 'Campagne email'),
+                    ce.relance_canal, ce.relance_canal_at, ce.relance_canal_message,
+                    ce.email_date_envoi
+             FROM contact_etiquettes ce
+             LEFT JOIN etiquettes e ON ce.etiquette_id = e.id
+             INNER JOIN contacts c ON ce.contact_id = c.id
+             WHERE ce.relance_canal IS NOT NULL AND TRIM(ce.relance_canal) != ''
+               AND ce.relance_canal_at IS NOT NULL
+               AND (?1 IS NULL OR ce.contact_id = ?1)",
+        )?;
+        let ce_rows = ce_stmt.query_map(params![only_contact_id], |row| {
+            Self::messaging_relance_entry_from_row(row, "etiquette")
+        })?;
+        for row in ce_rows {
+            entries.push(row?);
+        }
+
+        if self.table_has_column("contact_template_envois", "relance_canal")? {
+            let mut cte_stmt = self.conn.prepare(
+                "SELECT cte.id, cte.contact_id, c.nom, c.prenom, c.email, c.telephone,
+                        ('Modèle · ' || t.nom),
+                        cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message,
+                        cte.email_date_envoi
+                 FROM contact_template_envois cte
+                 INNER JOIN templates_email t ON cte.template_id = t.id
+                 INNER JOIN contacts c ON cte.contact_id = c.id
+                 WHERE cte.relance_canal IS NOT NULL AND TRIM(cte.relance_canal) != ''
+                   AND cte.relance_canal_at IS NOT NULL
+                   AND (?1 IS NULL OR cte.contact_id = ?1)",
+            )?;
+            let cte_rows = cte_stmt.query_map(params![only_contact_id], |row| {
+                Self::messaging_relance_entry_from_row(row, "template")
+            })?;
+            for row in cte_rows {
+                entries.push(row?);
+            }
+        }
+
+        Ok(())
     }
 
     /// Journal fusionné : échanges manuels + un fil par envoi campagne (envoi + réponse).
@@ -390,6 +485,9 @@ impl Database {
                     sujet: None,
                     contenu: None,
                     created_at: None,
+                    relance_canal: None,
+                    relance_canal_at: None,
+                    relance_canal_message: None,
                 });
                 continue;
             }
@@ -426,6 +524,9 @@ impl Database {
                 sujet,
                 contenu,
                 created_at: Some(created_at),
+                relance_canal: None,
+                relance_canal_at: None,
+                relance_canal_message: None,
             });
         }
 
@@ -658,8 +759,13 @@ impl Database {
                 sujet: None,
                 contenu: None,
                 created_at: None,
+                relance_canal: None,
+                relance_canal_at: None,
+                relance_canal_message: None,
             });
         }
+
+        self.append_messaging_relance_entries(&mut entries, only_contact_id)?;
 
         if entries.is_empty() && only_contact_id.is_none() {
             for row in self.get_all_interactions_with_contacts()? {
@@ -692,6 +798,9 @@ impl Database {
                     sujet: row.sujet,
                     contenu: row.contenu,
                     created_at: Some(row.created_at),
+                    relance_canal: None,
+                    relance_canal_at: None,
+                    relance_canal_message: None,
                 });
             }
         }

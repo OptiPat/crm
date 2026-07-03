@@ -213,6 +213,7 @@ fn main() {
             mark_calendar_rdv_effectue,
             sync_email_campaign_responses,
             mark_email_campaign_response,
+            mark_email_campaign_messaging_relance,
             dismiss_email_campaign_followup,
             cancel_pending_email_campaign,
             restore_pending_email_campaign,

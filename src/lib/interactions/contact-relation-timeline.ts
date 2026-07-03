@@ -15,13 +15,16 @@ import {
   getEmailResponseTypeLabel,
   getSentSubjectLabel,
   getSentTemplateLabel,
+  getMessagingRelanceChannelLabel,
   isEmailCampaignEntry,
+  isMessagingRelanceEntry,
 } from "@/lib/interactions/exchange-history-display";
 
 export type RelationTimelineFilter = "all" | "crm" | "mailbox";
 
 export type ContactRelationTimelineItem =
   | { kind: "email"; entry: ExchangeHistoryEntry; key: string; sort_date: number }
+  | { kind: "messaging"; entry: ExchangeHistoryEntry; key: string; sort_date: number }
   | { kind: "manual"; interaction: Interaction; key: string; sort_date: number }
   | {
       kind: "mailbox_thread";
@@ -38,6 +41,7 @@ export type ContactRelationTimelineItem =
 /** Événements internes CRM (hors boîte mail) — pour le filtre « CRM ». */
 const CRM_KINDS = new Set([
   "email",
+  "messaging",
   "manual",
   "investissement",
   "document",
@@ -71,12 +75,22 @@ export function buildContactRelationTimeline(
 ): ContactRelationTimelineItem[] {
   const threads = groupMailboxMessagesByThread(mailboxMessages);
   const items: ContactRelationTimelineItem[] = [
-    ...emailEntries.map((entry) => ({
-      kind: "email" as const,
-      entry,
-      key: exchangeEntryKey(entry),
-      sort_date: entry.sort_date,
-    })),
+    ...emailEntries
+      .filter((entry) => isEmailCampaignEntry(entry))
+      .map((entry) => ({
+        kind: "email" as const,
+        entry,
+        key: exchangeEntryKey(entry),
+        sort_date: entry.sort_date,
+      })),
+    ...emailEntries
+      .filter((entry) => isMessagingRelanceEntry(entry))
+      .map((entry) => ({
+        kind: "messaging" as const,
+        entry,
+        key: exchangeEntryKey(entry),
+        sort_date: entry.sort_date,
+      })),
     ...manualInteractions
       .filter((i) => !isLegacyCampaignInteraction(i))
       .map((interaction) => ({
@@ -144,6 +158,17 @@ export function relationTimelineMatchesSearch(
       .toLowerCase();
     return hay.includes(q);
   }
+  if (item.kind === "messaging") {
+    const hay = [
+      item.entry.etiquette_nom,
+      item.entry.relance_canal,
+      item.entry.relance_canal_message,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  }
   if (item.kind === "manual") {
     const hay = [item.interaction.sujet, item.interaction.contenu]
       .filter(Boolean)
@@ -171,6 +196,9 @@ export function relationTimelineMatchesSearch(
       .join(" ")
       .toLowerCase();
     return hay.includes(q);
+  }
+  if (item.kind !== "mailbox_thread") {
+    return false;
   }
   return item.messages.some((m) => {
     let attNames = "";
@@ -208,14 +236,23 @@ export async function loadContactRelationTimeline(
       getDocumentsByContact(contactId),
       getTachesByContact(contactId),
     ]);
-  const emailEntries = allExchanges.filter(
-    (e) => e.contact_id === contactId && isEmailCampaignEntry(e)
+  const campaignEntries = allExchanges.filter(
+    (e) =>
+      e.contact_id === contactId &&
+      (isEmailCampaignEntry(e) || isMessagingRelanceEntry(e))
   );
-  return buildContactRelationTimeline(emailEntries, manual, mailbox, {
+  return buildContactRelationTimeline(campaignEntries, manual, mailbox, {
     investissements,
     documents,
     taches,
   });
+}
+
+export function messagingRelationTitle(entry: ExchangeHistoryEntry): string {
+  const canal = getMessagingRelanceChannelLabel(entry.relance_canal);
+  const campagne = entry.etiquette_nom?.trim();
+  if (campagne) return `Relance ${canal} — ${campagne}`;
+  return `Relance ${canal}`;
 }
 
 export function emailRelationTitle(entry: ExchangeHistoryEntry): string {

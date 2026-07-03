@@ -6,6 +6,9 @@ import {
 
 /** Clé stable : une ligne par campagne (`contact_etiquette`), pas par contact. */
 export function exchangeEntryKey(entry: ExchangeHistoryEntry): string {
+  if (isMessagingRelanceEntry(entry)) {
+    return `messaging-${entry.contact_etiquette_id ?? 0}-${entry.relance_canal_at ?? entry.sort_date}`;
+  }
   if (isEmailCampaignEntry(entry)) {
     if (entry.contact_etiquette_id != null && entry.contact_etiquette_id > 0) {
       return `email-ce-${entry.contact_etiquette_id}`;
@@ -102,6 +105,10 @@ export function mergeEmailEntriesByContact(
   const byContact = new Map<number, ExchangeHistoryEntry[]>();
 
   for (const entry of entries) {
+    if (isMessagingRelanceEntry(entry)) {
+      manual.push(entry);
+      continue;
+    }
     if (!isEmailCampaignEntry(entry)) {
       manual.push(entry);
       continue;
@@ -232,11 +239,24 @@ export function truncateExchangeHistory(
   return entries.slice(0, maxEntries);
 }
 
+export function isMessagingRelanceEntry(entry: ExchangeHistoryEntry): boolean {
+  return entry.entry_kind === "messaging_relance";
+}
+
 export function isEmailCampaignEntry(entry: ExchangeHistoryEntry): boolean {
-  return (
-    entry.entry_kind === "email_campagne" ||
-    (entry.contact_etiquette_id != null && entry.contact_etiquette_id > 0)
-  );
+  return entry.entry_kind === "email_campagne";
+}
+
+export function isCampaignRelatedExchangeEntry(entry: ExchangeHistoryEntry): boolean {
+  return isEmailCampaignEntry(entry) || isMessagingRelanceEntry(entry);
+}
+
+export function getMessagingRelanceChannelLabel(
+  canal: string | null | undefined
+): string {
+  if (canal === "sms") return "SMS";
+  if (canal === "whatsapp") return "WhatsApp";
+  return "Message";
 }
 
 export function getEmailResponseTypeLabel(
@@ -249,6 +269,10 @@ export function getEmailResponseTypeLabel(
       return "RDV pris";
     case "autre":
       return "Autre retour client";
+    case "sms":
+      return "Réponse par SMS";
+    case "whatsapp":
+      return "Réponse par WhatsApp";
     default:
       return "Réponse client";
   }
@@ -272,6 +296,17 @@ export function getSentSubjectLabel(entry: ExchangeHistoryEntry): string | null 
 }
 
 export function exchangeListTitle(entry: ExchangeHistoryEntry): string {
+  if (isMessagingRelanceEntry(entry)) {
+    const canal = getMessagingRelanceChannelLabel(entry.relance_canal);
+    const campagne = entry.etiquette_nom?.trim();
+    const snippet = entry.relance_canal_message?.trim();
+    if (campagne && snippet) {
+      return `Relance ${canal} — ${campagne} — ${snippet}`;
+    }
+    if (campagne) return `Relance ${canal} — ${campagne}`;
+    if (snippet) return `Relance ${canal} — ${snippet}`;
+    return `Relance ${canal}`;
+  }
   if (isEmailCampaignEntry(entry)) {
     const template = getSentTemplateLabel(entry);
     const subject = getSentSubjectLabel(entry);
@@ -282,6 +317,14 @@ export function exchangeListTitle(entry: ExchangeHistoryEntry): string {
 }
 
 export function exchangeListSubtitle(entry: ExchangeHistoryEntry): string {
+  if (isMessagingRelanceEntry(entry)) {
+    const relanceAt = entry.relance_canal_at ?? entry.sort_date;
+    const relanceLabel = formatInteractionDateTime(relanceAt);
+    if (entry.sent_at) {
+      return `Après email du ${formatInteractionDateTime(entry.sent_at)} · relance ${relanceLabel}`;
+    }
+    return `Relance ${relanceLabel}`;
+  }
   if (isEmailCampaignEntry(entry)) {
     const sent = entry.sent_at
       ? formatInteractionDateTime(entry.sent_at)

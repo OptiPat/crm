@@ -35,6 +35,7 @@ import {
   restorePendingEmailCampaign,
   dismissCancelledPendingEmailCampaign,
   prepareEmailCampaignRelance,
+  markEmailCampaignMessagingRelance,
   countMisplacedSentCampaigns,
   repairMisplacedSentCampaigns,
   getContrastColor,
@@ -114,6 +115,14 @@ import { useScpiCampaignDashboard } from "@/hooks/useScpiCampaignDashboard";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { SmsBrandIcon, WhatsAppBrandIcon } from "@/components/icons/MessagingBrandIcons";
+import { hasMessagingPhone } from "@/lib/contacts/birthday-outreach";
+import {
+  campaignMessagingRelanceChannelLabel,
+  hasCampaignMessagingRelanceSent,
+  openCampaignMessagingRelance,
+  type CampaignMessagingChannel,
+} from "@/lib/emails/campaign-messaging-relance";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 
 type EnvoisSubTab =
@@ -178,6 +187,12 @@ export function EtiquetteEnvoisTab({
   const [dismissing, setDismissing] = useState(false);
   const [bulkRemoving, setBulkRemoving] = useState(false);
   const [relancing, setRelancing] = useState(false);
+  const [messagingRelancePending, setMessagingRelancePending] = useState<{
+    rowKey: string;
+    channel: CampaignMessagingChannel;
+    message: string;
+    item: EtiquetteEmailQueueItem;
+  } | null>(null);
   const [emailStatus, setEmailStatus] = useState<EmailConnectionStatus | null>(
     initialState.emailStatus
   );
@@ -523,9 +538,15 @@ export function EtiquetteEnvoisTab({
     .map((i) => getCampaignTemplateSendBlockReason(i))
     .find(Boolean);
   const selectedFollowupRelanceItems = followup.filter(
-    (i) =>
-      selectedIds.has(getEtiquetteQueueItemKey(i)) &&
-      isTemplateEmailRelanceEnabledForQueue(i.template_variables)
+    (i) => {
+      const key = getEtiquetteQueueItemKey(i);
+      return (
+        selectedIds.has(key) &&
+        isTemplateEmailRelanceEnabledForQueue(i.template_variables) &&
+        !hasCampaignMessagingRelanceSent(i) &&
+        messagingRelancePending?.rowKey !== key
+      );
+    }
   );
 
   const openBulkRemove = (
@@ -709,6 +730,49 @@ export function EtiquetteEnvoisTab({
     }
   };
 
+  const handleConfirmMessagingRelance = async (
+    item: EtiquetteEmailQueueItem,
+    channel: CampaignMessagingChannel,
+    message: string
+  ) => {
+    try {
+      await markEmailCampaignMessagingRelance(
+        item.contact_etiquette_id,
+        channel,
+        message,
+        item.queue_row_kind ?? "etiquette"
+      );
+      toast.success(
+        `Relance ${channel === "sms" ? "SMS" : "WhatsApp"} enregistrée — en attente de réponse`
+      );
+      notifyRelationChanged(item.contact_id);
+      setMessagingRelancePending((prev) =>
+        prev?.rowKey === getEtiquetteQueueItemKey(item) ? null : prev
+      );
+      await loadQueue();
+      onQueueChanged?.();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  };
+
+  const handleOpenMessagingRelance = async (
+    item: EtiquetteEmailQueueItem,
+    channel: CampaignMessagingChannel
+  ) => {
+    try {
+      const message = await openCampaignMessagingRelance(item, channel);
+      const rowKey = getEtiquetteQueueItemKey(item);
+      setMessagingRelancePending({ rowKey, channel, message, item });
+      const label = channel === "sms" ? "SMS" : "WhatsApp";
+      toast.success(`${label} préparé — confirmez sur la ligne du contact`, {
+        duration: 4000,
+      });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const renderList = (
     items: EtiquetteEmailQueueItem[],
     options: {
@@ -771,6 +835,9 @@ export function EtiquetteEnvoisTab({
           const batchLocked =
             options.mode === "ready" &&
             isEtiquetteQueueItemBatchLocked(item);
+          const isMessagingPending = messagingRelancePending?.rowKey === rowKey;
+          const canOfferMessagingRelance =
+            !hasCampaignMessagingRelanceSent(item) && !isMessagingPending;
 
           return (
             <div
@@ -835,22 +902,66 @@ export function EtiquetteEnvoisTab({
                 </p>
                 {(options.mode === "followup" ||
                   options.mode === "sent") &&
+                  !hasCampaignMessagingRelanceSent(item) &&
                   hasContactActivityAfterEmailSend(item) && (
                     <p className="text-xs text-blue-700">
                       Dernier contact fiche mis à jour après l&apos;envoi — à vérifier
                       avant relance.
                     </p>
                   )}
+                {isMessagingPending && messagingRelancePending && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-2 py-1.5">
+                    <p className="text-xs text-amber-900">
+                      {messagingRelancePending.channel === "sms" ? "SMS" : "WhatsApp"} préparé —
+                      confirmez après envoi depuis votre téléphone.
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 text-xs"
+                      onClick={() =>
+                        void handleConfirmMessagingRelance(
+                          messagingRelancePending.item,
+                          messagingRelancePending.channel,
+                          messagingRelancePending.message
+                        )
+                      }
+                    >
+                      J&apos;ai envoyé
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs"
+                      onClick={() => setMessagingRelancePending(null)}
+                    >
+                      Annuler
+                    </Button>
+                  </div>
+                )}
                 {options.mode === "sent" && (
                   <p className="text-xs text-muted-foreground">
-                    En attente de réponse client — clôturer quand le client a répondu ou retirer
-                    du suivi.
+                    {hasCampaignMessagingRelanceSent(item)
+                      ? "Relance SMS/WhatsApp envoyée — en attente de retour client."
+                      : "En attente de réponse client — clôturer quand le client a répondu ou retirer du suivi."}
                   </p>
                 )}
                 {options.mode === "followup" && (
                   <p className="text-xs text-amber-800">
-                    Aucun retour enregistré — relance selon le délai du modèle (onglet Relance).
+                    Aucun retour enregistré — relance email, SMS ou WhatsApp.
                   </p>
+                )}
+                {hasCampaignMessagingRelanceSent(item) && (
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-emerald-100 text-emerald-900"
+                  >
+                    Relancé par{" "}
+                    {campaignMessagingRelanceChannelLabel(item.relance_canal) ?? "message"}
+                    {item.relance_canal_at
+                      ? ` le ${formatEtiquetteSendDatetime(item.relance_canal_at)}`
+                      : ""}
+                  </Badge>
                 )}
                 {options.mode === "ready" && item.email_is_relance && (
                   <Badge variant="secondary" className="text-xs bg-orange-100 text-orange-900">
@@ -914,6 +1025,7 @@ export function EtiquetteEnvoisTab({
                 {(options.mode === "sent" || options.mode === "followup") && (
                   <>
                     {options.mode === "followup" &&
+                      canOfferMessagingRelance &&
                       (isTemplateEmailRelanceEnabledForQueue(item.template_variables) ? (
                         <Button
                           size="sm"
@@ -928,6 +1040,38 @@ export function EtiquetteEnvoisTab({
                           Relance désactivée sur ce modèle
                         </span>
                       ))}
+                    {options.mode === "followup" && canOfferMessagingRelance && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!hasMessagingPhone(item.contact_telephone)}
+                          title={
+                            hasMessagingPhone(item.contact_telephone)
+                              ? "Préparer un SMS de relance"
+                              : "Numéro absent ou incompatible (fixe FR, format invalide)"
+                          }
+                          onClick={() => void handleOpenMessagingRelance(item, "sms")}
+                        >
+                          <SmsBrandIcon className="h-4 w-4 mr-1" />
+                          SMS
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={!hasMessagingPhone(item.contact_telephone)}
+                          title={
+                            hasMessagingPhone(item.contact_telephone)
+                              ? "Préparer un WhatsApp de relance"
+                              : "Numéro absent ou incompatible (fixe FR, format invalide)"
+                          }
+                          onClick={() => void handleOpenMessagingRelance(item, "whatsapp")}
+                        >
+                          <WhatsAppBrandIcon className="h-4 w-4 mr-1" />
+                          WhatsApp
+                        </Button>
+                      </>
+                    )}
                     <Button
                       size="sm"
                       disabled={!item.contact_email?.trim()}
@@ -1069,6 +1213,45 @@ export function EtiquetteEnvoisTab({
         active={subTab}
         onSelect={setSubTab}
       />
+      {messagingRelancePending && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">
+            Relance {messagingRelancePending.channel === "sms" ? "SMS" : "WhatsApp"} préparée
+            pour {messagingRelancePending.item.contact_prenom}{" "}
+            {messagingRelancePending.item.contact_nom} — confirmez après envoi depuis votre
+            téléphone.
+          </p>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSubTab("followup")}
+            >
+              Voir dans À relancer
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() =>
+                void handleConfirmMessagingRelance(
+                  messagingRelancePending.item,
+                  messagingRelancePending.channel,
+                  messagingRelancePending.message
+                )
+              }
+            >
+              J&apos;ai envoyé
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setMessagingRelancePending(null)}
+            >
+              Annuler
+            </Button>
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>

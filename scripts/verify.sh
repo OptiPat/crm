@@ -41,6 +41,9 @@ fi
 echo ">> TypeScript (tsc --noEmit)"
 npx tsc --noEmit
 
+echo ">> ESLint (regles hooks)"
+npx eslint "src/**/*.{ts,tsx}" --quiet
+
 echo ">> Tests frontend (Vitest)"
 npm run test
 

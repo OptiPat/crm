@@ -81,6 +81,24 @@ describe("contact-relation-timeline", () => {
     expect(emailItems[0].key).not.toBe(emailItems[1].key);
   });
 
+  it("intègre une relance SMS dans la timeline contact", () => {
+    const messaging: ExchangeHistoryEntry = {
+      entry_kind: "messaging_relance",
+      sort_date: 1_700_050_000,
+      contact_id: 1,
+      contact_nom: "DUPONT",
+      contact_prenom: "Bruno",
+      contact_etiquette_id: 42,
+      etiquette_nom: "Suivi client",
+      relance_canal: "sms",
+      relance_canal_at: 1_700_050_000,
+      relance_canal_message: "Salut Bruno, ",
+      sent_at: 1_700_000_000,
+    };
+    const items = buildContactRelationTimeline([emailEntry, messaging], [], []);
+    expect(items.map((i) => i.kind)).toEqual(["messaging", "email"]);
+  });
+
   it("intègre investissements, documents et tâches, triés par date décroissante", () => {
     const items = buildContactRelationTimeline([], [], [], {
       investissements: [

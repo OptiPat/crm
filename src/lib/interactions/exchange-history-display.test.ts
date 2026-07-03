@@ -28,7 +28,26 @@ describe("exchange-history-display", () => {
     expect(isEmailCampaignEntry(emailEntry)).toBe(true);
     expect(
       isEmailCampaignEntry({ ...emailEntry, entry_kind: "manual" })
-    ).toBe(true);
+    ).toBe(false);
+  });
+
+  it("détecte une relance messaging", () => {
+    const messaging: ExchangeHistoryEntry = {
+      entry_kind: "messaging_relance",
+      sort_date: 1_700_020_000,
+      contact_id: 1,
+      contact_nom: "DUPONT",
+      contact_prenom: "Bruno",
+      contact_etiquette_id: 42,
+      etiquette_nom: "Suivi client",
+      relance_canal: "whatsapp",
+      relance_canal_at: 1_700_020_000,
+      relance_canal_message: "Bonjour Bruno, ",
+      sent_at: 1_700_000_000,
+    };
+    expect(exchangeEntryKey(messaging)).toBe("messaging-42-1700020000");
+    expect(exchangeListTitle(messaging)).toContain("WhatsApp");
+    expect(exchangeListTitle(messaging)).toContain("Suivi client");
   });
 
   it("une clé par campagne email (contact_etiquette)", () => {

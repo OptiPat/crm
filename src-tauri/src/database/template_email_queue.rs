@@ -438,7 +438,8 @@ impl Database {
                         cte.campaign_variables,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message
                  FROM contact_template_envois cte
                  {template_joins}
                  WHERE {TRIGGER_FILTER}
@@ -460,7 +461,8 @@ impl Database {
                         cte.campaign_variables,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -488,7 +490,8 @@ impl Database {
                         cte.campaign_variables,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -514,7 +517,8 @@ impl Database {
                         cte.campaign_variables,
                         NULL,
                         NULL,
-                        NULL
+                        NULL,
+                        cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message
                  FROM contact_template_envois cte
                  INNER JOIN templates_email t ON cte.template_id = t.id
                  LEFT JOIN templates_email t_tu ON t.tutoiement_template_id = t_tu.id
@@ -542,7 +546,8 @@ impl Database {
                             cte.campaign_variables,
                             cte.email_gmail_message_id,
                             cte.email_gmail_thread_id,
-                            cte.email_sent_subject
+                            cte.email_sent_subject,
+                            cte.relance_canal, cte.relance_canal_at, cte.relance_canal_message
                      FROM contact_template_envois cte
                      INNER JOIN templates_email t ON cte.template_id = t.id
                      INNER JOIN contacts c ON cte.contact_id = c.id
@@ -590,6 +595,9 @@ impl Database {
                 email_gmail_thread_id: row.get(23).ok(),
                 email_sent_subject: row.get(24).ok(),
                 rendement_exceltis: String::new(),
+                relance_canal: row.get(25).ok(),
+                relance_canal_at: row.get(26).ok(),
+                relance_canal_message: row.get(27).ok(),
             })
         };
 
@@ -627,6 +635,7 @@ impl Database {
                 email_gmail_message_id = NULL,
                 email_gmail_thread_id = NULL
              WHERE id = ?2 AND email_envoye = 1
+               AND (relance_canal IS NULL OR TRIM(relance_canal) = '')
                AND EXISTS (
                  SELECT 1 FROM templates_email t
                  WHERE t.id = contact_template_envois.template_id

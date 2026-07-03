@@ -8,10 +8,13 @@ import type { ExchangeHistoryEntry } from "@/lib/api/tauri-interactions";
 import {
   exchangeContactName,
   getEmailResponseTypeLabel,
+  getMessagingRelanceChannelLabel,
   getSentSubjectLabel,
   getSentTemplateLabel,
   isEmailCampaignEntry,
+  isMessagingRelanceEntry,
 } from "@/lib/interactions/exchange-history-display";
+import { SmsBrandIcon, WhatsAppBrandIcon } from "@/components/icons/MessagingBrandIcons";
 import {
   formatInteractionDateTime,
   getInteractionTypeLabel,
@@ -39,6 +42,7 @@ export function ExchangeHistoryDetailPanel({
 }) {
   const name = exchangeContactName(entry);
   const isEmail = isEmailCampaignEntry(entry);
+  const isMessaging = isMessagingRelanceEntry(entry);
 
   const templateLabel = getSentTemplateLabel(entry);
   const sentSubject = getSentSubjectLabel(entry);
@@ -67,8 +71,18 @@ export function ExchangeHistoryDetailPanel({
                 <p className="font-semibold text-lg leading-tight">{name}</p>
                 <div className="flex flex-wrap items-center gap-2 mt-1.5">
                   <Badge variant="secondary" className="gap-1">
-                    <Mail className="h-3.5 w-3.5" />
-                    {isEmail
+                    {isMessaging ? (
+                      entry.relance_canal === "whatsapp" ? (
+                        <WhatsAppBrandIcon className="h-3.5 w-3.5" />
+                      ) : (
+                        <SmsBrandIcon className="h-3.5 w-3.5" />
+                      )
+                    ) : (
+                      <Mail className="h-3.5 w-3.5" />
+                    )}
+                    {isMessaging
+                      ? `Relance ${getMessagingRelanceChannelLabel(entry.relance_canal)}`
+                      : isEmail
                       ? "Email campagne"
                       : getInteractionTypeLabel(entry.type_interaction ?? "AUTRE")}
                   </Badge>
@@ -102,7 +116,7 @@ export function ExchangeHistoryDetailPanel({
               Fiche contact
             </Button>
           )}
-          {isEmail && onNavigateSuiviEnvois && (
+          {(isEmail || isMessaging) && onNavigateSuiviEnvois && (
             <Button
               type="button"
               variant="outline"
@@ -114,7 +128,7 @@ export function ExchangeHistoryDetailPanel({
               Suivi → Envois
             </Button>
           )}
-          {!isEmail && onEdit && (
+          {!isEmail && !isMessaging && onEdit && (
             <Button
               type="button"
               variant="outline"
@@ -126,7 +140,7 @@ export function ExchangeHistoryDetailPanel({
               Modifier
             </Button>
           )}
-          {!isEmail && onDelete && (
+          {!isEmail && !isMessaging && onDelete && (
             <Button
               type="button"
               variant="ghost"
@@ -209,6 +223,39 @@ export function ExchangeHistoryDetailPanel({
               queueRowKind={inferQueueRowKindFromEtiquetteNom(entry.etiquette_nom)}
               onSent={() => onRefresh?.()}
             />
+          </>
+        ) : isMessaging ? (
+          <>
+            <section className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                Relance {getMessagingRelanceChannelLabel(entry.relance_canal)}
+              </p>
+              {(entry.relance_canal_at ?? entry.sort_date) > 0 && (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  {formatInteractionDateTime(entry.relance_canal_at ?? entry.sort_date, "long")}
+                </p>
+              )}
+              {entry.etiquette_nom?.trim() && (
+                <p className="text-xs text-muted-foreground">
+                  Campagne : {entry.etiquette_nom.trim()}
+                </p>
+              )}
+              {entry.sent_at != null && entry.sent_at > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Après email envoyé le {formatInteractionDateTime(entry.sent_at, "long")}
+                </p>
+              )}
+              {entry.relance_canal_message?.trim() ? (
+                <div className="rounded-lg border border-border/70 bg-muted/30 px-3 py-3">
+                  <p className="text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                    {entry.relance_canal_message.trim()}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2 italic">
+                    Début du message préparé — le reste a été complété sur votre téléphone.
+                  </p>
+                </div>
+              ) : null}
+            </section>
           </>
         ) : (
           <>
