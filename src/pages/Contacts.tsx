@@ -50,6 +50,7 @@ import { ContactsEmptyState } from "@/components/contacts/ContactsEmptyState";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
+import { FinzzleClientsImportDialog } from "@/components/contacts/FinzzleClientsImportDialog";
 import { MonOrganisationImportDialog } from "@/components/contacts/MonOrganisationImportDialog";
 import { ImmoCommandesImportDialog } from "@/components/investissements/ImmoCommandesImportDialog";
 import { PlacementCommandesImportDialog } from "@/components/investissements/PlacementCommandesImportDialog";
@@ -128,6 +129,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
   const [showDetail, setShowDetail] = useState(false);
   const [showImport, setShowImport] = useState(false);
+  const [showImportLegacy, setShowImportLegacy] = useState(false);
   const [showImportFilleuls, setShowImportFilleuls] = useState(false);
   const [showImmoImport, setShowImmoImport] = useState(false);
   const [showPlacementImport, setShowPlacementImport] = useState(false);
@@ -1127,11 +1129,21 @@ export function Contacts({ onNavigate }: ContactsProps) {
         onOpenContact={openLinkedContact}
       />
 
-      {/* Import de contacts clients */}
+      {/* Import contacts — export Finzzle */}
       <ErrorBoundary>
-        <ContactImport
+        <FinzzleClientsImportDialog
           open={showImport}
           onOpenChange={setShowImport}
+          onApplied={() => void loadContacts()}
+          onOpenLegacyImport={() => setShowImportLegacy(true)}
+        />
+      </ErrorBoundary>
+
+      {/* Import Excel personnalisé (mapping manuel, investissements…) */}
+      <ErrorBoundary>
+        <ContactImport
+          open={showImportLegacy}
+          onOpenChange={setShowImportLegacy}
         />
       </ErrorBoundary>
 
