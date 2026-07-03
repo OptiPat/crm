@@ -5,7 +5,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { FileUp, GitMerge, MoreHorizontal, Plus, Trash2 } from "lucide-react";
+import { FileUp, GitMerge, Home, Landmark, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 
 type MainTab = "clients" | "filleuls";
 
@@ -14,6 +14,8 @@ export function ContactsPageHeader({
   filteredCount,
   onNewContact,
   onImport,
+  onImportImmo,
+  onImportPlacement,
   onDeduplicate,
   onDeleteAll,
 }: {
@@ -21,6 +23,8 @@ export function ContactsPageHeader({
   filteredCount: number;
   onNewContact: () => void;
   onImport: () => void;
+  onImportImmo?: () => void;
+  onImportPlacement?: () => void;
   onDeduplicate: () => void;
   onDeleteAll: () => void;
 }) {
@@ -63,22 +67,48 @@ export function ContactsPageHeader({
                 className="justify-start gap-2 h-9"
                 onClick={() => {
                   setMenuOpen(false);
-                  onDeduplicate();
-                }}
-              >
-                <GitMerge className="h-4 w-4" />
-                Dédupliquer
-              </Button>
-              <Button
-                variant="ghost"
-                className="justify-start gap-2 h-9"
-                onClick={() => {
-                  setMenuOpen(false);
                   onImport();
                 }}
               >
                 <FileUp className="h-4 w-4" />
                 Importer {mainTab === "filleuls" ? "filleuls" : "clients"}
+              </Button>
+              {mainTab === "clients" && onImportImmo && (
+                <Button
+                  variant="ghost"
+                  className="justify-start gap-2 h-9"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onImportImmo();
+                  }}
+                >
+                  <Home className="h-4 w-4" />
+                  Import immo
+                </Button>
+              )}
+              {mainTab === "clients" && onImportPlacement && (
+                <Button
+                  variant="ghost"
+                  className="justify-start gap-2 h-9"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onImportPlacement();
+                  }}
+                >
+                  <Landmark className="h-4 w-4" />
+                  Import placement
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                className="justify-start gap-2 h-9"
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDeduplicate();
+                }}
+              >
+                <GitMerge className="h-4 w-4" />
+                Dédupliquer
               </Button>
               {filteredCount > 0 && (
                 <Button

@@ -48,6 +48,10 @@ describe("deduireTypePartenaire", () => {
   });
   it("immobilier -> PROMOTEUR", () => {
     expect(deduireTypePartenaire("Pinel")).toBe("PROMOTEUR");
+    expect(deduireTypePartenaire("DENORMANDIE")).toBe("PROMOTEUR");
+  });
+  it("contrat capitalisation -> ASSUREUR", () => {
+    expect(deduireTypePartenaire("CONTRAT_CAPITALISATION")).toBe("ASSUREUR");
   });
   it("FIP/FCPI -> SOCIETE_GESTION_FIP", () => {
     expect(deduireTypePartenaire("FCPI")).toBe("SOCIETE_GESTION_FIP");

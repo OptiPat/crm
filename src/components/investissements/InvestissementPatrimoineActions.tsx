@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { isPlacementEncoursEligible } from "@/lib/investissements/investissement-encours";
 import { isInvestissementActifEncours } from "@/lib/investissements/investissement-statut";
-import { Trash2, TrendingUp } from "lucide-react";
+import { Pencil, Trash2, TrendingUp } from "lucide-react";
 
 export function InvestissementPatrimoineActions({
   inv,
@@ -47,11 +47,18 @@ export function InvestissementPatrimoineActions({
         )}
       <Button
         type="button"
-        variant="outline"
-        size="sm"
+        variant={compact ? "ghost" : "outline"}
+        size={compact ? "icon" : "sm"}
+        className={compact ? "h-8 w-8" : undefined}
         onClick={() => onEdit(inv)}
+        aria-label="Modifier"
+        title="Modifier"
       >
-        Modifier
+        {compact ? (
+          <Pencil className="h-4 w-4" />
+        ) : (
+          "Modifier"
+        )}
       </Button>
       <Button
         variant={compact ? "ghost" : "outline"}

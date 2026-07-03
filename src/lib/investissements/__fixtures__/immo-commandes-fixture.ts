@@ -1,0 +1,37 @@
+/** Lignes anonymisées — structure export « Portefeuille investisseurs commandes » immo. */
+export const IMMO_COMMANDES_SAMPLE_ROWS: Record<string, unknown>[] = [
+  {
+    "Nom complet Investisseur": "DUPONT Marie",
+    "Email Investisseur": "marie.dupont@example.com",
+    "Co-Investisseur - Nom Prénom": "LEGRAND Paul",
+    "Co-Investisseur - Mail Information": "paul.legrand@example.com",
+    "Nom Programme": "Villa Jeanne",
+    "Ville Programme": "ST AUNES",
+    "Dispositif Fiscal": "Pinel",
+    "Date Acte": "2024-03-27",
+    "Prix TTC": 266152,
+    Lot: "Lot A113",
+    "Etat Commande": "Validée comptablement",
+    "Paiment Comptant Oui / Non ?": "OUI",
+    Partenaire: "PROMOTEUR EXEMPLE",
+  },
+  {
+    "Nom complet Investisseur": "BERNARD Luc",
+    "Email Investisseur": "luc.bernard@example.com",
+    "Co-Investisseur - Nom Prénom": "",
+    "Nom Programme": "PICKD Ducs DIJON",
+    "Ville Programme": "WOLFISHEIM",
+    "Dispositif Fiscal": "Pinel",
+    "Date Acte": "2025-12-22",
+    "Prix TTC": "187200",
+  },
+  {
+    "Nom complet Investisseur": "NOM1",
+    "Email Investisseur": "",
+    "Nom Programme": "Picking MARIGNAN 030",
+    "Ville Programme": "WOLFISHEIM",
+    "Dispositif Fiscal": "Besson",
+    "Date Acte": "",
+    "Prix TTC": 215000,
+  },
+];

@@ -1,0 +1,31 @@
+---
+description: Modèle agent — Composer 2.5 Fast uniquement (pas Sonnet/Opus/GPT)
+alwaysApply: true
+---
+
+# Modèle agent — Composer 2.5 Fast
+
+Pour ce dépôt, utiliser **uniquement** le modèle **Composer 2.5 Fast** (`composer-2.5-fast`).
+
+## Règles
+
+- Agent principal : **Composer 2.5 Fast** — ne pas basculer vers Sonnet 4.6, Opus, GPT ou Gemini.
+- Subagents (`Task`) : passer explicitement `model: "composer-2.5-fast"` ; ne jamais laisser le modèle par défaut d’un subagent.
+- Exception : l’utilisateur demande **explicitement** un autre modèle dans le chat.
+
+## Interdit sans demande explicite
+
+- Claude Sonnet / Opus (4.5, 4.6, 4.8, etc.)
+- GPT-5.x
+- Gemini
+
+## Exemple subagent
+
+```typescript
+Task({
+  subagent_type: "explore",
+  model: "composer-2.5-fast",
+  description: "...",
+  prompt: "...",
+})
+```

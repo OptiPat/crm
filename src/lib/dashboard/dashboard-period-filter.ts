@@ -1,4 +1,7 @@
-import { dateInputToUnix, formatCalendarDateFr } from "@/lib/dates/calendar-date";
+import {
+  dateInputToUnix,
+  formatCalendarDateFr,
+} from "@/lib/dates/calendar-date";
 
 /** Granularité des buckets du graphique activité (auto selon la plage). */
 export type DashboardPeriodGranularity = "year" | "month" | "day";
@@ -42,6 +45,91 @@ export function localDayStartUnix(year: number, month: number, day: number): num
 /** Fin de journée UTC → unix (secondes). */
 export function localDayEndUnix(year: number, month: number, day: number): number {
   return isoToDayEnd(`${year}-${pad2(month)}-${pad2(day)}`);
+}
+
+/** Affichage FR (jj/mm/aaaa) pour les champs de saisie. */
+export function isoDateToFrenchInput(iso: string): string {
+  const ts = dateInputToUnix(iso);
+  return ts !== null ? formatCalendarDateFr(ts) : "";
+}
+
+/** Dernier jour du mois (calendrier UTC). */
+function lastDayOfMonthUtc(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+function isValidCalendarYmd(year: number, month: number, day: number): boolean {
+  if (year < 1900 || year > 2100 || month < 1 || month > 12 || day < 1) return false;
+  return day <= lastDayOfMonthUtc(year, month);
+}
+
+/** Parse jj/mm/aaaa (ou yyyy-mm-dd) → YYYY-MM-DD, ou `null` si invalide (pas de rollover JS). */
+export function parseFrenchDateInputToIso(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const [y, m, d] = trimmed.split("-").map((part) => Number.parseInt(part, 10));
+    if (!isValidCalendarYmd(y, m, d)) return null;
+    return dateInputToUnix(trimmed) !== null ? trimmed : null;
+  }
+
+  const fr = trimmed.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+  if (!fr) return null;
+
+  const day = Number.parseInt(fr[1], 10);
+  const month = Number.parseInt(fr[2], 10);
+  const year = Number.parseInt(fr[3], 10);
+  if (!isValidCalendarYmd(year, month, day)) return null;
+
+  const iso = `${year}-${pad2(month)}-${pad2(day)}`;
+  return dateInputToUnix(iso) !== null ? iso : null;
+}
+
+export type DashboardPeriodPresetId =
+  | "this_month"
+  | "ytd"
+  | "last_12_months"
+  | "last_6_years";
+
+export const DASHBOARD_PERIOD_PRESETS: {
+  id: DashboardPeriodPresetId;
+  label: string;
+}[] = [
+  { id: "this_month", label: "Ce mois-ci" },
+  { id: "ytd", label: "Année en cours" },
+  { id: "last_12_months", label: "12 derniers mois" },
+  { id: "last_6_years", label: "6 ans" },
+];
+
+/** Plage prédéfinie — aucune limite max : plage libre au-delà des raccourcis. */
+export function getDashboardPeriodPreset(
+  id: DashboardPeriodPresetId,
+  reference: Date = new Date()
+): DashboardDateRangeFilter {
+  const to = formatIsoDateUtc(reference);
+  const y = reference.getUTCFullYear();
+  const m = reference.getUTCMonth() + 1;
+
+  switch (id) {
+    case "this_month": {
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      return {
+        from: `${y}-${pad2(m)}-01`,
+        to: `${y}-${pad2(m)}-${pad2(lastDay)}`,
+      };
+    }
+    case "ytd":
+      return { from: `${y}-01-01`, to };
+    case "last_12_months": {
+      const fromDate = new Date(reference);
+      fromDate.setUTCMonth(fromDate.getUTCMonth() - 12);
+      fromDate.setUTCDate(fromDate.getUTCDate() + 1);
+      return { from: formatIsoDateUtc(fromDate), to };
+    }
+    case "last_6_years":
+      return defaultDashboardDateRangeFilter(reference);
+  }
 }
 
 /** Plage par défaut : 6 ans glissants jusqu'à aujourd'hui. */

@@ -15,7 +15,7 @@ Arbre complet et règles : `.cursor/rules/verification-automatique.mdc`.
 
 Scripts : `verify.ps1` (Windows), `scripts/verify.sh` (Unix).
 
-Règles Cursor : `shell-commands.mdc` (commandes), `delegation.mdc` (shell vs subagent), `architecture.mdc` (structure + lints).
+Règles Cursor : `composer-model.mdc` (modèle **Composer 2.5 Fast** uniquement), `shell-commands.mdc` (commandes), `delegation.mdc` (shell vs subagent), `architecture.mdc` (structure + lints).
 
 Pas de `git commit` / `git push` sauf demande explicite.
 

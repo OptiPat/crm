@@ -427,23 +427,27 @@ fn gmail_find_reply_message_id(
         return Ok(None);
     }
 
-    if let Some(ref thread_id) = item
-        .email_gmail_thread_id
-        .as_ref()
-        .filter(|s| !s.trim().is_empty())
-    {
-        return gmail_find_reply_in_thread(client, token, item, thread_id);
-    }
-
-    if let Some(ref message_id) = item
-        .email_gmail_message_id
-        .as_ref()
-        .filter(|s| !s.trim().is_empty())
-    {
-        if let Some(thread_id) = gmail_fetch_message_thread_id(client, token, message_id)? {
-            return gmail_find_reply_in_thread(client, token, item, &thread_id);
+    if gmail_reply_has_thread_scope(item) {
+        if let Some(ref thread_id) = item
+            .email_gmail_thread_id
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+        {
+            return gmail_find_reply_in_thread(client, token, item, thread_id);
         }
-        // Message connu mais fil introuvable : ne pas rattacher un autre mail du contact.
+
+        if let Some(ref message_id) = item
+            .email_gmail_message_id
+            .as_ref()
+            .filter(|s| !s.trim().is_empty())
+        {
+            if let Some(thread_id) = gmail_fetch_message_thread_id(client, token, message_id)? {
+                return gmail_find_reply_in_thread(client, token, item, &thread_id);
+            }
+            // Message connu mais fil introuvable : ne pas rattacher un autre mail du contact.
+            return Ok(None);
+        }
+
         return Ok(None);
     }
 

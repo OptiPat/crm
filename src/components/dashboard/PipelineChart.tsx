@@ -8,7 +8,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Cell,
-  LabelList,
 } from "recharts";
 import { getPipelineStats } from "@/lib/api/tauri-dashboard";
 import {
@@ -52,6 +51,24 @@ export function PipelineChart({
 
   const total = useMemo(() => data.reduce((s, i) => s + i.count, 0), [data]);
   const interactive = Boolean(onNavigate);
+
+  const yAxisWidth = useMemo(() => {
+    if (data.length === 0) return 88;
+    const longest = data.reduce((best, row) => {
+      const label = `${row.stage} (${row.count})`;
+      return label.length > best.length ? label : best;
+    }, "");
+    return Math.min(128, Math.max(92, longest.length * 7));
+  }, [data]);
+
+  const yAxisTick = useCallback(
+    (stage: string) => {
+      const row = data.find((d) => d.stage === stage);
+      if (!row) return stage;
+      return `${stage} (${row.count})`;
+    },
+    [data]
+  );
 
   useEffect(() => {
     (async () => {
@@ -114,7 +131,7 @@ export function PipelineChart({
               <BarChart
                 data={data}
                 layout="vertical"
-                margin={{ top: 4, right: 24, left: 4, bottom: 4 }}
+                margin={{ top: 4, right: 12, left: 4, bottom: 4 }}
                 barCategoryGap="28%"
               >
                 <CartesianGrid
@@ -135,9 +152,10 @@ export function PipelineChart({
                   dataKey="stage"
                   stroke={CHART_AXIS_STROKE}
                   tick={{ fontSize: 12, fontWeight: 500 }}
+                  tickFormatter={yAxisTick}
                   tickLine={false}
                   axisLine={false}
-                  width={88}
+                  width={yAxisWidth}
                 />
                 <Tooltip
                   content={({ active, payload }) => {
@@ -172,16 +190,6 @@ export function PipelineChart({
                   {data.map((entry, index) => (
                     <Cell key={index} fill={entry.color} />
                   ))}
-                  <LabelList
-                    dataKey="count"
-                    position="right"
-                    className="fill-foreground/80 text-xs font-medium"
-                    formatter={(value) => {
-                      const n = typeof value === "number" ? value : Number(value);
-                      if (!Number.isFinite(n)) return "";
-                      return `${n} contact${n > 1 ? "s" : ""}`;
-                    }}
-                  />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

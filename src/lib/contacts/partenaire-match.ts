@@ -3,6 +3,7 @@
 // Logique pure, extraite de ContactImport pour être testable et réutilisable.
 
 import type { Partenaire } from "@/lib/api/tauri-partenaires";
+import { suggestPartenaireTypeForProduit } from "@/lib/partenaires/partenaire-display";
 
 /** Normalise : minuscules, sans accents, caractères spéciaux -> espaces, espaces réduits. */
 export const normalizeString = (str: string): string => {
@@ -125,12 +126,37 @@ export const findMatchingPartenaire = (
 
 /** Déduit le type de partenaire à partir du type de produit. */
 export const deduireTypePartenaire = (typeProduit: string): string => {
+  const normalized = typeProduit.toUpperCase().trim().replace(/[- ]/g, "_");
+  if (normalized.includes("_")) {
+    return suggestPartenaireTypeForProduit(normalized);
+  }
   const t = typeProduit.toUpperCase();
-  if (t.includes("AV") || t.includes("ASSURANCE") || t.includes("VIE") || t.includes("PER")) {
+  if (
+    t.includes("AV") ||
+    t.includes("ASSURANCE") ||
+    t.includes("VIE") ||
+    t.includes("PER") ||
+    t.includes("CAPITALISATION")
+  ) {
     return "ASSUREUR";
-  } else if (t.includes("PINEL") || t.includes("IMMOBILIER") || t.includes("MALRAUX")) {
+  }
+  if (
+    t.includes("PINEL") ||
+    t.includes("IMMOBILIER") ||
+    t.includes("MALRAUX") ||
+    t.includes("DENORMANDIE") ||
+    t.includes("JEANBRUN") ||
+    t.includes("LMNP") ||
+    t.includes("LMP") ||
+    t.includes("DEFICIT") ||
+    t.includes("MONUMENT") ||
+    t.includes("LOCATIF") ||
+    t.includes("RESIDENCE") ||
+    t.includes("NUE")
+  ) {
     return "PROMOTEUR";
-  } else if (
+  }
+  if (
     t.includes("FCPR") ||
     t.includes("FPCI") ||
     t.includes("FIP") ||
@@ -138,7 +164,9 @@ export const deduireTypePartenaire = (typeProduit: string): string => {
     t.includes("G3F")
   ) {
     return "SOCIETE_GESTION_FIP";
-  } else {
+  }
+  if (t.includes("SCPI")) {
     return "SOCIETE_GESTION_SCPI";
   }
+  return suggestPartenaireTypeForProduit(normalized);
 };

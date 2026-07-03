@@ -4,9 +4,12 @@ import {
   activityChartDrillHint,
   formatActivityBucketLabel,
   formatDashboardPeriodLabel,
+  getDashboardPeriodPreset,
+  isoDateToFrenchInput,
   localDayEndUnix,
   localDayStartUnix,
   normalizeDateRange,
+  parseFrenchDateInputToIso,
   resolveDashboardDateRange,
 } from "./dashboard-period-filter";
 
@@ -93,5 +96,43 @@ describe("activityChartDrillHint", () => {
     expect(activityChartDrillHint("year")).toBe("une barre (année)");
     expect(activityChartDrillHint("month")).toBe("un mois");
     expect(activityChartDrillHint("day")).toBe("un jour");
+  });
+});
+
+describe("isoDateToFrenchInput / parseFrenchDateInputToIso", () => {
+  it("convertit ISO ↔ affichage FR", () => {
+    expect(isoDateToFrenchInput("2026-08-01")).toBe("01/08/2026");
+    expect(parseFrenchDateInputToIso("01/08/2026")).toBe("2026-08-01");
+    expect(parseFrenchDateInputToIso("2026-08-30")).toBe("2026-08-30");
+  });
+
+  it("rejette les dates calendaires impossibles (pas de rollover JS)", () => {
+    expect(parseFrenchDateInputToIso("31/02/2024")).toBeNull();
+    expect(parseFrenchDateInputToIso("29/02/2023")).toBeNull();
+    expect(parseFrenchDateInputToIso("2024-02-31")).toBeNull();
+    expect(parseFrenchDateInputToIso("32/01/2026")).toBeNull();
+  });
+
+  it("accepte les dates limites valides", () => {
+    expect(parseFrenchDateInputToIso("29/02/2024")).toBe("2024-02-29");
+    expect(parseFrenchDateInputToIso("31/01/2026")).toBe("2026-01-31");
+  });
+});
+
+describe("getDashboardPeriodPreset", () => {
+  const ref = new Date(Date.UTC(2026, 7, 15));
+
+  it("ce mois-ci couvre août 2026", () => {
+    expect(getDashboardPeriodPreset("this_month", ref)).toEqual({
+      from: "2026-08-01",
+      to: "2026-08-31",
+    });
+  });
+
+  it("année en cours du 1er janvier à la date de référence", () => {
+    expect(getDashboardPeriodPreset("ytd", ref)).toEqual({
+      from: "2026-01-01",
+      to: "2026-08-15",
+    });
   });
 });

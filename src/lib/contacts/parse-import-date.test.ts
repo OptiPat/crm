@@ -23,6 +23,11 @@ describe("parseImportDate", () => {
     expect(parseImportDate("")).toBeUndefined();
     expect(parseImportDate(null)).toBeUndefined();
   });
+
+  it("parse objet Date (cellDates Excel) sans décalage calendaire", () => {
+    const iso = parseImportDate(new Date(2024, 2, 27));
+    expect(iso!.startsWith("2024-03-27")).toBe(true);
+  });
 });
 
 describe("parseImportDateFinPret", () => {

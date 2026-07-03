@@ -51,6 +51,8 @@ import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
 import { ContactImportFilleuls } from "@/components/contacts/ContactImportFilleuls";
+import { ImmoCommandesImportDialog } from "@/components/investissements/ImmoCommandesImportDialog";
+import { PlacementCommandesImportDialog } from "@/components/investissements/PlacementCommandesImportDialog";
 import { ContactDeduplicate } from "@/components/contacts/ContactDeduplicate";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { contactMatchesSearch } from "@/lib/search-utils";
@@ -127,6 +129,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [showDetail, setShowDetail] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showImportFilleuls, setShowImportFilleuls] = useState(false);
+  const [showImmoImport, setShowImmoImport] = useState(false);
+  const [showPlacementImport, setShowPlacementImport] = useState(false);
   const [showDeduplicate, setShowDeduplicate] = useState(false);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   const [deleteAllBusy, setDeleteAllBusy] = useState(false);
@@ -746,6 +750,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
           onImport={() =>
             mainTab === "filleuls" ? setShowImportFilleuls(true) : setShowImport(true)
           }
+          onImportImmo={() => setShowImmoImport(true)}
+          onImportPlacement={() => setShowPlacementImport(true)}
           onDeduplicate={() => setShowDeduplicate(true)}
           onDeleteAll={() => setShowDeleteAllDialog(true)}
         />
@@ -1134,6 +1140,20 @@ export function Contacts({ onNavigate }: ContactsProps) {
         <ContactImportFilleuls
           open={showImportFilleuls}
           onOpenChange={setShowImportFilleuls}
+        />
+      </ErrorBoundary>
+
+      <ErrorBoundary>
+        <ImmoCommandesImportDialog
+          open={showImmoImport}
+          onOpenChange={setShowImmoImport}
+        />
+      </ErrorBoundary>
+
+      <ErrorBoundary>
+        <PlacementCommandesImportDialog
+          open={showPlacementImport}
+          onOpenChange={setShowPlacementImport}
         />
       </ErrorBoundary>
 

@@ -5,6 +5,13 @@
 export function parseImportDate(value: unknown): string | undefined {
   if (value == null || value === "") return undefined;
 
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const d = new Date(
+      Date.UTC(value.getFullYear(), value.getMonth(), value.getDate())
+    );
+    return d.toISOString();
+  }
+
   const dateStr = String(value).trim();
   if (!dateStr) return undefined;
 
