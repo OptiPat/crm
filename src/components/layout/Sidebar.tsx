@@ -21,6 +21,7 @@ import {
   Newspaper,
   ListTodo,
   FileSignature,
+  GitBranch,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -65,6 +66,7 @@ const contactsGroup: NavGroup = {
     { id: "foyers", label: "Foyers", icon: House },
     { id: "prescripteurs", label: "Prescripteurs", icon: Share2 },
     { id: "partenaires", label: "Partenaires", icon: UserPlus },
+    { id: "organisation", label: "Organisation", icon: GitBranch },
   ],
 };
 

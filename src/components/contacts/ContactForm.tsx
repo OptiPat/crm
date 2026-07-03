@@ -49,6 +49,7 @@ import {
   resolveContactFiscal,
 } from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
+import { FilleulRankFormFields } from "@/components/organisation/FilleulRankFormFields";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
 import {
@@ -1434,6 +1435,18 @@ export function ContactForm({
                 allowCreate
                 createTitle="Créer un nouveau parrain"
                 onCreate={handleCreateParrain}
+              />
+            )}
+            {filleulActif && (
+              <FilleulRankFormFields
+                titre={formData.filleul_titre}
+                qualification={formData.filleul_qualification}
+                onTitreChange={(v) =>
+                  setFormData((prev) => ({ ...prev, filleul_titre: v }))
+                }
+                onQualificationChange={(v) =>
+                  setFormData((prev) => ({ ...prev, filleul_qualification: v }))
+                }
               />
             )}
             {contact && mesFilleulsCount > 0 && (

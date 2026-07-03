@@ -278,6 +278,8 @@ const BASE_EMPTY: NewContact = {
   notes: "",
   parrain_id: undefined,
   prescripteur_id: undefined,
+  filleul_titre: undefined,
+  filleul_qualification: undefined,
 };
 
 export function getEmptyForm(context: ContactFormContext): NewContact {
@@ -336,6 +338,8 @@ export function contactToFormData(contact: Contact): NewContact {
     type_invitation_filleul: contact.type_invitation_filleul ?? undefined,
     date_invitation_filleul: toDateInput(contact.date_invitation_filleul),
     presence_invitation_filleul: contact.presence_invitation_filleul ?? undefined,
+    filleul_titre: contact.filleul_titre ?? undefined,
+    filleul_qualification: contact.filleul_qualification ?? undefined,
     nom: contact.nom || "",
     prenom: contact.prenom || "",
     email: contact.email || "",
@@ -417,6 +421,8 @@ export function buildSubmitPayload(
     categorie: formData.categorie || "AUCUN",
     filleul_categorie: filleulActif ? formData.filleul_categorie : null,
     parrain_id: filleulActif ? formData.parrain_id : undefined,
+    filleul_titre: filleulActif ? formData.filleul_titre || null : null,
+    filleul_qualification: filleulActif ? formData.filleul_qualification || null : null,
     date_dernier_contact: clientActif
       ? dateFieldToIso(formData.date_dernier_contact)
       : undefined,
@@ -584,6 +590,18 @@ export function resolveImportContactCategories(
   return {
     categorie: statut ?? (hasContact ? "PROSPECT_CLIENT" : "SUSPECT_CLIENT"),
     filleul_categorie: undefined,
+  };
+}
+
+/** Mise à jour titre / qualification (organisation), y compris sur la fiche CGP. */
+export function contactFilleulRankUpdatePayload(
+  contact: Contact,
+  ranks: { filleul_titre?: string | null; filleul_qualification?: string | null }
+): NewContact {
+  return {
+    ...contactToUpdatePayload(contact),
+    filleul_titre: ranks.filleul_titre ?? null,
+    filleul_qualification: ranks.filleul_qualification ?? null,
   };
 }
 

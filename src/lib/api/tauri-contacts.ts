@@ -52,6 +52,10 @@ export interface Contact {
   date_invitation_filleul?: number;
   /** 1 = présent, 0 = absent. */
   presence_invitation_filleul?: number | null;
+  /** Titre réseau : JUNIOR, CONSULTANT, MANAGER, SENIOR, MAJOR, EXPERT */
+  filleul_titre?: string | null;
+  /** Qualification : MANAGER, PLANETE, ETOILE, CONSTELLATION, GALAXIE */
+  filleul_qualification?: string | null;
   statut_suivi: string;
   /** `VOUS` (défaut) ou `TU` — variante du modèle email lié */
   registre?: string | null;
@@ -101,6 +105,8 @@ export interface NewContact {
   type_invitation_filleul?: string | null;
   date_invitation_filleul?: string;
   presence_invitation_filleul?: number | null;
+  filleul_titre?: string | null;
+  filleul_qualification?: string | null;
   statut_suivi?: string;
   registre?: string | null;
   notes?: string;

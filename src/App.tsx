@@ -11,6 +11,7 @@ import { Familles } from "@/pages/Familles";
 import { Foyers } from "@/pages/Foyers";
 import { Prescripteurs } from "@/pages/Prescripteurs";
 import { Partenaires } from "@/pages/Partenaires";
+import { Organisation } from "@/pages/Organisation";
 import { Investissements } from "@/pages/Investissements";
 import { Documents } from "@/pages/Documents";
 import { SouscriptionCif } from "@/pages/SouscriptionCif";
@@ -156,6 +157,8 @@ function AppInner() {
         return <Prescripteurs onNavigate={setCurrentPage} />;
       case "partenaires":
         return <Partenaires onNavigate={setCurrentPage} />;
+      case "organisation":
+        return <Organisation onNavigate={setCurrentPage} />;
       case "investissements":
         return <Investissements onNavigate={setCurrentPage} />;
       case "interactions":

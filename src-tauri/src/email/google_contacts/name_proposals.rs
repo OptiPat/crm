@@ -342,6 +342,8 @@ mod tests {
             type_invitation_filleul: None,
             date_invitation_filleul: None,
             presence_invitation_filleul: None,
+            filleul_titre: None,
+            filleul_qualification: None,
             statut_suivi: "ACTIF".into(),
             registre: None,
             notes: None,

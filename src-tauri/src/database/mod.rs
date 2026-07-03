@@ -544,6 +544,7 @@ impl Database {
         self.migrate_add_contact_rio_financial_fields()?;
         self.migrate_add_contact_fiscal_fields()?;
         self.migrate_add_contact_funnel_fields()?;
+        self.migrate_add_filleul_rank_fields()?;
         self.migrate_add_foyer_ir_net()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
         self.migrate_documents_connaissances_financieres()?;
@@ -744,6 +745,32 @@ impl Database {
         }
         if added {
             println!("✅ Migration funnel contact appliquée");
+        }
+        Ok(())
+    }
+
+    /// Titres et qualifications réseau filleul (Organisation).
+    fn migrate_add_filleul_rank_fields(&self) -> Result<()> {
+        let columns: [(&str, &str); 2] = [
+            ("filleul_titre", "TEXT"),
+            ("filleul_qualification", "TEXT"),
+        ];
+        let mut added = false;
+        for (name, sql_type) in columns {
+            if self.table_has_column("contacts", name)? {
+                continue;
+            }
+            if !added {
+                println!("🔄 Migration : titres / qualifications filleul...");
+                added = true;
+            }
+            self.conn.execute(
+                &format!("ALTER TABLE contacts ADD COLUMN {name} {sql_type}"),
+                [],
+            )?;
+        }
+        if added {
+            println!("✅ Migration titres / qualifications filleul appliquée");
         }
         Ok(())
     }

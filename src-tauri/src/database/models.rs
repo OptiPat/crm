@@ -50,6 +50,12 @@ pub struct Contact {
     pub date_invitation_filleul: Option<i64>,
     /// Présence à l'invitation : `Some(1)` présent, `Some(0)` absent, `None` non renseigné.
     pub presence_invitation_filleul: Option<i64>,
+    /// Titre réseau filleul (JUNIOR, CONSULTANT, MANAGER, …).
+    #[serde(default)]
+    pub filleul_titre: Option<String>,
+    /// Qualification réseau (MANAGER, PLANETE, ETOILE, …).
+    #[serde(default)]
+    pub filleul_qualification: Option<String>,
     pub statut_suivi: String,
     /// `VOUS` (défaut) ou `TU` — choix du modèle email lié à l'envoi
     pub registre: Option<String>,
@@ -113,6 +119,10 @@ pub struct NewContact {
     /// `0` absent, `1` présent, `None` ou absent = non renseigné.
     #[serde(default)]
     pub presence_invitation_filleul: Option<i64>,
+    #[serde(default)]
+    pub filleul_titre: Option<String>,
+    #[serde(default)]
+    pub filleul_qualification: Option<String>,
     pub statut_suivi: Option<String>,
     #[serde(default)]
     pub registre: Option<String>,
@@ -160,6 +170,8 @@ impl Default for NewContact {
             type_invitation_filleul: None,
             date_invitation_filleul: None,
             presence_invitation_filleul: None,
+            filleul_titre: None,
+            filleul_qualification: None,
             statut_suivi: None,
             registre: None,
             notes: None,
