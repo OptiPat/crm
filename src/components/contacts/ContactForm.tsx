@@ -72,7 +72,10 @@ import {
   SELECT_NONE,
   buildSubmitPayload,
   parseBirthdayFieldToIso,
+  parseDateInscriptionFromNotes,
+  setDateInscriptionInNotes,
   contactToFormData,
+  dateFieldToIso,
   defaultProchainSuiviClient,
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
@@ -88,6 +91,7 @@ import {
   isClientActif,
   isFilleulStatut,
   isPrescripteurCategorie,
+  toDateInput,
   todayLocal,
 } from "@/lib/contacts/contact-form-utils";
 import {
@@ -1293,6 +1297,17 @@ export function ContactForm({
               <>
                 <Separator />
                 <div className="grid grid-cols-2 gap-4">
+                  <DateFieldWithShortcuts
+                    id="date_inscription_filleul"
+                    label="Date d'inscription"
+                    value={toDateInput(parseDateInscriptionFromNotes(formData.notes))}
+                    onChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        notes: setDateInscriptionInNotes(prev.notes, dateFieldToIso(v)),
+                      }))
+                    }
+                  />
                   <div className="space-y-2">
                     <Label>Type d&apos;invitation (JD / PO)</Label>
                     <Select

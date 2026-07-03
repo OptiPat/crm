@@ -50,7 +50,7 @@ import { ContactsEmptyState } from "@/components/contacts/ContactsEmptyState";
 import { ContactForm } from "@/components/contacts/ContactForm";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
-import { ContactImportFilleuls } from "@/components/contacts/ContactImportFilleuls";
+import { MonOrganisationImportDialog } from "@/components/contacts/MonOrganisationImportDialog";
 import { ImmoCommandesImportDialog } from "@/components/investissements/ImmoCommandesImportDialog";
 import { PlacementCommandesImportDialog } from "@/components/investissements/PlacementCommandesImportDialog";
 import { ContactDeduplicate } from "@/components/contacts/ContactDeduplicate";
@@ -1135,11 +1135,12 @@ export function Contacts({ onNavigate }: ContactsProps) {
         />
       </ErrorBoundary>
 
-      {/* Import de filleuls */}
+      {/* Import filleuls — export Finzzle Mon Organisation */}
       <ErrorBoundary>
-        <ContactImportFilleuls
+        <MonOrganisationImportDialog
           open={showImportFilleuls}
           onOpenChange={setShowImportFilleuls}
+          onApplied={() => void loadContacts()}
         />
       </ErrorBoundary>
 

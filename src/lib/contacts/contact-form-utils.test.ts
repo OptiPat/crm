@@ -6,6 +6,7 @@ import {
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
   formatPhoneInput,
+  normalizeImportTelephone,
   applyFoyerAddressIfEmpty,
   getEmptyForm,
   isAlerteSuiviFilleul,
@@ -269,6 +270,22 @@ describe("formatPhoneInput", () => {
 
   it("accepte le préfixe 00", () => {
     expect(formatPhoneInput("0033612345678")).toBe("+33 6 12 34 56 78");
+  });
+});
+
+describe("normalizeImportTelephone", () => {
+  it("formate un mobile FR exporté avec bruit Finzzle", () => {
+    expect(normalizeImportTelephone("+ () 06.52.13.88.22")).toBe("06 52 13 88 22");
+    expect(normalizeImportTelephone("0624408866")).toBe("06 24 40 88 66");
+  });
+
+  it("interprète 33 sans + comme international", () => {
+    expect(normalizeImportTelephone("+ () 33 06.08.35.52.99")).toBe("+33 6 08 35 52 99");
+    expect(normalizeImportTelephone("33 608355299")).toBe("+33 6 08 35 52 99");
+  });
+
+  it("déplie le wrapper Excel texte", () => {
+    expect(normalizeImportTelephone('="+33600000002"')).toBe("+33 6 00 00 00 02");
   });
 });
 

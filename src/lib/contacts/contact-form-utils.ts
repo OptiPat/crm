@@ -1,5 +1,7 @@
 import type { Contact, NewContact } from "@/lib/api/tauri-contacts";
 import { PROFIL_RISQUE_MAX, PROFIL_RISQUE_SRI_FIELD_LABEL } from "@/lib/contacts/investisseur-sri";
+import { unwrapImportCell } from "@/lib/contacts/import-row";
+import { parseImportDate } from "@/lib/contacts/parse-import-date";
 import { unixToDateInput } from "@/lib/dates/calendar-date";
 
 export const CLIENT_STATUTS = ["AUCUN", "CLIENT", "PROSPECT_CLIENT", "SUSPECT_CLIENT"] as const;
@@ -151,6 +153,48 @@ export function formatPhoneInput(value: string): string {
   }
 
   return formatPhoneFR(sanitized);
+}
+
+/**
+ * Normalise un téléphone lu depuis Excel / Finzzle (wrapper `="+33…"`, `+ ()`, points…)
+ * vers le même affichage que la fiche contact (`formatPhoneInput`).
+ */
+export function normalizeImportTelephone(value: unknown): string {
+  const unwrapped = unwrapImportCell(value);
+  if (unwrapped == null || unwrapped === "") return "";
+  let s = String(unwrapped).trim();
+  if (!s) return "";
+
+  s = s.replace(/^\+?\s*\(\s*\)\s*/i, "");
+  s = s.replace(/\./g, "");
+  s = s.replace(/\s+/g, " ").trim();
+  if (!s) return "";
+
+  const digits = normalizePhoneDigits(s);
+  if (!digits) return "";
+
+  if (digits.length === 10 && digits.startsWith("0")) {
+    return formatPhoneInput(digits);
+  }
+
+  if (digits.length === 11 && digits.startsWith("33")) {
+    return formatPhoneInput(`+${digits}`);
+  }
+
+  // Export Finzzle : 33 + 0 + mobile (12 chiffres, ex. 330608355299)
+  if (digits.length === 12 && digits.startsWith("330")) {
+    return formatPhoneInput(`+33${digits.slice(3)}`);
+  }
+
+  const after33 = digits.startsWith("33") ? digits.slice(2) : "";
+  if (after33.length === 10 && after33.startsWith("0")) {
+    return formatPhoneInput(`+33${after33.slice(1)}`);
+  }
+  if (after33.length === 9 && /^[67]\d/.test(after33)) {
+    return formatPhoneInput(`+33${after33}`);
+  }
+
+  return formatPhoneInput(s);
 }
 
 export type ContactAddressFields = Pick<NewContact, "adresse" | "code_postal" | "ville" | "pays">;
@@ -605,4 +649,32 @@ export function formatStatutSuiviLabel(statut?: string | null): string {
   if (statut === "EN_PAUSE") return "En pause";
   if (statut === "ARCHIVE") return "Archivé";
   return "Actif";
+}
+
+const DATE_INSCRIPTION_NOTES_RE = /^Date inscription:\s*(.+?)(?:\n\n|\n|$)/m;
+
+/** Lit la date d'inscription stockée en tête des notes filleul. */
+export function parseDateInscriptionFromNotes(notes?: string | null): string | undefined {
+  const match = notes?.match(DATE_INSCRIPTION_NOTES_RE);
+  if (!match?.[1]) return undefined;
+  return parseImportDate(match[1].trim());
+}
+
+/** Met à jour ou retire la ligne « Date inscription: … » en tête des notes. */
+export function setDateInscriptionInNotes(
+  notes: string | undefined,
+  isoDate: string | undefined
+): string | undefined {
+  const rest = notes?.replace(DATE_INSCRIPTION_NOTES_RE, "").trim();
+  if (!isoDate) return rest || undefined;
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return rest || notes;
+  const label = d.toLocaleDateString("fr-FR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const prefix = `Date inscription: ${label}`;
+  return rest ? `${prefix}\n\n${rest}` : prefix;
 }
