@@ -820,6 +820,8 @@ pub struct PendingCampaignResponseCheck {
     pub contact_email: String,
     pub email_date_envoi: i64,
     pub email_gmail_thread_id: Option<String>,
+    /// Message Gmail de l'envoi campagne — permet de retrouver le fil si thread_id absent.
+    pub email_gmail_message_id: Option<String>,
     pub queue_row_kind: String,
 }
 

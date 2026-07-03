@@ -4386,6 +4386,124 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn mail_response_keeps_sent_campaign_out_of_ready_after_recalc() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Suivi mail no reopen".into(),
+                sujet: "Bonjour {{prenom}}".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+        let _etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: "Campagne mail no reopen".into(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(0),
+                auto_condition_type: Some("DELAI_SANS_CONTACT".into()),
+                auto_condition_config: Some(
+                    r#"{"jours": 365, "inclure_sans_date": false}"#.into(),
+                ),
+                auto_categories: Some(r#"["CLIENT"]"#.into()),
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(now - 120),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: None,
+                segment_id: None,
+                rendement_cible: None,
+            })
+            .unwrap();
+
+        let old_ts = chrono::Utc::now().timestamp() - 400 * 24 * 3600;
+        let old_iso = chrono::DateTime::from_timestamp(old_ts, 0).unwrap().to_rfc3339();
+        let cid = db
+            .create_contact(NewContact {
+                date_dernier_contact: Some(old_iso),
+                email: Some("mail.no.reopen@example.com".into()),
+                ..sample_contact("Test", "MailNoReopen")
+            })
+            .unwrap()
+            .id
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+        let ce_id = db
+            .get_etiquette_email_queue("ready")
+            .unwrap()
+            .into_iter()
+            .find(|q| q.contact_id == cid)
+            .expect("file prête")
+            .contact_etiquette_id;
+
+        db.mark_etiquette_email_sent(
+            ce_id,
+            Some("gmail-msg-suivi"),
+            Some("gmail-thread-suivi"),
+            Some("Objet suivi"),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+
+        db.mark_email_campaign_response(ce_id, "mail", Some("Merci, à bientôt"), None, None, None, None)
+            .unwrap();
+
+        db.check_and_apply_auto_etiquettes().unwrap();
+
+        assert!(
+            db.get_etiquette_email_queue("ready")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid),
+            "réponse mail : pas de retour en file prête au recalcul"
+        );
+        assert!(
+            db.get_etiquette_email_queue("sent")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid),
+            "réponse mail : plus en attente envoyés"
+        );
+        assert!(
+            db.get_etiquette_email_queue("followup")
+                .unwrap()
+                .iter()
+                .all(|q| q.contact_id != cid),
+            "réponse mail : plus en relance"
+        );
+        let row: (i64, Option<i64>, Option<String>) = db
+            .get_connection()
+            .query_row(
+                "SELECT email_envoye, email_reponse_at, email_reponse_type FROM contact_etiquettes WHERE id = ?1",
+                rusqlite::params![ce_id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(row.0, 1, "envoi toujours marqué comme parti");
+        assert!(row.1.is_some(), "réponse conservée");
+        assert_eq!(row.2.as_deref(), Some("mail"));
+    }
+
+    #[test]
     fn repair_misplaced_sent_campaign_restores_from_send_log() {
         use crate::database::models::{NewEtiquette, NewTemplateEmail};
 

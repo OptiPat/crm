@@ -38,8 +38,16 @@ struct GmailThread {
 #[derive(Debug, Deserialize)]
 struct GmailMessageRef {
     id: String,
+    #[serde(rename = "threadId", default)]
+    _thread_id: Option<String>,
     #[serde(rename = "internalDate", default, deserialize_with = "deserialize_optional_internal_date")]
     internal_date: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GmailMessageThreadOnly {
+    #[serde(rename = "threadId")]
+    thread_id: String,
 }
 
 /// Gmail renvoie `internalDate` en string ou en nombre selon l'endpoint / le format.
@@ -332,6 +340,83 @@ fn message_from_contact(
     Ok(is_reply_from_contact(&from, contact_email))
 }
 
+fn gmail_fetch_message_thread_id(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    message_id: &str,
+) -> Result<Option<String>, String> {
+    let res = client
+        .get(format!(
+            "https://gmail.googleapis.com/gmail/v1/users/me/messages/{}",
+            message_id
+        ))
+        .query(&[("format", "minimal")])
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Ok(None);
+    }
+    let msg: GmailMessageThreadOnly = res.json().map_err(|e| e.to_string())?;
+    if msg.thread_id.trim().is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(msg.thread_id))
+    }
+}
+
+fn gmail_find_reply_in_thread(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    item: &PendingCampaignResponseCheck,
+    thread_id: &str,
+) -> Result<Option<String>, String> {
+    let contact = item.contact_email.trim();
+    if contact.is_empty() {
+        return Ok(None);
+    }
+    let res = client
+        .get(format!(
+            "https://gmail.googleapis.com/gmail/v1/users/me/threads/{}",
+            thread_id
+        ))
+        .query(&[("format", "minimal")])
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Ok(None);
+    }
+    let thread: GmailThread = res.json().map_err(|e| e.to_string())?;
+    if let Some(messages) = thread.messages {
+        for msg in messages {
+            let after_sent = msg
+                .internal_date
+                .as_deref()
+                .and_then(parse_internal_date_ms)
+                .map(|ms| ms > item.email_date_envoi * 1000)
+                .unwrap_or(true);
+            if after_sent
+                && message_from_contact(client, token, &msg.id, contact, item.email_date_envoi)?
+            {
+                return Ok(Some(msg.id));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// Vrai si la recherche doit rester limitée au fil Gmail de l'envoi (pas de fallback `from:after`).
+pub(crate) fn gmail_reply_has_thread_scope(item: &PendingCampaignResponseCheck) -> bool {
+    item.email_gmail_thread_id
+        .as_ref()
+        .is_some_and(|s| !s.trim().is_empty())
+        || item
+            .email_gmail_message_id
+            .as_ref()
+            .is_some_and(|s| !s.trim().is_empty())
+}
+
 fn gmail_find_reply_message_id(
     client: &reqwest::blocking::Client,
     token: &str,
@@ -342,40 +427,24 @@ fn gmail_find_reply_message_id(
         return Ok(None);
     }
 
-    if let Some(ref thread_id) = item.email_gmail_thread_id {
-        let res = client
-            .get(format!(
-                "https://gmail.googleapis.com/gmail/v1/users/me/threads/{}",
-                thread_id
-            ))
-            .query(&[("format", "minimal")])
-            .bearer_auth(token)
-            .send()
-            .map_err(|e| e.to_string())?;
-        if res.status().is_success() {
-            let thread: GmailThread = res.json().map_err(|e| e.to_string())?;
-            if let Some(messages) = thread.messages {
-                for msg in messages {
-                    let after_sent = msg
-                        .internal_date
-                        .as_deref()
-                        .and_then(parse_internal_date_ms)
-                        .map(|ms| ms > item.email_date_envoi * 1000)
-                        .unwrap_or(true);
-                    if after_sent
-                        && message_from_contact(
-                            client,
-                            token,
-                            &msg.id,
-                            contact,
-                            item.email_date_envoi,
-                        )?
-                    {
-                        return Ok(Some(msg.id));
-                    }
-                }
-            }
+    if let Some(ref thread_id) = item
+        .email_gmail_thread_id
+        .as_ref()
+        .filter(|s| !s.trim().is_empty())
+    {
+        return gmail_find_reply_in_thread(client, token, item, thread_id);
+    }
+
+    if let Some(ref message_id) = item
+        .email_gmail_message_id
+        .as_ref()
+        .filter(|s| !s.trim().is_empty())
+    {
+        if let Some(thread_id) = gmail_fetch_message_thread_id(client, token, message_id)? {
+            return gmail_find_reply_in_thread(client, token, item, &thread_id);
         }
+        // Message connu mais fil introuvable : ne pas rattacher un autre mail du contact.
+        return Ok(None);
     }
 
     let after = gmail_after_date(item.email_date_envoi);
@@ -570,6 +639,7 @@ pub fn resolve_campaign_rdv_start(
         contact_email: contact_email.to_string(),
         email_date_envoi,
         email_gmail_thread_id: None,
+        email_gmail_message_id: None,
         queue_row_kind: "etiquette".into(),
     };
     find_calendar_rdv_start(&client, &conn.access_token, &item)
@@ -657,6 +727,39 @@ pub fn sync_email_campaign_responses(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gmail_reply_has_thread_scope_with_thread_or_message_id() {
+        let with_thread = PendingCampaignResponseCheck {
+            contact_etiquette_id: 1,
+            contact_email: "a@example.com".into(),
+            email_date_envoi: 1_700_000_000,
+            email_gmail_thread_id: Some("thr1".into()),
+            email_gmail_message_id: None,
+            queue_row_kind: "etiquette".into(),
+        };
+        assert!(gmail_reply_has_thread_scope(&with_thread));
+
+        let with_msg = PendingCampaignResponseCheck {
+            contact_etiquette_id: 1,
+            contact_email: "a@example.com".into(),
+            email_date_envoi: 1_700_000_000,
+            email_gmail_thread_id: None,
+            email_gmail_message_id: Some("msg1".into()),
+            queue_row_kind: "etiquette".into(),
+        };
+        assert!(gmail_reply_has_thread_scope(&with_msg));
+
+        let legacy = PendingCampaignResponseCheck {
+            contact_etiquette_id: 1,
+            contact_email: "a@example.com".into(),
+            email_date_envoi: 1_700_000_000,
+            email_gmail_thread_id: None,
+            email_gmail_message_id: None,
+            queue_row_kind: "etiquette".into(),
+        };
+        assert!(!gmail_reply_has_thread_scope(&legacy));
+    }
 
     #[test]
     fn parses_gmail_thread_minimal_without_internal_date() {

@@ -1025,8 +1025,8 @@ impl Database {
     ) -> Result<Vec<super::models::PendingCampaignResponseCheck>> {
         use super::template_email_queue::TEMPLATE_ENVOI_QUEUE_FILTER;
         let sql = format!(
-            "SELECT id, email, email_date_envoi, email_gmail_thread_id, queue_row_kind FROM (
-                SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id, 'etiquette' AS queue_row_kind
+            "SELECT id, email, email_date_envoi, email_gmail_thread_id, email_gmail_message_id, queue_row_kind FROM (
+                SELECT ce.id, c.email, ce.email_date_envoi, ce.email_gmail_thread_id, ce.email_gmail_message_id, 'etiquette' AS queue_row_kind
                 FROM contact_etiquettes ce
                 INNER JOIN etiquettes e ON ce.etiquette_id = e.id
                 INNER JOIN contacts c ON ce.contact_id = c.id
@@ -1039,7 +1039,7 @@ impl Database {
                   AND COALESCE(json_extract(t.variables, '$.email_suivi_reponse.attendre_reponse'), 1) = 1
                   AND c.email IS NOT NULL AND TRIM(c.email) != ''
                 UNION ALL
-                SELECT cte.id, c.email, cte.email_date_envoi, cte.email_gmail_thread_id, 'template' AS queue_row_kind
+                SELECT cte.id, c.email, cte.email_date_envoi, cte.email_gmail_thread_id, cte.email_gmail_message_id, 'template' AS queue_row_kind
                 FROM contact_template_envois cte
                 INNER JOIN templates_email t ON cte.template_id = t.id
                 INNER JOIN contacts c ON cte.contact_id = c.id
@@ -1061,7 +1061,8 @@ impl Database {
                 contact_email: row.get::<_, String>(1)?,
                 email_date_envoi: row.get(2)?,
                 email_gmail_thread_id: row.get(3)?,
-                queue_row_kind: row.get(4)?,
+                email_gmail_message_id: row.get(4)?,
+                queue_row_kind: row.get(5)?,
             })
         })?;
         rows.collect()
@@ -1084,13 +1085,24 @@ impl Database {
             date_attribution,
             _email_date_envoi,
             email_reponse_at,
+            email_reponse_type,
             email_suivi_ignore,
             email_annule,
             template_variables,
-        ): (i64, i64, Option<i64>, Option<i64>, i64, i64, Option<String>) = self
+        ): (
+            i64,
+            i64,
+            Option<i64>,
+            Option<i64>,
+            Option<String>,
+            i64,
+            i64,
+            Option<String>,
+        ) = self
             .conn
             .query_row(
                 "SELECT ce.email_envoye, ce.date_attribution, ce.email_date_envoi, ce.email_reponse_at,
+                        ce.email_reponse_type,
                         COALESCE(ce.email_suivi_ignore, 0), COALESCE(ce.email_annule, 0), t.variables
                  FROM contact_etiquettes ce
                  INNER JOIN etiquettes e ON ce.etiquette_id = e.id
@@ -1106,6 +1118,7 @@ impl Database {
                         row.get(4)?,
                         row.get(5)?,
                         row.get(6)?,
+                        row.get(7)?,
                     ))
                 },
             )?;
@@ -1114,10 +1127,11 @@ impl Database {
             return Ok(false);
         }
 
-        // Réouverture = nouveau cycle après réponse enregistrée, ou campagne sans attente de retour.
-        // Ne pas réouvrir tant qu'il n'y a pas de réponse : la file « À relancer » gère le délai dépassé.
+        // Réouverture volontaire : RDV (dernier contact mis à jour) ou modèle sans attente de retour.
+        // Réponse mail/autre = campagne terminée — pas de nouveau bilan automatique (relance = manuel).
+        // Sans réponse : la file « À relancer » gère le délai dépassé.
         let should_reopen = if email_reponse_at.is_some() {
-            true
+            email_reponse_type.as_deref() == Some("rdv")
         } else if email_suivi_ignore != 0 {
             false
         } else {
