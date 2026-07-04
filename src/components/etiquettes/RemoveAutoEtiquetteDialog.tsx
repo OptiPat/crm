@@ -23,14 +23,16 @@ export function RemoveAutoEtiquetteDialog({
   target,
   onOpenChange,
   onConfirm,
+  stacked = false,
 }: {
   target: RemoveAutoEtiquetteTarget | null;
   onOpenChange: (open: boolean) => void;
   onConfirm: (excludeFromAuto: boolean) => void;
+  stacked?: boolean;
 }) {
   return (
     <AlertDialog open={target != null} onOpenChange={onOpenChange}>
-      <AlertDialogContent className="max-w-md">
+      <AlertDialogContent stacked={stacked} className="max-w-md">
         <AlertDialogHeader>
           <AlertDialogTitle>Retirer l&apos;étiquette automatique ?</AlertDialogTitle>
           <AlertDialogDescription className="text-left space-y-2">

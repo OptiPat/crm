@@ -1137,6 +1137,7 @@ mod tests {
             date_r1: None,
             type_invitation_filleul: None,
             date_invitation_filleul: None,
+            date_inscription_filleul: None,
             presence_invitation_filleul: None,
             filleul_titre: None,
             filleul_qualification: None,

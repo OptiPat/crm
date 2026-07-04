@@ -3,7 +3,6 @@ import { Calendar } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { type Contact as ContactRecord, getAllContacts } from "@/lib/api/tauri-contacts";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
-import { parseDateInscriptionFromNotes } from "@/lib/contacts/contact-form-utils";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { RankIcon } from "@/components/organisation/FilleulRankIcons";
 import {
@@ -84,10 +83,6 @@ export function ContactDetailSyntheseParrainageCard({
     [contact, allContacts, selfContact]
   );
 
-  const dateInscriptionIso = parseDateInscriptionFromNotes(contact.notes);
-  const dateInscriptionLabel = dateInscriptionIso
-    ? formatCalendarDateFr(Math.floor(Date.parse(dateInscriptionIso) / 1000))
-    : null;
   const invitationType = formatInvitationType(contact.type_invitation_filleul);
   const presence = formatPresence(contact.presence_invitation_filleul);
   const titreId = parseFilleulTitre(contact.filleul_titre);
@@ -120,12 +115,12 @@ export function ContactDetailSyntheseParrainageCard({
             {presence}
           </div>
         )}
-        {dateInscriptionLabel && (
+        {contact.date_inscription_filleul && (
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
             <div>
               <span className="text-muted-foreground text-sm">Date d&apos;inscription : </span>
-              {dateInscriptionLabel}
+              {formatCalendarDateFr(contact.date_inscription_filleul)}
             </div>
           </div>
         )}

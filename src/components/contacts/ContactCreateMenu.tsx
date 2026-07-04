@@ -8,6 +8,8 @@ import {
 import { Plus, ListTodo, MessageSquare, Tag } from "lucide-react";
 import { TacheForm } from "@/components/taches/TacheForm";
 import { InteractionForm } from "@/components/interactions/InteractionForm";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_POPOVER_Z } from "@/lib/ui/stacked-sheet-layers";
 
 interface ContactCreateMenuProps {
   contactId: number;
@@ -15,6 +17,8 @@ interface ContactCreateMenuProps {
   onCreated?: () => void;
   /** Ouvre le sélecteur d'étiquettes existant de l'en-tête. */
   onOpenEtiquettes: () => void;
+  /** Volet empilé (drill-down dashboard). */
+  nestedSheet?: boolean;
 }
 
 function MenuItem({
@@ -51,6 +55,7 @@ export function ContactCreateMenu({
   contactId,
   onCreated,
   onOpenEtiquettes,
+  nestedSheet = false,
 }: ContactCreateMenuProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [tacheOpen, setTacheOpen] = useState(false);
@@ -65,7 +70,7 @@ export function ContactCreateMenu({
             <span className="sr-only md:not-sr-only">Créer</span>
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="end" className="w-56 p-1.5">
+        <PopoverContent align="end" className={cn("w-56 p-1.5", nestedSheet && STACKED_NESTED_POPOVER_Z)}>
           <MenuItem
             icon={ListTodo}
             label="Tâche / rappel"
@@ -98,6 +103,7 @@ export function ContactCreateMenu({
         open={tacheOpen}
         onOpenChange={setTacheOpen}
         fixedContactId={contactId}
+        nestedSheet={nestedSheet}
         onSuccess={() => {
           setTacheOpen(false);
           onCreated?.();
@@ -107,6 +113,7 @@ export function ContactCreateMenu({
         open={interactionOpen}
         onOpenChange={setInteractionOpen}
         defaultContactId={contactId}
+        nestedSheet={nestedSheet}
         onSuccess={() => {
           setInteractionOpen(false);
           onCreated?.();

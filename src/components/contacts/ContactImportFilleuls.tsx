@@ -355,14 +355,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
         const dateNaissance = parseImportDate(row.data.date_naissance);
 
         let notes = row.data.commentaire ? String(row.data.commentaire).trim() : undefined;
-        
-        if (row.data.date_inscription) {
-          const dateInscription = String(row.data.date_inscription).trim();
-          const prefix = notes ? "\n\n" : "";
-          notes = notes 
-            ? `${notes}${prefix}Date inscription: ${dateInscription}`
-            : `Date inscription: ${dateInscription}`;
-        }
+        const dateInscription = row.data.date_inscription
+          ? parseImportDate(String(row.data.date_inscription).trim())
+          : undefined;
 
         pendingCreates.push({
           rowIndex: i,
@@ -377,6 +372,9 @@ export function ContactImportFilleuls({ open, onOpenChange, onSuccess }: Contact
             categorie: "AUCUN",
             filleul_categorie: filleulCategorie,
             date_dernier_contact_filleul: dateDernierContact,
+            date_inscription_filleul: dateInscription
+              ? dateInscription.slice(0, 10)
+              : undefined,
             statut_suivi: "ACTIF",
             notes,
           },

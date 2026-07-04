@@ -174,6 +174,8 @@ impl Database {
         let date_r1_timestamp = parse_optional_date_field(&new_contact.date_r1);
         let date_invitation_filleul_timestamp =
             parse_optional_date_field(&new_contact.date_invitation_filleul);
+        let date_inscription_filleul_timestamp =
+            parse_optional_date_field(&new_contact.date_inscription_filleul);
         let type_invitation_filleul = normalize_invitation_type(&new_contact.type_invitation_filleul);
         let presence_invitation_filleul =
             normalize_presence(new_contact.presence_invitation_filleul);
@@ -192,10 +194,11 @@ impl Database {
                 regime_matrimonial, revenus_annuels, charges_emprunts, objectifs_patrimoniaux,
                 source_lead, profil_risque_sri, date_dernier_contact, date_prochain_suivi,
                 date_dernier_contact_filleul, date_prochain_suivi_filleul,
-                date_r1, type_invitation_filleul, date_invitation_filleul, presence_invitation_filleul,
+                date_r1, type_invitation_filleul, date_invitation_filleul, date_inscription_filleul,
+                presence_invitation_filleul,
                 filleul_titre, filleul_qualification, filleul_volume, filleul_volume_manager,
                 statut_suivi, registre, notes, epargne_precaution_souhaitee
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43, ?44)",
             params![
                 new_contact.famille_id,
                 new_contact.foyer_id,
@@ -231,6 +234,7 @@ impl Database {
                 date_r1_timestamp,
                 type_invitation_filleul,
                 date_invitation_filleul_timestamp,
+                date_inscription_filleul_timestamp,
                 presence_invitation_filleul,
                 new_contact.filleul_titre,
                 new_contact.filleul_qualification,
@@ -444,6 +448,8 @@ pub fn update_contact(
         let date_r1_timestamp = parse_optional_date_field(&contact.date_r1);
         let date_invitation_filleul_timestamp =
             parse_optional_date_field(&contact.date_invitation_filleul);
+        let date_inscription_filleul_timestamp =
+            parse_optional_date_field(&contact.date_inscription_filleul);
         let type_invitation_filleul = normalize_invitation_type(&contact.type_invitation_filleul);
         let presence_invitation_filleul =
             normalize_presence(contact.presence_invitation_filleul);
@@ -519,20 +525,21 @@ pub fn update_contact(
                 date_r1 = ?30,
                 type_invitation_filleul = ?31,
                 date_invitation_filleul = ?32,
-                presence_invitation_filleul = ?33,
-                filleul_titre = ?34,
-                filleul_qualification = ?35,
-                filleul_volume = ?36,
-                filleul_volume_manager = ?37,
-                statut_suivi = ?38,
-                registre = ?39,
-                notes = ?40,
-                role_foyer = ?41,
-                role_famille = ?42,
-                famille_regroupement_exclu = ?43,
-                epargne_precaution_souhaitee = ?44,
+                date_inscription_filleul = ?33,
+                presence_invitation_filleul = ?34,
+                filleul_titre = ?35,
+                filleul_qualification = ?36,
+                filleul_volume = ?37,
+                filleul_volume_manager = ?38,
+                statut_suivi = ?39,
+                registre = ?40,
+                notes = ?41,
+                role_foyer = ?42,
+                role_famille = ?43,
+                famille_regroupement_exclu = ?44,
+                epargne_precaution_souhaitee = ?45,
                 updated_at = unixepoch()
-            WHERE id = ?45",
+            WHERE id = ?46",
             params![
                 &contact.famille_id,
                 &contact.foyer_id,
@@ -566,6 +573,7 @@ pub fn update_contact(
                 date_r1_timestamp,
                 type_invitation_filleul,
                 date_invitation_filleul_timestamp,
+                date_inscription_filleul_timestamp,
                 presence_invitation_filleul,
                 &filleul_titre,
                 &filleul_qualification,

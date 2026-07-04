@@ -50,6 +50,8 @@ export interface Contact {
   /** Invitation filleul : JD ou PO. */
   type_invitation_filleul?: string | null;
   date_invitation_filleul?: number;
+  /** Date d'inscription réseau filleul. */
+  date_inscription_filleul?: number;
   /** 1 = présent, 0 = absent. */
   presence_invitation_filleul?: number | null;
   /** Titre réseau : JUNIOR, CONSULTANT, MANAGER, SENIOR, MAJOR, EXPERT */
@@ -107,6 +109,7 @@ export interface NewContact {
   date_r1?: string;
   type_invitation_filleul?: string | null;
   date_invitation_filleul?: string;
+  date_inscription_filleul?: string;
   presence_invitation_filleul?: number | null;
   filleul_titre?: string | null;
   filleul_qualification?: string | null;

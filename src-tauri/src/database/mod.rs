@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result};
+use rusqlite::{params, Connection, Result};
 use tauri::{AppHandle, Manager};
 
 pub mod email_schedule;
@@ -546,6 +546,7 @@ impl Database {
         self.migrate_add_contact_rio_financial_fields()?;
         self.migrate_add_contact_fiscal_fields()?;
         self.migrate_add_contact_funnel_fields()?;
+        self.migrate_add_date_inscription_filleul()?;
         self.migrate_add_filleul_rank_fields()?;
         self.migrate_add_filleul_volume_field()?;
         self.migrate_add_filleul_volume_manager_field()?;
@@ -749,6 +750,95 @@ impl Database {
         }
         if added {
             println!("✅ Migration funnel contact appliquée");
+        }
+        Ok(())
+    }
+
+    /// Date d'inscription réseau filleul (colonne dédiée, ex-notes).
+    fn migrate_add_date_inscription_filleul(&self) -> Result<()> {
+        use chrono::{NaiveDate, TimeZone, Utc};
+
+        fn parse_inscription_label_ts(label: &str) -> Option<i64> {
+            let trimmed = label.trim();
+            if let Ok(d) = NaiveDate::parse_from_str(trimmed, "%d/%m/%Y") {
+                return d
+                    .and_hms_opt(0, 0, 0)
+                    .map(|ndt| Utc.from_utc_datetime(&ndt).timestamp());
+            }
+            NaiveDate::parse_from_str(trimmed, "%Y-%m-%d")
+                .ok()
+                .and_then(|d| d.and_hms_opt(0, 0, 0))
+                .map(|ndt| Utc.from_utc_datetime(&ndt).timestamp())
+        }
+
+        fn extract_inscription_label(notes: &str) -> Option<String> {
+            notes.lines().find_map(|line| {
+                line.strip_prefix("Date inscription:")
+                    .map(|rest| rest.trim().to_string())
+                    .filter(|s| !s.is_empty())
+            })
+        }
+
+        fn strip_inscription_from_notes(notes: &str) -> Option<String> {
+            let rest: String = notes
+                .lines()
+                .filter(|line| !line.starts_with("Date inscription:"))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .trim()
+                .to_string();
+            if rest.is_empty() {
+                None
+            } else {
+                Some(rest)
+            }
+        }
+
+        let mut added = false;
+        if !self.table_has_column("contacts", "date_inscription_filleul")? {
+            println!("🔄 Migration : date_inscription_filleul sur contacts...");
+            self.conn.execute(
+                "ALTER TABLE contacts ADD COLUMN date_inscription_filleul INTEGER",
+                [],
+            )?;
+            added = true;
+        }
+
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, notes, date_inscription_filleul FROM contacts WHERE notes LIKE '%Date inscription:%'")?;
+        let rows: Vec<(i64, Option<String>, Option<i64>)> = stmt
+            .query_map([], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let mut migrated = 0usize;
+        for (id, notes, existing_ts) in rows {
+            if existing_ts.is_some() {
+                continue;
+            }
+            let Some(notes) = notes else { continue };
+            let Some(label) = extract_inscription_label(&notes) else {
+                continue;
+            };
+            let Some(ts) = parse_inscription_label_ts(&label) else {
+                continue;
+            };
+            let cleaned = strip_inscription_from_notes(&notes);
+            self.conn.execute(
+                "UPDATE contacts SET date_inscription_filleul = ?1, notes = ?2 WHERE id = ?3",
+                params![ts, cleaned, id],
+            )?;
+            migrated += 1;
+        }
+
+        if added {
+            println!("✅ Migration date_inscription_filleul appliquée");
+        }
+        if migrated > 0 {
+            println!("✅ {migrated} date(s) d'inscription migrée(s) depuis les notes");
         }
         Ok(())
     }

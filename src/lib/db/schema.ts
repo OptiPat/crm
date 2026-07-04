@@ -103,6 +103,7 @@ export const contacts = sqliteTable("contacts", {
   // Funnel filleul (invitation JD / PO)
   typeInvitationFilleul: text("type_invitation_filleul"),
   dateInvitationFilleul: integer("date_invitation_filleul", { mode: "timestamp" }),
+  dateInscriptionFilleul: integer("date_inscription_filleul", { mode: "timestamp" }),
   presenceInvitationFilleul: integer("presence_invitation_filleul"),
   filleulTitre: text("filleul_titre"),
   filleulQualification: text("filleul_qualification"),

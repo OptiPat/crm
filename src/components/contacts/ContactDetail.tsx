@@ -122,7 +122,7 @@ interface ContactDetailProps {
   onNavigate?: (page: string) => void;
   /** Panneau latéral (split liste/détail) au lieu de la modale seule */
   embedded?: boolean;
-  /** Formulaire investissement empilé (drill-down dashboard) — pas d'overlay supplémentaire. */
+  /** Formulaire investissement empilé (fiche dashboard drill-down) — calque au-dessus de z-[60]. */
   nestedInvestissementSheet?: boolean;
 }
 
@@ -787,6 +787,7 @@ export function ContactDetail({
               </Button>
               <ContactCreateMenu
                 contactId={contact.id}
+                nestedSheet={nestedInvestissementSheet}
                 onCreated={() => void refreshContactAfterMutation()}
                 onOpenEtiquettes={() => setEtiquetteSelectorOpen(true)}
               />
@@ -879,6 +880,7 @@ export function ContactDetail({
           onRemove={handleRemoveEtiquetteClick}
           open={etiquetteSelectorOpen}
           onOpenChange={setEtiquetteSelectorOpen}
+          nestedSheet={nestedInvestissementSheet}
         />
         {contact.id != null && <ContactAutoEtiquetteLog contactId={contact.id} />}
         {excludedEtiquettes.length > 0 && (
@@ -1097,6 +1099,7 @@ export function ContactDetail({
         createContext="detail"
         initialSectionId={editSectionId}
         onOpenContact={onOpenContact}
+        nestedSheet={nestedInvestissementSheet}
         foyerActions={{
           onEditFoyer: () => {
             setShowEditForm(false);
@@ -1164,6 +1167,7 @@ export function ContactDetail({
 
       <RemoveAutoEtiquetteDialog
         target={etiquetteRemoveTarget}
+        stacked={nestedInvestissementSheet}
         onOpenChange={(open) => !open && setEtiquetteRemoveTarget(null)}
         onConfirm={(excludeFromAuto) => {
           if (!etiquetteRemoveTarget) return;
@@ -1180,7 +1184,7 @@ export function ContactDetail({
           if (!open) setFoyerRenamePrompt(null);
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent stacked={nestedInvestissementSheet}>
           <AlertDialogHeader>
             <AlertDialogTitle>Mettre à jour le nom du foyer ?</AlertDialogTitle>
             <AlertDialogDescription asChild>
@@ -1216,6 +1220,7 @@ export function ContactDetail({
           open={showDocUpload}
           onOpenChange={setShowDocUpload}
           contactId={contact.id}
+          nestedSheet={nestedInvestissementSheet}
           defaultTypeDocument="PATRIMOINE"
           contactNom={contact.nom}
           contactPrenom={contact.prenom}
@@ -1232,7 +1237,7 @@ export function ContactDetail({
         open={showDeleteContactDialog}
         onOpenChange={setShowDeleteContactDialog}
       >
-        <AlertDialogContent>
+        <AlertDialogContent stacked={nestedInvestissementSheet}>
           <AlertDialogHeader>
             <AlertDialogTitle>Supprimer ce contact ?</AlertDialogTitle>
             <AlertDialogDescription>

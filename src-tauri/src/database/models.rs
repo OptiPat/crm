@@ -48,6 +48,8 @@ pub struct Contact {
     /// Invitation réseau filleul : `JD` (Journée Découverte) ou `PO`.
     pub type_invitation_filleul: Option<String>,
     pub date_invitation_filleul: Option<i64>,
+    /// Date d'inscription réseau filleul (distincte de l'invitation JD/PO).
+    pub date_inscription_filleul: Option<i64>,
     /// Présence à l'invitation : `Some(1)` présent, `Some(0)` absent, `None` non renseigné.
     pub presence_invitation_filleul: Option<i64>,
     /// Titre réseau filleul (JUNIOR, CONSULTANT, MANAGER, …).
@@ -120,6 +122,8 @@ pub struct NewContact {
     pub type_invitation_filleul: Option<String>,
     #[serde(default)]
     pub date_invitation_filleul: Option<String>,
+    #[serde(default)]
+    pub date_inscription_filleul: Option<String>,
     /// `0` absent, `1` présent, `None` ou absent = non renseigné.
     #[serde(default)]
     pub presence_invitation_filleul: Option<i64>,
@@ -176,6 +180,7 @@ impl Default for NewContact {
             date_r1: None,
             type_invitation_filleul: None,
             date_invitation_filleul: None,
+            date_inscription_filleul: None,
             presence_invitation_filleul: None,
             filleul_titre: None,
             filleul_qualification: None,

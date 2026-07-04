@@ -14,7 +14,7 @@ import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import {
   contactToUpdatePayload,
   normalizeImportTelephone,
-  setDateInscriptionInNotes,
+  toDateInput,
 } from "@/lib/contacts/contact-form-utils";
 import { unwrapImportCell } from "@/lib/contacts/import-row";
 import { parseNomCompletInvestisseur } from "@/lib/contacts/investor-name-parse";
@@ -157,11 +157,6 @@ function parseNiveauSortKey(niveau: string): number {
 
 function buildLineKey(row: Pick<MonOrganisationRow, "rowIndex" | "nom" | "prenom">): string {
   return `${row.rowIndex}:${contactNameKey(row.nom, row.prenom)}`;
-}
-
-function buildNotes(dateInscriptionIso?: string): string | undefined {
-  if (!dateInscriptionIso) return undefined;
-  return setDateInscriptionInNotes(undefined, dateInscriptionIso);
 }
 
 function parseMonOrganisationDate(value: unknown): string | undefined {
@@ -462,8 +457,11 @@ function buildNewContactPayload(line: MonOrganisationPreviewLine): NewContact {
     date_dernier_contact_filleul: line.dateDernierContactFilleulIso,
     type_invitation_filleul: undefined,
     date_invitation_filleul: undefined,
+    date_inscription_filleul: line.dateInscriptionIso
+      ? toDateInput(line.dateInscriptionIso)
+      : undefined,
     presence_invitation_filleul: undefined,
-    notes: buildNotes(line.dateInscriptionIso),
+    notes: undefined,
   };
 }
 

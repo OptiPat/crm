@@ -33,6 +33,7 @@ import type { IdentityImportMode } from "@/lib/documents/identity-document-apply
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { assessRioImport } from "@/lib/documents/rio-import-guard";
 
 interface DocumentUploadProps {
@@ -52,6 +53,8 @@ interface DocumentUploadProps {
   contactPrenom?: string;
   contactDateNaissance?: number;
   contactLieuNaissance?: string;
+  /** Volet empilé (drill-down dashboard). */
+  nestedSheet?: boolean;
 }
 
 const IDENTITY_REQUIRED_MSG =
@@ -72,6 +75,7 @@ export function DocumentUpload({
   contactPrenom,
   contactDateNaissance,
   contactLieuNaissance,
+  nestedSheet = false,
 }: DocumentUploadProps) {
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
@@ -481,6 +485,7 @@ export function DocumentUpload({
         contactDateNaissance={previewContactDateNaissance}
         contactLieuNaissance={previewContactLieuNaissance}
         rectoPreviewPath={uploadedFile?.path}
+        nestedSheet={nestedSheet}
         versoPreviewPath={
           identityImport.identityImportMode === "two_files"
             ? identityImport.uploadedVersoFile?.path
@@ -488,10 +493,12 @@ export function DocumentUpload({
         }
       />
 
-      <Dialog open={open && !identityImport.showIdentityPreview} onOpenChange={onOpenChange}>
+      <Dialog open={open && !identityImport.showIdentityPreview} onOpenChange={onOpenChange} modal={!nestedSheet}>
         <DialogContent
+          hideOverlay={nestedSheet}
           className={cn(
             "max-h-[90vh] transition-[max-width] duration-200 ease-out",
+            nestedSheet && STACKED_NESTED_SHEET_Z,
             isStelliumWizardMode
               ? "flex h-[90vh] max-w-6xl flex-col overflow-hidden p-6"
               : "max-w-2xl overflow-y-auto"

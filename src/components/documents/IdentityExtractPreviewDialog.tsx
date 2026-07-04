@@ -25,6 +25,8 @@ import { normalizeIdentityDate } from "@/lib/identity/visual-identity-parser";
 import { contactHasStoredBirthPlace, contactHasStoredTimestamp } from "@/lib/identity/merge-identity-fields";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 
 export type IdentityPreviewValues = {
   dateNaissanceFr: string;
@@ -46,6 +48,7 @@ type IdentityExtractPreviewDialogProps = {
   contactLieuNaissance?: string;
   rectoPreviewPath?: string;
   versoPreviewPath?: string;
+  nestedSheet?: boolean;
 };
 
 function trustTone(extracted: IdentityExtractResult | null): string {
@@ -153,6 +156,7 @@ export function IdentityExtractPreviewDialog({
   contactLieuNaissance,
   rectoPreviewPath,
   versoPreviewPath,
+  nestedSheet = false,
 }: IdentityExtractPreviewDialogProps) {
   const [dateNaissanceFr, setDateNaissanceFr] = useState("");
   const [dateExpirationFr, setDateExpirationFr] = useState("");
@@ -187,8 +191,14 @@ export function IdentityExtractPreviewDialog({
   const hasPreview = Boolean(rectoPreviewPath || versoPreviewPath);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="z-[60] flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn(
+          "flex max-h-[90vh] max-w-5xl flex-col overflow-hidden",
+          nestedSheet ? STACKED_NESTED_SHEET_Z : "z-[60]"
+        )}
+      >
         <DialogHeader>
           <DialogTitle>{getDocumentTypeLabel("IDENTITE")}</DialogTitle>
           <DialogDescription>

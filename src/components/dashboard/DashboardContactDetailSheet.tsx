@@ -10,6 +10,7 @@ import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { List } from "lucide-react";
 import { toast } from "sonner";
+import { STACKED_CONTACT_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 
 interface DashboardContactDetailSheetProps {
   open: boolean;
@@ -64,7 +65,7 @@ export function DashboardContactDetailSheet({
       <SheetContent
         side="right"
         hideOverlay={hideOverlay}
-        className="z-[60] flex h-svh max-h-svh min-h-0 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl [&>button.absolute]:hidden"
+        className={`${STACKED_CONTACT_SHEET_Z} flex h-svh max-h-svh min-h-0 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl [&>button.absolute]:hidden`}
         onInteractOutside={hideOverlay ? (event) => event.preventDefault() : undefined}
         onPointerDownOutside={hideOverlay ? (event) => event.preventDefault() : undefined}
       >
@@ -78,7 +79,7 @@ export function DashboardContactDetailSheet({
             embedded
             open
             contact={contact}
-            nestedInvestissementSheet={hideOverlay}
+            nestedInvestissementSheet
             onOpenChange={onOpenChange}
             onDelete={handleDelete}
             onUpdate={onUpdate}

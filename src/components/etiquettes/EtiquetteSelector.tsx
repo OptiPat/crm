@@ -14,6 +14,7 @@ import {
   type Etiquette 
 } from "@/lib/api/tauri-etiquettes";
 import { cn } from "@/lib/utils";
+import { STACKED_NESTED_POPOVER_Z } from "@/lib/ui/stacked-sheet-layers";
 
 interface EtiquetteSelectorProps {
   /** IDs des étiquettes actuellement attribuées au contact */
@@ -30,6 +31,8 @@ interface EtiquetteSelectorProps {
   open?: boolean;
   /** Notifie le parent du changement d'ouverture (mode contrôlé). */
   onOpenChange?: (open: boolean) => void;
+  /** Volet empilé (drill-down dashboard). */
+  nestedSheet?: boolean;
 }
 
 /**
@@ -52,6 +55,7 @@ export function EtiquetteSelector({
   className,
   open: controlledOpen,
   onOpenChange,
+  nestedSheet = false,
 }: EtiquetteSelectorProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -108,7 +112,7 @@ export function EtiquetteSelector({
           <span className="sr-only md:not-sr-only">Étiquette</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-0" align="start">
+      <PopoverContent className={cn("w-72 p-0", nestedSheet && STACKED_NESTED_POPOVER_Z)} align="start">
         <div className="p-3 border-b">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

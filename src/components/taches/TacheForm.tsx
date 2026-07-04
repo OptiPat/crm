@@ -50,6 +50,8 @@ import {
 import { TacheRecurrenceFields } from "@/components/taches/TacheRecurrenceFields";
 import { isActiveRecurrence, type TacheRecurrence } from "@/lib/taches/tache-recurrence";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 
 interface TacheFormProps {
   open: boolean;
@@ -61,6 +63,7 @@ interface TacheFormProps {
   defaultDateEcheance?: string;
   creationContext?: TacheFormCreationContext;
   onSuccess?: () => void;
+  nestedSheet?: boolean;
 }
 
 interface FormState {
@@ -145,6 +148,7 @@ export function TacheForm({
   defaultDateEcheance,
   creationContext,
   onSuccess,
+  nestedSheet = false,
 }: TacheFormProps) {
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -366,8 +370,14 @@ export function TacheForm({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn(
+          "max-w-xl max-h-[90vh] overflow-y-auto",
+          nestedSheet && STACKED_NESTED_SHEET_Z
+        )}
+      >
         <DialogHeader>
           <DialogTitle>{tache ? "Modifier la tâche" : "Nouvelle tâche"}</DialogTitle>
           <DialogDescription>

@@ -1010,6 +1010,7 @@ mod filleul_rank_category_tests {
             date_r1: None,
             type_invitation_filleul: None,
             date_invitation_filleul: None,
+            date_inscription_filleul: None,
             presence_invitation_filleul: None,
             filleul_titre: titre.map(String::from),
             filleul_qualification: qual.map(String::from),

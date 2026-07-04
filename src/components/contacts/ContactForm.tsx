@@ -58,6 +58,8 @@ import {
   type InvestissementFormChoice,
 } from "@/components/contacts/ContactFormInvestissementSection";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
 import {
@@ -74,10 +76,7 @@ import {
   SELECT_NONE,
   buildSubmitPayload,
   parseBirthdayFieldToIso,
-  parseDateInscriptionFromNotes,
-  setDateInscriptionInNotes,
   contactToFormData,
-  dateFieldToIso,
   defaultProchainSuiviClient,
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
@@ -95,7 +94,6 @@ import {
   isFilleulStatut,
   isFilleulReseauInscrit,
   isPrescripteurCategorie,
-  toDateInput,
   todayLocal,
 } from "@/lib/contacts/contact-form-utils";
 import {
@@ -129,6 +127,8 @@ interface ContactFormProps {
   initialSectionId?: ContactFormSectionId | null;
   /** Raccourcis foyer (fiche contact uniquement). */
   foyerActions?: ContactFoyerRelationsActions;
+  /** Volet empilé (drill-down dashboard) — au-dessus de la fiche contact. */
+  nestedSheet?: boolean;
 }
 
 function FormSection({
@@ -338,6 +338,7 @@ export function ContactForm({
   onOpenContact,
   initialSectionId,
   foyerActions,
+  nestedSheet = false,
 }: ContactFormProps) {
   const isEdit = !!contact;
   const [loading, setLoading] = useState(false);
@@ -1397,11 +1398,11 @@ export function ContactForm({
                   <DateFieldWithShortcuts
                     id="date_inscription_filleul"
                     label="Date d'inscription"
-                    value={toDateInput(parseDateInscriptionFromNotes(formData.notes))}
+                    value={formData.date_inscription_filleul ?? ""}
                     onChange={(v) =>
                       setFormData((prev) => ({
                         ...prev,
-                        notes: setDateInscriptionInNotes(prev.notes, dateFieldToIso(v)),
+                        date_inscription_filleul: v,
                       }))
                     }
                   />
@@ -1594,10 +1595,14 @@ export function ContactForm({
 
   return (
     <>
-      <Sheet open={open} onOpenChange={handleOpenChange}>
+      <Sheet open={open} onOpenChange={handleOpenChange} modal={!nestedSheet}>
         <SheetContent
           side="right"
-          className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
+          hideOverlay={nestedSheet}
+          className={cn(
+            "flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]",
+            nestedSheet && STACKED_NESTED_SHEET_Z
+          )}
         >
           <div className="shrink-0 border-b px-6 py-4">
             <SheetHeader>
@@ -1610,7 +1615,7 @@ export function ContactForm({
       </Sheet>
 
       <AlertDialog open={showDiscardDialog} onOpenChange={setShowDiscardDialog}>
-        <AlertDialogContent>
+        <AlertDialogContent stacked={nestedSheet}>
           <AlertDialogHeader>
             <AlertDialogTitle>Modifications non enregistrées</AlertDialogTitle>
             <AlertDialogDescription>

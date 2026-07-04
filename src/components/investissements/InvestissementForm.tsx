@@ -134,6 +134,7 @@ import {
 } from "@/lib/investissements/investissement-immo-financing";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import type { LucideIcon } from "lucide-react";
 import { Plus } from "lucide-react";
 import {
@@ -1502,13 +1503,13 @@ export function InvestissementForm({
   return (
     <>
       {useSheet ? (
-        <Sheet open={open} onOpenChange={onOpenChange}>
+        <Sheet open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
           <SheetContent
             side="right"
             hideOverlay={nestedSheet}
             className={cn(
               "flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]",
-              nestedSheet && "z-[70]"
+              nestedSheet && STACKED_NESTED_SHEET_Z
             )}
           >
             <div className="shrink-0 border-b px-6 py-4">

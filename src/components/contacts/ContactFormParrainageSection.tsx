@@ -16,11 +16,7 @@ import type { Contact, NewContact } from "@/lib/api/tauri-contacts";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
 import {
   SELECT_NONE,
-  dateFieldToIso,
   defaultProchainSuiviSixMois,
-  parseDateInscriptionFromNotes,
-  setDateInscriptionInNotes,
-  toDateInput,
   todayLocal,
 } from "@/lib/contacts/contact-form-utils";
 import {
@@ -205,11 +201,11 @@ export function ContactFormParrainageSection({
         <DateFieldWithShortcuts
           id="date_inscription_filleul"
           label="Date d'inscription"
-          value={toDateInput(parseDateInscriptionFromNotes(formData.notes))}
+          value={formData.date_inscription_filleul ?? ""}
           onChange={(v) =>
             setFormData((prev) => ({
               ...prev,
-              notes: setDateInscriptionInNotes(prev.notes, dateFieldToIso(v)),
+              date_inscription_filleul: v,
             }))
           }
         />

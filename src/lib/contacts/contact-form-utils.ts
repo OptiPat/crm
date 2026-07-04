@@ -278,6 +278,7 @@ const BASE_EMPTY: NewContact = {
   date_r1: "",
   type_invitation_filleul: undefined,
   date_invitation_filleul: "",
+  date_inscription_filleul: "",
   presence_invitation_filleul: undefined,
   statut_suivi: "ACTIF",
   registre: "VOUS",
@@ -345,6 +346,9 @@ export function contactToFormData(contact: Contact): NewContact {
     date_r1: toDateInput(contact.date_r1),
     type_invitation_filleul: contact.type_invitation_filleul ?? undefined,
     date_invitation_filleul: toDateInput(contact.date_invitation_filleul),
+    date_inscription_filleul:
+      toDateInput(contact.date_inscription_filleul) ||
+      toDateInput(parseDateInscriptionFromNotes(contact.notes)),
     presence_invitation_filleul: contact.presence_invitation_filleul ?? undefined,
     filleul_titre: contact.filleul_titre ?? undefined,
     filleul_qualification: contact.filleul_qualification ?? undefined,
@@ -454,6 +458,9 @@ export function buildSubmitPayload(
     date_invitation_filleul: filleulActif
       ? dateFieldToIso(formData.date_invitation_filleul)
       : "",
+    date_inscription_filleul: filleulActif
+      ? dateFieldToIso(formData.date_inscription_filleul)
+      : "",
     presence_invitation_filleul: filleulActif
       ? formData.presence_invitation_filleul === 1
         ? 1
@@ -470,6 +477,7 @@ export function buildSubmitPayload(
     epargne_precaution_souhaitee: formData.epargne_precaution_souhaitee,
     objectifs_patrimoniaux: formData.objectifs_patrimoniaux?.trim() || undefined,
     registre: formData.registre?.trim().toUpperCase() === "TU" ? "TU" : "VOUS",
+    notes: stripDateInscriptionFromNotes(formData.notes?.trim()) || undefined,
   };
 }
 

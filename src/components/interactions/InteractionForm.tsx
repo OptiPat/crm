@@ -29,6 +29,8 @@ import {
 import { touchContactAfterInteraction } from "@/lib/interactions/touch-contact-after-interaction";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 
 interface InteractionFormProps {
   open: boolean;
@@ -36,6 +38,7 @@ interface InteractionFormProps {
   interaction?: InteractionWithContact | null;
   defaultContactId?: number;
   onSuccess?: () => void;
+  nestedSheet?: boolean;
 }
 
 function toLocalDatetimeInput(ts?: number): string {
@@ -64,6 +67,7 @@ export function InteractionForm({
   interaction,
   defaultContactId,
   onSuccess,
+  nestedSheet = false,
 }: InteractionFormProps) {
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -146,8 +150,11 @@ export function InteractionForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn("max-w-lg", nestedSheet && STACKED_NESTED_SHEET_Z)}
+      >
         <DialogHeader>
           <DialogTitle>
             {interaction ? "Modifier l'interaction" : "Nouvelle interaction"}
