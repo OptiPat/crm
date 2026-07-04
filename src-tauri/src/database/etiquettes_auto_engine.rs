@@ -15,6 +15,8 @@ type AssignmentInfo = (i64, String);
 struct SyncAutoPairOpts<'a> {
     log_eval: bool,
     exclusions: Option<&'a HashSet<(i64, i64)>>,
+    /// Contact « Moi » (profil CGP) — fourni en batch pour éviter N requêtes identiques.
+    organisation_self_id: Option<Option<i64>>,
 }
 
 impl Default for SyncAutoPairOpts<'_> {
@@ -22,6 +24,7 @@ impl Default for SyncAutoPairOpts<'_> {
         Self {
             log_eval: true,
             exclusions: None,
+            organisation_self_id: None,
         }
     }
 }
@@ -635,7 +638,10 @@ impl Database {
         };
         let assignment_info =
             self.lookup_assignment(contact_id, etiquette.id, assignments.as_deref());
-        let org_self_id = self.resolve_organisation_self_contact_id()?;
+        let org_self_id = match opts.organisation_self_id {
+            Some(cached) => cached,
+            None => self.resolve_organisation_self_contact_id()?,
+        };
         let should_assign =
             self.contact_matches_rule_tree(contact, &rule.tree, now, current_month, org_self_id)?;
         if opts.log_eval {
@@ -666,11 +672,12 @@ impl Database {
         let mut total_assigned = 0;
         let mut assignments = self.load_auto_assignment_map()?;
         let exclusions = self.load_auto_exclusion_set()?;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         let bulk_opts = SyncAutoPairOpts {
             log_eval: false,
             exclusions: Some(&exclusions),
+            organisation_self_id: Some(org_self_id),
         };
-        let org_self_id = self.resolve_organisation_self_contact_id()?;
 
         let etiquettes = self.get_all_etiquettes()?;
         let auto_etiquettes: Vec<_> = etiquettes
@@ -744,6 +751,11 @@ impl Database {
         }
         let contact = self.get_contact_by_id(contact_id)?;
         let (now, current_month) = Self::auto_etiquette_now_and_month();
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
+        let pair_opts = SyncAutoPairOpts {
+            organisation_self_id: Some(org_self_id),
+            ..SyncAutoPairOpts::default()
+        };
         let mut total = 0;
         let etiquettes = self.get_all_etiquettes()?;
         for etiquette in etiquettes
@@ -756,7 +768,7 @@ impl Database {
                 now,
                 current_month,
                 None,
-                &SyncAutoPairOpts::default(),
+                &pair_opts,
             )?;
         }
         total += self.sync_template_email_triggers_for_contact(contact_id)?;
@@ -776,13 +788,14 @@ impl Database {
         let mut total = 0;
         let mut assignments = self.load_auto_assignment_map()?;
         let exclusions = self.load_auto_exclusion_set()?;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         let bulk_opts = SyncAutoPairOpts {
             log_eval: false,
             exclusions: Some(&exclusions),
+            organisation_self_id: Some(org_self_id),
         };
         let contacts = self.get_all_contacts()?;
         let categories = Self::parse_auto_categories(&etiquette);
-        let org_self_id = self.resolve_organisation_self_contact_id()?;
         for contact in &contacts {
             if Self::should_skip_bulk_auto_pair(
                 contact,

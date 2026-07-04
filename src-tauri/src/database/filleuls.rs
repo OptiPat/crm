@@ -20,15 +20,36 @@ impl super::Database {
 
     // Rechercher un contact par nom et prénom (normalisation + inversion nom/prénom)
     pub fn find_contact_by_name(&self, nom: &str, prenom: &str) -> Result<Option<Contact>> {
+        if nom.trim().is_empty() || prenom.trim().is_empty() {
+            return Ok(None);
+        }
+
+        if let Some(id) = self.find_contact_id_by_name(nom, prenom)? {
+            return self.get_contact_by_id(id).map(Some);
+        }
+        Ok(None)
+    }
+
+    /// Recherche légère (id + nom + prénom seulement — pas de CONTACT_SELECT complet).
+    pub(crate) fn find_contact_id_by_name(&self, nom: &str, prenom: &str) -> Result<Option<i64>> {
         use crate::contact_name::names_match;
 
         if nom.trim().is_empty() || prenom.trim().is_empty() {
             return Ok(None);
         }
 
-        for contact in self.get_all_contacts()? {
-            if names_match(nom, prenom, &contact.nom, &contact.prenom) {
-                return Ok(Some(contact));
+        let mut stmt = self.conn.prepare("SELECT id, nom, prenom FROM contacts")?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?;
+        for row in rows {
+            let (id, row_nom, row_prenom) = row?;
+            if names_match(nom, prenom, &row_nom, &row_prenom) {
+                return Ok(Some(id));
             }
         }
         Ok(None)
@@ -55,8 +76,6 @@ impl super::Database {
         if nom.is_empty() || prenom.is_empty() {
             return Ok(None);
         }
-        Ok(self
-            .find_contact_by_name(nom, prenom)?
-            .and_then(|c| c.id))
+        self.find_contact_id_by_name(nom, prenom)
     }
 }

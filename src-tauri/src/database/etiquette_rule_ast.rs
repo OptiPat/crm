@@ -153,10 +153,12 @@ impl Database {
     }
 
     /// Un contact correspond-il au segment ?
+    /// Passer `cached_org_self_id = Some(&id)` en boucle pour éviter de re-résoudre le contact CGP.
     pub fn contact_matches_segment(
         &self,
         contact: &Contact,
         segment_id: i64,
+        cached_org_self_id: Option<&Option<i64>>,
     ) -> Result<bool> {
         let seg = self.get_segment_by_id(segment_id)?;
         let Some(seg) = seg else {
@@ -170,16 +172,20 @@ impl Database {
         }
         let tree = parse_rule_json(Some(&seg.rule_json), None, None, None)?;
         let (now, current_month) = Self::auto_etiquette_now_and_month();
-        let org_self_id = self.resolve_organisation_self_contact_id()?;
+        let org_self_id = match cached_org_self_id {
+            Some(cached) => *cached,
+            None => self.resolve_organisation_self_contact_id()?,
+        };
         self.contact_matches_rule_tree(contact, &tree, now, current_month, org_self_id)
     }
 
     /// Compte les contacts correspondant à un segment (hors archive/pause).
     pub fn count_contacts_for_segment(&self, segment_id: i64) -> Result<i64> {
         let contacts = self.get_all_contacts()?;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         let mut n = 0i64;
         for c in &contacts {
-            if self.contact_matches_segment(c, segment_id)? {
+            if self.contact_matches_segment(c, segment_id, Some(&org_self_id))? {
                 n += 1;
             }
         }

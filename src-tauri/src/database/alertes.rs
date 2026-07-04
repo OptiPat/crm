@@ -547,6 +547,7 @@ impl super::Database {
         }
 
         let contacts = self.get_all_contacts()?;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         let mut count = 0;
 
         for contact in contacts {
@@ -569,7 +570,7 @@ impl super::Database {
                 if self.contact_excluded_from_alerte_type(contact_id, type_alerte)? {
                     continue;
                 }
-                if self.contact_matches_segment(&contact, *segment_id)? {
+                if self.contact_matches_segment(&contact, *segment_id, Some(&org_self_id))? {
                     if self.try_create_alerte_suivi(contact_id, type_alerte, label.clone(), now)? {
                         count += 1;
                     }

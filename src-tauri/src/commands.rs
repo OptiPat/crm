@@ -1743,7 +1743,7 @@ pub fn evaluate_segment_for_contact(
         .get_contact_by_id(contact_id)
         .map_err(|e| format!("Contact: {}", e))?;
     database
-        .contact_matches_segment(&contact, segment_id)
+        .contact_matches_segment(&contact, segment_id, None)
         .map_err(|e| format!("Evaluate segment: {}", e))
 }
 
@@ -1757,10 +1757,13 @@ pub fn get_contacts_matching_segment(
     let contacts = database
         .get_all_contacts()
         .map_err(|e| format!("Contacts: {}", e))?;
+    let org_self_id = database
+        .resolve_organisation_self_contact_id()
+        .map_err(|e| format!("Organisation self: {}", e))?;
     let mut out = Vec::new();
     for c in contacts {
         if database
-            .contact_matches_segment(&c, segment_id)
+            .contact_matches_segment(&c, segment_id, Some(&org_self_id))
             .map_err(|e| format!("Segment: {}", e))?
         {
             out.push(c);
