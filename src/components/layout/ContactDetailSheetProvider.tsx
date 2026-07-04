@@ -1,5 +1,5 @@
 import { createContext, useContext, type ReactNode } from "react";
-import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
+import { useContactDetailSheet, type OpenContactWithTabOptions } from "@/hooks/useContactDetailSheet";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import type { ContactDetailTabHint } from "@/lib/investissements/investissement-navigation";
 
@@ -8,7 +8,7 @@ type ContactDetailSheetContextValue = {
   openContactWithTab: (
     contactId: number,
     tab?: ContactDetailTabHint,
-    ids?: number[]
+    options?: OpenContactWithTabOptions
   ) => Promise<void>;
 };
 

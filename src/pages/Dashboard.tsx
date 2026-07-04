@@ -45,6 +45,7 @@ import {
 } from "@/lib/dashboard/dashboard-date-range-preferences";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { DashboardStatInvestissementsSheet } from "@/components/dashboard/DashboardStatInvestissementsSheet";
+import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import type { DashboardInvestissementsSheetVariant } from "@/components/dashboard/DashboardStatInvestissementsSheet";
 
 interface DashboardProps {
@@ -67,6 +68,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
   const {
     openContactSheet: openDrillDownContact,
     openContactWithTab,
+    clearListBackMode,
     sheet: contactDetailSheet,
     isOpen: contactDetailOpen,
     activeContactId: drillDownActiveContactId,
@@ -285,6 +287,11 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
           dataRefreshSignal={chartsRefreshKey}
           activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
           onOpenContact={openDrillDownContact}
+          onOpenContactFromList={(contactId) => {
+            void openContactWithTab(contactId, undefined, { listBack: true });
+          }}
+          stackedContactOpen={contactDetailOpen}
+          onListClose={clearListBackMode}
         />
         <ConversionFunnelPanel
           periodStart={periodRange.start}
@@ -293,6 +300,11 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
           dataRefreshSignal={chartsRefreshKey}
           activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
           onOpenContact={openDrillDownContact}
+          onOpenContactFromList={(contactId) => {
+            void openContactWithTab(contactId, undefined, { listBack: true });
+          }}
+          stackedContactOpen={contactDetailOpen}
+          onListClose={clearListBackMode}
         />
       </DashboardCollapsibleSection>
 
@@ -312,20 +324,27 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
         </div>
       </DashboardCollapsibleSection>
 
-      {contactDetailSheet}
+      {investissementsSheet != null ? <DashboardDrillDownBackdrop /> : null}
 
       <DashboardStatInvestissementsSheet
         variant={investissementsSheet}
         open={investissementsSheet != null}
+        stackedContactOpen={contactDetailOpen}
         onOpenChange={(open) => {
-          if (!open) setInvestissementsSheet(null);
+          if (!open) {
+            if (contactDetailOpen) return;
+            setInvestissementsSheet(null);
+            clearListBackMode();
+          }
         }}
         refreshSignal={chartsRefreshKey}
-        onOpenContact={(contactId, contactIds) => {
-          setInvestissementsSheet(null);
-          void openContactWithTab(contactId, "patrimoine", contactIds);
+        activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
+        onOpenContact={(contactId) => {
+          void openContactWithTab(contactId, "patrimoine", { listBack: true });
         }}
       />
+
+      {contactDetailSheet}
     </div>
   );
 }

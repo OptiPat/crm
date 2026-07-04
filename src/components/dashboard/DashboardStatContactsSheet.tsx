@@ -14,6 +14,7 @@ import {
 } from "@/lib/contacts/contact-category-display";
 import { getFilleulLabel } from "@/lib/contacts/contact-form-utils";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
+import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { cn } from "@/lib/utils";
 import { ContactInitialsAvatar } from "./dashboard-ui";
 
@@ -25,7 +26,9 @@ interface DashboardStatContactsSheetProps {
   loadContacts: () => Promise<DashboardStatContact[]>;
   refreshSignal?: number;
   activeContactId?: number | null;
-  onOpenContact?: (contactId: number, contactIds?: number[]) => void;
+  onOpenContact?: DashboardDrillDownOpenContact;
+  /** Fiche contact ouverte — bloque la fermeture accidentelle du volet liste. */
+  stackedContactOpen?: boolean;
 }
 
 function contactCategoryLabel(contact: DashboardStatContact): string {
@@ -58,6 +61,7 @@ export function DashboardStatContactsSheet({
   refreshSignal,
   activeContactId,
   onOpenContact,
+  stackedContactOpen = false,
 }: DashboardStatContactsSheetProps) {
   const [contacts, setContacts] = useState<DashboardStatContact[]>([]);
   const [loading, setLoading] = useState(false);
@@ -90,21 +94,29 @@ export function DashboardStatContactsSheet({
     };
   }, [open, loadContacts, refreshSignal]);
 
-  const contactIds = contacts.map((c) => c.contact_id);
-
   const handleOpenContact = (contactId: number) => {
-    onOpenContact?.(contactId, contactIds);
+    onOpenContact?.(contactId);
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex flex-col sm:max-w-md overflow-hidden">
-        <SheetHeader>
+    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
+      <SheetContent
+        side="right"
+        hideOverlay
+        className="z-50 flex h-svh max-h-svh min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+        onInteractOutside={(event) => {
+          if (stackedContactOpen) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (stackedContactOpen) event.preventDefault();
+        }}
+      >
+        <SheetHeader className="shrink-0 space-y-1 px-6 pb-4 pt-6">
           <SheetTitle className="font-serif pr-8">{title}</SheetTitle>
           {description ? <SheetDescription>{description}</SheetDescription> : null}
         </SheetHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto -mx-6 px-6 pb-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-6">
           {loading ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Chargement…</p>
           ) : contacts.length === 0 ? (

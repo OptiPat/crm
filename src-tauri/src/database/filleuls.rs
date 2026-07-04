@@ -38,7 +38,9 @@ impl super::Database {
             return Ok(None);
         }
 
-        let mut stmt = self.conn.prepare("SELECT id, nom, prenom FROM contacts")?;
+        let mut stmt = self.conn.prepare(
+            "SELECT id, nom, prenom FROM contacts ORDER BY id ASC",
+        )?;
         let rows = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, i64>(0)?,
@@ -77,5 +79,32 @@ impl super::Database {
             return Ok(None);
         }
         self.find_contact_id_by_name(nom, prenom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::Database;
+    use crate::database::models::NewContact;
+
+    fn sample_contact(nom: &str, prenom: &str) -> NewContact {
+        NewContact {
+            categorie: "CLIENT".into(),
+            nom: nom.into(),
+            prenom: prenom.into(),
+            statut_suivi: Some("ACTIF".into()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn find_contact_id_by_name_picks_lowest_id_on_homonyms() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let first = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+        let second = db.create_contact(sample_contact("Dupont", "Jean")).unwrap();
+
+        let resolved = db.find_contact_id_by_name("Dupont", "Jean").unwrap();
+        assert_eq!(resolved, Some(first.id.unwrap()));
+        assert!(first.id.unwrap() < second.id.unwrap());
     }
 }

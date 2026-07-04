@@ -237,6 +237,7 @@ impl Database {
 mod database_integration_tests {
     use super::*;
     use chrono::TimeZone;
+    use crate::database::contacts::UpdateContactFieldPresence;
     use crate::database::models::{
         NewContact, NewFoyer, NewInvestissement, NewInvestissementValorisation,
         NewInvestissementVersement,
@@ -1250,7 +1251,7 @@ mod database_integration_tests {
                 date_r1: Some("2024-06-01T00:00:00+00:00".into()),
                 ..sample_contact("Dupont", "Alice")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
         db.update_contact(
@@ -1259,7 +1260,7 @@ mod database_integration_tests {
                 date_r1: Some("2025-06-01T00:00:00+00:00".into()),
                 ..sample_contact("Martin", "Bob")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 
@@ -1309,7 +1310,7 @@ mod database_integration_tests {
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
                 ..sample_contact("Legrand", "Paul")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 
@@ -1348,7 +1349,7 @@ mod database_integration_tests {
                 date_r1: Some("2024-06-01T00:00:00+00:00".into()),
                 ..sample_contact("Dupont", "Alice")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
         db.update_contact(
@@ -1357,7 +1358,7 @@ mod database_integration_tests {
                 date_r1: Some("2025-06-01T00:00:00+00:00".into()),
                 ..sample_contact("Martin", "Bob")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 
@@ -1405,7 +1406,7 @@ mod database_integration_tests {
                 filleul_categorie: Some("PROSPECT_FILLEUL".into()),
                 ..sample_contact("Legrand", "Paul")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
         db.update_contact(
@@ -1417,7 +1418,7 @@ mod database_integration_tests {
                 filleul_categorie: Some("FILLEUL".into()),
                 ..sample_contact("Bernard", "Luc")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 
@@ -1732,7 +1733,7 @@ mod database_integration_tests {
                 date_dernier_contact: Some(recent_iso),
                 ..sample_contact("Martin", "Paul")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 
@@ -2033,7 +2034,7 @@ mod database_integration_tests {
                     email: Some("jean@example.com".into()),
                     ..sample_contact("NOM2", "Jean")
                 },
-                false,
+                UpdateContactFieldPresence::default(),
             )
             .unwrap();
 
@@ -2610,6 +2611,123 @@ mod database_integration_tests {
             db.get_etiquette_email_queue("ready").unwrap().len(),
             1,
             "après signal Stellium, l'envoi Exceltis doit être planifié"
+        );
+    }
+
+    #[test]
+    fn exceltis_dismiss_annonce_preserves_ready_queue() {
+        use crate::database::models::{NewEtiquette, NewTemplateEmail};
+        use crate::email::stellium_exceltis::format_exceltis_etiquette_nom;
+
+        let db = test_db();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+        let nom = format_exceltis_etiquette_nom(Some("Rendement"), 12, 2024).unwrap();
+
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Exceltis tpl dismiss".into(),
+                sujet: "Exceltis {{millesime}}".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: None,
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        let etiqu = db
+            .create_etiquette(NewEtiquette {
+                nom: nom.clone(),
+                couleur: None,
+                icone: None,
+                description: None,
+                priorite: Some(50),
+                auto_condition_type: None,
+                auto_condition_config: None,
+                auto_categories: None,
+                email_template_id: Some(tpl.id),
+                email_delai_jours: Some(0),
+                email_envoi_prevu: Some(1),
+                email_envoi_heure: None,
+                email_envoi_jours_semaine: None,
+                email_actif: Some(true),
+                is_default: Some(false),
+                actif: Some(true),
+                segment_id: None,
+                rendement_cible: None,
+            })
+            .unwrap();
+
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("dismiss.exceltis@example.com".into()),
+                ..sample_contact("DISMISS", "Exceltis")
+            })
+            .unwrap();
+
+        db.attribuer_etiquette(
+            contact.id.unwrap(),
+            etiqu.id,
+            Some("MANUEL".into()),
+            None,
+        )
+        .unwrap();
+
+        let signal_id = "gmail-dismiss::Rendement::12::2024";
+        let state_json = serde_json::json!({
+            "signals": [{
+                "gmailMessageId": signal_id,
+                "subject": "Remboursement Exceltis Rendement Décembre 2024",
+                "millesimeLabel": "Décembre 2024",
+                "etiquetteNom": nom,
+                "etiquetteId": etiqu.id,
+                "contactCount": 1,
+                "receivedAt": now - 120,
+            }],
+            "etiquetteTriggerAt": {
+                etiqu.id.to_string(): now - 120
+            }
+        });
+        db.set_setting(
+            "stellium_exceltis_signals_v1",
+            &state_json.to_string(),
+        )
+        .unwrap();
+
+        db.sync_exceltis_etiquette_email_schedule(etiqu.id).unwrap();
+        assert_eq!(db.get_etiquette_email_queue("ready").unwrap().len(), 1);
+
+        let dismissed_json = serde_json::json!({
+            "signals": [{
+                "gmailMessageId": signal_id,
+                "subject": "Remboursement Exceltis Rendement Décembre 2024",
+                "millesimeLabel": "Décembre 2024",
+                "etiquetteNom": nom,
+                "etiquetteId": etiqu.id,
+                "contactCount": 1,
+                "receivedAt": now - 120,
+            }],
+            "dismissedMessageIds": [signal_id],
+            "etiquetteTriggerAt": {
+                etiqu.id.to_string(): now - 120
+            }
+        });
+        db.set_setting(
+            "stellium_exceltis_signals_v1",
+            &dismissed_json.to_string(),
+        )
+        .unwrap();
+
+        db.sync_pending_email_dates_for_all_active_campaigns()
+            .unwrap();
+        assert_eq!(
+            db.get_etiquette_email_queue("ready").unwrap().len(),
+            1,
+            "masquer l’annonce ne doit pas vider Prêt à envoyer"
         );
     }
 
@@ -5688,7 +5806,7 @@ mod database_integration_tests {
                 categorie: "PROSPECT".into(),
                 ..sample_contact("CatChange", "Bob")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 
@@ -5745,7 +5863,7 @@ mod database_integration_tests {
                 categorie: "PROSPECT".into(),
                 ..sample_contact("FullRecalc", "Ann")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 

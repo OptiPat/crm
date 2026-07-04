@@ -133,6 +133,7 @@ import {
   financingCentimesToEuro,
 } from "@/lib/investissements/investissement-immo-financing";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 import { Plus } from "lucide-react";
 import {
@@ -151,6 +152,8 @@ interface InvestissementFormProps {
   defaultContactId?: number;
   defaultFoyerId?: number;
   onEncoursUpdated?: () => void;
+  /** Volet empilé (fiche contact dashboard) — pas d'overlay opaque supplémentaire. */
+  nestedSheet?: boolean;
 }
 
 const PARTENAIRE_NONE_VALUE = "__none__";
@@ -217,6 +220,7 @@ export function InvestissementForm({
   defaultContactId,
   defaultFoyerId,
   onEncoursUpdated,
+  nestedSheet = false,
 }: InvestissementFormProps) {
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -1501,7 +1505,11 @@ export function InvestissementForm({
         <Sheet open={open} onOpenChange={onOpenChange}>
           <SheetContent
             side="right"
-            className="flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]"
+            hideOverlay={nestedSheet}
+            className={cn(
+              "flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]",
+              nestedSheet && "z-[70]"
+            )}
           >
             <div className="shrink-0 border-b px-6 py-4">
               <SheetHeader>

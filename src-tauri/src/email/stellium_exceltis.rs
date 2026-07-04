@@ -71,6 +71,9 @@ struct StelliumExceltisState {
     dismissed_message_ids: Vec<String>,
     #[serde(default)]
     signals: Vec<StelliumExceltisSignal>,
+    /// Déclencheur campagne conservé même si l’annonce Stellium est masquée (UI).
+    #[serde(default, alias = "etiquetteTriggerAt")]
+    etiquette_trigger_at: HashMap<i64, i64>,
     /// Tentatives de parsing millésime (message_id → compteur).
     #[serde(default, alias = "parseRetryByMessageId")]
     parse_retry_by_message_id: HashMap<String, u32>,
@@ -567,6 +570,23 @@ fn resolve_etiquette_id_for_exceltis_key(
         .or_else(|| find_etiquette_id_by_exceltis_key(db, key))
 }
 
+fn record_etiquette_trigger(state: &mut StelliumExceltisState, signal: &StelliumExceltisSignal) {
+    if let Some(etiquette_id) = signal.etiquette_id {
+        state
+            .etiquette_trigger_at
+            .entry(etiquette_id)
+            .and_modify(|ts| *ts = (*ts).max(signal.received_at))
+            .or_insert(signal.received_at);
+    }
+}
+
+fn refresh_etiquette_triggers_from_signals(state: &mut StelliumExceltisState) {
+    let signals = state.signals.clone();
+    for signal in &signals {
+        record_etiquette_trigger(state, signal);
+    }
+}
+
 /// Date du mail Stellium le plus récent pour cette étiquette millésime (si signal connu).
 pub fn stellium_signal_received_at_for_etiquette(
     db: &crate::database::Database,
@@ -577,7 +597,7 @@ pub fn stellium_signal_received_at_for_etiquette(
         .map_err(|e| e.to_string())?;
     let state = load_state(db)?;
     let etiquette_key = parse_exceltis_key_from_text(&etiquette.nom);
-    let mut best: Option<i64> = None;
+    let mut best: Option<i64> = state.etiquette_trigger_at.get(&etiquette_id).copied();
     for signal in &state.signals {
         let matches_id = signal.etiquette_id == Some(etiquette_id);
         let matches_key = match (etiquette_key.as_ref(), effective_exceltis_key_from_signal(signal)) {
@@ -979,6 +999,7 @@ fn sanitize_stellium_state(state: &mut StelliumExceltisState) -> bool {
         let _ = upsert_signal_by_key(&mut deduped, signal);
     }
     state.signals = deduped;
+    refresh_etiquette_triggers_from_signals(state);
     state.signals.len() != before
 }
 
@@ -1041,6 +1062,7 @@ pub fn dismiss_stellium_exceltis_signal(
         if id.is_empty() {
             return Err("Identifiant de message invalide".into());
         }
+        refresh_etiquette_triggers_from_signals(&mut state);
         if !state.dismissed_message_ids.contains(&id) {
             state.dismissed_message_ids.push(id);
         }
@@ -1259,9 +1281,10 @@ pub fn scan_stellium_exceltis_emails(
                         if dismissed.contains(&signal.gmail_message_id) {
                             continue;
                         }
-                        if upsert_signal_by_key(&mut state.signals, signal) {
+                        if upsert_signal_by_key(&mut state.signals, signal.clone()) {
                             new_signals += 1;
                         }
+                        record_etiquette_trigger(&mut state, &signal);
                     }
                 }
             } else if item.remboursement_unparsed {

@@ -148,13 +148,7 @@ impl Database {
         })? {
             Some(ts) => ts,
             None => {
-                self.conn.execute(
-                    "UPDATE contact_etiquettes SET email_date_prevue = NULL
-                     WHERE etiquette_id = ?1 AND email_envoye = 0
-                       AND COALESCE(email_annule, 0) = 0
-                       AND COALESCE(email_suivi_ignore, 0) = 0",
-                    params![etiquette_id],
-                )?;
+                // Masquer l’annonce Stellium ≠ annuler la campagne : ne jamais vider une file déjà déclenchée.
                 return Ok(0);
             }
         };

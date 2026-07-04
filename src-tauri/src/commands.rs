@@ -1,4 +1,5 @@
 use crate::database::{
+    contacts::UpdateContactFieldPresence,
     models::{
         Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
         ContactCustomField, ContactEtiquetteDetails, CustomFieldDef, CustomFieldValueInput,
@@ -142,9 +143,16 @@ pub fn update_contact(
     contact: serde_json::Value,
     skip_post_save_hooks: Option<bool>,
 ) -> Result<Contact, String> {
-    let birthday_in_payload = contact
-        .as_object()
-        .is_some_and(|fields| fields.contains_key("date_naissance"));
+    let field_presence = contact.as_object().map_or(
+        UpdateContactFieldPresence::default(),
+        |fields| UpdateContactFieldPresence {
+            birthday: fields.contains_key("date_naissance"),
+            filleul_titre: fields.contains_key("filleul_titre"),
+            filleul_qualification: fields.contains_key("filleul_qualification"),
+            filleul_volume: fields.contains_key("filleul_volume"),
+            filleul_volume_manager: fields.contains_key("filleul_volume_manager"),
+        },
+    );
     let contact: NewContact = serde_json::from_value(contact)
         .map_err(|e| format!("Payload contact invalide : {e}"))?;
 
@@ -152,7 +160,7 @@ pub fn update_contact(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .update_contact(id, &contact, birthday_in_payload)
+        .update_contact(id, &contact, field_presence)
         .map_err(|e| format!("Failed to update contact: {}", e))?;
     if !skip_post_save_hooks.unwrap_or(false) {
         let _ = database.check_auto_etiquettes_for_contact(id);

@@ -27,16 +27,18 @@ const SheetContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
     side?: "top" | "right" | "bottom" | "left"
+    hideOverlay?: boolean
+    overlayClassName?: string
   }
->(({ side = "right", className, children, ...props }, ref) => (
+>(({ side = "right", className, children, hideOverlay, overlayClassName, ...props }, ref) => (
   <SheetPortal>
-    <SheetOverlay />
+    {!hideOverlay ? <SheetOverlay className={overlayClassName} /> : null}
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
         "fixed z-50 gap-4 bg-background p-6 shadow-lg transition ease-in-out data-[state=closed]:duration-300 data-[state=open]:duration-500 data-[state=open]:animate-in data-[state=closed]:animate-out",
         side === "right" &&
-          "inset-y-0 right-0 h-full w-full border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-xl",
+          "inset-y-0 right-0 h-full max-h-svh w-full border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-xl pointer-events-auto",
         side === "left" &&
           "inset-y-0 left-0 h-full w-full border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-xl",
         className

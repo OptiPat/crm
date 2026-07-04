@@ -122,6 +122,8 @@ interface ContactDetailProps {
   onNavigate?: (page: string) => void;
   /** Panneau latéral (split liste/détail) au lieu de la modale seule */
   embedded?: boolean;
+  /** Formulaire investissement empilé (drill-down dashboard) — pas d'overlay supplémentaire. */
+  nestedInvestissementSheet?: boolean;
 }
 
 type DetailTab = "synthese" | "relation" | "patrimoine" | "foyer";
@@ -139,6 +141,7 @@ export function ContactDetail({
   onOpenContact,
   onNavigate,
   embedded = false,
+  nestedInvestissementSheet = false,
 }: ContactDetailProps) {
   const [detailTab, setDetailTab] = useState<DetailTab>("synthese");
   const [showEditForm, setShowEditForm] = useState(false);
@@ -1120,6 +1123,7 @@ export function ContactDetail({
         defaultContactId={contact?.id}
         onSuccess={handleInvestissementSuccess}
         onEncoursUpdated={loadInvestissements}
+        nestedSheet={nestedInvestissementSheet}
       />
 
       {/* Modales de gestion des foyers */}

@@ -4,6 +4,41 @@ use super::{
 };
 use rusqlite::{params, Result};
 
+/// Présence explicite des champs dans un payload JSON `update_contact`.
+/// Les champs absents ne doivent pas écraser la fiche existante (import partiel, etc.).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct UpdateContactFieldPresence {
+    pub birthday: bool,
+    pub filleul_titre: bool,
+    pub filleul_qualification: bool,
+    pub filleul_volume: bool,
+    pub filleul_volume_manager: bool,
+}
+
+fn merge_optional_string(
+    in_payload: bool,
+    incoming: &Option<String>,
+    existing: &Option<String>,
+) -> Option<String> {
+    if in_payload || incoming.is_some() {
+        incoming.clone()
+    } else {
+        existing.clone()
+    }
+}
+
+fn merge_optional_f64(
+    in_payload: bool,
+    incoming: Option<f64>,
+    existing: Option<f64>,
+) -> Option<f64> {
+    if in_payload || incoming.is_some() {
+        incoming
+    } else {
+        existing
+    }
+}
+
 fn parse_optional_date_iso(date_str: &str) -> Option<i64> {
     use chrono::{DateTime, NaiveDate, TimeZone, Utc};
     if let Ok(dt) = DateTime::parse_from_rfc3339(date_str) {
@@ -364,7 +399,7 @@ pub fn update_contact(
         &self,
         id: i64,
         contact: &NewContact,
-        birthday_in_payload: bool,
+        field_presence: UpdateContactFieldPresence,
     ) -> Result<Contact> {
         use chrono::DateTime;
 
@@ -420,7 +455,7 @@ pub fn update_contact(
             .unwrap_or_else(|| "ACTIF".to_string());
 
         let existing = self.get_contact_by_id(id)?;
-        let date_naissance_timestamp = if birthday_in_payload {
+        let date_naissance_timestamp = if field_presence.birthday {
             match contact.date_naissance.as_deref() {
                 None | Some("") => None,
                 Some(date_str) => parse_optional_date_iso(date_str),
@@ -428,6 +463,27 @@ pub fn update_contact(
         } else {
             existing.date_naissance
         };
+
+        let filleul_titre = merge_optional_string(
+            field_presence.filleul_titre,
+            &contact.filleul_titre,
+            &existing.filleul_titre,
+        );
+        let filleul_qualification = merge_optional_string(
+            field_presence.filleul_qualification,
+            &contact.filleul_qualification,
+            &existing.filleul_qualification,
+        );
+        let filleul_volume = merge_optional_f64(
+            field_presence.filleul_volume,
+            contact.filleul_volume,
+            existing.filleul_volume,
+        );
+        let filleul_volume_manager = merge_optional_f64(
+            field_presence.filleul_volume_manager,
+            contact.filleul_volume_manager,
+            existing.filleul_volume_manager,
+        );
 
         self.conn.execute(
             "UPDATE contacts SET 
@@ -511,10 +567,10 @@ pub fn update_contact(
                 type_invitation_filleul,
                 date_invitation_filleul_timestamp,
                 presence_invitation_filleul,
-                &contact.filleul_titre,
-                &contact.filleul_qualification,
-                &contact.filleul_volume,
-                &contact.filleul_volume_manager,
+                &filleul_titre,
+                &filleul_qualification,
+                &filleul_volume,
+                &filleul_volume_manager,
                 &statut_suivi,
                 super::contact_row::normalize_contact_registre(contact.registre.as_deref()),
                 &contact.notes,
@@ -592,6 +648,7 @@ pub fn update_contact(
 #[cfg(test)]
 mod tests {
     use super::super::Database;
+    use super::UpdateContactFieldPresence;
     use rusqlite::params;
 
     fn insert_contact(db: &Database, nom: &str) -> i64 {
@@ -634,7 +691,7 @@ mod tests {
                 email: Some("jean@example.com".into()),
                 ..sample_contact("Dupont", "Jean")
             },
-            false,
+            UpdateContactFieldPresence::default(),
         )
         .unwrap();
 
@@ -662,7 +719,10 @@ mod tests {
                 date_naissance: Some("".into()),
                 ..sample_contact("Martin", "Paul")
             },
-            true,
+            UpdateContactFieldPresence {
+                birthday: true,
+                ..Default::default()
+            },
         )
         .unwrap();
 
@@ -691,5 +751,81 @@ mod tests {
         let cleared = db.update_contact_fiscal(id, None, None, None, None).unwrap();
         assert_eq!(cleared.tranche_imposition, None);
         assert_eq!(cleared.nombre_parts_fiscales, None);
+    }
+
+    #[test]
+    fn update_contact_preserves_filleul_organisation_when_not_in_payload() {
+        use crate::database::models::NewContact;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let created = db
+            .create_contact(NewContact {
+                filleul_titre: Some("SENIOR".into()),
+                filleul_qualification: Some("QUALIFIE".into()),
+                filleul_volume: Some(120_000.0),
+                filleul_volume_manager: Some(450_000.0),
+                ..sample_contact("Dupont", "Jean")
+            })
+            .unwrap();
+        let id = created.id.unwrap();
+
+        db.update_contact(
+            id,
+            &NewContact {
+                email: Some("jean@example.com".into()),
+                ..sample_contact("Dupont", "Jean")
+            },
+            UpdateContactFieldPresence::default(),
+        )
+        .unwrap();
+
+        let reloaded = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reloaded.email.as_deref(), Some("jean@example.com"));
+        assert_eq!(reloaded.filleul_titre.as_deref(), Some("SENIOR"));
+        assert_eq!(reloaded.filleul_qualification.as_deref(), Some("QUALIFIE"));
+        assert_eq!(reloaded.filleul_volume, Some(120_000.0));
+        assert_eq!(reloaded.filleul_volume_manager, Some(450_000.0));
+    }
+
+    #[test]
+    fn update_contact_clears_filleul_organisation_when_null_in_payload() {
+        use crate::database::models::NewContact;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let created = db
+            .create_contact(NewContact {
+                filleul_titre: Some("SENIOR".into()),
+                filleul_qualification: Some("QUALIFIE".into()),
+                filleul_volume: Some(120_000.0),
+                filleul_volume_manager: Some(450_000.0),
+                ..sample_contact("Martin", "Paul")
+            })
+            .unwrap();
+        let id = created.id.unwrap();
+
+        db.update_contact(
+            id,
+            &NewContact {
+                filleul_titre: None,
+                filleul_qualification: None,
+                filleul_volume: None,
+                filleul_volume_manager: None,
+                ..sample_contact("Martin", "Paul")
+            },
+            UpdateContactFieldPresence {
+                filleul_titre: true,
+                filleul_qualification: true,
+                filleul_volume: true,
+                filleul_volume_manager: true,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let reloaded = db.get_contact_by_id(id).unwrap();
+        assert_eq!(reloaded.filleul_titre, None);
+        assert_eq!(reloaded.filleul_qualification, None);
+        assert_eq!(reloaded.filleul_volume, None);
+        assert_eq!(reloaded.filleul_volume_manager, None);
     }
 }

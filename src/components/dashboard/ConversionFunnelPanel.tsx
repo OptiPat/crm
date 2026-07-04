@@ -11,6 +11,7 @@ import {
   type ConversionFilleulStats,
 } from "@/lib/api/tauri-dashboard";
 import { cn } from "@/lib/utils";
+import { DashboardDrillDownBackdrop } from "./DashboardDrillDownBackdrop";
 import { DashboardStatContactsSheet } from "./DashboardStatContactsSheet";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { ChartEmpty, ChartLoading, DashboardPanel } from "./dashboard-ui";
@@ -121,16 +122,22 @@ function ClientConversionCard({
   periodStart,
   periodEnd,
   onOpenContact,
+  onOpenContactFromList,
   dataRefreshSignal = 0,
   activeContactId,
+  stackedContactOpen = false,
+  onListClose,
 }: {
   stats: ConversionClientStats;
   periodLabel: string;
   periodStart: number;
   periodEnd: number;
   onOpenContact?: DashboardDrillDownOpenContact;
+  onOpenContactFromList?: DashboardDrillDownOpenContact;
   dataRefreshSignal?: number;
   activeContactId?: number | null;
+  stackedContactOpen?: boolean;
+  onListClose?: () => void;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [segment, setSegment] = useState<ConversionClientSegment>("r1");
@@ -230,15 +237,22 @@ function ClientConversionCard({
         </div>
       </DashboardPanel>
 
+      {sheetOpen ? <DashboardDrillDownBackdrop /> : null}
+
       <DashboardStatContactsSheet
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={(open) => {
+          if (!open && stackedContactOpen) return;
+          setSheetOpen(open);
+          if (!open) onListClose?.();
+        }}
         title={sheetTitle}
         description="Cliquer un contact pour ouvrir sa fiche"
         loadContacts={loadContacts}
         refreshSignal={dataRefreshSignal}
         activeContactId={activeContactId}
-        onOpenContact={onOpenContact}
+        stackedContactOpen={stackedContactOpen}
+        onOpenContact={onOpenContactFromList ?? onOpenContact}
       />
     </>
   );
@@ -250,16 +264,22 @@ function FilleulConversionCard({
   periodStart,
   periodEnd,
   onOpenContact,
+  onOpenContactFromList,
   dataRefreshSignal = 0,
   activeContactId,
+  stackedContactOpen = false,
+  onListClose,
 }: {
   stats: ConversionFilleulStats;
   periodLabel: string;
   periodStart: number;
   periodEnd: number;
   onOpenContact?: DashboardDrillDownOpenContact;
+  onOpenContactFromList?: DashboardDrillDownOpenContact;
   dataRefreshSignal?: number;
   activeContactId?: number | null;
+  stackedContactOpen?: boolean;
+  onListClose?: () => void;
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [segment, setSegment] = useState<ConversionFilleulSegment>("invites");
@@ -346,15 +366,22 @@ function FilleulConversionCard({
         </div>
       </DashboardPanel>
 
+      {sheetOpen ? <DashboardDrillDownBackdrop /> : null}
+
       <DashboardStatContactsSheet
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={(open) => {
+          if (!open && stackedContactOpen) return;
+          setSheetOpen(open);
+          if (!open) onListClose?.();
+        }}
         title={sheetTitle}
         description="Cliquer un contact pour ouvrir sa fiche"
         loadContacts={loadContacts}
         refreshSignal={dataRefreshSignal}
         activeContactId={activeContactId}
-        onOpenContact={onOpenContact}
+        stackedContactOpen={stackedContactOpen}
+        onOpenContact={onOpenContactFromList ?? onOpenContact}
       />
     </>
   );
@@ -367,6 +394,9 @@ interface ConversionFunnelPanelProps {
   dataRefreshSignal?: number;
   activeContactId?: number | null;
   onOpenContact?: DashboardDrillDownOpenContact;
+  onOpenContactFromList?: DashboardDrillDownOpenContact;
+  stackedContactOpen?: boolean;
+  onListClose?: () => void;
 }
 
 export function ConversionFunnelPanel({
@@ -376,6 +406,9 @@ export function ConversionFunnelPanel({
   dataRefreshSignal = 0,
   activeContactId,
   onOpenContact,
+  onOpenContactFromList,
+  stackedContactOpen = false,
+  onListClose,
 }: ConversionFunnelPanelProps) {
   const [client, setClient] = useState<ConversionClientStats | null>(null);
   const [filleul, setFilleul] = useState<ConversionFilleulStats | null>(null);
@@ -419,6 +452,9 @@ export function ConversionFunnelPanel({
           dataRefreshSignal={dataRefreshSignal}
           activeContactId={activeContactId}
           onOpenContact={onOpenContact}
+          onOpenContactFromList={onOpenContactFromList}
+          stackedContactOpen={stackedContactOpen}
+          onListClose={onListClose}
         />
       ) : null}
       {filleul ? (
@@ -430,6 +466,9 @@ export function ConversionFunnelPanel({
           dataRefreshSignal={dataRefreshSignal}
           activeContactId={activeContactId}
           onOpenContact={onOpenContact}
+          onOpenContactFromList={onOpenContactFromList}
+          stackedContactOpen={stackedContactOpen}
+          onListClose={onListClose}
         />
       ) : null}
     </div>

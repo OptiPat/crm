@@ -99,7 +99,10 @@ interface DashboardStatInvestissementsSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   refreshSignal?: number;
-  onOpenContact?: (contactId: number, contactIds?: number[]) => void;
+  onOpenContact?: (contactId: number) => void;
+  /** Fiche contact ouverte — bloque la fermeture accidentelle du volet liste. */
+  stackedContactOpen?: boolean;
+  activeContactId?: number | null;
 }
 
 export function DashboardStatInvestissementsSheet({
@@ -108,6 +111,8 @@ export function DashboardStatInvestissementsSheet({
   onOpenChange,
   refreshSignal,
   onOpenContact,
+  stackedContactOpen = false,
+  activeContactId = null,
 }: DashboardStatInvestissementsSheetProps) {
   const [items, setItems] = useState<InvestissementWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
@@ -150,21 +155,27 @@ export function DashboardStatInvestissementsSheet({
     };
   }, [open, variant, loadItems, refreshSignal]);
 
-  const contactIds = items
-    .map((inv) => inv.contact_id)
-    .filter((id): id is number => id != null);
-
   if (!config) return null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="flex flex-col sm:max-w-md overflow-hidden">
-        <SheetHeader>
+    <Sheet open={open} onOpenChange={onOpenChange} modal={false}>
+      <SheetContent
+        side="right"
+        hideOverlay
+        className="z-50 flex h-svh max-h-svh min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
+        onInteractOutside={(event) => {
+          if (stackedContactOpen) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (stackedContactOpen) event.preventDefault();
+        }}
+      >
+        <SheetHeader className="shrink-0 space-y-1 px-6 pb-4 pt-6">
           <SheetTitle className="font-serif pr-8">{config.title}</SheetTitle>
           <SheetDescription>{config.description}</SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto -mx-6 px-6 pb-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-6">
           {loading ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Chargement…</p>
           ) : items.length === 0 ? (
@@ -173,18 +184,22 @@ export function DashboardStatInvestissementsSheet({
             <ul className="space-y-2">
               {items.map((inv) => {
                 const interactive = Boolean(onOpenContact && inv.contact_id != null);
+                const isActive =
+                  activeContactId != null && inv.contact_id === activeContactId;
                 return (
                   <li key={inv.id}>
                     <button
                       type="button"
                       className={cn(
                         "w-full flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
-                        "border-border/60 bg-background",
+                        isActive
+                          ? "border-primary/50 bg-primary/5"
+                          : "border-border/60 bg-background",
                         interactive && "hover:bg-muted/40 cursor-pointer"
                       )}
                       onClick={() => {
                         if (inv.contact_id != null) {
-                          onOpenContact?.(inv.contact_id, contactIds);
+                          onOpenContact?.(inv.contact_id);
                         }
                       }}
                       disabled={!interactive}

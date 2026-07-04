@@ -1,4 +1,4 @@
-/** Ouvre une fiche contact depuis un drill-down dashboard (liste optionnelle pour navigation). */
+/** Ouvre une fiche contact depuis un drill-down dashboard (liste optionnelle pour surbrillance). */
 export type DashboardDrillDownOpenContact = (
   contactId: number,
   contactIds?: number[]

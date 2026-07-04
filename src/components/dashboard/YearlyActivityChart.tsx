@@ -24,6 +24,7 @@ import {
   formatActivityBucketLabel,
   type DashboardPeriodGranularity,
 } from "@/lib/dashboard/dashboard-period-filter";
+import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import { DashboardStatContactsSheet } from "@/components/dashboard/DashboardStatContactsSheet";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import {
@@ -48,6 +49,9 @@ interface YearlyActivityChartProps {
   dataRefreshSignal?: number;
   activeContactId?: number | null;
   onOpenContact?: DashboardDrillDownOpenContact;
+  onOpenContactFromList?: DashboardDrillDownOpenContact;
+  stackedContactOpen?: boolean;
+  onListClose?: () => void;
 }
 
 export function YearlyActivityChart({
@@ -57,6 +61,9 @@ export function YearlyActivityChart({
   dataRefreshSignal = 0,
   activeContactId,
   onOpenContact,
+  onOpenContactFromList,
+  stackedContactOpen = false,
+  onListClose,
 }: YearlyActivityChartProps) {
   const [data, setData] = useState<YearlyActivityStats[]>([]);
   const [summary, setSummary] = useState<ActivityPeriodSummary | null>(null);
@@ -263,15 +270,22 @@ export function YearlyActivityChart({
         )}
       </DashboardPanel>
 
+      {sheetOpen ? <DashboardDrillDownBackdrop /> : null}
+
       <DashboardStatContactsSheet
         open={sheetOpen}
-        onOpenChange={setSheetOpen}
+        onOpenChange={(open) => {
+          if (!open && stackedContactOpen) return;
+          setSheetOpen(open);
+          if (!open) onListClose?.();
+        }}
         title={selectedBucket ? `Clients — ${selectedBucket.label}` : "Clients"}
         description="Cliquer un contact pour ouvrir sa fiche"
         loadContacts={loadBucketContacts}
         refreshSignal={dataRefreshSignal}
         activeContactId={activeContactId}
-        onOpenContact={onOpenContact}
+        stackedContactOpen={stackedContactOpen}
+        onOpenContact={onOpenContactFromList ?? onOpenContact}
       />
     </>
   );
