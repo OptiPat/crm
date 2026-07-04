@@ -12,6 +12,7 @@ export const CONTACT_AUTO_RULE_CATEGORIES: readonly ContactAutoRuleCategory[] = 
   { value: "CLIENT", label: "Client" },
   { value: "PROSPECT_CLIENT", label: "Prospect client" },
   { value: "SUSPECT_CLIENT", label: "Suspect client" },
+  { value: "PRESCRIPTEUR", label: "Prescripteur" },
   { value: "FILLEUL", label: "Filleul" },
   { value: "PROSPECT_FILLEUL", label: "Prospect filleul" },
   { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },

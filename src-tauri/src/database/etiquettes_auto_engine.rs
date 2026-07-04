@@ -325,28 +325,13 @@ impl Database {
             "TYPE_PRODUIT" => {
                 if let Some(config_str) = config {
                     if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) {
-                        let types: Vec<String> = parsed["types"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(String::from))
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        let noms: Vec<String> = parsed["noms_produit"]
-                            .as_array()
-                            .map(|arr| {
-                                arr.iter()
-                                    .filter_map(|v| v.as_str().map(String::from))
-                                    .filter(|s| !s.trim().is_empty())
-                                    .collect()
-                            })
-                            .unwrap_or_default();
-                        self.contact_has_investment_types_and_noms(
+                        let cfg = super::type_produit_condition::parse_type_produit_condition_json(
+                            &parsed,
+                        );
+                        self.contact_matches_type_produit_condition(
                             contact_id,
                             contact.foyer_id,
-                            &types,
-                            &noms,
+                            &cfg,
                         )
                         .unwrap_or(false)
                     } else {
@@ -1100,6 +1085,23 @@ mod filleul_rank_category_tests {
         ));
         assert!(Database::contact_matches_auto_categories(
             &direct, &cats, Some(SELF_ID)
+        ));
+    }
+
+    #[test]
+    fn prescripteur_category_matches() {
+        let mut c = sample_filleul(None, None, None);
+        c.categorie = "PRESCRIPTEUR".into();
+        c.filleul_categorie = None;
+        assert!(Database::contact_matches_auto_categories(
+            &c,
+            &["PRESCRIPTEUR".into()],
+            None
+        ));
+        assert!(!Database::contact_matches_auto_categories(
+            &c,
+            &["CLIENT".into()],
+            None
         ));
     }
 }

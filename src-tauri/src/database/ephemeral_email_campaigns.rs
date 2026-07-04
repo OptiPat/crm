@@ -56,6 +56,8 @@ impl Default for EphemeralVersementProgrammeFilter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct EphemeralCampaignAudience {
+    #[serde(default, alias = "segmentId")]
+    pub segment_id: Option<i64>,
     #[serde(default = "default_categories")]
     pub categories: Vec<String>,
     #[serde(default, alias = "typesProduit")]
@@ -377,6 +379,14 @@ impl Database {
         audience: &EphemeralCampaignAudience,
         organisation_self_id: Option<i64>,
     ) -> Result<bool> {
+        if let Some(segment_id) = audience.segment_id.filter(|id| *id > 0) {
+            return self.contact_matches_segment(
+                contact,
+                segment_id,
+                Some(&organisation_self_id),
+            );
+        }
+
         const CLIENT_SIDE: &[&str] = &["CLIENT", "PROSPECT_CLIENT", "SUSPECT_CLIENT"];
         const FILLEUL_SIDE: &[&str] = &[
             "FILLEUL",
@@ -415,7 +425,16 @@ impl Database {
             )
             && self.contact_matches_ephemeral_client_patrimoine(contact, audience)?;
 
-        Ok(filleul_ok || client_ok)
+        let prescripteur_cats =
+            Self::filter_audience_categories(&audience.categories, &["PRESCRIPTEUR"]);
+        let prescripteur_ok = !prescripteur_cats.is_empty()
+            && Self::contact_matches_auto_categories(
+                contact,
+                &prescripteur_cats,
+                organisation_self_id,
+            );
+
+        Ok(filleul_ok || client_ok || prescripteur_ok)
     }
 
     pub fn preview_ephemeral_campaign_audience(
@@ -828,9 +847,40 @@ mod tests {
     }
 
     #[test]
+    fn ephemeral_prescripteur_category_only() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = EphemeralCampaignAudience {
+            segment_id: None,
+            categories: vec!["PRESCRIPTEUR".into()],
+            types_produit: vec![],
+            noms_produit: vec![],
+            produits_match_mode: EphemeralProduitsMatchMode::All,
+            reinvestissement_dividendes: EphemeralReinvestFilter::Any,
+            versement_programme: EphemeralVersementProgrammeFilter::Any,
+        };
+
+        let mut presc = sample_contact("RESEAU", "Paul", "p@example.com");
+        presc.categorie = "PRESCRIPTEUR".into();
+        let id = db.create_contact(presc).unwrap();
+        let contact = db.get_contact_by_id(id.id.unwrap()).unwrap();
+        assert!(db
+            .contact_matches_ephemeral_audience(&contact, &audience, None)
+            .unwrap());
+
+        let client = db
+            .create_contact(sample_contact("CLIENT", "Jean", "j@example.com"))
+            .unwrap();
+        let client = db.get_contact_by_id(client.id.unwrap()).unwrap();
+        assert!(!db
+            .contact_matches_ephemeral_audience(&client, &audience, None)
+            .unwrap());
+    }
+
+    #[test]
     fn ephemeral_category_only_filleul_without_products() {
         let db = Database::open_in_memory_for_tests().unwrap();
         let audience = EphemeralCampaignAudience {
+            segment_id: None,
             categories: vec!["FILLEUL".into(), "FILLEUL_MANAGER".into()],
             types_produit: vec![],
             noms_produit: vec![],
@@ -864,6 +914,7 @@ mod tests {
     fn ephemeral_client_plus_filleul_filleul_sans_patrimoine() {
         let db = Database::open_in_memory_for_tests().unwrap();
         let audience = EphemeralCampaignAudience {
+            segment_id: None,
             categories: vec!["CLIENT".into(), "FILLEUL".into()],
             types_produit: vec!["SCPI".into()],
             noms_produit: vec![],
@@ -893,6 +944,7 @@ mod tests {
 
     fn ephemeral_audience_all_scpi(noms: &[&str]) -> EphemeralCampaignAudience {
         EphemeralCampaignAudience {
+            segment_id: None,
             categories: vec!["CLIENT".to_string()],
             types_produit: vec!["SCPI".to_string()],
             noms_produit: noms.iter().map(|s| s.to_string()).collect(),

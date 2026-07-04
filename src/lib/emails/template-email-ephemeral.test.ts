@@ -49,6 +49,7 @@ describe("template-email-ephemeral", () => {
         status: "archived",
         batch_key: "ephemeral-1",
         audience: {
+          segment_id: null,
           categories: ["CLIENT"],
           types_produit: ["SCPI"],
           noms_produit: ["Test"],
@@ -79,6 +80,7 @@ describe("template-email-ephemeral", () => {
 
   it("valide l'audience par catégorie seule ou avec produits", () => {
     const base = {
+      segment_id: null as number | null,
       categories: ["CLIENT"],
       types_produit: [] as string[],
       noms_produit: [] as string[],
@@ -104,6 +106,16 @@ describe("template-email-ephemeral", () => {
         ...base,
         categories: ["CLIENT", "FILLEUL"],
         types_produit: ["SCPI"],
+      })
+    ).toBe(true);
+  });
+
+  it("valide une audience par segment", () => {
+    expect(
+      isEphemeralAudienceValid({
+        ...DEFAULT_EPHEMERAL_CAMPAIGN.audience,
+        segment_id: 12,
+        categories: [],
       })
     ).toBe(true);
   });

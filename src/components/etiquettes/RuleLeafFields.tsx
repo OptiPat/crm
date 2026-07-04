@@ -12,7 +12,8 @@ import type { RuleLeaf } from "@/lib/etiquettes/rule-ast";
 import { MOIS_LABELS } from "@/lib/api/tauri-etiquettes";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
 import { TypeProduitConditionFields } from "@/components/etiquettes/TypeProduitConditionFields";
-import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
+import { buildTypeProduitConditionConfig, parseTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
+import { TypeProduitInvestmentOptions } from "@/components/etiquettes/TypeProduitInvestmentOptions";
 import { IrNetConditionFields, TmiTranchePicker } from "@/components/etiquettes/FiscalRuleFields";
 import {
   type IrNetOperator,
@@ -53,8 +54,33 @@ export function RuleLeafFields({
   const setCategories = (next: string[]) => onChange({ ...leaf, categories: next });
 
 
-  const typeProduitTypes = (leaf.config.types as string[] | undefined) ?? [];
-  const typeProduitNoms = (leaf.config.noms_produit as string[] | undefined) ?? [];
+  const typeProduitCfg = parseTypeProduitConditionConfig({
+    types: (leaf.config.types as string[] | undefined) ?? [],
+    noms_produit: (leaf.config.noms_produit as string[] | undefined) ?? [],
+    produits_match_mode: leaf.config.produits_match_mode as "all" | "any" | undefined,
+    reinvestissement_dividendes: leaf.config.reinvestissement_dividendes as
+      | "any"
+      | "inactive"
+      | "active"
+      | undefined,
+    versement_programme: leaf.config.versement_programme as
+      | "any"
+      | "inactive"
+      | "active"
+      | undefined,
+  });
+
+  const patchTypeProduit = (patch: Partial<typeof typeProduitCfg>) => {
+    const next = { ...typeProduitCfg, ...patch };
+    onChange({
+      ...leaf,
+      config: buildTypeProduitConditionConfig(next.types, next.nomsProduit, {
+        produitsMatchMode: next.produitsMatchMode,
+        reinvestissementDividendes: next.reinvestissementDividendes,
+        versementProgramme: next.versementProgramme,
+      }),
+    });
+  };
 
   const invTypes = (leaf.config.types_produit as string[] | undefined) ?? [];
 
@@ -255,24 +281,25 @@ export function RuleLeafFields({
       )}
 
       {leaf.type === "TYPE_PRODUIT" && (
-        <TypeProduitConditionFields
-          compact
-          types={typeProduitTypes}
-          nomsProduit={typeProduitNoms}
-          highlightInvalid={highlightInvalid}
-          onTypesChange={(next) =>
-            onChange({
-              ...leaf,
-              config: buildTypeProduitConditionConfig(next, typeProduitNoms),
-            })
-          }
-          onNomsProduitChange={(next) =>
-            onChange({
-              ...leaf,
-              config: buildTypeProduitConditionConfig(typeProduitTypes, next),
-            })
-          }
-        />
+        <div className="space-y-3">
+          <TypeProduitConditionFields
+            compact
+            types={typeProduitCfg.types}
+            nomsProduit={typeProduitCfg.nomsProduit}
+            produitsMatchMode={typeProduitCfg.produitsMatchMode}
+            highlightInvalid={highlightInvalid}
+            onTypesChange={(next) => patchTypeProduit({ types: next })}
+            onNomsProduitChange={(next) => patchTypeProduit({ nomsProduit: next })}
+            onProduitsMatchModeChange={(mode) => patchTypeProduit({ produitsMatchMode: mode })}
+          />
+          <TypeProduitInvestmentOptions
+            compact
+            reinvestissementDividendes={typeProduitCfg.reinvestissementDividendes ?? "any"}
+            versementProgramme={typeProduitCfg.versementProgramme ?? "any"}
+            onReinvestissementChange={(v) => patchTypeProduit({ reinvestissementDividendes: v })}
+            onVersementProgrammeChange={(v) => patchTypeProduit({ versementProgramme: v })}
+          />
+        </div>
       )}
 
       {leaf.type === "A_ETIQUETTE" && (

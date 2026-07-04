@@ -32,6 +32,9 @@ describe("type-produit-condition", () => {
     ).toEqual({
       types: ["SCPI"],
       nomsProduit: ["Comète"],
+      produitsMatchMode: "any",
+      reinvestissementDividendes: "any",
+      versementProgramme: "any",
     });
   });
 });

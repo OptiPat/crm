@@ -206,6 +206,9 @@ export interface ConditionTypeProduit {
   types: string[];
   /** Noms produit (investissements) — combinés en ET avec `types` si les deux sont renseignés. */
   noms_produit?: string[];
+  produits_match_mode?: "all" | "any";
+  reinvestissement_dividendes?: "any" | "inactive" | "active";
+  versement_programme?: "any" | "inactive" | "active";
 }
 
 /** Déclenché à l'enregistrement d'un investissement (date de souscription). */

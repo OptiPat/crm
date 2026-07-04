@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -9,9 +10,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { ContactAutoRuleCategoryPicker } from "@/components/etiquettes/ContactAutoRuleCategoryPicker";
 import { TemplateEmailEphemeralProductFilter } from "@/components/emails/TemplateEmailEphemeralProductFilter";
+import { TypeProduitInvestmentOptions } from "@/components/etiquettes/TypeProduitInvestmentOptions";
+import { getAllSegments, type Segment } from "@/lib/api/tauri-segments";
 import {
   EPHEMERAL_DEFAULT_SEND_TIME,
   ephemeralSendDateTimeToUnix,
+  isEphemeralSegmentAudience,
   shouldShowEphemeralPatrimoineFilter,
   unixToEphemeralSendDateLocal,
   unixToEphemeralSendTimeLocal,
@@ -35,10 +39,58 @@ export function TemplateEmailEphemeralAudiencePanel({
   onSendAtChange,
   highlightInvalid,
 }: Props) {
+  const [segments, setSegments] = useState<Segment[]>([]);
+
+  useEffect(() => {
+    void getAllSegments()
+      .then(setSegments)
+      .catch(() => setSegments([]));
+  }, []);
+
+  const activeSegments = useMemo(() => segments.filter((s) => s.actif), [segments]);
+
   const patchAudience = (partial: Partial<EphemeralCampaignAudience>) =>
     onAudienceChange({ ...audience, ...partial });
 
-  const showPatrimoine = shouldShowEphemeralPatrimoineFilter(audience.categories);
+  const segmentMode = isEphemeralSegmentAudience(audience);
+  const showPatrimoine =
+    !segmentMode && shouldShowEphemeralPatrimoineFilter(audience.categories);
+
+  const setAudienceMode = (mode: "manual" | "segment") => {
+    if (mode === "segment") {
+      if (activeSegments.length === 0) return;
+      const first = activeSegments[0]?.id ?? null;
+      onAudienceChange({
+        ...audience,
+        segment_id: first,
+        categories: [],
+        types_produit: [],
+        noms_produit: [],
+        reinvestissement_dividendes: "any",
+        versement_programme: "any",
+      });
+      return;
+    }
+    onAudienceChange({
+      ...audience,
+      segment_id: null,
+      categories: audience.categories.length > 0 ? audience.categories : ["CLIENT"],
+    });
+  };
+
+  const handleSegmentPick = (value: string) => {
+    const id = parseInt(value, 10);
+    if (Number.isNaN(id)) return;
+    onAudienceChange({
+      ...audience,
+      segment_id: id,
+      categories: [],
+      types_produit: [],
+      noms_produit: [],
+      reinvestissement_dividendes: "any",
+      versement_programme: "any",
+    });
+  };
 
   const handleCategoriesChange = (categories: string[]) => {
     if (!shouldShowEphemeralPatrimoineFilter(categories)) {
@@ -64,6 +116,55 @@ export function TemplateEmailEphemeralAudiencePanel({
         bibliothèque une fois la campagne terminée ; l&apos;historique reste sur chaque fiche.
       </div>
 
+      <div className="space-y-2">
+        <Label>Mode de ciblage</Label>
+        <Select
+          value={segmentMode ? "segment" : "manual"}
+          onValueChange={(v) => setAudienceMode(v as "manual" | "segment")}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="manual">Manuel (catégories / patrimoine)</SelectItem>
+            <SelectItem value="segment" disabled={activeSegments.length === 0}>
+              Segment existant{activeSegments.length === 0 ? " (aucun actif)" : ""}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {segmentMode ? (
+        <div className="space-y-2">
+          <Label>Segment</Label>
+          {activeSegments.length === 0 ? (
+            <p className="text-sm text-muted-foreground border border-dashed rounded-lg px-3 py-4 text-center">
+              Aucun segment actif — créez-en un dans Suivi → Segments ou Étiquettes.
+            </p>
+          ) : (
+            <Select
+              value={String(audience.segment_id ?? "")}
+              onValueChange={handleSegmentPick}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Choisir un segment…" />
+              </SelectTrigger>
+              <SelectContent>
+                {activeSegments.map((s) => (
+                    <SelectItem key={s.id} value={String(s.id)}>
+                      {s.nom}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
+          <p className="text-xs text-muted-foreground">
+            Les contacts correspondant au segment au moment de la préparation seront ajoutés à la
+            file (snapshot). Les règles du segment (TMI, étiquettes, etc.) s&apos;appliquent.
+          </p>
+        </div>
+      ) : (
+        <>
       <div className="space-y-2">
         <Label>Catégories contact</Label>
         <ContactAutoRuleCategoryPicker
@@ -92,63 +193,19 @@ export function TemplateEmailEphemeralAudiencePanel({
             highlightInvalid={highlightInvalid}
           />
 
-          <div className="space-y-3 rounded-lg border px-4 py-3">
-            <p className="text-xs font-medium text-foreground">
-              Options sur les investissements ciblés
-            </p>
-            <p className="text-xs text-muted-foreground -mt-1">
-              Filtres appliqués aux produits correspondant ci-dessus (SCPI, OPCVM, assurance-vie…),
-              selon les cases renseignées sur chaque fiche investissement.
-            </p>
+          <TypeProduitInvestmentOptions
+            reinvestissementDividendes={audience.reinvestissement_dividendes}
+            versementProgramme={audience.versement_programme}
+            onReinvestissementChange={(v) =>
+              patchAudience({ reinvestissement_dividendes: v as EphemeralReinvestFilter })
+            }
+            onVersementProgrammeChange={(v) =>
+              patchAudience({ versement_programme: v as EphemeralVersementProgrammeFilter })
+            }
+          />
+        </>
+      )}
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Réinvestissement des dividendes</Label>
-                <Select
-                  value={audience.reinvestissement_dividendes}
-                  onValueChange={(v) =>
-                    patchAudience({ reinvestissement_dividendes: v as EphemeralReinvestFilter })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Sans filtre</SelectItem>
-                    <SelectItem value="inactive">
-                      Au moins un produit ciblé sans réinvestissement
-                    </SelectItem>
-                    <SelectItem value="active">
-                      Au moins un produit ciblé avec réinvestissement actif
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Versements programmés</Label>
-                <Select
-                  value={audience.versement_programme}
-                  onValueChange={(v) =>
-                    patchAudience({ versement_programme: v as EphemeralVersementProgrammeFilter })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="any">Sans filtre</SelectItem>
-                    <SelectItem value="inactive">
-                      Au moins un produit ciblé sans versement programmé
-                    </SelectItem>
-                    <SelectItem value="active">
-                      Au moins un produit ciblé avec versement programmé actif
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
         </>
       )}
 

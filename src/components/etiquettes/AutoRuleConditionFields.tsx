@@ -11,7 +11,8 @@ import {
 import { ContactAutoRuleCategoryPicker } from "@/components/etiquettes/ContactAutoRuleCategoryPicker";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
 import { TypeProduitConditionFields } from "@/components/etiquettes/TypeProduitConditionFields";
-import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
+import { parseTypeProduitConditionConfig, typeProduitConditionPatch } from "@/lib/etiquettes/type-produit-condition";
+import { TypeProduitInvestmentOptions } from "@/components/etiquettes/TypeProduitInvestmentOptions";
 import {
   CONDITION_TYPE_LABELS,
   type ConditionType,
@@ -98,12 +99,8 @@ export function AutoRuleConditionFields({
       },
     [conditionConfig]
   );
-  const typesProduit = useMemo(
-    () => parseConditionConfig<ConditionTypeProduit>(conditionConfig)?.types ?? [],
-    [conditionConfig]
-  );
-  const nomsProduit = useMemo(
-    () => parseConditionConfig<ConditionTypeProduit>(conditionConfig)?.noms_produit ?? [],
+  const typeProduitCfg = useMemo(
+    () => parseTypeProduitConditionConfig(parseConditionConfig<ConditionTypeProduit>(conditionConfig)),
     [conditionConfig]
   );
   const invDate = useMemo(
@@ -321,24 +318,71 @@ export function AutoRuleConditionFields({
       )}
 
       {conditionType === "TYPE_PRODUIT" && (
-        <TypeProduitConditionFields
-          types={typesProduit}
-          nomsProduit={nomsProduit}
-          onTypesChange={(next) =>
-            emit(
-              conditionType,
-              stringifyConditionConfig(buildTypeProduitConditionConfig(next, nomsProduit)),
-              categories
-            )
-          }
-          onNomsProduitChange={(next) =>
-            emit(
-              conditionType,
-              stringifyConditionConfig(buildTypeProduitConditionConfig(typesProduit, next)),
-              categories
-            )
-          }
-        />
+        <div className="space-y-4">
+          <TypeProduitConditionFields
+            types={typeProduitCfg.types}
+            nomsProduit={typeProduitCfg.nomsProduit}
+            produitsMatchMode={typeProduitCfg.produitsMatchMode}
+            onTypesChange={(next) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig(
+                  typeProduitConditionPatch(parseConditionConfig(conditionConfig), { types: next })
+                ),
+                categories
+              )
+            }
+            onNomsProduitChange={(next) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig(
+                  typeProduitConditionPatch(parseConditionConfig(conditionConfig), {
+                    nomsProduit: next,
+                  })
+                ),
+                categories
+              )
+            }
+            onProduitsMatchModeChange={(mode) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig(
+                  typeProduitConditionPatch(parseConditionConfig(conditionConfig), {
+                    produitsMatchMode: mode,
+                  })
+                ),
+                categories
+              )
+            }
+          />
+          <TypeProduitInvestmentOptions
+            compact
+            reinvestissementDividendes={typeProduitCfg.reinvestissementDividendes ?? "any"}
+            versementProgramme={typeProduitCfg.versementProgramme ?? "any"}
+            onReinvestissementChange={(v) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig(
+                  typeProduitConditionPatch(parseConditionConfig(conditionConfig), {
+                    reinvestissementDividendes: v,
+                  })
+                ),
+                categories
+              )
+            }
+            onVersementProgrammeChange={(v) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig(
+                  typeProduitConditionPatch(parseConditionConfig(conditionConfig), {
+                    versementProgramme: v,
+                  })
+                ),
+                categories
+              )
+            }
+          />
+        </div>
       )}
 
       {conditionType === "DATE_APPROCHE_INVESTISSEMENT" && (

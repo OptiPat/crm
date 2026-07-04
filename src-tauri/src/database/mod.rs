@@ -26,6 +26,7 @@ pub mod foyers;
 pub mod interactions;
 pub mod investissement_produit_match;
 pub mod investissements;
+pub mod type_produit_condition;
 pub mod partenaires;
 pub mod settings;
 pub mod templates_email;

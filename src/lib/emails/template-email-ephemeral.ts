@@ -17,6 +17,8 @@ export type EphemeralReinvestFilter = "any" | "inactive" | "active";
 export type EphemeralVersementProgrammeFilter = "any" | "inactive" | "active";
 
 export interface EphemeralCampaignAudience {
+  /** Si renseigné, l'audience = contacts du segment (snapshot à la préparation). */
+  segment_id: number | null;
   categories: string[];
   types_produit: string[];
   noms_produit: string[];
@@ -37,6 +39,7 @@ export interface EphemeralCampaignConfig {
 }
 
 export const DEFAULT_EPHEMERAL_CAMPAIGN_AUDIENCE: EphemeralCampaignAudience = {
+  segment_id: null,
   categories: ["CLIENT"],
   types_produit: [],
   noms_produit: [],
@@ -79,8 +82,12 @@ function parseAudience(raw: unknown): EphemeralCampaignAudience {
   const versementRaw = o.versement_programme ?? o.versementProgramme;
   const versement_programme: EphemeralVersementProgrammeFilter =
     versementRaw === "inactive" || versementRaw === "active" ? versementRaw : "any";
+  const segmentRaw = o.segment_id ?? o.segmentId;
+  const segment_id =
+    typeof segmentRaw === "number" && segmentRaw > 0 ? segmentRaw : null;
   return {
-    categories: categories.length > 0 ? categories : ["CLIENT"],
+    segment_id,
+    categories: segment_id != null ? [] : categories.length > 0 ? categories : ["CLIENT"],
     types_produit,
     noms_produit,
     produits_match_mode,
@@ -151,7 +158,14 @@ export function shouldShowEphemeralPatrimoineFilter(categories: readonly string[
   return categories.some((c) => EPHEMERAL_CLIENT_SIDE_CATEGORIES.has(c));
 }
 
+export function isEphemeralSegmentAudience(audience: EphemeralCampaignAudience): boolean {
+  return audience.segment_id != null && audience.segment_id > 0;
+}
+
 export function isEphemeralAudienceValid(audience: EphemeralCampaignAudience): boolean {
+  if (audience.segment_id != null && audience.segment_id > 0) {
+    return true;
+  }
   if (audience.categories.length === 0) return false;
   if (!shouldShowEphemeralPatrimoineFilter(audience.categories)) {
     return true;

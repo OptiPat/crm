@@ -128,6 +128,7 @@ import {
   DEFAULT_EPHEMERAL_CAMPAIGN,
   buildEphemeralSyncFingerprint,
   isEphemeralAudienceValid,
+  isEphemeralSegmentAudience,
   shouldShowEphemeralPatrimoineFilter,
   isEphemeralTemplate,
   mergeEphemeralCampaignForSave,
@@ -602,14 +603,17 @@ export function TemplateEmailForm({
       }
     }
     if (isEphemeralMode && !isEphemeralAudienceValid(ephemeralCampaign.audience)) {
-      const needsProducts = shouldShowEphemeralPatrimoineFilter(
-        ephemeralCampaign.audience.categories
-      );
-      toast.error(
-        needsProducts
-          ? "Audience : sélectionnez au moins un type ou un nom de produit"
-          : "Audience : sélectionnez au moins une catégorie de contact"
-      );
+      const aud = ephemeralCampaign.audience;
+      if (isEphemeralSegmentAudience(aud)) {
+        toast.error("Audience : choisissez un segment actif");
+      } else {
+        const needsProducts = shouldShowEphemeralPatrimoineFilter(aud.categories);
+        toast.error(
+          needsProducts
+            ? "Audience : sélectionnez au moins un type ou un nom de produit"
+            : "Audience : sélectionnez au moins une catégorie de contact"
+        );
+      }
       setFormTab("audience");
       setEphemeralAudienceInvalid(true);
       rejectPendingEphemeralSave(new Error("validation"));
