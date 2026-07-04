@@ -36,6 +36,7 @@ const PRODUCT_TYPE_LABELS: Record<string, string> = {
   SCPI: "SCPI",
   SCPI_DEMEMBREMENT: "SCPI Démembrement",
   ASSURANCE_VIE: "Assurance Vie",
+  PREVOYANCE: "Prévoyance",
   PER: "PER",
   IMMOBILIER: "Immobilier",
   FIP_FCPI: "FIP/FCPI",

@@ -244,8 +244,8 @@ function NotificationPill({
       {onDismiss ? (
         <button
           type="button"
-          title="Masquer ce signal"
-          aria-label="Masquer ce signal Stellium"
+          title="Masquer cette annonce (ne supprime pas les étiquettes ni la file Prêt à envoyer)"
+          aria-label="Masquer cette annonce Stellium"
           className="px-1.5 py-1 border-l border-current/20 hover:bg-black/10"
           onClick={(e) => {
             e.stopPropagation();

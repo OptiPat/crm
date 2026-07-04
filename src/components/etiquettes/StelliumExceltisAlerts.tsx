@@ -88,7 +88,7 @@ export function StelliumExceltisAlerts({ onOpenEtiquette }: StelliumExceltisAler
               size="sm"
               variant="ghost"
               className="text-muted-foreground"
-              title="Masquer cette annonce (ne supprime pas les étiquettes sur les contacts)"
+              title="Masquer cette annonce (ne supprime pas les étiquettes ni la file Prêt à envoyer)"
               onClick={() => void handleDismiss(sig.gmail_message_id)}
             >
               <X className="h-4 w-4" />

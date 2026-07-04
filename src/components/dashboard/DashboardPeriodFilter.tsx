@@ -18,6 +18,8 @@ import {
 interface DashboardPeriodFilterBarProps {
   value: DashboardDateRangeFilter;
   onChange: (next: DashboardDateRangeFilter) => void;
+  /** Texte d'aide sous la plage (défaut : regroupement graphique activité). */
+  hint?: string;
 }
 
 function matchesPreset(
@@ -29,7 +31,11 @@ function matchesPreset(
   return preset.from === current.from && preset.to === current.to;
 }
 
-export function DashboardPeriodFilterBar({ value, onChange }: DashboardPeriodFilterBarProps) {
+export function DashboardPeriodFilterBar({
+  value,
+  onChange,
+  hint = "Plage libre (aucune limite) — le graphique d'activité regroupe par jour, mois ou année selon la durée.",
+}: DashboardPeriodFilterBarProps) {
   const normalized = normalizeDateRange(value);
   const periodLabel = formatDashboardPeriodLabel(normalized.from, normalized.to);
 
@@ -143,10 +149,7 @@ export function DashboardPeriodFilterBar({ value, onChange }: DashboardPeriodFil
           {fieldError}
         </p>
       ) : (
-        <p className="text-xs text-muted-foreground">
-          Plage libre (aucune limite) — le graphique regroupe par jour, mois ou année selon la
-          durée.
-        </p>
+        <p className="text-xs text-muted-foreground">{hint}</p>
       )}
     </div>
   );

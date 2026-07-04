@@ -3,7 +3,6 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { CategoryPieChart } from "@/components/dashboard/CategoryPieChart";
 import { ProductPieChart } from "@/components/dashboard/ProductPieChart";
 import { YearlyActivityChart } from "@/components/dashboard/YearlyActivityChart";
-import { PipelineChart } from "@/components/dashboard/PipelineChart";
 import { ConversionFunnelPanel } from "@/components/dashboard/ConversionFunnelPanel";
 import { DashboardPeriodFilterBar } from "@/components/dashboard/DashboardPeriodFilter";
 import { AlertsPreview } from "@/components/dashboard/AlertsPreview";
@@ -45,6 +44,8 @@ import {
   saveDashboardDateRange,
 } from "@/lib/dashboard/dashboard-date-range-preferences";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
+import { DashboardStatInvestissementsSheet } from "@/components/dashboard/DashboardStatInvestissementsSheet";
+import type { DashboardInvestissementsSheetVariant } from "@/components/dashboard/DashboardStatInvestissementsSheet";
 
 interface DashboardProps {
   currentPage?: string;
@@ -56,6 +57,8 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [chartsRefreshKey, setChartsRefreshKey] = useState(0);
   const [dateRange, setDateRange] = useState<DashboardDateRangeFilter>(loadDashboardDateRange);
+  const [investissementsSheet, setInvestissementsSheet] =
+    useState<DashboardInvestissementsSheetVariant | null>(null);
 
   const refreshDashboardData = useCallback(() => {
     setChartsRefreshKey((k) => k + 1);
@@ -63,6 +66,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
 
   const {
     openContactSheet: openDrillDownContact,
+    openContactWithTab,
     sheet: contactDetailSheet,
     isOpen: contactDetailOpen,
     activeContactId: drillDownActiveContactId,
@@ -193,7 +197,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
                 accentColor="#C9A227"
                 iconColor="text-amber-600"
                 iconBgColor="bg-amber-50"
-                onClick={onNavigate ? () => onNavigate("investissements") : undefined}
+                onClick={() => setInvestissementsSheet("placements")}
               />
               <StatCard
                 title="Alertes non traitées"
@@ -214,6 +218,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
                 accentColor="#3B82F6"
                 iconColor="text-blue-600"
                 iconBgColor="bg-blue-50"
+                onClick={() => setInvestissementsSheet("versements")}
               />
               <StatCard
                 title="Biens immobiliers"
@@ -223,6 +228,7 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
                 accentColor="#059669"
                 iconColor="text-emerald-600"
                 iconBgColor="bg-emerald-50"
+                onClick={() => setInvestissementsSheet("immo")}
               />
               <StatCard
                 title="Panier moyen"
@@ -267,41 +273,19 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
       </DashboardCockpitSection>
 
       <DashboardCollapsibleSection
-        sectionId="repartition"
-        title="Répartition"
-        subtitle="Catégories et produits"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          <CategoryPieChart
-            key={`cat-${chartsRefreshKey}`}
-            onNavigate={onNavigate}
-            currentPage={currentPage}
-          />
-          <ProductPieChart key={`prod-${chartsRefreshKey}`} />
-        </div>
-      </DashboardCollapsibleSection>
-
-      <DashboardCollapsibleSection
         sectionId="activite"
         title="Activité"
         subtitle="Souscriptions et funnel commercial"
       >
         <DashboardPeriodFilterBar value={dateRange} onChange={handleDateRangeChange} />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
-          <YearlyActivityChart
-            periodStart={periodRange.start}
-            periodEnd={periodRange.end}
-            bucket={activityBucket}
-            dataRefreshSignal={chartsRefreshKey}
-            activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
-            onOpenContact={openDrillDownContact}
-          />
-          <PipelineChart
-            key={`pipe-${chartsRefreshKey}`}
-            onNavigate={onNavigate}
-            currentPage={currentPage}
-          />
-        </div>
+        <YearlyActivityChart
+          periodStart={periodRange.start}
+          periodEnd={periodRange.end}
+          bucket={activityBucket}
+          dataRefreshSignal={chartsRefreshKey}
+          activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
+          onOpenContact={openDrillDownContact}
+        />
         <ConversionFunnelPanel
           periodStart={periodRange.start}
           periodEnd={periodRange.end}
@@ -312,7 +296,36 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
         />
       </DashboardCollapsibleSection>
 
+      <DashboardCollapsibleSection
+        sectionId="repartition"
+        title="Répartition"
+        subtitle="Pipeline et encours actuels du portefeuille"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-stretch">
+          <CategoryPieChart
+            key={`cat-${chartsRefreshKey}`}
+            onNavigate={onNavigate}
+            currentPage={currentPage}
+            dataRefreshSignal={chartsRefreshKey}
+          />
+          <ProductPieChart key={`prod-${chartsRefreshKey}`} dataRefreshSignal={chartsRefreshKey} />
+        </div>
+      </DashboardCollapsibleSection>
+
       {contactDetailSheet}
+
+      <DashboardStatInvestissementsSheet
+        variant={investissementsSheet}
+        open={investissementsSheet != null}
+        onOpenChange={(open) => {
+          if (!open) setInvestissementsSheet(null);
+        }}
+        refreshSignal={chartsRefreshKey}
+        onOpenContact={(contactId, contactIds) => {
+          setInvestissementsSheet(null);
+          void openContactWithTab(contactId, "patrimoine", contactIds);
+        }}
+      />
     </div>
   );
 }

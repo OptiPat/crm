@@ -139,11 +139,13 @@ export function ChartLegendGrid({
   total,
   columns = 2,
   maxHeight = "9rem",
+  onItemClick,
 }: {
   items: LegendItem[];
   total: number;
   columns?: 1 | 2 | 3;
   maxHeight?: string;
+  onItemClick?: (index: number) => void;
 }) {
   const colClass =
     columns === 3
@@ -155,16 +157,34 @@ export function ChartLegendGrid({
   return (
     <div className="border-t pt-3 overflow-y-auto pr-1" style={{ maxHeight }}>
       <div className={`grid grid-cols-1 ${colClass} gap-x-4 gap-y-2 text-xs`}>
-        {items.map((item) => {
+        {items.map((item, index) => {
           const valueLabel = item.formatValue
             ? item.formatValue(item.value)
             : String(item.value);
           const pct = formatDashboardPercent(item.value, total);
+          const clickable = onItemClick != null;
           return (
             <div
               key={item.name}
-              className="flex items-center gap-2 min-w-0"
+              role={clickable ? "button" : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              className={
+                clickable
+                  ? "flex items-center gap-2 min-w-0 rounded-md px-1 -mx-1 py-0.5 cursor-pointer hover:bg-muted/60 transition-colors"
+                  : "flex items-center gap-2 min-w-0"
+              }
               title={`${item.name} — ${valueLabel} (${pct})`}
+              onClick={clickable ? () => onItemClick(index) : undefined}
+              onKeyDown={
+                clickable
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        onItemClick(index);
+                      }
+                    }
+                  : undefined
+              }
             >
               <span
                 className="w-2.5 h-2.5 rounded-sm shrink-0 ring-1 ring-black/5"

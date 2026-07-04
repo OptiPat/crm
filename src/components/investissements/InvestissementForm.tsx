@@ -40,6 +40,7 @@ const TYPE_PRODUIT_GROUP_LABEL =
 const KNOWN_TYPE_PRODUITS = new Set<string>([
   "ASSURANCE_VIE",
   "CONTRAT_CAPITALISATION",
+  "PREVOYANCE",
   "PER",
   "EPARGNE_SALARIALE",
   "FIP_FCPI",
@@ -243,6 +244,9 @@ export function InvestissementForm({
   const [mensualiteCredit, setMensualiteCredit] = useState("");
   const [creditCrd, setCreditCrd] = useState("");
   const [loyerMensuel, setLoyerMensuel] = useState("");
+  const [prevoyancePerso, setPrevoyancePerso] = useState(false);
+  const [prevoyancePro, setPrevoyancePro] = useState(false);
+  const [montantVersementMensuel, setMontantVersementMensuel] = useState("");
   const [versementProgramme, setVersementProgramme] = useState(false);
   const [montantVersementProgramme, setMontantVersementProgramme] = useState("");
   const [frequenceVersement, setFrequenceVersement] = useState<string>("");
@@ -299,6 +303,7 @@ export function InvestissementForm({
   
   // SCPI accepte le réinvestissement des dividendes
   const accepteReinvestissement = ["SCPI", "SCPI_FISCALE"].includes(typeProduit);
+  const isPrevoyance = typeProduit === "PREVOYANCE";
   const immoFinancing = isImmobilierFinancingType(typeProduit);
   const scpiFinancing = isScpiFinancingType(typeProduit);
 
@@ -313,6 +318,11 @@ export function InvestissementForm({
       setReinvestissementDividendes(false);
       setPourcentageReinvestissement("100");
     }
+    if (!isPrevoyance) {
+      setPrevoyancePerso(false);
+      setPrevoyancePro(false);
+      setMontantVersementMensuel("");
+    }
     if (!isExceltisEligibleProductType(typeProduit)) {
       setExceltisChoice({ hasExceltis: false });
     }
@@ -321,7 +331,7 @@ export function InvestissementForm({
       setDureeDemembrementAns("");
       setDetentionMode(null);
     }
-  }, [typeProduit, accepteVersementProgramme, accepteReinvestissement]);
+  }, [typeProduit, accepteVersementProgramme, accepteReinvestissement, isPrevoyance]);
 
   useEffect(() => {
     if (!open || !typeProduit || !partenaireId) {
@@ -427,6 +437,17 @@ export function InvestissementForm({
         setMensualiteCredit(financingCentimesToEuro(investissement.mensualite_credit));
         setCreditCrd(financingCentimesToEuro(investissement.credit_crd));
         setLoyerMensuel(financingCentimesToEuro(investissement.loyer_mensuel));
+        setPrevoyancePerso(investissement.prevoyance_perso ?? false);
+        setPrevoyancePro(investissement.prevoyance_pro ?? false);
+        if (investissement.type_produit === "PREVOYANCE") {
+          setMontantVersementMensuel(
+            investissement.prevoyance_versement_mensuel
+              ? (investissement.prevoyance_versement_mensuel / 100).toString()
+              : ""
+          );
+        } else {
+          setMontantVersementMensuel("");
+        }
         setVersementProgramme(investissement.versement_programme);
         setMontantVersementProgramme(investissement.montant_versement_programme ? (investissement.montant_versement_programme / 100).toString() : "");
         setFrequenceVersement(investissement.frequence_versement || "");
@@ -490,6 +511,9 @@ export function InvestissementForm({
     setMensualiteCredit("");
     setCreditCrd("");
     setLoyerMensuel("");
+    setPrevoyancePerso(false);
+    setPrevoyancePro(false);
+    setMontantVersementMensuel("");
     setVersementProgramme(false);
     setMontantVersementProgramme("");
     setFrequenceVersement("");
@@ -562,6 +586,10 @@ export function InvestissementForm({
       const immoFinancingSave = isImmobilierFinancingType(typeProduit);
       const acceptsFinancingFields = acceptsInvestissementFinancingFields(typeProduit);
 
+      const montantVersementMensuelCentimes = montantVersementMensuel
+        ? Math.round(parseFloat(montantVersementMensuel) * 100)
+        : undefined;
+
       const newInvestissement: NewInvestissement = {
         contact_id: contactId ? parseInt(contactId) : undefined,
         foyer_id: investissementCommun && foyerId ? parseInt(foyerId) : undefined,
@@ -580,9 +608,19 @@ export function InvestissementForm({
           : undefined,
         credit_crd: acceptsFinancingFields ? euroToFinancingCentimes(creditCrd) : undefined,
         loyer_mensuel: immoFinancingSave ? euroToFinancingCentimes(loyerMensuel) : undefined,
+        prevoyance_perso: isPrevoyance ? prevoyancePerso : false,
+        prevoyance_pro: isPrevoyance ? prevoyancePro : false,
+        prevoyance_versement_mensuel: isPrevoyance
+          ? montantVersementMensuelCentimes
+          : undefined,
         versement_programme: accepteVersementProgramme ? versementProgramme : false,
-        montant_versement_programme: montantVersementProgramme ? Math.round(parseFloat(montantVersementProgramme) * 100) : undefined,
-        frequence_versement: frequenceVersement || undefined,
+        montant_versement_programme:
+          accepteVersementProgramme && montantVersementProgramme
+            ? Math.round(parseFloat(montantVersementProgramme) * 100)
+            : undefined,
+        frequence_versement: accepteVersementProgramme
+          ? frequenceVersement || undefined
+          : undefined,
         reinvestissement_dividendes: accepteReinvestissement ? reinvestissementDividendes : false,
         notes: finalNotes || undefined,
         origine,
@@ -831,6 +869,7 @@ export function InvestissementForm({
                   <SelectLabel className={TYPE_PRODUIT_GROUP_LABEL}>Placement</SelectLabel>
                   <SelectItem value="ASSURANCE_VIE">Assurance Vie</SelectItem>
                   <SelectItem value="CONTRAT_CAPITALISATION">Contrat de Capitalisation</SelectItem>
+                  <SelectItem value="PREVOYANCE">Prévoyance</SelectItem>
                   <SelectItem value="PER">PER</SelectItem>
                   <SelectItem value="EPARGNE_SALARIALE">Épargne Salariale</SelectItem>
                   <SelectItem value="FIP_FCPI">FIP/FCPI</SelectItem>
@@ -997,6 +1036,52 @@ export function InvestissementForm({
               onChange={(e) => setDateSouscription(e.target.value)}
             />
           </div>
+
+          {isPrevoyance && (
+            <div className="space-y-4 rounded-lg border bg-muted/20 p-4">
+              <div className="space-y-2">
+                <Label>Type de prévoyance</Label>
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="prevoyance-perso"
+                      checked={prevoyancePerso}
+                      onCheckedChange={(checked) =>
+                        setPrevoyancePerso(checked === true)
+                      }
+                    />
+                    <Label htmlFor="prevoyance-perso" className="font-normal cursor-pointer">
+                      Prévoyance perso
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="prevoyance-pro"
+                      checked={prevoyancePro}
+                      onCheckedChange={(checked) => setPrevoyancePro(checked === true)}
+                    />
+                    <Label htmlFor="prevoyance-pro" className="font-normal cursor-pointer">
+                      Prévoyance pro
+                    </Label>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2 max-w-xs">
+                <Label htmlFor="montant-versement-mensuel-prevoyance">
+                  Montant du versement mensuel (€)
+                </Label>
+                <Input
+                  id="montant-versement-mensuel-prevoyance"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={montantVersementMensuel}
+                  onChange={(e) => setMontantVersementMensuel(e.target.value)}
+                  placeholder="Ex. 85"
+                />
+              </div>
+            </div>
+          )}
 
           {typeProduit === "SCPI_DEMEMBREMENT" && (
             <div className="space-y-4 rounded-lg border bg-muted/20 p-4">

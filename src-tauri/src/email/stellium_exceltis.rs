@@ -737,6 +737,15 @@ fn format_signal_id(message_id: &str, key: &ExceltisEtiquetteKey) -> String {
     format!("{message_id}::{gamme}::{}::{}", key.month, key.year)
 }
 
+/// Masquage UI : id Gmail brut ou id composite `message_id::gamme::mois::année`.
+fn is_stellium_message_dismissed(dismissed: &HashSet<String>, message_id: &str) -> bool {
+    if dismissed.contains(message_id) {
+        return true;
+    }
+    let prefix = format!("{message_id}::");
+    dismissed.iter().any(|id| id.starts_with(&prefix))
+}
+
 /// Extrait le millésime depuis le sujet ou le corps (ex. « Remboursement Exceltis Février 2025 »).
 pub fn parse_millesime_from_text(text: &str) -> Option<(u32, u32)> {
     let clipped = clip_parse_text(text);
@@ -981,6 +990,24 @@ fn remove_signals_for_message(state: &mut StelliumExceltisState, message_id: &st
     });
 }
 
+fn visible_stellium_signals(state: &StelliumExceltisState) -> Vec<StelliumExceltisSignal> {
+    let dismissed: HashSet<String> = state.dismissed_message_ids.iter().cloned().collect();
+    state
+        .signals
+        .iter()
+        .filter(|s| {
+            if dismissed.contains(&s.gmail_message_id) {
+                return false;
+            }
+            if let Some(raw) = s.gmail_message_id.split("::").next() {
+                return !is_stellium_message_dismissed(&dismissed, raw);
+            }
+            true
+        })
+        .cloned()
+        .collect()
+}
+
 pub fn get_stellium_exceltis_signals(db_state: &DbState) -> Result<Vec<StelliumExceltisSignal>, String> {
     with_db(db_state, |db| {
         let mut state = load_state(db)?;
@@ -999,10 +1026,11 @@ pub fn get_stellium_exceltis_signals(db_state: &DbState) -> Result<Vec<StelliumE
         if changed {
             save_state(db, &state)?;
         }
-        Ok(state.signals)
+        Ok(visible_stellium_signals(&state))
     })
 }
 
+/// Masque l’annonce UI — conserve le signal pour la planification campagne Exceltis.
 pub fn dismiss_stellium_exceltis_signal(
     db_state: &DbState,
     gmail_message_id: &str,
@@ -1013,7 +1041,6 @@ pub fn dismiss_stellium_exceltis_signal(
         if id.is_empty() {
             return Err("Identifiant de message invalide".into());
         }
-        state.signals.retain(|s| s.gmail_message_id != id);
         if !state.dismissed_message_ids.contains(&id) {
             state.dismissed_message_ids.push(id);
         }
@@ -1209,12 +1236,18 @@ pub fn scan_stellium_exceltis_emails(
                 state.parse_retry_by_message_id.remove(&item.message_id);
             }
             if !item.keys.is_empty() {
-                state.parse_retry_by_message_id.remove(&item.message_id);
-                state
-                    .dismissed_message_ids
-                    .retain(|id| id != &item.message_id);
-                remove_signals_for_message(&mut state, &item.message_id);
+                let was_dismissed = is_stellium_message_dismissed(&dismissed, &item.message_id);
+                if !was_dismissed {
+                    state.parse_retry_by_message_id.remove(&item.message_id);
+                    state
+                        .dismissed_message_ids
+                        .retain(|id| id != &item.message_id);
+                    remove_signals_for_message(&mut state, &item.message_id);
+                }
                 for key in item.keys {
+                    if was_dismissed {
+                        continue;
+                    }
                     if let Some(signal) = build_signal_for_key(
                         db,
                         &item.message_id,
@@ -1632,6 +1665,40 @@ Fermeture imminente d'Exceltis Rendement Juin 2026"#;
         let etiquette_key = parse_exceltis_key_from_text("Exceltis Rendement — Août 2026").unwrap();
         let signal_key = effective_exceltis_key_from_signal(&signal).unwrap();
         assert!(exceltis_keys_match(&etiquette_key, &signal_key));
+    }
+
+    #[test]
+    fn is_stellium_message_dismissed_matches_composite_signal_id() {
+        let mut dismissed = HashSet::new();
+        dismissed.insert("gmail-abc::Rendement::12::2024".into());
+        assert!(is_stellium_message_dismissed(&dismissed, "gmail-abc"));
+        assert!(!is_stellium_message_dismissed(&dismissed, "gmail-other"));
+    }
+
+    #[test]
+    fn dismiss_masks_ui_but_keeps_signal_for_scheduling() {
+        let mut state = StelliumExceltisState::default();
+        let signal = StelliumExceltisSignal {
+            gmail_message_id: "msg-exceltis-1::Rendement::12::2024".into(),
+            subject: "Remboursement Exceltis Rendement Décembre 2024".into(),
+            millesime_label: "Décembre 2024".into(),
+            etiquette_nom: "Exceltis Rendement — Décembre 2024".into(),
+            etiquette_id: Some(42),
+            contact_count: 16,
+            received_at: 1_735_000_000,
+            operation_from_label: None,
+        };
+        state.signals.push(signal);
+        state
+            .dismissed_message_ids
+            .push("msg-exceltis-1::Rendement::12::2024".into());
+
+        assert!(visible_stellium_signals(&state).is_empty());
+        assert_eq!(state.signals.len(), 1);
+        assert_eq!(
+            state.signals[0].gmail_message_id,
+            "msg-exceltis-1::Rendement::12::2024"
+        );
     }
 
     #[test]

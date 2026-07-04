@@ -21,6 +21,10 @@ export interface Investissement {
   mensualite_credit?: number;
   credit_crd?: number;
   loyer_mensuel?: number;
+  prevoyance_perso?: boolean;
+  prevoyance_pro?: boolean;
+  /** Cotisation mensuelle prévoyance (centimes), distincte des VP AV/PER/SCPI. */
+  prevoyance_versement_mensuel?: number;
   versement_programme: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;
@@ -56,6 +60,9 @@ export interface NewInvestissement {
   mensualite_credit?: number;
   credit_crd?: number;
   loyer_mensuel?: number;
+  prevoyance_perso?: boolean;
+  prevoyance_pro?: boolean;
+  prevoyance_versement_mensuel?: number;
   versement_programme?: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;
@@ -83,6 +90,10 @@ export interface InvestissementWithDetails {
   mensualite_credit?: number;
   credit_crd?: number;
   loyer_mensuel?: number;
+  prevoyance_perso?: boolean;
+  prevoyance_pro?: boolean;
+  /** Cotisation mensuelle prévoyance (centimes), distincte des VP AV/PER/SCPI. */
+  prevoyance_versement_mensuel?: number;
   versement_programme: boolean;
   montant_versement_programme?: number;
   frequence_versement?: string;

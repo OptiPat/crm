@@ -7,6 +7,7 @@ const INVESTISSEMENT_SELECT_COLS: &str = "id, contact_id, foyer_id, type_produit
     numero_contrat,
     montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
     mensualite_credit, credit_crd, loyer_mensuel,
+    prevoyance_perso, prevoyance_pro, prevoyance_versement_mensuel,
     versement_programme, montant_versement_programme, frequence_versement,
     reinvestissement_dividendes, notes, origine, statut, date_cloture, created_at, updated_at";
 
@@ -38,25 +39,28 @@ impl super::Database {
             mensualite_credit: row.get(11)?,
             credit_crd: row.get(12)?,
             loyer_mensuel: row.get(13)?,
-            versement_programme: row.get::<_, i64>(14)? != 0,
-            montant_versement_programme: row.get(15)?,
-            frequence_versement: row.get(16)?,
-            reinvestissement_dividendes: row.get::<_, i64>(17)? != 0,
-            notes: row.get(18)?,
+            prevoyance_perso: row.get::<_, i64>(14)? != 0,
+            prevoyance_pro: row.get::<_, i64>(15)? != 0,
+            prevoyance_versement_mensuel: row.get(16)?,
+            versement_programme: row.get::<_, i64>(17)? != 0,
+            montant_versement_programme: row.get(18)?,
+            frequence_versement: row.get(19)?,
+            reinvestissement_dividendes: row.get::<_, i64>(20)? != 0,
+            notes: row.get(21)?,
             origine: row
-                .get::<_, String>(19)
+                .get::<_, String>(22)
                 .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
             statut: row
-                .get::<_, String>(20)
+                .get::<_, String>(23)
                 .unwrap_or_else(|_| "ACTIF".to_string()),
-            date_cloture: row.get(21)?,
-            created_at: row.get(22)?,
-            updated_at: row.get(23)?,
-            encours_actuel: row.get(24)?,
-            encours_date: row.get(25)?,
-            montant_investi_total: row.get(26)?,
-            stellium_versements_nets_centimes: row.get(27)?,
-            stellium_perf_euro_centimes: row.get(28)?,
+            date_cloture: row.get(24)?,
+            created_at: row.get(25)?,
+            updated_at: row.get(26)?,
+            encours_actuel: row.get(27)?,
+            encours_date: row.get(28)?,
+            montant_investi_total: row.get(29)?,
+            stellium_versements_nets_centimes: row.get(30)?,
+            stellium_perf_euro_centimes: row.get(31)?,
         })
     }
 
@@ -156,6 +160,7 @@ impl super::Database {
                     i.type_produit, i.partenaire_id, p.raison_sociale as partenaire_nom,
                     i.nom_produit, i.numero_contrat, i.montant_initial, i.date_souscription, i.date_fin_demembrement, i.date_fin_pret,
                     i.mensualite_credit, i.credit_crd, i.loyer_mensuel,
+                    i.prevoyance_perso, i.prevoyance_pro, i.prevoyance_versement_mensuel,
                     i.versement_programme, i.montant_versement_programme, i.frequence_versement,
                     i.reinvestissement_dividendes, i.notes, i.origine, i.statut, i.date_cloture, i.created_at, i.updated_at,
                     {}
@@ -202,25 +207,28 @@ impl super::Database {
                 mensualite_credit: row.get(15)?,
                 credit_crd: row.get(16)?,
                 loyer_mensuel: row.get(17)?,
-                versement_programme: row.get::<_, i64>(18)? != 0,
-                montant_versement_programme: row.get(19)?,
-                frequence_versement: row.get(20)?,
-                reinvestissement_dividendes: row.get::<_, i64>(21)? != 0,
-                notes: row.get(22)?,
+                prevoyance_perso: row.get::<_, i64>(18)? != 0,
+                prevoyance_pro: row.get::<_, i64>(19)? != 0,
+                prevoyance_versement_mensuel: row.get(20)?,
+                versement_programme: row.get::<_, i64>(21)? != 0,
+                montant_versement_programme: row.get(22)?,
+                frequence_versement: row.get(23)?,
+                reinvestissement_dividendes: row.get::<_, i64>(24)? != 0,
+                notes: row.get(25)?,
                 origine: row
-                    .get::<_, String>(23)
+                    .get::<_, String>(26)
                     .unwrap_or_else(|_| "MON_CONSEIL".to_string()),
                 statut: row
-                    .get::<_, String>(24)
+                    .get::<_, String>(27)
                     .unwrap_or_else(|_| "ACTIF".to_string()),
-                date_cloture: row.get(25)?,
-                created_at: row.get(26)?,
-                updated_at: row.get(27)?,
-                encours_actuel: row.get(28)?,
-                encours_date: row.get(29)?,
-                montant_investi_total: row.get(30)?,
-                stellium_versements_nets_centimes: row.get(31)?,
-                stellium_perf_euro_centimes: row.get(32)?,
+                date_cloture: row.get(28)?,
+                created_at: row.get(29)?,
+                updated_at: row.get(30)?,
+                encours_actuel: row.get(31)?,
+                encours_date: row.get(32)?,
+                montant_investi_total: row.get(33)?,
+                stellium_versements_nets_centimes: row.get(34)?,
+                stellium_perf_euro_centimes: row.get(35)?,
             })
         })?;
 
@@ -340,14 +348,26 @@ impl super::Database {
             .unwrap_or_else(|| "MON_CONSEIL".to_string());
         let numero_contrat = normalize_numero_contrat(investissement.numero_contrat);
 
+        let prevoyance_perso = if investissement.prevoyance_perso.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+        let prevoyance_pro = if investissement.prevoyance_pro.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+
         self.conn.execute(
             "INSERT INTO investissements (contact_id, foyer_id, type_produit, partenaire_id, nom_produit,
                                          numero_contrat,
                                          montant_initial, date_souscription, date_fin_demembrement, date_fin_pret,
                                          mensualite_credit, credit_crd, loyer_mensuel,
+                                         prevoyance_perso, prevoyance_pro, prevoyance_versement_mensuel,
                                          versement_programme, montant_versement_programme, frequence_versement,
                                          reinvestissement_dividendes, notes, origine) 
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -362,6 +382,9 @@ impl super::Database {
                 &investissement.mensualite_credit,
                 &investissement.credit_crd,
                 &investissement.loyer_mensuel,
+                prevoyance_perso,
+                prevoyance_pro,
+                &investissement.prevoyance_versement_mensuel,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,
@@ -461,6 +484,17 @@ impl super::Database {
                 .and_then(|i| i.numero_contrat),
         };
 
+        let prevoyance_perso = if investissement.prevoyance_perso.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+        let prevoyance_pro = if investissement.prevoyance_pro.unwrap_or(false) {
+            1
+        } else {
+            0
+        };
+
         self.conn.execute(
             "UPDATE investissements SET 
                 contact_id = ?1,
@@ -476,14 +510,17 @@ impl super::Database {
                 mensualite_credit = ?11,
                 credit_crd = ?12,
                 loyer_mensuel = ?13,
-                versement_programme = ?14,
-                montant_versement_programme = ?15,
-                frequence_versement = ?16,
-                reinvestissement_dividendes = ?17,
-                notes = ?18,
-                origine = ?19,
+                prevoyance_perso = ?14,
+                prevoyance_pro = ?15,
+                prevoyance_versement_mensuel = ?16,
+                versement_programme = ?17,
+                montant_versement_programme = ?18,
+                frequence_versement = ?19,
+                reinvestissement_dividendes = ?20,
+                notes = ?21,
+                origine = ?22,
                 updated_at = unixepoch()
-            WHERE id = ?20",
+            WHERE id = ?23",
             params![
                 &investissement.contact_id,
                 &investissement.foyer_id,
@@ -498,6 +535,9 @@ impl super::Database {
                 &investissement.mensualite_credit,
                 &investissement.credit_crd,
                 &investissement.loyer_mensuel,
+                prevoyance_perso,
+                prevoyance_pro,
+                &investissement.prevoyance_versement_mensuel,
                 versement_programme,
                 &investissement.montant_versement_programme,
                 &investissement.frequence_versement,
@@ -1104,6 +1144,9 @@ mod tests {
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
                 versement_programme: Some(false),
                 montant_versement_programme: None,
                 frequence_versement: None,
@@ -1130,6 +1173,9 @@ mod tests {
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
                 versement_programme: Some(false),
                 montant_versement_programme: None,
                 frequence_versement: None,
@@ -1171,6 +1217,9 @@ mod tests {
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
                 versement_programme: Some(false),
                 montant_versement_programme: None,
                 frequence_versement: None,
@@ -1229,6 +1278,9 @@ mod tests {
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
                 versement_programme: Some(false),
                 montant_versement_programme: None,
                 frequence_versement: None,
@@ -1294,6 +1346,9 @@ mod tests {
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
                 versement_programme: Some(false),
                 montant_versement_programme: None,
                 frequence_versement: None,
@@ -1356,6 +1411,9 @@ mod tests {
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
                 versement_programme: Some(false),
                 montant_versement_programme: None,
                 frequence_versement: None,
@@ -1381,6 +1439,9 @@ mod tests {
                 mensualite_credit: None,
                 credit_crd: None,
                 loyer_mensuel: None,
+                prevoyance_perso: None,
+                prevoyance_pro: None,
+                prevoyance_versement_mensuel: None,
                 versement_programme: Some(false),
                 montant_versement_programme: None,
                 frequence_versement: None,

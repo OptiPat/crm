@@ -90,6 +90,7 @@ export const INVESTISSEMENT_TYPE_FILTER_OPTIONS: MultiFilterOption[] = [
   { value: "SCPI", label: "SCPI" },
   { value: "SCPI_DEMEMBREMENT", label: "SCPI démembrement" },
   { value: "ASSURANCE_VIE", label: "Assurance vie" },
+  { value: "PREVOYANCE", label: "Prévoyance" },
   { value: "PER", label: "PER" },
   { value: "IMMOBILIER", label: "Immobilier (Pinel, Malraux…)" },
   { value: "FIP_FCPI", label: "FIP / FCPI" },

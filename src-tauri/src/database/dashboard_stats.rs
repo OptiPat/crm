@@ -125,6 +125,7 @@ fn conversion_period_clause(column: &str, with_period: bool) -> String {
     }
 }
 
+
 impl super::Database {
     // ========== DASHBOARD STATS ==========
 
@@ -186,7 +187,7 @@ impl super::Database {
         let nombre_biens_immobiliers: i64 = self.conn.query_row(
             &format!(
                 "SELECT COUNT(*) FROM investissements i
-             WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'JEANBRUN', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE')
+             WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'JEANBRUN', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE', 'RP', 'LOCATIF', 'RS', 'SCI', 'COLOCATION', 'MONOLOCATION')
                AND i.origine = 'MON_CONSEIL'
                AND {INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I}
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))
@@ -229,7 +230,6 @@ impl super::Database {
     }
 
     pub fn get_category_stats(&self) -> Result<super::models::CategoryStats> {
-        // Compter chaque catégorie individuellement
         let clients: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM contacts WHERE categorie = 'CLIENT'",
             [],
@@ -409,7 +409,6 @@ impl super::Database {
     }
 
     pub fn get_product_stats(&self) -> Result<Vec<super::models::ProductStats>> {
-        // Vérifier si la table existe, sinon retourner un vecteur vide
         let table_exists: Result<i64> = self.conn.query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='investissements'",
             [],
@@ -436,19 +435,13 @@ impl super::Database {
 
         let stats = stmt.query_map([], |row| {
             let montant_centimes: i64 = row.get(1)?;
-            let montant_euros = montant_centimes as f64 / 100.0; // Convertir centimes en euros
-
             Ok(super::models::ProductStats {
                 type_produit: row.get(0)?,
-                montant: montant_euros,
+                montant: montant_centimes as f64 / 100.0,
             })
         })?;
 
-        let mut result = Vec::new();
-        for stat in stats {
-            result.push(stat?);
-        }
-        Ok(result)
+        stats.collect::<Result<Vec<_>>>()
     }
 
     pub fn get_pipeline_stats(&self) -> Result<super::models::PipelineStats> {

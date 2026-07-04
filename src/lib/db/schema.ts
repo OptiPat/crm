@@ -167,6 +167,7 @@ export const partenaires = sqliteTable("partenaires", {
       // Placements
       "ASSURANCE_VIE",
       "CONTRAT_CAPITALISATION",
+      "PREVOYANCE",
       "PER",
       "EPARGNE_SALARIALE",
       "FIP_FCPI",
@@ -218,6 +219,7 @@ export const investissements = sqliteTable("investissements", {
       // Placements
       "ASSURANCE_VIE",
       "CONTRAT_CAPITALISATION",
+      "PREVOYANCE",
       "PER",
       "EPARGNE_SALARIALE",
       "FIP_FCPI",
@@ -243,6 +245,14 @@ export const investissements = sqliteTable("investissements", {
   mensualiteCredit: integer("mensualite_credit"), // En centimes
   creditCrd: integer("credit_crd"), // En centimes
   loyerMensuel: integer("loyer_mensuel"), // En centimes
+  prevoyancePerso: integer("prevoyance_perso", { mode: "boolean" })
+    .default(false)
+    .notNull(),
+  prevoyancePro: integer("prevoyance_pro", { mode: "boolean" })
+    .default(false)
+    .notNull(),
+  /** Cotisation mensuelle prévoyance (centimes), distincte des VP AV/PER/SCPI. */
+  prevoyanceVersementMensuel: integer("prevoyance_versement_mensuel"),
   
   // Versements programmés
   versementProgramme: integer("versement_programme", { mode: "boolean" })

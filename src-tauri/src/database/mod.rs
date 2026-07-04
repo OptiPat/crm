@@ -500,6 +500,7 @@ impl Database {
         self.migrate_add_investissement_immo_financing_fields()?;
         self.migrate_add_investissement_numero_contrat()?;
         self.migrate_add_investissement_statut()?;
+        self.migrate_add_investissement_prevoyance_fields()?;
         self.migrate_investissement_valorisations()?;
         self.migrate_stellium_fields_on_valorisations()?;
 
@@ -1706,6 +1707,41 @@ impl Database {
                 [],
             )?;
             println!("✅ Migration appliquée : colonne date_cloture sur investissements");
+        }
+        Ok(())
+    }
+
+    /// Migration : prévoyance perso / pro sur investissements PREVOYANCE.
+    fn migrate_add_investissement_prevoyance_fields(&self) -> Result<()> {
+        for column in ["prevoyance_perso", "prevoyance_pro"] {
+            if !self.table_has_column("investissements", column)? {
+                self.conn.execute(
+                    &format!(
+                        "ALTER TABLE investissements ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"
+                    ),
+                    [],
+                )?;
+                println!("✅ Migration appliquée : colonne {column} sur investissements");
+            }
+        }
+        if !self.table_has_column("investissements", "prevoyance_versement_mensuel")? {
+            self.conn.execute(
+                "ALTER TABLE investissements ADD COLUMN prevoyance_versement_mensuel INTEGER",
+                [],
+            )?;
+            println!("✅ Migration appliquée : colonne prevoyance_versement_mensuel sur investissements");
+            // Reprise des anciennes fiches PREVOYANCE stockées par erreur en VP.
+            self.conn.execute(
+                "UPDATE investissements
+                 SET prevoyance_versement_mensuel = montant_versement_programme,
+                     versement_programme = 0,
+                     montant_versement_programme = NULL,
+                     frequence_versement = NULL
+                 WHERE type_produit = 'PREVOYANCE'
+                   AND prevoyance_versement_mensuel IS NULL
+                   AND montant_versement_programme IS NOT NULL",
+                [],
+            )?;
         }
         Ok(())
     }
