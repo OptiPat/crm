@@ -307,16 +307,19 @@ impl Database {
         }
     }
 
-    pub(crate) fn contact_matches_ephemeral_audience(
+    fn filter_audience_categories(categories: &[String], side: &[&str]) -> Vec<String> {
+        categories
+            .iter()
+            .filter(|c| side.contains(&c.as_str()))
+            .cloned()
+            .collect()
+    }
+
+    fn contact_matches_ephemeral_client_patrimoine(
         &self,
         contact: &Contact,
         audience: &EphemeralCampaignAudience,
     ) -> Result<bool> {
-        if audience.categories.is_empty()
-            || !Self::contact_matches_auto_categories(contact, &audience.categories)
-        {
-            return Ok(false);
-        }
         if audience.types_produit.is_empty() && audience.noms_produit.is_empty() {
             return Ok(false);
         }
@@ -368,6 +371,53 @@ impl Database {
         )
     }
 
+    pub(crate) fn contact_matches_ephemeral_audience(
+        &self,
+        contact: &Contact,
+        audience: &EphemeralCampaignAudience,
+        organisation_self_id: Option<i64>,
+    ) -> Result<bool> {
+        const CLIENT_SIDE: &[&str] = &["CLIENT", "PROSPECT_CLIENT", "SUSPECT_CLIENT"];
+        const FILLEUL_SIDE: &[&str] = &[
+            "FILLEUL",
+            "PROSPECT_FILLEUL",
+            "SUSPECT_FILLEUL",
+            "FILLEUL_DESINSCRIT",
+            "FILLEUL_MANAGER",
+            "FILLEUL_PREMIER_NIVEAU",
+        ];
+
+        if audience.categories.is_empty()
+            || !Self::contact_matches_auto_categories(
+                contact,
+                &audience.categories,
+                organisation_self_id,
+            )
+        {
+            return Ok(false);
+        }
+
+        let client_cats = Self::filter_audience_categories(&audience.categories, CLIENT_SIDE);
+        let filleul_cats = Self::filter_audience_categories(&audience.categories, FILLEUL_SIDE);
+
+        let filleul_ok = !filleul_cats.is_empty()
+            && Self::contact_matches_auto_categories(
+                contact,
+                &filleul_cats,
+                organisation_self_id,
+            );
+
+        let client_ok = !client_cats.is_empty()
+            && Self::contact_matches_auto_categories(
+                contact,
+                &client_cats,
+                organisation_self_id,
+            )
+            && self.contact_matches_ephemeral_client_patrimoine(contact, audience)?;
+
+        Ok(filleul_ok || client_ok)
+    }
+
     pub fn preview_ephemeral_campaign_audience(
         &self,
         template_id: i64,
@@ -407,13 +457,18 @@ impl Database {
         let mut eligible_count = 0u64;
         let mut excluded_count = 0u64;
         let mut no_email_count = 0u64;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
 
         for contact in contacts {
             let contact = contact?;
             let Some(contact_id) = contact.id else {
                 continue;
             };
-            if !self.contact_matches_ephemeral_audience(&contact, &cfg.audience)? {
+            if !self.contact_matches_ephemeral_audience(
+                &contact,
+                &cfg.audience,
+                org_self_id,
+            )? {
                 continue;
             }
             let is_excluded = excluded.contains(&contact_id);
@@ -471,11 +526,6 @@ impl Database {
                 "Campagne éphémère archivée".into(),
             ));
         }
-        if cfg.audience.types_produit.is_empty() && cfg.audience.noms_produit.is_empty() {
-            return Err(rusqlite::Error::InvalidParameterName(
-                "Audience produits requise".into(),
-            ));
-        }
 
         let batch_key = Self::ephemeral_batch_key(template_id, &cfg);
         cfg.batch_key = Some(batch_key.clone());
@@ -490,6 +540,7 @@ impl Database {
         let mut eligible_ids = HashSet::new();
         let mut contacts_matched = 0u64;
         let mut contacts_no_email = 0u64;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
 
         let mut stmt = self.conn.prepare(&format!(
             "SELECT {CONTACT_SELECT} FROM contacts"
@@ -500,7 +551,11 @@ impl Database {
             let Some(contact_id) = contact.id else {
                 continue;
             };
-            if !self.contact_matches_ephemeral_audience(&contact, &cfg.audience)? {
+            if !self.contact_matches_ephemeral_audience(
+                &contact,
+                &cfg.audience,
+                org_self_id,
+            )? {
                 continue;
             }
             contacts_matched += 1;
@@ -772,6 +827,70 @@ mod tests {
         }
     }
 
+    #[test]
+    fn ephemeral_category_only_filleul_without_products() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = EphemeralCampaignAudience {
+            categories: vec!["FILLEUL".into(), "FILLEUL_MANAGER".into()],
+            types_produit: vec![],
+            noms_produit: vec![],
+            produits_match_mode: EphemeralProduitsMatchMode::All,
+            reinvestissement_dividendes: EphemeralReinvestFilter::Any,
+            versement_programme: EphemeralVersementProgrammeFilter::Any,
+        };
+
+        let mut filleul = sample_contact("MANAGER", "Alice", "a@example.com");
+        filleul.categorie = "AUCUN".into();
+        filleul.filleul_categorie = Some("FILLEUL".into());
+        filleul.filleul_titre = Some("SENIOR".into());
+        let c1 = db.create_contact(filleul).unwrap();
+        let contact = db.get_contact_by_id(c1.id.unwrap()).unwrap();
+        assert!(db
+            .contact_matches_ephemeral_audience(&contact, &audience, None)
+            .unwrap());
+
+        let mut junior = sample_contact("JUNIOR", "Bob", "b@example.com");
+        junior.categorie = "AUCUN".into();
+        junior.filleul_categorie = Some("FILLEUL".into());
+        junior.filleul_titre = Some("JUNIOR".into());
+        let c2 = db.create_contact(junior).unwrap();
+        let contact2 = db.get_contact_by_id(c2.id.unwrap()).unwrap();
+        assert!(!db
+            .contact_matches_ephemeral_audience(&contact2, &audience, None)
+            .unwrap());
+    }
+
+    #[test]
+    fn ephemeral_client_plus_filleul_filleul_sans_patrimoine() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let audience = EphemeralCampaignAudience {
+            categories: vec!["CLIENT".into(), "FILLEUL".into()],
+            types_produit: vec!["SCPI".into()],
+            noms_produit: vec![],
+            produits_match_mode: EphemeralProduitsMatchMode::All,
+            reinvestissement_dividendes: EphemeralReinvestFilter::Any,
+            versement_programme: EphemeralVersementProgrammeFilter::Any,
+        };
+
+        let mut filleul_only = sample_contact("RESEAU", "Bob", "b@example.com");
+        filleul_only.categorie = "AUCUN".into();
+        filleul_only.filleul_categorie = Some("FILLEUL".into());
+        let c1 = db.create_contact(filleul_only).unwrap();
+        let contact = db.get_contact_by_id(c1.id.unwrap()).unwrap();
+        assert!(db
+            .contact_matches_ephemeral_audience(&contact, &audience, None)
+            .unwrap());
+
+        let client_no_scpi = db
+            .create_contact(sample_contact("CLIENT", "Jean", "j@example.com"))
+            .unwrap();
+        let c2_id = client_no_scpi.id.unwrap();
+        let contact2 = db.get_contact_by_id(c2_id).unwrap();
+        assert!(!db
+            .contact_matches_ephemeral_audience(&contact2, &audience, None)
+            .unwrap());
+    }
+
     fn ephemeral_audience_all_scpi(noms: &[&str]) -> EphemeralCampaignAudience {
         EphemeralCampaignAudience {
             categories: vec!["CLIENT".to_string()],
@@ -809,7 +928,7 @@ mod tests {
             .unwrap();
         let contact = db.get_contact_by_id(c1_id).unwrap();
         assert!(db
-            .contact_matches_ephemeral_audience(&contact, &audience)
+            .contact_matches_ephemeral_audience(&contact, &audience, None)
             .unwrap());
 
         let c2 = db
@@ -822,7 +941,7 @@ mod tests {
             .unwrap();
         let contact2 = db.get_contact_by_id(c2_id).unwrap();
         assert!(!db
-            .contact_matches_ephemeral_audience(&contact2, &audience)
+            .contact_matches_ephemeral_audience(&contact2, &audience, None)
             .unwrap());
 
         let c3 = db
@@ -833,7 +952,7 @@ mod tests {
             .unwrap();
         let contact3 = db.get_contact_by_id(c3_id).unwrap();
         assert!(!db
-            .contact_matches_ephemeral_audience(&contact3, &audience)
+            .contact_matches_ephemeral_audience(&contact3, &audience, None)
             .unwrap());
     }
 
@@ -1175,10 +1294,10 @@ mod tests {
         let contact1 = db.get_contact_by_id(c1_id).unwrap();
         let contact2 = db.get_contact_by_id(c2_id).unwrap();
         assert!(db
-            .contact_matches_ephemeral_audience(&contact1, &audience)
+            .contact_matches_ephemeral_audience(&contact1, &audience, None)
             .unwrap());
         assert!(!db
-            .contact_matches_ephemeral_audience(&contact2, &audience)
+            .contact_matches_ephemeral_audience(&contact2, &audience, None)
             .unwrap());
     }
 }

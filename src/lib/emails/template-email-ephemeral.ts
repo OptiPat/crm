@@ -136,8 +136,27 @@ export function isArchivedEphemeralTemplate(variables: string | null | undefined
   return cfg?.status === "archived";
 }
 
-export function isEphemeralAudienceValid(audience: EphemeralCampaignAudience): boolean {
+export function hasEphemeralProductFilter(audience: EphemeralCampaignAudience): boolean {
   return audience.types_produit.length > 0 || audience.noms_produit.length > 0;
+}
+
+const EPHEMERAL_CLIENT_SIDE_CATEGORIES = new Set([
+  "CLIENT",
+  "PROSPECT_CLIENT",
+  "SUSPECT_CLIENT",
+]);
+
+/** Patrimoine ciblé : uniquement si une catégorie « client » est cochée (seul ou avec filleul). */
+export function shouldShowEphemeralPatrimoineFilter(categories: readonly string[]): boolean {
+  return categories.some((c) => EPHEMERAL_CLIENT_SIDE_CATEGORIES.has(c));
+}
+
+export function isEphemeralAudienceValid(audience: EphemeralCampaignAudience): boolean {
+  if (audience.categories.length === 0) return false;
+  if (!shouldShowEphemeralPatrimoineFilter(audience.categories)) {
+    return true;
+  }
+  return hasEphemeralProductFilter(audience);
 }
 
 export function setEphemeralCampaignInMeta(

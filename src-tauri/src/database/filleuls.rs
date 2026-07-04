@@ -46,4 +46,17 @@ impl super::Database {
 
         clients.collect()
     }
+
+    /// Contact « Moi » dans Organisation (profil CGP → fiche contact).
+    pub(crate) fn resolve_organisation_self_contact_id(&self) -> Result<Option<i64>> {
+        let cgp = self.get_cgp_config()?;
+        let nom = cgp.nom.as_deref().unwrap_or("").trim();
+        let prenom = cgp.prenom.as_deref().unwrap_or("").trim();
+        if nom.is_empty() || prenom.is_empty() {
+            return Ok(None);
+        }
+        Ok(self
+            .find_contact_by_name(nom, prenom)?
+            .and_then(|c| c.id))
+    }
 }

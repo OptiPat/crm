@@ -306,12 +306,13 @@ impl super::Database {
         )?;
         let contacts = self.get_all_contacts()?;
         let (now, current_month) = super::Database::auto_etiquette_now_and_month();
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         let mut n = 0i64;
         for c in &contacts {
             if c.statut_suivi == "ARCHIVE" || c.statut_suivi == "EN_PAUSE" {
                 continue;
             }
-            if self.contact_matches_rule_tree(c, &tree, now, current_month)? {
+            if self.contact_matches_rule_tree(c, &tree, now, current_month, org_self_id)? {
                 n += 1;
             }
         }

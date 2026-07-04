@@ -1,12 +1,20 @@
 import { MOIS_LABELS } from "@/lib/api/tauri-etiquettes";
 import { CONDITION_TYPE_LABELS, type ConditionType } from "@/lib/etiquettes/etiquette-condition-labels";
+import { CONTACT_AUTO_RULE_CATEGORY_LABELS } from "@/lib/contacts/contact-auto-rule-categories";
+import { FILLEUL_RANK_CATEGORY_OPTIONS } from "@/lib/contacts/contact-filleul-rank-match";
 
 const CATEGORY_LABELS: Record<string, string> = {
+  ...CONTACT_AUTO_RULE_CATEGORY_LABELS,
+  ...Object.fromEntries(FILLEUL_RANK_CATEGORY_OPTIONS.map((o) => [o.value, o.label])),
   CLIENT: "Clients",
   PROSPECT_CLIENT: "Prospects client",
-  PROSPECT_FILLEUL: "Prospects filleul",
   SUSPECT_CLIENT: "Suspects client",
+  FILLEUL: "Filleuls",
+  PROSPECT_FILLEUL: "Prospects filleul",
   SUSPECT_FILLEUL: "Suspects filleul",
+  FILLEUL_DESINSCRIT: "Filleuls désinscrits",
+  FILLEUL_MANAGER: "Filleuls Manager",
+  FILLEUL_PREMIER_NIVEAU: "Filleuls direct (niveau 1)",
 };
 
 export interface EtiquetteRuleSummaryInput {

@@ -82,6 +82,7 @@ impl Database {
         tree: &RuleNode,
         now: i64,
         current_month: i32,
+        organisation_self_id: Option<i64>,
     ) -> Result<bool> {
         match tree {
             RuleNode::Tree { op, children, .. } => {
@@ -91,7 +92,13 @@ impl Database {
                 let op = op.to_ascii_lowercase();
                 if op == "or" {
                     for child in children {
-                        if self.contact_matches_rule_tree(contact, child, now, current_month)? {
+                        if self.contact_matches_rule_tree(
+                            contact,
+                            child,
+                            now,
+                            current_month,
+                            organisation_self_id,
+                        )? {
                             return Ok(true);
                         }
                     }
@@ -99,7 +106,13 @@ impl Database {
                 }
                 // défaut : AND
                 for child in children {
-                    if !self.contact_matches_rule_tree(contact, child, now, current_month)? {
+                    if !self.contact_matches_rule_tree(
+                        contact,
+                        child,
+                        now,
+                        current_month,
+                        organisation_self_id,
+                    )? {
                         return Ok(false);
                     }
                 }
@@ -117,7 +130,11 @@ impl Database {
                 if categories.is_empty() {
                     return Ok(false);
                 }
-                if !Self::contact_matches_auto_categories(contact, categories) {
+                if !Self::contact_matches_auto_categories(
+                    contact,
+                    categories,
+                    organisation_self_id,
+                ) {
                     return Ok(false);
                 }
                 let config_str = serde_json::to_string(config).ok();
@@ -153,7 +170,8 @@ impl Database {
         }
         let tree = parse_rule_json(Some(&seg.rule_json), None, None, None)?;
         let (now, current_month) = Self::auto_etiquette_now_and_month();
-        self.contact_matches_rule_tree(contact, &tree, now, current_month)
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
+        self.contact_matches_rule_tree(contact, &tree, now, current_month, org_self_id)
     }
 
     /// Compte les contacts correspondant à un segment (hors archive/pause).
@@ -177,7 +195,8 @@ impl Database {
         let contact = self.get_contact_by_id(contact_id)?;
         let tree = parse_rule_json(Some(&rule_json.to_string()), None, None, None)?;
         let (now, current_month) = Self::auto_etiquette_now_and_month();
-        self.contact_matches_rule_tree(&contact, &tree, now, current_month)
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
+        self.contact_matches_rule_tree(&contact, &tree, now, current_month, org_self_id)
     }
 }
 

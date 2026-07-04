@@ -70,17 +70,106 @@ impl Database {
             .unwrap_or_default()
     }
 
-    pub(crate) fn contact_matches_auto_categories(contact: &Contact, categories: &[String]) -> bool {
+    fn contact_is_de_facto_manager(contact: &Contact) -> bool {
+        const MANAGER_TITRES: &[&str] = &["MANAGER", "SENIOR", "MAJOR", "EXPERT"];
+        const MANAGER_QUALIFICATIONS: &[&str] =
+            &["MANAGER", "PLANETE", "ETOILE", "CONSTELLATION", "GALAXIE"];
+
+        if let Some(ref t) = contact.filleul_titre {
+            if MANAGER_TITRES.contains(&t.as_str()) {
+                return true;
+            }
+        }
+        if let Some(ref q) = contact.filleul_qualification {
+            if MANAGER_QUALIFICATIONS.contains(&q.as_str()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn contact_is_direct_organisation_filleul(
+        contact: &Contact,
+        organisation_self_id: Option<i64>,
+    ) -> bool {
+        let Some(self_id) = organisation_self_id else {
+            return false;
+        };
+        contact.filleul_categorie.as_deref() == Some("FILLEUL")
+            && contact.parrain_id == Some(self_id)
+    }
+
+    fn has_filleul_rank_subfilters(categories: &[String]) -> bool {
+        categories.iter().any(|c| {
+            c == "FILLEUL_MANAGER" || c == "FILLEUL_PREMIER_NIVEAU"
+        })
+    }
+
+    fn matches_filleul_rank_category(
+        contact: &Contact,
+        cat: &str,
+        organisation_self_id: Option<i64>,
+    ) -> bool {
+        if contact.filleul_categorie.as_deref() != Some("FILLEUL") {
+            return false;
+        }
+        match cat {
+            "FILLEUL_MANAGER" => Self::contact_is_de_facto_manager(contact),
+            "FILLEUL_PREMIER_NIVEAU" => {
+                Self::contact_is_direct_organisation_filleul(contact, organisation_self_id)
+            }
+            _ => false,
+        }
+    }
+
+    fn single_auto_category_matches(
+        contact: &Contact,
+        cat: &str,
+        all_categories: &[String],
+        organisation_self_id: Option<i64>,
+    ) -> bool {
+        let has_rank = Self::has_filleul_rank_subfilters(all_categories);
+
+        match cat {
+            "FILLEUL_MANAGER" | "FILLEUL_PREMIER_NIVEAU" => {
+                Self::matches_filleul_rank_category(contact, cat, organisation_self_id)
+            }
+            "FILLEUL" => {
+                if contact.filleul_categorie.as_deref() != Some("FILLEUL") {
+                    return false;
+                }
+                if has_rank {
+                    all_categories.iter().any(|c| {
+                        Self::matches_filleul_rank_category(contact, c.as_str(), organisation_self_id)
+                    })
+                } else {
+                    true
+                }
+            }
+            _ => {
+                if cat == contact.categorie {
+                    return true;
+                }
+                contact
+                    .filleul_categorie
+                    .as_ref()
+                    .map(|fc| cat == fc)
+                    .unwrap_or(false)
+            }
+        }
+    }
+
+    pub(crate) fn contact_matches_auto_categories(
+        contact: &Contact,
+        categories: &[String],
+        organisation_self_id: Option<i64>,
+    ) -> bool {
         if categories.is_empty() {
             return false;
         }
-        let cat_match = categories.iter().any(|c| c == &contact.categorie);
-        let filleul_match = contact
-            .filleul_categorie
-            .as_ref()
-            .map(|fc| categories.iter().any(|c| c == fc))
-            .unwrap_or(false);
-        cat_match || filleul_match
+        categories.iter().any(|c| {
+            Self::single_auto_category_matches(contact, c.as_str(), categories, organisation_self_id)
+        })
     }
 
     fn load_auto_assignment_map(&self) -> Result<HashMap<AssignmentKey, AssignmentInfo>> {
@@ -129,8 +218,11 @@ impl Database {
         etiquette_id: i64,
         categories: &[String],
         assignments: &HashMap<AssignmentKey, AssignmentInfo>,
+        organisation_self_id: Option<i64>,
     ) -> bool {
-        if categories.is_empty() || Self::contact_matches_auto_categories(contact, categories) {
+        if categories.is_empty()
+            || Self::contact_matches_auto_categories(contact, categories, organisation_self_id)
+        {
             return false;
         }
         let Some(contact_id) = contact.id else {
@@ -543,8 +635,9 @@ impl Database {
         };
         let assignment_info =
             self.lookup_assignment(contact_id, etiquette.id, assignments.as_deref());
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         let should_assign =
-            self.contact_matches_rule_tree(contact, &rule.tree, now, current_month)?;
+            self.contact_matches_rule_tree(contact, &rule.tree, now, current_month, org_self_id)?;
         if opts.log_eval {
             let _ = self.log_auto_etiquette_event(
                 contact_id,
@@ -577,6 +670,7 @@ impl Database {
             log_eval: false,
             exclusions: Some(&exclusions),
         };
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
 
         let etiquettes = self.get_all_etiquettes()?;
         let auto_etiquettes: Vec<_> = etiquettes
@@ -588,8 +682,13 @@ impl Database {
         for etiquette in &auto_etiquettes {
             let categories = Self::parse_auto_categories(etiquette);
             for contact in &contacts {
-                if Self::should_skip_bulk_auto_pair(contact, etiquette.id, &categories, &assignments)
-                {
+                if Self::should_skip_bulk_auto_pair(
+                    contact,
+                    etiquette.id,
+                    &categories,
+                    &assignments,
+                    org_self_id,
+                ) {
                     continue;
                 }
                 total_assigned += self.sync_auto_pair(
@@ -683,8 +782,15 @@ impl Database {
         };
         let contacts = self.get_all_contacts()?;
         let categories = Self::parse_auto_categories(&etiquette);
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         for contact in &contacts {
-            if Self::should_skip_bulk_auto_pair(contact, etiquette.id, &categories, &assignments) {
+            if Self::should_skip_bulk_auto_pair(
+                contact,
+                etiquette.id,
+                &categories,
+                &assignments,
+                org_self_id,
+            ) {
                 continue;
             }
             total += self.sync_auto_pair(
@@ -758,9 +864,10 @@ impl Database {
             .collect();
 
         let mut assigned = 0usize;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         for etiqu in etiquettes {
             let categories = Self::parse_auto_categories(&etiqu);
-            if !Self::contact_matches_auto_categories(&contact, &categories) {
+            if !Self::contact_matches_auto_categories(&contact, &categories, org_self_id) {
                 continue;
             }
 
@@ -851,5 +958,135 @@ impl Database {
             }
         }
         Ok(total)
+    }
+}
+
+#[cfg(test)]
+mod filleul_rank_category_tests {
+    use super::Database;
+    use crate::database::models::Contact;
+
+    fn sample_filleul(
+        titre: Option<&str>,
+        qual: Option<&str>,
+        parrain_id: Option<i64>,
+    ) -> Contact {
+        Contact {
+            id: Some(1),
+            famille_id: None,
+            foyer_id: None,
+            role_foyer: None,
+            role_famille: None,
+            categorie: "AUCUN".into(),
+            filleul_categorie: Some("FILLEUL".into()),
+            parrain_id,
+            prescripteur_id: None,
+            civilite: None,
+            nom: "Test".into(),
+            prenom: "Filleul".into(),
+            email: None,
+            telephone: None,
+            adresse: None,
+            code_postal: None,
+            ville: None,
+            pays: None,
+            date_naissance: None,
+            lieu_naissance: None,
+            profession: None,
+            situation_familiale: None,
+            regime_matrimonial: None,
+            revenus_annuels: None,
+            charges_emprunts: None,
+            epargne_precaution_souhaitee: None,
+            objectifs_patrimoniaux: None,
+            tranche_imposition: None,
+            nombre_parts_fiscales: None,
+            revenu_fiscal_reference: None,
+            ir_net_a_payer: None,
+            source_lead: None,
+            profil_risque_sri: None,
+            date_dernier_contact: None,
+            date_prochain_suivi: None,
+            date_dernier_contact_filleul: None,
+            date_prochain_suivi_filleul: None,
+            date_r1: None,
+            type_invitation_filleul: None,
+            date_invitation_filleul: None,
+            presence_invitation_filleul: None,
+            filleul_titre: titre.map(String::from),
+            filleul_qualification: qual.map(String::from),
+            filleul_volume: None,
+            filleul_volume_manager: None,
+            statut_suivi: "ACTIF".into(),
+            registre: None,
+            notes: None,
+            famille_regroupement_exclu: false,
+            created_at: None,
+            updated_at: None,
+            google_contact_resource_name: None,
+            google_synced_at: None,
+        }
+    }
+
+    #[test]
+    fn filleul_sans_sous_filtre_matche_tous_les_filleuls_actifs() {
+        let c = sample_filleul(Some("JUNIOR"), None, None);
+        assert!(Database::contact_matches_auto_categories(
+            &c,
+            &["FILLEUL".into()],
+            None
+        ));
+    }
+
+    #[test]
+    fn filleul_manager_sous_filtre() {
+        let manager = sample_filleul(Some("SENIOR"), None, None);
+        let junior = sample_filleul(Some("JUNIOR"), None, None);
+        let cats = vec!["FILLEUL".into(), "FILLEUL_MANAGER".into()];
+        assert!(Database::contact_matches_auto_categories(
+            &manager, &cats, None
+        ));
+        assert!(!Database::contact_matches_auto_categories(
+            &junior, &cats, None
+        ));
+    }
+
+    #[test]
+    fn filleul_premier_niveau_filleuls_directs() {
+        const SELF_ID: i64 = 42;
+        let mut direct = sample_filleul(Some("SENIOR"), None, Some(SELF_ID));
+        direct.id = Some(10);
+        let mut indirect = sample_filleul(Some("JUNIOR"), None, Some(99));
+        indirect.id = Some(11);
+        let cats = vec!["FILLEUL".into(), "FILLEUL_PREMIER_NIVEAU".into()];
+        assert!(Database::contact_matches_auto_categories(
+            &direct,
+            &cats,
+            Some(SELF_ID)
+        ));
+        assert!(!Database::contact_matches_auto_categories(
+            &indirect,
+            &cats,
+            Some(SELF_ID)
+        ));
+    }
+
+    #[test]
+    fn filleul_deux_sous_filtres_rang_union() {
+        const SELF_ID: i64 = 42;
+        let manager = sample_filleul(Some("EXPERT"), None, Some(99));
+        let mut direct = sample_filleul(None, None, Some(SELF_ID));
+        direct.id = Some(12);
+        let cats = vec![
+            "FILLEUL".into(),
+            "FILLEUL_MANAGER".into(),
+            "FILLEUL_PREMIER_NIVEAU".into(),
+        ];
+        assert!(Database::contact_matches_auto_categories(
+            &manager, &cats, Some(SELF_ID)
+        ));
+        assert!(Database::contact_matches_auto_categories(
+            &direct, &cats, Some(SELF_ID)
+        ));
     }
 }

@@ -62,6 +62,18 @@ export function resolveOrganisationSelfContact(
   return findContactByNameKeyWithSwap(contacts, nom, prenom) ?? null;
 }
 
+/** Filleul inscrit dont le parrain est le contact « Moi » (niveau 1 Organisation). */
+export function isDirectOrganisationFilleul(
+  contact: Pick<Contact, "parrain_id" | "filleul_categorie">,
+  selfContactId: number | null | undefined
+): boolean {
+  return (
+    selfContactId != null &&
+    contact.filleul_categorie === "FILLEUL" &&
+    contact.parrain_id === selfContactId
+  );
+}
+
 export function buildOrganisationSelfDisplayName(
   cgp: Pick<CgpConfig, "nom" | "prenom">,
   selfContact: Contact | null

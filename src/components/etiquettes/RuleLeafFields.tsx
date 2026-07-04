@@ -17,7 +17,7 @@ import { IrNetConditionFields, TmiTranchePicker } from "@/components/etiquettes/
 import {
   type IrNetOperator,
 } from "@/lib/etiquettes/fiscal-tmi";
-import { CategoryTogglePills } from "@/components/etiquettes/etiquette-form-ui";
+import { ContactAutoRuleCategoryPicker } from "@/components/etiquettes/ContactAutoRuleCategoryPicker";
 import {
   parseSelectOptions,
   type CustomFieldDef,
@@ -33,15 +33,6 @@ const CUSTOM_FIELD_OPERATORS = [
 ] as const;
 
 const OPERATORS_WITH_VALUE = ["egal", "different", "contient"];
-
-const CATEGORIES = [
-  { value: "CLIENT", label: "Client" },
-  { value: "PROSPECT_CLIENT", label: "Prospect client" },
-  { value: "PROSPECT_FILLEUL", label: "Prospect filleul" },
-  { value: "SUSPECT_CLIENT", label: "Suspect client" },
-  { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },
-  { value: "FILLEUL", label: "Filleul" },
-] as const;
 
 export function RuleLeafFields({
   leaf,
@@ -59,12 +50,7 @@ export function RuleLeafFields({
   const setConfig = (patch: Record<string, unknown>) =>
     onChange({ ...leaf, config: { ...leaf.config, ...patch } });
 
-  const toggleCategory = (cat: string) => {
-    const next = leaf.categories.includes(cat)
-      ? leaf.categories.filter((c) => c !== cat)
-      : [...leaf.categories, cat];
-    onChange({ ...leaf, categories: next });
-  };
+  const setCategories = (next: string[]) => onChange({ ...leaf, categories: next });
 
 
   const typeProduitTypes = (leaf.config.types as string[] | undefined) ?? [];
@@ -384,19 +370,11 @@ export function RuleLeafFields({
         })()}
 
       {leaf.type !== "JAMAIS_CONTACT" && (
-        <CategoryTogglePills
-          categories={[...CATEGORIES]}
-          selected={leaf.categories}
-          onToggle={toggleCategory}
-        />
+        <ContactAutoRuleCategoryPicker selected={leaf.categories} onChange={setCategories} />
       )}
 
       {leaf.type === "JAMAIS_CONTACT" && (
-        <CategoryTogglePills
-          categories={[...CATEGORIES]}
-          selected={leaf.categories}
-          onToggle={toggleCategory}
-        />
+        <ContactAutoRuleCategoryPicker selected={leaf.categories} onChange={setCategories} />
       )}
     </div>
   );

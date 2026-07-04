@@ -104,8 +104,8 @@ import {
   type RuleLeaf,
   type RuleOp,
 } from "@/lib/etiquettes/rule-ast";
+import { ContactAutoRuleCategoryPicker } from "@/components/etiquettes/ContactAutoRuleCategoryPicker";
 import {
-  CategoryTogglePills,
   EtiquetteFormPanel,
   EtiquetteFormStatusBadges,
   EtiquetteRuleSummaryCard,
@@ -127,14 +127,6 @@ interface EtiquetteFormProps {
   /** Ferme le dialog et ouvre l’onglet Segments de la page Étiquettes. */
   onOpenSegmentsTab?: () => void;
 }
-
-const CATEGORIES_CONTACTS = [
-  { value: "CLIENT", label: "Client" },
-  { value: "PROSPECT_CLIENT", label: "Prospect client" },
-  { value: "PROSPECT_FILLEUL", label: "Prospect filleul" },
-  { value: "SUSPECT_CLIENT", label: "Suspect client" },
-  { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },
-] as const;
 
 const CONDITION_TYPES_ORDER: ConditionType[] = [
   "DELAI_SANS_CONTACT",
@@ -816,13 +808,9 @@ export function EtiquetteForm({
     );
   };
 
-  const handleCategoryToggle = (category: string) => {
+  const handleCategoriesChange = (next: string[]) => {
     if (fieldHighlight === "rule-categories") setFieldHighlight(null);
-    setCategoriesSelectionnees(prev => 
-      prev.includes(category)
-        ? prev.filter(c => c !== category)
-        : [...prev, category]
-    );
+    setCategoriesSelectionnees(next);
   };
 
   const toggleTypeInList = (
@@ -1524,10 +1512,9 @@ export function EtiquetteForm({
                               "rounded-lg ring-2 ring-destructive ring-offset-2 ring-offset-background p-1 -m-1"
                           )}
                         >
-                          <CategoryTogglePills
-                            categories={[...CATEGORIES_CONTACTS]}
+                          <ContactAutoRuleCategoryPicker
                             selected={categoriesSelectionnees}
-                            onToggle={handleCategoryToggle}
+                            onChange={handleCategoriesChange}
                           />
                         </div>
                       </div>

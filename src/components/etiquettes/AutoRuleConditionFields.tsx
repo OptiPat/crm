@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { CategoryTogglePills } from "@/components/etiquettes/etiquette-form-ui";
+import { ContactAutoRuleCategoryPicker } from "@/components/etiquettes/ContactAutoRuleCategoryPicker";
 import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investissement-types";
 import { TypeProduitConditionFields } from "@/components/etiquettes/TypeProduitConditionFields";
 import { buildTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
@@ -30,14 +30,6 @@ import {
 } from "@/lib/api/tauri-etiquettes";
 import { SouscriptionRepeatModeRadios } from "@/components/etiquettes/SouscriptionRepeatModeRadios";
 import { useMemo } from "react";
-
-const CONTACT_CATEGORIES = [
-  { value: "CLIENT", label: "Client" },
-  { value: "PROSPECT_CLIENT", label: "Prospect client" },
-  { value: "PROSPECT_FILLEUL", label: "Prospect filleul" },
-  { value: "SUSPECT_CLIENT", label: "Suspect client" },
-  { value: "SUSPECT_FILLEUL", label: "Suspect filleul" },
-] as const;
 
 const MOIS_LABELS = [
   { value: 1, label: "Janvier" },
@@ -132,11 +124,8 @@ export function AutoRuleConditionFields({
     [conditionConfig]
   );
 
-  const toggleCategory = (value: string) => {
-    const next = categories.includes(value)
-      ? categories.filter((c) => c !== value)
-      : [...categories, value];
-    emit(conditionType, conditionConfig, next.length > 0 ? next : ["CLIENT"]);
+  const toggleCategory = (next: string[]) => {
+    emit(conditionType, conditionConfig, next);
   };
 
   return (
@@ -454,11 +443,7 @@ export function AutoRuleConditionFields({
 
       <div className="space-y-2">
         <Label>Catégories de contacts</Label>
-        <CategoryTogglePills
-          categories={[...CONTACT_CATEGORIES]}
-          selected={categories}
-          onToggle={toggleCategory}
-        />
+        <ContactAutoRuleCategoryPicker selected={categories} onChange={toggleCategory} />
       </div>
 
       {conditionType !== "EVENEMENT_SOUSCRIPTION" && (

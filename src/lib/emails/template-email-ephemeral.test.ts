@@ -10,6 +10,7 @@ import {
   mergeEphemeralCampaignForSave,
   parseEphemeralCampaignConfig,
   setEphemeralCampaignInMeta,
+  shouldShowEphemeralPatrimoineFilter,
   stampNewEphemeralTemplateMeta,
   unixToEphemeralSendDateLocal,
   unixToEphemeralSendTimeLocal,
@@ -76,26 +77,42 @@ describe("template-email-ephemeral", () => {
     expect(unixToEphemeralSendTimeLocal(withDefaultTime)).toBe("09:00");
   });
 
-  it("valide l'audience produits", () => {
+  it("valide l'audience par catégorie seule ou avec produits", () => {
+    const base = {
+      categories: ["CLIENT"],
+      types_produit: [] as string[],
+      noms_produit: [] as string[],
+      produits_match_mode: "all" as const,
+      reinvestissement_dividendes: "any" as const,
+      versement_programme: "any" as const,
+    };
+    expect(isEphemeralAudienceValid({ ...base, categories: ["FILLEUL"] })).toBe(true);
+    expect(isEphemeralAudienceValid({ ...base, categories: ["FILLEUL", "PROSPECT_FILLEUL"] })).toBe(
+      true
+    );
+    expect(isEphemeralAudienceValid({ ...base, categories: [] })).toBe(false);
+    expect(isEphemeralAudienceValid({ ...base, categories: ["CLIENT"] })).toBe(false);
     expect(
       isEphemeralAudienceValid({
-        categories: ["CLIENT"],
-        types_produit: [],
-        noms_produit: [],
-        produits_match_mode: "all",
-        reinvestissement_dividendes: "any",
-        versement_programme: "any",
-      })
-    ).toBe(false);
-    expect(
-      isEphemeralAudienceValid({
+        ...base,
         categories: ["CLIENT"],
         types_produit: ["SCPI"],
-        noms_produit: [],
-        produits_match_mode: "all",
-        reinvestissement_dividendes: "any",
-        versement_programme: "any",
       })
     ).toBe(true);
+    expect(
+      isEphemeralAudienceValid({
+        ...base,
+        categories: ["CLIENT", "FILLEUL"],
+        types_produit: ["SCPI"],
+      })
+    ).toBe(true);
+  });
+
+  it("shouldShowEphemeralPatrimoineFilter — client seul ou client + filleul", () => {
+    expect(shouldShowEphemeralPatrimoineFilter(["FILLEUL"])).toBe(false);
+    expect(shouldShowEphemeralPatrimoineFilter(["PROSPECT_FILLEUL"])).toBe(false);
+    expect(shouldShowEphemeralPatrimoineFilter(["CLIENT"])).toBe(true);
+    expect(shouldShowEphemeralPatrimoineFilter(["CLIENT", "FILLEUL"])).toBe(true);
+    expect(shouldShowEphemeralPatrimoineFilter(["PROSPECT_CLIENT"])).toBe(true);
   });
 });

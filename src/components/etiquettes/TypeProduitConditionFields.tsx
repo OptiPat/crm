@@ -35,6 +35,8 @@ type Props = {
   compact?: boolean;
   /** Carte « Patrimoine ciblé » (campagnes éphémères). */
   variant?: "default" | "card";
+  /** Patrimoine facultatif (campagne éphémère par catégories seules). */
+  productFilterOptional?: boolean;
   showEmptyWarning?: boolean;
   produitsMatchMode?: ProduitsMatchMode;
   onProduitsMatchModeChange?: (mode: ProduitsMatchMode) => void;
@@ -50,6 +52,7 @@ export function TypeProduitConditionFields({
   highlightInvalid,
   compact = false,
   variant = "default",
+  productFilterOptional = false,
   showEmptyWarning = false,
   produitsMatchMode = "all",
   onProduitsMatchModeChange,
@@ -89,9 +92,21 @@ export function TypeProduitConditionFields({
             Patrimoine ciblé
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Choisissez au moins un <strong className="font-medium text-foreground">type</strong> ou un{" "}
-            <strong className="font-medium text-foreground">nom de produit</strong>. Un contact est
-            retenu s&apos;il détient un investissement qui correspond aux deux filtres actifs.
+            {productFilterOptional ? (
+              <>
+                Facultatif — sans sélection, tous les contacts des catégories cochées sont ciblés.
+                Cochez un <strong className="font-medium text-foreground">type</strong> ou un{" "}
+                <strong className="font-medium text-foreground">nom de produit</strong> pour
+                restreindre aux détenteurs correspondants.
+              </>
+            ) : (
+              <>
+                Choisissez au moins un <strong className="font-medium text-foreground">type</strong>{" "}
+                ou un <strong className="font-medium text-foreground">nom de produit</strong>. Un
+                contact est retenu s&apos;il détient un investissement qui correspond aux deux
+                filtres actifs.
+              </>
+            )}
           </p>
         </div>
       )}
@@ -250,7 +265,7 @@ export function TypeProduitConditionFields({
         </div>
       </div>
 
-      {showEmptyWarning && !hasSelection && (
+      {showEmptyWarning && !productFilterOptional && !hasSelection && (
         <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
           Sélectionnez au moins un type ou un nom pour définir la cible.
         </p>

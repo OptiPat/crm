@@ -105,11 +105,16 @@ impl Database {
         contact: &Contact,
         trigger: &TemplateEmailTriggerConfig,
         type_produit: &str,
+        organisation_self_id: Option<i64>,
     ) -> bool {
         if !trigger.is_event_souscription() {
             return false;
         }
-        if !Self::contact_matches_auto_categories(contact, &trigger.categories) {
+        if !Self::contact_matches_auto_categories(
+            contact,
+            &trigger.categories,
+            organisation_self_id,
+        ) {
             return false;
         }
         let types = trigger.souscription_types_filter();
@@ -189,6 +194,7 @@ impl Database {
     pub fn sync_template_email_triggers_for_contact(&self, contact_id: i64) -> Result<usize> {
         let contact = self.get_contact_by_id(contact_id)?;
         let (now, current_month) = Self::auto_etiquette_now_and_month();
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
 
         let mut stmt = self.conn.prepare(
             "SELECT id, variables FROM templates_email ORDER BY nom",
@@ -209,8 +215,11 @@ impl Database {
             if condition_type == "EVENEMENT_SOUSCRIPTION" {
                 continue;
             }
-            let category_ok =
-                Self::contact_matches_auto_categories(&contact, &trigger.categories);
+            let category_ok = Self::contact_matches_auto_categories(
+                &contact,
+                &trigger.categories,
+                org_self_id,
+            );
             let config_ref = trigger.resolved_condition_config();
             let condition_ok = if category_ok {
                 self.evaluate_auto_etiquette_condition(
@@ -270,6 +279,7 @@ impl Database {
             return Ok(0);
         }
         let contact = self.get_contact_by_id(contact_id)?;
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -286,7 +296,12 @@ impl Database {
         let mut scheduled = 0usize;
         for (template_id, variables) in templates {
             let trigger = parse_template_email_trigger(variables.as_deref());
-            if !self.template_trigger_matches_souscription(&contact, &trigger, type_produit) {
+            if !self.template_trigger_matches_souscription(
+                &contact,
+                &trigger,
+                type_produit,
+                org_self_id,
+            ) {
                 continue;
             }
 
