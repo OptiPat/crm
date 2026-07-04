@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { GitBranch, Settings, Users2 } from "lucide-react";
 import { toast } from "sonner";
 import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
-import { contactFilleulRankUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import { contactFilleulRankUpdatePayload, contactFilleulVolumeUpdatePayload, contactFilleulManagerVolumeUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import {
   buildOrganisationTree,
@@ -91,6 +91,37 @@ export function Organisation({ onNavigate }: OrganisationProps) {
     []
   );
 
+  const handleVolumeSave = useCallback(
+    async (contact: Contact, volume: number | null) => {
+      try {
+        await updateContact(contact.id, contactFilleulVolumeUpdatePayload(contact, volume));
+        toast.success("Volume exercice enregistré");
+      } catch (error) {
+        console.error("Error saving filleul volume:", error);
+        toast.error("Impossible d'enregistrer le volume");
+        throw error;
+      }
+    },
+    []
+  );
+
+  const handleManagerVolumeSave = useCallback(
+    async (contact: Contact, volume: number | null) => {
+      try {
+        await updateContact(
+          contact.id,
+          contactFilleulManagerVolumeUpdatePayload(contact, volume)
+        );
+        toast.success("Objectif Manager enregistré");
+      } catch (error) {
+        console.error("Error saving manager volume:", error);
+        toast.error("Impossible d'enregistrer l'objectif Manager");
+        throw error;
+      }
+    },
+    []
+  );
+
   const missingSelfContact = !loading && tree.selfContact == null;
 
   return (
@@ -102,7 +133,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
             Organisation
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Réseau filleuls et parrains — vous en bas, filleuls au-dessus.
+            Réseau filleuls et parrains.
           </p>
         </div>
         {!loading && tree.stats.total > 0 && (
@@ -165,7 +196,7 @@ export function Organisation({ onNavigate }: OrganisationProps) {
             )}
           </div>
           <CardDescription className="text-xs mt-1">
-            Molette = zoom (pas de scroll) · glisser le fond · double-clic filleul · gén. 5+ repliées
+            Molette = zoom · glisser le fond · niveau 5+ repliées
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
@@ -181,9 +212,12 @@ export function Organisation({ onNavigate }: OrganisationProps) {
           ) : (
             <OrganisationTreeView
               tree={tree}
+              contacts={contacts}
               onNodeClick={handleNodeClick}
               onParrainClick={handleParrainClick}
               onRankSave={handleRankSave}
+              onVolumeSave={handleVolumeSave}
+              onManagerVolumeSave={handleManagerVolumeSave}
               selectedContactId={activeContactId}
             />
           )}

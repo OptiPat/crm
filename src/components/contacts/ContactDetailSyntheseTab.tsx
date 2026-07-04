@@ -26,6 +26,7 @@ import {
   canSyncContactToGoogle,
   googleSyncNeedsContactRefresh,
 } from "@/lib/contacts/google-contact-sync-ui";
+import { ContactDetailSyntheseParrainageCard } from "@/components/contacts/ContactDetailSyntheseParrainageCard";
 import {
   formatCiviliteLabel,
   formatSituationLabel,
@@ -33,7 +34,9 @@ import {
   getClientLabel,
   getFilleulLabel,
   isClientActif,
+  isFilleulReseauInscrit,
   isFilleulStatut,
+  stripDateInscriptionFromNotes,
 } from "@/lib/contacts/contact-form-utils";
 import {
   CONTACT_FORM_SECTIONS,
@@ -63,6 +66,7 @@ interface ContactDetailSyntheseTabProps {
   prescripteur?: ContactRecord | null;
   loadingParrain?: boolean;
   loadingPrescripteur?: boolean;
+  mesFilleulsCount?: number;
   foyerActions?: ContactFoyerRelationsActions;
   onOpenContact?: (contact: ContactRecord) => void;
   onContactUpdated?: () => void;
@@ -119,12 +123,12 @@ function hasRelationsContent(
   parrain?: ContactRecord | null,
   prescripteur?: ContactRecord | null
 ): boolean {
+  const filleulInscrit = isFilleulReseauInscrit(contact.filleul_categorie);
   return !!(
     contact.foyer_id ||
     contact.source_lead ||
-    contact.parrain_id ||
+    (!filleulInscrit && (contact.parrain_id || parrain)) ||
     contact.prescripteur_id ||
-    parrain ||
     prescripteur
   );
 }
@@ -213,6 +217,7 @@ export function ContactDetailSyntheseTab({
   prescripteur,
   loadingParrain = false,
   loadingPrescripteur = false,
+  mesFilleulsCount = 0,
   foyerActions,
   onOpenContact,
   onContactUpdated,
@@ -225,14 +230,16 @@ export function ContactDetailSyntheseTab({
   const fiscal = resolveContactFiscal(contact, foyer);
   const clientLabel = getClientLabel(contact.categorie || "AUCUN");
   const filleulLabel = getFilleulLabel(contact.filleul_categorie);
+  const filleulReseauInscrit = isFilleulReseauInscrit(contact.filleul_categorie);
+  const notesDisplay = stripDateInscriptionFromNotes(contact.notes);
   const showRolesCard =
     clientLabel ||
     filleulLabel ||
     contact.statut_suivi ||
     contact.date_dernier_contact ||
     contact.date_prochain_suivi ||
-    contact.date_dernier_contact_filleul ||
-    contact.date_prochain_suivi_filleul;
+    (!filleulReseauInscrit && contact.date_dernier_contact_filleul) ||
+    (!filleulReseauInscrit && contact.date_prochain_suivi_filleul);
 
   const handleSyncGoogle = async () => {
     if (contact.id == null) return;
@@ -502,7 +509,7 @@ export function ContactDetailSyntheseTab({
               actions={foyerActions}
               className="border-0 bg-transparent px-0 py-0"
             />
-            {(contact.parrain_id || parrain) && (
+            {(contact.parrain_id || parrain) && !filleulReseauInscrit && (
               <LinkedContactRow
                 label="Parrain"
                 person={parrain}
@@ -528,6 +535,22 @@ export function ContactDetailSyntheseTab({
             )}
           </CardContent>
         </Card>
+      )}
+
+      {filleulReseauInscrit && (
+        <ContactDetailSyntheseParrainageCard
+          contact={contact}
+          parrain={parrain}
+          loadingParrain={loadingParrain}
+          mesFilleulsCount={mesFilleulsCount}
+          onOpenContact={onOpenContact}
+          header={
+            <SyntheseCardHeader
+              sectionKey="parrainage"
+              onEditSection={onEditSection}
+            />
+          }
+        />
       )}
 
       {showRolesCard && (
@@ -582,7 +605,7 @@ export function ContactDetailSyntheseTab({
                 </div>
               </div>
             )}
-            {contact.date_dernier_contact_filleul && (
+            {contact.date_dernier_contact_filleul && !filleulReseauInscrit && (
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
@@ -593,7 +616,7 @@ export function ContactDetailSyntheseTab({
                 </div>
               </div>
             )}
-            {contact.date_prochain_suivi_filleul && (
+            {contact.date_prochain_suivi_filleul && !filleulReseauInscrit && (
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
@@ -614,9 +637,9 @@ export function ContactDetailSyntheseTab({
           onEditSection={onEditSection}
         />
         <CardContent>
-          {contact.notes ? (
+          {notesDisplay ? (
             <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-sans">
-              {contact.notes}
+              {notesDisplay}
             </pre>
           ) : (
             <p className="text-sm text-muted-foreground italic">Aucune note pour ce contact</p>

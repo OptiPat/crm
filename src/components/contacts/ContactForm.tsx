@@ -49,6 +49,7 @@ import {
   resolveContactFiscal,
 } from "@/lib/foyers/foyer-fiscal-sync";
 import { ContactFoyerRelationsBlock, type ContactFoyerRelationsActions } from "@/components/contacts/ContactFoyerRelationsBlock";
+import { ContactFormParrainageSection } from "@/components/contacts/ContactFormParrainageSection";
 import { FilleulRankFormFields } from "@/components/organisation/FilleulRankFormFields";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -80,6 +81,7 @@ import {
   defaultProchainSuiviClient,
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
+  mergeParrainageVolumeInputsFromDom,
   serializeFormSnapshot,
   formatPhoneInput,
   applyFoyerAddressIfEmpty,
@@ -91,6 +93,7 @@ import {
   getFieldErrors,
   isClientActif,
   isFilleulStatut,
+  isFilleulReseauInscrit,
   isPrescripteurCategorie,
   toDateInput,
   todayLocal,
@@ -373,9 +376,11 @@ export function ContactForm({
 
   useEffect(() => {
     let retryCount = 0;
+    let cancelled = false;
     const loadContacts = async () => {
       try {
-        setAllContacts(await getAllContacts());
+        const contacts = await getAllContacts();
+        if (!cancelled) setAllContacts(contacts);
       } catch (error) {
         if (retryCount === 0 && error instanceof Error && error.message.includes("Invalid column type")) {
           retryCount++;
@@ -383,7 +388,14 @@ export function ContactForm({
         }
       }
     };
-    loadContacts();
+    void loadContacts();
+    const unsub = subscribeContactsChanged(() => {
+      void loadContacts();
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, []);
 
   useEffect(() => {
@@ -654,7 +666,10 @@ export function ContactForm({
         setLoading(false);
         return;
       }
-      const dataToSubmit = buildSubmitPayload(formData, { alwaysSendBirthday: true });
+      const payloadForm = filleulReseauInscrit
+        ? mergeParrainageVolumeInputsFromDom(formData)
+        : formData;
+      const dataToSubmit = buildSubmitPayload(payloadForm, { alwaysSendBirthday: true });
       if (contact) {
         const updated = await updateContact(contact.id, dataToSubmit);
         // Le contact est déjà enregistré : un échec de la fiscalité (foyer) ne
@@ -692,20 +707,28 @@ export function ContactForm({
   };
 
   const filleulActif = isFilleulStatut(formData.filleul_categorie);
+  const filleulReseauInscrit = isFilleulReseauInscrit(formData.filleul_categorie);
   const clientActif = isClientActif(formData.categorie);
   const isClientStatut = formData.categorie === "CLIENT";
   const isPrescripteurForm = createContext === "prescripteurs" && !isEdit;
 
   const editSections = useMemo(() => {
-    const keys = isPrescripteurForm
+    const baseKeys = isPrescripteurForm
       ? CONTACT_FORM_PRESCRIPTEUR_SECTION_KEYS
       : CONTACT_FORM_EDIT_SECTION_KEYS;
+    const keys: ContactFormSectionKey[] = [];
+    for (const key of baseKeys) {
+      keys.push(key);
+      if (filleulReseauInscrit && key === "roles") {
+        keys.push("parrainage");
+      }
+    }
     return keys.map((key) => ({
       id: CONTACT_FORM_SECTIONS[key],
       label: CONTACT_FORM_SECTION_META[key].navLabel,
       icon: CONTACT_FORM_SECTION_META[key].icon,
     }));
-  }, [isPrescripteurForm]);
+  }, [isPrescripteurForm, filleulReseauInscrit]);
 
   const setFilleulStatut = (value: string) => {
     if (value === "AUCUN") {
@@ -1294,18 +1317,25 @@ export function ContactForm({
                 </div>
               </>
             )}
-            {filleulActif && (
+            {filleulActif && !filleulReseauInscrit && (
               <>
                 <Separator />
                 <div className="grid grid-cols-2 gap-4">
                   <DateFieldWithShortcuts
-                    id="date_inscription_filleul"
-                    label="Date d'inscription"
-                    value={toDateInput(parseDateInscriptionFromNotes(formData.notes))}
+                    id="date_invitation_filleul"
+                    label="Date d'invitation"
+                    value={formData.date_invitation_filleul ?? ""}
                     onChange={(v) =>
                       setFormData((prev) => ({
                         ...prev,
-                        notes: setDateInscriptionInNotes(prev.notes, dateFieldToIso(v)),
+                        date_invitation_filleul: v,
+                        filleul_categorie:
+                          v &&
+                          prev.type_invitation_filleul &&
+                          (!prev.filleul_categorie ||
+                            prev.filleul_categorie === "SUSPECT_FILLEUL")
+                            ? "PROSPECT_FILLEUL"
+                            : prev.filleul_categorie,
                       }))
                     }
                   />
@@ -1336,24 +1366,6 @@ export function ContactForm({
                       </SelectContent>
                     </Select>
                   </div>
-                  <DateFieldWithShortcuts
-                    id="date_invitation_filleul"
-                    label="Date d'invitation"
-                    value={formData.date_invitation_filleul ?? ""}
-                    onChange={(v) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        date_invitation_filleul: v,
-                        filleul_categorie:
-                          v &&
-                          prev.type_invitation_filleul &&
-                          (!prev.filleul_categorie ||
-                            prev.filleul_categorie === "SUSPECT_FILLEUL")
-                            ? "PROSPECT_FILLEUL"
-                            : prev.filleul_categorie,
-                      }))
-                    }
-                  />
                   <div className="space-y-2">
                     <Label>Présence à l&apos;invitation</Label>
                     <Select
@@ -1383,6 +1395,17 @@ export function ContactForm({
                     </Select>
                   </div>
                   <DateFieldWithShortcuts
+                    id="date_inscription_filleul"
+                    label="Date d'inscription"
+                    value={toDateInput(parseDateInscriptionFromNotes(formData.notes))}
+                    onChange={(v) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        notes: setDateInscriptionInNotes(prev.notes, dateFieldToIso(v)),
+                      }))
+                    }
+                  />
+                  <DateFieldWithShortcuts
                     id="date_dernier_contact_filleul"
                     label="Dernier contact (filleul)"
                     value={formData.date_dernier_contact_filleul}
@@ -1407,6 +1430,23 @@ export function ContactForm({
         )}
       </FormSection>
 
+      {filleulReseauInscrit && !isPrescripteurForm && (
+        <>
+          <Separator />
+          <FormSection sectionKey="parrainage">
+            <ContactFormParrainageSection
+              formData={formData}
+              setFormData={setFormData}
+              contact={contact}
+              allContacts={allContacts}
+              mesFilleulsCount={mesFilleulsCount}
+              onOpenContact={onOpenContact}
+              onCreateParrain={handleCreateParrain}
+            />
+          </FormSection>
+        </>
+      )}
+
       {!isPrescripteurForm && (
         <>
           <Separator />
@@ -1421,7 +1461,7 @@ export function ContactForm({
                 actions={foyerActions}
               />
             )}
-            {filleulActif && (
+            {filleulActif && !filleulReseauInscrit && (
               <ContactPersonSearch
                 label="Mon parrain"
                 hint="Personne qui vous a parrainé dans le réseau filleul"
@@ -1437,7 +1477,7 @@ export function ContactForm({
                 onCreate={handleCreateParrain}
               />
             )}
-            {filleulActif && (
+            {filleulActif && !filleulReseauInscrit && (
               <FilleulRankFormFields
                 titre={formData.filleul_titre}
                 qualification={formData.filleul_qualification}
@@ -1449,7 +1489,7 @@ export function ContactForm({
                 }
               />
             )}
-            {contact && mesFilleulsCount > 0 && (
+            {contact && mesFilleulsCount > 0 && !filleulReseauInscrit && (
               <p className="text-sm text-muted-foreground rounded-md border px-3 py-2 bg-muted/20">
                 Ce contact est parrain de {mesFilleulsCount} filleul
                 {mesFilleulsCount > 1 ? "s" : ""}. Modifier le lien depuis la fiche de chaque filleul.

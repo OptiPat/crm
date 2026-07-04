@@ -56,6 +56,9 @@ export interface Contact {
   filleul_titre?: string | null;
   /** Qualification : MANAGER, PLANETE, ETOILE, CONSTELLATION, GALAXIE */
   filleul_qualification?: string | null;
+  /** Volume réseau propre (euros). */
+  filleul_volume?: number | null;
+  filleul_volume_manager?: number | null;
   statut_suivi: string;
   /** `VOUS` (défaut) ou `TU` — variante du modèle email lié */
   registre?: string | null;
@@ -107,6 +110,8 @@ export interface NewContact {
   presence_invitation_filleul?: number | null;
   filleul_titre?: string | null;
   filleul_qualification?: string | null;
+  filleul_volume?: number | null;
+  filleul_volume_manager?: number | null;
   statut_suivi?: string;
   registre?: string | null;
   notes?: string;

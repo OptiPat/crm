@@ -943,6 +943,7 @@ export function ContactDetail({
                 prescripteur={prescripteur}
                 loadingParrain={loadingParrain}
                 loadingPrescripteur={loadingPrescripteur}
+                mesFilleulsCount={filleuls.length}
                 foyerActions={foyerRelationsActions}
                 onOpenContact={onOpenContact}
                 onContactUpdated={() => void refreshContactAfterMutation()}

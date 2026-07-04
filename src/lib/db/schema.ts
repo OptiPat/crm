@@ -106,6 +106,8 @@ export const contacts = sqliteTable("contacts", {
   presenceInvitationFilleul: integer("presence_invitation_filleul"),
   filleulTitre: text("filleul_titre"),
   filleulQualification: text("filleul_qualification"),
+  filleulVolume: real("filleul_volume"),
+  filleulVolumeManager: real("filleul_volume_manager"),
   
   // Notes
   notes: text("notes"),

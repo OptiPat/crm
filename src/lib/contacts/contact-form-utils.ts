@@ -1,4 +1,5 @@
 import type { Contact, NewContact } from "@/lib/api/tauri-contacts";
+import { parseFilleulVolumeField } from "@/lib/organisation/organisation-branch-volumes";
 import { PROFIL_RISQUE_MAX, PROFIL_RISQUE_SRI_FIELD_LABEL } from "@/lib/contacts/investisseur-sri";
 import { unwrapImportCell } from "@/lib/contacts/import-row";
 import { parseImportDate } from "@/lib/contacts/parse-import-date";
@@ -35,6 +36,11 @@ export type FieldErrors = {
 
 export function isFilleulStatut(cat?: string | null): cat is FilleulStatut {
   return !!cat && (FILLEUL_STATUTS as readonly string[]).includes(cat);
+}
+
+/** Filleul inscrit actif dans le réseau (onglet Parrainage du formulaire). */
+export function isFilleulReseauInscrit(cat?: string | null): boolean {
+  return cat === "FILLEUL";
 }
 
 export function isPrescripteurCategorie(cat?: string | null): boolean {
@@ -280,6 +286,8 @@ const BASE_EMPTY: NewContact = {
   prescripteur_id: undefined,
   filleul_titre: undefined,
   filleul_qualification: undefined,
+  filleul_volume: undefined,
+  filleul_volume_manager: undefined,
 };
 
 export function getEmptyForm(context: ContactFormContext): NewContact {
@@ -340,6 +348,8 @@ export function contactToFormData(contact: Contact): NewContact {
     presence_invitation_filleul: contact.presence_invitation_filleul ?? undefined,
     filleul_titre: contact.filleul_titre ?? undefined,
     filleul_qualification: contact.filleul_qualification ?? undefined,
+    filleul_volume: contact.filleul_volume ?? undefined,
+    filleul_volume_manager: contact.filleul_volume_manager ?? undefined,
     nom: contact.nom || "",
     prenom: contact.prenom || "",
     email: contact.email || "",
@@ -423,6 +433,8 @@ export function buildSubmitPayload(
     parrain_id: filleulActif ? formData.parrain_id : undefined,
     filleul_titre: filleulActif ? formData.filleul_titre || null : null,
     filleul_qualification: filleulActif ? formData.filleul_qualification || null : null,
+    filleul_volume: filleulActif ? formData.filleul_volume ?? null : null,
+    filleul_volume_manager: filleulActif ? formData.filleul_volume_manager ?? null : null,
     date_dernier_contact: clientActif
       ? dateFieldToIso(formData.date_dernier_contact)
       : undefined,
@@ -593,6 +605,53 @@ export function resolveImportContactCategories(
   };
 }
 
+/** Lit les champs volume parrainage encore en cours de saisie (inputs non contrôlés). */
+export function mergeParrainageVolumeInputsFromDom(formData: NewContact): NewContact {
+  if (typeof document === "undefined") return formData;
+
+  const readVolume = (id: string): number | null | undefined => {
+    const el = document.getElementById(id);
+    if (!(el instanceof HTMLInputElement)) return undefined;
+    return parseFilleulVolumeField(el.value);
+  };
+
+  let next = formData;
+  const ownVolume = readVolume("filleul_volume");
+  if (ownVolume != null) {
+    next = { ...next, filleul_volume: ownVolume === 0 ? undefined : ownVolume };
+  }
+  const managerVolume = readVolume("filleul_volume_manager");
+  if (managerVolume != null) {
+    next = {
+      ...next,
+      filleul_volume_manager: managerVolume === 0 ? undefined : managerVolume,
+    };
+  }
+  return next;
+}
+
+/** Mise à jour volume réseau exercice (Organisation). */
+export function contactFilleulVolumeUpdatePayload(
+  contact: Contact,
+  volume: number | null
+): NewContact {
+  return {
+    ...contactToUpdatePayload(contact),
+    filleul_volume: volume,
+  };
+}
+
+/** Mise à jour cumul objectif Manager (Organisation). */
+export function contactFilleulManagerVolumeUpdatePayload(
+  contact: Contact,
+  volume: number | null
+): NewContact {
+  return {
+    ...contactToUpdatePayload(contact),
+    filleul_volume_manager: volume,
+  };
+}
+
 /** Mise à jour titre / qualification (organisation), y compris sur la fiche CGP. */
 export function contactFilleulRankUpdatePayload(
   contact: Contact,
@@ -676,6 +735,12 @@ export function parseDateInscriptionFromNotes(notes?: string | null): string | u
   const match = notes?.match(DATE_INSCRIPTION_NOTES_RE);
   if (!match?.[1]) return undefined;
   return parseImportDate(match[1].trim());
+}
+
+/** Retire la ligne structurée « Date inscription: … » des notes affichées. */
+export function stripDateInscriptionFromNotes(notes?: string | null): string | undefined {
+  const rest = notes?.replace(DATE_INSCRIPTION_NOTES_RE, "").trim();
+  return rest || undefined;
 }
 
 /** Met à jour ou retire la ligne « Date inscription: … » en tête des notes. */

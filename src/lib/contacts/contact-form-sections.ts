@@ -2,6 +2,7 @@ import {
   AtSign,
   Briefcase,
   CalendarClock,
+  GitBranch,
   StickyNote,
   UserCircle,
   Users,
@@ -14,6 +15,7 @@ export const CONTACT_FORM_SECTIONS = {
   coordonnees: "contact-section-coordonnees",
   viePro: "contact-section-vie-pro",
   roles: "contact-section-roles",
+  parrainage: "contact-section-parrainage",
   relations: "contact-section-relations",
   notes: "contact-section-notes",
 } as const;
@@ -41,6 +43,7 @@ export const CONTACT_FORM_SECTION_META: Record<
     icon: Briefcase,
   },
   roles: { label: "Rôles & suivi", navLabel: "Rôles", icon: CalendarClock },
+  parrainage: { label: "Parrainage", navLabel: "Parrainage", icon: GitBranch },
   relations: { label: "Relations", navLabel: "Relations", icon: Users },
   notes: { label: "Notes", navLabel: "Notes", icon: StickyNote },
 };

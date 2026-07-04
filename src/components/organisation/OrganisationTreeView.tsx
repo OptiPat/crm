@@ -28,13 +28,13 @@ import {
 
 } from "@/lib/organisation/organisation-branch-stats";
 
-import {
-
-  OrganisationTreeViewport,
+import { OrganisationTreeViewport,
 
   type OrganisationTreeViewportHandle,
 
 } from "@/components/organisation/OrganisationTreeViewport";
+
+import { OrganisationBranchVolumesPanel } from "@/components/organisation/OrganisationBranchVolumesPanel";
 
 import { FilleulRankBadges } from "@/components/organisation/FilleulRankBadges";
 
@@ -62,11 +62,17 @@ type OrganisationTreeViewProps = {
 
   tree: OrganisationTreeResult;
 
+  contacts: Contact[];
+
   onNodeClick: (contact: Contact) => void;
 
   onParrainClick?: (parrainId: number) => void;
 
   onRankSave?: RankSaveHandler;
+
+  onVolumeSave?: (contact: Contact, volume: number | null) => void | Promise<void>;
+
+  onManagerVolumeSave?: (contact: Contact, volume: number | null) => void | Promise<void>;
 
   selectedContactId?: number | null;
 
@@ -836,7 +842,7 @@ function DesinscritsPanel({
 
           <UserX className="h-3.5 w-3.5 shrink-0" aria-hidden />
 
-          Filleuls désinscrits ({entries.length}) — hors arbre
+          Filleuls désinscrits ({entries.length})
 
         </span>
 
@@ -1022,11 +1028,17 @@ export function OrganisationTreeView({
 
   tree,
 
+  contacts,
+
   onNodeClick,
 
   onParrainClick,
 
   onRankSave,
+
+  onVolumeSave,
+
+  onManagerVolumeSave,
 
   selectedContactId,
 
@@ -1144,11 +1156,11 @@ export function OrganisationTreeView({
 
             ? level1Count > 0
 
-              ? `${level1Count} filleul${level1Count > 1 ? "s" : ""} direct${level1Count > 1 ? "s" : ""} (niveau 1)${
+              ? `${level1Count} filleul${level1Count > 1 ? "s" : ""} direct${level1Count > 1 ? "s" : ""}${
 
                   desinscrits.length > 0
 
-                    ? ` · ${desinscrits.length} désinscrit${desinscrits.length > 1 ? "s" : ""} à part`
+                    ? ` · ${desinscrits.length} désinscrit${desinscrits.length > 1 ? "s" : ""}`
 
                     : ""
 
@@ -1195,6 +1207,26 @@ export function OrganisationTreeView({
         {treeContent}
 
       </OrganisationTreeViewport>
+
+
+
+      {onVolumeSave && onManagerVolumeSave && (
+
+        <OrganisationBranchVolumesPanel
+
+          tree={tree}
+
+          contacts={contacts}
+
+          onVolumeSave={onVolumeSave}
+
+          onManagerVolumeSave={onManagerVolumeSave}
+
+          onNodeClick={onNodeClick}
+
+        />
+
+      )}
 
 
 

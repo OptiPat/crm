@@ -344,6 +344,8 @@ mod tests {
             presence_invitation_filleul: None,
             filleul_titre: None,
             filleul_qualification: None,
+            filleul_volume: None,
+            filleul_volume_manager: None,
             statut_suivi: "ACTIF".into(),
             registre: None,
             notes: None,

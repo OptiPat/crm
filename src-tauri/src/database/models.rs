@@ -56,6 +56,10 @@ pub struct Contact {
     /// Qualification réseau (MANAGER, PLANETE, ETOILE, …).
     #[serde(default)]
     pub filleul_qualification: Option<String>,
+    /// Volume réseau propre (euros), saisi sur Organisation.
+    #[serde(default)]
+    pub filleul_volume: Option<f64>,
+    pub filleul_volume_manager: Option<f64>,
     pub statut_suivi: String,
     /// `VOUS` (défaut) ou `TU` — choix du modèle email lié à l'envoi
     pub registre: Option<String>,
@@ -123,6 +127,9 @@ pub struct NewContact {
     pub filleul_titre: Option<String>,
     #[serde(default)]
     pub filleul_qualification: Option<String>,
+    #[serde(default)]
+    pub filleul_volume: Option<f64>,
+    pub filleul_volume_manager: Option<f64>,
     pub statut_suivi: Option<String>,
     #[serde(default)]
     pub registre: Option<String>,
@@ -172,6 +179,8 @@ impl Default for NewContact {
             presence_invitation_filleul: None,
             filleul_titre: None,
             filleul_qualification: None,
+            filleul_volume: None,
+            filleul_volume_manager: None,
             statut_suivi: None,
             registre: None,
             notes: None,

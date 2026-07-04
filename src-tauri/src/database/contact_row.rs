@@ -12,7 +12,7 @@ pub const CONTACT_SELECT: &str = "id, famille_id, foyer_id, role_foyer, role_fam
                     google_contact_resource_name, google_synced_at, epargne_precaution_souhaitee,
                     tranche_imposition, nombre_parts_fiscales, revenu_fiscal_reference, ir_net_a_payer,
                     date_r1, type_invitation_filleul, date_invitation_filleul, presence_invitation_filleul,
-                    filleul_titre, filleul_qualification";
+                    filleul_titre, filleul_qualification, filleul_volume, filleul_volume_manager";
 
 /// CONTACT_SELECT avec préfixe table (requêtes JOIN sur `contacts`).
 pub fn contact_select_prefixed(prefix: &str) -> String {
@@ -83,5 +83,7 @@ pub fn map_contact_row(row: &Row<'_>) -> rusqlite::Result<Contact> {
         presence_invitation_filleul: row.get(48)?,
         filleul_titre: row.get(49)?,
         filleul_qualification: row.get(50)?,
+        filleul_volume: row.get(51)?,
+        filleul_volume_manager: row.get(52)?,
     })
 }

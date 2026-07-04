@@ -545,6 +545,8 @@ impl Database {
         self.migrate_add_contact_fiscal_fields()?;
         self.migrate_add_contact_funnel_fields()?;
         self.migrate_add_filleul_rank_fields()?;
+        self.migrate_add_filleul_volume_field()?;
+        self.migrate_add_filleul_volume_manager_field()?;
         self.migrate_add_foyer_ir_net()?;
         self.migrate_documents_sensibilite_extra_financiere()?;
         self.migrate_documents_connaissances_financieres()?;
@@ -772,6 +774,34 @@ impl Database {
         if added {
             println!("✅ Migration titres / qualifications filleul appliquée");
         }
+        Ok(())
+    }
+
+    /// Volume réseau filleul (Organisation), en euros.
+    fn migrate_add_filleul_volume_field(&self) -> Result<()> {
+        if self.table_has_column("contacts", "filleul_volume")? {
+            return Ok(());
+        }
+        println!("🔄 Migration : volume filleul...");
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN filleul_volume REAL",
+            [],
+        )?;
+        println!("✅ Migration volume filleul appliquée");
+        Ok(())
+    }
+
+    /// Cumul branche objectif Manager (hors exercice), en euros.
+    fn migrate_add_filleul_volume_manager_field(&self) -> Result<()> {
+        if self.table_has_column("contacts", "filleul_volume_manager")? {
+            return Ok(());
+        }
+        println!("🔄 Migration : volume objectif Manager filleul...");
+        self.conn.execute(
+            "ALTER TABLE contacts ADD COLUMN filleul_volume_manager REAL",
+            [],
+        )?;
+        println!("✅ Migration volume objectif Manager filleul appliquée");
         Ok(())
     }
 
