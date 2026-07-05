@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { Check, Pencil } from "lucide-react";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -8,26 +8,18 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { RankIcon } from "@/components/organisation/FilleulRankIcons";
 import {
   FILLEUL_QUALIFICATIONS,
   FILLEUL_QUALIFICATION_META,
   FILLEUL_TITRES,
   FILLEUL_TITRE_META,
+  parseFilleulQualification,
+  parseFilleulTitre,
   type FilleulQualification,
   type FilleulTitre,
 } from "@/lib/organisation/filleul-ranks";
-import { SELECT_NONE } from "@/lib/contacts/contact-form-utils";
 import { cn } from "@/lib/utils";
-
-const NONE = SELECT_NONE;
 
 type FilleulRankEditorProps = {
   contact: Contact;
@@ -38,15 +30,80 @@ type FilleulRankEditorProps = {
   className?: string;
 };
 
+function RankOptionList<T extends string>({
+  label,
+  noneLabel,
+  options,
+  meta,
+  value,
+  onChange,
+}: {
+  label: string;
+  noneLabel: string;
+  options: readonly T[];
+  meta: Record<T, { label: string; icon: Parameters<typeof RankIcon>[0]["kind"] }>;
+  value: T | undefined;
+  onChange: (value: T | undefined) => void;
+}) {
+  const entries: { id: T | undefined; label: string; icon: Parameters<typeof RankIcon>[0]["kind"] }[] =
+    [
+      { id: undefined, label: noneLabel, icon: "none" },
+      ...options.map((id) => ({
+        id,
+        label: meta[id].label,
+        icon: meta[id].icon,
+      })),
+    ];
+
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs">{label}</Label>
+      <div
+        className="max-h-36 overflow-y-auto rounded-md border bg-background p-1 space-y-0.5"
+        role="listbox"
+        aria-label={label}
+      >
+        {entries.map((entry) => {
+          const selected = value === entry.id;
+          return (
+            <button
+              key={entry.id ?? "__none__"}
+              type="button"
+              role="option"
+              aria-selected={selected}
+              className={cn(
+                "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-xs",
+                "hover:bg-accent hover:text-accent-foreground",
+                selected && "bg-accent text-accent-foreground"
+              )}
+              onClick={() => onChange(entry.id)}
+            >
+              <span className="flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                {selected ? <Check className="h-3 w-3" aria-hidden /> : null}
+              </span>
+              {entry.icon !== "none" ? <RankIcon kind={entry.icon} /> : null}
+              <span>{entry.label}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function FilleulRankEditor({ contact, onSave, className }: FilleulRankEditorProps) {
   const [open, setOpen] = useState(false);
-  const [titre, setTitre] = useState(contact.filleul_titre ?? NONE);
-  const [qualification, setQualification] = useState(contact.filleul_qualification ?? NONE);
+  const [titre, setTitre] = useState<FilleulTitre | undefined>(
+    () => parseFilleulTitre(contact.filleul_titre) ?? undefined
+  );
+  const [qualification, setQualification] = useState<FilleulQualification | undefined>(
+    () => parseFilleulQualification(contact.filleul_qualification) ?? undefined
+  );
   const [saving, setSaving] = useState(false);
 
   const syncFromContact = () => {
-    setTitre(contact.filleul_titre ?? NONE);
-    setQualification(contact.filleul_qualification ?? NONE);
+    setTitre(parseFilleulTitre(contact.filleul_titre) ?? undefined);
+    setQualification(parseFilleulQualification(contact.filleul_qualification) ?? undefined);
   };
 
   const handleOpenChange = (next: boolean) => {
@@ -58,8 +115,8 @@ export function FilleulRankEditor({ contact, onSave, className }: FilleulRankEdi
     setSaving(true);
     try {
       await onSave(contact, {
-        filleul_titre: titre === NONE ? null : titre,
-        filleul_qualification: qualification === NONE ? null : qualification,
+        filleul_titre: titre ?? null,
+        filleul_qualification: qualification ?? null,
       });
       setOpen(false);
     } finally {
@@ -95,47 +152,23 @@ export function FilleulRankEditor({ contact, onSave, className }: FilleulRankEdi
           {contact.prenom} {contact.nom}
         </p>
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Titre</Label>
-          <Select value={titre} onValueChange={setTitre}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Aucun" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Aucun</SelectItem>
-              {FILLEUL_TITRES.map((id) => (
-                <SelectItem key={id} value={id}>
-                  <span className="inline-flex items-center gap-2">
-                    <RankIcon kind={FILLEUL_TITRE_META[id as FilleulTitre].icon} />
-                    {FILLEUL_TITRE_META[id as FilleulTitre].label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <RankOptionList
+          label="Titre"
+          noneLabel="Aucun"
+          options={FILLEUL_TITRES}
+          meta={FILLEUL_TITRE_META}
+          value={titre}
+          onChange={setTitre}
+        />
 
-        <div className="space-y-1.5">
-          <Label className="text-xs">Qualification</Label>
-          <Select value={qualification} onValueChange={setQualification}>
-            <SelectTrigger className="h-8 text-xs">
-              <SelectValue placeholder="Aucune" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={NONE}>Aucune</SelectItem>
-              {FILLEUL_QUALIFICATIONS.map((id) => (
-                <SelectItem key={id} value={id}>
-                  <span className="inline-flex items-center gap-2">
-                    <RankIcon
-                      kind={FILLEUL_QUALIFICATION_META[id as FilleulQualification].icon}
-                    />
-                    {FILLEUL_QUALIFICATION_META[id as FilleulQualification].label}
-                  </span>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        <RankOptionList
+          label="Qualification"
+          noneLabel="Aucune"
+          options={FILLEUL_QUALIFICATIONS}
+          meta={FILLEUL_QUALIFICATION_META}
+          value={qualification}
+          onChange={setQualification}
+        />
 
         <Button
           type="button"
