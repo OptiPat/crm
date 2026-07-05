@@ -35,10 +35,16 @@ describe("contactMatchesPipelineStage", () => {
     ).toBe(true);
   });
 
-  it("clients — uniquement categorie CLIENT", () => {
+  it("clients — categorie CLIENT hors ancien client (EN_PAUSE)", () => {
     expect(
       contactMatchesPipelineStage({ categorie: "CLIENT", filleul_categorie: "FILLEUL" }, "clients")
     ).toBe(true);
+    expect(
+      contactMatchesPipelineStage(
+        { categorie: "CLIENT", filleul_categorie: null, statut_suivi: "EN_PAUSE" },
+        "clients"
+      )
+    ).toBe(false);
     expect(
       contactMatchesPipelineStage({ categorie: "PROSPECT_CLIENT", filleul_categorie: null }, "clients")
     ).toBe(false);

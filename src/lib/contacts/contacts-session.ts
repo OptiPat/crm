@@ -1,6 +1,6 @@
 export type ContactsUiState = {
   mainTab: "clients" | "filleuls";
-  clientSubTab: "CLIENT" | "PROSPECT_CLIENT" | "SUSPECT_CLIENT";
+  clientSubTab: "CLIENT" | "PROSPECT_CLIENT" | "SUSPECT_CLIENT" | "CLIENT_ANCIEN";
   filleulSubTab:
     | "FILLEUL"
     | "PROSPECT_FILLEUL"

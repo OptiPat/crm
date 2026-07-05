@@ -10,7 +10,8 @@ export const CONTACTS_PIPELINE_STAGE_LABELS: Record<ContactsPipelineStage, strin
 
 /** Aligné sur `get_pipeline_stats` (dashboard_stats.rs). */
 export function contactMatchesPipelineStage(
-  contact: Pick<Contact, "categorie" | "filleul_categorie">,
+  contact: Pick<Contact, "categorie" | "filleul_categorie"> &
+    Partial<Pick<Contact, "statut_suivi">>,
   stage: ContactsPipelineStage
 ): boolean {
   switch (stage) {
@@ -27,7 +28,7 @@ export function contactMatchesPipelineStage(
         (contact.filleul_categorie == null && contact.categorie === "PROSPECT_FILLEUL")
       );
     case "clients":
-      return contact.categorie === "CLIENT";
+      return contact.categorie === "CLIENT" && contact.statut_suivi !== "EN_PAUSE";
     default:
       return false;
   }

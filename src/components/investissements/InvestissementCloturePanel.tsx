@@ -41,7 +41,7 @@ export function InvestissementCloturePanel({
         date_cloture: dateFieldToIso(dateCloture),
       });
       toast.success(
-        "Investissement clôturé — sorti de l'encours. Suivi client en pause si plus d'encours actif."
+        "Investissement clôturé — sorti de l'encours. Passe en ancien client si plus d'encours actif."
       );
       onChanged?.(updated);
     } catch (error) {
@@ -80,8 +80,7 @@ export function InvestissementCloturePanel({
         <p className="text-xs text-muted-foreground mt-1">
           Clôturer retire le placement de votre encours actuel tout en conservant
           l&apos;historique dans vos statistiques de vente. Si c&apos;était le
-          dernier encours actif du client, son suivi passe automatiquement en
-          pause.
+          dernier encours actif du client, il passe automatiquement en ancien client.
         </p>
       </div>
 

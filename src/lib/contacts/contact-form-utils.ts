@@ -731,7 +731,7 @@ export function formatSituationLabel(situation?: string | null): string | null {
 }
 
 export function formatStatutSuiviLabel(statut?: string | null): string {
-  if (statut === "EN_PAUSE") return "En pause";
+  if (statut === "EN_PAUSE") return "Ancien client";
   if (statut === "ARCHIVE") return "Archivé";
   return "Actif";
 }

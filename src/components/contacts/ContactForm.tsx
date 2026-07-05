@@ -1276,7 +1276,7 @@ export function ContactForm({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ACTIF">Actif</SelectItem>
-                  <SelectItem value="EN_PAUSE">En pause</SelectItem>
+                  <SelectItem value="EN_PAUSE">Ancien client</SelectItem>
                   <SelectItem value="ARCHIVE">Archivé</SelectItem>
                 </SelectContent>
               </Select>

@@ -11,6 +11,14 @@ use super::operations::{
 };
 use rusqlite::{params, Result};
 
+/// Client compté dans les KPI dashboard / pipeline (hors ancien client = EN_PAUSE).
+const CLIENT_STATS_WHERE: &str =
+    "categorie = 'CLIENT' AND COALESCE(statut_suivi, 'ACTIF') != 'EN_PAUSE'";
+
+/// Filtre `contacts c` dans les sous-requêtes EXISTS (alias `c`).
+const CLIENT_STATS_EXISTS: &str =
+    "c.categorie = 'CLIENT' AND COALESCE(c.statut_suivi, 'ACTIF') != 'EN_PAUSE'";
+
 fn activity_bucket_format(bucket: Option<&str>) -> &'static str {
     match bucket {
         Some("month") => "%Y-%m",
@@ -52,7 +60,7 @@ fn activity_souscription_branch(bucket_fmt: Option<&str>, period_clause: &str) -
                AND COALESCE(i.montant_initial, 0) > 0
                AND EXISTS (
                    SELECT 1 FROM contacts c
-                   WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
+                   WHERE c.id = i.contact_id AND {CLIENT_STATS_EXISTS}
                ){period_clause}"
     )
 }
@@ -74,7 +82,7 @@ fn activity_versement_branch(bucket_fmt: Option<&str>, period_clause: &str) -> S
                AND i.contact_id IS NOT NULL
                AND EXISTS (
                    SELECT 1 FROM contacts c
-                   WHERE c.id = i.contact_id AND c.categorie = 'CLIENT'
+                   WHERE c.id = i.contact_id AND {CLIENT_STATS_EXISTS}
                ){period_clause}"
     )
 }
@@ -132,7 +140,7 @@ impl super::Database {
     pub fn get_dashboard_stats(&self) -> Result<super::models::DashboardStats> {
         // Compter les clients
         let total_clients: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie = 'CLIENT'",
+            &format!("SELECT COUNT(*) FROM contacts WHERE {CLIENT_STATS_WHERE}"),
             [],
             |row| row.get(0),
         )?;
@@ -231,7 +239,7 @@ impl super::Database {
 
     pub fn get_category_stats(&self) -> Result<super::models::CategoryStats> {
         let clients: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie = 'CLIENT'",
+            &format!("SELECT COUNT(*) FROM contacts WHERE {CLIENT_STATS_WHERE}"),
             [],
             |row| row.get(0),
         )?;
@@ -463,9 +471,9 @@ impl super::Database {
             |row| row.get(0),
         )?;
 
-        // Compter les clients
+        // Compter les clients actifs (hors anciens clients EN_PAUSE)
         let clients: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM contacts WHERE categorie = 'CLIENT'",
+            &format!("SELECT COUNT(*) FROM contacts WHERE {CLIENT_STATS_WHERE}"),
             [],
             |row| row.get(0),
         )?;

@@ -754,12 +754,13 @@ mod database_integration_tests {
         let contact_after = db.get_contact_by_id(contact_id).unwrap();
         assert_eq!(
             contact_after.statut_suivi, "EN_PAUSE",
-            "dernier encours clôturé → suivi client en pause"
+            "dernier encours clôturé → ancien client (EN_PAUSE)"
         );
 
         let stats_after = db.get_dashboard_stats().unwrap();
         assert!((stats_after.encours_placements - 0.0).abs() < 0.01);
-        assert!((stats_after.panier_moyen - 50_000.0).abs() < 0.01);
+        assert_eq!(stats_after.total_clients, 0);
+        assert!((stats_after.panier_moyen - 0.0).abs() < 0.01);
 
         let refreshed = db.get_investissement_by_id(inv.id).unwrap();
         assert_eq!(refreshed.statut, "CLOTURE");

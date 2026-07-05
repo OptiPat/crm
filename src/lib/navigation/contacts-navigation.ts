@@ -1,4 +1,5 @@
 import type { ContactsUiState } from "@/lib/contacts/contacts-session";
+import { normalizeClientSubTab } from "@/lib/contacts/contacts-category-match";
 import type { ContactsPipelineStage } from "@/lib/contacts/contacts-pipeline-match";
 import { dispatchAppNavigation } from "@/lib/navigation/app-navigation";
 
@@ -12,7 +13,13 @@ export type ContactsNavigationFilter =
   | ({ kind: "category" } & ContactsCategoryFilter)
   | { kind: "pipeline"; stage: ContactsPipelineStage };
 
-const VALID_CLIENT_SUB = new Set(["CLIENT", "PROSPECT_CLIENT", "SUSPECT_CLIENT"]);
+const VALID_CLIENT_SUB = new Set([
+  "CLIENT",
+  "PROSPECT_CLIENT",
+  "SUSPECT_CLIENT",
+  "CLIENT_ANCIEN",
+  "CLIENT_DESINVESTI",
+]);
 const VALID_FILLEUL_SUB = new Set([
   "FILLEUL",
   "PROSPECT_FILLEUL",
@@ -37,10 +44,13 @@ function parseContactsNavigationFilter(raw: unknown): ContactsNavigationFilter |
   if (parsed.kind === "category" || parsed.mainTab != null) {
     const mainTab = parsed.mainTab;
     if (mainTab === "clients" && VALID_CLIENT_SUB.has(String(parsed.clientSubTab))) {
+      const clientSubTab =
+        normalizeClientSubTab(String(parsed.clientSubTab)) ??
+        (parsed.clientSubTab as ContactsUiState["clientSubTab"]);
       return {
         kind: "category",
         mainTab: "clients",
-        clientSubTab: parsed.clientSubTab as ContactsUiState["clientSubTab"],
+        clientSubTab,
       };
     }
     if (mainTab === "filleuls" && VALID_FILLEUL_SUB.has(String(parsed.filleulSubTab))) {

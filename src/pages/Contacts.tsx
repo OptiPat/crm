@@ -87,6 +87,14 @@ import {
   type ContactsPipelineStage,
 } from "@/lib/contacts/contacts-pipeline-match";
 import {
+  contactMatchesClientSubTab,
+  countContactCategories,
+  normalizeClientSubTab,
+  type ClientSubTab,
+  type FilleulSubTab,
+} from "@/lib/contacts/contacts-category-match";
+import { formatStatutSuiviLabel } from "@/lib/contacts/contact-form-utils";
+import {
   SplitDetailLayout,
   SplitDetailPane,
   splitCardClassName,
@@ -96,14 +104,12 @@ import {
 import { toast } from "sonner";
 
 type MainTab = "clients" | "filleuls";
-type ClientSubTab = "CLIENT" | "PROSPECT_CLIENT" | "SUSPECT_CLIENT";
-type FilleulSubTab = "FILLEUL" | "PROSPECT_FILLEUL" | "SUSPECT_FILLEUL" | "FILLEUL_DESINSCRIT";
 
 const STATUT_LABELS: Record<string, string> = {
   ALL: "Tous statuts",
   ACTIF: "Actifs",
-  EN_PAUSE: "En pause",
-  ARCHIVE: "Archivés",
+  EN_PAUSE: formatStatutSuiviLabel("EN_PAUSE"),
+  ARCHIVE: formatStatutSuiviLabel("ARCHIVE"),
 };
 
 interface ContactsProps {
@@ -181,7 +187,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
     const stored = loadContactsUiState();
     if (stored) {
       if (stored.mainTab) setMainTab(stored.mainTab);
-      if (stored.clientSubTab) setClientSubTab(stored.clientSubTab);
+      if (stored.clientSubTab) {
+        const normalized = normalizeClientSubTab(stored.clientSubTab);
+        if (normalized) setClientSubTab(normalized);
+      }
       if (stored.filleulSubTab) setFilleulSubTab(stored.filleulSubTab);
       if (stored.statutFilter) setStatutFilter(stored.statutFilter);
       if (stored.etiquetteFilter) setEtiquetteFilter(stored.etiquetteFilter);
@@ -339,45 +348,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   // Calcul des compteurs par catégorie
   // categorie = statut commercial (CLIENT, PROSPECT_CLIENT, SUSPECT_CLIENT)
   // filleul_categorie = statut réseau filleul (FILLEUL, PROSPECT_FILLEUL, etc.) - INDÉPENDANT
-  const categoryCounts = useMemo(() => {
-    const counts = {
-      CLIENT: 0,
-      PROSPECT_CLIENT: 0,
-      SUSPECT_CLIENT: 0,
-      FILLEUL: 0,
-      PROSPECT_FILLEUL: 0,
-      SUSPECT_FILLEUL: 0,
-      FILLEUL_DESINSCRIT: 0,
-    };
-    for (const c of contacts) {
-      switch (c.categorie) {
-        case "CLIENT":
-          counts.CLIENT++;
-          break;
-        case "PROSPECT_CLIENT":
-          counts.PROSPECT_CLIENT++;
-          break;
-        case "SUSPECT_CLIENT":
-          counts.SUSPECT_CLIENT++;
-          break;
-      }
-      switch (c.filleul_categorie) {
-        case "FILLEUL":
-          counts.FILLEUL++;
-          break;
-        case "PROSPECT_FILLEUL":
-          counts.PROSPECT_FILLEUL++;
-          break;
-        case "SUSPECT_FILLEUL":
-          counts.SUSPECT_FILLEUL++;
-          break;
-        case "FILLEUL_DESINSCRIT":
-          counts.FILLEUL_DESINSCRIT++;
-          break;
-      }
-    }
-    return counts;
-  }, [contacts]);
+  const categoryCounts = useMemo(() => countContactCategories(contacts), [contacts]);
 
   // Déterminer la catégorie active selon l'onglet sélectionné
   const currentCategorie = mainTab === "clients" ? clientSubTab : filleulSubTab;
@@ -395,7 +366,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
       } else if (isFilleulTab) {
         matchesCategorie = contact.filleul_categorie === currentCategorie;
       } else {
-        matchesCategorie = contact.categorie === currentCategorie;
+        matchesCategorie = contactMatchesClientSubTab(contact, clientSubTab);
       }
 
       // Filtre par statut
@@ -800,6 +771,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   Clients
                   <Badge variant="secondary" className="ml-1 tabular-nums">
                     {categoryCounts.CLIENT +
+                      categoryCounts.CLIENT_ANCIEN +
                       categoryCounts.PROSPECT_CLIENT +
                       categoryCounts.SUSPECT_CLIENT}
                   </Badge>
@@ -824,7 +796,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                     setClientSubTab(value as ClientSubTab);
                   }}
                 >
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="CLIENT" className="gap-2">
                       Clients
                       <Badge variant="secondary" className="bg-green-50 text-green-700 border border-green-200">
@@ -841,6 +813,12 @@ export function Contacts({ onNavigate }: ContactsProps) {
                       Suspects
                       <Badge variant="secondary" className="bg-yellow-50 text-yellow-700 border border-yellow-200">
                         {categoryCounts.SUSPECT_CLIENT}
+                      </Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="CLIENT_ANCIEN" className="gap-2">
+                      Anciens clients
+                      <Badge variant="secondary" className="bg-gray-50 text-gray-700 border border-gray-200">
+                        {categoryCounts.CLIENT_ANCIEN}
                       </Badge>
                     </TabsTrigger>
                   </TabsList>
@@ -907,7 +885,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   <SelectContent>
                     <SelectItem value="ALL">Tous statuts</SelectItem>
                     <SelectItem value="ACTIF">Actifs</SelectItem>
-                    <SelectItem value="EN_PAUSE">En pause</SelectItem>
+                    <SelectItem value="EN_PAUSE">{formatStatutSuiviLabel("EN_PAUSE")}</SelectItem>
                     <SelectItem value="ARCHIVE">Archivés</SelectItem>
                   </SelectContent>
                 </Select>

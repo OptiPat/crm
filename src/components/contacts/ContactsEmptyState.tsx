@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { FileUp, Plus, Search } from "lucide-react";
 
 type MainTab = "clients" | "filleuls";
-type ClientSubTab = "CLIENT" | "PROSPECT_CLIENT" | "SUSPECT_CLIENT";
+type ClientSubTab = "CLIENT" | "PROSPECT_CLIENT" | "SUSPECT_CLIENT" | "CLIENT_ANCIEN";
 type FilleulSubTab =
   | "FILLEUL"
   | "PROSPECT_FILLEUL"
@@ -13,6 +13,7 @@ const CLIENT_LABELS: Record<ClientSubTab, string> = {
   CLIENT: "client",
   PROSPECT_CLIENT: "prospect client",
   SUSPECT_CLIENT: "suspect client",
+  CLIENT_ANCIEN: "ancien client",
 };
 
 const FILLEUL_LABELS: Record<FilleulSubTab, string> = {

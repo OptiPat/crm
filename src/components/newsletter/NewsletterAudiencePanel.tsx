@@ -215,7 +215,7 @@ export function NewsletterAudiencePanel({
                   checked={filters.excludeArchived}
                   onCheckedChange={(v) => toggleCategoryFilter("excludeArchived", v === true)}
                 />
-                Exclure archivés / en pause
+                Exclure archivés / anciens clients
               </label>
             </div>
 
