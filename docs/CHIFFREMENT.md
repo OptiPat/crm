@@ -54,8 +54,9 @@ pour ne pas traîner en clair sur le disque :
 ## Sauvegardes
 
 Sauvegardes automatiques (quotidienne + pré-migration + manuelles, rotation des 10 dernières)
-dans `%APPDATA%\com.patrimoine-crm.app\backups\`. Étant en clair, elles sont **restaurables
-sans clé**.
+dans `%APPDATA%\com.patrimoine-crm.app\backups\` : base SQLite, dossier `documents/`, et fichiers
+de config jumelés (OAuth, secrets, newsletter, verrou, branding). Étant en clair, elles sont
+**restaurables sans clé**.
 
 ## Build
 

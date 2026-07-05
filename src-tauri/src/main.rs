@@ -5,6 +5,7 @@ mod app_branding;
 mod auth;
 mod birthday_notifications;
 mod backup;
+mod backup_sidecar;
 mod commands;
 mod documents_storage;
 mod contact_name;

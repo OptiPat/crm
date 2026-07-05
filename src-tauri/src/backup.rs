@@ -17,6 +17,11 @@ pub fn create_pre_migration_backup(app_data_dir: &Path, db_path: &Path) -> std::
     if let Some(docs_dest) = documents_storage::backup_documents_dir(app_data_dir, &backups_dir, &stem)? {
         println!("✅ Backup documents créé : {:?}", docs_dest);
     }
+    if let Some(cfg_dest) =
+        crate::backup_sidecar::backup_app_config_files(app_data_dir, &backups_dir, &stem)?
+    {
+        println!("✅ Backup config créé : {:?}", cfg_dest);
+    }
     println!("✅ Backup créé : {:?}", dest);
 
     prune_old_backups(&backups_dir)?;
@@ -45,6 +50,7 @@ fn prune_old_backups(backups_dir: &Path) -> std::io::Result<()> {
         }
     }
     documents_storage::prune_paired_documents_backups(backups_dir, &removed);
+    crate::backup_sidecar::prune_paired_config_backups(backups_dir, &removed);
     Ok(())
 }
 
@@ -154,6 +160,14 @@ pub fn restore_db_from_backup(
         }
     }
 
+    if let Some(dir_name) = crate::backup_sidecar::paired_config_backup_dir_name(file_name) {
+        let config_backup = backups_dir.join(&dir_name);
+        if config_backup.is_dir() {
+            crate::backup_sidecar::restore_app_config_from_backup(app_data_dir, &config_backup)?;
+            println!("✅ Config restaurée depuis {:?}", config_backup);
+        }
+    }
+
     Ok((src, safety))
 }
 
@@ -198,6 +212,7 @@ mod tests {
         let docs = app_data.join("documents");
         fs::create_dir_all(&docs).expect("docs");
         fs::write(docs.join("test.pdf"), b"pdf").expect("write pdf");
+        fs::write(app_data.join("secrets.key"), b"key").expect("secrets");
 
         let backup_path =
             create_pre_migration_backup(&app_data, &db_path).expect("backup with docs");
@@ -207,6 +222,9 @@ mod tests {
             .expect("stem");
         let docs_backup = app_data.join("backups").join(format!("{stem}_documents"));
         assert!(docs_backup.join("test.pdf").is_file());
+
+        let cfg_backup = app_data.join("backups").join(format!("{stem}_config"));
+        assert!(cfg_backup.join("secrets.key").is_file());
 
         let _ = fs::remove_dir_all(&app_data);
     }
