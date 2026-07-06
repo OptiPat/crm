@@ -7,6 +7,7 @@ export type SettingsSectionId =
   | "email"
   | "newsletter"
   | "suivi"
+  | "comptabilite"
   | "integrations"
   | "champs"
   | "donnees"

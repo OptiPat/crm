@@ -1,6 +1,7 @@
 use crate::database::{
     compta::{
-        ComptaConfig, ComptaDepense, ComptaDeplacement, ComptaEncaissement, NewComptaDepense,
+        ComptaBilanData, ComptaConfig, ComptaDepense, ComptaDeplacement, ComptaEncaissement,
+        NewComptaDepense,
         NewComptaDeplacement, NewComptaEncaissement,
     },
     contacts::UpdateContactFieldPresence,
@@ -2802,4 +2803,54 @@ pub fn delete_compta_deplacement(db: State<'_, DbState>, id: i64) -> Result<(), 
     database
         .delete_compta_deplacement(id)
         .map_err(|e| format!("Failed to delete compta deplacement: {}", e))
+}
+
+#[tauri::command]
+pub fn get_compta_bilan_data(
+    db: State<'_, DbState>,
+    year: i32,
+    evolution_end_year: i32,
+    evolution_end_month: u32,
+) -> Result<ComptaBilanData, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_compta_bilan_data(year, evolution_end_year, evolution_end_month)
+        .map_err(|e| format!("Failed to get compta bilan data: {}", e))
+}
+
+#[tauri::command]
+pub fn get_compta_closed_months(db: State<'_, DbState>) -> Result<Vec<String>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_compta_closed_months()
+        .map_err(|e| format!("Failed to get compta closed months: {}", e))
+}
+
+#[tauri::command]
+pub fn set_compta_month_closed(
+    db: State<'_, DbState>,
+    year: i32,
+    month: u32,
+    closed: bool,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .set_compta_month_closed(year, month, closed)
+        .map_err(|e| format!("Failed to set compta month closed: {}", e))
+}
+
+#[tauri::command]
+pub fn is_compta_month_closed(
+    db: State<'_, DbState>,
+    year: i32,
+    month: u32,
+) -> Result<bool, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .is_compta_month_closed(year, month)
+        .map_err(|e| format!("Failed to check compta month closed: {}", e))
 }

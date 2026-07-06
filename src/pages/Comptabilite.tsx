@@ -1,6 +1,23 @@
-import { useMemo, useState } from "react";
-import { CalendarSync, ChevronLeft, ChevronRight, Cloud, FileDown, Loader2 } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import {
+  CalendarSync,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Cloud,
+  FileDown,
+  FileSpreadsheet,
+  Loader2,
+  Lock,
+  Unlock,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ComptaBilanTab } from "@/components/compta/ComptaBilanTab";
 import { ComptaCalendarSyncDialog } from "@/components/compta/ComptaCalendarSyncDialog";
@@ -10,10 +27,15 @@ import { ComptaDepensesTab } from "@/components/compta/ComptaDepensesTab";
 import { ComptaEncaissementsTab } from "@/components/compta/ComptaEncaissementsTab";
 import { ComptaDeplacementsTab } from "@/components/compta/ComptaDeplacementsTab";
 import { ComptaJournalTab } from "@/components/compta/ComptaJournalTab";
+import { ComptaMonthKpiBanner } from "@/components/compta/ComptaMonthKpiBanner";
 import { useComptaBilanData } from "@/hooks/useComptaBilanData";
 import { useComptaMonthData } from "@/hooks/useComptaMonthData";
 import { getCgpConfig } from "@/lib/api/tauri-settings";
+import { isComptaMonthClosed, setComptaMonthClosed } from "@/lib/api/tauri-compta";
+import { exportComptaJournalCsv } from "@/lib/compta/compta-csv-export";
 import { exportComptaJournalPdf } from "@/lib/compta/compta-pdf-export";
+import { computeComptaAnnualSummary } from "@/lib/compta/compta-bilan";
+import { shouldShowComptaMonthEndReminder } from "@/lib/compta/compta-month-reminder";
 import { formatComptaMonthLabel, shiftComptaMonth } from "@/lib/compta/compta-month";
 import { toast } from "sonner";
 
@@ -21,9 +43,14 @@ export function Comptabilite() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
+  const [activeTab, setActiveTab] = useState("journal");
+  const [bilanYear, setBilanYear] = useState(now.getFullYear());
   const [exportBusy, setExportBusy] = useState(false);
   const [driveSyncOpen, setDriveSyncOpen] = useState(false);
   const [calendarSyncOpen, setCalendarSyncOpen] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
+  const [monthClosed, setMonthClosed] = useState(false);
+  const [closingBusy, setClosingBusy] = useState(false);
 
   const {
     config,
@@ -36,6 +63,9 @@ export function Comptabilite() {
     reload,
   } = useComptaMonthData(year, month);
 
+  const bilanEvolutionEndYear = bilanYear === year ? year : bilanYear;
+  const bilanEvolutionEndMonth = bilanYear === year ? month : 12;
+
   const {
     depenses: bilanDepenses,
     encaissements: bilanEncaissements,
@@ -43,14 +73,44 @@ export function Comptabilite() {
     loading: bilanLoading,
     error: bilanError,
     reload: reloadBilan,
-  } = useComptaBilanData(year, month);
+  } = useComptaBilanData(bilanYear, bilanEvolutionEndYear, bilanEvolutionEndMonth);
+
+  const {
+    depenses: prevBilanDepenses,
+    encaissements: prevBilanEncaissements,
+    deplacements: prevBilanDeplacements,
+  } = useComptaBilanData(bilanYear - 1, bilanYear - 1, 12);
+
+  const previousAnnual = useMemo(
+    () =>
+      computeComptaAnnualSummary(
+        prevBilanEncaissements,
+        prevBilanDepenses,
+        prevBilanDeplacements,
+        bilanYear - 1
+      ),
+    [prevBilanEncaissements, prevBilanDepenses, prevBilanDeplacements, bilanYear]
+  );
+
+  useEffect(() => {
+    void isComptaMonthClosed(year, month).then(setMonthClosed);
+  }, [year, month]);
+
+  const monthEndReminder = shouldShowComptaMonthEndReminder(now, year, month);
 
   const monthLabel = useMemo(() => formatComptaMonthLabel(year, month), [year, month]);
+  const isCurrentMonth =
+    year === now.getFullYear() && month === now.getMonth() + 1;
 
   const shiftMonth = (delta: number) => {
     const next = shiftComptaMonth(year, month, delta);
     setYear(next.year);
     setMonth(next.month);
+  };
+
+  const goToToday = () => {
+    setYear(now.getFullYear());
+    setMonth(now.getMonth() + 1);
   };
 
   const handleExportPdf = async () => {
@@ -74,6 +134,25 @@ export function Comptabilite() {
     }
   };
 
+  const handleExportCsv = () => {
+    exportComptaJournalCsv({ year, month, depenses, encaissements, deplacements });
+    toast.success("CSV exporté");
+  };
+
+  const toggleMonthClosed = async () => {
+    setClosingBusy(true);
+    try {
+      const next = !monthClosed;
+      await setComptaMonthClosed(year, month, next);
+      setMonthClosed(next);
+      toast.success(next ? "Mois marqué comme clôturé" : "Mois rouvert");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setClosingBusy(false);
+    }
+  };
+
   if (loading && !config) {
     return (
       <div className="flex items-center justify-center py-24 text-muted-foreground">
@@ -85,7 +164,7 @@ export function Comptabilite() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Comptabilité</h1>
           <p className="text-sm text-muted-foreground">
@@ -93,34 +172,114 @@ export function Comptabilite() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" size="icon" onClick={() => shiftMonth(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="min-w-[140px] text-center font-medium capitalize">{monthLabel}</span>
-          <Button type="button" variant="outline" size="icon" onClick={() => shiftMonth(1)}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button type="button" variant="outline" disabled={loading} onClick={() => setDriveSyncOpen(true)}>
-            <Cloud className="mr-2 h-4 w-4" />
-            Sync Drive
-          </Button>
-          {config ? (
-            <Button
-              type="button"
-              variant="outline"
-              disabled={loading}
-              onClick={() => setCalendarSyncOpen(true)}
-            >
-              <CalendarSync className="mr-2 h-4 w-4" />
-              Sync Agenda
+          <div className="flex items-center rounded-md border bg-background">
+            <Button type="button" variant="ghost" size="icon" onClick={() => shiftMonth(-1)}>
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-          ) : null}
-          <Button type="button" variant="secondary" disabled={exportBusy || loading} onClick={() => void handleExportPdf()}>
-            {exportBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
-            Exporter PDF
+            <span className="min-w-[140px] px-1 text-center font-medium capitalize">
+              {monthLabel}
+            </span>
+            <Button type="button" variant="ghost" size="icon" onClick={() => shiftMonth(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={isCurrentMonth}
+            onClick={goToToday}
+          >
+            Aujourd&apos;hui
+          </Button>
+          <Popover open={importMenuOpen} onOpenChange={setImportMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="outline" size="sm" disabled={loading}>
+                Importer
+                <ChevronDown className="ml-1 h-4 w-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-52 p-1">
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={() => {
+                  setImportMenuOpen(false);
+                  setDriveSyncOpen(true);
+                }}
+              >
+                <Cloud className="mr-2 h-4 w-4" />
+                Sync Drive
+              </Button>
+              {config ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="w-full justify-start"
+                  onClick={() => {
+                    setImportMenuOpen(false);
+                    setCalendarSyncOpen(true);
+                  }}
+                >
+                  <CalendarSync className="mr-2 h-4 w-4" />
+                  Sync Agenda
+                </Button>
+              ) : null}
+            </PopoverContent>
+          </Popover>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={exportBusy || loading}
+            onClick={handleExportCsv}
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            CSV
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={exportBusy || loading}
+            onClick={() => void handleExportPdf()}
+          >
+            {exportBusy ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <FileDown className="mr-2 h-4 w-4" />
+            )}
+            PDF
+          </Button>
+          <Button
+            type="button"
+            variant={monthClosed ? "secondary" : "outline"}
+            size="sm"
+            disabled={closingBusy || loading}
+            onClick={() => void toggleMonthClosed()}
+          >
+            {monthClosed ? (
+              <Lock className="mr-2 h-4 w-4" />
+            ) : (
+              <Unlock className="mr-2 h-4 w-4" />
+            )}
+            {monthClosed ? "Clôturé" : "Clôturer"}
           </Button>
         </div>
       </div>
+
+      {monthClosed ? (
+        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">
+          Mois clôturé — les écritures restent modifiables si besoin
+        </Badge>
+      ) : null}
+
+      {monthEndReminder ? (
+        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+          Fin de mois proche : vérifiez vos encaissements, dépenses et déplacements avant clôture.
+        </p>
+      ) : null}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {bilanError ? <p className="text-sm text-destructive">{bilanError}</p> : null}
@@ -134,24 +293,42 @@ export function Comptabilite() {
         />
       ) : null}
 
-      <Tabs defaultValue="depenses">
+      <ComptaMonthKpiBanner
+        depenses={depenses}
+        encaissements={encaissements}
+        deplacements={deplacements}
+        onNavigateTab={(tab) => setActiveTab(tab)}
+      />
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap h-auto">
+          <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="depenses">
             Dépenses
             <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">{depenses.length}</span>
           </TabsTrigger>
           <TabsTrigger value="encaissements">
             Encaissements
-            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">{encaissements.length}</span>
+            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">
+              {encaissements.length}
+            </span>
           </TabsTrigger>
           <TabsTrigger value="deplacements">
             Déplacements
-            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">{deplacements.length}</span>
+            <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">
+              {deplacements.length}
+            </span>
           </TabsTrigger>
-          <TabsTrigger value="journal">Journal</TabsTrigger>
           <TabsTrigger value="bilan">Bilan</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="journal" className="mt-4">
+          <ComptaJournalTab
+            depenses={depenses}
+            encaissements={encaissements}
+            deplacements={deplacements}
+          />
+        </TabsContent>
         <TabsContent value="depenses" className="mt-4">
           <ComptaDepensesTab depenses={depenses} onChanged={reload} />
         </TabsContent>
@@ -163,20 +340,16 @@ export function Comptabilite() {
             <ComptaDeplacementsTab config={config} deplacements={deplacements} onChanged={reload} />
           ) : null}
         </TabsContent>
-        <TabsContent value="journal" className="mt-4">
-          <ComptaJournalTab
-            depenses={depenses}
-            encaissements={encaissements}
-            deplacements={deplacements}
-          />
-        </TabsContent>
         <TabsContent value="bilan" className="mt-4">
           <ComptaBilanTab
-            year={year}
-            month={month}
+            year={bilanYear}
+            onYearChange={setBilanYear}
+            evolutionEndYear={bilanEvolutionEndYear}
+            evolutionEndMonth={bilanEvolutionEndMonth}
             depenses={bilanDepenses}
             encaissements={bilanEncaissements}
             deplacements={bilanDeplacements}
+            previousAnnual={previousAnnual}
             loading={bilanLoading}
           />
         </TabsContent>

@@ -63,6 +63,12 @@ export interface NewComptaEncaissement {
   sourceDriveFileId?: string | null;
 }
 
+export interface ComptaBilanData {
+  depenses: ComptaDepense[];
+  encaissements: ComptaEncaissement[];
+  deplacements: ComptaDeplacement[];
+}
+
 export interface ComptaDeplacement {
   id: number;
   date: string;
@@ -162,4 +168,32 @@ export async function updateComptaDeplacement(
 
 export async function deleteComptaDeplacement(id: number): Promise<void> {
   await invoke("delete_compta_deplacement", { id });
+}
+
+export async function getComptaBilanData(
+  year: number,
+  evolutionEndYear: number,
+  evolutionEndMonth: number
+): Promise<ComptaBilanData> {
+  return invoke<ComptaBilanData>("get_compta_bilan_data", {
+    year,
+    evolutionEndYear,
+    evolutionEndMonth,
+  });
+}
+
+export async function getComptaClosedMonths(): Promise<string[]> {
+  return invoke<string[]>("get_compta_closed_months");
+}
+
+export async function setComptaMonthClosed(
+  year: number,
+  month: number,
+  closed: boolean
+): Promise<void> {
+  await invoke("set_compta_month_closed", { year, month, closed });
+}
+
+export async function isComptaMonthClosed(year: number, month: number): Promise<boolean> {
+  return invoke<boolean>("is_compta_month_closed", { year, month });
 }

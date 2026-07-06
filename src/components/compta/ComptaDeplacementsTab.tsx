@@ -1,9 +1,17 @@
 import { useMemo, useState } from "react";
-import { Loader2, Pencil, Trash2 } from "lucide-react";
+import { Copy, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,7 +36,22 @@ import {
 } from "@/lib/compta/compta-distance";
 import { formatComptaMoney } from "@/lib/compta/compta-money";
 import { formatComptaDateFr, todayDateInput } from "@/lib/compta/compta-month";
+import { parseComptaSortValue, sortComptaDeplacements } from "@/lib/compta/compta-list-sort";
+import {
+  comptaJournalTypeBadgeClass,
+  comptaJournalTypeLabel,
+  comptaTypeListCardClass,
+} from "@/lib/compta/compta-journal";
+import { ComptaListSortSelect } from "@/components/compta/ComptaListSortSelect";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const DEPLACEMENT_SORT_OPTIONS = [
+  { value: "date-desc", label: "Date (récent)" },
+  { value: "date-asc", label: "Date (ancien)" },
+  { value: "destination-asc", label: "Destination A→Z" },
+  { value: "indemnite-desc", label: "Indemnité ↓" },
+] as const;
 
 interface ComptaDeplacementsTabProps {
   config: ComptaConfig;
@@ -41,6 +64,8 @@ export function ComptaDeplacementsTab({
   deplacements,
   onChanged,
 }: ComptaDeplacementsTabProps) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [sortValue, setSortValue] = useState("date-desc");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -54,13 +79,28 @@ export function ComptaDeplacementsTab({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return deplacements;
-    return deplacements.filter(
-      (d) =>
-        d.destination.toLowerCase().includes(q) ||
-        d.objet.toLowerCase().includes(q)
-    );
-  }, [deplacements, search]);
+    const base = !q
+      ? deplacements
+      : deplacements.filter(
+          (d) =>
+            d.destination.toLowerCase().includes(q) ||
+            d.objet.toLowerCase().includes(q)
+        );
+    const { key, dir } = parseComptaSortValue(sortValue);
+    return sortComptaDeplacements(base, key as "date" | "destination" | "indemnite", dir);
+  }, [deplacements, search, sortValue]);
+
+  const monthTotals = useMemo(
+    () =>
+      deplacements.reduce(
+        (acc, d) => ({
+          km: acc.km + d.km,
+          indemnite: acc.indemnite + d.indemnite,
+        }),
+        { km: 0, indemnite: 0 }
+      ),
+    [deplacements]
+  );
 
   const resetForm = () => {
     setEditingId(null);
@@ -71,6 +111,11 @@ export function ComptaDeplacementsTab({
     setIndemnite(null);
   };
 
+  const openNewForm = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
   const loadEdit = (d: ComptaDeplacement) => {
     setEditingId(d.id);
     setDate(d.date);
@@ -78,6 +123,17 @@ export function ComptaDeplacementsTab({
     setObjet(d.objet);
     setKm(d.km);
     setIndemnite(d.indemnite);
+    setFormOpen(true);
+  };
+
+  const duplicateDeplacement = (d: ComptaDeplacement) => {
+    setEditingId(null);
+    setDate(d.date);
+    setDestination(d.destination);
+    setObjet(d.objet);
+    setKm(d.km);
+    setIndemnite(d.indemnite);
+    setFormOpen(true);
   };
 
   const handleCalculate = async () => {
@@ -135,6 +191,7 @@ export function ComptaDeplacementsTab({
         toast.success("Déplacement ajouté");
       }
       resetForm();
+      setFormOpen(false);
       await onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
@@ -161,14 +218,26 @@ export function ComptaDeplacementsTab({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
-            {editingId != null ? "Modifier le déplacement" : "Nouveau déplacement"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" onClick={openNewForm}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nouveau déplacement
+        </Button>
+        <ComptaListSortSelect
+          value={sortValue}
+          onValueChange={setSortValue}
+          options={[...DEPLACEMENT_SORT_OPTIONS]}
+        />
+      </div>
+
+      <Sheet open={formOpen} onOpenChange={setFormOpen}>
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>
+              {editingId != null ? "Modifier le déplacement" : "Nouveau déplacement"}
+            </SheetTitle>
+          </SheetHeader>
+          <form className="mt-6 space-y-4" onSubmit={(e) => void handleSubmit(e)}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="depl-date">Date</Label>
@@ -203,19 +272,24 @@ export function ComptaDeplacementsTab({
                 </span>
               </div>
             ) : null}
-            <div className="flex gap-2">
+            <SheetFooter className="gap-2 sm:justify-start">
               <Button type="submit" disabled={busy || km == null}>
                 {editingId != null ? "Enregistrer" : "Ajouter le déplacement"}
               </Button>
-              {editingId != null ? (
-                <Button type="button" variant="ghost" onClick={resetForm}>
-                  Annuler
-                </Button>
-              ) : null}
-            </div>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  resetForm();
+                  setFormOpen(false);
+                }}
+              >
+                Annuler
+              </Button>
+            </SheetFooter>
           </form>
-        </CardContent>
-      </Card>
+        </SheetContent>
+      </Sheet>
 
       <Input placeholder="Rechercher un déplacement…" value={search} onChange={(e) => setSearch(e.target.value)} />
 
@@ -224,17 +298,25 @@ export function ComptaDeplacementsTab({
           <p className="text-center text-muted-foreground py-8">Aucun déplacement pour ce mois</p>
         ) : (
           filtered.map((d) => (
-            <Card key={d.id}>
+            <Card key={d.id} className={cn(comptaTypeListCardClass("deplacement"))}>
               <CardContent className="flex flex-wrap items-center gap-3 py-3">
                 <div className="text-sm text-muted-foreground w-24 shrink-0">
                   {formatComptaDateFr(d.date)}
                 </div>
                 <div className="flex-1 min-w-[180px]">
-                  <p className="font-medium">{d.destination}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={cn(comptaJournalTypeBadgeClass("deplacement"))}
+                    >
+                      {comptaJournalTypeLabel("deplacement")}
+                    </Badge>
+                    <p className="font-medium">{d.destination}</p>
+                  </div>
                   <p className="text-sm text-muted-foreground">{d.objet}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-emerald-600">+{formatComptaMoney(d.indemnite)}</p>
+                  <p className="font-semibold text-blue-600">+{formatComptaMoney(d.indemnite)}</p>
                   <p className="text-xs text-muted-foreground">
                     {d.km.toFixed(1)} km × {config.indemniteKm} €
                   </p>
@@ -242,6 +324,9 @@ export function ComptaDeplacementsTab({
                 <div className="flex gap-1 ml-auto">
                   <Button type="button" variant="ghost" size="icon" onClick={() => loadEdit(d)}>
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => duplicateDeplacement(d)}>
+                    <Copy className="h-4 w-4" />
                   </Button>
                   <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteId(d.id)}>
                     <Trash2 className="h-4 w-4" />
@@ -252,6 +337,23 @@ export function ComptaDeplacementsTab({
           ))
         )}
       </div>
+
+      {deplacements.length > 0 ? (
+        <Card className="border-t-2 bg-muted/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm font-medium">
+            <span>
+              Totaux du mois ({deplacements.length} ligne
+              {deplacements.length > 1 ? "s" : ""})
+            </span>
+            <div className="flex flex-wrap gap-4 tabular-nums">
+              <span>{monthTotals.km.toFixed(1)} km</span>
+              <span className="text-blue-600">
+                Indemnités {formatComptaMoney(monthTotals.indemnite)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <AlertDialog open={deleteId != null} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>

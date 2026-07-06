@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -12,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
   ComptaDepense,
@@ -22,6 +24,7 @@ import {
   computeComptaAnnualSummary,
   computeComptaExpensesByCategory,
   computeComptaMonthlyEvolution,
+  type ComptaAnnualSummary,
 } from "@/lib/compta/compta-bilan";
 import { formatComptaMoney } from "@/lib/compta/compta-money";
 import { cn } from "@/lib/utils";
@@ -48,10 +51,13 @@ const CATEGORY_COLORS = [
 
 interface ComptaBilanTabProps {
   year: number;
-  month: number;
+  onYearChange: (year: number) => void;
+  evolutionEndYear: number;
+  evolutionEndMonth: number;
   depenses: ComptaDepense[];
   encaissements: ComptaEncaissement[];
   deplacements: ComptaDeplacement[];
+  previousAnnual?: ComptaAnnualSummary | null;
   loading?: boolean;
 }
 
@@ -62,10 +68,13 @@ function formatAxisMoney(value: number): string {
 
 export function ComptaBilanTab({
   year,
-  month,
+  onYearChange,
+  evolutionEndYear,
+  evolutionEndMonth,
   depenses,
   encaissements,
   deplacements,
+  previousAnnual = null,
   loading = false,
 }: ComptaBilanTabProps) {
   const annual = useMemo(
@@ -74,8 +83,8 @@ export function ComptaBilanTab({
   );
 
   const monthly = useMemo(
-    () => computeComptaMonthlyEvolution(encaissements, depenses, year, month),
-    [encaissements, depenses, year, month]
+    () => computeComptaMonthlyEvolution(encaissements, depenses, evolutionEndYear, evolutionEndMonth),
+    [encaissements, depenses, evolutionEndYear, evolutionEndMonth]
   );
 
   const expenseSlices = useMemo(
@@ -112,21 +121,63 @@ export function ComptaBilanTab({
     [expenseSlices]
   );
 
+  const yoyDelta = useMemo(() => {
+    if (!previousAnnual) return null;
+    return {
+      caHT: annual.caHT - previousAnnual.caHT,
+      depensesHT: annual.depensesHT - previousAnnual.depensesHT,
+      resultatNet: annual.resultatNet - previousAnnual.resultatNet,
+    };
+  }, [annual, previousAnnual]);
+
+  function formatDelta(value: number): string {
+    const prefix = value > 0 ? "+" : "";
+    return `${prefix}${formatComptaMoney(value)}`;
+  }
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">
-        Chargement du bilan…
+      <div className="space-y-6 animate-pulse">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="h-7 w-48 rounded-md bg-muted" />
+          <div className="h-9 w-32 rounded-md bg-muted" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <div className="h-4 w-24 rounded bg-muted" />
+              </CardHeader>
+              <CardContent>
+                <div className="h-7 w-28 rounded bg-muted" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="h-[280px] rounded-2xl border bg-muted/40" />
+        <div className="grid gap-4 xl:grid-cols-2">
+          <div className="h-[360px] rounded-2xl border bg-muted/40" />
+          <div className="h-[360px] rounded-2xl border bg-muted/40" />
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold">Bilan annuel {year}</h2>
-        <p className="text-sm text-muted-foreground">
-          Synthèse HT et évolution TTC — calquée sur ComptaZen
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Bilan annuel {year}</h2>
+        </div>
+        <div className="flex items-center rounded-md border bg-background">
+          <Button type="button" variant="ghost" size="icon" onClick={() => onYearChange(year - 1)}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-[4rem] px-2 text-center font-medium tabular-nums">{year}</span>
+          <Button type="button" variant="ghost" size="icon" onClick={() => onYearChange(year + 1)}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -174,6 +225,38 @@ export function ComptaBilanTab({
           </CardContent>
         </Card>
       </div>
+
+      {yoyDelta ? (
+        <Card className="border-dashed">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Évolution vs {year - 1}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-6 text-sm tabular-nums">
+            <span>
+              CA HT{" "}
+              <strong className={yoyDelta.caHT >= 0 ? "text-emerald-600" : "text-red-600"}>
+                {formatDelta(yoyDelta.caHT)}
+              </strong>
+            </span>
+            <span>
+              Dépenses HT{" "}
+              <strong className={yoyDelta.depensesHT <= 0 ? "text-emerald-600" : "text-red-600"}>
+                {formatDelta(yoyDelta.depensesHT)}
+              </strong>
+            </span>
+            <span>
+              Résultat net{" "}
+              <strong
+                className={yoyDelta.resultatNet >= 0 ? "text-emerald-600" : "text-red-600"}
+              >
+                {formatDelta(yoyDelta.resultatNet)}
+              </strong>
+            </span>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm">
         <h3 className="mb-4 text-sm font-medium">Vue annuelle (HT)</h3>

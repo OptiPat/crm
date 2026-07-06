@@ -373,6 +373,7 @@ export function ComptaCalendarSyncDialog({
   };
 
   const rowBusy = batchImporting || calculating;
+  const addressMissing = !config.adresseDepart.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -386,6 +387,12 @@ export function ComptaCalendarSyncDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+          {addressMissing ? (
+            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Renseignez l&apos;adresse de départ dans Configuration (ou Paramètres →
+              Comptabilité) pour calculer les km et importer les déplacements.
+            </p>
+          ) : null}
           {loading ? (
             <div className="flex items-center justify-center py-12 text-muted-foreground">
               <Loader2 className="mr-2 h-5 w-5 animate-spin" />
@@ -428,6 +435,7 @@ export function ComptaCalendarSyncDialog({
                   locationNeedsCityHint(proposal.location) ||
                   draft.cityHint.length > 0;
                 const canSelect =
+                  !addressMissing &&
                   !proposal.alreadyImported &&
                   draft.km != null &&
                   draft.indemnite != null &&
@@ -495,6 +503,17 @@ export function ComptaCalendarSyncDialog({
                             <p className="pb-2 text-xs text-muted-foreground">
                               Repli sur la ville — calcul auto dès la saisie.
                             </p>
+                          </div>
+                        ) : null}
+
+                        {draft.km != null && draft.indemnite != null ? (
+                          <div className="flex flex-wrap gap-4 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm">
+                            <span>
+                              <strong>{draft.km.toFixed(1)} km</strong> aller-retour
+                            </span>
+                            <span className="font-semibold text-blue-700">
+                              Indemnité {formatComptaMoney(draft.indemnite)}
+                            </span>
                           </div>
                         ) : null}
 

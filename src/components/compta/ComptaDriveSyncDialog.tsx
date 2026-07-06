@@ -42,6 +42,26 @@ import {
 } from "@/lib/compta/compta-money";
 import { openComptaDriveLink } from "@/lib/compta/compta-drive";
 import { extractTextFromPDFPath } from "@/lib/pdf/extractor";
+import { ComptaDriveSyncFilterBar } from "@/components/compta/ComptaDriveSyncFilterBar";
+import {
+  matchesComptaDriveSyncFilter,
+  type ComptaDriveSyncFilter,
+} from "@/lib/compta/compta-drive-sync-filter";
+import {
+  comptaConfidenceBadgeClass,
+  comptaConfidenceInputClass,
+} from "@/lib/compta/compta-sync-confidence";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 interface ComptaDriveSyncDialogProps {
@@ -192,6 +212,9 @@ export function ComptaDriveSyncDialog({
   const [batchImporting, setBatchImporting] = useState(false);
   const [selectedEnc, setSelectedEnc] = useState<Record<string, boolean>>({});
   const [selectedDep, setSelectedDep] = useState<Record<string, boolean>>({});
+  const [encFilter, setEncFilter] = useState<ComptaDriveSyncFilter>("all");
+  const [depFilter, setDepFilter] = useState<ComptaDriveSyncFilter>("all");
+  const [batchConfirm, setBatchConfirm] = useState<"enc" | "dep" | null>(null);
   const [encDrafts, setEncDrafts] = useState<Record<string, EncDraft>>({});
   const [depDrafts, setDepDrafts] = useState<Record<string, DepDraft>>({});
   const [extractProgress, setExtractProgress] = useState<{ done: number; total: number } | null>(
@@ -639,6 +662,7 @@ export function ComptaDriveSyncDialog({
                   <p className="text-sm text-muted-foreground">Aucun PDF dans ce dossier.</p>
                 ) : (
                   <>
+                    <ComptaDriveSyncFilterBar value={encFilter} onChange={setEncFilter} />
                     <SelectionToolbar
                       selectedCount={selectedEncCount}
                       readyCount={readyEncFiles.length}
@@ -649,10 +673,19 @@ export function ComptaDriveSyncDialog({
                         setSelectedEnc(next);
                       }}
                       onDeselectAll={() => setSelectedEnc({})}
-                      onImportSelected={() => void importSelectedEncaissements()}
+                      onImportSelected={() => setBatchConfirm("enc")}
                       importLabel="Importer la sélection"
                     />
-                    {scan.encaissementsFiles.map((file) => (
+                    {scan.encaissementsFiles
+                      .filter((file) =>
+                        matchesComptaDriveSyncFilter({
+                          alreadyImported: file.alreadyImported,
+                          status: encDrafts[file.id]?.status,
+                          confidence: encDrafts[file.id]?.confidence,
+                          filter: encFilter,
+                        })
+                      )
+                      .map((file) => (
                       <EncaissementFileRow
                         key={file.id}
                         file={file}
@@ -691,6 +724,7 @@ export function ComptaDriveSyncDialog({
                   <p className="text-sm text-muted-foreground">Aucun PDF dans ce dossier.</p>
                 ) : (
                   <>
+                    <ComptaDriveSyncFilterBar value={depFilter} onChange={setDepFilter} />
                     <SelectionToolbar
                       selectedCount={selectedDepCount}
                       readyCount={readyDepFiles.length}
@@ -701,10 +735,19 @@ export function ComptaDriveSyncDialog({
                         setSelectedDep(next);
                       }}
                       onDeselectAll={() => setSelectedDep({})}
-                      onImportSelected={() => void importSelectedDepenses()}
+                      onImportSelected={() => setBatchConfirm("dep")}
                       importLabel="Importer la sélection"
                     />
-                    {scan.depensesFiles.map((file) => (
+                    {scan.depensesFiles
+                      .filter((file) =>
+                        matchesComptaDriveSyncFilter({
+                          alreadyImported: file.alreadyImported,
+                          status: depDrafts[file.id]?.status,
+                          confidence: depDrafts[file.id]?.confidence,
+                          filter: depFilter,
+                        })
+                      )
+                      .map((file) => (
                       <DepenseFileRow
                         key={file.id}
                         file={file}
@@ -748,6 +791,33 @@ export function ComptaDriveSyncDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <AlertDialog open={batchConfirm != null} onOpenChange={(open) => !open && setBatchConfirm(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer l&apos;import</AlertDialogTitle>
+            <AlertDialogDescription>
+              {batchConfirm === "enc"
+                ? `${selectedEncCount} encaissement${selectedEncCount > 1 ? "s" : ""} prêt${selectedEncCount > 1 ? "s" : ""} à importer.`
+                : `${selectedDepCount} dépense${selectedDepCount > 1 ? "s" : ""} prête${selectedDepCount > 1 ? "s" : ""} à importer.`}
+              {" "}Vérifiez les montants extraits avant de valider.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const kind = batchConfirm;
+                setBatchConfirm(null);
+                if (kind === "enc") void importSelectedEncaissements();
+                else if (kind === "dep") void importSelectedDepenses();
+              }}
+            >
+              Importer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Dialog>
   );
 }
@@ -828,13 +898,11 @@ function DepenseFileRow({
                       USD
                     </Badge>
                     <Badge
-                      variant={
-                        draft.confidence === "high"
-                          ? "default"
-                          : draft.confidence === "medium"
-                            ? "secondary"
-                            : "outline"
-                      }
+                      variant="outline"
+                      className={cn(
+                        "mt-1",
+                        comptaConfidenceBadgeClass(draft.confidence)
+                      )}
                     >
                       Confiance {draft.confidence}
                     </Badge>
@@ -900,6 +968,7 @@ function DepenseFileRow({
               <Input
                 value={draft.tiers}
                 placeholder={isBankStatement ? "La Banque Postale" : undefined}
+                className={comptaConfidenceInputClass(draft.confidence)}
                 onChange={(e) => onDraftChange({ tiers: e.target.value })}
               />
             </div>
@@ -936,6 +1005,7 @@ function DepenseFileRow({
                 step="0.01"
                 value={draft.ttc}
                 disabled={isBankStatement}
+                className={comptaConfidenceInputClass(draft.confidence)}
                 onChange={(e) => onDraftChange({ ttc: e.target.value })}
               />
             </div>
@@ -946,6 +1016,7 @@ function DepenseFileRow({
                 step="0.01"
                 value={draft.tva}
                 disabled={isBankStatement}
+                className={comptaConfidenceInputClass(draft.confidence)}
                 onChange={(e) => onDraftChange({ tva: e.target.value })}
               />
             </div>
@@ -1039,18 +1110,12 @@ function EncaissementFileRow({
             {file.name}
           </p>
           {draft?.status === "ready" ? (
-            <Badge
-              variant={
-                draft.confidence === "high"
-                  ? "default"
-                  : draft.confidence === "medium"
-                    ? "secondary"
-                    : "outline"
-              }
-              className="mt-1"
-            >
-              Confiance {draft.confidence}
-            </Badge>
+                  <Badge
+                    variant="outline"
+                    className={cn("mt-1", comptaConfidenceBadgeClass(draft.confidence))}
+                  >
+                    Confiance {draft.confidence}
+                  </Badge>
           ) : null}
           </div>
         </div>
@@ -1085,6 +1150,7 @@ function EncaissementFileRow({
               <Label>Client</Label>
               <Input
                 value={draft.client}
+                className={comptaConfidenceInputClass(draft.confidence)}
                 onChange={(e) => onDraftChange({ client: e.target.value })}
               />
             </div>
@@ -1111,6 +1177,7 @@ function EncaissementFileRow({
                 type="number"
                 step="0.01"
                 value={draft.ht}
+                className={comptaConfidenceInputClass(draft.confidence)}
                 onChange={(e) => onDraftChange({ ht: e.target.value })}
               />
             </div>
@@ -1120,6 +1187,7 @@ function EncaissementFileRow({
                 type="number"
                 step="0.01"
                 value={draft.tva}
+                className={comptaConfidenceInputClass(draft.confidence)}
                 onChange={(e) => onDraftChange({ tva: e.target.value })}
               />
             </div>

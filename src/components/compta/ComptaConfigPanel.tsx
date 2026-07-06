@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, ChevronUp, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, Save } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ interface ComptaConfigPanelProps {
   config: ComptaConfig;
   year: number;
   month: number;
+  defaultOpen?: boolean;
   onSaved: (config: ComptaConfig) => void;
 }
 
@@ -19,9 +21,10 @@ export function ComptaConfigPanel({
   config,
   year,
   month,
+  defaultOpen = false,
   onSaved,
 }: ComptaConfigPanelProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultOpen);
   const [draft, setDraft] = useState(config);
   const [saving, setSaving] = useState(false);
 
@@ -30,6 +33,8 @@ export function ComptaConfigPanel({
   }, [config]);
 
   const syncDraft = () => setDraft(config);
+  const adresseOk = config.adresseDepart.trim().length > 0;
+  const driveRootOk = config.driveRootFolderId.trim().length > 0;
 
   const handleSave = async () => {
     setSaving(true);
@@ -46,8 +51,27 @@ export function ComptaConfigPanel({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between py-3">
-        <CardTitle className="text-base font-medium">Configuration</CardTitle>
+      <CardHeader className="flex flex-row items-center justify-between gap-3 py-3">
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          <CardTitle className="text-base font-medium">Configuration</CardTitle>
+          {adresseOk ? (
+            <Badge variant="outline" className="gap-1 border-emerald-200 bg-emerald-50 text-emerald-800">
+              <CheckCircle2 className="h-3 w-3" />
+              Adresse OK
+            </Badge>
+          ) : (
+            <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-900">
+              <AlertTriangle className="h-3 w-3" />
+              Adresse requise (Agenda / km)
+            </Badge>
+          )}
+          {!driveRootOk ? (
+            <Badge variant="outline" className="gap-1 border-amber-200 bg-amber-50 text-amber-900">
+              <AlertTriangle className="h-3 w-3" />
+              Drive à configurer
+            </Badge>
+          ) : null}
+        </div>
         <Button
           type="button"
           variant="ghost"
@@ -91,18 +115,6 @@ export function ComptaConfigPanel({
                 }
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="compta-ors">Clé OpenRouteService (optionnel)</Label>
-              <Input
-                id="compta-ors"
-                type="password"
-                value={draft.orsApiKey ?? ""}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, orsApiKey: e.target.value || null }))
-                }
-                placeholder="Réservé — calcul km via OSRM par défaut"
-              />
-            </div>
             <div className="space-y-2 md:col-span-2">
               <Label htmlFor="compta-drive-root">Dossier racine Google Drive (ID)</Label>
               <Input
@@ -111,7 +123,16 @@ export function ComptaConfigPanel({
                 onChange={(e) =>
                   setDraft((d) => ({ ...d, driveRootFolderId: e.target.value }))
                 }
+                placeholder="Coller l'ID du dossier racine ComptaZen"
               />
+              {!draft.driveRootFolderId.trim() ? (
+                <p className="text-xs text-amber-800 rounded-md border border-amber-200 bg-amber-50 p-2">
+                  Requis pour la sync Drive : ouvrez le dossier racine dans Google Drive, copiez
+                  l&apos;identifiant depuis l&apos;URL (
+                  <span className="font-mono">drive.google.com/drive/folders/…</span>
+                  ), puis enregistrez.
+                </p>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 Dossiers attendus ce mois :{" "}
                 <span className="font-medium">{comptaDriveFolderName(year, month, "Encaissements")}</span>

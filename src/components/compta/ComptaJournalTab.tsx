@@ -1,7 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type {
   ComptaDepense,
   ComptaDeplacement,
@@ -9,12 +8,13 @@ import type {
 } from "@/lib/api/tauri-compta";
 import {
   buildComptaJournalEntries,
+  comptaJournalTypeBadgeClass,
   comptaJournalTypeLabel,
-  computeComptaJournalTotals,
 } from "@/lib/compta/compta-journal";
 import { formatComptaMoney } from "@/lib/compta/compta-money";
 import { formatComptaDateFr } from "@/lib/compta/compta-month";
 import { openComptaDriveLink } from "@/lib/compta/compta-drive";
+import { cn } from "@/lib/utils";
 
 interface ComptaJournalTabProps {
   depenses: ComptaDepense[];
@@ -28,45 +28,9 @@ export function ComptaJournalTab({
   deplacements,
 }: ComptaJournalTabProps) {
   const entries = buildComptaJournalEntries(encaissements, depenses, deplacements);
-  const totals = computeComptaJournalTotals(encaissements, depenses, deplacements);
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Encaissements</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-semibold text-emerald-600">{formatComptaMoney(totals.totalEnc)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Dépenses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-semibold text-destructive">{formatComptaMoney(totals.totalDep)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Indemnités km</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-semibold">{formatComptaMoney(totals.totalKm)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">TVA nette</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-xl font-semibold">{formatComptaMoney(totals.totalTVA)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="overflow-x-auto rounded-lg border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50">
@@ -93,7 +57,12 @@ export function ComptaJournalTab({
                 <tr key={`${e.type}-${e.date}-${i}`} className="border-t">
                   <td className="p-3 whitespace-nowrap">{formatComptaDateFr(e.date)}</td>
                   <td className="p-3">
-                    <Badge variant="outline">{comptaJournalTypeLabel(e.type)}</Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(comptaJournalTypeBadgeClass(e.type))}
+                    >
+                      {comptaJournalTypeLabel(e.type)}
+                    </Badge>
                   </td>
                   <td className="p-3">
                     {e.libelle}

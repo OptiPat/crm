@@ -1,9 +1,17 @@
 import { useMemo, useState } from "react";
-import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ComptaDriveLinkField } from "@/components/compta/ComptaDriveLinkField";
+import { ComptaListSortSelect } from "@/components/compta/ComptaListSortSelect";
 import {
   createComptaEncaissement,
   deleteComptaEncaissement,
@@ -27,8 +36,23 @@ import {
   formatComptaMoney,
 } from "@/lib/compta/compta-money";
 import { formatComptaDateFr, todayDateInput } from "@/lib/compta/compta-month";
+import { parseComptaSortValue, sortComptaEncaissements } from "@/lib/compta/compta-list-sort";
+import {
+  comptaJournalTypeBadgeClass,
+  comptaJournalTypeLabel,
+  comptaTypeListCardClass,
+} from "@/lib/compta/compta-journal";
 import { openComptaDriveLink } from "@/lib/compta/compta-drive";
+import { useComptaNameSuggestions } from "@/hooks/useComptaNameSuggestions";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const ENCAISSEMENT_SORT_OPTIONS = [
+  { value: "date-desc", label: "Date (récent)" },
+  { value: "date-asc", label: "Date (ancien)" },
+  { value: "client-asc", label: "Client A→Z" },
+  { value: "total-desc", label: "Montant reçu ↓" },
+] as const;
 
 interface ComptaEncaissementsTabProps {
   encaissements: ComptaEncaissement[];
@@ -39,6 +63,8 @@ export function ComptaEncaissementsTab({
   encaissements,
   onChanged,
 }: ComptaEncaissementsTabProps) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [sortValue, setSortValue] = useState("date-desc");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -61,12 +87,30 @@ export function ComptaEncaissementsTab({
     () => [...new Set(encaissements.map((e) => e.client).filter(Boolean))],
     [encaissements]
   );
+  const nameSuggestions = useComptaNameSuggestions(clientSuggestions);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return encaissements;
-    return encaissements.filter((e) => e.client.toLowerCase().includes(q));
-  }, [encaissements, search]);
+    const base = !q
+      ? encaissements
+      : encaissements.filter((e) => e.client.toLowerCase().includes(q));
+    const { key, dir } = parseComptaSortValue(sortValue);
+    return sortComptaEncaissements(base, key as "date" | "client" | "total", dir);
+  }, [encaissements, search, sortValue]);
+
+  const monthTotals = useMemo(
+    () =>
+      encaissements.reduce(
+        (acc, e) => ({
+          ht: acc.ht + e.ht,
+          tva: acc.tva + e.tva,
+          total: acc.total + e.total,
+          don: acc.don + e.don,
+        }),
+        { ht: 0, tva: 0, total: 0, don: 0 }
+      ),
+    [encaissements]
+  );
 
   const resetForm = () => {
     setEditingId(null);
@@ -79,6 +123,11 @@ export function ComptaEncaissementsTab({
     setLienDrive("");
   };
 
+  const openNewForm = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
   const loadEdit = (e: ComptaEncaissement) => {
     setEditingId(e.id);
     setClient(e.client);
@@ -88,6 +137,19 @@ export function ComptaEncaissementsTab({
     setTva(String(e.tva));
     setDon(String(e.don));
     setLienDrive(e.lienDrive ?? "");
+    setFormOpen(true);
+  };
+
+  const duplicateEncaissement = (e: ComptaEncaissement) => {
+    setEditingId(null);
+    setClient(e.client);
+    setDate(e.date);
+    setExonere(String(e.exonere));
+    setHt(String(e.ht));
+    setTva(String(e.tva));
+    setDon(String(e.don));
+    setLienDrive(e.lienDrive ?? "");
+    setFormOpen(true);
   };
 
   const buildPayload = (): NewComptaEncaissement => ({
@@ -120,6 +182,7 @@ export function ComptaEncaissementsTab({
         toast.success("Encaissement ajouté");
       }
       resetForm();
+      setFormOpen(false);
       await onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
@@ -146,14 +209,26 @@ export function ComptaEncaissementsTab({
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
-            {editingId != null ? "Modifier l'encaissement" : "Nouvel encaissement"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" onClick={openNewForm}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nouvel encaissement
+        </Button>
+        <ComptaListSortSelect
+          value={sortValue}
+          onValueChange={setSortValue}
+          options={[...ENCAISSEMENT_SORT_OPTIONS]}
+        />
+      </div>
+
+      <Sheet open={formOpen} onOpenChange={setFormOpen}>
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>
+              {editingId != null ? "Modifier l'encaissement" : "Nouvel encaissement"}
+            </SheetTitle>
+          </SheetHeader>
+          <form className="mt-6 space-y-4" onSubmit={(e) => void handleSubmit(e)}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="enc-client">Nom du client</Label>
@@ -165,7 +240,7 @@ export function ComptaEncaissementsTab({
                   required
                 />
                 <datalist id="compta-clients-list">
-                  {clientSuggestions.map((c) => (
+                  {nameSuggestions.map((c) => (
                     <option key={c} value={c} />
                   ))}
                 </datalist>
@@ -205,19 +280,24 @@ export function ComptaEncaissementsTab({
               value={lienDrive}
               onChange={setLienDrive}
             />
-            <div className="flex gap-2">
+            <SheetFooter className="gap-2 sm:justify-start">
               <Button type="submit" disabled={busy}>
                 {editingId != null ? "Enregistrer" : "Ajouter l'encaissement"}
               </Button>
-              {editingId != null ? (
-                <Button type="button" variant="ghost" onClick={resetForm}>
-                  Annuler
-                </Button>
-              ) : null}
-            </div>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  resetForm();
+                  setFormOpen(false);
+                }}
+              >
+                Annuler
+              </Button>
+            </SheetFooter>
           </form>
-        </CardContent>
-      </Card>
+        </SheetContent>
+      </Sheet>
 
       <Input placeholder="Rechercher un encaissement…" value={search} onChange={(e) => setSearch(e.target.value)} />
 
@@ -226,13 +306,21 @@ export function ComptaEncaissementsTab({
           <p className="text-center text-muted-foreground py-8">Aucun encaissement pour ce mois</p>
         ) : (
           filtered.map((e) => (
-            <Card key={e.id}>
+            <Card key={e.id} className={cn(comptaTypeListCardClass("encaissement"))}>
               <CardContent className="flex flex-wrap items-center gap-3 py-3">
                 <div className="text-sm text-muted-foreground w-24 shrink-0">
                   {formatComptaDateFr(e.date)}
                 </div>
                 <div className="flex-1 min-w-[180px]">
-                  <p className="font-medium">{e.client}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={cn(comptaJournalTypeBadgeClass("encaissement"))}
+                    >
+                      {comptaJournalTypeLabel("encaissement")}
+                    </Badge>
+                    <p className="font-medium">{e.client}</p>
+                  </div>
                   <p className="text-sm text-muted-foreground">
                     HT {formatComptaMoney(e.ht)} · TVA {formatComptaMoney(e.tva)}
                     {e.exonere > 0 ? ` · Exo ${formatComptaMoney(e.exonere)}` : ""}
@@ -252,6 +340,9 @@ export function ComptaEncaissementsTab({
                   <Button type="button" variant="ghost" size="icon" onClick={() => loadEdit(e)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => duplicateEncaissement(e)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
                   <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteId(e.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -261,6 +352,27 @@ export function ComptaEncaissementsTab({
           ))
         )}
       </div>
+
+      {encaissements.length > 0 ? (
+        <Card className="border-t-2 bg-muted/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm font-medium">
+            <span>
+              Totaux du mois ({encaissements.length} ligne
+              {encaissements.length > 1 ? "s" : ""})
+            </span>
+            <div className="flex flex-wrap gap-4 tabular-nums">
+              <span>HT {formatComptaMoney(monthTotals.ht)}</span>
+              <span>TVA {formatComptaMoney(monthTotals.tva)}</span>
+              {monthTotals.don > 0 ? (
+                <span>Don {formatComptaMoney(monthTotals.don)}</span>
+              ) : null}
+              <span className="text-emerald-600">
+                Reçu {formatComptaMoney(monthTotals.total)}
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <AlertDialog open={deleteId != null} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>

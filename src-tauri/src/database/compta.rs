@@ -122,6 +122,60 @@ fn month_bounds(year: i32, month: u32) -> (String, String) {
     (start, end)
 }
 
+fn shift_compta_month(year: i32, month: u32, delta: i32) -> (i32, u32) {
+    let mut y = year;
+    let mut m = month as i32 + delta;
+    while m <= 0 {
+        m += 12;
+        y -= 1;
+    }
+    while m > 12 {
+        m -= 12;
+        y += 1;
+    }
+    (y, m as u32)
+}
+
+fn compta_bilan_date_bounds(
+    year: i32,
+    evolution_end_year: i32,
+    evolution_end_month: u32,
+) -> (String, String) {
+    let (mut min_y, mut min_m) = (year, 1u32);
+    let (mut max_y, mut max_m) = (year, 12u32);
+
+    let mut consider = |y: i32, m: u32| {
+        if y < min_y || (y == min_y && m < min_m) {
+            min_y = y;
+            min_m = m;
+        }
+        if y > max_y || (y == max_y && m > max_m) {
+            max_y = y;
+            max_m = m;
+        }
+    };
+
+    for m in 1..=12 {
+        consider(year, m);
+    }
+    for delta in -5..=0 {
+        let (y, m) = shift_compta_month(evolution_end_year, evolution_end_month, delta);
+        consider(y, m);
+    }
+
+    let (start, _) = month_bounds(min_y, min_m);
+    let (_, end) = month_bounds(max_y, max_m);
+    (start, end)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComptaBilanData {
+    pub depenses: Vec<ComptaDepense>,
+    pub encaissements: Vec<ComptaEncaissement>,
+    pub deplacements: Vec<ComptaDeplacement>,
+}
+
 impl super::Database {
     pub fn get_compta_config(&self) -> Result<ComptaConfig> {
         Ok(ComptaConfig {
@@ -135,7 +189,7 @@ impl super::Database {
             ors_api_key: self.get_setting("compta_ors_api_key")?,
             drive_root_folder_id: self
                 .get_setting("compta_drive_root_folder_id")?
-                .unwrap_or_else(|| "1BFPOo103v0BoeNaZoKS2jsLaV57zjOSX".to_string()),
+                .unwrap_or_default(),
         })
     }
 
@@ -480,6 +534,128 @@ impl super::Database {
         Ok(())
     }
 
+    pub fn get_compta_bilan_data(
+        &self,
+        year: i32,
+        evolution_end_year: i32,
+        evolution_end_month: u32,
+    ) -> Result<ComptaBilanData> {
+        let (start, end) = compta_bilan_date_bounds(year, evolution_end_year, evolution_end_month);
+
+        let mut dep_stmt = self.conn.prepare(
+            "SELECT id, date, categorie, tiers, ttc, tva, ht, lien_drive, source_drive_file_id,
+                    created_at, updated_at
+             FROM compta_depenses
+             WHERE date >= ?1 AND date < ?2
+             ORDER BY date DESC, id DESC",
+        )?;
+        let depenses = dep_stmt
+            .query_map(params![start, end], |row| {
+                Ok(ComptaDepense {
+                    id: row.get(0)?,
+                    date: row.get(1)?,
+                    categorie: row.get(2)?,
+                    tiers: row.get(3)?,
+                    ttc: row.get(4)?,
+                    tva: row.get(5)?,
+                    ht: row.get(6)?,
+                    lien_drive: row.get(7)?,
+                    source_drive_file_id: row.get(8)?,
+                    created_at: row.get(9)?,
+                    updated_at: row.get(10)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+
+        let mut enc_stmt = self.conn.prepare(
+            "SELECT id, client, date, exonere, ht, tva, ttc, total, don, is_partenaire, lien_drive,
+                    source_drive_file_id, created_at, updated_at
+             FROM compta_encaissements
+             WHERE date >= ?1 AND date < ?2
+             ORDER BY date DESC, id DESC",
+        )?;
+        let encaissements = enc_stmt
+            .query_map(params![start, end], |row| {
+                Ok(ComptaEncaissement {
+                    id: row.get(0)?,
+                    client: row.get(1)?,
+                    date: row.get(2)?,
+                    exonere: row.get(3)?,
+                    ht: row.get(4)?,
+                    tva: row.get(5)?,
+                    ttc: row.get(6)?,
+                    total: row.get(7)?,
+                    don: row.get(8)?,
+                    is_partenaire: row.get(9)?,
+                    lien_drive: row.get(10)?,
+                    source_drive_file_id: row.get(11)?,
+                    created_at: row.get(12)?,
+                    updated_at: row.get(13)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+
+        let mut depl_stmt = self.conn.prepare(
+            "SELECT id, date, destination, objet, km, indemnite, source_google_event_id,
+                    created_at, updated_at
+             FROM compta_deplacements
+             WHERE date >= ?1 AND date < ?2
+             ORDER BY date DESC, id DESC",
+        )?;
+        let deplacements = depl_stmt
+            .query_map(params![start, end], |row| {
+                Ok(ComptaDeplacement {
+                    id: row.get(0)?,
+                    date: row.get(1)?,
+                    destination: row.get(2)?,
+                    objet: row.get(3)?,
+                    km: row.get(4)?,
+                    indemnite: row.get(5)?,
+                    source_google_event_id: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(ComptaBilanData {
+            depenses,
+            encaissements,
+            deplacements,
+        })
+    }
+
+    pub fn get_compta_closed_months(&self) -> Result<Vec<String>> {
+        match self.get_setting("compta_closed_months")? {
+            Some(raw) if !raw.trim().is_empty() => {
+                Ok(serde_json::from_str(&raw).unwrap_or_default())
+            }
+            _ => Ok(Vec::new()),
+        }
+    }
+
+    pub fn set_compta_month_closed(&self, year: i32, month: u32, closed: bool) -> Result<()> {
+        let key = format!("{year:04}-{month:02}");
+        let mut list = self.get_compta_closed_months()?;
+        if closed {
+            if !list.iter().any(|k| k == &key) {
+                list.push(key);
+                list.sort();
+            }
+        } else {
+            list.retain(|k| k != &key);
+        }
+        let json = serde_json::to_string(&list)
+            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
+        self.set_setting("compta_closed_months", &json)?;
+        Ok(())
+    }
+
+    pub fn is_compta_month_closed(&self, year: i32, month: u32) -> Result<bool> {
+        let key = format!("{year:04}-{month:02}");
+        Ok(self.get_compta_closed_months()?.iter().any(|k| k == &key))
+    }
+
     pub fn get_compta_imported_drive_file_ids(&self) -> Result<Vec<String>> {
         let mut ids = Vec::new();
         let mut stmt = self.conn.prepare(
@@ -548,6 +724,6 @@ mod tests {
         let db = mem_db();
         let cfg = db.get_compta_config().expect("get");
         assert!((cfg.indemnite_km - 0.405).abs() < f64::EPSILON);
-        assert_eq!(cfg.drive_root_folder_id, "1BFPOo103v0BoeNaZoKS2jsLaV57zjOSX");
+        assert_eq!(cfg.drive_root_folder_id, "");
     }
 }

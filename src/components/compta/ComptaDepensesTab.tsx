@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { Copy, ExternalLink, Pencil, Plus, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Sheet,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +30,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { ComptaDriveLinkField } from "@/components/compta/ComptaDriveLinkField";
+import { ComptaListSortSelect } from "@/components/compta/ComptaListSortSelect";
 import {
   createComptaDepense,
   deleteComptaDepense,
@@ -36,8 +45,23 @@ import {
   formatComptaMoney,
 } from "@/lib/compta/compta-money";
 import { formatComptaDateFr, todayDateInput } from "@/lib/compta/compta-month";
+import { parseComptaSortValue, sortComptaDepenses } from "@/lib/compta/compta-list-sort";
+import {
+  comptaJournalTypeBadgeClass,
+  comptaJournalTypeLabel,
+  comptaTypeListCardClass,
+} from "@/lib/compta/compta-journal";
 import { openComptaDriveLink } from "@/lib/compta/compta-drive";
+import { useComptaNameSuggestions } from "@/hooks/useComptaNameSuggestions";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const DEPENSE_SORT_OPTIONS = [
+  { value: "date-desc", label: "Date (récent)" },
+  { value: "date-asc", label: "Date (ancien)" },
+  { value: "tiers-asc", label: "Tiers A→Z" },
+  { value: "ttc-desc", label: "Montant TTC ↓" },
+] as const;
 
 interface ComptaDepensesTabProps {
   depenses: ComptaDepense[];
@@ -45,6 +69,8 @@ interface ComptaDepensesTabProps {
 }
 
 export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProps) {
+  const [formOpen, setFormOpen] = useState(false);
+  const [sortValue, setSortValue] = useState("date-desc");
   const [search, setSearch] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -62,16 +88,33 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
     () => [...new Set(depenses.map((d) => d.tiers).filter(Boolean))],
     [depenses]
   );
+  const nameSuggestions = useComptaNameSuggestions(tiersSuggestions);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return depenses;
-    return depenses.filter(
-      (d) =>
-        d.tiers.toLowerCase().includes(q) ||
-        d.categorie.toLowerCase().includes(q)
-    );
-  }, [depenses, search]);
+    const base = !q
+      ? depenses
+      : depenses.filter(
+          (d) =>
+            d.tiers.toLowerCase().includes(q) ||
+            d.categorie.toLowerCase().includes(q)
+        );
+    const { key, dir } = parseComptaSortValue(sortValue);
+    return sortComptaDepenses(base, key as "date" | "tiers" | "ttc", dir);
+  }, [depenses, search, sortValue]);
+
+  const monthTotals = useMemo(
+    () =>
+      depenses.reduce(
+        (acc, d) => ({
+          ht: acc.ht + d.ht,
+          tva: acc.tva + d.tva,
+          ttc: acc.ttc + d.ttc,
+        }),
+        { ht: 0, tva: 0, ttc: 0 }
+      ),
+    [depenses]
+  );
 
   const resetForm = () => {
     setEditingId(null);
@@ -83,6 +126,11 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
     setLienDrive("");
   };
 
+  const openNewForm = () => {
+    resetForm();
+    setFormOpen(true);
+  };
+
   const loadEdit = (d: ComptaDepense) => {
     setEditingId(d.id);
     setDate(d.date);
@@ -91,6 +139,18 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
     setTtc(String(d.ttc));
     setTva(String(d.tva));
     setLienDrive(d.lienDrive ?? "");
+    setFormOpen(true);
+  };
+
+  const duplicateDepense = (d: ComptaDepense) => {
+    setEditingId(null);
+    setDate(d.date);
+    setCategorie(d.categorie);
+    setTiers(d.tiers);
+    setTtc(String(d.ttc));
+    setTva(String(d.tva));
+    setLienDrive(d.lienDrive ?? "");
+    setFormOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -118,6 +178,7 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
         toast.success("Dépense ajoutée");
       }
       resetForm();
+      setFormOpen(false);
       await onChanged();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
@@ -144,14 +205,26 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">
-            {editingId != null ? "Modifier la dépense" : "Nouvelle dépense"}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="space-y-4" onSubmit={(e) => void handleSubmit(e)}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" onClick={openNewForm}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nouvelle dépense
+        </Button>
+        <ComptaListSortSelect
+          value={sortValue}
+          onValueChange={setSortValue}
+          options={[...DEPENSE_SORT_OPTIONS]}
+        />
+      </div>
+
+      <Sheet open={formOpen} onOpenChange={setFormOpen}>
+        <SheetContent className="overflow-y-auto sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>
+              {editingId != null ? "Modifier la dépense" : "Nouvelle dépense"}
+            </SheetTitle>
+          </SheetHeader>
+          <form className="mt-6 space-y-4" onSubmit={(e) => void handleSubmit(e)}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="dep-date">Date</Label>
@@ -183,7 +256,7 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
                   required
                 />
                 <datalist id="compta-tiers-list">
-                  {tiersSuggestions.map((t) => (
+                  {nameSuggestions.map((t) => (
                     <option key={t} value={t} />
                   ))}
                 </datalist>
@@ -239,19 +312,24 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
               value={lienDrive}
               onChange={setLienDrive}
             />
-            <div className="flex gap-2">
+            <SheetFooter className="gap-2 sm:justify-start">
               <Button type="submit" disabled={busy}>
                 {editingId != null ? "Enregistrer" : "Ajouter la dépense"}
               </Button>
-              {editingId != null ? (
-                <Button type="button" variant="ghost" onClick={resetForm}>
-                  Annuler
-                </Button>
-              ) : null}
-            </div>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  resetForm();
+                  setFormOpen(false);
+                }}
+              >
+                Annuler
+              </Button>
+            </SheetFooter>
           </form>
-        </CardContent>
-      </Card>
+        </SheetContent>
+      </Sheet>
 
       <Input
         placeholder="Rechercher une dépense…"
@@ -264,17 +342,25 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
           <p className="text-center text-muted-foreground py-8">Aucune dépense pour ce mois</p>
         ) : (
           filtered.map((d) => (
-            <Card key={d.id}>
+            <Card key={d.id} className={cn(comptaTypeListCardClass("depense"))}>
               <CardContent className="flex flex-wrap items-center gap-3 py-3">
                 <div className="text-sm text-muted-foreground w-24 shrink-0">
                   {formatComptaDateFr(d.date)}
                 </div>
                 <div className="flex-1 min-w-[180px]">
-                  <p className="font-medium">{d.tiers}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={cn(comptaJournalTypeBadgeClass("depense"))}
+                    >
+                      {comptaJournalTypeLabel("depense")}
+                    </Badge>
+                    <p className="font-medium">{d.tiers}</p>
+                  </div>
                   <p className="text-sm text-muted-foreground">{d.categorie}</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold text-destructive">-{formatComptaMoney(d.ttc)}</p>
+                  <p className="font-semibold text-red-600">-{formatComptaMoney(d.ttc)}</p>
                   <p className="text-xs text-muted-foreground">TVA {formatComptaMoney(d.tva)}</p>
                 </div>
                 <div className="flex gap-1 ml-auto">
@@ -291,6 +377,9 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
                   <Button type="button" variant="ghost" size="icon" onClick={() => loadEdit(d)}>
                     <Pencil className="h-4 w-4" />
                   </Button>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => duplicateDepense(d)}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
                   <Button type="button" variant="ghost" size="icon" onClick={() => setDeleteId(d.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -300,6 +389,19 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
           ))
         )}
       </div>
+
+      {depenses.length > 0 ? (
+        <Card className="border-t-2 bg-muted/20">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm font-medium">
+            <span>Totaux du mois ({depenses.length} ligne{depenses.length > 1 ? "s" : ""})</span>
+            <div className="flex flex-wrap gap-4 tabular-nums">
+              <span>HT {formatComptaMoney(monthTotals.ht)}</span>
+              <span>TVA {formatComptaMoney(monthTotals.tva)}</span>
+              <span className="text-red-600">TTC {formatComptaMoney(monthTotals.ttc)}</span>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <AlertDialog open={deleteId != null} onOpenChange={(o) => !o && setDeleteId(null)}>
         <AlertDialogContent>

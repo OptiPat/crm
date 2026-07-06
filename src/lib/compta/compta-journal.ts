@@ -111,3 +111,27 @@ export function comptaJournalTypeLabel(type: ComptaJournalEntryType): string {
       return "Déplacement";
   }
 }
+
+export type ComptaKpiTargetTab = "encaissements" | "depenses" | "deplacements" | "journal";
+
+export function comptaJournalTypeBadgeClass(type: ComptaJournalEntryType): string {
+  switch (type) {
+    case "encaissement":
+      return "border-emerald-300 bg-emerald-100 text-emerald-800";
+    case "depense":
+      return "border-red-400 bg-red-100 text-red-800";
+    case "deplacement":
+      return "border-blue-300 bg-blue-100 text-blue-800";
+  }
+}
+
+export function comptaTypeListCardClass(type: ComptaJournalEntryType): string {
+  switch (type) {
+    case "encaissement":
+      return "border-l-4 border-l-emerald-500";
+    case "depense":
+      return "border-l-4 border-l-red-500";
+    case "deplacement":
+      return "border-l-4 border-l-blue-500";
+  }
+}

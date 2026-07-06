@@ -14,6 +14,7 @@ import { ParametresSuiviSection } from "@/components/settings/ParametresSuiviSec
 import { ParametresDatabaseSection } from "@/components/settings/ParametresDatabaseSection";
 import { ParametresApplicationSection } from "@/components/settings/ParametresApplicationSection";
 import { ParametresIntegrationsSection } from "@/components/settings/ParametresIntegrationsSection";
+import { ParametresComptaSection } from "@/components/settings/ParametresComptaSection";
 import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
 import { ParametresCustomFieldsSection } from "@/components/settings/ParametresCustomFieldsSection";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
@@ -39,6 +40,7 @@ import {
   Sparkles,
   SlidersHorizontal,
   Workflow,
+  Calculator,
 } from "lucide-react";
 
 const EMPTY_CGP_CONFIG: CgpConfig = {
@@ -95,6 +97,12 @@ const SETTINGS_NAV: SettingsNavItem[] = [
     label: "Suivi",
     description: "Liens Google Agenda",
     icon: CalendarClock,
+  },
+  {
+    id: "comptabilite",
+    label: "Comptabilité",
+    description: "Adresse km et sync Drive",
+    icon: Calculator,
   },
   {
     id: "integrations",
@@ -327,6 +335,8 @@ export function Parametres() {
         return (
           <ParametresSuiviSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
         );
+      case "comptabilite":
+        return <ParametresComptaSection />;
       case "integrations":
         return <ParametresIntegrationsSection />;
       case "donnees":
