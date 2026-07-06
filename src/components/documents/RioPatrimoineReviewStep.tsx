@@ -42,6 +42,7 @@ export function RioPatrimoineReviewStep({
       onOpenChange={() => {}}
       {...props}
       ownerLabel={props.contactNom}
+      coupleMemberIds={props.coupleMemberIds}
       onComplete={(investissements) => onComplete(investissements)}
       onCancel={onCancel}
     />

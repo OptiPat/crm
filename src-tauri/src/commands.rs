@@ -1,4 +1,8 @@
 use crate::database::{
+    compta::{
+        ComptaConfig, ComptaDepense, ComptaDeplacement, ComptaEncaissement, NewComptaDepense,
+        NewComptaDeplacement, NewComptaEncaissement,
+    },
     contacts::UpdateContactFieldPresence,
     models::{
         Alerte, AlerteWithContact, CategoryStats, CgpConfig, Contact, ContactEtiquette,
@@ -2637,4 +2641,165 @@ pub fn get_all_contact_custom_values(
     database
         .get_all_custom_values(&entity)
         .map_err(|e| format!("Failed to list custom values: {}", e))
+}
+
+// ========== COMPTABILITÉ ==========
+
+#[tauri::command]
+pub fn get_compta_config(db: State<'_, DbState>) -> Result<ComptaConfig, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_compta_config()
+        .map_err(|e| format!("Failed to get compta config: {}", e))
+}
+
+#[tauri::command]
+pub fn save_compta_config(db: State<'_, DbState>, config: ComptaConfig) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .save_compta_config(&config)
+        .map_err(|e| format!("Failed to save compta config: {}", e))
+}
+
+#[tauri::command]
+pub fn get_compta_depenses(
+    db: State<'_, DbState>,
+    year: i32,
+    month: u32,
+) -> Result<Vec<ComptaDepense>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_compta_depenses(year, month)
+        .map_err(|e| format!("Failed to get compta depenses: {}", e))
+}
+
+#[tauri::command]
+pub fn create_compta_depense(
+    db: State<'_, DbState>,
+    depense: NewComptaDepense,
+) -> Result<ComptaDepense, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_compta_depense(depense)
+        .map_err(|e| format!("Failed to create compta depense: {}", e))
+}
+
+#[tauri::command]
+pub fn update_compta_depense(
+    db: State<'_, DbState>,
+    id: i64,
+    depense: NewComptaDepense,
+) -> Result<ComptaDepense, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_compta_depense(id, &depense)
+        .map_err(|e| format!("Failed to update compta depense: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_compta_depense(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .delete_compta_depense(id)
+        .map_err(|e| format!("Failed to delete compta depense: {}", e))
+}
+
+#[tauri::command]
+pub fn get_compta_encaissements(
+    db: State<'_, DbState>,
+    year: i32,
+    month: u32,
+) -> Result<Vec<ComptaEncaissement>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_compta_encaissements(year, month)
+        .map_err(|e| format!("Failed to get compta encaissements: {}", e))
+}
+
+#[tauri::command]
+pub fn create_compta_encaissement(
+    db: State<'_, DbState>,
+    encaissement: NewComptaEncaissement,
+) -> Result<ComptaEncaissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_compta_encaissement(encaissement)
+        .map_err(|e| format!("Failed to create compta encaissement: {}", e))
+}
+
+#[tauri::command]
+pub fn update_compta_encaissement(
+    db: State<'_, DbState>,
+    id: i64,
+    encaissement: NewComptaEncaissement,
+) -> Result<ComptaEncaissement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_compta_encaissement(id, &encaissement)
+        .map_err(|e| format!("Failed to update compta encaissement: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_compta_encaissement(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .delete_compta_encaissement(id)
+        .map_err(|e| format!("Failed to delete compta encaissement: {}", e))
+}
+
+#[tauri::command]
+pub fn get_compta_deplacements(
+    db: State<'_, DbState>,
+    year: i32,
+    month: u32,
+) -> Result<Vec<ComptaDeplacement>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_compta_deplacements(year, month)
+        .map_err(|e| format!("Failed to get compta deplacements: {}", e))
+}
+
+#[tauri::command]
+pub fn create_compta_deplacement(
+    db: State<'_, DbState>,
+    deplacement: NewComptaDeplacement,
+) -> Result<ComptaDeplacement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .create_compta_deplacement(deplacement)
+        .map_err(|e| format!("Failed to create compta deplacement: {}", e))
+}
+
+#[tauri::command]
+pub fn update_compta_deplacement(
+    db: State<'_, DbState>,
+    id: i64,
+    deplacement: NewComptaDeplacement,
+) -> Result<ComptaDeplacement, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .update_compta_deplacement(id, &deplacement)
+        .map_err(|e| format!("Failed to update compta deplacement: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_compta_deplacement(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .delete_compta_deplacement(id)
+        .map_err(|e| format!("Failed to delete compta deplacement: {}", e))
 }

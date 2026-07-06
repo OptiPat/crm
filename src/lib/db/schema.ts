@@ -492,6 +492,49 @@ export const parametres = sqliteTable("parametres", {
     .notNull(),
 });
 
+// ============================================
+// COMPTABILITÉ (runtime : migrations Rust + settings)
+// ============================================
+export const comptaDepenses = sqliteTable("compta_depenses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(),
+  categorie: text("categorie").notNull(),
+  tiers: text("tiers").notNull(),
+  ttc: real("ttc").notNull(),
+  tva: real("tva").notNull(),
+  ht: real("ht").notNull(),
+  lienDrive: text("lien_drive"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const comptaEncaissements = sqliteTable("compta_encaissements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  client: text("client").notNull(),
+  date: text("date").notNull(),
+  exonere: real("exonere").notNull(),
+  ht: real("ht").notNull(),
+  tva: real("tva").notNull(),
+  ttc: real("ttc").notNull(),
+  total: real("total").notNull(),
+  don: real("don").notNull(),
+  isPartenaire: integer("is_partenaire", { mode: "boolean" }).notNull(),
+  lienDrive: text("lien_drive"),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
+export const comptaDeplacements = sqliteTable("compta_deplacements", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  date: text("date").notNull(),
+  destination: text("destination").notNull(),
+  objet: text("objet").notNull(),
+  km: real("km").notNull(),
+  indemnite: real("indemnite").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" }).notNull(),
+});
+
 // Types TypeScript pour l'utilisation dans l'application
 export type Foyer = typeof foyers.$inferSelect;
 export type NewFoyer = typeof foyers.$inferInsert;

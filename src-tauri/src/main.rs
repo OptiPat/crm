@@ -7,6 +7,7 @@ mod birthday_notifications;
 mod backup;
 mod backup_sidecar;
 mod commands;
+mod compta;
 mod documents_storage;
 mod contact_name;
 mod database;
@@ -21,6 +22,11 @@ use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_b
 use auth::commands::*;
 use auth::AuthManager;
 use commands::*;
+use compta::commands::{
+    compute_compta_driving_distance_km, download_compta_drive_file, import_compta_calendar_trip,
+    import_compta_drive_depense, reset_compta_distance_cache, scan_compta_calendar_month,
+    scan_compta_drive_month,
+};
 use database::Database;
 use email::commands::*;
 use email::oauth_commands::*;
@@ -324,6 +330,28 @@ fn main() {
             get_contact_custom_fields,
             set_contact_custom_fields,
             get_all_contact_custom_values,
+            // Comptabilité
+            get_compta_config,
+            save_compta_config,
+            get_compta_depenses,
+            create_compta_depense,
+            update_compta_depense,
+            delete_compta_depense,
+            get_compta_encaissements,
+            create_compta_encaissement,
+            update_compta_encaissement,
+            delete_compta_encaissement,
+            get_compta_deplacements,
+            create_compta_deplacement,
+            update_compta_deplacement,
+            delete_compta_deplacement,
+            scan_compta_drive_month,
+            download_compta_drive_file,
+            scan_compta_calendar_month,
+            import_compta_drive_depense,
+            import_compta_calendar_trip,
+            compute_compta_driving_distance_km,
+            reset_compta_distance_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

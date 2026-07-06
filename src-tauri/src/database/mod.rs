@@ -12,6 +12,7 @@ pub mod etiquette_fiscal;
 pub mod alertes;
 pub mod contact_row;
 pub mod contacts;
+pub mod compta;
 pub mod custom_fields;
 pub mod dashboard_stats;
 pub mod documents;
@@ -556,7 +557,79 @@ impl Database {
         self.migrate_documents_experience_investissement()?;
         self.migrate_contacts_profil_risque_echelle_5()?;
         self.migrate_drop_contacts_date_expiration_identite()?;
+        self.migrate_compta_tables()?;
+        self.migrate_compta_sync_columns()?;
 
+        Ok(())
+    }
+
+    fn migrate_compta_sync_columns(&self) -> Result<()> {
+        if !self.table_has_column("compta_depenses", "source_drive_file_id")? {
+            self.conn.execute(
+                "ALTER TABLE compta_depenses ADD COLUMN source_drive_file_id TEXT",
+                [],
+            )?;
+        }
+        if !self.table_has_column("compta_encaissements", "source_drive_file_id")? {
+            self.conn.execute(
+                "ALTER TABLE compta_encaissements ADD COLUMN source_drive_file_id TEXT",
+                [],
+            )?;
+        }
+        if !self.table_has_column("compta_deplacements", "source_google_event_id")? {
+            self.conn.execute(
+                "ALTER TABLE compta_deplacements ADD COLUMN source_google_event_id TEXT",
+                [],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn migrate_compta_tables(&self) -> Result<()> {
+        self.conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS compta_depenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                categorie TEXT NOT NULL,
+                tiers TEXT NOT NULL,
+                ttc REAL NOT NULL DEFAULT 0,
+                tva REAL NOT NULL DEFAULT 0,
+                ht REAL NOT NULL DEFAULT 0,
+                lien_drive TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS compta_depenses_date_idx ON compta_depenses (date);
+
+            CREATE TABLE IF NOT EXISTS compta_encaissements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client TEXT NOT NULL,
+                date TEXT NOT NULL,
+                exonere REAL NOT NULL DEFAULT 0,
+                ht REAL NOT NULL DEFAULT 0,
+                tva REAL NOT NULL DEFAULT 0,
+                ttc REAL NOT NULL DEFAULT 0,
+                total REAL NOT NULL DEFAULT 0,
+                don REAL NOT NULL DEFAULT 0,
+                is_partenaire INTEGER NOT NULL DEFAULT 0,
+                lien_drive TEXT,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS compta_encaissements_date_idx ON compta_encaissements (date);
+
+            CREATE TABLE IF NOT EXISTS compta_deplacements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date TEXT NOT NULL,
+                destination TEXT NOT NULL,
+                objet TEXT NOT NULL,
+                km REAL NOT NULL DEFAULT 0,
+                indemnite REAL NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS compta_deplacements_date_idx ON compta_deplacements (date);",
+        )?;
         Ok(())
     }
 

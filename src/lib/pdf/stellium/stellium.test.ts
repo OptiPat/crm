@@ -185,6 +185,21 @@ describe("Stellium — RIO solo Legrand 2026", () => {
     ]);
   });
 
+  it("nettoie les noms assignataires sur un objectif couple coupé (layout PDF réel)", () => {
+    const section =
+      "Objectif(s) Attribué à Priorité Horizon " +
+      "Préparer votre retraite Paul BERNARD & Luc LEGRAND 1 - " +
+      "Optimiser la fiscalité de vos revenus Paul BERNARD 2 - " +
+      "Optimiser la rentabilité de vos Paul BERNARD 3 - " +
+      "placements financiers Paul BERNARD Luc LEGRAND " +
+      "Epargne de précaution souhaitée 10000 €";
+    expect(parseRioObjectifsSection(section)).toEqual([
+      "Préparer votre retraite",
+      "Optimiser la fiscalité de vos revenus",
+      "Optimiser la rentabilité de vos placements financiers",
+    ]);
+  });
+
   it("retrouve la table Objectifs après une coupure de page", () => {
     const text =
       "Fiscalité IR net à payer 1000 € Objectifs Recueil d'informations - Nicolas PLAZA - 15/06/2026 3/6 " +
@@ -342,6 +357,14 @@ describe("Stellium — QPI solo Dupont 2026", () => {
     expect(data.dateDocument).toBe("15/06/2026");
     expect(data.dateSignature).toBe("15/06/2026");
     expect(data.typeDocument).toBe("QPI");
+  });
+
+  it("extrait l'investisseur même si le nom contient « Le » (CLEVELAND, CLEMENT…)", () => {
+    const text =
+      "Profil investisseur Consultant : DUPONT Jean Investisseur : CLEVELAND Paul Le 15/06/2026 Conformément aux exigences";
+    const parsed = parseStelliumQpi(text);
+    expect(parsed.nom).toBe("CLEVELAND");
+    expect(parsed.prenom).toBe("Paul");
   });
 
   it("mappe le profil de risque vers l'échelle CRM 1–5", () => {

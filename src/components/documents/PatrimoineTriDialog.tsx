@@ -25,6 +25,13 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { ExtractedData } from "@/lib/pdf";
 import type { OrigineInvestissement, NewInvestissement } from "@/lib/api/tauri-investissements";
 import {
@@ -32,6 +39,12 @@ import {
   buildRioPatrimoineOwner,
   patrimoineOwnerLabel,
 } from "@/lib/documents/rio-patrimoine-target";
+import {
+  buildCouplePatrimoineMemberOptions,
+  isCouplePatrimoineTri,
+  ownerHintToKey,
+  resolveCouplePatrimoineOwner,
+} from "@/lib/documents/rio-couple-patrimoine-owner";
 import { extractPatrimoineItemsFromRio } from "@/lib/documents/extract-patrimoine-items";
 import {
   buildImmoInvestissementExtras,
@@ -56,6 +69,8 @@ interface PatrimoineItem {
   mensualiteCredit?: number;
   loyerMensuel?: number;
   dateFinCredit?: string;
+  /** RIO couple : clé contact id ou « foyer ». */
+  ownerKey?: string;
 }
 
 interface PatrimoineTriDialogProps {
@@ -65,6 +80,7 @@ interface PatrimoineTriDialogProps {
   contactId: number;
   /** Patrimoine commun du foyer (RIO couple). */
   foyerId?: number;
+  coupleMemberIds?: number[];
   ownerLabel?: string;
   onComplete: (investissements: NewInvestissement[]) => void;
   onCancel: () => void;
@@ -72,10 +88,17 @@ interface PatrimoineTriDialogProps {
   embedded?: boolean;
 }
 
-function extractPatrimoineItems(data: ExtractedData): PatrimoineItem[] {
+function extractPatrimoineItems(
+  data: ExtractedData,
+  coupleMemberIds?: number[]
+): PatrimoineItem[] {
+  const isCouple = Boolean(data.isCouple && coupleMemberIds?.length === 2);
+  const members = isCouple ? (coupleMemberIds as [number, number]) : undefined;
+
   return extractPatrimoineItemsFromRio(data).map((item) => ({
     ...item,
     loyerMensuel: item.loyerAnnuel ? Math.round(item.loyerAnnuel / 12) : undefined,
+    ownerKey: members ? ownerHintToKey(item.rioOwnerHint, members) : undefined,
   }));
 }
 
@@ -148,13 +171,29 @@ export function PatrimoineTriDialog({
   extractedData,
   contactId,
   foyerId,
+  coupleMemberIds,
   ownerLabel,
   onComplete,
   onCancel,
   embedded = false,
 }: PatrimoineTriDialogProps) {
-  const useFoyerPatrimoine = Boolean(foyerId);
-  const owner = buildRioPatrimoineOwner({
+  const isCouplePatrimoine = isCouplePatrimoineTri({
+    isCouple: extractedData.isCouple,
+    foyerId,
+    coupleMemberIds,
+  });
+  const coupleMembers = useMemo(
+    () =>
+      isCouplePatrimoine && coupleMemberIds?.length === 2
+        ? buildCouplePatrimoineMemberOptions(
+            extractedData,
+            coupleMemberIds as [number, number]
+          )
+        : [],
+    [isCouplePatrimoine, coupleMemberIds, extractedData]
+  );
+  const useFoyerPatrimoine = Boolean(foyerId) && !isCouplePatrimoine;
+  const defaultOwner = buildRioPatrimoineOwner({
     contactId,
     foyerId,
     useFoyer: useFoyerPatrimoine,
@@ -165,17 +204,17 @@ export function PatrimoineTriDialog({
       useFoyer: useFoyerPatrimoine,
       contactNom: "ce contact",
     });
-  const [items, setItems] = useState<PatrimoineItem[]>(() => 
-    extractPatrimoineItems(extractedData)
+  const [items, setItems] = useState<PatrimoineItem[]>(() =>
+    extractPatrimoineItems(extractedData, coupleMemberIds)
   );
   const [autoEpargneOpen, setAutoEpargneOpen] = useState(false);
   const completingRef = useRef(false);
 
   useEffect(() => {
     if (open) {
-      setItems(extractPatrimoineItems(extractedData));
+      setItems(extractPatrimoineItems(extractedData, coupleMemberIds));
     }
-  }, [open, extractedData]);
+  }, [open, extractedData, coupleMemberIds]);
 
   const handleDialogOpenChange = (next: boolean) => {
     if (next) {
@@ -195,7 +234,11 @@ export function PatrimoineTriDialog({
   const toTriItems = items.filter(item => !item.autoOrigine);
 
   // Vérifier si tous les items à trier ont été traités
-  const allTriCompleted = toTriItems.every(item => item.origine);
+  const allTriCompleted = toTriItems.every((item) => item.origine);
+  const allOwnersAssigned =
+    !isCouplePatrimoine || items.every((item) => Boolean(item.ownerKey));
+  const canValidate =
+    (allTriCompleted || toTriItems.length === 0) && allOwnersAssigned;
 
   // Compteurs
   const avecMoiCount = items.filter(item => item.origine === "MON_CONSEIL" || (item.autoOrigine === "MON_CONSEIL")).length;
@@ -212,6 +255,16 @@ export function PatrimoineTriDialog({
     setItems((prev) =>
       prev.map((item) => (!item.autoOrigine ? { ...item, origine } : item))
     );
+  };
+
+  const setOwnerKey = (itemId: string, ownerKey: string) => {
+    setItems((prev) =>
+      prev.map((item) => (item.id === itemId ? { ...item, ownerKey } : item))
+    );
+  };
+
+  const setAllOwnerKey = (ownerKey: string) => {
+    setItems((prev) => prev.map((item) => ({ ...item, ownerKey })));
   };
 
   const groupedToTriItems = useMemo(() => {
@@ -238,6 +291,8 @@ export function PatrimoineTriDialog({
 
   // Valider et créer les investissements
   const handleValidate = () => {
+    if (!canValidate) return;
+
     type RioInvImport = NewInvestissement & { rioEncoursEuro?: number };
 
     const investissements: RioInvImport[] = items
@@ -250,6 +305,14 @@ export function PatrimoineTriDialog({
           loyerMensuel: item.loyerMensuel,
           dateFinCredit: item.dateFinCredit,
         });
+        const itemOwner =
+          isCouplePatrimoine && item.ownerKey && foyerId && coupleMemberIds?.length === 2
+            ? resolveCouplePatrimoineOwner(
+                item.ownerKey,
+                coupleMemberIds as [number, number],
+                foyerId
+              )
+            : defaultOwner;
         const base = attachRioPatrimoineOwner(
           {
             type_produit: item.type,
@@ -258,7 +321,7 @@ export function PatrimoineTriDialog({
             origine: item.origine || item.autoOrigine || "EXISTANT_CLIENT",
             ...immoExtras,
           },
-          owner
+          itemOwner
         );
         if (usesRioEncoursMontant(item.type)) {
           return { ...base, rioEncoursEuro: item.montant };
@@ -282,6 +345,30 @@ export function PatrimoineTriDialog({
   const totalACote = items
     .filter(i => i.origine === "EXISTANT_CLIENT" || i.autoOrigine === "EXISTANT_CLIENT")
     .reduce((sum, i) => sum + i.montant, 0);
+
+  const renderOwnerSelect = (item: PatrimoineItem) => {
+    if (!isCouplePatrimoine || coupleMembers.length === 0) return null;
+    return (
+      <div className="space-y-1 mt-3 border-t pt-3">
+        <Label className="text-xs">Détenteur</Label>
+        <Select
+          value={item.ownerKey ?? ""}
+          onValueChange={(value) => setOwnerKey(item.id, value)}
+        >
+          <SelectTrigger className="h-9">
+            <SelectValue placeholder="Choisir le détenteur…" />
+          </SelectTrigger>
+          <SelectContent>
+            {coupleMembers.map((member) => (
+              <SelectItem key={member.key} value={member.key}>
+                {member.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    );
+  };
 
   const renderTriItem = (item: PatrimoineItem) => (
     <div
@@ -333,6 +420,8 @@ export function PatrimoineTriDialog({
           À côté
         </Button>
       </div>
+
+      {renderOwnerSelect(item)}
 
       {isImmobilierFinancingType(item.type) && (
         <div className="mt-3 grid grid-cols-2 gap-3 border-t pt-3">
@@ -409,8 +498,14 @@ export function PatrimoineTriDialog({
               Tri du patrimoine
             </DialogTitle>
             <DialogDescription>
-              Patrimoine de <strong>{scopeLabel}</strong> — pour chaque investissement, indiquez s&apos;il a été placé{" "}
-              <strong>avec vous</strong> ou s&apos;il existait <strong>à côté</strong>.
+              {isCouplePatrimoine
+                ? "Pour chaque investissement, indiquez le détenteur (investisseur 1, 2 ou commun) et s'il a été placé avec vous ou à côté."
+                : (
+                    <>
+                      Patrimoine de <strong>{scopeLabel}</strong> — pour chaque investissement, indiquez s&apos;il a été placé{" "}
+                      <strong>avec vous</strong> ou s&apos;il existait <strong>à côté</strong>.
+                    </>
+                  )}
             </DialogDescription>
           </DialogHeader>
           <RioImportStepper currentStep={3} className="py-2" />
@@ -419,7 +514,13 @@ export function PatrimoineTriDialog({
 
       {embedded && (
         <p className="text-sm text-muted-foreground">
-          Patrimoine de <strong>{scopeLabel}</strong> — classez chaque investissement « avec moi » ou « à côté ».
+          {isCouplePatrimoine
+            ? "Classez chaque investissement : détenteur, puis « avec moi » ou « à côté »."
+            : (
+                <>
+                  Patrimoine de <strong>{scopeLabel}</strong> — classez chaque investissement « avec moi » ou « à côté ».
+                </>
+              )}
         </p>
       )}
 
@@ -451,6 +552,21 @@ export function PatrimoineTriDialog({
                 </Button>
               </div>
             )}
+            {isCouplePatrimoine && coupleMembers.length > 0 && (
+              <div className="flex flex-wrap gap-2 justify-end">
+                {coupleMembers.map((member) => (
+                  <Button
+                    key={member.key}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAllOwnerKey(member.key)}
+                  >
+                    Tout → {member.label}
+                  </Button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -474,23 +590,23 @@ export function PatrimoineTriDialog({
               {autoEpargneOpen && (
               <div className="space-y-2 pl-6">
                 {autoItems.map(item => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-lg ${getTypeColor(item.type)}`}>
-                        {getTypeIcon(item.type)}
+                  <div key={item.id} className="space-y-2">
+                    <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${getTypeColor(item.type)}`}>
+                          {getTypeIcon(item.type)}
+                        </div>
+                        <div>
+                          <p className="font-medium">{item.label}</p>
+                          <p className="text-sm text-muted-foreground">{formatEuro(item.montant)}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium">{item.label}</p>
-                        <p className="text-sm text-muted-foreground">{formatEuro(item.montant)}</p>
-                      </div>
+                      <Badge variant="outline" className="text-gray-500 gap-1">
+                        <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
+                        À côté
+                      </Badge>
                     </div>
-                    <Badge variant="outline" className="text-gray-500 gap-1">
-                      <ClipboardList className="h-3 w-3 shrink-0" aria-hidden />
-                      À côté
-                    </Badge>
+                    {renderOwnerSelect(item)}
                   </div>
                 ))}
               </div>
@@ -558,13 +674,12 @@ export function PatrimoineTriDialog({
         <Button variant="outline" onClick={handleCancel}>
           {embedded ? "Retour" : "Annuler"}
         </Button>
-        <Button
-          onClick={handleValidate}
-          disabled={!allTriCompleted && toTriItems.length > 0}
-        >
-          {allTriCompleted || toTriItems.length === 0
+        <Button onClick={handleValidate} disabled={!canValidate}>
+          {canValidate
             ? "Valider l'import"
-            : `Trier les ${toTriItems.length - toTriItems.filter((i) => i.origine).length} restant(s)`}
+            : !allOwnersAssigned
+              ? "Attribuer un détenteur à chaque ligne"
+              : `Trier les ${toTriItems.length - toTriItems.filter((i) => i.origine).length} restant(s)`}
         </Button>
       </div>
     </>

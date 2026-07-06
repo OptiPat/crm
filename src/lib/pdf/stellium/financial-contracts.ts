@@ -1,4 +1,4 @@
-import type { ContratFinancier, ExtractedData } from "../types";
+import type { ContratFinancier, ExtractedData, RioCoupleOwnerHint } from "../types";
 
 function slugify(value: string): string {
   return value
@@ -47,7 +47,8 @@ export function appendContratFinancier(
   data: ExtractedData,
   category: string,
   nom: string,
-  montant: number
+  montant: number,
+  rioOwnerHint?: RioCoupleOwnerHint
 ): void {
   const type = mapActifCategoryToProductType(category);
   if (!type || montant <= 0) return;
@@ -81,6 +82,7 @@ export function appendContratFinancier(
     type,
     nom: label,
     montant,
+    ...(rioOwnerHint ? { rioOwnerHint } : {}),
     autoOrigine: ["LIVRET_A", "LDDS", "EPARGNE_BANCAIRE", "PEL", "CEL", "CSL"].includes(type)
       ? "EXISTANT_CLIENT"
       : undefined,
@@ -148,9 +150,10 @@ export function registerFinancialActifLine(
   data: ExtractedData,
   category: string,
   nom: string,
-  montant: number
+  montant: number,
+  rioOwnerHint?: RioCoupleOwnerHint
 ): void {
-  appendContratFinancier(data, category, nom, montant);
+  appendContratFinancier(data, category, nom, montant, rioOwnerHint);
   applyFinancialProductAggregate(data, category, montant);
 }
 

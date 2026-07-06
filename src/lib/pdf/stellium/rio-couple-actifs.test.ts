@@ -58,6 +58,7 @@ describe("RIO couple — noms d'actifs propres + ids uniques", () => {
     expect(livrets).toHaveLength(2);
     expect(new Set(livrets.map((c) => c.id)).size).toBe(2);
     expect(livrets.map((c) => c.montant).sort((a, b) => a - b)).toEqual([8000, 10000]);
+    expect(livrets.every((c) => c.rioOwnerHint != null)).toBe(true);
 
     const av = data.contratsFinanciers?.filter((c) => c.type === "ASSURANCE_VIE") ?? [];
     expect(av).toHaveLength(2);
@@ -65,5 +66,13 @@ describe("RIO couple — noms d'actifs propres + ids uniques", () => {
 
     expect(data.livretA).toBe(18000);
     expect(data.assuranceVie).toBe(8000);
+  });
+
+  it("pose un hint détenteur sur les actifs extraits", () => {
+    const withHint = [
+      ...(data.biensImmobiliers ?? []),
+      ...(data.contratsFinanciers ?? []),
+    ].filter((item) => item.rioOwnerHint != null);
+    expect(withHint.length).toBeGreaterThan(0);
   });
 });

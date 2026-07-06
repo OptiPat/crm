@@ -261,8 +261,25 @@ const RIO_ASSIGNEE_NAMES_LINE = new RegExp(
   `^${RIO_OBJECTIF_ASSIGNEE.source}$`
 );
 
+/** Fragment « Prénom NOM », éventuellement couple « A & B ». */
+const RIO_TRAILING_ASSIGNEE_CHUNK =
+  /\s+[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'\s-]+(?:\s*&\s*[A-ZÀ-Ü][A-Za-zÀ-üéèê'ô-]+\s+[A-ZÀ-Ü][A-ZÀ-Ü'\s-]+)?/;
+
+/** Retire les noms d'assignataires collés en fin de libellé (layout PDF couple). */
+function stripTrailingRioAssignees(value: string): string {
+  let result = value.trim();
+  const trailing = new RegExp(`${RIO_TRAILING_ASSIGNEE_CHUNK.source}\\s*$`);
+  while (trailing.test(result)) {
+    result = result.replace(trailing, "").trim();
+  }
+  return result;
+}
+
 function isRioAssigneeNamesLine(value: string): boolean {
-  return RIO_ASSIGNEE_NAMES_LINE.test(value.trim());
+  const trimmed = value.trim();
+  if (!trimmed) return true;
+  if (RIO_ASSIGNEE_NAMES_LINE.test(trimmed)) return true;
+  return stripTrailingRioAssignees(trimmed) === "";
 }
 
 function isRioObjectifLabelNoise(label: string): boolean {
@@ -336,8 +353,10 @@ function parseRioObjectifsTableBody(tableBody: string): string[] {
     if (i + 1 < anchors.length) {
       const gap = body.slice(end, anchors[i + 1].assigneeStart);
       const { continuation, nextRowPrefix } = splitRioObjectifGap(gap);
-      if (continuation) {
-        label = normalizeRioObjectifLabel(`${label} ${continuation}`);
+      if (continuation && !isRioAssigneeNamesLine(continuation)) {
+        label = normalizeRioObjectifLabel(
+          `${label} ${stripTrailingRioAssignees(continuation)}`
+        );
       }
       pendingPrefix = nextRowPrefix ? `${nextRowPrefix} ` : "";
       pos = anchors[i + 1].assigneeStart;
@@ -349,10 +368,14 @@ function parseRioObjectifsTableBody(tableBody: string): string[] {
       // précédant l'épargne par personne), qui n'est pas une continuation.
       const { continuation } = splitRioObjectifGap(body.slice(end));
       if (continuation && !isRioAssigneeNamesLine(continuation)) {
-        label = normalizeRioObjectifLabel(`${label} ${continuation}`);
+        label = normalizeRioObjectifLabel(
+          `${label} ${stripTrailingRioAssignees(continuation)}`
+        );
       }
       pos = end;
     }
+
+    label = stripTrailingRioAssignees(label);
 
     if (!isRioObjectifLabelNoise(label)) {
       objectifs.push(label);

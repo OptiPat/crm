@@ -1,4 +1,4 @@
-import type { BienImmobilier, ExtractedData } from "../types";
+import type { BienImmobilier, ExtractedData, RioCoupleOwnerHint } from "../types";
 import { parseStelliumAmount } from "./amounts";
 import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
@@ -358,6 +358,23 @@ function pickPersonAmounts(
   return [amounts[0], undefined];
 }
 
+/** Infère le détenteur probable d'une ligne actif couple (col. investisseur 1 / 2 / commun). */
+export function inferCoupleLineOwner(
+  amounts: (number | undefined)[],
+  hasCommunColumn: boolean
+): RioCoupleOwnerHint {
+  if (amounts.length === 0) return "foyer";
+  if (amounts.length === 1) return "foyer";
+
+  const [person1, person2] = pickPersonAmounts(amounts, hasCommunColumn);
+  const hasPerson1 = person1 != null && person1 > 0;
+  const hasPerson2 = person2 != null && person2 > 0;
+  if (hasPerson1 && hasPerson2) return "foyer";
+  if (hasPerson1 && !hasPerson2) return "person1";
+  if (hasPerson2 && !hasPerson1) return "person2";
+  return "foyer";
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
@@ -470,6 +487,7 @@ export function parseCouplePatrimoine(
     const nom = cleanCoupleNom(match[2]);
     const amounts = parseTrailingAmounts(match[3]);
     const montant = pickFoyerAmount(amounts, hasCommunColumn, true);
+    const ownerHint = inferCoupleLineOwner(amounts, hasCommunColumn);
     if (!montant || montant <= 0) continue;
 
     if (isImmoActifCategory(category)) {
@@ -479,6 +497,7 @@ export function parseCouplePatrimoine(
         type,
         nom,
         valeur: montant,
+        rioOwnerHint: ownerHint,
       });
 
       if (type === "RESIDENCE_PRINCIPALE") {
@@ -493,7 +512,7 @@ export function parseCouplePatrimoine(
       continue;
     }
 
-    registerFinancialActifLine(data, category, nom, montant);
+    registerFinancialActifLine(data, category, nom, montant, ownerHint);
   }
 
   const bankPattern = new RegExp(
@@ -506,9 +525,10 @@ export function parseCouplePatrimoine(
     const nom = cleanCoupleNom(match[2] ?? "") || category;
     const amounts = parseTrailingAmounts(match[3]);
     const montant = pickFoyerAmount(amounts, hasCommunColumn, true);
+    const bankOwnerHint = inferCoupleLineOwner(amounts, hasCommunColumn);
     if (!montant || montant <= 0) continue;
     if (isImmoActifCategory(category)) continue;
-    registerFinancialActifLine(data, category, nom, montant);
+    registerFinancialActifLine(data, category, nom, montant, bankOwnerHint);
   }
 
   if (!hasEpargneBancaireDetail(data)) {
@@ -519,7 +539,13 @@ export function parseCouplePatrimoine(
       const amounts = parseTrailingAmounts(epargneLine[1]);
       const subtotal = pickFoyerAmount(amounts, hasCommunColumn, true);
       if (subtotal && subtotal > 0) {
-        registerFinancialActifLine(data, "Compte courant", "Épargne bancaire", subtotal);
+        registerFinancialActifLine(
+          data,
+          "Compte courant",
+          "Épargne bancaire",
+          subtotal,
+          inferCoupleLineOwner(amounts, hasCommunColumn)
+        );
       }
     }
   }

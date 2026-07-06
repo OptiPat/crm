@@ -1,4 +1,4 @@
-import type { ExtractedData } from "@/lib/pdf";
+import type { ExtractedData, RioCoupleOwnerHint } from "@/lib/pdf/types";
 import type { OrigineInvestissement } from "@/lib/api/tauri-investissements";
 
 export interface PatrimoineExtractItem {
@@ -7,6 +7,7 @@ export interface PatrimoineExtractItem {
   label: string;
   montant: number;
   autoOrigine?: OrigineInvestissement;
+  rioOwnerHint?: RioCoupleOwnerHint;
   creditCRD?: number;
   mensualiteCredit?: number;
   loyerAnnuel?: number;
@@ -146,6 +147,7 @@ export function extractPatrimoineItemsFromRio(data: ExtractedData): PatrimoineEx
         label: contrat.nom,
         montant: contrat.montant,
         autoOrigine: contrat.autoOrigine,
+        rioOwnerHint: contrat.rioOwnerHint,
       });
     }
   }
@@ -158,6 +160,7 @@ export function extractPatrimoineItemsFromRio(data: ExtractedData): PatrimoineEx
         type: mapImmoTypeToProduct(bien.type || "IMMOBILIER"),
         label: bien.nom,
         montant: bien.valeur,
+        rioOwnerHint: bien.rioOwnerHint,
         creditCRD: bien.creditCRD,
         mensualiteCredit: bien.mensualiteCredit,
         loyerAnnuel: bien.loyersAnnuels,

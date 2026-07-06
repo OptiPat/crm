@@ -2,7 +2,7 @@ import type { ExtractedData } from "../types";
 import { computeStelliumConfidence } from "./confidence";
 import { extractStelliumSignatureDate } from "./signature-date";
 import { normalizeStelliumText } from "./normalize";
-import { extractFieldValue, getSection, splitStelliumSections } from "./sections";
+import { getSection, splitStelliumSections } from "./sections";
 
 /** Profils Stellium QPI (échelle 1–5) → profil CRM (1–5). */
 const STELLIUM_PROFILE_TO_SRI: Readonly<Record<string, number>> = {
@@ -25,6 +25,15 @@ function splitNomPrenom(value: string): { nom?: string; prenom?: string } {
     prenom: parts[parts.length - 1],
     nom: parts.slice(0, -1).join(" "),
   };
+}
+
+/** En-tête QPI : « Le JJ/MM/AAAA » ne doit pas s'arrêter sur « Le » dans CLEMENT, etc. */
+function extractQpiInvestisseur(header: string): string | undefined {
+  const match = header.match(
+    /Investisseur\s*:?\s+(.+?)(?=\s+Le\s+\d{2}\/\d{2}\/\d{4}\b|\bConformément\b)/i
+  );
+  const value = match?.[1]?.trim();
+  return value && value !== "-" ? value : undefined;
 }
 
 function normalizeProfileLabel(value: string): string {
@@ -98,7 +107,7 @@ export function parseStelliumQpi(rawText: string): ExtractedData {
     raw: text,
   };
 
-  const investisseur = extractFieldValue(header, ["Investisseur"], ["Le", "Conformément"]);
+  const investisseur = extractQpiInvestisseur(header);
   if (investisseur) {
     const split = splitNomPrenom(investisseur);
     data.nom = split.nom;

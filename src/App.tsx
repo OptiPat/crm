@@ -18,6 +18,7 @@ import { SouscriptionCif } from "@/pages/SouscriptionCif";
 import { Interactions } from "@/pages/Interactions";
 import { Taches } from "@/pages/Taches";
 import { Parametres } from "@/pages/Parametres";
+import { Comptabilite } from "@/pages/Comptabilite";
 import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
@@ -192,6 +193,8 @@ function AppInner() {
             onNavigate={setCurrentPage}
           />
         );
+      case "comptabilite":
+        return <Comptabilite />;
       case "parametres":
         return <Parametres />;
       default:

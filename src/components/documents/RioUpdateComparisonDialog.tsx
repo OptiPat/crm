@@ -35,6 +35,12 @@ import {
   attachRioPatrimoineOwner,
   buildRioPatrimoineOwner,
 } from "@/lib/documents/rio-patrimoine-target";
+import {
+  buildCouplePatrimoineMemberOptions,
+  isCouplePatrimoineTri,
+  ownerHintToKey,
+  resolveCouplePatrimoineOwner,
+} from "@/lib/documents/rio-couple-patrimoine-owner";
 import { extractPatrimoineItemsFromRio } from "@/lib/documents/extract-patrimoine-items";
 import {
   buildImmoInvestissementExtras,
@@ -85,6 +91,7 @@ interface ExtractedInvestissement {
   mensualiteCredit?: number;
   loyerAnnuel?: number;
   dateFinCredit?: string;
+  ownerHint?: import("@/lib/pdf/types").RioCoupleOwnerHint;
 }
 
 // Représente une comparaison entre ancien et nouveau
@@ -117,6 +124,8 @@ interface InvestissementComparison {
   mensualiteCredit?: number;
   creditCRD?: number;
   dateFinCredit?: string;
+  /** RIO couple : clé contact id ou « foyer » (nouveaux investissements). */
+  ownerKey?: string;
 }
 
 function usesRioEncoursField(type: string): boolean {
@@ -175,6 +184,7 @@ function extractInvestissementsFromRIO(data: ExtractedData): ExtractedInvestisse
       label: item.label,
       montant: item.montant,
       origine: item.autoOrigine,
+      ownerHint: item.rioOwnerHint,
       creditCRD: item.creditCRD,
       mensualiteCredit: item.mensualiteCredit,
       loyerAnnuel: item.loyerAnnuel,
@@ -224,7 +234,22 @@ export function RioUpdateComparisonDialog({
   embedded = false,
   unifiedTriUx = false,
 }: RioUpdateComparisonDialogProps) {
-  const useFoyerPatrimoine = Boolean(foyerId);
+  const isCouplePatrimoine = isCouplePatrimoineTri({
+    isCouple: extractedData.isCouple,
+    foyerId,
+    coupleMemberIds,
+  });
+  const coupleMembers = useMemo(
+    () =>
+      isCouplePatrimoine && coupleMemberIds?.length === 2
+        ? buildCouplePatrimoineMemberOptions(
+            extractedData,
+            coupleMemberIds as [number, number]
+          )
+        : [],
+    [isCouplePatrimoine, coupleMemberIds, extractedData]
+  );
+  const useFoyerPatrimoine = Boolean(foyerId) && !isCouplePatrimoine;
   const defaultOwner = buildRioPatrimoineOwner({
     contactId,
     foyerId,
@@ -324,6 +349,10 @@ export function RioUpdateComparisonDialog({
             dateFinCredit: ext.dateFinCredit,
           });
         } else {
+          const defaultOwnerKey =
+            isCouplePatrimoine && coupleMemberIds?.length === 2
+              ? ownerHintToKey(ext.ownerHint, coupleMemberIds as [number, number])
+              : undefined;
           newComparisons.push({
             id: ext.id,
             type: ext.type,
@@ -338,6 +367,7 @@ export function RioUpdateComparisonDialog({
             isChanged: false,
             selectedForUpdate: true,
             selectedOrigine: ext.origine || "EXISTANT_CLIENT",
+            ownerKey: defaultOwnerKey,
             compatibleExisting,
             versementProgramme: false,
             montantVersement: undefined,
@@ -411,9 +441,15 @@ export function RioUpdateComparisonDialog({
   };
 
   const handleChangeOrigine = (id: string, origine: OrigineInvestissement) => {
-    setComparisons(prev => prev.map(c => 
+    setComparisons(prev => prev.map(c =>
       c.id === id ? { ...c, selectedOrigine: origine } : c
     ));
+  };
+
+  const handleChangeOwnerKey = (id: string, ownerKey: string) => {
+    setComparisons((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, ownerKey } : c))
+    );
   };
 
   const handleChangeLabel = (id: string, newLabel: string) => {
@@ -505,6 +541,13 @@ export function RioUpdateComparisonDialog({
       if (c.id !== id) return c;
       
       if (existingId === null) {
+        const extractedHint = extractPatrimoineItemsFromRio(extractedData).find(
+          (item) => item.id === c.id
+        )?.rioOwnerHint;
+        const defaultOwnerKey =
+          isCouplePatrimoine && coupleMemberIds?.length === 2
+            ? ownerHintToKey(extractedHint, coupleMemberIds as [number, number])
+            : c.ownerKey;
         // Nouveau investissement : réinitialiser les champs
         return {
           ...c,
@@ -518,6 +561,7 @@ export function RioUpdateComparisonDialog({
           montantVersement: undefined,
           frequenceVersement: "MENSUEL",
           reinvestissementDividendes: false,
+          ownerKey: defaultOwnerKey,
         };
       } else {
         const existing = existingInvestissements.find(inv => inv.id === existingId);
@@ -565,6 +609,16 @@ export function RioUpdateComparisonDialog({
   };
 
   const handleApply = async () => {
+    if (isCouplePatrimoine) {
+      const missingOwner = comparisons.some(
+        (c) => c.selectedForUpdate && c.linkedToExistingId === null && !c.ownerKey
+      );
+      if (missingOwner) {
+        toast.error("Attribuez un détenteur à chaque nouvel investissement.");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       let updated = 0;
@@ -578,6 +632,17 @@ export function RioUpdateComparisonDialog({
 
         if (comp.linkedToExistingId === null) {
           const encoursType = usesRioEncoursField(comp.editedType);
+          const itemOwner =
+            isCouplePatrimoine &&
+            comp.ownerKey &&
+            foyerId &&
+            coupleMemberIds?.length === 2
+              ? resolveCouplePatrimoineOwner(
+                  comp.ownerKey,
+                  coupleMemberIds as [number, number],
+                  foyerId
+                )
+              : defaultOwner;
           const newInv = attachRioPatrimoineOwner(
             {
               type_produit: comp.editedType,
@@ -598,7 +663,7 @@ export function RioUpdateComparisonDialog({
                 : undefined,
               ...immoExtras,
             },
-            defaultOwner
+            itemOwner
           );
           const created = await createInvestissement(newInv);
           if (encoursType) {
@@ -897,6 +962,23 @@ export function RioUpdateComparisonDialog({
                       </select>
                     )}
                   </div>
+                  {isCouplePatrimoine && coupleMembers.length > 0 && (
+                    <div className="min-w-0 sm:col-span-2">
+                      <label className="text-xs text-muted-foreground">Détenteur</label>
+                      <select
+                        value={comp.ownerKey ?? ""}
+                        onChange={(e) => handleChangeOwnerKey(comp.id, e.target.value)}
+                        className="w-full h-8 text-sm border rounded px-2 mt-1"
+                      >
+                        <option value="">Choisir le détenteur…</option>
+                        {coupleMembers.map((member) => (
+                          <option key={member.key} value={member.key}>
+                            {member.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 
                 {/* Options avancées conditionnelles selon le type (sauf épargne bancaire hors PEL) */}

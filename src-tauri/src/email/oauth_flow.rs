@@ -25,6 +25,7 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
                 "https://www.googleapis.com/auth/calendar.readonly",
                 "https://www.googleapis.com/auth/calendar.events",
                 "https://www.googleapis.com/auth/contacts",
+                "https://www.googleapis.com/auth/drive.readonly",
                 "https://www.googleapis.com/auth/userinfo.email",
                 "openid",
             ],

@@ -1,5 +1,8 @@
 // Types pour l'extraction de données depuis les PDF
 
+/** Propriétaire probable d'une ligne patrimoine RIO couple (colonnes investisseur 1 / 2). */
+export type RioCoupleOwnerHint = "person1" | "person2" | "foyer";
+
 /**
  * Représente un bien immobilier individuel avec ses détails
  */
@@ -7,6 +10,8 @@ export interface BienImmobilier {
   id: string; // Identifiant unique (ex: "rp-primo-mtp", "locatif-pinel-sete")
   type: "RESIDENCE_PRINCIPALE" | "RESIDENCE_SECONDAIRE" | "LOCATIF" | "SCPI" | "PINEL" | "LMNP" | "LMP" | "RP" | string;
   nom: string; // Nom du bien (ex: "Primo Mtp", "Pinel - Sète")
+  /** RIO couple : colonne investisseur 1, 2 ou bien commun. */
+  rioOwnerHint?: RioCoupleOwnerHint;
   valeur?: number; // Valeur du bien
   creditCRD?: number; // Capital Restant Dû
   mensualiteCredit?: number; // Mensualité du crédit
@@ -21,6 +26,8 @@ export interface ContratFinancier {
   nom: string;
   montant: number;
   autoOrigine?: "MON_CONSEIL" | "EXISTANT_CLIENT";
+  /** RIO couple : colonne investisseur 1, 2 ou bien commun. */
+  rioOwnerHint?: RioCoupleOwnerHint;
 }
 
 export interface ExtractedText {
