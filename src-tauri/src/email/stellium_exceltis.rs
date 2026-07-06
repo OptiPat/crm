@@ -850,8 +850,6 @@ struct GraphStelliumFromWrapper {
 struct GraphStelliumEmailAddress {
     #[serde(default)]
     address: Option<String>,
-    #[serde(default)]
-    name: Option<String>,
 }
 
 fn list_graph_stellium_message_ids(

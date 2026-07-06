@@ -16,7 +16,7 @@ pub struct OutlookReplyFound {
 struct GraphMessageList {
     value: Vec<GraphMessage>,
     #[serde(rename = "@odata.nextLink", default)]
-    next_link: Option<String>,
+    _next_link: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
