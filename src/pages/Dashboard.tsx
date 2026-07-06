@@ -45,8 +45,10 @@ import {
 } from "@/lib/dashboard/dashboard-date-range-preferences";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { DashboardStatInvestissementsSheet } from "@/components/dashboard/DashboardStatInvestissementsSheet";
+import { DashboardStatProductFamilySheet } from "@/components/dashboard/DashboardStatProductFamilySheet";
 import { DashboardDrillDownBackdrop } from "@/components/dashboard/DashboardDrillDownBackdrop";
 import type { DashboardInvestissementsSheetVariant } from "@/components/dashboard/DashboardStatInvestissementsSheet";
+import type { DashboardProductFamilyId } from "@/lib/dashboard/dashboard-product-families";
 
 interface DashboardProps {
   currentPage?: string;
@@ -60,6 +62,8 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
   const [dateRange, setDateRange] = useState<DashboardDateRangeFilter>(loadDashboardDateRange);
   const [investissementsSheet, setInvestissementsSheet] =
     useState<DashboardInvestissementsSheetVariant | null>(null);
+  const [productFamilySheet, setProductFamilySheet] =
+    useState<DashboardProductFamilyId | null>(null);
 
   const refreshDashboardData = useCallback(() => {
     setChartsRefreshKey((k) => k + 1);
@@ -199,7 +203,10 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
                 accentColor="#C9A227"
                 iconColor="text-amber-600"
                 iconBgColor="bg-amber-50"
-                onClick={() => setInvestissementsSheet("placements")}
+                onClick={() => {
+                  setProductFamilySheet(null);
+                  setInvestissementsSheet("placements");
+                }}
               />
               <StatCard
                 title="Alertes non traitées"
@@ -220,7 +227,10 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
                 accentColor="#3B82F6"
                 iconColor="text-blue-600"
                 iconBgColor="bg-blue-50"
-                onClick={() => setInvestissementsSheet("versements")}
+                onClick={() => {
+                  setProductFamilySheet(null);
+                  setInvestissementsSheet("versements");
+                }}
               />
               <StatCard
                 title="Biens immobiliers"
@@ -230,7 +240,10 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
                 accentColor="#059669"
                 iconColor="text-emerald-600"
                 iconBgColor="bg-emerald-50"
-                onClick={() => setInvestissementsSheet("immo")}
+                onClick={() => {
+                  setProductFamilySheet(null);
+                  setInvestissementsSheet("immo");
+                }}
               />
               <StatCard
                 title="Panier moyen"
@@ -320,11 +333,20 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
             currentPage={currentPage}
             dataRefreshSignal={chartsRefreshKey}
           />
-          <ProductPieChart key={`prod-${chartsRefreshKey}`} dataRefreshSignal={chartsRefreshKey} />
+          <ProductPieChart
+            key={`prod-${chartsRefreshKey}`}
+            dataRefreshSignal={chartsRefreshKey}
+            onFamilyClick={(familyId) => {
+              setInvestissementsSheet(null);
+              setProductFamilySheet(familyId);
+            }}
+          />
         </div>
       </DashboardCollapsibleSection>
 
-      {investissementsSheet != null ? <DashboardDrillDownBackdrop /> : null}
+      {investissementsSheet != null || productFamilySheet != null ? (
+        <DashboardDrillDownBackdrop />
+      ) : null}
 
       <DashboardStatInvestissementsSheet
         variant={investissementsSheet}
@@ -334,6 +356,24 @@ export function Dashboard({ currentPage, onNavigate }: DashboardProps) {
           if (!open) {
             if (contactDetailOpen) return;
             setInvestissementsSheet(null);
+            clearListBackMode();
+          }
+        }}
+        refreshSignal={chartsRefreshKey}
+        activeContactId={contactDetailOpen ? drillDownActiveContactId : null}
+        onOpenContact={(contactId) => {
+          void openContactWithTab(contactId, "patrimoine", { listBack: true });
+        }}
+      />
+
+      <DashboardStatProductFamilySheet
+        familyId={productFamilySheet}
+        open={productFamilySheet != null}
+        stackedContactOpen={contactDetailOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            if (contactDetailOpen) return;
+            setProductFamilySheet(null);
             clearListBackMode();
           }
         }}

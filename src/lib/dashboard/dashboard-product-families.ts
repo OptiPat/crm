@@ -7,6 +7,7 @@ export type DashboardProductFamilyId =
   | "G3F"
   | "IMMOBILIER"
   | "EPARGNE_FINANCIERE"
+  | "EPARGNE_SALARIALE"
   | "AUTRES";
 
 export interface DashboardProductFamilyStat {
@@ -27,6 +28,8 @@ const CAPITAL_INVEST_TYPES = new Set([
   "FPCR",
 ]);
 
+const EPARGNE_SALARIALE_TYPES = new Set(["EPARGNE_SALARIALE", "PEE", "PERCO", "PERCOL"]);
+
 const EPARGNE_FINANCIERE_TYPES = new Set([
   "ASSURANCE_VIE",
   "CONTRAT_CAPITALISATION",
@@ -45,6 +48,7 @@ export const DASHBOARD_PRODUCT_FAMILY_META: Record<
   G3F: { name: "G3F", color: "#F59E0B" },
   IMMOBILIER: { name: "Immobilier", color: "#059669" },
   EPARGNE_FINANCIERE: { name: "Épargne financière", color: "#F43F5E" },
+  EPARGNE_SALARIALE: { name: "Épargne salariale", color: "#14B8A6" },
   AUTRES: { name: "Autres", color: "#6B7280" },
 };
 
@@ -59,6 +63,7 @@ export function resolveDashboardProductFamily(
   if (CAPITAL_INVEST_TYPES.has(type)) return "CAPITAL_INVEST";
   if (type === "G3F") return "G3F";
   if (IMMOBILIER_TYPE_SET.has(type)) return "IMMOBILIER";
+  if (EPARGNE_SALARIALE_TYPES.has(type)) return "EPARGNE_SALARIALE";
   if (EPARGNE_FINANCIERE_TYPES.has(type)) return "EPARGNE_FINANCIERE";
   return "AUTRES";
 }

@@ -1,7 +1,10 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { getProductStats } from "@/lib/api/tauri-dashboard";
-import { aggregateProductStatsByFamily } from "@/lib/dashboard/dashboard-product-families";
+import {
+  aggregateProductStatsByFamily,
+  type DashboardProductFamilyId,
+} from "@/lib/dashboard/dashboard-product-families";
 import { formatDashboardCurrency, formatDashboardPercent } from "./dashboard-format";
 import {
   ChartEmpty,
@@ -12,6 +15,7 @@ import {
 } from "./dashboard-ui";
 
 interface ChartData {
+  familyId: DashboardProductFamilyId;
   name: string;
   value: number;
   color: string;
@@ -19,17 +23,32 @@ interface ChartData {
 
 function buildChartData(stats: { type_produit: string; montant: number }[]): ChartData[] {
   return aggregateProductStatsByFamily(stats).map((row) => ({
+    familyId: row.id,
     name: row.name,
     value: row.montant,
     color: row.color,
   }));
 }
 
-export function ProductPieChart({ dataRefreshSignal = 0 }: { dataRefreshSignal?: number }) {
+export function ProductPieChart({
+  dataRefreshSignal = 0,
+  onFamilyClick,
+}: {
+  dataRefreshSignal?: number;
+  onFamilyClick?: (familyId: DashboardProductFamilyId) => void;
+}) {
   const [rawStats, setRawStats] = useState<{ type_produit: string; montant: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const data = useMemo(() => buildChartData(rawStats), [rawStats]);
   const total = useMemo(() => data.reduce((s, d) => s + d.value, 0), [data]);
+  const interactive = Boolean(onFamilyClick);
+
+  const handleFamilyClick = useCallback(
+    (entry: ChartData) => {
+      onFamilyClick?.(entry.familyId);
+    },
+    [onFamilyClick]
+  );
 
   useEffect(() => {
     (async () => {
@@ -47,7 +66,11 @@ export function ProductPieChart({ dataRefreshSignal = 0 }: { dataRefreshSignal?:
   return (
     <DashboardPanel
       title="Par produit"
-      description="Encours par famille de produit — avec moi (instantané)"
+      description={
+        interactive
+          ? "Encours par famille de produit — avec moi (instantané). Cliquer pour voir les clients."
+          : "Encours par famille de produit — avec moi (instantané)"
+      }
       className="h-full"
     >
       {loading ? (
@@ -71,6 +94,11 @@ export function ProductPieChart({ dataRefreshSignal = 0 }: { dataRefreshSignal?:
                   outerRadius={92}
                   paddingAngle={1}
                   dataKey="value"
+                  className={interactive ? "cursor-pointer outline-none" : undefined}
+                  onClick={(_, index) => {
+                    const entry = data[index];
+                    if (entry) handleFamilyClick(entry);
+                  }}
                 >
                   {data.map((entry, index) => (
                     <Cell key={index} fill={entry.color} stroke="#fff" strokeWidth={1} />
@@ -87,6 +115,11 @@ export function ProductPieChart({ dataRefreshSignal = 0 }: { dataRefreshSignal?:
                         <p className="text-xs text-muted-foreground">
                           {formatDashboardPercent(v, total)}
                         </p>
+                        {interactive ? (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Cliquer pour voir les clients
+                          </p>
+                        ) : null}
                       </ChartTooltipBox>
                     );
                   }}
@@ -105,7 +138,20 @@ export function ProductPieChart({ dataRefreshSignal = 0 }: { dataRefreshSignal?:
               </span>
             </div>
           </div>
-          <ChartLegendGrid items={data} total={total} columns={2} maxHeight="8rem" />
+          <ChartLegendGrid
+            items={data}
+            total={total}
+            columns={2}
+            maxHeight="8rem"
+            onItemClick={
+              interactive
+                ? (index) => {
+                    const entry = data[index];
+                    if (entry) handleFamilyClick(entry);
+                  }
+                : undefined
+            }
+          />
         </div>
       )}
     </DashboardPanel>
