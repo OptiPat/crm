@@ -44,7 +44,7 @@ import {
   computeTvaFromTtc,
   formatComptaMoney,
 } from "@/lib/compta/compta-money";
-import { formatComptaDateFr, todayDateInput } from "@/lib/compta/compta-month";
+import { formatComptaDateFr, defaultComptaReleveTiersLabel, todayDateInput } from "@/lib/compta/compta-month";
 import { parseComptaSortValue, sortComptaDepenses } from "@/lib/compta/compta-list-sort";
 import {
   comptaJournalTypeBadgeClass,
@@ -64,11 +64,13 @@ const DEPENSE_SORT_OPTIONS = [
 ] as const;
 
 interface ComptaDepensesTabProps {
+  year: number;
+  month: number;
   depenses: ComptaDepense[];
   onChanged: () => Promise<void>;
 }
 
-export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProps) {
+export function ComptaDepensesTab({ year, month, depenses, onChanged }: ComptaDepensesTabProps) {
   const [formOpen, setFormOpen] = useState(false);
   const [sortValue, setSortValue] = useState("date-desc");
   const [search, setSearch] = useState("");
@@ -83,6 +85,8 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
   const [busy, setBusy] = useState(false);
 
   const ht = computeDepenseHt(parseFloat(ttc) || 0, parseFloat(tva) || 0);
+  const isReleveArchive = categorie === "Relevé de compte";
+  const drivePickerContext = { year, month, folderKind: "depenses" as const };
 
   const tiersSuggestions = useMemo(
     () => [...new Set(depenses.map((d) => d.tiers).filter(Boolean))],
@@ -155,19 +159,37 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!categorie || !tiers || !ttc) {
-      toast.error("Remplissez les champs obligatoires");
-      return;
+    let payload: NewComptaDepense;
+
+    if (isReleveArchive) {
+      if (!lienDrive.trim()) {
+        toast.error("Choisissez le PDF du relevé sur Drive");
+        return;
+      }
+      payload = {
+        date,
+        categorie,
+        tiers: tiers.trim() || defaultComptaReleveTiersLabel(date),
+        ttc: 0,
+        tva: 0,
+        ht: 0,
+        lienDrive: lienDrive.trim(),
+      };
+    } else {
+      if (!categorie || !tiers || !ttc) {
+        toast.error("Remplissez les champs obligatoires");
+        return;
+      }
+      payload = {
+        date,
+        categorie,
+        tiers: tiers.trim(),
+        ttc: parseFloat(ttc),
+        tva: parseFloat(tva) || 0,
+        ht,
+        lienDrive: lienDrive.trim() || null,
+      };
     }
-    const payload: NewComptaDepense = {
-      date,
-      categorie,
-      tiers: tiers.trim(),
-      ttc: parseFloat(ttc),
-      tva: parseFloat(tva) || 0,
-      ht,
-      lienDrive: lienDrive.trim() || null,
-    };
     setBusy(true);
     try {
       if (editingId != null) {
@@ -221,9 +243,21 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
         <SheetContent className="overflow-y-auto sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>
-              {editingId != null ? "Modifier la dépense" : "Nouvelle dépense"}
+              {editingId != null
+                ? isReleveArchive
+                  ? "Modifier le relevé"
+                  : "Modifier la dépense"
+                : isReleveArchive
+                  ? "Archiver un relevé"
+                  : "Nouvelle dépense"}
             </SheetTitle>
           </SheetHeader>
+          {isReleveArchive ? (
+            <p className="mt-2 text-sm text-muted-foreground">
+              Archive le PDF du relevé (montants à 0 €). Vous pouvez enregistrer plusieurs relevés
+              par mois — un libellé distinct par période est recommandé.
+            </p>
+          ) : null}
           <form className="mt-6 space-y-4" onSubmit={(e) => void handleSubmit(e)}>
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
@@ -232,7 +266,18 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
               </div>
               <div className="space-y-2">
                 <Label>Catégorie</Label>
-                <Select value={categorie} onValueChange={setCategorie} required>
+                <Select
+                  value={categorie}
+                  onValueChange={(value) => {
+                    setCategorie(value);
+                    if (value === "Relevé de compte") {
+                      setTtc("0");
+                      setTva("0");
+                      if (!tiers.trim()) setTiers(defaultComptaReleveTiersLabel(date));
+                    }
+                  }}
+                  required
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Sélectionner…" />
                   </SelectTrigger>
@@ -252,8 +297,8 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
                   list="compta-tiers-list"
                   value={tiers}
                   onChange={(e) => setTiers(e.target.value)}
-                  placeholder="Nom du fournisseur"
-                  required
+                  placeholder={isReleveArchive ? "Relevé juin 2026" : "Nom du fournisseur"}
+                  required={!isReleveArchive}
                 />
                 <datalist id="compta-tiers-list">
                   {nameSuggestions.map((t) => (
@@ -261,60 +306,69 @@ export function ComptaDepensesTab({ depenses, onChanged }: ComptaDepensesTabProp
                   ))}
                 </datalist>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="dep-ttc">Montant TTC (€)</Label>
-                <Input
-                  id="dep-ttc"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={ttc}
-                  onChange={(e) => setTtc(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="dep-tva">Montant TVA (€)</Label>
-                <Input
-                  id="dep-tva"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={tva}
-                  onChange={(e) => setTva(e.target.value)}
-                />
-                <div className="flex flex-wrap gap-1">
-                  {COMPTA_TVA_RATES.map((rate) => (
-                    <Button
-                      key={rate}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() => {
-                        const ttcVal = parseFloat(ttc) || 0;
-                        setTva(String(computeTvaFromTtc(ttcVal, rate)));
-                      }}
-                    >
-                      {rate}%
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Montant HT</Label>
-                <p className="text-lg font-semibold">{formatComptaMoney(ht)}</p>
-              </div>
+              {!isReleveArchive ? (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="dep-ttc">Montant TTC (€)</Label>
+                    <Input
+                      id="dep-ttc"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={ttc}
+                      onChange={(e) => setTtc(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="dep-tva">Montant TVA (€)</Label>
+                    <Input
+                      id="dep-tva"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={tva}
+                      onChange={(e) => setTva(e.target.value)}
+                    />
+                    <div className="flex flex-wrap gap-1">
+                      {COMPTA_TVA_RATES.map((rate) => (
+                        <Button
+                          key={rate}
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => {
+                            const ttcVal = parseFloat(ttc) || 0;
+                            setTva(String(computeTvaFromTtc(ttcVal, rate)));
+                          }}
+                        >
+                          {rate}%
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Montant HT</Label>
+                    <p className="text-lg font-semibold">{formatComptaMoney(ht)}</p>
+                  </div>
+                </>
+              ) : null}
             </div>
             <ComptaDriveLinkField
               id="dep-drive"
               label="Justificatif Google Drive"
               value={lienDrive}
               onChange={setLienDrive}
+              pickerContext={drivePickerContext}
             />
             <SheetFooter className="gap-2 sm:justify-start">
               <Button type="submit" disabled={busy}>
-                {editingId != null ? "Enregistrer" : "Ajouter la dépense"}
+                {editingId != null
+                  ? "Enregistrer"
+                  : isReleveArchive
+                    ? "Archiver le relevé"
+                    : "Ajouter la dépense"}
               </Button>
               <Button
                 type="button"

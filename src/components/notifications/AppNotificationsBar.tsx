@@ -5,11 +5,16 @@ import {
   notifyStelliumExceltisChanged,
 } from "@/lib/api/tauri-stellium-exceltis";
 import { cn } from "@/lib/utils";
+import { getComptaConfig, isComptaMonthClosed } from "@/lib/api/tauri-compta";
 import {
   fetchAppNotificationsSummary,
   type AppNotificationItem,
   type NotificationSeverity,
 } from "@/lib/notifications/app-notifications";
+import {
+  isComptaDriveConfigured,
+  shouldShowComptaMonthEndReminder,
+} from "@/lib/compta/compta-month-reminder";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { navigateToTaches } from "@/lib/navigation/taches-navigation";
 import { STELLIUM_EXCELTIS_CHANGED_EVENT } from "@/lib/api/tauri-stellium-exceltis";
@@ -49,8 +54,38 @@ export function AppNotificationsBar({
   currentPage,
 }: AppNotificationsBarProps) {
   const [items, setItems] = useState<AppNotificationItem[]>([]);
+  const [comptaReminder, setComptaReminder] = useState<AppNotificationItem | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const loadComptaReminder = useCallback(async () => {
+    try {
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const [config, closed] = await Promise.all([
+        getComptaConfig(),
+        isComptaMonthClosed(year, month),
+      ]);
+      const show =
+        isComptaDriveConfigured(config) &&
+        !closed &&
+        shouldShowComptaMonthEndReminder(now, year, month);
+      setComptaReminder(
+        show
+          ? {
+              id: "compta_month_end",
+              label: "Compta — fin de mois (sync Drive)",
+              count: 1,
+              severity: "info",
+              targetPage: "comptabilite",
+            }
+          : null
+      );
+    } catch {
+      setComptaReminder(null);
+    }
+  }, []);
 
   const load = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -59,16 +94,18 @@ export function AppNotificationsBar({
       const summary = await fetchAppNotificationsSummary();
       setItems(summary.items);
       setTotalCount(summary.totalCount);
+      await loadComptaReminder();
     } catch (error) {
       console.error("Notifications:", error);
       if (!silent) {
         setItems([]);
         setTotalCount(0);
       }
+      await loadComptaReminder();
     } finally {
       if (!silent) setLoading(false);
     }
-  }, []);
+  }, [loadComptaReminder]);
 
   useEffect(() => {
     void load();
@@ -115,9 +152,11 @@ export function AppNotificationsBar({
     };
   }, [load]);
 
-  const hasUrgent = items.some((i) => i.severity === "urgent");
+  const displayItems = comptaReminder ? [comptaReminder, ...items] : items;
+  const displayTotal = totalCount + (comptaReminder ? 1 : 0);
+  const hasUrgent = displayItems.some((i) => i.severity === "urgent");
 
-  if (loading && items.length === 0) {
+  if (loading && displayItems.length === 0) {
     return (
       <div
         role="status"
@@ -129,7 +168,7 @@ export function AppNotificationsBar({
     );
   }
 
-  if (totalCount === 0) {
+  if (displayTotal === 0) {
     return null;
   }
 
@@ -160,7 +199,7 @@ export function AppNotificationsBar({
           </span>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground leading-tight">
-              {totalCount} action{totalCount > 1 ? "s" : ""} en attente
+              {displayTotal} action{displayTotal > 1 ? "s" : ""} en attente
             </p>
             <p className="text-xs text-muted-foreground hidden sm:block">
               Mise à jour automatique
@@ -169,11 +208,15 @@ export function AppNotificationsBar({
         </div>
 
         <div className="flex flex-1 flex-wrap items-center gap-2 min-w-0">
-          {items.map((item) => (
+          {displayItems.map((item) => (
             <NotificationPill
               key={item.id}
               item={item}
               onClick={() => {
+                if (item.targetPage === "comptabilite") {
+                  onPageChange("comptabilite");
+                  return;
+                }
                 if (item.targetPage === "taches") {
                   navigateToTaches(
                     onPageChange,

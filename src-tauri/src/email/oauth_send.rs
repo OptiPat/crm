@@ -36,9 +36,46 @@ fn load_cgp_config(app: &AppHandle) -> CgpConfig {
         .unwrap_or_default()
 }
 
+pub fn resolve_google_calendar_connection(
+    app: &AppHandle,
+) -> Result<Option<EmailOAuthConnection>, String> {
+    let store = EmailOAuthStore::load(app)?;
+    if let Some(ref conn) = store.connection {
+        if conn.provider == "google" {
+            let mut c = conn.clone();
+            refresh_connection_if_needed(app, &mut c)?;
+            return Ok(Some(c));
+        }
+    }
+    if let Some(ref conn) = store.google_calendar_connection {
+        let mut c = conn.clone();
+        refresh_oauth_connection_if_needed(app, &mut c, OAuthConnectionSlot::GoogleCalendar)?;
+        return Ok(Some(c));
+    }
+    Ok(None)
+}
+
+pub fn resolve_google_calendar_access_token(app: &AppHandle) -> Result<Option<String>, String> {
+    Ok(resolve_google_calendar_connection(app)?
+        .map(|c| c.access_token))
+}
+
 pub fn refresh_connection_if_needed(
     app: &AppHandle,
     conn: &mut EmailOAuthConnection,
+) -> Result<(), String> {
+    refresh_oauth_connection_if_needed(app, conn, OAuthConnectionSlot::Primary)
+}
+
+pub enum OAuthConnectionSlot {
+    Primary,
+    GoogleCalendar,
+}
+
+pub fn refresh_oauth_connection_if_needed(
+    app: &AppHandle,
+    conn: &mut EmailOAuthConnection,
+    slot: OAuthConnectionSlot,
 ) -> Result<(), String> {
     if !EmailOAuthStore::connection_needs_refresh(conn) {
         return Ok(());
@@ -66,7 +103,12 @@ pub fn refresh_connection_if_needed(
         .unwrap_or(EmailOAuthStore::now_unix() + 3500);
 
     let mut store = EmailOAuthStore::load(app)?;
-    store.connection = Some(conn.clone());
+    match slot {
+        OAuthConnectionSlot::Primary => store.connection = Some(conn.clone()),
+        OAuthConnectionSlot::GoogleCalendar => {
+            store.google_calendar_connection = Some(conn.clone());
+        }
+    }
     store.save(app)?;
     Ok(())
 }

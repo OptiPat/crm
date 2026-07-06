@@ -546,7 +546,8 @@ export function RioUpdateComparisonDialog({
         )?.rioOwnerHint;
         const defaultOwnerKey =
           isCouplePatrimoine && coupleMemberIds?.length === 2
-            ? ownerHintToKey(extractedHint, coupleMemberIds as [number, number])
+            ? (c.ownerKey ??
+              ownerHintToKey(extractedHint, coupleMemberIds as [number, number]))
             : c.ownerKey;
         // Nouveau investissement : réinitialiser les champs
         return {

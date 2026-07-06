@@ -5,6 +5,8 @@ export interface EmailConnectionStatus {
   provider: string | null;
   email: string | null;
   method: "oauth" | "none";
+  google_calendar_connected: boolean;
+  google_calendar_email: string | null;
 }
 
 export interface OAuthAppSettings {
@@ -44,6 +46,18 @@ export async function connectEmailOAuth(
 
 export async function disconnectEmailOAuth(): Promise<void> {
   return invoke<void>("disconnect_email_oauth");
+}
+
+export async function connectGoogleCalendarOAuth(
+  options?: { forceConsent?: boolean }
+): Promise<EmailConnectionStatus> {
+  return invoke<EmailConnectionStatus>("connect_google_calendar_oauth", {
+    forceConsent: options?.forceConsent ?? null,
+  });
+}
+
+export async function disconnectGoogleCalendarOAuth(): Promise<void> {
+  return invoke<void>("disconnect_google_calendar_oauth_cmd");
 }
 
 export async function testEmailConnection(): Promise<string> {

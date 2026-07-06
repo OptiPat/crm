@@ -24,6 +24,8 @@ pub struct EmailOAuthStore {
     pub google_client_secret: Option<String>,
     pub microsoft_client_id: Option<String>,
     pub connection: Option<EmailOAuthConnection>,
+    /// Agenda Google en complément d'une boîte Microsoft (lecture RDV campagnes).
+    pub google_calendar_connection: Option<EmailOAuthConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -35,6 +37,8 @@ struct PersistedOAuthStore {
     google_client_secret_enc: Option<String>,
     microsoft_client_id: Option<String>,
     connection: Option<PersistedOAuthConnection>,
+    #[serde(default)]
+    google_calendar_connection: Option<PersistedOAuthConnection>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +97,10 @@ impl EmailOAuthStore {
             .connection
             .map(|c| persisted_connection_to_runtime(c, storage_key))
             .transpose()?;
+        let google_calendar_connection = persisted
+            .google_calendar_connection
+            .map(|c| persisted_connection_to_runtime(c, storage_key))
+            .transpose()?;
         let google_client_secret = match (
             persisted.google_client_secret_enc.as_ref(),
             storage_key,
@@ -108,12 +116,18 @@ impl EmailOAuthStore {
             google_client_secret,
             microsoft_client_id: persisted.microsoft_client_id,
             connection,
+            google_calendar_connection,
         })
     }
 
     fn to_persisted(&self, storage_key: Option<&[u8; 32]>) -> Result<PersistedOAuthStore, String> {
         let connection = self
             .connection
+            .as_ref()
+            .map(|c| runtime_connection_to_persisted(c, storage_key))
+            .transpose()?;
+        let google_calendar_connection = self
+            .google_calendar_connection
             .as_ref()
             .map(|c| runtime_connection_to_persisted(c, storage_key))
             .transpose()?;
@@ -135,6 +149,7 @@ impl EmailOAuthStore {
             google_client_secret_enc,
             microsoft_client_id: self.microsoft_client_id.clone(),
             connection,
+            google_calendar_connection,
         })
     }
 

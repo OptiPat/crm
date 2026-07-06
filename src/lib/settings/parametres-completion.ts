@@ -1,4 +1,5 @@
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import type { ComptaConfig } from "@/lib/api/tauri-compta";
 import type { AgendaLink } from "@/lib/emails/agenda-links";
 
 export type SettingsSectionId =
@@ -31,7 +32,8 @@ function hasValidAgendaLink(links: AgendaLink[] | undefined): boolean {
 
 export function getSetupChecklist(
   config: CgpConfig,
-  emailConnected: boolean
+  emailConnected: boolean,
+  comptaConfig?: ComptaConfig | null
 ): SetupCheckItem[] {
   return [
     {
@@ -76,6 +78,15 @@ export function getSetupChecklist(
       done:
         hasText(config.email_signature) || hasText(config.email_signature_html),
       section: "email",
+    },
+    {
+      id: "compta",
+      label: "Comptabilité configurée",
+      hint: "Adresse de départ et dossier Drive racine",
+      done:
+        hasText(comptaConfig?.adresseDepart) &&
+        hasText(comptaConfig?.driveRootFolderId),
+      section: "comptabilite",
     },
   ];
 }

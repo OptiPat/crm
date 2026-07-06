@@ -8,6 +8,7 @@ import type {
 } from "@/lib/api/tauri-compta";
 import {
   buildComptaJournalEntries,
+  comptaJournalTypeAmountClass,
   comptaJournalTypeBadgeClass,
   comptaJournalTypeLabel,
 } from "@/lib/compta/compta-journal";
@@ -72,7 +73,14 @@ export function ComptaJournalTab({
                   </td>
                   <td className="p-3 text-right">{formatComptaMoney(e.ht)}</td>
                   <td className="p-3 text-right">{formatComptaMoney(e.tva)}</td>
-                  <td className="p-3 text-right">{formatComptaMoney(e.ttc)}</td>
+                  <td
+                    className={cn(
+                      "p-3 text-right font-medium",
+                      comptaJournalTypeAmountClass(e.type)
+                    )}
+                  >
+                    {formatComptaMoney(e.ttc)}
+                  </td>
                   <td className="p-3 text-right">
                     {e.don > 0 ? formatComptaMoney(e.don) : "—"}
                   </td>

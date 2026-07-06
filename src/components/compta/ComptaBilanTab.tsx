@@ -58,6 +58,7 @@ interface ComptaBilanTabProps {
   encaissements: ComptaEncaissement[];
   deplacements: ComptaDeplacement[];
   previousAnnual?: ComptaAnnualSummary | null;
+  previousLoading?: boolean;
   loading?: boolean;
 }
 
@@ -75,6 +76,7 @@ export function ComptaBilanTab({
   encaissements,
   deplacements,
   previousAnnual = null,
+  previousLoading = false,
   loading = false,
 }: ComptaBilanTabProps) {
   const annual = useMemo(
@@ -122,13 +124,13 @@ export function ComptaBilanTab({
   );
 
   const yoyDelta = useMemo(() => {
-    if (!previousAnnual) return null;
+    if (previousLoading || !previousAnnual) return null;
     return {
       caHT: annual.caHT - previousAnnual.caHT,
       depensesHT: annual.depensesHT - previousAnnual.depensesHT,
       resultatNet: annual.resultatNet - previousAnnual.resultatNet,
     };
-  }, [annual, previousAnnual]);
+  }, [annual, previousAnnual, previousLoading]);
 
   function formatDelta(value: number): string {
     const prefix = value > 0 ? "+" : "";
@@ -194,7 +196,7 @@ export function ComptaBilanTab({
             <CardTitle className="text-sm font-medium text-muted-foreground">Dépenses HT</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-xl font-semibold text-destructive">
+            <p className="text-xl font-semibold text-red-600">
               {formatComptaMoney(annual.depensesHT)}
             </p>
           </CardContent>

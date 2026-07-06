@@ -21,30 +21,35 @@ interface ComptaMonthKpiBannerProps {
 const KPI_CARDS: Array<{
   label: string;
   tab: ComptaKpiTargetTab;
+  labelClassName: string;
   valueClassName: string;
   cardClassName: string;
 }> = [
   {
     label: "Encaissements",
     tab: "encaissements",
+    labelClassName: "text-emerald-700",
     valueClassName: "text-emerald-600",
-    cardClassName: "border-l-4 border-l-emerald-500",
+    cardClassName: "border-l-4 border-l-emerald-500 bg-emerald-50/40",
   },
   {
     label: "Dépenses",
     tab: "depenses",
+    labelClassName: "text-red-600",
     valueClassName: "text-red-600",
-    cardClassName: "border-l-4 border-l-red-500",
+    cardClassName: "border-l-4 border-l-red-500 bg-red-50/50",
   },
   {
     label: "Indemnités km",
     tab: "deplacements",
+    labelClassName: "text-blue-700",
     valueClassName: "text-blue-600",
-    cardClassName: "border-l-4 border-l-blue-500",
+    cardClassName: "border-l-4 border-l-blue-500 bg-blue-50/40",
   },
   {
     label: "TVA nette",
     tab: "journal",
+    labelClassName: "text-muted-foreground",
     valueClassName: "",
     cardClassName: "",
   },
@@ -78,7 +83,7 @@ export function ComptaMonthKpiBanner({
             className={cn(
               c.cardClassName,
               interactive &&
-                "cursor-pointer transition-colors hover:border-primary/40 hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
             )}
             onClick={interactive ? () => onNavigateTab?.(c.tab) : undefined}
             onKeyDown={
@@ -93,7 +98,7 @@ export function ComptaMonthKpiBanner({
             }
           >
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
+              <CardTitle className={cn("text-sm font-medium", c.labelClassName)}>
                 {c.label}
               </CardTitle>
             </CardHeader>

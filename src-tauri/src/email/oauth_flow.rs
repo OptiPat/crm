@@ -30,6 +30,14 @@ fn provider_config(provider: &str) -> Result<ProviderOAuth, String> {
                 "openid",
             ],
         }),
+        "google_calendar" => Ok(ProviderOAuth {
+            scopes: &[
+                "https://www.googleapis.com/auth/calendar.readonly",
+                "https://www.googleapis.com/auth/calendar.events",
+                "https://www.googleapis.com/auth/userinfo.email",
+                "openid",
+            ],
+        }),
         "microsoft" => Ok(ProviderOAuth {
             scopes: &[
                 "offline_access",
@@ -206,10 +214,12 @@ pub fn run_oauth_connect(
     provider: &str,
     force_consent: bool,
 ) -> Result<EmailOAuthConnection, String> {
+    let calendar_only = provider == "google_calendar";
+    let oauth_provider = if calendar_only { "google" } else { provider };
     let mut store = EmailOAuthStore::load(app)?;
     let cfg = provider_config(provider)?;
 
-    let oauth_client = build_basic_client(provider, &store)?
+    let oauth_client = build_basic_client(oauth_provider, &store)?
         .set_redirect_uri(RedirectUrl::new(OAUTH_REDIRECT_URI.to_string()).map_err(|e| e.to_string())?);
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -279,17 +289,21 @@ pub fn run_oauth_connect(
         .map(|d| EmailOAuthStore::now_unix() + d.as_secs() as i64)
         .unwrap_or(EmailOAuthStore::now_unix() + 3500);
 
-    let email = fetch_user_email(provider, &access_token)?;
+    let email = fetch_user_email(oauth_provider, &access_token)?;
 
     let connection = EmailOAuthConnection {
-        provider: provider.to_string(),
+        provider: oauth_provider.to_string(),
         email,
         access_token,
         refresh_token,
         expires_at,
     };
 
-    store.connection = Some(connection.clone());
+    if calendar_only {
+        store.google_calendar_connection = Some(connection.clone());
+    } else {
+        store.connection = Some(connection.clone());
+    }
     store.save(app)?;
 
     Ok(connection)
@@ -299,5 +313,11 @@ pub fn disconnect_oauth(app: &AppHandle) -> Result<(), String> {
     crate::email::google_contacts::clear_session_index();
     let mut store = EmailOAuthStore::load(app)?;
     store.connection = None;
+    store.save(app)
+}
+
+pub fn disconnect_google_calendar_oauth(app: &AppHandle) -> Result<(), String> {
+    let mut store = EmailOAuthStore::load(app)?;
+    store.google_calendar_connection = None;
     store.save(app)
 }

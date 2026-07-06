@@ -70,7 +70,7 @@ fn google_token(app: &AppHandle) -> Result<String, String> {
     Ok(conn.access_token)
 }
 
-pub fn is_visio_or_remote_event(ev: &CalendarEvent) -> bool {
+fn is_visio_or_remote_event(ev: &CalendarEvent) -> bool {
     if ev.hangout_link.as_ref().is_some_and(|s| !s.trim().is_empty()) {
         return true;
     }
@@ -80,6 +80,10 @@ pub fn is_visio_or_remote_event(ev: &CalendarEvent) -> bool {
                 ep.entry_point_type
                     .as_deref()
                     .is_some_and(|t| t.eq_ignore_ascii_case("video"))
+                    || ep
+                        .uri
+                        .as_deref()
+                        .is_some_and(|u| contains_remote_meeting_hint(u))
             })
         }) {
             return true;
@@ -95,6 +99,10 @@ pub fn is_visio_or_remote_event(ev: &CalendarEvent) -> bool {
         ev.summary.as_deref().unwrap_or("").to_lowercase(),
         ev.description.as_deref().unwrap_or("").to_lowercase()
     );
+    contains_remote_meeting_hint(&hay)
+}
+
+fn contains_remote_meeting_hint(hay: &str) -> bool {
     const REMOTE: [&str; 8] = [
         "meet.google.com",
         "zoom.us",
@@ -213,5 +221,17 @@ mod tests {
             None
         )));
         assert!(!is_visio_or_remote_event(&ev("12 rue des Acacias, Montpellier", None)));
+    }
+
+    #[test]
+    fn skips_video_conference_entry_point_uri() {
+        let mut event = ev("12 rue des Acacias, Montpellier", None);
+        event.conference_data = Some(ConferenceData {
+            entry_points: Some(vec![ConferenceEntryPoint {
+                entry_point_type: Some("video".into()),
+                uri: Some("https://meet.google.com/xyz".into()),
+            }]),
+        });
+        assert!(is_visio_or_remote_event(&event));
     }
 }

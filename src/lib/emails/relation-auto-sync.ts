@@ -19,7 +19,11 @@ export interface RelationAutoSyncResult {
  */
 export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
   const status = await getEmailConnectionStatus();
-  if (status.provider !== "google" || !status.connected) {
+  const mailReady =
+    status.connected &&
+    (status.provider === "google" || status.provider === "microsoft");
+  const calendarReady = status.google_calendar_connected;
+  if (!mailReady && !calendarReady) {
     return {
       skipped: true,
       mail_detected: 0,
@@ -39,20 +43,24 @@ export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
   let calendarCancelled = 0;
 
   try {
-    const email = await syncEmailCampaignResponses();
-    mailDetected = email.mail_detected;
-    rdvCampaignDetected = email.rdv_detected;
-    errors.push(...email.errors);
+    if (mailReady) {
+      const email = await syncEmailCampaignResponses();
+      mailDetected = email.mail_detected;
+      rdvCampaignDetected = email.rdv_detected;
+      errors.push(...email.errors);
+    }
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e));
   }
 
   try {
-    const cal = await syncCalendarRdv();
-    calendarAccepted = cal.accepted;
-    calendarDeclined = cal.declined;
-    calendarCancelled = cal.cancelled;
-    errors.push(...cal.errors);
+    if (calendarReady) {
+      const cal = await syncCalendarRdv();
+      calendarAccepted = cal.accepted;
+      calendarDeclined = cal.declined;
+      calendarCancelled = cal.cancelled;
+      errors.push(...cal.errors);
+    }
   } catch (e) {
     errors.push(e instanceof Error ? e.message : String(e));
   }

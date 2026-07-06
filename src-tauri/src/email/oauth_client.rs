@@ -17,7 +17,11 @@ pub fn oauth_endpoints(provider: &str) -> Result<(&'static str, &'static str), S
 }
 
 pub fn build_basic_client(provider: &str, store: &EmailOAuthStore) -> Result<BasicClient, String> {
-    let (client_id, client_secret) = match provider {
+    let oauth_provider = match provider {
+        "google" | "google_calendar" => "google",
+        other => other,
+    };
+    let (client_id, client_secret) = match oauth_provider {
         "google" => {
             let id = store
                 .google_client_id
@@ -53,7 +57,7 @@ pub fn build_basic_client(provider: &str, store: &EmailOAuthStore) -> Result<Bas
         _ => return Err(format!("Fournisseur OAuth inconnu: {}", provider)),
     };
 
-    let (auth_url, token_url) = oauth_endpoints(provider)?;
+    let (auth_url, token_url) = oauth_endpoints(oauth_provider)?;
     Ok(BasicClient::new(
         ClientId::new(client_id),
         client_secret.map(ClientSecret::new),

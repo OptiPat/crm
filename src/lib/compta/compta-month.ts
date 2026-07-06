@@ -25,6 +25,12 @@ export function formatComptaDateFr(isoDate: string): string {
   return new Date(y, m - 1, d).toLocaleDateString("fr-FR");
 }
 
+export function defaultComptaReleveTiersLabel(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})/.exec(isoDate);
+  if (!match) return "Relevé de compte";
+  return `Relevé ${formatComptaMonthLabel(Number(match[1]), Number(match[2]))}`;
+}
+
 /** Noms de dossiers Drive : « Juillet 2026 - Encaissements » */
 export function comptaDriveFolderName(
   year: number,

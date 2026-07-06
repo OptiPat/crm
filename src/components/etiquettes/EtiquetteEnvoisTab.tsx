@@ -210,7 +210,11 @@ export function EtiquetteEnvoisTab({
   const { dashboard: scpiDashboard } = useScpiCampaignDashboard(dashboardRefreshKey);
 
   const runAutoSync = useCallback(async () => {
-    if (emailStatus?.provider !== "google" || !emailStatus.connected) return;
+    const mailReady =
+      emailStatus?.connected &&
+      (emailStatus.provider === "google" || emailStatus.provider === "microsoft");
+    const calendarReady = emailStatus?.google_calendar_connected;
+    if (!mailReady && !calendarReady) return;
     try {
       setSyncing(true);
       const r = await runRelationAutoSync();
@@ -237,7 +241,11 @@ export function EtiquetteEnvoisTab({
     } finally {
       setSyncing(false);
     }
-  }, [emailStatus?.provider, emailStatus?.connected]);
+  }, [
+    emailStatus?.provider,
+    emailStatus?.connected,
+    emailStatus?.google_calendar_connected,
+  ]);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("crm_nav_suivi_envois_subtab");
@@ -1272,7 +1280,13 @@ export function EtiquetteEnvoisTab({
                 try {
                   setSyncing(true);
                   const assigned = await runFullEtiquettesRecalc();
-                  if (emailStatus?.provider === "google" && emailStatus.connected) {
+                  if (
+                    emailStatus?.connected &&
+                    (emailStatus.provider === "google" ||
+                      emailStatus.provider === "microsoft")
+                  ) {
+                    await runAutoSync();
+                  } else if (emailStatus?.google_calendar_connected) {
                     await runAutoSync();
                   }
                   await loadQueue({ silent: true });

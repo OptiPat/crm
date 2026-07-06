@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import {
   connectEmailOAuth,
+  connectGoogleCalendarOAuth,
   disconnectEmailOAuth,
+  disconnectGoogleCalendarOAuth,
   getEmailConnectionStatus,
   getOAuthAppSettings,
   saveOAuthAppSettings,
@@ -37,7 +39,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
   const [googleSecretConfigured, setGoogleSecretConfigured] = useState(false);
   const [microsoftClientId, setMicrosoftClientId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState<"google" | "microsoft" | null>(null);
+  const [connecting, setConnecting] = useState<"google" | "microsoft" | "google_calendar" | null>(null);
   const [testing, setTesting] = useState(false);
   const [showReplaceGoogleSecret, setShowReplaceGoogleSecret] = useState(false);
 
@@ -84,18 +86,33 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
   };
 
   const handleConnect = async (
-    provider: "google" | "microsoft",
+    provider: "google" | "microsoft" | "google_calendar",
     options?: { forceConsent?: boolean }
   ) => {
     setConnecting(provider);
     try {
       await handleSaveIds();
-      const st = await connectEmailOAuth(provider, options);
+      const st =
+        provider === "google_calendar"
+          ? await connectGoogleCalendarOAuth(options)
+          : await connectEmailOAuth(provider, options);
       setStatus(st);
+      const accountEmail =
+        provider === "google_calendar"
+          ? (st.google_calendar_email ?? "compte")
+          : (st.email ?? "compte");
+      const providerLabel =
+        provider === "google_calendar"
+          ? "Google Agenda"
+          : provider === "google"
+            ? "Google"
+            : "Microsoft";
       toast.success(
         options?.forceConsent
-          ? `Google reconnecté : ${st.email ?? "compte"}`
-          : `Connecté : ${st.email ?? "compte"}`
+          ? `${providerLabel} reconnecté : ${accountEmail}`
+          : provider === "google_calendar"
+            ? `Google Agenda connecté : ${accountEmail}`
+            : `Connecté : ${accountEmail}`
       );
     } catch (e) {
       console.error(e);
@@ -146,8 +163,12 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
                 {status?.provider === "google" ? "Google" : "Microsoft"} — {status?.email}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Prêt pour Suivi → Envois. « Tester » vérifie Gmail + Agenda. En cas d&apos;erreur
-                Agenda, cliquez Reconnecter Google.
+                Prêt pour Suivi → Envois. « Tester » vérifie l&apos;envoi
+                {status?.provider === "google" || status?.google_calendar_connected
+                  ? " et Google Agenda."
+                  : status?.provider === "microsoft"
+                    ? ". Connectez Google Agenda ci-dessous pour la détection RDV."
+                    : "."}
               </p>
             </div>
           </div>
@@ -181,7 +202,69 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
             </Button>
           </div>
         </div>
-      ) : (
+      ) : null}
+
+      {oauthConnected && status?.provider === "microsoft" && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4 rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50 to-white p-4">
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-blue-950">Google Agenda (optionnel)</p>
+            <p className="text-sm text-blue-900/90 truncate">
+              {status.google_calendar_connected
+                ? `Connecté — ${status.google_calendar_email ?? "compte"}`
+                : "Pour détecter les RDV pris par vos clients (campagnes Suivi)."}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            {status.google_calendar_connected ? (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!!connecting}
+                  onClick={() => void handleConnect("google_calendar", { forceConsent: true })}
+                >
+                  Reconnecter Agenda
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await disconnectGoogleCalendarOAuth();
+                      await refresh();
+                      toast.success("Google Agenda déconnecté");
+                    } catch {
+                      toast.error("Erreur lors de la déconnexion Agenda");
+                    }
+                  }}
+                >
+                  Déconnecter Agenda
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={
+                  !!connecting ||
+                  !googleClientId.trim() ||
+                  (!googleSecretConfigured && !googleClientSecret.trim())
+                }
+                onClick={() => void handleConnect("google_calendar")}
+              >
+                {connecting === "google_calendar" ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                )}
+                Connecter Google Agenda
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!oauthConnected ? (
         <div className="grid gap-3 sm:grid-cols-2">
           <button
             type="button"
@@ -224,7 +307,7 @@ export function EmailOAuthConnect({ variant = "card" }: EmailOAuthConnectProps) 
             )}
           </button>
         </div>
-      )}
+      ) : null}
 
       <details className="group rounded-xl border border-border/80 bg-muted/20 open:bg-muted/30">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium hover:bg-muted/40 rounded-xl [&::-webkit-details-marker]:hidden">

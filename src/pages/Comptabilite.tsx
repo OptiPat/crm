@@ -11,7 +11,6 @@ import {
   Lock,
   Unlock,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -35,7 +34,7 @@ import { isComptaMonthClosed, setComptaMonthClosed } from "@/lib/api/tauri-compt
 import { exportComptaJournalCsv } from "@/lib/compta/compta-csv-export";
 import { exportComptaJournalPdf } from "@/lib/compta/compta-pdf-export";
 import { computeComptaAnnualSummary } from "@/lib/compta/compta-bilan";
-import { shouldShowComptaMonthEndReminder } from "@/lib/compta/compta-month-reminder";
+import { isComptaDriveConfigured } from "@/lib/compta/compta-month-reminder";
 import { formatComptaMonthLabel, shiftComptaMonth } from "@/lib/compta/compta-month";
 import { toast } from "sonner";
 
@@ -79,6 +78,7 @@ export function Comptabilite() {
     depenses: prevBilanDepenses,
     encaissements: prevBilanEncaissements,
     deplacements: prevBilanDeplacements,
+    loading: prevBilanLoading,
   } = useComptaBilanData(bilanYear - 1, bilanYear - 1, 12);
 
   const previousAnnual = useMemo(
@@ -96,9 +96,8 @@ export function Comptabilite() {
     void isComptaMonthClosed(year, month).then(setMonthClosed);
   }, [year, month]);
 
-  const monthEndReminder = shouldShowComptaMonthEndReminder(now, year, month);
-
   const monthLabel = useMemo(() => formatComptaMonthLabel(year, month), [year, month]);
+  const driveConfigured = isComptaDriveConfigured(config);
   const isCurrentMonth =
     year === now.getFullYear() && month === now.getMonth() + 1;
 
@@ -240,7 +239,7 @@ export function Comptabilite() {
           </Button>
           <Button
             type="button"
-            variant="ghost"
+            variant="secondary"
             size="sm"
             disabled={exportBusy || loading}
             onClick={() => void handleExportPdf()}
@@ -252,34 +251,29 @@ export function Comptabilite() {
             )}
             PDF
           </Button>
-          <Button
-            type="button"
-            variant={monthClosed ? "secondary" : "outline"}
-            size="sm"
-            disabled={closingBusy || loading}
-            onClick={() => void toggleMonthClosed()}
-          >
-            {monthClosed ? (
-              <Lock className="mr-2 h-4 w-4" />
-            ) : (
-              <Unlock className="mr-2 h-4 w-4" />
-            )}
-            {monthClosed ? "Clôturé" : "Clôturer"}
-          </Button>
+          {driveConfigured ? (
+            <Button
+              type="button"
+              variant={monthClosed ? "secondary" : "outline"}
+              size="sm"
+              disabled={closingBusy || loading}
+              title={
+                monthClosed
+                  ? "Rouvrir le mois pour le marquer comme en cours"
+                  : "Marquer le mois comme terminé (sync Drive faite)"
+              }
+              onClick={() => void toggleMonthClosed()}
+            >
+              {monthClosed ? (
+                <Lock className="mr-2 h-4 w-4" />
+              ) : (
+                <Unlock className="mr-2 h-4 w-4" />
+              )}
+              {monthClosed ? "Clôturé" : "Clôturer"}
+            </Button>
+          ) : null}
         </div>
       </div>
-
-      {monthClosed ? (
-        <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">
-          Mois clôturé — les écritures restent modifiables si besoin
-        </Badge>
-      ) : null}
-
-      {monthEndReminder ? (
-        <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-          Fin de mois proche : vérifiez vos encaissements, dépenses et déplacements avant clôture.
-        </p>
-      ) : null}
 
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {bilanError ? <p className="text-sm text-destructive">{bilanError}</p> : null}
@@ -330,10 +324,15 @@ export function Comptabilite() {
           />
         </TabsContent>
         <TabsContent value="depenses" className="mt-4">
-          <ComptaDepensesTab depenses={depenses} onChanged={reload} />
+          <ComptaDepensesTab year={year} month={month} depenses={depenses} onChanged={reload} />
         </TabsContent>
         <TabsContent value="encaissements" className="mt-4">
-          <ComptaEncaissementsTab encaissements={encaissements} onChanged={reload} />
+          <ComptaEncaissementsTab
+            year={year}
+            month={month}
+            encaissements={encaissements}
+            onChanged={reload}
+          />
         </TabsContent>
         <TabsContent value="deplacements" className="mt-4">
           {config ? (
@@ -350,6 +349,7 @@ export function Comptabilite() {
             encaissements={bilanEncaissements}
             deplacements={bilanDeplacements}
             previousAnnual={previousAnnual}
+            previousLoading={prevBilanLoading}
             loading={bilanLoading}
           />
         </TabsContent>

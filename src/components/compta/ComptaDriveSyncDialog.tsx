@@ -32,15 +32,17 @@ import {
   type ComptaDriveFileStatus,
   type ComptaDriveScanResponse,
 } from "@/lib/api/tauri-compta-sync";
-import { COMPTA_CATEGORIES } from "@/lib/compta/compta-constants";
+import { COMPTA_CATEGORIES, COMPTA_TVA_RATES } from "@/lib/compta/compta-constants";
 import { extractComptaDepenseFromText } from "@/lib/compta/compta-depense-extract";
 import { extractComptaInvoiceFromText } from "@/lib/compta/compta-invoice-extract";
 import {
   computeDepenseHt,
   computeEncaissementTotals,
+  computeTvaFromTtc,
   formatComptaMoney,
 } from "@/lib/compta/compta-money";
 import { openComptaDriveLink } from "@/lib/compta/compta-drive";
+import { defaultComptaReleveTiersLabel } from "@/lib/compta/compta-month";
 import { extractTextFromPDFPath } from "@/lib/pdf/extractor";
 import { ComptaDriveSyncFilterBar } from "@/components/compta/ComptaDriveSyncFilterBar";
 import {
@@ -91,6 +93,8 @@ type DepDraft = {
   ttc: string;
   tva: string;
   ht: string;
+  /** Dernier taux % choisi — recalcule la TVA si le TTC change. */
+  tvaRate: number | null;
   confidence: "low" | "medium" | "high";
   documentKind: "invoice" | "bank_statement";
   currency: "EUR" | "USD";
@@ -127,10 +131,14 @@ function parsedDepToDraft(
   return {
     date: parsed.date,
     categorie: parsed.suggestedCategorie,
-    tiers: parsed.tiers,
+    tiers:
+      parsed.documentKind === "bank_statement"
+        ? defaultComptaReleveTiersLabel(parsed.date)
+        : parsed.tiers,
     ttc: String(parsed.ttc),
     tva: String(parsed.tva),
     ht: String(parsed.ht),
+    tvaRate: null,
     confidence: parsed.confidence,
     documentKind: parsed.documentKind,
     currency: parsed.currency,
@@ -146,7 +154,9 @@ function validateDepDraft(draft: DepDraft): string | null {
   const isBankStatement =
     draft.documentKind === "bank_statement" || draft.categorie === "Relevé de compte";
   if (!draft.categorie.trim()) return "Catégorie requise";
-  const tiers = draft.tiers.trim() || (isBankStatement ? "La Banque Postale" : "");
+  const tiers =
+    draft.tiers.trim() ||
+    (isBankStatement ? defaultComptaReleveTiersLabel(draft.date) : "");
   if (!tiers) return "Tiers requis";
   const ttc = parseFloat(draft.ttc) || 0;
   if (!isBankStatement && ttc <= 0) return "Montant TTC requis";
@@ -253,7 +263,6 @@ export function ComptaDriveSyncDialog({
           ...prev,
           [file.id]: { ...parsedToDraft(parsed), status: "ready" },
         }));
-        setSelectedEnc((prev) => ({ ...prev, [file.id]: true }));
       } catch (e) {
         if (batchGen !== batchGenRef.current) return;
         const message = e instanceof Error ? e.message : "Extraction PDF échouée";
@@ -289,6 +298,7 @@ export function ComptaDriveSyncDialog({
           ttc: "",
           tva: "",
           ht: "",
+          tvaRate: null,
           confidence: "low",
           documentKind: "invoice",
           currency: "EUR",
@@ -308,7 +318,6 @@ export function ComptaDriveSyncDialog({
           ...prev,
           [file.id]: { ...parsedDepToDraft(parsed), status: "ready" },
         }));
-        setSelectedDep((prev) => ({ ...prev, [file.id]: true }));
       } catch (e) {
         if (batchGen !== batchGenRef.current) return;
         const message = e instanceof Error ? e.message : "Extraction PDF échouée";
@@ -321,6 +330,7 @@ export function ComptaDriveSyncDialog({
             ttc: "",
             tva: "",
             ht: "",
+            tvaRate: null,
             confidence: "low",
             documentKind: "invoice",
             currency: "EUR",
@@ -445,9 +455,13 @@ export function ComptaDriveSyncDialog({
       const current = prev[fileId];
       if (!current) return prev;
       const next = { ...current, ...patch };
-      if ("ttc" in patch || "tva" in patch) {
+      if ("ttc" in patch || "tva" in patch || "tvaRate" in patch) {
         const ttc = parseFloat(next.ttc) || 0;
-        const tva = parseFloat(next.tva) || 0;
+        let tva = parseFloat(next.tva) || 0;
+        if ("ttc" in patch && next.tvaRate != null && !("tva" in patch)) {
+          tva = computeTvaFromTtc(ttc, next.tvaRate);
+          next.tva = String(tva);
+        }
         next.ht = String(computeDepenseHt(ttc, tva));
       }
       return { ...prev, [fileId]: next };
@@ -513,7 +527,9 @@ export function ComptaDriveSyncDialog({
     const ttc = parseFloat(draft.ttc) || 0;
     const tva = parseFloat(draft.tva) || 0;
     const ht = parseFloat(draft.ht) || computeDepenseHt(ttc, tva);
-    const tiers = draft.tiers.trim() || (isBankStatement ? "La Banque Postale" : "");
+    const tiers =
+      draft.tiers.trim() ||
+      (isBankStatement ? defaultComptaReleveTiersLabel(draft.date) : "");
     if (draft.currency === "USD" && !isBankStatement && !options?.silent) {
       toast.warning(
         "Montants en dollars — convertissez en euros avant validation comptable si besoin."
@@ -1017,8 +1033,30 @@ function DepenseFileRow({
                 value={draft.tva}
                 disabled={isBankStatement}
                 className={comptaConfidenceInputClass(draft.confidence)}
-                onChange={(e) => onDraftChange({ tva: e.target.value })}
+                onChange={(e) => onDraftChange({ tva: e.target.value, tvaRate: null })}
               />
+              {!isBankStatement ? (
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {COMPTA_TVA_RATES.map((rate) => (
+                    <Button
+                      key={rate}
+                      type="button"
+                      variant={draft.tvaRate === rate ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => {
+                        const ttcVal = parseFloat(draft.ttc) || 0;
+                        onDraftChange({
+                          tvaRate: rate,
+                          tva: String(computeTvaFromTtc(ttcVal, rate)),
+                        });
+                      }}
+                    >
+                      {rate}%
+                    </Button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <div className="space-y-1">
               <Label>{isUsd ? "HT (USD)" : "HT (€)"}</Label>

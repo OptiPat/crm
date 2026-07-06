@@ -135,3 +135,14 @@ export function comptaTypeListCardClass(type: ComptaJournalEntryType): string {
       return "border-l-4 border-l-blue-500";
   }
 }
+
+export function comptaJournalTypeAmountClass(type: ComptaJournalEntryType): string {
+  switch (type) {
+    case "encaissement":
+      return "text-emerald-600";
+    case "depense":
+      return "text-red-600";
+    case "deplacement":
+      return "text-blue-600";
+  }
+}

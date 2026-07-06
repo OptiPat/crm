@@ -1,5 +1,5 @@
 use super::google_calendar_probe::probe_google_calendar_access;
-use super::oauth_flow::{disconnect_oauth, run_oauth_connect};
+use super::oauth_flow::{disconnect_google_calendar_oauth, disconnect_oauth, run_oauth_connect};
 use super::oauth_send::{
     fetch_gmail_signature, send_test_to_self, send_with_oauth, ImportedGmailSignature, OAuthSendResult,
 };
@@ -13,6 +13,8 @@ pub struct EmailConnectionStatus {
     pub provider: Option<String>,
     pub email: Option<String>,
     pub method: String,
+    pub google_calendar_connected: bool,
+    pub google_calendar_email: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -33,12 +35,20 @@ pub struct OAuthAppSettingsInput {
 #[tauri::command]
 pub fn get_email_connection_status(app_handle: AppHandle) -> Result<EmailConnectionStatus, String> {
     let oauth = EmailOAuthStore::load(&app_handle)?;
+    let calendar = oauth.google_calendar_connection.as_ref();
     if let Some(c) = &oauth.connection {
         return Ok(EmailConnectionStatus {
             connected: true,
             provider: Some(c.provider.clone()),
             email: Some(c.email.clone()),
             method: "oauth".into(),
+            google_calendar_connected: calendar.is_some()
+                || c.provider == "google",
+            google_calendar_email: if c.provider == "google" {
+                Some(c.email.clone())
+            } else {
+                calendar.map(|cal| cal.email.clone())
+            },
         });
     }
     Ok(EmailConnectionStatus {
@@ -46,6 +56,8 @@ pub fn get_email_connection_status(app_handle: AppHandle) -> Result<EmailConnect
         provider: None,
         email: None,
         method: "none".into(),
+        google_calendar_connected: calendar.is_some(),
+        google_calendar_email: calendar.map(|c| c.email.clone()),
     })
 }
 
@@ -93,13 +105,8 @@ pub async fn connect_email_oauth(
 ) -> Result<EmailConnectionStatus, String> {
     let force = force_consent.unwrap_or(false);
     tauri::async_runtime::spawn_blocking(move || {
-        let conn = run_oauth_connect(&app_handle, &provider, force)?;
-        Ok(EmailConnectionStatus {
-            connected: true,
-            provider: Some(conn.provider),
-            email: Some(conn.email),
-            method: "oauth".into(),
-        })
+        run_oauth_connect(&app_handle, &provider, force)?;
+        get_email_connection_status(app_handle)
     })
     .await
     .map_err(|e| format!("OAuth interrompu: {}", e))?
@@ -108,6 +115,26 @@ pub async fn connect_email_oauth(
 #[tauri::command]
 pub fn disconnect_email_oauth(app_handle: AppHandle) -> Result<(), String> {
     disconnect_oauth(&app_handle)
+}
+
+#[tauri::command]
+pub async fn connect_google_calendar_oauth(
+    app_handle: AppHandle,
+    force_consent: Option<bool>,
+) -> Result<EmailConnectionStatus, String> {
+    let force = force_consent.unwrap_or(false);
+    tauri::async_runtime::spawn_blocking(move || {
+        run_oauth_connect(&app_handle, "google_calendar", force)?;
+        get_email_connection_status(app_handle)
+    })
+    .await
+    .map_err(|e| format!("OAuth Agenda interrompu: {}", e))?
+}
+
+#[tauri::command]
+pub fn disconnect_google_calendar_oauth_cmd(app_handle: AppHandle) -> Result<(), String> {
+    disconnect_google_calendar_oauth(&app_handle)?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -130,7 +157,13 @@ pub fn test_email_connection(app_handle: AppHandle) -> Result<String, String> {
         probe_google_calendar_access(&app_handle)?;
         return Ok(format!("{mail_msg} Accès Google Agenda OK."));
     }
-    Ok(mail_msg)
+    if oauth.google_calendar_connection.is_some() {
+        probe_google_calendar_access(&app_handle)?;
+        return Ok(format!("{mail_msg} Accès Google Agenda OK."));
+    }
+    Ok(format!(
+        "{mail_msg} Connectez Google Agenda pour la détection RDV (Paramètres → Email)."
+    ))
 }
 
 pub fn send_email_unified(

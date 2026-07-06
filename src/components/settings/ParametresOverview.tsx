@@ -11,8 +11,10 @@ import {
   type SetupCheckItem,
 } from "@/lib/settings/parametres-completion";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
+import { getComptaConfig } from "@/lib/api/tauri-compta";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import type { DbBackupEntry } from "@/lib/api/tauri-system";
+import type { ComptaConfig } from "@/lib/api/tauri-compta";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import {
   CheckCircle2,
@@ -36,6 +38,13 @@ export function ParametresOverview({ cgpConfig, backups, onNavigate }: Parametre
   const { currentVersion, pendingUpdate } = useAppUpdate();
   const [emailConnected, setEmailConnected] = useState(false);
   const [emailLabel, setEmailLabel] = useState("Non connecté");
+  const [comptaConfig, setComptaConfig] = useState<ComptaConfig | null>(null);
+
+  useEffect(() => {
+    void getComptaConfig()
+      .then(setComptaConfig)
+      .catch(() => setComptaConfig(null));
+  }, []);
 
   useEffect(() => {
     getEmailConnectionStatus()
@@ -54,7 +63,7 @@ export function ParametresOverview({ cgpConfig, backups, onNavigate }: Parametre
       });
   }, []);
 
-  const checklist = getSetupChecklist(cgpConfig, emailConnected);
+  const checklist = getSetupChecklist(cgpConfig, emailConnected, comptaConfig);
   const completion = getCompletionPercent(checklist);
   const displayName = getDisplayName(cgpConfig);
 

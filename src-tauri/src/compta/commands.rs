@@ -5,7 +5,9 @@ use crate::compta::calendar::{
 };
 use crate::compta::distance::{compute_driving_distance_km, reset_distance_cache};
 use crate::compta::drive::{
-    download_drive_file_to_cache, scan_compta_drive_month as drive_scan_month, ComptaDriveFile,
+    browse_compta_drive_folder, download_drive_file_to_cache,
+    resolve_browse_start_folder, scan_compta_drive_month as drive_scan_month, ComptaDriveBrowseResult,
+    ComptaDriveFile,
 };
 use crate::commands::DbState;
 use crate::database::compta::NewComptaDeplacement;
@@ -86,6 +88,34 @@ pub fn download_compta_drive_file(
     file_name: String,
 ) -> Result<String, String> {
     download_drive_file_to_cache(&app, &file_id, &file_name)
+}
+
+#[tauri::command]
+pub fn browse_compta_drive(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    folder_id: Option<String>,
+    year: Option<i32>,
+    month: Option<u32>,
+    month_folder_kind: Option<String>,
+) -> Result<ComptaDriveBrowseResult, String> {
+    if let Some(id) = folder_id.filter(|s| !s.trim().is_empty()) {
+        return browse_compta_drive_folder(&app, id.trim());
+    }
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let config = database
+        .get_compta_config()
+        .map_err(|e| e.to_string())?;
+    drop(db_guard);
+    let start = resolve_browse_start_folder(
+        &app,
+        &config.drive_root_folder_id,
+        year,
+        month,
+        month_folder_kind.as_deref(),
+    )?;
+    browse_compta_drive_folder(&app, &start)
 }
 
 #[tauri::command]

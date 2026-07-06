@@ -1,8 +1,7 @@
 //! Vérification de l'accès Google Calendar (OAuth + API activée).
 
 use super::google_api_errors::{calendar_access_error, missing_calendar_scopes};
-use super::oauth_send::refresh_connection_if_needed;
-use super::oauth_store::EmailOAuthStore;
+use super::oauth_send::resolve_google_calendar_connection;
 use tauri::AppHandle;
 
 fn fetch_token_scopes(client: &reqwest::blocking::Client, access_token: &str) -> Result<Vec<String>, String> {
@@ -24,15 +23,8 @@ fn fetch_token_scopes(client: &reqwest::blocking::Client, access_token: &str) ->
 
 /// GET minimal sur l'agenda principal — échoue avec un message actionnable si l'API ou les scopes manquent.
 pub fn probe_google_calendar_access(app: &AppHandle) -> Result<(), String> {
-    let store = EmailOAuthStore::load(app)?;
-    let mut conn = store
-        .connection
-        .clone()
-        .ok_or("Connectez Google dans Paramètres → Email.")?;
-    if conn.provider != "google" {
-        return Ok(());
-    }
-    refresh_connection_if_needed(app, &mut conn)?;
+    let conn = resolve_google_calendar_connection(app)?
+        .ok_or("Connectez Google Agenda dans Paramètres → Email.")?;
 
     let client = reqwest::blocking::Client::new();
     let scopes = fetch_token_scopes(&client, &conn.access_token)?;

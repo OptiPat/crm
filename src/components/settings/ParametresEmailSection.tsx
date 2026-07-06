@@ -215,7 +215,7 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
 
       <SettingsPanel
         title="Exceltis — mails Stellium"
-        description="Détection automatique des emails Stellium (remboursements effectués ou annoncés à venir). Chaque ligne = un millésime repéré. Les « Informations complémentaires » sont ignorées. Gmail connecté requis."
+        description="Détection automatique des emails Stellium (remboursements effectués ou annoncés à venir). Chaque ligne = un millésime repéré. Les « Informations complémentaires » sont ignorées. Gmail ou Outlook connecté requis."
       >
         <div className="flex flex-wrap gap-2">
           <Button
@@ -226,8 +226,11 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
               setScanningStellium(true);
               try {
                 const status = await getEmailConnectionStatus();
-                if (status.provider !== "google" || !status.connected) {
-                  toast.error("Connectez Google dans la section Connexion.");
+                const mailReady =
+                  status.connected &&
+                  (status.provider === "google" || status.provider === "microsoft");
+                if (!mailReady) {
+                  toast.error("Connectez Gmail ou Outlook dans la section Connexion.");
                   return;
                 }
                 const result = await scanStelliumExceltisEmails();
@@ -281,7 +284,10 @@ export function ParametresEmailSection({ cgpConfig, onConfigChange }: Parametres
               try {
                 await resetStelliumExceltisDismissed();
                 const status = await getEmailConnectionStatus();
-                if (status.provider === "google" && status.connected) {
+                const mailReady =
+                  status.connected &&
+                  (status.provider === "google" || status.provider === "microsoft");
+                if (mailReady) {
                   await scanStelliumExceltisEmails();
                 }
                 notifyStelliumExceltisChanged();

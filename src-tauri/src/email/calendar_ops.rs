@@ -1,7 +1,6 @@
 //! Création et synchronisation RDV Google Calendar.
 
-use super::oauth_send::refresh_connection_if_needed;
-use super::oauth_store::EmailOAuthStore;
+use super::oauth_send::resolve_google_calendar_connection;
 use crate::database::models::{CalendarEventEntry, CalendarSyncResult};
 use crate::database::Database;
 use chrono::TimeZone;
@@ -67,15 +66,8 @@ pub fn create_google_calendar_rdv(
     start_at: i64,
     end_at: i64,
 ) -> Result<CalendarEventEntry, String> {
-    let store = EmailOAuthStore::load(app)?;
-    let mut conn = store
-        .connection
-        .clone()
-        .ok_or("Connectez Google dans Paramètres → Email pour planifier un RDV.")?;
-    if conn.provider != "google" {
-        return Err("La planification RDV nécessite un compte Google connecté.".into());
-    }
-    refresh_connection_if_needed(app, &mut conn)?;
+    let conn = resolve_google_calendar_connection(app)?
+        .ok_or("Connectez Google Agenda dans Paramètres → Email pour planifier un RDV.")?;
 
     let (prenom, nom, email) = db
         .get_contact_calendar_info(contact_id)
@@ -147,15 +139,8 @@ pub fn create_google_calendar_rdv(
 }
 
 pub fn sync_calendar_rdv_status(app: &AppHandle, db: &Database) -> Result<CalendarSyncResult, String> {
-    let store = EmailOAuthStore::load(app)?;
-    let mut conn = store
-        .connection
-        .clone()
-        .ok_or("Connectez Google pour synchroniser l'Agenda.")?;
-    if conn.provider != "google" {
-        return Err("Synchronisation Agenda : compte Google requis.".into());
-    }
-    refresh_connection_if_needed(app, &mut conn)?;
+    let conn = resolve_google_calendar_connection(app)?
+        .ok_or("Connectez Google Agenda pour synchroniser l'Agenda.")?;
 
     let pending = db.list_calendar_events_to_sync().map_err(|e| e.to_string())?;
     let client = reqwest::blocking::Client::new();

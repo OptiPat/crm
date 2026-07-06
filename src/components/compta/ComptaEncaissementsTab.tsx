@@ -55,11 +55,15 @@ const ENCAISSEMENT_SORT_OPTIONS = [
 ] as const;
 
 interface ComptaEncaissementsTabProps {
+  year: number;
+  month: number;
   encaissements: ComptaEncaissement[];
   onChanged: () => Promise<void>;
 }
 
 export function ComptaEncaissementsTab({
+  year,
+  month,
   encaissements,
   onChanged,
 }: ComptaEncaissementsTabProps) {
@@ -82,6 +86,7 @@ export function ComptaEncaissementsTab({
   const tvaN = parseFloat(tva) || 0;
   const donN = parseFloat(don) || 0;
   const { ttc, total } = computeEncaissementTotals(exonereN, htN, tvaN, donN);
+  const drivePickerContext = { year, month, folderKind: "encaissements" as const };
 
   const clientSuggestions = useMemo(
     () => [...new Set(encaissements.map((e) => e.client).filter(Boolean))],
@@ -279,6 +284,7 @@ export function ComptaEncaissementsTab({
               label="Facture Google Drive"
               value={lienDrive}
               onChange={setLienDrive}
+              pickerContext={drivePickerContext}
             />
             <SheetFooter className="gap-2 sm:justify-start">
               <Button type="submit" disabled={busy}>

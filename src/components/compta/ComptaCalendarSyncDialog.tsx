@@ -302,6 +302,12 @@ export function ComptaCalendarSyncDialog({
     proposal: ComptaCalendarTripProposal,
     options?: { silent?: boolean }
   ): Promise<boolean> => {
+    if (!config.adresseDepart.trim()) {
+      if (!options?.silent) {
+        toast.error("Renseignez l'adresse de départ dans la configuration Comptabilité");
+      }
+      return false;
+    }
     const draft = drafts[proposal.eventId] ?? EMPTY_DRAFT;
     if (draft.km == null || draft.indemnite == null) {
       if (!options?.silent) {
@@ -348,8 +354,13 @@ export function ComptaCalendarSyncDialog({
     return d?.km != null && d.indemnite != null && !d.calcBusy;
   });
   const selectedTripCount = readyTrips.filter((p) => selectedTrips[p.eventId]).length;
+  const addressMissing = !config.adresseDepart.trim();
 
   const importSelectedTrips = async () => {
+    if (addressMissing) {
+      toast.error("Renseignez l'adresse de départ avant d'importer");
+      return;
+    }
     const toImport = readyTrips.filter((p) => selectedTrips[p.eventId]);
     if (toImport.length === 0) {
       toast.error("Aucun déplacement sélectionné");
@@ -373,7 +384,6 @@ export function ComptaCalendarSyncDialog({
   };
 
   const rowBusy = batchImporting || calculating;
-  const addressMissing = !config.adresseDepart.trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -593,6 +603,7 @@ export function ComptaCalendarSyncDialog({
                             type="button"
                             size="sm"
                             disabled={
+                              addressMissing ||
                               importingId === proposal.eventId ||
                               batchImporting ||
                               draft.km == null ||

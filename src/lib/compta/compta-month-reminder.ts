@@ -1,3 +1,12 @@
+import type { ComptaConfig } from "@/lib/api/tauri-compta";
+
+/** Dossier racine Drive renseigné par l'utilisateur (rien en dur — multi-installation). */
+export function isComptaDriveConfigured(
+  config: Pick<ComptaConfig, "driveRootFolderId"> | null | undefined
+): boolean {
+  return Boolean(config?.driveRootFolderId?.trim());
+}
+
 export function shouldShowComptaMonthEndReminder(now: Date, year: number, month: number): boolean {
   const isSameMonth =
     year === now.getFullYear() && month === now.getMonth() + 1;

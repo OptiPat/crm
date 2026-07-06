@@ -23,7 +23,7 @@ use auth::commands::*;
 use auth::AuthManager;
 use commands::*;
 use compta::commands::{
-    compute_compta_driving_distance_km, download_compta_drive_file, import_compta_calendar_trip,
+    compute_compta_driving_distance_km, browse_compta_drive, download_compta_drive_file, import_compta_calendar_trip,
     import_compta_drive_depense, reset_compta_distance_cache, scan_compta_calendar_month,
     scan_compta_drive_month,
 };
@@ -275,6 +275,8 @@ fn main() {
             save_oauth_app_settings,
             connect_email_oauth,
             disconnect_email_oauth,
+            connect_google_calendar_oauth,
+            disconnect_google_calendar_oauth_cmd,
             test_email_connection,
             fetch_gmail_signature_for_cgp,
             get_app_info,
@@ -350,6 +352,7 @@ fn main() {
             set_compta_month_closed,
             is_compta_month_closed,
             scan_compta_drive_month,
+            browse_compta_drive,
             download_compta_drive_file,
             scan_compta_calendar_month,
             import_compta_drive_depense,

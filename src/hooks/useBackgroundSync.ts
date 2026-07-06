@@ -55,7 +55,10 @@ export function useBackgroundSync(enabled = true): void {
       const endActivity = beginBackgroundActivity("stellium-scan");
       try {
         const status = await getEmailConnectionStatus();
-        if (status.provider !== "google" || !status.connected) {
+        const mailReady =
+          status.connected &&
+          (status.provider === "google" || status.provider === "microsoft");
+        if (!mailReady) {
           lastStelliumScanRef.current = Date.now();
           return;
         }

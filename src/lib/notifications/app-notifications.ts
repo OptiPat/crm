@@ -13,7 +13,8 @@ export type AppNotificationKind =
   | "emails_sent"
   | "alertes_suivi"
   | "taches_urgent"
-  | "exceltis_stellium";
+  | "exceltis_stellium"
+  | "compta_month_end";
 
 export type AppNotificationItem = {
   id: AppNotificationKind | `exceltis_stellium:${string}`;
@@ -27,7 +28,7 @@ export type AppNotificationItem = {
   focusEtiquetteId?: number;
   stelliumMessageId?: string;
   /** Cible page Tâches. */
-  targetPage?: "taches";
+  targetPage?: "taches" | "comptabilite";
   tachesEcheanceFilter?: "urgent";
 };
 

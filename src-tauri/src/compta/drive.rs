@@ -157,6 +157,139 @@ pub fn drive_view_url(file_id: &str) -> String {
     format!("https://drive.google.com/file/d/{file_id}/view")
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComptaDriveBrowseItem {
+    pub id: String,
+    pub name: String,
+    pub is_folder: bool,
+    pub web_view_link: Option<String>,
+    pub modified_time: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ComptaDriveBrowseResult {
+    pub folder_id: String,
+    pub folder_name: String,
+    pub parent_folder_id: Option<String>,
+    pub items: Vec<ComptaDriveBrowseItem>,
+}
+
+#[derive(Debug, Deserialize)]
+struct DriveFileMeta {
+    name: String,
+    #[serde(default)]
+    parents: Option<Vec<String>>,
+}
+
+fn get_drive_folder_meta(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    folder_id: &str,
+) -> Result<(String, Option<String>), String> {
+    let res = client
+        .get(format!(
+            "https://www.googleapis.com/drive/v3/files/{}",
+            folder_id.trim()
+        ))
+        .query(&[("fields", "name,parents")])
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("Drive API: {}", res.text().unwrap_or_default()));
+    }
+    let meta: DriveFileMeta = res.json().map_err(|e| e.to_string())?;
+    Ok((meta.name, meta.parents.and_then(|p| p.into_iter().next())))
+}
+
+pub fn resolve_browse_start_folder(
+    app: &AppHandle,
+    root_folder_id: &str,
+    year: Option<i32>,
+    month: Option<u32>,
+    month_folder_kind: Option<&str>,
+) -> Result<String, String> {
+    let root = root_folder_id.trim();
+    if root.is_empty() {
+        return Err("Renseignez l'ID du dossier racine Drive dans Configuration.".into());
+    }
+    if let (Some(y), Some(m), Some(kind)) = (year, month, month_folder_kind) {
+        let folder_label = match kind {
+            "depenses" => "Dépenses",
+            "encaissements" => "Encaissements",
+            _ => return Err("Dossier Drive invalide.".into()),
+        };
+        let expected = compta_drive_folder_name(y, m, folder_label);
+        let token = google_drive_token(app)?;
+        let client = reqwest::blocking::Client::new();
+        if let Some(id) = find_month_folder(&client, &token, root, &expected)? {
+            return Ok(id);
+        }
+    }
+    Ok(root.to_string())
+}
+
+pub fn browse_compta_drive_folder(
+    app: &AppHandle,
+    folder_id: &str,
+) -> Result<ComptaDriveBrowseResult, String> {
+    let token = google_drive_token(app)?;
+    let client = reqwest::blocking::Client::new();
+    let (folder_name, parent_folder_id) = get_drive_folder_meta(&client, &token, folder_id)?;
+
+    let q = format!("'{}' in parents and trashed = false", folder_id.trim());
+    let files = drive_query_list(&client, &token, &q)?;
+
+    let mut items: Vec<ComptaDriveBrowseItem> = files
+        .into_iter()
+        .filter_map(|f| {
+            let is_folder = f.mime_type == "application/vnd.google-apps.folder";
+            if is_folder {
+                return Some(ComptaDriveBrowseItem {
+                    id: f.id,
+                    name: f.name,
+                    is_folder: true,
+                    web_view_link: None,
+                    modified_time: f.modified_time,
+                });
+            }
+            let selectable = f.mime_type == "application/pdf"
+                || f.name.to_lowercase().ends_with(".pdf")
+                || f.mime_type.starts_with("image/");
+            if !selectable {
+                return None;
+            }
+            Some(ComptaDriveBrowseItem {
+                id: f.id.clone(),
+                web_view_link: f
+                    .web_view_link
+                    .clone()
+                    .or_else(|| Some(drive_view_url(&f.id))),
+                name: f.name,
+                is_folder: false,
+                modified_time: f.modified_time,
+            })
+        })
+        .collect();
+
+    items.sort_by(|a, b| {
+        match (a.is_folder, b.is_folder) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+        }
+    });
+
+    Ok(ComptaDriveBrowseResult {
+        folder_id: folder_id.to_string(),
+        folder_name,
+        parent_folder_id,
+        items,
+    })
+}
+
 pub fn scan_compta_drive_month(
     app: &AppHandle,
     root_folder_id: &str,

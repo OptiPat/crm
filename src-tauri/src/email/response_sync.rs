@@ -1,8 +1,11 @@
-//! Détection automatique : réponses Gmail et RDV Google Agenda.
+//! Détection automatique : réponses Gmail/Outlook et RDV Google Agenda.
 
 use super::google_api_errors::calendar_access_error;
-use super::oauth_send::refresh_connection_if_needed;
+use super::oauth_send::{
+    refresh_connection_if_needed, resolve_google_calendar_access_token,
+};
 use super::oauth_store::EmailOAuthStore;
+use super::response_sync_outlook::outlook_find_contact_reply;
 use crate::database::models::PendingCampaignResponseCheck;
 use crate::newsletter::db::is_newsletter_unsubscribe_request;
 use serde::Deserialize;
@@ -628,15 +631,9 @@ pub fn resolve_campaign_rdv_start(
     contact_email: &str,
     email_date_envoi: i64,
 ) -> Result<Option<i64>, String> {
-    let store = EmailOAuthStore::load(app)?;
-    let mut conn = store
-        .connection
-        .clone()
-        .ok_or("Connectez Google dans Paramètres → Email.")?;
-    if conn.provider != "google" {
+    let Some(token) = resolve_google_calendar_access_token(app)? else {
         return Ok(None);
-    }
-    refresh_connection_if_needed(app, &mut conn)?;
+    };
     let client = reqwest::blocking::Client::new();
     let item = PendingCampaignResponseCheck {
         contact_etiquette_id: 0,
@@ -646,7 +643,7 @@ pub fn resolve_campaign_rdv_start(
         email_gmail_message_id: None,
         queue_row_kind: "etiquette".into(),
     };
-    find_calendar_rdv_start(&client, &conn.access_token, &item)
+    find_calendar_rdv_start(&client, &token, &item)
 }
 
 pub fn sync_email_campaign_responses(
@@ -663,16 +660,13 @@ pub fn sync_email_campaign_responses(
     ) -> Result<(), String>,
 ) -> Result<EmailCampaignSyncResult, String> {
     let store = EmailOAuthStore::load(app)?;
-    let mut conn = store
-        .connection
-        .clone()
-        .ok_or("Connectez Google dans Paramètres → Email pour la détection automatique.")?;
-    if conn.provider != "google" {
+    let Some(mut mail_conn) = store.connection.clone() else {
         return Err(
-            "La détection automatique nécessite un compte Google (Gmail + Agenda).".into(),
+            "Connectez votre boîte dans Paramètres → Email pour la détection automatique.".into(),
         );
-    }
-    refresh_connection_if_needed(app, &mut conn)?;
+    };
+    refresh_connection_if_needed(app, &mut mail_conn)?;
+    let calendar_token = resolve_google_calendar_access_token(app)?;
 
     let client = reqwest::blocking::Client::new();
     let mut result = EmailCampaignSyncResult {
@@ -683,44 +677,68 @@ pub fn sync_email_campaign_responses(
     };
 
     for item in pending {
-        // Agenda avant Gmail : un mail parasite (hors fil campagne) ne doit pas masquer un RDV.
-        match find_calendar_rdv_start(&client, &conn.access_token, &item) {
-            Ok(Some(rdv_at)) => {
-                match mark_response(
-                    item.contact_etiquette_id,
-                    "rdv",
-                    None,
-                    None,
-                    None,
-                    Some(rdv_at),
-                    item.queue_row_kind.as_str(),
-                ) {
-                Ok(()) => result.rdv_detected += 1,
+        if let Some(ref cal_token) = calendar_token {
+            match find_calendar_rdv_start(&client, cal_token, &item) {
+                Ok(Some(rdv_at)) => {
+                    match mark_response(
+                        item.contact_etiquette_id,
+                        "rdv",
+                        None,
+                        None,
+                        None,
+                        Some(rdv_at),
+                        item.queue_row_kind.as_str(),
+                    ) {
+                        Ok(()) => result.rdv_detected += 1,
+                        Err(e) if result.errors.len() < 5 => result.errors.push(e),
+                        Err(_) => {}
+                    }
+                    continue;
+                }
+                Ok(None) => {}
                 Err(e) if result.errors.len() < 5 => result.errors.push(e),
                 Err(_) => {}
-                }
             }
-            Ok(None) => match gmail_find_contact_reply(&client, &conn.access_token, &item) {
-                Ok(Some(reply)) => match mark_response(
-                    item.contact_etiquette_id,
-                    "mail",
-                    Some(reply.body_text.as_str()),
-                    Some(reply.message_id.as_str()),
-                    reply.subject.as_deref(),
-                    None,
-                    item.queue_row_kind.as_str(),
-                ) {
-                    Ok(()) => result.mail_detected += 1,
-                    Err(e) if result.errors.len() < 5 => result.errors.push(e),
-                    Err(_) => {}
-                },
-                Ok(None) => {}
-                Err(e) if result.errors.len() < 3 => {
-                    result.errors.push(format!("Gmail {}: {}", item.contact_email, e));
-                }
+        }
+
+        let mail_result = match mail_conn.provider.as_str() {
+            "google" => gmail_find_contact_reply(&client, &mail_conn.access_token, &item),
+            "microsoft" => outlook_find_contact_reply(&client, &mail_conn.access_token, &item)
+                .map(|opt| {
+                    opt.map(|reply| GmailReplyFound {
+                        message_id: reply.message_id,
+                        body_text: reply.body_text,
+                        subject: reply.subject,
+                    })
+                }),
+            other => Err(format!("Fournisseur email non supporté pour la détection: {other}")),
+        };
+
+        match mail_result {
+            Ok(Some(reply)) => match mark_response(
+                item.contact_etiquette_id,
+                "mail",
+                Some(reply.body_text.as_str()),
+                Some(reply.message_id.as_str()),
+                reply.subject.as_deref(),
+                None,
+                item.queue_row_kind.as_str(),
+            ) {
+                Ok(()) => result.mail_detected += 1,
+                Err(e) if result.errors.len() < 5 => result.errors.push(e),
                 Err(_) => {}
             },
-            Err(e) if result.errors.len() < 5 => result.errors.push(e),
+            Ok(None) => {}
+            Err(e) if result.errors.len() < 3 => {
+                let label = if mail_conn.provider == "microsoft" {
+                    "Outlook"
+                } else {
+                    "Gmail"
+                };
+                result
+                    .errors
+                    .push(format!("{label} {}: {}", item.contact_email, e));
+            }
             Err(_) => {}
         }
     }

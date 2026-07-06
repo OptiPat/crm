@@ -812,6 +812,137 @@ fn gmail_stellium_query() -> String {
     )
 }
 
+fn graph_stellium_search() -> String {
+    format!("from:{GMAIL_FROM} subject:Remboursement")
+}
+
+fn stellium_recency_cutoff_unix() -> i64 {
+    chrono::Utc::now().timestamp() - (GMAIL_QUERY_RECENCY_DAYS as i64 * 86_400)
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphStelliumMessageList {
+    value: Vec<GraphStelliumMessage>,
+    #[serde(rename = "@odata.nextLink", default)]
+    next_link: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphStelliumMessage {
+    id: String,
+    #[serde(default)]
+    subject: Option<String>,
+    #[serde(rename = "receivedDateTime", default)]
+    received_date_time: Option<String>,
+    #[serde(default)]
+    from: Option<GraphStelliumFromWrapper>,
+    #[serde(rename = "bodyPreview", default)]
+    body_preview: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphStelliumFromWrapper {
+    #[serde(rename = "emailAddress", default)]
+    email_address: Option<GraphStelliumEmailAddress>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphStelliumEmailAddress {
+    #[serde(default)]
+    address: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+fn list_graph_stellium_message_ids(
+    client: &reqwest::blocking::Client,
+    token: &str,
+) -> Result<Vec<String>, String> {
+    let search = graph_stellium_search();
+    let cutoff = stellium_recency_cutoff_unix();
+    let mut all_ids: Vec<String> = Vec::new();
+    let mut next_link: Option<String> = None;
+    loop {
+        let res = if let Some(ref url) = next_link {
+            client.get(url).bearer_auth(token).send()
+        } else {
+            client
+                .get("https://graph.microsoft.com/v1.0/me/messages")
+                .header("ConsistencyLevel", "eventual")
+                .query(&[
+                    ("$search", search.as_str()),
+                    ("$top", "50"),
+                    ("$select", "id,subject,receivedDateTime,from,bodyPreview"),
+                ])
+                .bearer_auth(token)
+                .send()
+        }
+        .map_err(|e| e.to_string())?;
+        if !res.status().is_success() {
+            return Err(format!("Outlook Stellium: {}", res.text().unwrap_or_default()));
+        }
+        let list: GraphStelliumMessageList = res.json().map_err(|e| e.to_string())?;
+        for msg in list.value {
+            if is_complementaires_subject(msg.subject.as_deref().unwrap_or("")) {
+                continue;
+            }
+            let received_at = msg
+                .received_date_time
+                .as_deref()
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.timestamp())
+                .unwrap_or(0);
+            if received_at > 0 && received_at < cutoff {
+                continue;
+            }
+            all_ids.push(msg.id);
+            if all_ids.len() >= SCAN_MAX_MESSAGE_IDS {
+                return Ok(all_ids);
+            }
+        }
+        next_link = list.next_link;
+        if next_link.is_none() {
+            break;
+        }
+    }
+    Ok(all_ids)
+}
+
+fn fetch_graph_message_meta(
+    client: &reqwest::blocking::Client,
+    token: &str,
+    message_id: &str,
+) -> Result<(String, String, i64, String), String> {
+    let url = format!(
+        "https://graph.microsoft.com/v1.0/me/messages/{message_id}?$select=subject,from,receivedDateTime,bodyPreview"
+    );
+    let res = client
+        .get(&url)
+        .bearer_auth(token)
+        .send()
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("Outlook message: {}", res.text().unwrap_or_default()));
+    }
+    let msg: GraphStelliumMessage = res.json().map_err(|e| e.to_string())?;
+    let subject = msg.subject.unwrap_or_default();
+    let from = msg
+        .from
+        .as_ref()
+        .and_then(|w| w.email_address.as_ref())
+        .and_then(|a| a.address.as_ref())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
+    let received_at = msg
+        .received_date_time
+        .as_deref()
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .map(|dt| dt.timestamp())
+        .unwrap_or(0);
+    let snippet = msg.body_preview.unwrap_or_default();
+    Ok((subject, from, received_at, snippet))
+}
+
 fn parse_internal_date_sec(internal_date: &str) -> i64 {
     internal_date
         .parse::<i64>()
@@ -1097,16 +1228,35 @@ fn fetch_stellium_message_keys(
     access_token: &str,
     message_id: &str,
     dismissed: &HashSet<String>,
+    provider: &str,
 ) -> Option<StelliumFetchedMessage> {
-    let meta = match fetch_message_meta(client, access_token, message_id) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Stellium meta {message_id}: {e}");
-            return None;
+    let (subject, from, received_at, snippet) = if provider == "microsoft" {
+        match fetch_graph_message_meta(client, access_token, message_id) {
+            Ok(v) => v,
+            Err(e) => {
+                eprintln!("Stellium meta {message_id}: {e}");
+                return None;
+            }
         }
+    } else {
+        let meta = match fetch_message_meta(client, access_token, message_id) {
+            Ok(m) => m,
+            Err(e) => {
+                eprintln!("Stellium meta {message_id}: {e}");
+                return None;
+            }
+        };
+        let headers = meta.payload.as_ref().and_then(|p| p.headers.as_deref());
+        let subject = header_value(headers, "Subject");
+        let from = header_value(headers, "From").to_lowercase();
+        let received_at = meta
+            .internal_date
+            .as_deref()
+            .map(parse_internal_date_sec)
+            .unwrap_or(0);
+        let snippet = meta.snippet.unwrap_or_default();
+        (subject, from, received_at, snippet)
     };
-    let headers = meta.payload.as_ref().and_then(|p| p.headers.as_deref());
-    let subject = header_value(headers, "Subject");
     if subject.is_empty() {
         return None;
     }
@@ -1124,28 +1274,28 @@ fn fetch_stellium_message_keys(
     if dismissed.contains(message_id) && !subject_looks_like_exceltis_remboursement(&subject) {
         return None;
     }
-    let from = header_value(headers, "From").to_lowercase();
     if !from.contains("stellium") && !from.contains(GMAIL_FROM) {
         return None;
     }
-    let received_at = meta
-        .internal_date
-        .as_deref()
-        .map(parse_internal_date_sec)
-        .unwrap_or(0);
 
-    let snippet = meta.snippet.unwrap_or_default();
     let mut parse_text = build_parse_text(&subject, &snippet, None);
     let mut body_owned: Option<String> = None;
 
     let mut keys = keys_for_stellium_message(&subject, &parse_text, None);
     if keys.is_empty() {
-        if let Ok(full) =
-            super::response_sync::gmail_fetch_message_body(client, access_token, message_id)
-        {
-            if !full.is_empty() {
-                body_owned = Some(full);
-            }
+        let full = if provider == "microsoft" {
+            super::response_sync_outlook::outlook_fetch_message_body_and_subject(
+                client,
+                access_token,
+                message_id,
+            )
+            .ok()
+            .map(|(body, _)| body)
+        } else {
+            super::response_sync::gmail_fetch_message_body(client, access_token, message_id).ok()
+        };
+        if let Some(full) = full.filter(|b| !b.is_empty()) {
+            body_owned = Some(full);
         }
     }
     let body_ref = body_owned.as_deref();
@@ -1185,40 +1335,44 @@ pub fn scan_stellium_exceltis_emails(
     let conn = store
         .connection
         .as_ref()
-        .ok_or("Aucun compte email connecté. Paramètres → Email : connectez Google.")?;
-    if conn.provider != "google" {
-        return Err(
-            "La détection Stellium / Exceltis nécessite une connexion Google (Gmail).".into(),
-        );
+        .ok_or("Aucun compte email connecté. Paramètres → Email : connectez Google ou Microsoft.")?;
+    if conn.provider != "google" && conn.provider != "microsoft" {
+        return Err("La détection Stellium / Exceltis nécessite Gmail ou Outlook connecté.".into());
     }
 
     let mut oauth_conn = conn.clone();
     refresh_connection_if_needed(app, &mut oauth_conn)?;
-    let access_token = oauth_conn.access_token;
+    let access_token = oauth_conn.access_token.clone();
+    let provider = oauth_conn.provider.clone();
 
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| e.to_string())?;
 
-    let q = gmail_stellium_query();
-    let mut page_token: Option<String> = None;
-    let mut all_ids: Vec<String> = Vec::new();
-    loop {
-        let (ids, next) = list_message_ids(
-            &client,
-            &access_token,
-            &q,
-            page_token.as_deref(),
-        )?;
-        for m in ids {
-            all_ids.push(m.id);
+    let all_ids = if provider == "microsoft" {
+        list_graph_stellium_message_ids(&client, &access_token)?
+    } else {
+        let q = gmail_stellium_query();
+        let mut page_token: Option<String> = None;
+        let mut ids: Vec<String> = Vec::new();
+        loop {
+            let (batch, next) = list_message_ids(
+                &client,
+                &access_token,
+                &q,
+                page_token.as_deref(),
+            )?;
+            for m in batch {
+                ids.push(m.id);
+            }
+            if next.is_none() || ids.len() >= SCAN_MAX_MESSAGE_IDS {
+                break;
+            }
+            page_token = next;
         }
-        if next.is_none() || all_ids.len() >= SCAN_MAX_MESSAGE_IDS {
-            break;
-        }
-        page_token = next;
-    }
+        ids
+    };
 
     let scanned = all_ids.len() as u32;
 
@@ -1234,7 +1388,7 @@ pub fn scan_stellium_exceltis_emails(
     let fetched: Vec<StelliumFetchedMessage> = all_ids
         .iter()
         .filter_map(|message_id| {
-            fetch_stellium_message_keys(&client, &access_token, message_id, &dismissed)
+            fetch_stellium_message_keys(&client, &access_token, message_id, &dismissed, &provider)
         })
         .collect();
 
