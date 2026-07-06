@@ -63,6 +63,15 @@ import {
   type RioPreviewTab,
 } from "@/lib/documents/rio-preview-tab-status";
 
+function formatRioCoupleMemberLabel(
+  prenom?: string,
+  nom?: string,
+  fallback = "Investisseur"
+): string {
+  const name = [prenom?.trim(), nom?.trim()].filter(Boolean).join(" ");
+  return name.length > 0 ? name : fallback;
+}
+
 interface ExtractedDataPreviewAdvancedProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -654,9 +663,11 @@ export function ExtractedDataPreviewAdvanced({
           {hasData([
             formData.situationFamiliale,
             formData.profession,
+            formData.conjoint?.profession,
             formData.regimeMatrimonial,
             formData.employeur,
             formData.enfants?.length,
+            formData.isCouple && formData.conjoint ? "couple" : undefined,
           ]) && (
             <PreviewSection {...sectionProps}
               id="situation"
@@ -745,13 +756,46 @@ export function ExtractedDataPreviewAdvanced({
                   </div>
                 )}
 
-                {formData.profession !== undefined && (
+                {(formData.profession !== undefined ||
+                  (formData.isCouple && formData.conjoint)) && (
                   <div className="space-y-2">
-                    <Label>Profession</Label>
+                    <Label>
+                      {formData.isCouple && formData.conjoint
+                        ? `Profession — ${formatRioCoupleMemberLabel(
+                            formData.prenom,
+                            formData.nom,
+                            "investisseur 1"
+                          )}`
+                        : "Profession"}
+                    </Label>
                     <Input
                       value={formData.profession || ""}
                       onChange={(e) =>
                         setFormData({ ...formData, profession: e.target.value })
+                      }
+                    />
+                  </div>
+                )}
+
+                {formData.isCouple && formData.conjoint && (
+                  <div className="space-y-2">
+                    <Label>
+                      {`Profession — ${formatRioCoupleMemberLabel(
+                        formData.conjoint.prenom,
+                        formData.conjoint.nom,
+                        "investisseur 2"
+                      )}`}
+                    </Label>
+                    <Input
+                      value={formData.conjoint.profession || ""}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          conjoint: {
+                            ...prev.conjoint!,
+                            profession: e.target.value,
+                          },
+                        }))
                       }
                     />
                   </div>
