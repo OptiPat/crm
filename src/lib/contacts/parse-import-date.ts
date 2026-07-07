@@ -15,17 +15,27 @@ export function parseImportDate(value: unknown): string | undefined {
   const dateStr = String(value).trim();
   if (!dateStr) return undefined;
 
+  const isoDate = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoDate) {
+    const year = parseInt(isoDate[1]!, 10);
+    const month = parseInt(isoDate[2]!, 10);
+    const day = parseInt(isoDate[3]!, 10);
+    const d = new Date(Date.UTC(year, month - 1, day));
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+
   const excelDate = parseFloat(dateStr.replace(",", "."));
-  if (!isNaN(excelDate) && excelDate > 1 && excelDate < 100000) {
+  if (
+    !dateStr.includes("-") &&
+    !dateStr.includes("/") &&
+    !isNaN(excelDate) &&
+    excelDate > 1 &&
+    excelDate < 100000
+  ) {
     const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
     if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1900 && jsDate.getFullYear() < 2100) {
       return jsDate.toISOString();
     }
-  }
-
-  if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) return d.toISOString();
   }
 
   const fr = dateStr.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
@@ -44,6 +54,17 @@ export function parseImportDate(value: unknown): string | undefined {
   }
 
   return undefined;
+}
+
+/** Affiche une ISO backend dans un `<input type="date">` (partie calendaire UTC). */
+export function isoToDateInput(iso?: string): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 /** Objet Date pour calculs (démembrement, etc.). */

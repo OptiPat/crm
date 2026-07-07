@@ -19,7 +19,7 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import { getAllContacts } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
-import { parseImportDate } from "@/lib/contacts/parse-import-date";
+import { isoToDateInput } from "@/lib/contacts/parse-import-date";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
   applyImmoCommandesImport,
@@ -42,6 +42,7 @@ import {
   IMPORT_DIALOG_FOOTER_CLASS,
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
+  commitImportDateFieldChange,
 } from "@/components/investissements/import-dialog-fullscreen";
 
 type Step = "pick" | "preview";
@@ -87,11 +88,6 @@ function readImmoWorkbookRows(
     );
     return { rows, missingSheet };
   });
-}
-
-function isoToDateInput(iso?: string): string {
-  if (!iso) return "";
-  return iso.slice(0, 10);
 }
 
 export function ImmoCommandesImportDialog({
@@ -408,13 +404,17 @@ export function ImmoCommandesImportDialog({
                           <td className="p-2">
                             {editable ? (
                               <Input
-                                key={`${line.lineKey}-date-${line.dateActeIso ?? "x"}`}
+                                key={`${line.lineKey}-date`}
                                 className="h-8 w-36"
                                 type="date"
-                                defaultValue={isoToDateInput(line.dateActeIso)}
-                                onBlur={(e) => {
-                                  const iso = parseImportDate(e.target.value);
-                                  commitLineEdit(line.lineKey, { dateActeIso: iso });
+                                value={isoToDateInput(line.dateActeIso)}
+                                onChange={(e) => {
+                                  const next = commitImportDateFieldChange(
+                                    e.target.value,
+                                    line.dateActeIso
+                                  );
+                                  if (next === null) return;
+                                  commitLineEdit(line.lineKey, { dateActeIso: next });
                                 }}
                               />
                             ) : (

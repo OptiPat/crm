@@ -18,6 +18,7 @@ import {
   resolvePlacementDateEffetIso,
   pickPlacementCommandesSheetName,
   stripPlacementNamePrefix,
+  syncPlacementVpFields,
 } from "./placement-commandes-import";
 
 describe("placement-commandes-import", () => {
@@ -597,5 +598,21 @@ describe("placement-commandes-import", () => {
     expect(
       pickPlacementCommandesSheetName(["Autre", "Investissement Placement"])
     ).toBe("Investissement Placement");
+  });
+
+  it("syncPlacementVpFields conserve la fréquence sans montant VP", () => {
+    expect(syncPlacementVpFields(undefined, "MENSUEL")).toEqual({
+      versementProgramme: false,
+      montantVpCentimes: undefined,
+      frequenceVp: "MENSUEL",
+    });
+  });
+
+  it("syncPlacementVpFields active le VP quand montant et fréquence", () => {
+    expect(syncPlacementVpFields(5000, "TRIMESTRIEL")).toEqual({
+      versementProgramme: true,
+      montantVpCentimes: 5000,
+      frequenceVp: "TRIMESTRIEL",
+    });
   });
 });

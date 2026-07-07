@@ -285,12 +285,17 @@ export function syncPlacementVpFields(
   montantVpCentimes: number | undefined,
   frequenceVp: string | undefined
 ): Pick<PlacementCommandeRow, "versementProgramme" | "montantVpCentimes" | "frequenceVp"> {
-  const freq = frequenceVp?.trim();
-  const amount = montantVpCentimes ?? 0;
-  if (!freq || amount <= 0) {
+  const freq = frequenceVp?.trim() || undefined;
+  const amount =
+    montantVpCentimes != null && montantVpCentimes > 0 ? montantVpCentimes : undefined;
+  if (!freq && amount == null) {
     return { versementProgramme: false, montantVpCentimes: undefined, frequenceVp: undefined };
   }
-  return { versementProgramme: true, montantVpCentimes: amount, frequenceVp: freq };
+  return {
+    versementProgramme: !!(freq && amount != null),
+    montantVpCentimes: amount,
+    frequenceVp: freq,
+  };
 }
 
 export function syncPlacementScpiReinvestFields(

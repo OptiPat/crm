@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseImportDate,
   parseImportDateFinPret,
+  isoToDateInput,
 } from "./parse-import-date";
 
 describe("parseImportDate", () => {
@@ -27,6 +28,17 @@ describe("parseImportDate", () => {
   it("parse objet Date (cellDates Excel) sans décalage calendaire", () => {
     const iso = parseImportDate(new Date(2024, 2, 27));
     expect(iso!.startsWith("2024-03-27")).toBe(true);
+  });
+
+  it("parse input date HTML YYYY-MM-DD en UTC calendaire", () => {
+    expect(parseImportDate("2024-06-15")).toBe("2024-06-15T00:00:00.000Z");
+  });
+});
+
+describe("isoToDateInput", () => {
+  it("affiche la partie calendaire UTC", () => {
+    expect(isoToDateInput("2024-06-15T00:00:00.000Z")).toBe("2024-06-15");
+    expect(isoToDateInput("2024-06-14T22:00:00.000Z")).toBe("2024-06-14");
   });
 });
 

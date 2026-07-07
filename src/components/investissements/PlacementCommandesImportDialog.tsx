@@ -19,7 +19,7 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import { getAllContacts } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
-import { parseImportDate } from "@/lib/contacts/parse-import-date";
+import { isoToDateInput } from "@/lib/contacts/parse-import-date";
 import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
   applyPlacementCommandesImport,
@@ -44,6 +44,7 @@ import {
   IMPORT_DIALOG_FOOTER_CLASS,
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
+  commitImportDateFieldChange,
 } from "@/components/investissements/import-dialog-fullscreen";
 
 type Step = "pick" | "preview";
@@ -94,11 +95,6 @@ function readPlacementWorkbookRows(
     );
     return { rows, missingSheet };
   });
-}
-
-function isoToDateInput(iso?: string): string {
-  if (!iso) return "";
-  return iso.slice(0, 10);
 }
 
 function formatProduitLabel(line: PlacementImportPreviewLine): string {
@@ -432,7 +428,7 @@ export function PlacementCommandesImportDialog({
                                 className="h-8 w-28 rounded-md border border-input bg-background px-2 text-xs"
                                 value={line.frequenceVp ?? ""}
                                 onChange={(e) => {
-                                  updateLine(line.lineKey, {
+                                  commitLineEdit(line.lineKey, {
                                     frequenceVp: e.target.value || undefined,
                                     montantVpCentimes: line.montantVpCentimes,
                                   });
@@ -495,13 +491,17 @@ export function PlacementCommandesImportDialog({
                         <td className="p-2">
                           {editableViVp ? (
                             <Input
-                              key={`${line.lineKey}-date-${line.dateEffetIso ?? "x"}`}
+                              key={`${line.lineKey}-date`}
                               className="h-8 w-36"
                               type="date"
-                              defaultValue={isoToDateInput(line.dateEffetIso)}
-                              onBlur={(e) => {
-                                const iso = parseImportDate(e.target.value);
-                                commitLineEdit(line.lineKey, { dateEffetIso: iso });
+                              value={isoToDateInput(line.dateEffetIso)}
+                              onChange={(e) => {
+                                const next = commitImportDateFieldChange(
+                                  e.target.value,
+                                  line.dateEffetIso
+                                );
+                                if (next === null) return;
+                                commitLineEdit(line.lineKey, { dateEffetIso: next });
                               }}
                             />
                           ) : (
@@ -519,13 +519,17 @@ export function PlacementCommandesImportDialog({
                                 Close
                               </Badge>
                               <Input
-                                key={`${line.lineKey}-sortie-${line.dateSortieIso ?? "x"}`}
+                                key={`${line.lineKey}-sortie`}
                                 className="h-8 w-36"
                                 type="date"
-                                defaultValue={isoToDateInput(line.dateSortieIso)}
-                                onBlur={(e) => {
-                                  const iso = parseImportDate(e.target.value);
-                                  commitLineEdit(line.lineKey, { dateSortieIso: iso });
+                                value={isoToDateInput(line.dateSortieIso)}
+                                onChange={(e) => {
+                                  const next = commitImportDateFieldChange(
+                                    e.target.value,
+                                    line.dateSortieIso
+                                  );
+                                  if (next === null) return;
+                                  commitLineEdit(line.lineKey, { dateSortieIso: next });
                                 }}
                               />
                             </div>
