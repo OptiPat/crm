@@ -1,5 +1,6 @@
-# Build Windows + release GitHub + latest.json (updater) au push d'un tag v*.*
+# Build Windows + macOS, release GitHub + latest.json (updater) au push d'un tag v*.*
 # Prérequis : secret TAURI_SIGNING_PRIVATE_KEY (contenu du fichier .key)
+# macOS d'abord, puis Windows : évite la course sur latest.json (tauri-action #1270).
 
 name: Release CRM W.Y.S
 
@@ -12,9 +13,13 @@ permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  publish-macos:
+    runs-on: macos-latest
     timeout-minutes: 90
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
 
     steps:
       - name: Checkout
@@ -47,6 +52,65 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Build & publish release (macOS)
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: src-tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: CRM W.Y.S ${{ github.ref_name }}
+          releaseBody: |
+            ## Installation Windows
+            - Télécharger **CRM.W.Y.S_*_x64-setup.exe** ci-dessous
+            - Installer par-dessus l'ancienne version (données conservées)
+            - Ou : ouvrir le CRM → **Paramètres → Mises à jour** → Installer
+
+            ## Installation macOS
+            - Télécharger **CRM.W.Y.S_*_universal.dmg** ci-dessous
+            - Ouvrir le DMG, glisser **CRM W.Y.S** dans Applications
+            - Premier lancement : clic droit → **Ouvrir** (app non notarisée, équivalent Windows)
+
+            ## Fichiers updater
+            - `latest.json` + `.sig` : mises à jour automatiques dans l'app
+          releaseDraft: false
+          prerelease: false
+          includeUpdaterJson: true
+          generateReleaseNotes: true
+          retryAttempts: 3
+          tauriScript: npm run tauri
+          args: --target universal-apple-darwin --bundles dmg
+
+  publish-windows:
+    needs: publish-macos
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -65,15 +129,13 @@ jobs:
         shell: pwsh
         run: .\scripts\ci-precache-nsis.ps1
 
-      # SQLCipher compile OpenSSL depuis les sources (vendored) : nécessite NASM.
-      # Perl (Strawberry) est déjà préinstallé sur l'image windows-latest.
-      - name: Install NASM (build OpenSSL/SQLCipher)
+      - name: Install NASM (legacy Windows build tools)
         run: |
           choco install nasm -y --no-progress
           echo "C:\Program Files\NASM" >> $env:GITHUB_PATH
         shell: pwsh
 
-      - name: Build & publish release
+      - name: Build & publish release (Windows)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -82,19 +144,10 @@ jobs:
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}
-          releaseName: CRM W.Y.S ${{ github.ref_name }}
-          releaseBody: |
-            ## Installation
-            - Télécharger **CRM.W.Y.S_*_x64-setup.exe** ci-dessous
-            - Installer par-dessus l'ancienne version (données conservées)
-            - Ou : ouvrir le CRM → **Paramètres → Mises à jour** → Installer
-
-            ## Fichiers updater
-            - `latest.json` + `.sig` : mises à jour automatiques dans l'app
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: true
-          generateReleaseNotes: true
+          retryAttempts: 3
           tauriScript: npm run tauri
           args: --bundles nsis
