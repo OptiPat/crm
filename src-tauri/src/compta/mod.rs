@@ -23,6 +23,22 @@ pub(crate) fn normalize_folder_key(name: &str) -> String {
         .join(" ")
 }
 
+/// Accepte singulier/pluriel (« Encaissement » vs « Encaissements »).
+pub(crate) fn compta_folder_names_match(expected: &str, actual: &str) -> bool {
+    let expected_key = normalize_folder_key(expected);
+    let actual_key = normalize_folder_key(actual);
+    if expected_key == actual_key {
+        return true;
+    }
+    normalize_compta_folder_kind_suffix(&expected_key)
+        == normalize_compta_folder_kind_suffix(&actual_key)
+}
+
+fn normalize_compta_folder_kind_suffix(key: &str) -> String {
+    key.replace("encaissements", "encaissement")
+        .replace("depenses", "depense")
+}
+
 pub(crate) fn compta_drive_folder_name(year: i32, month: u32, kind: &str) -> String {
     const MOIS: [&str; 12] = [
         "Janvier",
@@ -77,5 +93,17 @@ mod tests {
         let a = normalize_folder_key("Juillet 2026 - Dépenses");
         let b = normalize_folder_key("juillet 2026 - Depenses");
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn folder_name_matches_encaissement_singular() {
+        assert!(compta_folder_names_match(
+            "Février 2026 - Encaissements",
+            "Février 2026 - Encaissement"
+        ));
+        assert!(compta_folder_names_match(
+            "Février 2026 - Dépenses",
+            "Février 2026 - Dépense"
+        ));
     }
 }

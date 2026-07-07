@@ -153,9 +153,6 @@ export function ComptaCalendarSyncDialog({
         const city = geocodeTargetFromCity(options.cityHint ?? "");
         if (city.length < MIN_CITY_LENGTH) return false;
         destination = city;
-      } else if (locationNeedsCityHint(proposal.location)) {
-        patchDraft(proposal.eventId, { calcBusy: false, calcError: true });
-        return false;
       } else {
         destination = proposal.location;
       }
@@ -178,6 +175,15 @@ export function ComptaCalendarSyncDialog({
         return true;
       } catch {
         if (batchGen !== batchGenRef.current) return false;
+
+        if (
+          !options?.cityOnly &&
+          locationNeedsCityHint(proposal.location) &&
+          !options?.promptOnFail
+        ) {
+          patchDraft(proposal.eventId, { calcBusy: false, calcError: true });
+          return false;
+        }
 
         if (options?.promptOnFail) {
           const manual = window.prompt(
@@ -391,8 +397,8 @@ export function ComptaCalendarSyncDialog({
         <DialogHeader className="shrink-0 border-b px-6 py-4">
           <DialogTitle>Synchroniser Google Agenda</DialogTitle>
           <DialogDescription>
-            RDV avec lieu (visio exclus). Distances calculées automatiquement depuis votre adresse
-            de départ.
+            RDV sur place avec adresse postale (rue ou code postal). Exclus : Zoom, Teams, visio,
+            numéros de téléphone et liens de réunion.
           </DialogDescription>
         </DialogHeader>
 

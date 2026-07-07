@@ -1,6 +1,6 @@
 //! Google Drive — scan dossiers compta mensuels.
 
-use super::{compta_drive_folder_name, normalize_folder_key};
+use super::{compta_drive_folder_name, compta_folder_names_match};
 use crate::email::oauth_send::refresh_connection_if_needed;
 use crate::email::oauth_store::EmailOAuthStore;
 use serde::{Deserialize, Serialize};
@@ -115,10 +115,9 @@ fn find_month_folder(
         "'{}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
         parent_id
     );
-    let expected_key = normalize_folder_key(expected_name);
     let folders = drive_query_list(client, token, &q)?;
     Ok(folders.into_iter().find_map(|f| {
-        if normalize_folder_key(&f.name) == expected_key {
+        if compta_folder_names_match(expected_name, &f.name) {
             Some(f.id)
         } else {
             None
