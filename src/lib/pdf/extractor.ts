@@ -1,15 +1,11 @@
 // Extraction de texte depuis les PDF natifs
-import * as pdfjsLib from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import type { ExtractedText } from "./types";
 import { readPdfFile } from "@/lib/api/tauri-pdf";
 import {
   reconstructPageTextFromItems,
   type PdfTextItemLike,
 } from "./pdf-layout";
-
-// Worker bundlé via Vite (aligné sur la version pdfjs-dist installée)
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+import { loadPdfDocument } from "./pdfjs-setup";
 
 function extractPageText(textContent: { items: unknown[] }): string {
   const items = textContent.items.filter(
@@ -33,11 +29,7 @@ export async function extractTextFromPDFPath(
   try {
     // Lire le fichier via Tauri
     const uint8Array = await readPdfFile(filePath);
-    const arrayBuffer = uint8Array.buffer as ArrayBuffer;
-
-    // Charger le document PDF
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
+    const pdf = await loadPdfDocument(uint8Array).promise;
 
     let fullText = "";
     const numPages = pdf.numPages;
@@ -88,12 +80,8 @@ export async function extractTextFromPDF(
   file: File
 ): Promise<ExtractedText> {
   try {
-    // Convertir le fichier en ArrayBuffer
     const arrayBuffer = await file.arrayBuffer();
-
-    // Charger le document PDF
-    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
+    const pdf = await loadPdfDocument(arrayBuffer).promise;
 
     let fullText = "";
     const numPages = pdf.numPages;

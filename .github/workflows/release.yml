@@ -85,11 +85,11 @@ jobs:
             - `latest.json` + `.sig` : mises à jour automatiques dans l'app
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
+          includeUpdaterJson: false
           generateReleaseNotes: true
           retryAttempts: 3
           tauriScript: npm run tauri
-          args: --target universal-apple-darwin --bundles dmg
+          args: --target universal-apple-darwin --bundles app,dmg
 
   publish-windows:
     needs: publish-macos
@@ -146,8 +146,28 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseDraft: false
           prerelease: false
-          includeUpdaterJson: true
-          updaterJsonPreferNsis: true
+          includeUpdaterJson: false
           retryAttempts: 3
           tauriScript: npm run tauri
           args: --bundles nsis
+
+  finalize-updater-json:
+    needs: [publish-macos, publish-windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Générer latest.json multi-plateformes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/ci-merge-latest-json.mjs
+
+      - name: Publier latest.json sur la release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" latest.json --clobber

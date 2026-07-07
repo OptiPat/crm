@@ -1,9 +1,6 @@
-import * as pdfjsLib from "pdfjs-dist";
-import pdfjsWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import { readPdfFile } from "@/lib/api/tauri-pdf";
 import { cropCanvasRegion, type CropRegion } from "@/lib/documents/extraction/image-crop";
-
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
+import { loadPdfDocument } from "@/lib/pdf/pdfjs-setup";
 
 /** Rend une page PDF en PNG (data URL) pour OCR. */
 export async function renderPdfPageToDataUrl(
@@ -13,7 +10,7 @@ export async function renderPdfPageToDataUrl(
   region?: CropRegion
 ): Promise<string> {
   const bytes = await readPdfFile(filePath);
-  const pdf = await pdfjsLib.getDocument({ data: bytes.buffer as ArrayBuffer }).promise;
+  const pdf = await loadPdfDocument(bytes).promise;
   const page = await pdf.getPage(Math.min(pageNumber, pdf.numPages));
   const viewport = page.getViewport({ scale });
   const canvas = document.createElement("canvas");
@@ -32,6 +29,6 @@ export async function renderPdfPageToDataUrl(
 
 export async function getPdfPageCount(filePath: string): Promise<number> {
   const bytes = await readPdfFile(filePath);
-  const pdf = await pdfjsLib.getDocument({ data: bytes.buffer as ArrayBuffer }).promise;
+  const pdf = await loadPdfDocument(bytes).promise;
   return pdf.numPages;
 }

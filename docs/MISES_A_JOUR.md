@@ -90,10 +90,18 @@ Puis release GitHub à la main (voir ancienne procédure ci-dessous).
     "windows-x86_64": {
       "url": "https://github.com/OptiPat/crm/releases/download/v0.2.0/Patrimoine.CRM_0.2.0_x64-setup.exe",
       "signature": "CONTENU_DU_FICHIER .sig"
+    },
+    "darwin-aarch64": {
+      "url": "https://github.com/OptiPat/crm/releases/download/v0.2.0/CRM.W.Y.S_0.2.0_universal.app.tar.gz",
+      "signature": "CONTENU_DU_FICHIER .app.tar.gz.sig"
     }
   }
 }
 ```
+
+**macOS** : l’updater in-app utilise le **`.app.tar.gz`**, pas le `.dmg` (install initiale seulement). Sans entrée `darwin-aarch64` dans `latest.json`, le bouton « Rechercher mise à jour » échoue sur Mac.
+
+Le workflow CI (`release.yml`) génère ce fichier via `scripts/ci-merge-latest-json.mjs` après les builds Windows et macOS.
 
 La `signature` est le **contenu texte** du fichier `.sig` généré au build, pas une URL.
 

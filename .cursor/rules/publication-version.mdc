@@ -43,7 +43,10 @@ Quand l'utilisateur demande de **publier**, **release**, **tagger**, **bump** ou
 
 ## Résultat attendu sur GitHub
 
-Release `vX.Y.Z` avec : installateur NSIS `.exe` + `.sig` + `latest.json` (sans BOM UTF-8)
+Release `vX.Y.Z` avec :
+- Windows : installateur NSIS `.exe` + `.sig`
+- macOS : `.dmg` (install manuelle) + `.app.tar.gz` + `.sig` (MAJ in-app)
+- `latest.json` fusionné Windows + macOS (sans BOM UTF-8)
 
 ## Utilisatrice (associée)
 
