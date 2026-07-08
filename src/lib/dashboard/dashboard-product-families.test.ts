@@ -56,8 +56,8 @@ describe("aggregateProductStatsByFamily", () => {
       "SCPI",
       "IMMOBILIER",
       "PER",
-      "EPARGNE_SALARIALE",
       "CAPITAL_INVEST",
+      "EPARGNE_SALARIALE",
       "G3F",
       "AUTRES",
     ]);

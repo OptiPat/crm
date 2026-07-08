@@ -83,6 +83,7 @@ impl Database {
 
         let conn = Connection::open(&db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
+        crate::licensing::install_authorizer(&conn);
 
         let db = Database { conn };
         db.init_tables().map_err(|e| {
@@ -94,6 +95,8 @@ impl Database {
             eprintln!("⚠️ Sauvegarde automatique échouée : {e}");
         }
 
+        crate::licensing::refresh_write_gate(&db);
+
         Ok(db)
     }
 
@@ -102,7 +105,10 @@ impl Database {
         let conn = Connection::open(db_path)?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
         conn.busy_timeout(std::time::Duration::from_secs(10))?;
-        Ok(Database { conn })
+        crate::licensing::install_authorizer(&conn);
+        let db = Database { conn };
+        crate::licensing::refresh_write_gate(&db);
+        Ok(db)
     }
 
     fn init_tables(&self) -> Result<()> {
@@ -2222,8 +2228,10 @@ impl Database {
     pub fn open_in_memory_for_tests() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         conn.execute("PRAGMA foreign_keys = ON", [])?;
+        crate::licensing::install_authorizer(&conn);
         let db = Database { conn };
         db.init_tables()?;
+        crate::licensing::refresh_write_gate(&db);
         Ok(db)
     }
 

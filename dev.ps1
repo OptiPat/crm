@@ -18,6 +18,14 @@ $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 $onWindows = ($IsWindows -or $env:OS -match 'Windows')
 
+# Registre licences (optionnel — license-build.local.ps1 hors repo)
+$licenseEnvLoaded = . (Join-Path $PSScriptRoot 'scripts\load-license-build-env.ps1') -Quiet
+if ($licenseEnvLoaded) {
+    Write-Host 'Licences : registre Sheet actif pour ce build Rust.' -ForegroundColor Green
+} else {
+    Write-Host 'Licences : license-build.local.ps1 absent — pas de registre au build.' -ForegroundColor DarkYellow
+}
+
 Write-Host '=== Patrimoine CRM - mode dev ===' -ForegroundColor Cyan
 
 $proc = netstat -ano 2>$null | Select-String ':1420\s' | ForEach-Object {

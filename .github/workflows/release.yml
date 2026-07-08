@@ -66,6 +66,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          LICENSE_REGISTRY_URL: ${{ secrets.LICENSE_REGISTRY_URL }}
+          LICENSE_REGISTRY_TOKEN: ${{ secrets.LICENSE_REGISTRY_TOKEN }}
+          LICENSE_SIGNING_SECRET: ${{ secrets.LICENSE_SIGNING_SECRET }}
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}
@@ -141,6 +144,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          LICENSE_REGISTRY_URL: ${{ secrets.LICENSE_REGISTRY_URL }}
+          LICENSE_REGISTRY_TOKEN: ${{ secrets.LICENSE_REGISTRY_TOKEN }}
+          LICENSE_SIGNING_SECRET: ${{ secrets.LICENSE_SIGNING_SECRET }}
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}

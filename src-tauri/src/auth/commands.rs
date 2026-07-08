@@ -15,7 +15,11 @@ fn close_database(db: &State<'_, DbState>) {
 }
 
 /// Ouvre la base locale (non chiffrée) et la place dans l'état partagé.
-fn open_database(app: &AppHandle, db: &State<'_, DbState>) -> Result<(), String> {
+fn open_database(
+    app: &AppHandle,
+    db: &State<'_, DbState>,
+    auth: &State<'_, AuthState>,
+) -> Result<(), String> {
     close_database(db);
 
     let database = Database::open(app).map_err(|e| {
@@ -24,6 +28,15 @@ fn open_database(app: &AppHandle, db: &State<'_, DbState>) -> Result<(), String>
     })?;
     if let Err(e) = crate::local_api::start_for_app(app, &database) {
         eprintln!("⚠️ API locale n8n : {e}");
+    }
+    let installed_at = {
+        let guard = auth.lock().unwrap();
+        guard
+            .as_ref()
+            .and_then(|manager| manager.created_at().ok())
+    };
+    if let Err(e) = crate::licensing::ensure_on_database_open(app, &database, installed_at) {
+        eprintln!("⚠️ Licence : {e}");
     }
     *db.lock().unwrap() = Some(database);
     crate::birthday_notifications::spawn_run_if_due(app);
@@ -55,7 +68,7 @@ pub fn create_master_password(
         manager.create_master_password(&password)?;
     }
 
-    open_database(&app, &db)
+    open_database(&app, &db, &auth)
 }
 
 #[tauri::command]
@@ -103,7 +116,7 @@ pub fn unlock(
                 return Ok(true);
             }
             drop(guard);
-            open_database(&app, &db)?;
+            open_database(&app, &db, &auth)?;
         }
         Err(_) => {
             // Commande longue en cours (recalcul étiquettes…) : la base est déjà ouverte.

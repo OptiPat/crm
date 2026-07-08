@@ -1,0 +1,11 @@
+# Copiez ce fichier vers license-build.local.ps1 (gitignore) et renseignez les valeurs.
+# Utilisé par dev.ps1 et scripts/publish-release.ps1 au build Rust.
+
+# URL Apps Script (Application web → exec)
+$env:LICENSE_REGISTRY_URL = "https://script.google.com/macros/s/VOTRE_DEPLOYMENT_ID/exec"
+
+# Même valeur que la propriété REGISTRY_TOKEN dans Apps Script
+$env:LICENSE_REGISTRY_TOKEN = "remplacer-par-token-aleatoire"
+
+# Secret local pour signer / valider les clés (hors repo)
+$env:LICENSE_SIGNING_SECRET = "remplacer-par-secret-long"

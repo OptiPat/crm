@@ -6,6 +6,8 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $Root
 
+. (Join-Path $Root "scripts\load-license-build-env.ps1") -Quiet | Out-Null
+
 $keyPath = "$env:USERPROFILE\.tauri\patrimoine-crm.key"
 if (-not $env:TAURI_SIGNING_PRIVATE_KEY -and -not $env:TAURI_SIGNING_PRIVATE_KEY_PATH) {
     if (Test-Path $keyPath) {

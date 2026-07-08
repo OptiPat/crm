@@ -51,6 +51,7 @@ auth.json
 .env
 .env.*
 !.env.example
+license-build.local.ps1
 
 # Sauvegardes locales / exports
 **/backups/

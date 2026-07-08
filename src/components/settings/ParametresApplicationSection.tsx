@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { ParametresAppBrandingSection } from "@/components/settings/ParametresAppBrandingSection";
+import { ParametresLicenseSection } from "@/components/settings/ParametresLicenseSection";
 import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
@@ -14,6 +15,8 @@ export function ParametresApplicationSection() {
 
   return (
     <div className="space-y-6">
+      <ParametresLicenseSection />
+
       <ParametresAppBrandingSection />
 
       <SettingsPanel

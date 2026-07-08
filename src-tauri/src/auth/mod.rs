@@ -44,6 +44,14 @@ impl AuthManager {
         !self.config_path.exists()
     }
 
+    /// Horodatage de création du mot de passe (≈ date d'installation).
+    pub fn created_at(&self) -> Result<i64, String> {
+        if self.is_first_launch() {
+            return Ok(chrono::Utc::now().timestamp());
+        }
+        Ok(self.load_config()?.created_at)
+    }
+
     /// Définit le mot de passe d'accès (premier lancement).
     pub fn create_master_password(&self, password: &str) -> Result<(), String> {
         if self.config_path.exists() {

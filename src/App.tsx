@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Toaster } from "sonner";
+import { LicenseActivation } from "@/pages/LicenseActivation";
 import { SetupPassword } from "@/pages/SetupPassword";
 import { SetupWizard } from "@/pages/SetupWizard";
 import { UnlockScreen } from "@/pages/UnlockScreen";
@@ -30,11 +31,13 @@ import { isWizardCompleted } from "@/lib/api/tauri-settings";
 import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
+import { needsLicenseActivation } from "@/lib/api/tauri-license";
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
+  const [showLicense, setShowLicense] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
   const ETIQUETTES_RECALC_SESSION_KEY = "crm_etiquettes_recalc_done";
   const etiquettesRecalcDone = useRef(
@@ -66,6 +69,13 @@ function AppInner() {
         const unlocked = await invoke<boolean>("is_database_unlocked");
         if (!unlocked) return;
         setIsAuthenticated(true);
+        const needsLicense = await needsLicenseActivation();
+        if (needsLicense) {
+          setShowLicense(true);
+          setShowWizard(false);
+          return;
+        }
+        setShowLicense(false);
         const wizardDone = await isWizardCompleted();
         setShowWizard(!wizardDone);
       } catch (error) {
@@ -74,23 +84,43 @@ function AppInner() {
     })();
   }, [isFirstLaunch]);
 
+  const syncPostUnlockState = async () => {
+    const needsLicense = await needsLicenseActivation();
+    if (needsLicense) {
+      setShowLicense(true);
+      setShowWizard(false);
+      return;
+    }
+    setShowLicense(false);
+    const wizardDone = await isWizardCompleted();
+    setShowWizard(!wizardDone);
+  };
+
   const handlePasswordCreated = async () => {
     setIsFirstLaunch(false);
     setIsAuthenticated(true);
-    // Après création du mot de passe, afficher le wizard
-    setShowWizard(true);
+    await syncPostUnlockState();
   };
 
   const handleWizardComplete = () => {
     setShowWizard(false);
   };
 
-  const handleUnlocked = async () => {
-    setIsAuthenticated(true);
-    // Vérifier si le wizard est complété après déverrouillage
+  const handleLicenseComplete = async () => {
+    setShowLicense(false);
     try {
       const wizardDone = await isWizardCompleted();
       setShowWizard(!wizardDone);
+    } catch (error) {
+      console.error("Error checking wizard status:", error);
+      setShowWizard(true);
+    }
+  };
+
+  const handleUnlocked = async () => {
+    setIsAuthenticated(true);
+    try {
+      await syncPostUnlockState();
     } catch (error) {
       console.error("Error checking wizard status:", error);
     }
@@ -110,7 +140,7 @@ function AppInner() {
 
   // Étiquettes par défaut + recalcul complet une fois par session (après wizard si besoin)
   useEffect(() => {
-    if (!isAuthenticated || showWizard) return;
+    if (!isAuthenticated || showWizard || showLicense) return;
     if (etiquettesRecalcDone.current) return;
     etiquettesRecalcDone.current = true;
     sessionStorage.setItem(ETIQUETTES_RECALC_SESSION_KEY, "1");
@@ -133,7 +163,7 @@ function AppInner() {
         console.error("Erreur recalcul étiquettes (arrière-plan):", error);
       }
     })();
-  }, [isAuthenticated, showWizard]);
+  }, [isAuthenticated, showWizard, showLicense]);
 
   const renderPage = () => {
     switch (currentPage) {
@@ -224,6 +254,11 @@ function AppInner() {
   // Lancements suivants : afficher l'écran de déverrouillage si pas authentifié
   if (!isAuthenticated) {
     return <UnlockScreen onUnlocked={handleUnlocked} />;
+  }
+
+  // Afficher l'écran d'activation licence si nécessaire
+  if (showLicense) {
+    return <LicenseActivation onComplete={() => void handleLicenseComplete()} />;
   }
 
   // Afficher le wizard de configuration si pas encore complété

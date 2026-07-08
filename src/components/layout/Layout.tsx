@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { LicenseStatusBanner } from "@/components/system/LicenseStatusBanner";
 import { AppUpdateBanner } from "@/components/system/AppUpdateBanner";
 import { AppNotificationsBar } from "@/components/notifications/AppNotificationsBar";
 import { BackgroundActivityBanner } from "@/components/layout/BackgroundActivityBanner";
@@ -33,6 +34,7 @@ export function Layout({ children, currentPage, onPageChange, onLogout }: Layout
           <EtiquetteEmailSendBanner />
           <BackgroundActivityBanner />
           <AppUpdateBanner />
+          <LicenseStatusBanner onOpenSettings={() => onPageChange("parametres")} />
 
           <main className="flex-1 p-6 overflow-auto">{children}</main>
         </div>

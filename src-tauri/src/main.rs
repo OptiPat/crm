@@ -13,6 +13,7 @@ mod contact_name;
 mod database;
 mod email;
 mod export_archive;
+mod licensing;
 mod local_api;
 mod newsletter;
 mod scpi_bulletin;
@@ -34,6 +35,10 @@ use birthday_notifications::{
     generate_birthday_message_draft_cmd, get_birthday_builtin_bodies_cmd, get_birthday_message_settings_cmd, get_birthday_telegram_settings_cmd, list_birthdays_today_cmd,
     run_birthday_telegram_if_due_cmd, save_birthday_message_settings_cmd, save_birthday_telegram_settings_cmd,
     send_birthday_telegram_reminders_now_cmd, test_birthday_telegram_cmd,
+};
+use licensing::{
+    activate_license_cmd, get_license_status_cmd, needs_license_activation_cmd,
+    start_license_trial_cmd,
 };
 use local_api::{
     get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
@@ -269,6 +274,10 @@ fn main() {
             unlock,
             lock,
             change_master_password,
+            get_license_status_cmd,
+            needs_license_activation_cmd,
+            start_license_trial_cmd,
+            activate_license_cmd,
             send_email,
             get_email_connection_status,
             get_oauth_app_settings,

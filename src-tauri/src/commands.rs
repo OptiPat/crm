@@ -2273,6 +2273,12 @@ pub fn get_setting(db: State<'_, DbState>, key: String) -> Result<Option<String>
 
 #[tauri::command]
 pub fn set_setting(db: State<'_, DbState>, key: String, value: String) -> Result<(), String> {
+    if key == crate::licensing::LICENSE_STATE_KEY {
+        return Err(
+            "La licence ne peut pas être modifiée manuellement. Utilisez l'écran d'activation."
+                .to_string(),
+        );
+    }
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
@@ -2283,6 +2289,14 @@ pub fn set_setting(db: State<'_, DbState>, key: String, value: String) -> Result
 
 #[tauri::command]
 pub fn delete_setting(db: State<'_, DbState>, key: String) -> Result<(), String> {
+    if key == crate::licensing::LICENSE_STATE_KEY
+        || key == crate::licensing::LICENSE_LEGACY_MIGRATED_KEY
+    {
+        return Err(
+            "La licence ne peut pas être supprimée manuellement. Utilisez l'écran d'activation."
+                .to_string(),
+        );
+    }
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
