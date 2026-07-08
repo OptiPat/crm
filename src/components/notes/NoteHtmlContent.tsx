@@ -1,4 +1,4 @@
-import { sanitizeEditorHtml } from "@/components/emails/rich-text-email-editor-utils";
+import { sanitizeNoteHtml } from "@/lib/notes/note-html";
 import { cn } from "@/lib/utils";
 
 interface NoteHtmlContentProps {
@@ -7,14 +7,20 @@ interface NoteHtmlContentProps {
 }
 
 export function NoteHtmlContent({ html, className }: NoteHtmlContentProps) {
-  const safe = sanitizeEditorHtml(html);
+  const safe = sanitizeNoteHtml(html);
   if (!safe.trim()) {
     return <p className="text-sm text-muted-foreground italic">Contenu vide.</p>;
   }
   return (
     <div
       className={cn(
-        "prose prose-sm max-w-none dark:prose-invert [&_ul]:list-disc [&_ol]:list-decimal [&_a]:text-primary [&_a]:underline",
+        "text-sm max-w-none leading-normal",
+        "[&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline",
+        "[&_a]:text-primary [&_a]:underline",
+        "[&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-1",
+        "[&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-1",
+        "[&_li]:leading-normal",
+        "[&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-md [&_img]:my-2",
         className
       )}
       dangerouslySetInnerHTML={{ __html: safe }}

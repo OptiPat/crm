@@ -6,6 +6,7 @@ interface NoteRichTextEditorProps {
   minHeight?: string;
   placeholder?: string;
   ariaLabel?: string;
+  resetToken?: number;
 }
 
 export function NoteRichTextEditor({
@@ -14,6 +15,7 @@ export function NoteRichTextEditor({
   minHeight = "240px",
   placeholder = "Rédigez votre note…",
   ariaLabel = "Contenu de la note",
+  resetToken,
 }: NoteRichTextEditorProps) {
   return (
     <RichTextEmailEditor
@@ -22,7 +24,9 @@ export function NoteRichTextEditor({
       minHeight={minHeight}
       placeholder={placeholder}
       showFooter={false}
+      variant="note"
       ariaLabel={ariaLabel}
+      resetToken={resetToken}
     />
   );
 }

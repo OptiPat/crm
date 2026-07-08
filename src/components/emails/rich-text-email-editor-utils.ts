@@ -3,6 +3,9 @@ import {
   sanitizeTemplateEmailHtml,
   normalizeTemplateEmailHtmlLikeGmail,
 } from "@/lib/emails/template-email-html";
+import { sanitizeNoteHtml } from "@/lib/notes/note-html";
+
+export type RichEditorSanitizeMode = "email" | "note";
 
 export function normalizeEditorHtml(html: string): string {
   const trimmed = html.trim();
@@ -12,8 +15,13 @@ export function normalizeEditorHtml(html: string): string {
   return html;
 }
 /** Pendant la saisie : sécurise sans restructurer (évite de casser le curseur / l’aperçu live). */
-export function sanitizeEditorHtml(html: string): string {
-  return sanitizeTemplateEmailHtml(normalizeEditorHtml(html));
+export function sanitizeEditorHtml(html: string, mode: RichEditorSanitizeMode = "email"): string {
+  const normalized = normalizeEditorHtml(html);
+  return mode === "note" ? sanitizeNoteHtml(normalized) : sanitizeTemplateEmailHtml(normalized);
+}
+
+export function sanitizeNoteEditorHtml(html: string): string {
+  return sanitizeEditorHtml(html, "note");
 }
 
 /** Au blur / enregistrement : format Gmail (div par ligne). */
@@ -244,4 +252,19 @@ export function insertTextInRichEditor(
   }
   document.execCommand("insertText", false, text);
   return sanitizeEditorHtml(normalizeEditorHtml(editorEl.innerHTML));
+}
+
+/** Insère du HTML à la position du curseur (images, etc.). */
+export function insertHtmlInRichEditor(
+  editorEl: HTMLDivElement | null,
+  html: string,
+  savedRange?: Range | null,
+  mode: RichEditorSanitizeMode = "email"
+): boolean {
+  if (!editorEl || !html.trim()) return false;
+  editorEl.focus();
+  restoreRichEditorSelection(editorEl, savedRange ?? saveRichEditorSelection(editorEl));
+  document.execCommand("insertHTML", false, html);
+  editorEl.innerHTML = sanitizeEditorHtml(normalizeEditorHtml(editorEl.innerHTML), mode);
+  return true;
 }
