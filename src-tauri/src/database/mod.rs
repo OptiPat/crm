@@ -33,6 +33,7 @@ pub mod settings;
 pub mod templates_email;
 pub mod models;
 pub mod newsletter_ops;
+pub mod notes;
 pub mod notifications_summary;
 pub mod birthdays;
 pub mod scpi_campaigns;
@@ -565,6 +566,7 @@ impl Database {
         self.migrate_drop_contacts_date_expiration_identite()?;
         self.migrate_compta_tables()?;
         self.migrate_compta_sync_columns()?;
+        self.migrate_notes_tables()?;
 
         Ok(())
     }
@@ -2231,7 +2233,7 @@ impl Database {
         crate::licensing::install_authorizer(&conn);
         let db = Database { conn };
         db.init_tables()?;
-        crate::licensing::refresh_write_gate(&db);
+        crate::licensing::seed_in_memory_test_license(&db);
         Ok(db)
     }
 

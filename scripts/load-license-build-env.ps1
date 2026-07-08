@@ -25,6 +25,18 @@ if (-not $env:LICENSE_REGISTRY_URL) { $missing += "LICENSE_REGISTRY_URL" }
 if (-not $env:LICENSE_REGISTRY_TOKEN) { $missing += "LICENSE_REGISTRY_TOKEN" }
 if (-not $env:LICENSE_SIGNING_SECRET) { $missing += "LICENSE_SIGNING_SECRET" }
 
+# Notes partagées (optionnel)
+if (-not $env:NOTES_REGISTRY_URL) {
+    if (-not $Quiet) {
+        Write-Host "Notes : NOTES_REGISTRY_URL absent — bibliothèque partagée inactive au build." -ForegroundColor DarkYellow
+    }
+}
+if (-not $env:NOTES_REGISTRY_TOKEN) {
+    if (-not $Quiet) {
+        Write-Host "Notes : NOTES_REGISTRY_TOKEN absent — bibliothèque partagée inactive au build." -ForegroundColor DarkYellow
+    }
+}
+
 if ($missing.Count -gt 0) {
     Write-Host ('Licences : variables manquantes dans license-build.local.ps1 : ' + ($missing -join ', ')) -ForegroundColor Red
     return $false

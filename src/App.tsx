@@ -20,6 +20,7 @@ import { Interactions } from "@/pages/Interactions";
 import { Taches } from "@/pages/Taches";
 import { Parametres } from "@/pages/Parametres";
 import { Comptabilite } from "@/pages/Comptabilite";
+import { Notes } from "@/pages/Notes";
 import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
@@ -230,6 +231,8 @@ function AppInner() {
             onNavigate={setCurrentPage}
           />
         );
+      case "notes":
+        return <Notes />;
       case "comptabilite":
         return <Comptabilite />;
       case "parametres":

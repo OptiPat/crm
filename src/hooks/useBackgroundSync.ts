@@ -6,12 +6,16 @@ import {
 } from "@/lib/api/tauri-stellium-exceltis";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
+import { syncSharedNotes } from "@/lib/api/tauri-notes";
+import { notifyNotesChanged } from "@/lib/notes/note-events";
 import { toast } from "sonner";
 
 export const RELATION_INTERVAL_MS = 3 * 60_000;
 export const STELLIUM_INTERVAL_MS = 60 * 60_000;
+export const NOTES_INTERVAL_MS = 5 * 60_000;
 export const RELATION_COOLDOWN_MS = 90_000;
 export const STELLIUM_COOLDOWN_MS = 60 * 60_000;
+export const NOTES_COOLDOWN_MS = 4 * 60_000;
 const WAKE_DEBOUNCE_MS = 300;
 
 /**
@@ -22,6 +26,7 @@ export function useBackgroundSync(enabled = true): void {
   const runningRef = useRef(false);
   const lastRelationSyncRef = useRef(0);
   const lastStelliumScanRef = useRef(0);
+  const lastNotesSyncRef = useRef(0);
 
   const runRelationSync = useCallback(
     async (options?: { force?: boolean; reason?: string }) => {
@@ -89,8 +94,29 @@ export function useBackgroundSync(enabled = true): void {
     [enabled]
   );
 
+  const runNotesSync = useCallback(
+    async (options?: { force?: boolean }) => {
+      if (!enabled) return;
+      const now = Date.now();
+      if (!options?.force && now - lastNotesSyncRef.current < NOTES_COOLDOWN_MS) {
+        return;
+      }
+      const endActivity = beginBackgroundActivity("notes-sync");
+      try {
+        await syncSharedNotes();
+        lastNotesSyncRef.current = Date.now();
+        notifyNotesChanged();
+      } catch (error) {
+        console.warn("Sync notes partagées:", error);
+      } finally {
+        endActivity();
+      }
+    },
+    [enabled]
+  );
+
   const runSequential = useCallback(
-    async (options?: { relation?: boolean; stellium?: boolean; force?: boolean }) => {
+    async (options?: { relation?: boolean; stellium?: boolean; notes?: boolean; force?: boolean }) => {
       if (!enabled || runningRef.current) return;
       runningRef.current = true;
       try {
@@ -100,11 +126,14 @@ export function useBackgroundSync(enabled = true): void {
         if (options?.stellium) {
           await runStelliumScan({ force: options?.force });
         }
+        if (options?.notes) {
+          await runNotesSync({ force: options?.force });
+        }
       } finally {
         runningRef.current = false;
       }
     },
-    [enabled, runRelationSync, runStelliumScan]
+    [enabled, runRelationSync, runStelliumScan, runNotesSync]
   );
 
   useEffect(() => {
@@ -117,7 +146,7 @@ export function useBackgroundSync(enabled = true): void {
       if (wakeTimer != null) globalThis.clearTimeout(wakeTimer);
       wakeTimer = globalThis.setTimeout(() => {
         wakeTimer = null;
-        void runSequential({ relation: true, stellium: true });
+        void runSequential({ relation: true, stellium: true, notes: true });
       }, WAKE_DEBOUNCE_MS) as unknown as number;
     };
 
@@ -129,16 +158,21 @@ export function useBackgroundSync(enabled = true): void {
       if (!document.hidden) void runSequential({ relation: false, stellium: true });
     }, STELLIUM_INTERVAL_MS);
 
+    const notesInterval = globalThis.setInterval(() => {
+      if (!document.hidden) void runSequential({ relation: false, stellium: false, notes: true });
+    }, NOTES_INTERVAL_MS);
+
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
 
-    void runSequential({ relation: true, stellium: true, force: true });
+    void runSequential({ relation: true, stellium: true, notes: true, force: true });
 
     return () => {
       document.removeEventListener("visibilitychange", onWake);
       window.removeEventListener("focus", onWake);
       globalThis.clearInterval(relationInterval);
       globalThis.clearInterval(stelliumInterval);
+      globalThis.clearInterval(notesInterval);
       if (wakeTimer != null) globalThis.clearTimeout(wakeTimer);
     };
   }, [enabled, runSequential]);

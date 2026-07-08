@@ -9,3 +9,7 @@ $env:LICENSE_REGISTRY_TOKEN = "remplacer-par-token-aleatoire"
 
 # Secret local pour signer / valider les clés (hors repo)
 $env:LICENSE_SIGNING_SECRET = "remplacer-par-secret-long"
+
+# Notes partagées (Sheet dédié + Apps Script scripts/notes/google-sheet-notes-registry.gs)
+$env:NOTES_REGISTRY_URL = "https://script.google.com/macros/s/VOTRE_DEPLOYMENT_ID/exec"
+$env:NOTES_REGISTRY_TOKEN = "remplacer-par-token-notes-aleatoire"

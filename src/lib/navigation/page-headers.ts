@@ -52,6 +52,14 @@ const PAGE_HEADERS: Record<string, PageHeaderMeta> = {
     title: "Modèles email",
     subtitle: "Templates et déclencheurs",
   },
+  notes: {
+    title: "Notes",
+    subtitle: "Procédures personnelles et bibliothèque partagée",
+  },
+  comptabilite: {
+    title: "Comptabilité",
+    subtitle: "Dépenses, factures et bilan",
+  },
   newsletter: {
     title: "Newsletter",
     subtitle: "Campagnes et abonnés",

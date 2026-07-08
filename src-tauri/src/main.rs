@@ -15,6 +15,7 @@ mod email;
 mod export_archive;
 mod licensing;
 mod local_api;
+mod notes;
 mod newsletter;
 mod scpi_bulletin;
 mod system_commands;
@@ -39,6 +40,12 @@ use birthday_notifications::{
 use licensing::{
     activate_license_cmd, get_license_status_cmd, needs_license_activation_cmd,
     start_license_trial_cmd,
+};
+use notes::{
+    add_shared_note_contribution_cmd, create_personal_note_cmd, create_shared_note_cmd,
+    delete_personal_note_cmd, delete_shared_note_cmd, get_all_personal_notes_cmd,
+    get_shared_notes_cmd, sync_shared_notes_cmd, update_personal_note_cmd,
+    update_shared_note_cmd,
 };
 use local_api::{
     get_local_api_settings_cmd, get_scpi_campaign_dashboard_cmd, regenerate_local_api_token_cmd,
@@ -278,6 +285,16 @@ fn main() {
             needs_license_activation_cmd,
             start_license_trial_cmd,
             activate_license_cmd,
+            get_all_personal_notes_cmd,
+            create_personal_note_cmd,
+            update_personal_note_cmd,
+            delete_personal_note_cmd,
+            get_shared_notes_cmd,
+            sync_shared_notes_cmd,
+            create_shared_note_cmd,
+            update_shared_note_cmd,
+            delete_shared_note_cmd,
+            add_shared_note_contribution_cmd,
             send_email,
             get_email_connection_status,
             get_oauth_app_settings,

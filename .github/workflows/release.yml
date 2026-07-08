@@ -69,6 +69,8 @@ jobs:
           LICENSE_REGISTRY_URL: ${{ secrets.LICENSE_REGISTRY_URL }}
           LICENSE_REGISTRY_TOKEN: ${{ secrets.LICENSE_REGISTRY_TOKEN }}
           LICENSE_SIGNING_SECRET: ${{ secrets.LICENSE_SIGNING_SECRET }}
+          NOTES_REGISTRY_URL: ${{ secrets.NOTES_REGISTRY_URL }}
+          NOTES_REGISTRY_TOKEN: ${{ secrets.NOTES_REGISTRY_TOKEN }}
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}
@@ -147,6 +149,8 @@ jobs:
           LICENSE_REGISTRY_URL: ${{ secrets.LICENSE_REGISTRY_URL }}
           LICENSE_REGISTRY_TOKEN: ${{ secrets.LICENSE_REGISTRY_TOKEN }}
           LICENSE_SIGNING_SECRET: ${{ secrets.LICENSE_SIGNING_SECRET }}
+          NOTES_REGISTRY_URL: ${{ secrets.NOTES_REGISTRY_URL }}
+          NOTES_REGISTRY_TOKEN: ${{ secrets.NOTES_REGISTRY_TOKEN }}
         with:
           projectPath: src-tauri
           tagName: ${{ github.ref_name }}

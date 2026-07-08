@@ -469,3 +469,33 @@ pub fn activate_license(
     }
     get_status(db)
 }
+
+/// État de licence minimal pour les tests SQLite en mémoire (autorise les écritures).
+#[cfg(test)]
+pub(crate) fn seed_in_memory_test_license(db: &Database) {
+    let now = now_ts();
+    let mut state = LicenseState {
+        installation_id: "00000000-0000-4000-8000-000000000001".to_string(),
+        status: LicenseStatus::Trial,
+        license_type: Some("trial".to_string()),
+        license_key_masked: None,
+        client_email: Some("test@example.com".to_string()),
+        client_name: Some("Test CRM".to_string()),
+        cabinet: None,
+        activated_at: now,
+        expires_at: None,
+        installed_at: now,
+        legacy: false,
+        registry_synced: false,
+        last_heartbeat_at: None,
+        trial_restart_count: 0,
+        state_integrity: None,
+    };
+    attach_state_integrity(&mut state);
+    bypass_authorizer(|| {
+        if let Ok(json) = serde_json::to_string(&state) {
+            let _ = db.set_setting(LICENSE_STATE_KEY, &json);
+        }
+    });
+    refresh_write_gate(db);
+}

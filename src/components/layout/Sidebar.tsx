@@ -23,6 +23,7 @@ import {
   FileSignature,
   GitBranch,
   Calculator,
+  StickyNote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,6 +103,7 @@ const standaloneItems: NavItem[] = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
   { id: "etiquettes", label: "Étiquettes", icon: Tag },
   { id: "templates-email", label: "Modèles email", icon: Mail },
+  { id: "notes", label: "Notes", icon: StickyNote },
   { id: "comptabilite", label: "Comptabilité", icon: Calculator },
   { id: "parametres", label: "Paramètres", icon: Settings },
 ];
