@@ -60,7 +60,7 @@ Fichiers : `src/lib/emails/template-email-ephemeral.ts`, `src-tauri/src/database
 ### Étape 1 — Fondations ✅
 
 - Documenter la feuille de route (`docs/EMAIL.md`).
-- Rappel UI : CRM ouvert pour envoyer (Suivi → Envois, Paramètres → Email).
+- Rappel UI : CRM ouvert pour envoyer (Suivi → Envois, Paramètres → Emails & envois → Connexion).
 - Pas de changement d’architecture d’envoi.
 
 ### Étape 2 — Templates métier ✅
@@ -108,7 +108,7 @@ L’API Gmail **n’ajoute pas** la signature configurée dans Gmail. Dans **Par
 
 Si vous voyez `&#39;` au lieu d’apostrophes : **réimportez depuis Gmail** puis **Enregistrer** le profil (ou rechargez l’app : les apostrophes sont corrigées à la lecture). Ne modifiez pas le texte après import si vous voulez garder le logo.
 
-La signature est ajoutée en fin de chaque message dans la file d’envoi (aperçu texte + envoi HTML si logo importé), y compris l’**email de test** OAuth (Paramètres → Email → Tester la connexion), si elle est configurée dans le profil.
+La signature est ajoutée en fin de chaque message dans la file d’envoi (aperçu texte + envoi HTML si logo importé), y compris l’**email de test** OAuth (Paramètres → Emails & envois → Connexion → Tester la connexion), si elle est configurée dans **Paramètres → Emails & envois → Signature**.
 
 ## Suivi après envoi (relance)
 
@@ -160,7 +160,7 @@ L’interface se rafraîchit sans action manuelle (Suivi, Envois, fiche ouverte)
 
 ### Détection automatique (Google)
 
-Nécessite **Google connecté** avec les droits Gmail (lecture) et **Google Calendar** (lecture). Si l’accès Agenda échoue : **Paramètres → Email → reconnecter Google**.
+Nécessite **Google connecté** avec les droits Gmail (lecture) et **Google Calendar** (lecture). Si l’accès Agenda échoue : **Paramètres → Emails & envois → Connexion → reconnecter Google**.
 
 | Source | Détection |
 |--------|-----------|

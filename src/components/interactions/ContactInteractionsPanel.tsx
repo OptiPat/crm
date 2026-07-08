@@ -272,7 +272,7 @@ export function ContactInteractionsPanel({
         return;
       }
       if (!mailConnected) {
-        toast.error("Connectez Google ou Microsoft dans Paramètres → Email.");
+        toast.error("Connectez Google ou Microsoft dans Paramètres → Emails & envois → Connexion.");
         return;
       }
       syncLockRef.current = true;
@@ -492,7 +492,7 @@ export function ContactInteractionsPanel({
               !contactEmail?.trim()
                 ? "Email du contact requis"
                 : !mailConnected
-                  ? "Connectez Google ou Microsoft dans Paramètres → Email"
+                  ? "Connectez Google ou Microsoft dans Paramètres → Emails & envois → Connexion"
                   : "Import complet (5 ans), reprise automatique jusqu’à la fin"
             }
             onClick={() => void runMailSync(true)}

@@ -29,7 +29,7 @@ export async function sendTemplateTestToSelf(params: {
   const status = await getEmailConnectionStatus();
   if (!status.connected || !status.email?.trim()) {
     throw new Error(
-      "Connectez Gmail ou Microsoft dans Paramètres → Email pour envoyer un test."
+      "Connectez Gmail ou Microsoft dans Paramètres → Emails & envois → Connexion pour envoyer un test."
     );
   }
 

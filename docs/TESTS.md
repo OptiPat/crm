@@ -49,4 +49,4 @@ Suite complète recommandée pour les agents : `npm run verify` (voir `AGENTS.md
 
 Pas de tests E2E (Tauri / navigateur).
 
-Le flux **OAuth email** (connexion navigateur, refresh token, Gmail API / Graph) n’est pas couvert par des tests automatisés — validation manuelle via Paramètres → Email et `test_email_connection`.
+Le flux **OAuth email** (connexion navigateur, refresh token, Gmail API / Graph) n’est pas couvert par des tests automatisés — validation manuelle via Paramètres → Emails & envois → Connexion et `test_email_connection`.

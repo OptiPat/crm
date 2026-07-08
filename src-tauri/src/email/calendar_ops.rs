@@ -67,7 +67,7 @@ pub fn create_google_calendar_rdv(
     end_at: i64,
 ) -> Result<CalendarEventEntry, String> {
     let conn = resolve_google_calendar_connection(app)?
-        .ok_or("Connectez Google Agenda dans Paramètres → Email pour planifier un RDV.")?;
+        .ok_or("Connectez Google Agenda dans Paramètres → Emails & envois → Connexion pour planifier un RDV.")?;
 
     let (prenom, nom, email) = db
         .get_contact_calendar_info(contact_id)

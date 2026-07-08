@@ -416,7 +416,7 @@ export function newsletterChecklistOk(input: {
 }): { ok: boolean; messages: string[] } {
   const messages: string[] = [];
   if (!input.hasContent) messages.push("Générez ou saisissez le contenu");
-  if (!input.emailConnected) messages.push("Connectez Gmail (Paramètres → Email)");
+  if (!input.emailConnected) messages.push("Connectez Gmail (Paramètres → Emails & envois → Connexion)");
   if (!input.preview || input.preview.eligible === 0) {
     messages.push("Aucun destinataire sélectionné");
   }

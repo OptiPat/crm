@@ -34,7 +34,7 @@ type TemplateEmailPreviewPanelProps = {
   /** Aperçu forcé tu/vous (sans contact réel). */
   previewRegistre?: ContactRegistre;
   label?: string;
-  /** Bouton « M’envoyer un test » (compte OAuth Paramètres → Email). */
+  /** Bouton « M’envoyer un test » (compte OAuth Paramètres → Emails & envois → Connexion). */
   allowSendTest?: boolean;
 };
 

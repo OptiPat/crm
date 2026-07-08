@@ -60,7 +60,7 @@ struct EventTime {
 fn google_token(app: &AppHandle) -> Result<String, String> {
     resolve_google_calendar_connection(app)?
         .map(|c| c.access_token)
-        .ok_or_else(|| "Connectez Google Agenda dans Paramètres → Email.".into())
+        .ok_or_else(|| "Connectez Google Agenda dans Paramètres → Emails & envois → Connexion.".into())
 }
 
 fn strip_html_tags(s: &str) -> String {

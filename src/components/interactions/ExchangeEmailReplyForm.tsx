@@ -87,7 +87,7 @@ export function ExchangeEmailReplyForm({
     } catch (error) {
       const hint = error instanceof Error ? error.message : String(error);
       toast.error(
-        hint.includes("connexion") || hint.includes("Google") ? hint : `${hint} (Paramètres → Email)`
+        hint.includes("connexion") || hint.includes("Google") ? hint : `${hint} (Paramètres → Emails & envois → Connexion)`
       );
     } finally {
       setSending(false);

@@ -662,7 +662,7 @@ pub fn sync_email_campaign_responses(
     let store = EmailOAuthStore::load(app)?;
     let Some(mut mail_conn) = store.connection.clone() else {
         return Err(
-            "Connectez votre boîte dans Paramètres → Email pour la détection automatique.".into(),
+            "Connectez votre boîte dans Paramètres → Emails & envois → Connexion pour la détection automatique.".into(),
         );
     };
     refresh_connection_if_needed(app, &mut mail_conn)?;

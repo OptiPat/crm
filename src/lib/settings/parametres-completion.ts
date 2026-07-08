@@ -5,7 +5,11 @@ import type { AgendaLink } from "@/lib/emails/agenda-links";
 export type SettingsSectionId =
   | "accueil"
   | "profil"
-  | "email"
+  | "email-connexion"
+  | "email-signature"
+  | "email-google-contacts"
+  | "email-historique"
+  | "email-stellium"
   | "newsletter"
   | "suivi"
   | "comptabilite"
@@ -20,6 +24,8 @@ export type SetupCheckItem = {
   hint: string;
   done: boolean;
   section: SettingsSectionId;
+  /** Section retirée de Paramètres — ouvre une page dédiée. */
+  externalPage?: "newsletter" | "comptabilite";
 };
 
 function hasText(value: string | undefined | null): boolean {
@@ -69,7 +75,7 @@ export function getSetupChecklist(
       label: "Boîte mail connectée",
       hint: "Google ou Microsoft (OAuth)",
       done: emailConnected,
-      section: "email",
+      section: "email-connexion",
     },
     {
       id: "signature",
@@ -77,7 +83,7 @@ export function getSetupChecklist(
       hint: "Texte ou import Gmail",
       done:
         hasText(config.email_signature) || hasText(config.email_signature_html),
-      section: "email",
+      section: "email-signature",
     },
     {
       id: "compta",
@@ -87,6 +93,7 @@ export function getSetupChecklist(
         hasText(comptaConfig?.adresseDepart) &&
         hasText(comptaConfig?.driveRootFolderId),
       section: "comptabilite",
+      externalPage: "comptabilite",
     },
   ];
 }

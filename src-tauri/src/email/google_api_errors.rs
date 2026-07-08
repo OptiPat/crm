@@ -16,13 +16,13 @@ pub fn calendar_access_error(status: reqwest::StatusCode, body: &str) -> String 
         || lower.contains("insufficientpermissions")
         || status == reqwest::StatusCode::FORBIDDEN
     {
-        return "Accès Agenda refusé pour ce token OAuth. Paramètres → Email → « Reconnecter Google » \
+        return "Accès Agenda refusé pour ce token OAuth. Paramètres → Emails & envois → Connexion → « Reconnecter Google » \
                 (cochez bien Google Agenda), ou supprimez l'accès CRM dans \
                 https://myaccount.google.com/permissions puis reconnectez."
             .into();
     }
     if status == reqwest::StatusCode::UNAUTHORIZED {
-        return "Session Google expirée. Paramètres → Email → Reconnecter Google.".into();
+        return "Session Google expirée. Paramètres → Emails & envois → Connexion → Reconnecter Google.".into();
     }
     let snippet: String = body.chars().take(280).collect();
     format!(
@@ -43,7 +43,7 @@ pub fn missing_calendar_scopes(scopes: &[&str]) -> Option<String> {
         return None;
     }
     Some(
-        "Le token OAuth actuel n'inclut pas Google Agenda. Paramètres → Email → Reconnecter Google."
+        "Le token OAuth actuel n'inclut pas Google Agenda. Paramètres → Emails & envois → Connexion → Reconnecter Google."
             .into(),
     )
 }

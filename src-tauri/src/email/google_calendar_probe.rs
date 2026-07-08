@@ -24,7 +24,7 @@ fn fetch_token_scopes(client: &reqwest::blocking::Client, access_token: &str) ->
 /// GET minimal sur l'agenda principal — échoue avec un message actionnable si l'API ou les scopes manquent.
 pub fn probe_google_calendar_access(app: &AppHandle) -> Result<(), String> {
     let conn = resolve_google_calendar_connection(app)?
-        .ok_or("Connectez Google Agenda dans Paramètres → Email.")?;
+        .ok_or("Connectez Google Agenda dans Paramètres → Emails & envois → Connexion.")?;
 
     let client = reqwest::blocking::Client::new();
     let scopes = fetch_token_scopes(&client, &conn.access_token)?;

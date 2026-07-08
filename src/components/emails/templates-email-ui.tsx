@@ -29,9 +29,9 @@ import type {
   TemplatesEmailActiveFilterId,
 } from "@/lib/emails/templates-email-active-filters";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
-import { EnvoisEmailConnectionBanner } from "@/components/etiquettes/etiquette-envois-ui";
 import type { EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
+import { requestOpenParametres } from "@/lib/navigation/app-navigation";
 import {
   ArrowRight,
   AlertTriangle,
@@ -46,6 +46,119 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
+
+/** Statut boîte mail discret (barre d’actions Modèles email). */
+export function TemplatesEmailMailboxStatus({
+  emailStatus,
+  onNavigate,
+  currentPage,
+}: {
+  emailStatus: EmailConnectionStatus | null;
+  onNavigate?: (page: string) => void;
+  currentPage?: string;
+}) {
+  const connected = Boolean(emailStatus?.connected && emailStatus.method === "oauth");
+  const providerLabel =
+    emailStatus?.provider === "google"
+      ? "Google"
+      : emailStatus?.provider === "microsoft"
+        ? "Microsoft"
+        : null;
+
+  if (!connected) {
+    if (!onNavigate) {
+      return (
+        <span className="inline-flex items-center gap-1 text-xs text-amber-800">
+          <AlertTriangle className="h-3 w-3 shrink-0" />
+          Boîte non connectée
+        </span>
+      );
+    }
+    return (
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 text-xs text-amber-800 hover:text-amber-950 hover:underline"
+        onClick={() =>
+          requestOpenParametres("email-connexion", {
+            currentPage,
+            setCurrentPage: onNavigate,
+          })
+        }
+      >
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        Boîte non connectée
+      </button>
+    );
+  }
+
+  return (
+    <span
+      className="inline-flex max-w-[min(100%,14rem)] items-center gap-1.5 text-xs text-muted-foreground"
+      title={emailStatus?.email ?? undefined}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+      <span className="truncate">
+        {providerLabel ?? "OAuth"}
+        {emailStatus?.email ? ` · ${emailStatus.email}` : ""}
+      </span>
+    </span>
+  );
+}
+
+export function TemplatesEmailDeliveryBanner({
+  emailStatus,
+  onNavigate,
+  currentPage,
+}: {
+  emailStatus: EmailConnectionStatus | null;
+  onNavigate?: (page: string) => void;
+  currentPage?: string;
+}) {
+  const connected = Boolean(emailStatus?.connected && emailStatus.method === "oauth");
+
+  if (connected || !onNavigate) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 py-2">
+      <p className="text-xs text-amber-900 flex items-center gap-1.5 min-w-0 flex-1">
+        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+        <span>
+          Connectez votre boîte dans <strong>{PARAMETRES_PATH.emailConnexion}</strong> pour envoyer
+          depuis Suivi → Envois.
+        </span>
+      </p>
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5 h-8"
+          onClick={() =>
+            requestOpenParametres("email-connexion", {
+              currentPage,
+              setCurrentPage: onNavigate,
+            })
+          }
+        >
+          Configurer OAuth
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="gap-1.5 h-8 text-muted-foreground"
+          onClick={() =>
+            navigateToSuivi(onNavigate, "envois", "ready", undefined, "templates-email")
+          }
+        >
+          Suivi → Envois
+          <ArrowRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export function TemplatesEmailHelp() {
   return (
@@ -75,51 +188,6 @@ export function TemplatesEmailHelp() {
         </p>
       </div>
     </details>
-  );
-}
-
-export function TemplatesEmailDeliveryBanner({
-  emailStatus,
-  onNavigate,
-}: {
-  emailStatus: EmailConnectionStatus | null;
-  onNavigate?: (page: string) => void;
-}) {
-  const connected = Boolean(emailStatus?.connected && emailStatus.method === "oauth");
-
-  return (
-    <div className="space-y-2">
-      <EnvoisEmailConnectionBanner
-        connected={connected}
-        provider={emailStatus?.provider}
-        email={emailStatus?.email}
-      />
-      <div className="flex flex-wrap items-center gap-2">
-        {onNavigate && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => navigateToSuivi(onNavigate, "envois", "ready", undefined, "templates-email")}
-          >
-            Suivi → Envois
-            <ArrowRight className="h-3.5 w-3.5" />
-          </Button>
-        )}
-        {!connected && onNavigate && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-muted-foreground"
-            onClick={() => onNavigate("parametres")}
-          >
-            Paramètres → Email
-          </Button>
-        )}
-      </div>
-    </div>
   );
 }
 

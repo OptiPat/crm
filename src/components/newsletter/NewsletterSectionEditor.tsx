@@ -52,7 +52,7 @@ export function NewsletterSectionEditor({
       <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2 bg-muted/20">
         <strong>Branding de ce numéro</strong> — mise en page, images, blocs enrichis et CTA
         optionnel. Barre de mise en forme (gras, italique, souligné…) sur chaque zone de texte,
-        comme dans Templates email. Couleurs et typographie globales : Paramètres → Newsletter.
+        comme dans Templates email. Couleurs et typographie globales : Newsletter → Paramètres.
         Variables :{" "}
         {NEWSLETTER_VARIABLE_HINTS.join(", ")}
       </p>
@@ -216,7 +216,7 @@ export function NewsletterSectionEditor({
             </div>
             <p className="text-xs text-muted-foreground">
               Laissez libellé et URL vides pour le comportement automatique (bouton agenda si le
-              texte parle de rendez-vous). Lien RDV par défaut : Paramètres → Newsletter.
+              texte parle de rendez-vous). Lien RDV par défaut : Paramètres → Agenda & RDV.
             </p>
           </>
         )}

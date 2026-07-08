@@ -83,7 +83,7 @@ pub fn refresh_oauth_connection_if_needed(
     let refresh = conn
         .refresh_token
         .clone()
-        .ok_or("Session expirée. Reconnectez votre compte dans Paramètres → Email.")?;
+        .ok_or("Session expirée. Reconnectez votre compte dans Paramètres → Emails & envois → Connexion.")?;
 
     let store = EmailOAuthStore::load(app)?;
     let client = build_basic_client(&conn.provider, &store)?;
@@ -310,7 +310,7 @@ pub fn send_with_oauth(
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Aucun compte connecté (Google/Microsoft). Paramètres → Email : connectez votre boîte.")?;
+        .ok_or("Aucun compte connecté (Google/Microsoft). Paramètres → Emails & envois → Connexion : connectez votre boîte.")?;
 
     refresh_connection_if_needed(app, &mut conn)?;
 
@@ -353,7 +353,7 @@ pub fn fetch_gmail_signature(app: &AppHandle) -> Result<ImportedGmailSignature, 
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Connectez Google dans Paramètres → Email.")?;
+        .ok_or("Connectez Google dans Paramètres → Emails & envois → Connexion.")?;
     if conn.provider != "google" {
         return Err("L'import de signature fonctionne uniquement avec un compte Google.".into());
     }
@@ -369,7 +369,7 @@ pub fn fetch_gmail_signature(app: &AppHandle) -> Result<ImportedGmailSignature, 
         let err = res.text().unwrap_or_default();
         if err.contains("insufficient") || err.contains("403") {
             return Err(
-                "Accès refusé : reconnectez Google (Paramètres → Email) pour autoriser la lecture de la signature."
+                "Accès refusé : reconnectez Google (Paramètres → Emails & envois → Signature) pour autoriser la lecture de la signature."
                     .into(),
             );
         }

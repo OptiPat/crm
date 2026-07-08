@@ -201,7 +201,7 @@ pub fn generate_newsletter_content(
                 "Clé API illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
                     .to_string()
             } else {
-                "Configurez votre clé API Mistral dans Paramètres → Newsletter.".to_string()
+                "Configurez votre clé API Mistral dans Newsletter → Paramètres.".to_string()
             }
         })?;
 
@@ -247,7 +247,7 @@ pub fn refine_newsletter_content(
                 "Clé API illisible — fermez et rouvrez le CRM avec votre mot de passe maître."
                     .to_string()
             } else {
-                "Configurez votre clé API Mistral dans Paramètres → Newsletter.".to_string()
+                "Configurez votre clé API Mistral dans Newsletter → Paramètres.".to_string()
             }
         })?;
 

@@ -31,7 +31,7 @@ export function ScpiTrimestreGuideDialog({
           </li>
           <li>
             <strong className="text-foreground font-normal">OCR + résumé</strong> — Mistral lit
-            chaque PDF et produit un digest client. Clé API : Paramètres → Newsletter.
+            chaque PDF et produit un digest client. Clé API : Newsletter → Paramètres.
           </li>
           <li>
             <strong className="text-foreground font-normal">Prepare CRM</strong> — remplit Suivi →

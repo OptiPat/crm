@@ -16,6 +16,7 @@ import { EmailEnvoiWeekdayPicker } from "@/components/emails/EmailEnvoiWeekdayPi
 import { EtiquetteSouscriptionGuide } from "@/components/etiquettes/EtiquetteSouscriptionGuide";
 import type { EmailEnvoiJourCode } from "@/lib/emails/email-envoi-schedule";
 import type { TemplateEmail } from "@/lib/api/tauri-templates-email";
+import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
   getTemplateCategoryMeta,
@@ -266,7 +267,7 @@ export function EtiquetteEmailCampaignFields({
                 </p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Posez l&apos;étiquette sur les fiches contact, activez la campagne ci-dessus, puis
-                  attendez le scan Stellium (Paramètres → Email ou sync en arrière-plan).
+                  attendez le scan Stellium ({PARAMETRES_PATH.emailStellium} ou sync en arrière-plan).
                 </p>
               </div>
             </div>

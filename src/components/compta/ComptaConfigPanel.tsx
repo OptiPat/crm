@@ -140,7 +140,7 @@ export function ComptaConfigPanel({
                 <span className="font-medium">{comptaDriveFolderName(year, month, "Dépenses")}</span>
               </p>
               <p className="text-xs text-muted-foreground">
-                Sync Drive : reconnectez Google dans Paramètres → Email si l&apos;accès Drive est
+                Sync Drive : reconnectez Google dans Paramètres → Emails & envois → Connexion si l&apos;accès Drive est
                 refusé (nouveau scope requis).
               </p>
             </div>

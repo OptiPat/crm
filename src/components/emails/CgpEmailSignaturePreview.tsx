@@ -1,5 +1,6 @@
 import { FileSignature } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import { PARAMETRES_PATH } from "@/lib/settings/parametres-labels";
 
 type CgpEmailSignaturePreviewProps = {
   html?: string | null;
@@ -31,7 +32,7 @@ export function CgpEmailSignaturePreview({ html, plain }: CgpEmailSignaturePrevi
         )}
       </div>
       <p className="text-[11px] text-muted-foreground">
-        Identique à Paramètres → Email. Seul le message ci-dessus est modifiable.
+        Identique à {PARAMETRES_PATH.emailSignature}. Seul le message ci-dessus est modifiable.
       </p>
     </div>
   );

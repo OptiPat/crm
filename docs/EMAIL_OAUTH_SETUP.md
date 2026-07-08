@@ -1,6 +1,6 @@
 # Configuration OAuth Gmail / Microsoft
 
-Pour connecter **Google** ou **Microsoft** sans mot de passe d’application, enregistrez une application OAuth puis collez les identifiants client dans **Paramètres → Email**.
+Pour connecter **Google** ou **Microsoft** sans mot de passe d’application, enregistrez une application OAuth puis collez les identifiants client dans **Paramètres → Emails & envois → Connexion**.
 
 Redirect URI à déclarer **exactement** :
 
@@ -72,6 +72,6 @@ Recommandations : poste verrouillé, sauvegardes du dossier App Data protégées
 | `Missing required parameter: scope` (400) | Bug Windows corrigé (URL OAuth tronquée) — mettre à jour le CRM puis réessayer **Connecter Google** |
 | `redirect_uri_mismatch` à l'échange du code | Google Cloud → **Clients** → votre client → URI de redirection : `http://127.0.0.1:3847/callback` (exact) |
 | `invalid_grant` à l'échange | Ne pas recharger la page de succès ; une seule tentative — recliquer **Connecter Google** après 5 s |
-| `client_secret is missing` | Collez le **code secret** Google (Clients → CRM Bureau) dans Paramètres → Email, puis **Enregistrer** |
+| `client_secret is missing` | Collez le **code secret** Google (Clients → CRM Bureau) dans Paramètres → Emails & envois → Connexion, puis **Enregistrer** |
 
 Seule la connexion OAuth (Google / Microsoft) est supportée dans le CRM.

@@ -238,7 +238,7 @@ export function ScpiCampaignChecklist({
                       .
                     </>
                   ) : (
-                    " — clé Mistral requise (Paramètres → Newsletter)."
+                    " — clé Mistral requise (Newsletter → Paramètres)."
                   )}
                 </span>
               </li>

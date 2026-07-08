@@ -177,7 +177,7 @@ export interface NewsletterSettings {
   bodyFontSize?: NewsletterBodyFontSize | null;
   lineHeight?: NewsletterLineHeight | null;
   sectionSpacing?: NewsletterSectionSpacing | null;
-  /** Identifiant du lien agenda (Paramètres → Suivi) pour le bouton RDV newsletter. */
+  /** Identifiant du lien agenda (Paramètres → Agenda & RDV) pour le bouton RDV newsletter. */
   agendaLinkId?: string | null;
   defaultAudienceFilters: NewsletterAudienceFilters;
 }

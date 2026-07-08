@@ -83,7 +83,7 @@ export function EnvoisQueueHelp() {
         <p>
           <strong className="text-foreground">2. Prêts à envoyer</strong> — Le CRM prépare les
           emails ; vous confirmez un par un ou en <strong>sélection groupée</strong> (cases à
-          cocher). CRM ouvert, boîte connectée dans Paramètres → Email. ✕ sur Prêts ou sur
+          cocher). CRM ouvert, boîte connectée dans Paramètres → Emails & envois → Connexion. ✕ sur Prêts ou sur
           À compléter → onglet <strong>Retirés</strong> (<strong>Remettre en file</strong> pour
           annuler) ; ✕ sur Retirés → ne plus proposer (hors file, étiquette conservée).
         </p>
@@ -189,7 +189,7 @@ export function EnvoisEmailConnectionBanner({
       <p className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-start gap-2">
         <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
         <span>
-          Connectez votre boîte dans <strong>Paramètres → Email</strong> pour envoyer depuis cette
+          Connectez votre boîte dans <strong>Paramètres → Emails & envois → Connexion</strong> pour envoyer depuis cette
           file.
         </span>
       </p>

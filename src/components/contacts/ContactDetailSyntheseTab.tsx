@@ -247,7 +247,7 @@ export function ContactDetailSyntheseTab({
     try {
       const status = await getEmailConnectionStatus();
       if (status.provider !== "google" || !status.connected) {
-        toast.error("Connectez Google dans Paramètres → Email.");
+        toast.error("Connectez Google dans Paramètres → Emails & envois → Connexion.");
         return;
       }
       const result = await syncContactGoogle(contact.id);

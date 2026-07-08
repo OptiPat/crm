@@ -14,7 +14,7 @@ Checklist à chaque trimestre (T1, T2, T3, T4). Durée typique : sélection PDF 
 - **Résumé Mistral** (markdown court par SCPI)
 - **Prepare CRM** : matching `nom_produit` ↔ investissements clients → file **Suivi → Envois → Prêts à envoyer**
 
-**Prérequis** : clé API Mistral dans **Paramètres → Newsletter** (même clé que les newsletters).
+**Prérequis** : clé API Mistral dans **Newsletter → Paramètres** (même clé que les newsletters).
 
 Le CRM aligne chaque bulletin sur le **nom SCPI le plus long** présent en portefeuille (ex. `Transitions_Europe_T1.pdf` → `Transitions Europe`, pas `Europe`).
 

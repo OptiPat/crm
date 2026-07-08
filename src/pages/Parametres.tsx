@@ -5,18 +5,20 @@ import {
   SettingsPageHeader,
   SettingsLoading,
   SettingsSaveBar,
-  type SettingsNavItem,
 } from "@/components/settings/parametres-ui";
 import { ParametresOverview } from "@/components/settings/ParametresOverview";
 import { ParametresProfileSection } from "@/components/settings/ParametresProfileSection";
-import { ParametresEmailSection } from "@/components/settings/ParametresEmailSection";
+import { ParametresEmailConnexionSection } from "@/components/settings/ParametresEmailConnexionSection";
+import { ParametresEmailSignatureSection } from "@/components/settings/ParametresEmailSignatureSection";
+import { ParametresEmailGoogleContactsSection } from "@/components/settings/ParametresEmailGoogleContactsSection";
+import { ParametresEmailHistoriqueSection } from "@/components/settings/ParametresEmailHistoriqueSection";
+import { StelliumExceltisSettingsPanel } from "@/components/settings/StelliumExceltisSettingsPanel";
 import { ParametresSuiviSection } from "@/components/settings/ParametresSuiviSection";
 import { ParametresDatabaseSection } from "@/components/settings/ParametresDatabaseSection";
 import { ParametresApplicationSection } from "@/components/settings/ParametresApplicationSection";
 import { ParametresIntegrationsSection } from "@/components/settings/ParametresIntegrationsSection";
-import { ParametresComptaSection } from "@/components/settings/ParametresComptaSection";
-import { ParametresNewsletterSection } from "@/components/settings/ParametresNewsletterSection";
 import { ParametresCustomFieldsSection } from "@/components/settings/ParametresCustomFieldsSection";
+import { ParametresSearchBar } from "@/components/settings/ParametresSearchBar";
 import { normalizeAgendaLinks, type AgendaLink } from "@/lib/emails/agenda-links";
 import { getCgpConfig, saveCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { notifyAppBrandingChanged } from "@/lib/api/tauri-app-branding";
@@ -24,24 +26,21 @@ import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { getAppInfo, listDbBackups, type DbBackupEntry } from "@/lib/api/tauri-system";
 import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
 import {
+  CRM_PARAMETRES_EMAIL_TAB_KEY,
   CRM_PARAMETRES_SCROLL_KEY,
   CRM_PARAMETRES_SECTION_KEY,
+  requestOpenComptabilite,
+  requestOpenNewsletterSettings,
 } from "@/lib/navigation/app-navigation";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { useAppUpdate } from "@/components/system/app-update-context";
 import { toast } from "sonner";
 import {
-  LayoutDashboard,
-  User,
-  Mail,
-  Newspaper,
-  CalendarClock,
-  Database,
-  Sparkles,
-  SlidersHorizontal,
-  Workflow,
-  Calculator,
-} from "lucide-react";
+  isParametresExternalSection,
+  SETTINGS_NAV_GROUPS,
+} from "@/lib/settings/parametres-nav";
+import type { ParametresSearchItem } from "@/lib/settings/parametres-search";
+import { resolveSettingsSection, isEmailSettingsSection } from "@/lib/settings/parametres-section-resolve";
 
 const EMPTY_CGP_CONFIG: CgpConfig = {
   nom: "",
@@ -67,70 +66,19 @@ const EMPTY_CGP_CONFIG: CgpConfig = {
   cif_pied_de_page: "",
 };
 
-const SETTINGS_NAV: SettingsNavItem[] = [
-  {
-    id: "accueil",
-    label: "Vue d'ensemble",
-    description: "État du compte et checklist",
-    icon: LayoutDashboard,
-  },
-  {
-    id: "profil",
-    label: "Profil",
-    description: "Identité et coordonnées",
-    icon: User,
-  },
-  {
-    id: "email",
-    label: "Email",
-    description: "Connexion et signature",
-    icon: Mail,
-  },
-  {
-    id: "newsletter",
-    label: "Newsletter",
-    description: "Mistral et style de rédaction",
-    icon: Newspaper,
-  },
-  {
-    id: "suivi",
-    label: "Suivi",
-    description: "Liens Google Agenda",
-    icon: CalendarClock,
-  },
-  {
-    id: "comptabilite",
-    label: "Comptabilité",
-    description: "Adresse km et sync Drive",
-    icon: Calculator,
-  },
-  {
-    id: "integrations",
-    label: "API locale",
-    description: "API locale anniversaires",
-    icon: Workflow,
-  },
-  {
-    id: "champs",
-    label: "Champs personnalisés",
-    description: "Champs sur mesure des fiches contact",
-    icon: SlidersHorizontal,
-  },
-  {
-    id: "donnees",
-    label: "Données",
-    description: "Base locale et maintenance",
-    icon: Database,
-  },
-  {
-    id: "application",
-    label: "Application",
-    description: "Mises à jour et sécurité",
-    icon: Sparkles,
-  },
-];
+const SECTIONS_WITH_SAVE: SettingsSectionId[] = ["profil", "email-signature", "suivi"];
 
-const SECTIONS_WITH_SAVE: SettingsSectionId[] = ["profil", "email", "suivi"];
+const SECTIONS_WITHOUT_CONFIG_LOAD: SettingsSectionId[] = [
+  "accueil",
+  "donnees",
+  "champs",
+  "email-connexion",
+  "email-google-contacts",
+  "email-historique",
+  "email-stellium",
+  "integrations",
+  "application",
+];
 
 function normalizeCgpConfig(config: CgpConfig): CgpConfig {
   return {
@@ -162,7 +110,12 @@ function configSnapshotKey(config: CgpConfig): string {
   return JSON.stringify(normalizeCgpConfig(config));
 }
 
-export function Parametres() {
+type ParametresProps = {
+  currentPage?: string;
+  onNavigate?: (page: string) => void;
+};
+
+export function Parametres({ currentPage, onNavigate }: ParametresProps) {
   const { currentVersion, pendingUpdate } = useAppUpdate();
   const [cgpConfig, setCgpConfig] = useState<CgpConfig>(EMPTY_CGP_CONFIG);
   const [savedSnapshot, setSavedSnapshot] = useState("");
@@ -174,27 +127,60 @@ export function Parametres() {
   const [activeSection, setActiveSection] = useState<SettingsSectionId>("accueil");
   const [scrollTargetId, setScrollTargetId] = useState<string | null>(null);
 
+  const isDirty = useMemo(() => {
+    if (!savedSnapshot) return false;
+    return configSnapshotKey(cgpConfig) !== savedSnapshot;
+  }, [cgpConfig, savedSnapshot]);
+
+  const showSaveBar =
+    isDirty && SECTIONS_WITH_SAVE.includes(activeSection) && !loadingConfig;
+
+  const confirmDiscardDirty = useCallback(() => {
+    if (!isDirty || !SECTIONS_WITH_SAVE.includes(activeSection)) return true;
+    return window.confirm(
+      "Modifications non enregistrées. Continuer sans enregistrer ?"
+    );
+  }, [isDirty, activeSection]);
+
+  const redirectExternalSection = useCallback(
+    (section: SettingsSectionId) => {
+      if (!isParametresExternalSection(section)) return false;
+      if (!confirmDiscardDirty()) return true;
+      if (section === "newsletter") {
+        requestOpenNewsletterSettings({ currentPage, setCurrentPage: onNavigate });
+      } else {
+        requestOpenComptabilite({ currentPage, setCurrentPage: onNavigate });
+      }
+      return true;
+    },
+    [confirmDiscardDirty, currentPage, onNavigate]
+  );
+
   const applyParametresNavigation = useCallback(
-    (section: SettingsSectionId, scrollToId?: string) => {
+    (rawSection: string, scrollToId?: string, emailTab?: string) => {
+      const section = resolveSettingsSection(rawSection, emailTab);
+      if (redirectExternalSection(section)) return;
       setActiveSection(section);
       setScrollTargetId(scrollToId ?? null);
     },
-    []
+    [redirectExternalSection]
   );
 
   useEffect(() => {
-    const section = sessionStorage.getItem(CRM_PARAMETRES_SECTION_KEY) as SettingsSectionId | null;
+    const section = sessionStorage.getItem(CRM_PARAMETRES_SECTION_KEY) ?? undefined;
     const scrollToId = sessionStorage.getItem(CRM_PARAMETRES_SCROLL_KEY) ?? undefined;
+    const storedEmailTab = sessionStorage.getItem(CRM_PARAMETRES_EMAIL_TAB_KEY) ?? undefined;
     sessionStorage.removeItem(CRM_PARAMETRES_SECTION_KEY);
     sessionStorage.removeItem(CRM_PARAMETRES_SCROLL_KEY);
+    sessionStorage.removeItem(CRM_PARAMETRES_EMAIL_TAB_KEY);
     if (section) {
-      applyParametresNavigation(section, scrollToId);
+      applyParametresNavigation(section, scrollToId, storedEmailTab);
     }
   }, [applyParametresNavigation]);
 
   useAppNavigationListener((detail) => {
     if (detail.type === "parametres") {
-      applyParametresNavigation(detail.section, detail.scrollToId);
+      applyParametresNavigation(detail.section, detail.scrollToId, detail.emailTab);
     }
   });
 
@@ -206,14 +192,6 @@ export function Parametres() {
     }, 150);
     return () => window.clearTimeout(timer);
   }, [scrollTargetId, activeSection, loadingConfig]);
-
-  const isDirty = useMemo(() => {
-    if (!savedSnapshot) return false;
-    return configSnapshotKey(cgpConfig) !== savedSnapshot;
-  }, [cgpConfig, savedSnapshot]);
-
-  const showSaveBar =
-    isDirty && SECTIONS_WITH_SAVE.includes(activeSection) && !loadingConfig;
 
   useEffect(() => {
     const load = async () => {
@@ -251,7 +229,7 @@ export function Parametres() {
     if (
       activeSection !== "accueil" &&
       activeSection !== "profil" &&
-      activeSection !== "email"
+      !isEmailSettingsSection(activeSection)
     ) {
       return;
     }
@@ -296,13 +274,42 @@ export function Parametres() {
     toast.message("Modifications annulées");
   };
 
+  const handleNavigateToSection = useCallback(
+    (section: SettingsSectionId, options?: { scrollToId?: string }) => {
+      if (redirectExternalSection(section)) return;
+      if (!confirmDiscardDirty()) return;
+      setActiveSection(section);
+      if (options?.scrollToId) setScrollTargetId(options.scrollToId);
+    },
+    [redirectExternalSection, confirmDiscardDirty]
+  );
+
+  const handleSectionChange = useCallback(
+    (section: SettingsSectionId) => {
+      handleNavigateToSection(section);
+    },
+    [handleNavigateToSection]
+  );
+
+  const handleSearchSelect = useCallback(
+    (item: ParametresSearchItem) => {
+      if (item.externalPage === "newsletter") {
+        if (!confirmDiscardDirty()) return;
+        requestOpenNewsletterSettings({ currentPage, setCurrentPage: onNavigate });
+        return;
+      }
+      if (item.externalPage === "comptabilite") {
+        if (!confirmDiscardDirty()) return;
+        requestOpenComptabilite({ currentPage, setCurrentPage: onNavigate });
+        return;
+      }
+      handleNavigateToSection(item.section, { scrollToId: item.scrollToId });
+    },
+    [confirmDiscardDirty, currentPage, onNavigate, handleNavigateToSection]
+  );
+
   const renderSection = () => {
-    if (
-      loadingConfig &&
-      activeSection !== "accueil" &&
-      activeSection !== "donnees" &&
-      activeSection !== "champs"
-    ) {
+    if (loadingConfig && !SECTIONS_WITHOUT_CONFIG_LOAD.includes(activeSection)) {
       return <SettingsLoading />;
     }
 
@@ -312,7 +319,15 @@ export function Parametres() {
           <ParametresOverview
             cgpConfig={cgpConfig}
             backups={backups}
-            onNavigate={setActiveSection}
+            onNavigate={handleNavigateToSection}
+            onNavigateExternal={(page) => {
+              if (!confirmDiscardDirty()) return;
+              if (page === "newsletter") {
+                requestOpenNewsletterSettings({ currentPage, setCurrentPage: onNavigate });
+              } else {
+                requestOpenComptabilite({ currentPage, setCurrentPage: onNavigate });
+              }
+            }}
           />
         );
       case "profil":
@@ -323,20 +338,27 @@ export function Parametres() {
             emailConnected={emailConnected}
           />
         );
-      case "email":
+      case "email-connexion":
+        return <ParametresEmailConnexionSection />;
+      case "email-signature":
         return (
-          <ParametresEmailSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
+          <ParametresEmailSignatureSection
+            cgpConfig={cgpConfig}
+            onConfigChange={patchCgpConfig}
+          />
         );
-      case "newsletter":
-        return <ParametresNewsletterSection />;
+      case "email-google-contacts":
+        return <ParametresEmailGoogleContactsSection />;
+      case "email-historique":
+        return <ParametresEmailHistoriqueSection />;
+      case "email-stellium":
+        return <StelliumExceltisSettingsPanel />;
       case "champs":
         return <ParametresCustomFieldsSection />;
       case "suivi":
         return (
           <ParametresSuiviSection cgpConfig={cgpConfig} onConfigChange={patchCgpConfig} />
         );
-      case "comptabilite":
-        return <ParametresComptaSection />;
       case "integrations":
         return <ParametresIntegrationsSection />;
       case "donnees":
@@ -359,7 +381,7 @@ export function Parametres() {
       header={
         <SettingsPageHeader
           title="Paramètres"
-          description="Configurez votre espace conseiller : profil, envois email, suivi client et données locales."
+          description="Configurez votre espace conseiller : profil, envois email, automatisations et données locales."
           badge={
             <div className="flex flex-wrap gap-2">
               <Badge variant="outline" className="font-normal tabular-nums">
@@ -379,9 +401,10 @@ export function Parametres() {
           }
         />
       }
-      nav={SETTINGS_NAV}
+      search={<ParametresSearchBar onSelect={handleSearchSelect} />}
+      navGroups={SETTINGS_NAV_GROUPS}
       activeSection={activeSection}
-      onSectionChange={setActiveSection}
+      onSectionChange={handleSectionChange}
       footer={
         <SettingsSaveBar
           visible={showSaveBar}

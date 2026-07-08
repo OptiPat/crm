@@ -39,7 +39,9 @@ import {
   TemplatesEmailActiveFilterChips,
   TemplatesEmailDeliveryBanner,
   TemplatesEmailHelp,
+  TemplatesEmailMailboxStatus,
 } from "@/components/emails/templates-email-ui";
+import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import {
   duplicateTemplatePayload,
   EMAIL_TEMPLATE_CATEGORIES,
@@ -71,9 +73,10 @@ import { toast } from "sonner";
 
 type TemplatesEmailProps = {
   onNavigate?: (page: string) => void;
+  currentPage?: string;
 };
 
-export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
+export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps) {
   const [templates, setTemplates] = useState<TemplateEmail[]>([]);
   const [etiquettes, setEtiquettes] = useState<Etiquette[]>([]);
   const [loading, setLoading] = useState(true);
@@ -389,10 +392,30 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
           <h2 className="text-3xl font-serif font-bold text-primary mb-1">Modèles email</h2>
           <p className="text-muted-foreground max-w-xl text-sm">
             Bibliothèque de messages — déclencheur auto, campagnes étiquette ou relance, envoi
-            depuis Suivi → Envois.
+            depuis{" "}
+            {onNavigate ? (
+              <button
+                type="button"
+                className="text-foreground/80 underline decoration-muted-foreground/40 underline-offset-2 hover:text-primary hover:decoration-primary/50"
+                onClick={() =>
+                  navigateToSuivi(onNavigate, "envois", "ready", undefined, "templates-email")
+                }
+              >
+                Suivi → Envois
+              </button>
+            ) : (
+              "Suivi → Envois"
+            )}
+            .
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <TemplatesEmailMailboxStatus
+            emailStatus={emailStatus}
+            onNavigate={onNavigate}
+            currentPage={currentPage}
+          />
+          <span className="hidden sm:block h-4 w-px bg-border/80" aria-hidden />
           <Button
             variant="outline"
             size="sm"
@@ -435,7 +458,11 @@ export function TemplatesEmail({ onNavigate }: TemplatesEmailProps) {
 
       <TemplatesEmailHelp />
 
-      <TemplatesEmailDeliveryBanner emailStatus={emailStatus} onNavigate={onNavigate} />
+      <TemplatesEmailDeliveryBanner
+        emailStatus={emailStatus}
+        onNavigate={onNavigate}
+        currentPage={currentPage}
+      />
 
       <section className="space-y-2" aria-label="Synthèse des modèles">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">

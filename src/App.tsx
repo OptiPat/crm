@@ -32,6 +32,7 @@ import { seedDefaultEtiquettes } from "@/lib/api/tauri-etiquettes";
 import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { needsLicenseActivation } from "@/lib/api/tauri-license";
+import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -43,6 +44,12 @@ function AppInner() {
   const etiquettesRecalcDone = useRef(
     sessionStorage.getItem("crm_etiquettes_recalc_done") === "1"
   );
+
+  useAppNavigationListener((detail) => {
+    if (detail.type === "page" && detail.page !== currentPage) {
+      setCurrentPage(detail.page);
+    }
+  });
 
   useEffect(() => {
     // Vérifier si c'est le premier lancement
@@ -202,7 +209,7 @@ function AppInner() {
       case "taches":
         return <Taches onNavigate={setCurrentPage} />;
       case "templates-email":
-        return <TemplatesEmail onNavigate={setCurrentPage} />;
+        return <TemplatesEmail onNavigate={setCurrentPage} currentPage={currentPage} />;
       case "newsletter":
         return <Newsletter onNavigate={setCurrentPage} />;
       case "suivi":
@@ -226,7 +233,12 @@ function AppInner() {
       case "comptabilite":
         return <Comptabilite />;
       case "parametres":
-        return <Parametres />;
+        return (
+          <Parametres
+            currentPage={currentPage}
+            onNavigate={setCurrentPage}
+          />
+        );
       default:
         return (
           <Dashboard

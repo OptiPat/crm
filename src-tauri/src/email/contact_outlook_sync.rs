@@ -182,7 +182,7 @@ pub fn sync_contact_outlook_history(
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Connectez Microsoft dans Paramètres → Email pour synchroniser l'historique.")?;
+        .ok_or("Connectez Microsoft dans Paramètres → Emails & envois → Connexion pour synchroniser l'historique.")?;
     if conn.provider != "microsoft" {
         return Err("La synchronisation Outlook nécessite un compte Microsoft connecté.".into());
     }

@@ -245,7 +245,7 @@ export function ParametresIntegrationsSection() {
 
           <p className="text-xs text-muted-foreground">
             Bulletins SCPI : bouton <strong>Préparer</strong> dans Suivi → Envois (OCR + résumé
-            Mistral intégrés). Clé Mistral : Paramètres → Newsletter.
+            Mistral intégrés). Clé Mistral : page Newsletter → Paramètres.
           </p>
 
           <Button onClick={() => void handleSave()} disabled={saving}>

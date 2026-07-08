@@ -101,6 +101,7 @@ import { mergeNewsletterAudienceFilters } from "@/lib/newsletter/newsletter-audi
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import { toast } from "sonner";
 import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
+import { CRM_NEWSLETTER_TAB_KEY } from "@/lib/navigation/app-navigation";
 
 function buildHtmlOptions(
   cgp: CgpConfig | null,
@@ -259,6 +260,14 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       setActiveEditionId(null);
     }
   }, [activeEditionId]);
+
+  useEffect(() => {
+    const storedTab = sessionStorage.getItem(CRM_NEWSLETTER_TAB_KEY);
+    sessionStorage.removeItem(CRM_NEWSLETTER_TAB_KEY);
+    if (storedTab === "settings") {
+      setTab("settings");
+    }
+  }, []);
 
   useEffect(() => {
     void load().catch((e) => {
@@ -448,7 +457,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       return;
     }
     if (!emailConnected) {
-      toast.error("Connectez Gmail dans Paramètres → Email");
+      toast.error("Connectez Gmail dans Paramètres → Emails & envois → Connexion");
       return;
     }
     if (!subject.trim() || !plainBody.trim()) {
@@ -579,7 +588,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       return;
     }
     if (!emailConnected) {
-      toast.error("Connectez Gmail dans Paramètres → Email");
+      toast.error("Connectez Gmail dans Paramètres → Emails & envois → Connexion");
       return;
     }
     setPreparing(true);
@@ -634,7 +643,7 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
       return;
     }
     if (!emailConnected) {
-      toast.error("Connectez Gmail dans Paramètres → Email");
+      toast.error("Connectez Gmail dans Paramètres → Emails & envois → Connexion");
       return;
     }
     setSendConfirmOpen(false);
@@ -884,13 +893,13 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
               </Button>
               {!settings?.apiKeyConfigured && (
                 <p className="text-xs text-muted-foreground">
-                  Configurez votre clé API dans{" "}
+                  Configurez votre clé API dans l&apos;onglet{" "}
                   <button
                     type="button"
                     className="underline text-primary"
-                    onClick={() => onNavigate?.("parametres")}
+                    onClick={() => setTab("settings")}
                   >
-                    Paramètres → Newsletter
+                    Paramètres
                   </button>
                   .
                 </p>
@@ -1033,17 +1042,6 @@ export function Newsletter({ onNavigate }: { onNavigate?: (page: string) => void
         </TabsContent>
 
         <TabsContent value="settings" className="mt-4 space-y-4">
-          <p className="text-sm text-muted-foreground">
-            Les mêmes réglages sont disponibles dans{" "}
-            <button
-              type="button"
-              className="underline text-primary"
-              onClick={() => onNavigate?.("parametres")}
-            >
-              Paramètres → Newsletter
-            </button>
-            .
-          </p>
           <ParametresNewsletterSection
             switchToComposerAfterSave
             onSwitchToComposer={() => setTab("composer")}

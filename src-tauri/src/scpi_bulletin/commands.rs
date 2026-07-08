@@ -16,7 +16,7 @@ pub async fn prepare_scpi_bulletins_from_pdfs_cmd(
         .clone()
         .filter(|k| !k.trim().is_empty())
         .ok_or(
-            "Clé API Mistral absente — Paramètres → Newsletter → clé Mistral (OCR + résumés SCPI).",
+            "Clé API Mistral absente — Newsletter → Paramètres → clé Mistral (OCR + résumés SCPI).",
         )?;
     let paths: Vec<String> = pdf_paths
         .into_iter()

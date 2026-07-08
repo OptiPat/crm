@@ -114,7 +114,7 @@ pub(super) fn google_access_token(app: &AppHandle) -> Result<String, String> {
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Connectez Google dans Paramètres → Email pour synchroniser les contacts.")?;
+        .ok_or("Connectez Google dans Paramètres → Emails & envois → Connexion pour synchroniser les contacts.")?;
     if conn.provider != "google" {
         return Err("La sync Google Contacts nécessite un compte Google.".into());
     }

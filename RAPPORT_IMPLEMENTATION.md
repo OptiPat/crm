@@ -105,7 +105,7 @@
 
 **État actuel** :
 - `EmailOAuthConnect`, `oauth_store.rs`, `oauth_send.rs`
-- Paramètres → Email : Connecter Google / Microsoft, test de connexion
+- Paramètres → Emails & envois → Connexion : Connecter Google / Microsoft, test de connexion
 - Envoi : Suivi → Envois, campagnes par étiquette (CRM ouvert)
 - Fichier local : `email_oauth.json` (tokens chiffrés) ; `smtp_config.json` supprimé au démarrage
 

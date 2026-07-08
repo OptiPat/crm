@@ -199,7 +199,7 @@ Tests frontend : `src/lib/etiquettes/etiquettes-filter.test.ts`, `etiquette-emai
 | **Campagne email** | Modèle **Exceltis — remboursement et arbitrage** (`{{millesime}}`, `{{etiquette_nom}}`, `{{rendement_exceltis}}`) — suggéré à la création de l’étiquette ; relance = modèle « suite sans réponse ». |
 | **Rendement cible** | Saisi sur l'étiquette (création ou onglet Email), ex. `9 %/an` — balise `{{rendement_exceltis}}` dans le modèle et la relance. |
 
-Scan automatique au démarrage du CRM (compte Google connecté), puis environ toutes les 5 minutes. Paramètres → Email : scan manuel possible.
+Scan automatique au démarrage du CRM (compte Google connecté), puis environ toutes les 5 minutes. Paramètres → Emails & envois → Exceltis Stellium : scan manuel possible.
 
 **Limites scan Gmail :** requête limitée aux **400 derniers jours** ; pagination jusqu’à **200 messages** par scan (largement suffisant en usage normal). Millésime illisible : **3 tentatives** puis le message est ignoré.
 

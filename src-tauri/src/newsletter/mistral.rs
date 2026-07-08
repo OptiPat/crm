@@ -89,7 +89,7 @@ pub fn call_mistral_chat_json(
 
     if !status.is_success() {
         let hint = if status.as_u16() == 401 {
-            "Clé API Mistral invalide (Paramètres → Newsletter)."
+            "Clé API Mistral invalide (Newsletter → Paramètres)."
         } else {
             "Vérifiez votre connexion et la clé API."
         };

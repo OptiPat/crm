@@ -51,7 +51,7 @@ fn google_drive_token(app: &AppHandle) -> Result<String, String> {
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Connectez Google dans Paramètres → Email (compte Google requis).")?;
+        .ok_or("Connectez Google dans Paramètres → Emails & envois → Connexion (compte Google requis).")?;
     if conn.provider != "google" {
         return Err("La synchronisation Drive nécessite un compte Google connecté.".into());
     }
@@ -86,7 +86,7 @@ fn drive_query_list(
             .map_err(|e| e.to_string())?;
         if res.status() == reqwest::StatusCode::FORBIDDEN {
             return Err(
-                "Accès Drive refusé. Déconnectez puis reconnectez Google dans Paramètres → Email (scope Drive)."
+                "Accès Drive refusé. Déconnectez puis reconnectez Google dans Paramètres → Emails & envois → Connexion (scope Drive)."
                     .into(),
             );
         }

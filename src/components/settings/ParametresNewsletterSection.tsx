@@ -319,7 +319,7 @@ export function ParametresNewsletterSection({
               </select>
             ) : (
               <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
-                Aucun lien agenda. Ajoutez-en dans Paramètres → Suivi → Liens Google Agenda.
+                Aucun lien agenda. Ajoutez-en dans Paramètres → Agenda & RDV.
               </p>
             )}
             <p className="text-xs text-muted-foreground">
@@ -498,7 +498,7 @@ export function ParametresNewsletterSection({
         <ul className="text-sm text-muted-foreground space-y-2 list-disc pl-5">
           <li>Destinataires = contacts avec email (sauf désinscrits et exclusions permanentes)</li>
           <li>Un seul lien principal (bouton agenda)</li>
-          <li>Envoi via Gmail connecté (Paramètres → Email)</li>
+          <li>Envoi via Gmail connecté (Paramètres → Emails & envois)</li>
           <li>Testez avec « M'envoyer un test » avant la campagne</li>
         </ul>
       </SettingsPanel>

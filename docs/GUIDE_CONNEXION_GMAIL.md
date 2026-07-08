@@ -22,14 +22,14 @@ Les données restent **sur votre PC** ; le mot de passe Gmail n’est jamais sai
 
 - CRM W.Y.S **installé et déverrouillé** (version ≥ 0.2.0 recommandée).
 - Compte **Gmail** ou **Google Workspace** (ex. `prenom@cabinet.fr`).
-- Les **identifiants OAuth** (Client ID + secret) déjà renseignés dans le CRM par votre responsable technique — section **Paramètres → Email → Identifiants OAuth Google**.
+- Les **identifiants OAuth** (Client ID + secret) déjà renseignés dans le CRM par votre responsable technique — section **Paramètres → Emails & envois → Connexion → Identifiants OAuth Google**.
 - **Antivirus / pare-feu** : autoriser le CRM à écouter le port local `3847` le temps de la connexion (quelques secondes).
 
 ---
 
 ## Étapes dans le CRM
 
-### 1. Ouvrir Paramètres → Email
+### 1. Ouvrir Paramètres → Emails & envois → Connexion
 
 Menu latéral → **Paramètres** → onglet ou section **Email**.
 
@@ -50,13 +50,13 @@ Si les champs **Client ID Google** / **Secret** sont vides, demandez-les à la p
 
 ### 4. Tester l’envoi
 
-1. Toujours dans **Paramètres → Email**, cliquez **Tester la connexion**.
+1. Toujours dans **Paramètres → Emails & envois → Connexion**, cliquez **Tester la connexion**.
 2. Vous devez recevoir un **email de test** sur votre propre boîte.
 3. Si oui → la connexion est OK.
 
 ### 5. Importer la signature (recommandé)
 
-1. Dans **Paramètres → Email**, section **Signature des emails**.
+1. Ouvrez **Paramètres → Emails & envois → Signature**.
 2. Cliquez **Importer Gmail**.
 3. Vérifiez l’aperçu (logo inclus si configuré dans Gmail).
 4. Cliquez **Enregistrer** en bas de la page Paramètres (profil / CGP).
@@ -69,8 +69,8 @@ Si les champs **Client ID Google** / **Secret** sont vides, demandez-les à la p
 |--------|-----|
 | Envoyer une campagne | **Suivi** → onglet **Envois** |
 | Voir les mails d’un client | Fiche **Contact** → **Relation client** → **Sync Gmail** (première fois) |
-| Sync auto à l’ouverture | **Paramètres → Email** → activer **Sync auto à l’ouverture de Relation client** |
-| Déconnecter Gmail | **Paramètres → Email** → **Déconnecter** |
+| Sync auto à l’ouverture | **Paramètres → Emails & envois → Connexion** → activer **Sync auto à l’ouverture de Relation client** |
+| Déconnecter Gmail | **Paramètres → Emails & envois → Connexion** → **Déconnecter** |
 
 Le CRM doit rester **ouvert** pendant un envoi de campagne.
 
@@ -80,7 +80,7 @@ Le CRM doit rester **ouvert** pendant un envoi de campagne.
 
 | Symptôme | Que faire |
 |----------|-----------|
-| « Identifiants Google manquants » | Demander Client ID + secret à l’admin ; les coller dans Paramètres → Email → **Enregistrer**. |
+| « Identifiants Google manquants » | Demander Client ID + secret à l’admin ; les coller dans Paramètres → Emails & envois → Connexion → **Enregistrer**. |
 | Navigateur : « redirect_uri_mismatch » | L’admin doit ajouter exactement `http://127.0.0.1:3847/callback` dans Google Cloud — voir [EMAIL_OAUTH_SETUP.md](./EMAIL_OAUTH_SETUP.md). |
 | « Compte non autorisé » (mode Test Google) | L’admin ajoute votre adresse Gmail dans **Utilisateurs test** de l’écran de consentement Google. |
 | Page de succès mais CRM toujours déconnecté | Attendre 5 s, recliquer **Connecter Google** (ne pas recharger la page navigateur). |

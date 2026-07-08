@@ -24,17 +24,32 @@ import {
   User,
   ChevronRight,
   Sparkles,
+  CalendarClock,
+  Workflow,
+  SlidersHorizontal,
+  Newspaper,
+  Calculator,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 
+type ParametresNavigateOptions = {
+  scrollToId?: string;
+};
+
 type ParametresOverviewProps = {
   cgpConfig: CgpConfig;
   backups: DbBackupEntry[];
-  onNavigate: (section: SettingsSectionId) => void;
+  onNavigate: (section: SettingsSectionId, options?: ParametresNavigateOptions) => void;
+  onNavigateExternal?: (page: "newsletter" | "comptabilite") => void;
 };
 
-export function ParametresOverview({ cgpConfig, backups, onNavigate }: ParametresOverviewProps) {
+export function ParametresOverview({
+  cgpConfig,
+  backups,
+  onNavigate,
+  onNavigateExternal,
+}: ParametresOverviewProps) {
   const { currentVersion, pendingUpdate } = useAppUpdate();
   const [emailConnected, setEmailConnected] = useState(false);
   const [emailLabel, setEmailLabel] = useState("Non connecté");
@@ -67,9 +82,17 @@ export function ParametresOverview({ cgpConfig, backups, onNavigate }: Parametre
   const completion = getCompletionPercent(checklist);
   const displayName = getDisplayName(cgpConfig);
 
+  const handleChecklistGo = (item: SetupCheckItem) => {
+    if (item.externalPage && onNavigateExternal) {
+      onNavigateExternal(item.externalPage);
+      return;
+    }
+    onNavigate(item.section, { scrollToId: undefined });
+  };
+
   return (
     <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         <StatusTile
           title="Profil"
           value={`${completion} %`}
@@ -81,14 +104,62 @@ export function ParametresOverview({ cgpConfig, backups, onNavigate }: Parametre
           onClick={() => onNavigate("profil")}
         />
         <StatusTile
-          title="Email"
+          title="Emails & envois"
           value={emailConnected ? "Connecté" : "À configurer"}
           subtitle={emailLabel}
           icon={Mail}
           accentColor={emailConnected ? "#059669" : "#D97706"}
           iconBg={emailConnected ? "bg-emerald-50" : "bg-amber-50"}
           iconColor={emailConnected ? "text-emerald-600" : "text-amber-600"}
-          onClick={() => onNavigate("email")}
+          onClick={() => onNavigate("email-connexion")}
+        />
+        <StatusTile
+          title="Newsletter"
+          value="Mistral & campagnes"
+          subtitle="Clé API, style et file d'envoi"
+          icon={Newspaper}
+          accentColor="#7C3AED"
+          iconBg="bg-violet-50"
+          iconColor="text-violet-600"
+          onClick={() => onNavigateExternal?.("newsletter")}
+        />
+        <StatusTile
+          title="Comptabilité"
+          value={
+            comptaConfig?.adresseDepart?.trim() && comptaConfig?.driveRootFolderId?.trim()
+              ? "Configurée"
+              : "À configurer"
+          }
+          subtitle="Adresse km et dossier Drive"
+          icon={Calculator}
+          accentColor="#B45309"
+          iconBg="bg-amber-50"
+          iconColor="text-amber-700"
+          onClick={() => onNavigateExternal?.("comptabilite")}
+        />
+        <StatusTile
+          title="Agenda & RDV"
+          value={
+            (cgpConfig.agenda_links ?? []).some((l) => l.url?.trim() && l.label?.trim())
+              ? "Configuré"
+              : "À configurer"
+          }
+          subtitle="Liens Google Agenda pour les templates"
+          icon={CalendarClock}
+          accentColor="#0D9488"
+          iconBg="bg-teal-50"
+          iconColor="text-teal-600"
+          onClick={() => onNavigate("suivi")}
+        />
+        <StatusTile
+          title="Intégrations"
+          value="API & Telegram"
+          subtitle="Automatisations locales et rappels anniversaires"
+          icon={Workflow}
+          accentColor="#6366F1"
+          iconBg="bg-indigo-50"
+          iconColor="text-indigo-600"
+          onClick={() => onNavigate("integrations")}
         />
         <StatusTile
           title="Sauvegardes"
@@ -105,7 +176,17 @@ export function ParametresOverview({ cgpConfig, backups, onNavigate }: Parametre
           onClick={() => onNavigate("donnees")}
         />
         <StatusTile
-          title="Application"
+          title="Champs personnalisés"
+          value="Fiches contact"
+          subtitle="Champs sur mesure pour vos contacts"
+          icon={SlidersHorizontal}
+          accentColor="#64748B"
+          iconBg="bg-slate-50"
+          iconColor="text-slate-600"
+          onClick={() => onNavigate("champs")}
+        />
+        <StatusTile
+          title="Logiciel"
           value={`v${currentVersion}`}
           subtitle={
             pendingUpdate
@@ -126,7 +207,7 @@ export function ParametresOverview({ cgpConfig, backups, onNavigate }: Parametre
       >
         <ul className="space-y-1">
           {checklist.map((item) => (
-            <ChecklistRow key={item.id} item={item} onGo={() => onNavigate(item.section)} />
+            <ChecklistRow key={item.id} item={item} onGo={() => handleChecklistGo(item)} />
           ))}
         </ul>
         {completion === 100 && (

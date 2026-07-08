@@ -10,6 +10,8 @@ import type { SettingsSectionId } from "@/lib/settings/parametres-completion";
 export const CRM_NAV_EVENT = "crm-app-navigation";
 export const CRM_PARAMETRES_SECTION_KEY = "crm_nav_parametres_section";
 export const CRM_PARAMETRES_SCROLL_KEY = "crm_nav_parametres_scroll";
+export const CRM_PARAMETRES_EMAIL_TAB_KEY = "crm_nav_parametres_email_tab";
+export const CRM_NEWSLETTER_TAB_KEY = "crm_nav_newsletter_tab";
 
 export type AppNavigationDetail =
   | { type: "open-contact"; contactId: number; tab?: ContactDetailTabHint }
@@ -30,7 +32,12 @@ export type AppNavigationDetail =
       partenaireId?: number;
       focusInvestissementId?: number;
     }
-  | { type: "parametres"; section: SettingsSectionId; scrollToId?: string }
+  | {
+      type: "parametres";
+      section: SettingsSectionId;
+      scrollToId?: string;
+      emailTab?: string;
+    }
   | { type: "page"; page: string };
 
 function persistNavigationDetail(detail: AppNavigationDetail): void {
@@ -78,6 +85,11 @@ function persistNavigationDetail(detail: AppNavigationDetail): void {
         sessionStorage.setItem(CRM_PARAMETRES_SCROLL_KEY, detail.scrollToId);
       } else {
         sessionStorage.removeItem(CRM_PARAMETRES_SCROLL_KEY);
+      }
+      if (detail.emailTab) {
+        sessionStorage.setItem(CRM_PARAMETRES_EMAIL_TAB_KEY, detail.emailTab);
+      } else {
+        sessionStorage.removeItem(CRM_PARAMETRES_EMAIL_TAB_KEY);
       }
       break;
     default:
@@ -141,6 +153,7 @@ export function requestOpenParametres(
   section: SettingsSectionId,
   options?: {
     scrollToId?: string;
+    emailTab?: string;
     currentPage?: string;
     setCurrentPage?: (page: string) => void;
   }
@@ -149,10 +162,36 @@ export function requestOpenParametres(
     type: "parametres",
     section,
     scrollToId: options?.scrollToId,
+    emailTab: options?.emailTab,
   };
   if (options?.setCurrentPage) {
     navigateAppPage(options.currentPage ?? "", options.setCurrentPage, "parametres", detail);
   } else {
     dispatchAppNavigation(detail);
+  }
+}
+
+/** Ouvre la page Newsletter sur l'onglet Paramètres (ex-clé API Mistral). */
+export function requestOpenNewsletterSettings(options?: {
+  currentPage?: string;
+  setCurrentPage?: (page: string) => void;
+}): void {
+  sessionStorage.setItem(CRM_NEWSLETTER_TAB_KEY, "settings");
+  if (options?.setCurrentPage) {
+    navigateAppPage(options.currentPage ?? "", options.setCurrentPage, "newsletter");
+  } else {
+    dispatchAppNavigation({ type: "page", page: "newsletter" });
+  }
+}
+
+/** Ouvre la page Comptabilité (config km / Drive). */
+export function requestOpenComptabilite(options?: {
+  currentPage?: string;
+  setCurrentPage?: (page: string) => void;
+}): void {
+  if (options?.setCurrentPage) {
+    navigateAppPage(options.currentPage ?? "", options.setCurrentPage, "comptabilite");
+  } else {
+    dispatchAppNavigation({ type: "page", page: "comptabilite" });
   }
 }

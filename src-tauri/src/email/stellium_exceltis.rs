@@ -1333,7 +1333,7 @@ pub fn scan_stellium_exceltis_emails(
     let conn = store
         .connection
         .as_ref()
-        .ok_or("Aucun compte email connecté. Paramètres → Email : connectez Google ou Microsoft.")?;
+        .ok_or("Aucun compte email connecté. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.")?;
     if conn.provider != "google" && conn.provider != "microsoft" {
         return Err("La détection Stellium / Exceltis nécessite Gmail ou Outlook connecté.".into());
     }

@@ -149,7 +149,7 @@ pub fn test_email_connection(app_handle: AppHandle) -> Result<String, String> {
     let oauth = EmailOAuthStore::load(&app_handle)?;
     let Some(ref conn) = oauth.connection else {
         return Err(
-            "Aucune connexion email. Paramètres → Email : connectez Google ou Microsoft.".into(),
+            "Aucune connexion email. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.".into(),
         );
     };
     let mail_msg = send_test_to_self(&app_handle)?;
@@ -162,7 +162,7 @@ pub fn test_email_connection(app_handle: AppHandle) -> Result<String, String> {
         return Ok(format!("{mail_msg} Accès Google Agenda OK."));
     }
     Ok(format!(
-        "{mail_msg} Connectez Google Agenda pour la détection RDV (Paramètres → Email)."
+        "{mail_msg} Connectez Google Agenda pour la détection RDV (Paramètres → Emails & envois → Connexion)."
     ))
 }
 
@@ -197,5 +197,5 @@ pub fn send_email_unified(
             reply_ref,
         );
     }
-    Err("Aucune connexion email. Paramètres → Email : connectez Google ou Microsoft.".into())
+    Err("Aucune connexion email. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.".into())
 }

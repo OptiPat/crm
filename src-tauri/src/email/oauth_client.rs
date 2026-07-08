@@ -29,7 +29,7 @@ pub fn build_basic_client(provider: &str, store: &EmailOAuthStore) -> Result<Bas
                 .filter(|s| !s.trim().is_empty())
                 .cloned()
                 .ok_or_else(|| {
-                    "Identifiant client Google manquant (Paramètres → Email).".to_string()
+                    "Identifiant client Google manquant (Paramètres → Emails & envois → Connexion).".to_string()
                 })?;
             let secret = store
                 .google_client_secret
@@ -38,7 +38,7 @@ pub fn build_basic_client(provider: &str, store: &EmailOAuthStore) -> Result<Bas
                 .cloned()
                 .ok_or_else(|| {
                     "Code secret client Google manquant. Google Cloud → Clients → CRM Bureau → \
-                     copiez le « Code secret du client » dans Paramètres → Email."
+                     copiez le « Code secret du client » dans Paramètres → Emails & envois → Connexion."
                         .to_string()
                 })?;
             (id, Some(secret))
@@ -50,7 +50,7 @@ pub fn build_basic_client(provider: &str, store: &EmailOAuthStore) -> Result<Bas
                 .filter(|s| !s.trim().is_empty())
                 .cloned()
                 .ok_or_else(|| {
-                    "Identifiant client Microsoft manquant (Paramètres → Email).".to_string()
+                    "Identifiant client Microsoft manquant (Paramètres → Emails & envois → Connexion).".to_string()
                 })?;
             (id, None)
         }

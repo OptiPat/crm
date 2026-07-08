@@ -218,7 +218,7 @@ export function startIndividualEtiquetteEmailSend(input: {
         errorMessage: hint,
         sendMode: "individual",
       }).catch(() => {});
-      toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Email)`);
+      toast.error(hint.includes("connexion") ? hint : `${hint} (Paramètres → Emails & envois → Connexion)`);
     } finally {
       unlockQueueItem(item);
       individualRunning = false;

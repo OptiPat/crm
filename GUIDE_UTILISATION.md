@@ -78,7 +78,7 @@
 ---
 
 #### 3. Connexion email (OAuth) et envoi
-**Accès** : Paramètres → **Email** (ou étape 2 du wizard de première configuration)
+**Accès** : Paramètres → **Emails & envois → Connexion** (ou étape 2 du wizard de première configuration)
 
 **Fonctionnalités** :
 - ✅ **Google (Gmail)** — connexion OAuth (Gmail API pour l’envoi, lecture pour les réponses campagne)
@@ -88,7 +88,7 @@
 
 **Configuration (résumé)** :
 1. Créer un client OAuth dans Google Cloud ou Azure (voir `docs/EMAIL_OAUTH_SETUP.md`).
-2. Dans Paramètres → Email : renseigner l’**ID client** (et secret Google si requis).
+2. Dans Paramètres → Emails & envois → Connexion : renseigner l’**ID client** (et secret Google si requis).
 3. Cliquer sur **Connecter Google** ou **Connecter Microsoft** et valider dans le navigateur.
 4. **Tester la connexion**, puis envoyer depuis Suivi → Envois.
 
@@ -194,7 +194,7 @@
 
 ### Test connexion email (OAuth)
 - [ ] Configurer les identifiants OAuth (voir `docs/EMAIL_OAUTH_SETUP.md`)
-- [ ] Connecter Google ou Microsoft dans Paramètres → Email
+- [ ] Connecter Google ou Microsoft dans Paramètres → Emails & envois → Connexion
 - [ ] Tester la connexion et vérifier l’email de test
 
 ### Test des alertes

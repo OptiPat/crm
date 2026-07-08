@@ -434,7 +434,7 @@ fn sync_contact_gmail_history_google(
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Connectez Google dans Paramètres → Email pour synchroniser l'historique.")?;
+        .ok_or("Connectez Google dans Paramètres → Emails & envois → Connexion pour synchroniser l'historique.")?;
     if conn.provider != "google" {
         return Err(
             "La synchronisation nécessite un compte Google connecté (Gmail).".into(),
@@ -710,7 +710,7 @@ pub fn fetch_contact_gmail_message_body(
     let mut conn = store
         .connection
         .clone()
-        .ok_or("Connectez Google dans Paramètres → Email.")?;
+        .ok_or("Connectez Google dans Paramètres → Emails & envois → Connexion.")?;
     if conn.provider != "google" {
         return Err("Compte Google requis.".into());
     }
@@ -802,7 +802,7 @@ pub fn open_contact_mail_attachment(
     let mut oauth = store
         .connection
         .clone()
-        .ok_or("Connectez un compte email dans Paramètres → Email.")?;
+        .ok_or("Connectez un compte email dans Paramètres → Emails & envois → Connexion.")?;
     refresh_connection_if_needed(app, &mut oauth)?;
     let client = reqwest::blocking::Client::new();
 
