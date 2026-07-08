@@ -24,11 +24,16 @@ les en-têtes suivants :
 
 **Onglet `shared_notes`**
 
-| id | title | content_html | installation_id | author_name | created_at | updated_at |
+| id | title | content_html | installation_id | author_name | created_at | updated_at | content_html_2 | … |
 
 **Onglet `contributions`**
 
-| id | note_id | installation_id | author_name | content_html | created_at |
+| id | note_id | installation_id | author_name | content_html | created_at | content_html_2 | … |
+
+> **Limite Google Sheets** : une cellule ne peut pas dépasser **50 000 caractères**.
+> Le script découpe automatiquement le HTML volumineux (images base64, etc.) sur
+> les colonnes `content_html`, `content_html_2`, … jusqu’à ~**900 000** caractères
+> au total. Les notes déjà enregistrées (&lt; 50k) restent lisibles sans migration.
 
 Les dates sont stockées en **timestamp Unix** (secondes, ex. `1751968800`).
 
@@ -36,6 +41,10 @@ Les dates sont stockées en **timestamp Unix** (secondes, ex. `1751968800`).
 
 Dans le Sheet : **Extensions → Apps Script**, collez le contenu de
 `scripts/notes/google-sheet-notes-registry.gs`, puis :
+
+> Si le registre existait déjà : **remplacez tout le script** par la nouvelle
+> version (découpage multi-colonnes pour les notes longues). Les colonnes
+> `content_html_2`, … sont ajoutées automatiquement au prochain appel.
 
 1. **Déployer → Nouveau déploiement → Application web**
    - Exécuter en tant que : **Moi**

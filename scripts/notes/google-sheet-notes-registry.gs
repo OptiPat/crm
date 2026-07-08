@@ -3,7 +3,16 @@
  * À coller dans Extensions → Apps Script d'un Google Sheet dédié (hors dépôt).
  *
  * Propriété script : NOTES_REGISTRY_TOKEN
+ *
+ * Google Sheets limite chaque cellule à 50 000 caractères. Le contenu HTML est
+ * découpé automatiquement sur plusieurs colonnes (content_html, content_html_2, …).
  */
+
+/** Marge sous la limite Google (50 000 caractères / cellule). */
+const CONTENT_CHUNK_SIZE = 45000;
+
+/** Nombre max de morceaux (≈ 900 000 caractères au total). */
+const MAX_CONTENT_CHUNKS = 20;
 
 const NOTES_HEADERS = [
   "id",
@@ -23,6 +32,20 @@ const CONTRIBUTION_HEADERS = [
   "content_html",
   "created_at",
 ];
+
+const NOTES_CONTENT_COL = 3;
+const NOTES_CHUNK_EXTRA_START_COL = 8;
+
+const CONTRIBUTION_CONTENT_COL = 5;
+const CONTRIBUTION_CHUNK_EXTRA_START_COL = 7;
+
+function chunkHeaders_() {
+  const headers = [];
+  for (let i = 2; i <= MAX_CONTENT_CHUNKS; i++) {
+    headers.push("content_html_" + i);
+  }
+  return headers;
+}
 
 function doPost(e) {
   try {
@@ -69,15 +92,16 @@ function handleCreateNote_(body) {
   }
   const now = Math.floor(Date.now() / 1000);
   const id = Utilities.getUuid();
-  sheet.appendRow([
+  const row = buildNoteRow_(
     id,
     title,
     String(body.content_html || ""),
     installationId,
     String(body.author_name || ""),
     now,
-    now,
-  ]);
+    now
+  );
+  sheet.appendRow(row);
   return jsonResponse({ ok: true, id: id });
 }
 
@@ -95,7 +119,13 @@ function handleUpdateNote_(body) {
   }
   const now = Math.floor(Date.now() / 1000);
   sheet.getRange(rowIndex, 2).setValue(String(body.title || "").trim());
-  sheet.getRange(rowIndex, 3).setValue(String(body.content_html || ""));
+  writeChunkedContent_(
+    sheet,
+    rowIndex,
+    NOTES_CONTENT_COL,
+    NOTES_CHUNK_EXTRA_START_COL,
+    String(body.content_html || "")
+  );
   sheet.getRange(rowIndex, 7).setValue(now);
   return jsonResponse({ ok: true });
 }
@@ -130,14 +160,15 @@ function handleAddContribution_(body) {
   }
   const sheet = ensureContributionsSheet_();
   const now = Math.floor(Date.now() / 1000);
-  sheet.appendRow([
+  const row = buildContributionRow_(
     Utilities.getUuid(),
     noteId,
     installationId,
     String(body.author_name || ""),
     content,
-    now,
-  ]);
+    now
+  );
+  sheet.appendRow(row);
   return jsonResponse({ ok: true });
 }
 
@@ -152,13 +183,95 @@ function ensureContributionsSheet_() {
 function ensureSheet_(name, headers) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(name);
+  const extraHeaders = chunkHeaders_();
   if (!sheet) {
     sheet = ss.insertSheet(name);
-    sheet.appendRow(headers);
+    sheet.appendRow(headers.concat(extraHeaders));
   } else if (sheet.getLastRow() === 0) {
-    sheet.appendRow(headers);
+    sheet.appendRow(headers.concat(extraHeaders));
+  } else {
+    ensureChunkHeaders_(sheet, headers.length, extraHeaders);
   }
   return sheet;
+}
+
+function ensureChunkHeaders_(sheet, baseHeaderCount, chunkHeaders) {
+  for (let i = 0; i < chunkHeaders.length; i++) {
+    const col = baseHeaderCount + 1 + i;
+    const current = String(sheet.getRange(1, col).getValue() || "").trim();
+    if (current !== chunkHeaders[i]) {
+      sheet.getRange(1, col).setValue(chunkHeaders[i]);
+    }
+  }
+}
+
+function splitContent_(content) {
+  const text = String(content || "");
+  if (text.length <= CONTENT_CHUNK_SIZE) {
+    return [text];
+  }
+  const chunks = [];
+  for (let i = 0; i < text.length; i += CONTENT_CHUNK_SIZE) {
+    chunks.push(text.slice(i, i + CONTENT_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+function writeChunkedContent_(sheet, rowIndex, primaryCol, extraStartCol, content) {
+  const chunks = splitContent_(content);
+  if (chunks.length > MAX_CONTENT_CHUNKS) {
+    throw new Error(
+      "content too large (max " + CONTENT_CHUNK_SIZE * MAX_CONTENT_CHUNKS + " characters)"
+    );
+  }
+  sheet.getRange(rowIndex, primaryCol).setValue(chunks[0] || "");
+  for (let i = 1; i < MAX_CONTENT_CHUNKS; i++) {
+    const col = extraStartCol + i - 1;
+    const value = i < chunks.length ? chunks[i] : "";
+    sheet.getRange(rowIndex, col).setValue(value);
+  }
+}
+
+function readChunkedContent_(row, primaryIndex, extraStartIndex) {
+  let out = String(row[primaryIndex] || "");
+  for (let i = extraStartIndex; i < row.length; i++) {
+    const part = row[i];
+    if (part === "" || part === null || part === undefined) {
+      continue;
+    }
+    out += String(part);
+  }
+  return out;
+}
+
+function buildNoteRow_(id, title, content, installationId, authorName, createdAt, updatedAt) {
+  const row = [id, title, "", installationId, authorName, createdAt, updatedAt];
+  const chunks = splitContent_(content);
+  if (chunks.length > MAX_CONTENT_CHUNKS) {
+    throw new Error(
+      "content too large (max " + CONTENT_CHUNK_SIZE * MAX_CONTENT_CHUNKS + " characters)"
+    );
+  }
+  row[2] = chunks[0] || "";
+  for (let i = 1; i < chunks.length; i++) {
+    row[6 + i] = chunks[i];
+  }
+  return row;
+}
+
+function buildContributionRow_(id, noteId, installationId, authorName, content, createdAt) {
+  const row = [id, noteId, installationId, authorName, "", createdAt];
+  const chunks = splitContent_(content);
+  if (chunks.length > MAX_CONTENT_CHUNKS) {
+    throw new Error(
+      "content too large (max " + CONTENT_CHUNK_SIZE * MAX_CONTENT_CHUNKS + " characters)"
+    );
+  }
+  row[4] = chunks[0] || "";
+  for (let i = 1; i < chunks.length; i++) {
+    row[5 + i] = chunks[i];
+  }
+  return row;
 }
 
 function readNotes_(sheet) {
@@ -170,7 +283,7 @@ function readNotes_(sheet) {
     rows.push({
       id: String(row[0]),
       title: String(row[1] || ""),
-      content_html: String(row[2] || ""),
+      content_html: readChunkedContent_(row, 2, 7),
       installation_id: String(row[3] || ""),
       author_name: String(row[4] || ""),
       created_at: Number(row[5] || 0),
@@ -191,7 +304,7 @@ function readContributions_(sheet) {
       note_id: String(row[1] || ""),
       installation_id: String(row[2] || ""),
       author_name: String(row[3] || ""),
-      content_html: String(row[4] || ""),
+      content_html: readChunkedContent_(row, 4, 6),
       created_at: Number(row[5] || 0),
     });
   }

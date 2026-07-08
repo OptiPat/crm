@@ -61,6 +61,54 @@ fn non_empty_env(value: Option<&'static str>) -> Option<&'static str> {
     value.filter(|entry| !entry.is_empty())
 }
 
+fn is_apps_script_webhook_url(url: &str) -> bool {
+    url.starts_with("https://script.google.com/macros/s/")
+        && url.ends_with("/exec")
+}
+
+fn format_registry_http_error(status: u16, body: &str, url: &str) -> String {
+    if url.contains("docs.google.com") || url.contains("/spreadsheets/") {
+        return "Registre notes : NOTES_REGISTRY_URL pointe vers le Google Sheet, pas vers le webhook Apps Script. Utilisez l'URL …/macros/s/…/exec (Déployer → Application web).".into();
+    }
+    if !is_apps_script_webhook_url(url) {
+        return format!(
+            "Registre notes : NOTES_REGISTRY_URL invalide ({url}). Attendu : https://script.google.com/macros/s/…/exec"
+        );
+    }
+    if body.contains("<!DOCTYPE html") || body.contains("Page introuvable") {
+        return match status {
+            404 => "Registre notes : webhook introuvable (404). Le déploiement Apps Script a été supprimé ou l'URL dans les secrets GitHub / license-build.local.ps1 est obsolète — recréez un déploiement Application web et mettez à jour NOTES_REGISTRY_URL.".into(),
+            _ => format!("Registre notes : réponse HTML ({status}) — vérifiez le déploiement Apps Script et NOTES_REGISTRY_URL."),
+        };
+    }
+    let preview = truncate_registry_body(body, 240);
+    format!("Registre notes a répondu {status} : {preview}")
+}
+
+fn format_registry_parse_error(parse_err: &str, body: &str, url: &str) -> String {
+    if body.contains("<!DOCTYPE html") {
+        if !is_apps_script_webhook_url(url) {
+            return format!(
+                "Registre notes : URL invalide ({url}). Attendu : https://script.google.com/macros/s/…/exec"
+            );
+        }
+        return "Registre notes : le webhook a renvoyé une page HTML au lieu de JSON — déploiement Apps Script absent, révoqué ou mauvaise URL.".into();
+    }
+    let preview = truncate_registry_body(body, 240);
+    format!("Réponse registre notes invalide : {parse_err} ({preview})")
+}
+
+fn truncate_registry_body(body: &str, max: usize) -> String {
+    if body.chars().count() <= max {
+        return body.to_string();
+    }
+    let mut end = max;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}…", &body[..end])
+}
+
 pub fn is_registry_configured() -> bool {
     registry_url().is_some() && registry_token().is_some()
 }
@@ -87,10 +135,10 @@ fn post_action(action: &str, extra: Value) -> Result<RegistryResponse, String> {
         .text()
         .map_err(|e| format!("Lecture réponse registre notes : {e}"))?;
     if !status.is_success() {
-        return Err(format!("Registre notes a répondu {status} : {body}"));
+        return Err(format_registry_http_error(status.as_u16(), &body, url));
     }
     let parsed: RegistryResponse = serde_json::from_str(&body)
-        .map_err(|e| format!("Réponse registre notes invalide : {e} ({body})"))?;
+        .map_err(|e| format_registry_parse_error(&e.to_string(), &body, url))?;
     if !parsed.ok {
         return Err(parsed
             .error

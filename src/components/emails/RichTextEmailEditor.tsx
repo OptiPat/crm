@@ -26,6 +26,7 @@ import {
   type RichEditorSanitizeMode,
 } from "@/components/emails/rich-text-email-editor-utils";
 import { buildNoteImageHtml, pickNoteImageDataUrl } from "@/lib/notes/note-image-import";
+import { handleNoteLinkClick } from "@/lib/notes/note-external-link";
 import {
   NOTE_HIGHLIGHT_CLEAR,
   NOTE_HIGHLIGHT_COLORS,
@@ -432,6 +433,9 @@ export const RichTextEmailEditor = forwardRef<HTMLDivElement, RichTextEmailEdito
         onInput={() => emitChange(false, true)}
         onKeyUp={captureSelection}
         onMouseUp={captureSelection}
+        onClickCapture={(e) => {
+          if (isNote) handleNoteLinkClick(e);
+        }}
         onKeyDownCapture={(e) => {
           const el = editorRef.current;
           if (!el) return;

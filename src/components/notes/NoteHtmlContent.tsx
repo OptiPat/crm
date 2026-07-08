@@ -1,4 +1,5 @@
 import { sanitizeNoteHtml } from "@/lib/notes/note-html";
+import { handleNoteLinkClick } from "@/lib/notes/note-external-link";
 import { cn } from "@/lib/utils";
 
 interface NoteHtmlContentProps {
@@ -23,6 +24,7 @@ export function NoteHtmlContent({ html, className }: NoteHtmlContentProps) {
         "[&_img]:max-w-full [&_img]:h-auto [&_img]:rounded-md [&_img]:my-2",
         className
       )}
+      onClick={handleNoteLinkClick}
       dangerouslySetInnerHTML={{ __html: safe }}
     />
   );

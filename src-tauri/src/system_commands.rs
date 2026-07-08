@@ -189,7 +189,21 @@ pub fn open_external_url(url: String) -> Result<(), String> {
 }
 
 fn is_allowed_external_url(url: &str) -> bool {
-    url.starts_with("https://") || url.starts_with("http://") || is_allowed_sms_url(url)
+    url.starts_with("https://")
+        || url.starts_with("http://")
+        || is_allowed_sms_url(url)
+        || is_allowed_mailto_url(url)
+}
+
+fn is_allowed_mailto_url(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("mailto:") else {
+        return false;
+    };
+    let trimmed = rest.trim();
+    !trimmed.is_empty()
+        && !trimmed.contains('\n')
+        && !trimmed.contains('\r')
+        && !trimmed.to_ascii_lowercase().contains("javascript:")
 }
 
 fn is_allowed_sms_url(url: &str) -> bool {
@@ -214,6 +228,12 @@ mod open_external_url_tests {
     fn allows_sms_with_body() {
         assert!(is_allowed_sms_url("sms:+33612345678?body=Hello"));
         assert!(is_allowed_external_url("sms:+33612345678?body=Hello"));
+    }
+
+    #[test]
+    fn allows_mailto() {
+        assert!(is_allowed_external_url("mailto:contact@example.com"));
+        assert!(!is_allowed_external_url("mailto:"));
     }
 
     #[test]
