@@ -274,3 +274,83 @@
     opacity: 0.85;
   }
 }
+
+/** Export PDF notes — impression navigateur (Enregistrer en PDF). */
+#note-print-portal {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 210mm;
+  opacity: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.note-print-doc {
+  font-family: system-ui, "Segoe UI", sans-serif;
+  color: #111827;
+  font-size: 11pt;
+  line-height: 1.45;
+}
+
+.note-print-header {
+  margin-bottom: 6mm;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.note-print-title {
+  margin: 0;
+  font-size: 18pt;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.note-print-subtitle {
+  margin: 2mm 0 0;
+  font-size: 10pt;
+  color: #6b7280;
+}
+
+.note-print-section + .note-print-section {
+  margin-top: 6mm;
+  padding-top: 4mm;
+  border-top: 1px solid #e5e7eb;
+}
+
+.note-print-section-title {
+  margin: 0 0 2mm;
+  font-size: 12pt;
+  font-weight: 600;
+}
+
+.note-print-section-meta {
+  margin: 0 0 3mm;
+  font-size: 9pt;
+  color: #6b7280;
+}
+
+@media print {
+  html.note-printing #root {
+    display: none !important;
+  }
+
+  html.note-printing #note-print-portal {
+    position: static !important;
+    width: auto !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    z-index: auto !important;
+    display: block !important;
+  }
+
+  html.note-printing #note-print-portal,
+  html.note-printing #note-print-portal * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  html.note-printing .note-print-doc {
+    padding: 15mm;
+  }
+}

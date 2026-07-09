@@ -5,6 +5,7 @@ import {
   filterPersonalNotes,
   filterSharedNotes,
   isPersonalNoteDraftDirty,
+  formatNoteTimestamp,
   uniquePersonalNoteCategories,
 } from "@/lib/notes/note-filter";
 
@@ -87,5 +88,12 @@ describe("note-filter", () => {
     );
     const draft = { ...baseline, content_html: "<b>Gras</b>" };
     expect(isPersonalNoteDraftDirty(draft, baseline)).toBe(false);
+  });
+
+  describe("formatNoteTimestamp", () => {
+    it("affiche la date absolue au fuseau local", () => {
+      const ts = Math.floor(new Date("2026-07-01T19:00:00+02:00").getTime() / 1000);
+      expect(formatNoteTimestamp(ts)).toBe("le 01/07/2026");
+    });
   });
 });

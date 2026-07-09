@@ -94,19 +94,13 @@ export function filterSharedNotes(notes: SharedNote[], query: string): SharedNot
   );
 }
 
+/** Date absolue locale, ex. « le 01/07/2026 ». */
 export function formatNoteTimestamp(ts: number): string {
   const date = new Date(ts * 1000);
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) return "Aujourd'hui";
-  if (diffDays === 1) return "Hier";
-  if (diffDays < 7) return `Il y a ${diffDays} jours`;
-
-  return date.toLocaleDateString("fr-FR", {
+  const formatted = date.toLocaleDateString("fr-FR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
+  return `le ${formatted}`;
 }

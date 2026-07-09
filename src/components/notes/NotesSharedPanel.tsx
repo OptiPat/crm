@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { MessageSquarePlus, Pencil, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
+import { MessageSquarePlus, Pencil, Plus, RefreshCw, Search, Trash2, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,8 @@ import {
 import { notifyNotesChanged, subscribeNotesChanged } from "@/lib/notes/note-events";
 import { filterSharedNotes, formatNoteTimestamp } from "@/lib/notes/note-filter";
 import { sanitizeNoteHtml } from "@/lib/notes/note-html";
+import { buildSharedNotePrintDocument } from "@/lib/notes/note-print-document";
+import { useNotePrint } from "@/components/notes/NotePrintProvider";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +68,7 @@ export function NotesSharedPanel() {
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
+  const { printDocument, isPrinting } = useNotePrint();
 
   const selected = notes.find((n) => n.id === selectedId) ?? null;
 
@@ -262,6 +265,11 @@ export function NotesSharedPanel() {
     }
   };
 
+  const handlePrintPdf = () => {
+    if (!selected) return;
+    void printDocument(buildSharedNotePrintDocument(selected));
+  };
+
   return (
     <>
       <div className="space-y-3">
@@ -392,6 +400,15 @@ export function NotesSharedPanel() {
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2 border-t pt-4">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isPrinting}
+                    onClick={handlePrintPdf}
+                  >
+                    <FileDown className="h-4 w-4 mr-1.5" />
+                    PDF
+                  </Button>
                   <Button size="sm" variant="outline" onClick={startContribute}>
                     <MessageSquarePlus className="h-4 w-4 mr-1.5" />
                     Enrichir

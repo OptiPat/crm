@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Pin, Trash2, Save, Search } from "lucide-react";
+import { Plus, Pin, Trash2, Save, Search, FileDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +40,8 @@ import {
   type PersonalNoteDraft,
 } from "@/lib/notes/note-filter";
 import { sanitizeNoteHtml } from "@/lib/notes/note-html";
+import { buildPersonalNotePrintDocument } from "@/lib/notes/note-print-document";
+import { useNotePrint } from "@/components/notes/NotePrintProvider";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -61,6 +63,7 @@ export function NotesPersonalPanel() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [editorResetToken, setEditorResetToken] = useState(0);
   const isDirtyRef = useRef(false);
+  const { printDocument, isPrinting } = useNotePrint();
 
   const isDirty = useMemo(() => isPersonalNoteDraftDirty(draft, baseline), [draft, baseline]);
 
@@ -207,6 +210,19 @@ export function NotesPersonalPanel() {
     setEditorResetToken((token) => token + 1);
   };
 
+  const handlePrintPdf = () => {
+    const payload = buildPersonalNotePrintDocument({
+      title: draft.title,
+      category: draft.category,
+      contentHtml: draft.content_html,
+    });
+    if (!payload) {
+      toast.error("Ajoutez un titre avant d'exporter en PDF.");
+      return;
+    }
+    void printDocument(payload);
+  };
+
   return (
     <>
       <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -313,7 +329,7 @@ export function NotesPersonalPanel() {
 
           {selectedNote && (
             <p className="text-xs text-muted-foreground">
-              Modifiée {formatNoteTimestamp(selectedNote.updated_at).toLowerCase()}
+              Modifiée {formatNoteTimestamp(selectedNote.updated_at)}
             </p>
           )}
 
@@ -331,6 +347,14 @@ export function NotesPersonalPanel() {
             <Button disabled={saving || !isDirty} onClick={() => void handleSave()}>
               <Save className="h-4 w-4 mr-1.5" />
               {saving ? "Enregistrement…" : "Enregistrer"}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={saving || isPrinting || !draft.title.trim()}
+              onClick={handlePrintPdf}
+            >
+              <FileDown className="h-4 w-4 mr-1.5" />
+              PDF
             </Button>
             {selectedId != null && (
               <Button
