@@ -23,12 +23,16 @@ import { linkContactToFoyer, buildFoyerNomFromMembers } from "@/lib/foyers/foyer
 import { Badge } from "@/components/ui/badge";
 import { contactMatchesSearch } from "@/lib/search-utils";
 import { ListSearchField } from "@/components/layout/ListSearchField";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface FoyerLinkModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentContact: Contact;
   onSuccess: () => void;
+  nestedSheet?: boolean;
 }
 
 export function FoyerLinkModal({
@@ -36,6 +40,7 @@ export function FoyerLinkModal({
   onOpenChange,
   currentContact,
   onSuccess,
+  nestedSheet = false,
 }: FoyerLinkModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [contacts, setContacts] = useState<Contact[]>([]);
@@ -124,8 +129,15 @@ export function FoyerLinkModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn(
+          "max-w-2xl max-h-[80vh] overflow-y-auto",
+          nestedSheet && STACKED_NESTED_SHEET_Z
+        )}
+      >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
@@ -237,6 +249,7 @@ export function FoyerLinkModal({
             Annuler
           </Button>
         </DialogFooter>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

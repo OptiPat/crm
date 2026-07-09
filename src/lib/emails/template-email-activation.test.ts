@@ -39,6 +39,7 @@ describe("template-email-activation", () => {
       envoi_heure: "09:00",
       envoi_jours_semaine: null,
       a_chaque_souscription: true,
+      excluded_contact_ids: [],
     });
     const relanceVars = setTemplateEmailRelanceInMeta(triggerVars, {
       enabled: true,
@@ -61,7 +62,9 @@ describe("template-email-activation", () => {
       hasSendChannel: true,
       isLibraryOnly: false,
     });
-    expect(getTemplateTriggerShortLabel(template)).toBe("Délai sans contact");
+    expect(getTemplateTriggerShortLabel(template)).toBe(
+      "Délai sans contact · 09:00"
+    );
     expect(getTemplateRelanceBadgeLabel(template)).toBe("Relance J+7");
   });
 
@@ -83,6 +86,7 @@ describe("template-email-activation", () => {
         envoi_heure: "09:00",
         envoi_jours_semaine: null,
         a_chaque_souscription: true,
+        excluded_contact_ids: [],
       }),
     });
     const linkedOnly = base(4);
@@ -111,6 +115,7 @@ describe("template-email-activation", () => {
           envoi_heure: "09:00",
           envoi_jours_semaine: null,
           a_chaque_souscription: true,
+          excluded_contact_ids: [],
         }),
         relance_template_id: 10,
       }),

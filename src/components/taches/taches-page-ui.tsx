@@ -324,7 +324,7 @@ export function TachesBulkBar({
   if (count === 0) return null;
 
   return (
-    <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-primary/5 px-3 py-2 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-primary/5 px-3 py-2 text-sm">
       <span>
         {count} tâche{count > 1 ? "s" : ""} sélectionnée{count > 1 ? "s" : ""}
       </span>

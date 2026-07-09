@@ -112,7 +112,12 @@ async function upsertCoupleMember(
   const identityConflicts =
     existing &&
     getPairIdentityConflictMessages(
-      { email: member.email, telephone: member.telephone },
+      {
+        email: member.email,
+        telephone: member.telephone,
+        nom: member.nom,
+        prenom: member.prenom,
+      },
       existing
     );
 
@@ -120,7 +125,7 @@ async function upsertCoupleMember(
     const confirmMerge = await Promise.resolve(
       ctx.confirmIdentityMerge(
       [
-        "Même nom/prénom mais coordonnées différentes :",
+        "Conflit d'identité :",
         identityConflicts.join(", "),
         "",
         "Fiche en base :",

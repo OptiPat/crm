@@ -65,6 +65,18 @@ import {
   rollbackImportTransaction,
 } from "@/lib/api/tauri-import-transaction";
 import {
+  IMPORT_DIALOG_BODY_CLASS,
+  IMPORT_DIALOG_CONTENT_CLASS,
+  IMPORT_DIALOG_FOOTER_CLASS,
+  IMPORT_DIALOG_HEADER_CLASS,
+} from "@/components/investissements/import-dialog-fullscreen";
+import {
+  ImportPreviewLineCard,
+  ImportPreviewReadonlyField,
+  IMPORT_PREVIEW_FIELD_GRID_CLASS,
+  IMPORT_PREVIEW_LIST_CLASS,
+} from "@/components/contacts/import-preview-ui";
+import {
   contactToUpdatePayload,
   normalizeImportCivilite,
   normalizeImportTmi,
@@ -454,12 +466,15 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         let duplicateSource = null;
         let firstOccurrenceInExcel: { rowIndex: number; email?: string; telephone?: string } | null =
           null;
+        let duplicateMatch: "name" | "email" | "phone" | null = null;
         let identityConflict = false;
         let conflictReasons: string[] = [];
 
         const rowIdentity = {
           email: contactData.email ? String(contactData.email) : undefined,
           telephone: contactData.telephone ? String(contactData.telephone) : undefined,
+          nom: contactData.nom ? String(contactData.nom) : undefined,
+          prenom: contactData.prenom ? String(contactData.prenom) : undefined,
         };
 
         if (contactKey && seenInImport.has(contactKey)) {
@@ -475,7 +490,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             telephone: rowIdentity.telephone,
           });
 
-          duplicateContact =
+          const byName =
             contactData.nom && contactData.prenom
               ? findContactByNameKeyWithSwap(
                   existingContacts,
@@ -483,14 +498,23 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                   String(contactData.prenom)
                 )
               : undefined;
-          if (!duplicateContact) {
-            duplicateContact =
-              existingContacts.find((contact) => {
-                if (contactData.email && contact.email === contactData.email) return true;
-                if (contactData.telephone && contact.telephone === contactData.telephone)
-                  return true;
-                return false;
-              }) ?? null;
+
+          if (byName) {
+            duplicateContact = byName;
+            duplicateMatch = "name";
+          } else {
+            for (const contact of existingContacts) {
+              if (contactData.email && contact.email === contactData.email) {
+                duplicateContact = contact;
+                duplicateMatch = "email";
+                break;
+              }
+              if (contactData.telephone && contact.telephone === contactData.telephone) {
+                duplicateContact = contact;
+                duplicateMatch = "phone";
+                break;
+              }
+            }
           }
 
           isDuplicate = !!duplicateContact;
@@ -506,7 +530,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           if (duplicateSource === "excel" && firstOccurrenceInExcel) {
             duplicateMessage = `Doublon dans l'Excel (→ ligne ${firstOccurrenceInExcel.rowIndex + 1})`;
           } else if (duplicateContact) {
-            duplicateMessage = `Doublon en base (${duplicateContact.prenom} ${duplicateContact.nom})`;
+            if (duplicateMatch === "email") {
+              duplicateMessage = "Correspondance email";
+            } else if (duplicateMatch === "phone") {
+              duplicateMessage = "Correspondance téléphone";
+            } else {
+              duplicateMessage = `Doublon en base (${duplicateContact.prenom} ${duplicateContact.nom})`;
+            }
           } else {
             duplicateMessage = "Doublon détecté";
           }
@@ -2356,14 +2386,15 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
   return (
     <>
     <Dialog open={open} onOpenChange={handleDialogOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className={IMPORT_DIALOG_CONTENT_CLASS}>
+        <DialogHeader className={IMPORT_DIALOG_HEADER_CLASS}>
           <DialogTitle>Importer des contacts</DialogTitle>
           <DialogDescription>
             Importez vos contacts depuis un fichier Excel (.xlsx) ou CSV
           </DialogDescription>
         </DialogHeader>
 
+        <div className={IMPORT_DIALOG_BODY_CLASS}>
         {/* Afficher les erreurs */}
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
@@ -2441,7 +2472,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
 
             <div className="space-y-3">
               {columns.map(col => (
-                <div key={col} className="grid grid-cols-2 gap-4 items-center">
+                <div key={col} className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 items-center">
                   <Label className="font-medium">
                     {col}
                     {mapping[col] && mapping[col] !== "SKIP" && (
@@ -2482,7 +2513,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         {step === "preview" && (
           <div className="space-y-4">
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-start gap-4 justify-between">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">
                     {pendingCount} contact{pendingCount > 1 ? "s" : ""} prêt{pendingCount > 1 ? "s" : ""} à être importé{pendingCount > 1 ? "s" : ""}
@@ -2503,9 +2534,9 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       {ambiguousDuplicateCount > 0 && (
                         <span className="text-amber-700">
                           {" "}
-                          — dont {ambiguousDuplicateCount} homonyme
-                          {ambiguousDuplicateCount > 1 ? "s" : ""} en base (email/tél différents,
-                          ligne ignorée)
+                          — dont {ambiguousDuplicateCount} ambigu
+                          {ambiguousDuplicateCount > 1 ? "s" : ""} en base (noms ou coordonnées
+                          différents, ligne ignorée)
                         </span>
                       )}
                     </p>
@@ -2625,19 +2656,8 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
               )}
             </div>
 
-            <div className="border rounded-lg max-h-96 overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted sticky top-0">
-                  <tr>
-                    <th className="p-2 text-left">Statut</th>
-                    <th className="p-2 text-left">Nom</th>
-                    <th className="p-2 text-left">Prénom</th>
-                    <th className="p-2 text-left">Email</th>
-                    <th className="p-2 text-left">Catégorie</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {importRows.slice(0, 50).map((row, idx) => {
+            <div className={IMPORT_PREVIEW_LIST_CLASS}>
+              {importRows.slice(0, 50).map((row, idx) => {
                     // Déterminer la catégorie qui sera appliquée (même logique que l'import)
                     const hasProduit = row.data.produit && (() => {
                       const produitStr = String(row.data.produit).trim().toUpperCase();
@@ -2664,58 +2684,69 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                       : previewClientCat;
                     
                     return (
-                      <tr key={idx} className="border-t">
-                        <td className="p-2">
-                          {row.status === "duplicate" && (
-                            <Badge
-                              variant="outline"
-                              className={
-                                row.data._identityConflict
-                                  ? "bg-amber-50 text-amber-900 border-amber-300"
-                                  : "bg-orange-50 text-orange-800"
-                              }
-                            >
-                              {row.data._identityConflict ? "Homonyme ?" : "Doublon"}
-                            </Badge>
-                          )}
-                          {row.status === "pending" && (
-                            <Badge variant="outline" className="bg-green-50 text-green-800">
-                              Prêt
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="p-2">{row.data.nom}</td>
-                        <td className="p-2">{row.data.prenom}</td>
-                        <td className="p-2">{row.data.email || "-"}</td>
-                        <td className="p-2">
-                          <Badge 
-                            variant="outline" 
-                            className={
-                              previewClientCat === "CLIENT"
-                                ? "bg-green-50 text-green-700 border-green-300"
-                                : previewFilleulCat
-                                ? "bg-indigo-50 text-indigo-700 border-indigo-300"
-                                : previewClientCat === "PROSPECT_CLIENT"
-                                ? "bg-purple-50 text-purple-700 border-purple-300"
-                                : "bg-slate-50 text-slate-700 border-slate-300"
-                            }
-                          >
-                            {(finalCategorie || previewClientCat).replace(/_/g, " ")}
-                          </Badge>
-                        </td>
-                      </tr>
+                      <ImportPreviewLineCard
+                        key={idx}
+                        header={
+                          <>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-muted-foreground">Ligne {idx + 1}</span>
+                              {row.status === "duplicate" && (
+                                <Badge
+                                  variant="outline"
+                                  className={
+                                    row.data._identityConflict
+                                      ? "bg-amber-50 text-amber-900 border-amber-300"
+                                      : "bg-orange-50 text-orange-800"
+                                  }
+                                >
+                                  {row.data._identityConflict ? "Homonyme ?" : "Doublon"}
+                                </Badge>
+                              )}
+                              {row.status === "pending" && (
+                                <Badge variant="outline" className="bg-green-50 text-green-800">
+                                  Prêt
+                                </Badge>
+                              )}
+                              <Badge 
+                                variant="outline" 
+                                className={
+                                  previewClientCat === "CLIENT"
+                                    ? "bg-green-50 text-green-700 border-green-300"
+                                    : previewFilleulCat
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-300"
+                                    : previewClientCat === "PROSPECT_CLIENT"
+                                    ? "bg-purple-50 text-purple-700 border-purple-300"
+                                    : "bg-slate-50 text-slate-700 border-slate-300"
+                                }
+                              >
+                                {(finalCategorie || previewClientCat).replace(/_/g, " ")}
+                              </Badge>
+                            </div>
+                            {row.message ? (
+                              <p className="text-xs text-muted-foreground">{row.message}</p>
+                            ) : null}
+                          </>
+                        }
+                      >
+                        <div className={IMPORT_PREVIEW_FIELD_GRID_CLASS}>
+                          <ImportPreviewReadonlyField label="Nom" value={row.data.nom} />
+                          <ImportPreviewReadonlyField label="Prénom" value={row.data.prenom} />
+                          <ImportPreviewReadonlyField label="Email" value={row.data.email} className="col-span-2" />
+                          {row.data.telephone ? (
+                            <ImportPreviewReadonlyField label="Téléphone" value={row.data.telephone} />
+                          ) : null}
+                        </div>
+                      </ImportPreviewLineCard>
                     );
                   })}
-                </tbody>
-              </table>
               {importRows.length > 50 && (
-                <div className="p-2 text-center text-sm text-muted-foreground bg-muted">
+                <div className="p-2 text-center text-sm text-muted-foreground bg-muted rounded-lg">
                   ... et {importRows.length - 50} ligne{importRows.length - 50 > 1 ? "s" : ""} de plus
                 </div>
               )}
             </div>
 
-            <DialogFooter>
+            <DialogFooter className={IMPORT_DIALOG_FOOTER_CLASS}>
               <Button variant="outline" onClick={() => setStep("mapping")}>
                 Retour
               </Button>
@@ -2765,12 +2796,13 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             </div>
 
             {!importing && (
-              <DialogFooter>
+              <DialogFooter className={IMPORT_DIALOG_FOOTER_CLASS}>
                 <Button onClick={handleFinishImport}>Fermer</Button>
               </DialogFooter>
             )}
           </div>
         )}
+        </div>
       </DialogContent>
     </Dialog>
 

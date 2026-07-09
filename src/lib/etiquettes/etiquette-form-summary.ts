@@ -34,12 +34,16 @@ export interface EtiquetteRuleSummaryInput {
   eventTypesProduitCount?: number;
   /** Pose de l'étiquette à chaque investissement (événement souscription). */
   aChaqueSouscription?: boolean;
+  /** Libellé répétition souscription : étiquette (défaut) ou envoi (déclencheur modèle). */
+  repeatEntity?: "etiquette" | "envoi";
   invChampDate: string;
   invJoursAvant: number;
   invTypesProduitCount: number;
   tmiTranches: number[];
   irNetOperator: string;
   irNetMontant: number | null;
+  revenusAnnuelsOperator: string;
+  revenusAnnuelsMontant: number | null;
   categories: string[];
 }
 
@@ -82,10 +86,15 @@ export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): st
         count > 0
           ? ` (${count} type${count > 1 ? "s" : ""} de produit)`
           : " (tous produits)";
+      const entity = input.repeatEntity ?? "etiquette";
       const repeat =
         input.aChaqueSouscription === false
-          ? " — étiquette une seule fois par contact"
-          : " — étiquette à chaque investissement";
+          ? entity === "envoi"
+            ? " — un envoi une seule fois par contact"
+            : " — étiquette une seule fois par contact"
+          : entity === "envoi"
+            ? " — un envoi à chaque investissement"
+            : " — étiquette à chaque investissement";
       detail = `souscription enregistrée sur la fiche${types}${repeat}`;
       break;
     }
@@ -150,6 +159,24 @@ export function formatEtiquetteRuleSummary(input: EtiquetteRuleSummaryInput): st
             }).format(input.irNetMontant)
           : "…";
       detail = `IR net ${op} ${m}`;
+      break;
+    }
+    case "REVENUS_ANNUELS": {
+      const op =
+        input.revenusAnnuelsOperator === "lte"
+          ? "≤"
+          : input.revenusAnnuelsOperator === "eq"
+            ? "="
+            : "≥";
+      const m =
+        input.revenusAnnuelsMontant != null
+          ? new Intl.NumberFormat("fr-FR", {
+              style: "currency",
+              currency: "EUR",
+              maximumFractionDigits: 0,
+            }).format(input.revenusAnnuelsMontant)
+          : "…";
+      detail = `revenus annuels ${op} ${m}`;
       break;
     }
     default:

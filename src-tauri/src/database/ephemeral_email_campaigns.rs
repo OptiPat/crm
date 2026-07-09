@@ -70,6 +70,9 @@ pub struct EphemeralCampaignAudience {
     pub reinvestissement_dividendes: EphemeralReinvestFilter,
     #[serde(default, alias = "versementProgramme")]
     pub versement_programme: EphemeralVersementProgrammeFilter,
+    /// Règle combinée optionnelle (JSON rule_tree v1) — TMI, revenus, etc.
+    #[serde(default, alias = "ruleTree")]
+    pub rule_tree: Option<String>,
 }
 
 fn default_categories() -> Vec<String> {
@@ -317,13 +320,44 @@ impl Database {
             .collect()
     }
 
+    fn contact_matches_ephemeral_patrimoine_options(
+        &self,
+        audience: &EphemeralCampaignAudience,
+        investments: &[ScopedInvestment],
+    ) -> bool {
+        if audience.reinvestissement_dividendes == EphemeralReinvestFilter::Any
+            && audience.versement_programme == EphemeralVersementProgrammeFilter::Any
+        {
+            return true;
+        }
+        let matching = Self::matching_investments_for_audience(investments, audience);
+        Self::passes_tri_state_filter(&matching, audience.reinvestissement_dividendes, |inv| {
+            inv.reinvestissement_dividendes
+        }) && Self::passes_versement_filter(&matching, audience.versement_programme)
+    }
+
     fn contact_matches_ephemeral_client_patrimoine(
         &self,
         contact: &Contact,
         audience: &EphemeralCampaignAudience,
     ) -> Result<bool> {
         if audience.types_produit.is_empty() && audience.noms_produit.is_empty() {
-            return Ok(false);
+            let has_rule_tree = audience
+                .rule_tree
+                .as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+            if !has_rule_tree {
+                return Ok(false);
+            }
+            let Some(contact_id) = contact.id else {
+                return Ok(false);
+            };
+            let investments = self.load_scoped_investments(contact_id, contact.foyer_id)?;
+            return Ok(self.contact_matches_ephemeral_patrimoine_options(
+                audience,
+                &investments,
+            ));
         }
 
         let Some(contact_id) = contact.id else {
@@ -365,12 +399,10 @@ impl Database {
             return Ok(false);
         }
 
-        let matching = Self::matching_investments_for_audience(&investments, audience);
-        Ok(
-            Self::passes_tri_state_filter(&matching, audience.reinvestissement_dividendes, |inv| {
-                inv.reinvestissement_dividendes
-            }) && Self::passes_versement_filter(&matching, audience.versement_programme),
-        )
+        Ok(self.contact_matches_ephemeral_patrimoine_options(
+            audience,
+            &investments,
+        ))
     }
 
     pub(crate) fn contact_matches_ephemeral_audience(
@@ -434,7 +466,40 @@ impl Database {
                 organisation_self_id,
             );
 
-        Ok(filleul_ok || client_ok || prescripteur_ok)
+        if !(filleul_ok || client_ok || prescripteur_ok) {
+            return Ok(false);
+        }
+
+        // Règle avancée : ne filtre que les contacts retenus côté client (pas filleul / prescripteur seuls).
+        if client_ok {
+            return self.contact_matches_ephemeral_rule_tree(
+                contact,
+                audience,
+                organisation_self_id,
+            );
+        }
+        Ok(true)
+    }
+
+    fn contact_matches_ephemeral_rule_tree(
+        &self,
+        contact: &Contact,
+        audience: &EphemeralCampaignAudience,
+        organisation_self_id: Option<i64>,
+    ) -> Result<bool> {
+        let Some(ref tree_json) = audience.rule_tree else {
+            return Ok(true);
+        };
+        if tree_json.trim().is_empty() {
+            return Ok(true);
+        }
+        use super::etiquette_rule_ast::parse_rule_json;
+        let tree = match parse_rule_json(Some(tree_json), None, None, None) {
+            Ok(tree) => tree,
+            Err(_) => return Ok(false),
+        };
+        let (now, current_month) = Self::auto_etiquette_now_and_month();
+        self.contact_matches_rule_tree(contact, &tree, now, current_month, organisation_self_id)
     }
 
     pub fn preview_ephemeral_campaign_audience(
@@ -860,6 +925,7 @@ mod tests {
             produits_match_mode: EphemeralProduitsMatchMode::All,
             reinvestissement_dividendes: EphemeralReinvestFilter::Any,
             versement_programme: EphemeralVersementProgrammeFilter::Any,
+            rule_tree: None,
         };
 
         let mut presc = sample_contact("RESEAU", "Paul", "p@example.com");
@@ -890,6 +956,7 @@ mod tests {
             produits_match_mode: EphemeralProduitsMatchMode::All,
             reinvestissement_dividendes: EphemeralReinvestFilter::Any,
             versement_programme: EphemeralVersementProgrammeFilter::Any,
+            rule_tree: None,
         };
 
         let mut filleul = sample_contact("MANAGER", "Alice", "a@example.com");
@@ -924,6 +991,7 @@ mod tests {
             produits_match_mode: EphemeralProduitsMatchMode::All,
             reinvestissement_dividendes: EphemeralReinvestFilter::Any,
             versement_programme: EphemeralVersementProgrammeFilter::Any,
+            rule_tree: None,
         };
 
         let mut filleul_only = sample_contact("RESEAU", "Bob", "b@example.com");
@@ -954,6 +1022,7 @@ mod tests {
             produits_match_mode: EphemeralProduitsMatchMode::All,
             reinvestissement_dividendes: EphemeralReinvestFilter::Inactive,
             versement_programme: EphemeralVersementProgrammeFilter::Any,
+            rule_tree: None,
         }
     }
 
@@ -1353,6 +1422,167 @@ mod tests {
             .unwrap());
         assert!(!db
             .contact_matches_ephemeral_audience(&contact2, &audience, None)
+            .unwrap());
+    }
+
+    #[test]
+    fn ephemeral_rule_tree_tmi_and_revenus() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let rule_tree = serde_json::json!({
+            "v": 1,
+            "op": "and",
+            "children": [
+                {
+                    "type": "TMI",
+                    "config": { "tranches": [30] },
+                    "categories": ["CLIENT"]
+                },
+                {
+                    "type": "REVENUS_ANNUELS",
+                    "config": { "operator": "gte", "montant": 60000 },
+                    "categories": ["CLIENT"]
+                }
+            ]
+        })
+        .to_string();
+
+        let audience = EphemeralCampaignAudience {
+            segment_id: None,
+            categories: vec!["CLIENT".into()],
+            types_produit: vec![],
+            noms_produit: vec![],
+            produits_match_mode: EphemeralProduitsMatchMode::All,
+            reinvestissement_dividendes: EphemeralReinvestFilter::Any,
+            versement_programme: EphemeralVersementProgrammeFilter::Any,
+            rule_tree: Some(rule_tree),
+        };
+
+        let c_ok = db
+            .create_contact(sample_contact("ELIGIBLE", "Jean", "ok@example.com"))
+            .unwrap();
+        let c_ok_id = c_ok.id.unwrap();
+        db.update_contact_fiscal(
+            c_ok_id,
+            Some("30 %".into()),
+            None,
+            Some(70_000.0),
+            None,
+        )
+        .unwrap();
+        let contact_ok = db.get_contact_by_id(c_ok_id).unwrap();
+        assert!(db
+            .contact_matches_ephemeral_audience(&contact_ok, &audience, None)
+            .unwrap());
+
+        let c_ko = db
+            .create_contact(sample_contact("KO", "Luc", "ko@example.com"))
+            .unwrap();
+        let c_ko_id = c_ko.id.unwrap();
+        db.update_contact_fiscal(
+            c_ko_id,
+            Some("30 %".into()),
+            None,
+            Some(50_000.0),
+            None,
+        )
+        .unwrap();
+        let contact_ko = db.get_contact_by_id(c_ko_id).unwrap();
+        assert!(!db
+            .contact_matches_ephemeral_audience(&contact_ko, &audience, None)
+            .unwrap());
+    }
+
+    #[test]
+    fn ephemeral_rule_tree_applies_reinvest_filter_without_product() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let rule_tree = serde_json::json!({
+            "v": 1,
+            "op": "and",
+            "children": [
+                {
+                    "type": "TMI",
+                    "config": { "tranches": [30] },
+                    "categories": ["CLIENT"]
+                }
+            ]
+        })
+        .to_string();
+
+        let audience = EphemeralCampaignAudience {
+            segment_id: None,
+            categories: vec!["CLIENT".into()],
+            types_produit: vec![],
+            noms_produit: vec![],
+            produits_match_mode: EphemeralProduitsMatchMode::All,
+            reinvestissement_dividendes: EphemeralReinvestFilter::Inactive,
+            versement_programme: EphemeralVersementProgrammeFilter::Any,
+            rule_tree: Some(rule_tree),
+        };
+
+        let c_ok = db
+            .create_contact(sample_contact("REINV_OFF", "Jean", "ok@example.com"))
+            .unwrap();
+        let c_ok_id = c_ok.id.unwrap();
+        db.update_contact_fiscal(c_ok_id, Some("30 %".into()), None, None, None)
+            .unwrap();
+        let mut inv = scpi_inv_with_options(c_ok_id, "Fonds Test", false, false);
+        inv.type_produit = "SCPI".into();
+        db.create_investissement(inv).unwrap();
+
+        let c_ko = db
+            .create_contact(sample_contact("REINV_ON", "Luc", "ko@example.com"))
+            .unwrap();
+        let c_ko_id = c_ko.id.unwrap();
+        db.update_contact_fiscal(c_ko_id, Some("30 %".into()), None, None, None)
+            .unwrap();
+        let mut inv2 = scpi_inv_with_options(c_ko_id, "Fonds Test", true, false);
+        inv2.type_produit = "SCPI".into();
+        db.create_investissement(inv2).unwrap();
+
+        let contact_ok = db.get_contact_by_id(c_ok_id).unwrap();
+        let contact_ko = db.get_contact_by_id(c_ko_id).unwrap();
+        assert!(db
+            .contact_matches_ephemeral_audience(&contact_ok, &audience, None)
+            .unwrap());
+        assert!(!db
+            .contact_matches_ephemeral_audience(&contact_ko, &audience, None)
+            .unwrap());
+    }
+
+    #[test]
+    fn ephemeral_rule_tree_skips_filleul_only_match() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let rule_tree = serde_json::json!({
+            "v": 1,
+            "op": "and",
+            "children": [
+                {
+                    "type": "TMI",
+                    "config": { "tranches": [30] },
+                    "categories": ["CLIENT"]
+                }
+            ]
+        })
+        .to_string();
+
+        let audience = EphemeralCampaignAudience {
+            segment_id: None,
+            categories: vec!["CLIENT".into(), "FILLEUL".into()],
+            types_produit: vec![],
+            noms_produit: vec![],
+            produits_match_mode: EphemeralProduitsMatchMode::All,
+            reinvestissement_dividendes: EphemeralReinvestFilter::Any,
+            versement_programme: EphemeralVersementProgrammeFilter::Any,
+            rule_tree: Some(rule_tree),
+        };
+
+        let mut filleul = sample_contact("FILLEUL", "Alice", "a@example.com");
+        filleul.categorie = "AUCUN".into();
+        filleul.filleul_categorie = Some("FILLEUL".into());
+        let c = db.create_contact(filleul).unwrap();
+        let contact = db.get_contact_by_id(c.id.unwrap()).unwrap();
+        assert!(db
+            .contact_matches_ephemeral_audience(&contact, &audience, None)
             .unwrap());
     }
 }

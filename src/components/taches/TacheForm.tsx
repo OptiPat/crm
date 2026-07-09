@@ -52,6 +52,7 @@ import { isActiveRecurrence, type TacheRecurrence } from "@/lib/taches/tache-rec
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface TacheFormProps {
   open: boolean;
@@ -378,6 +379,7 @@ export function TacheForm({
           nestedSheet && STACKED_NESTED_SHEET_Z
         )}
       >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle>{tache ? "Modifier la tâche" : "Nouvelle tâche"}</DialogTitle>
           <DialogDescription>
@@ -460,6 +462,7 @@ export function TacheForm({
             </Button>
           </DialogFooter>
         </form>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

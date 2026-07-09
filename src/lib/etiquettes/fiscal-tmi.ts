@@ -46,6 +46,17 @@ export interface ConditionIrNetConfig {
   montant: number;
 }
 
+export interface ConditionRevenusAnnuelsConfig {
+  operator: IrNetOperator;
+  montant: number;
+}
+
+export function parseConditionRevenusAnnuelsConfig(
+  configJson: string | null | undefined
+): ConditionRevenusAnnuelsConfig | null {
+  return parseConditionIrNetConfig(configJson);
+}
+
 export function parseConditionTmiConfig(
   configJson: string | null | undefined
 ): ConditionTmiConfig | null {

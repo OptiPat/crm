@@ -16,6 +16,9 @@ pub struct TemplateEmailTriggerConfig {
     #[serde(default)]
     pub envoi_jours_semaine: Option<String>,
     pub a_chaque_souscription: bool,
+    /// Contacts décochés dans l'aperçu (exclus de la file déclencheur).
+    #[serde(default)]
+    pub excluded_contact_ids: Vec<i64>,
     /// Ancien format
     pub trigger_type: String,
     pub event_types: Vec<String>,
@@ -91,6 +94,10 @@ impl TemplateEmailTriggerConfig {
             }
         }
         self.a_chaque_souscription
+    }
+
+    pub fn is_contact_excluded(&self, contact_id: i64) -> bool {
+        self.excluded_contact_ids.contains(&contact_id)
     }
 }
 

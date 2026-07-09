@@ -56,6 +56,7 @@ describe("template-email-ephemeral", () => {
           produits_match_mode: "all",
           reinvestissement_dividendes: "inactive",
           versement_programme: "any",
+          rule_tree: null,
         },
         excluded_contact_ids: [],
         send_at: null,
@@ -87,6 +88,7 @@ describe("template-email-ephemeral", () => {
       produits_match_mode: "all" as const,
       reinvestissement_dividendes: "any" as const,
       versement_programme: "any" as const,
+      rule_tree: null as string | null,
     };
     expect(isEphemeralAudienceValid({ ...base, categories: ["FILLEUL"] })).toBe(true);
     expect(isEphemeralAudienceValid({ ...base, categories: ["FILLEUL", "PROSPECT_FILLEUL"] })).toBe(
@@ -126,5 +128,32 @@ describe("template-email-ephemeral", () => {
     expect(shouldShowEphemeralPatrimoineFilter(["CLIENT"])).toBe(true);
     expect(shouldShowEphemeralPatrimoineFilter(["CLIENT", "FILLEUL"])).toBe(true);
     expect(shouldShowEphemeralPatrimoineFilter(["PROSPECT_CLIENT"])).toBe(true);
+  });
+
+  it("valide une audience client avec règle avancée sans produit", () => {
+    const rule_tree = JSON.stringify({
+      v: 1,
+      op: "and",
+      children: [
+        { type: "TMI", config: { tranches: [30] }, categories: ["CLIENT"] },
+        {
+          type: "REVENUS_ANNUELS",
+          config: { operator: "gte", montant: 60_000 },
+          categories: ["CLIENT"],
+        },
+      ],
+    });
+    expect(
+      isEphemeralAudienceValid({
+        segment_id: null,
+        categories: ["CLIENT"],
+        types_produit: [],
+        noms_produit: [],
+        produits_match_mode: "all",
+        reinvestissement_dividendes: "any",
+        versement_programme: "any",
+        rule_tree,
+      })
+    ).toBe(true);
   });
 });

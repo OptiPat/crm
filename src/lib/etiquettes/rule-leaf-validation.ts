@@ -17,7 +17,21 @@ export function isRuleLeafValidForPreview(leaf: RuleLeaf): boolean {
     }
     case "IR_NET": {
       const montant = leaf.config.montant;
-      return montant != null && montant !== "" && Number.isFinite(Number(montant));
+      return (
+        montant != null &&
+        montant !== "" &&
+        Number.isFinite(Number(montant)) &&
+        Number(montant) > 0
+      );
+    }
+    case "REVENUS_ANNUELS": {
+      const montant = leaf.config.montant;
+      return (
+        montant != null &&
+        montant !== "" &&
+        Number.isFinite(Number(montant)) &&
+        Number(montant) > 0
+      );
     }
     default:
       return true;

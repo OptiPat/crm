@@ -138,6 +138,8 @@ impl super::Database {
         )?;
 
         let _ = self.resync_pending_template_envois_for_template(id)?;
+        let _ = self.purge_excluded_template_trigger_envois(id)?;
+        let _ = self.sync_template_email_trigger_for_all_contacts(id)?;
 
         self.get_template_email_by_id(id)
     }

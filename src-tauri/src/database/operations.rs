@@ -3726,6 +3726,78 @@ mod database_integration_tests {
     }
 
     #[test]
+    fn update_template_email_requeues_contact_removed_from_exclusion() {
+        use crate::database::models::{NewContact, NewTemplateEmail};
+
+        let db = test_db();
+        let (_, current_month) = crate::database::Database::auto_etiquette_now_and_month();
+        let contact = db
+            .create_contact(NewContact {
+                email: Some("client@example.com".into()),
+                ..sample_contact("Martin", "Alice")
+            })
+            .unwrap();
+        let cid = contact.id.unwrap();
+
+        let trigger_with_exclusion = format!(
+            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":0,"excluded_contact_ids":[{cid}]}}}}"#
+        );
+        let tpl = db
+            .create_template_email(NewTemplateEmail {
+                nom: "Relance exclusion test".into(),
+                sujet: "Bonjour {{prenom}}".into(),
+                corps: "Corps".into(),
+                categorie: "INFO".into(),
+                variables: Some(trigger_with_exclusion.into()),
+                agenda_link_id: None,
+                relance_template_id: None,
+                tutoiement_template_id: None,
+            })
+            .unwrap();
+
+        db.sync_template_email_triggers_for_contact(cid).unwrap();
+        let pending_before: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois
+                 WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 0",
+                rusqlite::params![cid, tpl.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_before, 0);
+
+        let trigger_no_exclusion = format!(
+            r#"{{"email_trigger":{{"enabled":true,"condition_type":"PERIODE_ANNEE","condition_config":"{{\"mois_debut\":{current_month},\"mois_fin\":{current_month}}}","categories":["CLIENT"],"delai_jours":0,"excluded_contact_ids":[]}}}}"#
+        );
+        db.update_template_email(
+            tpl.id,
+            &NewTemplateEmail {
+                nom: tpl.nom.clone(),
+                sujet: tpl.sujet.clone(),
+                corps: tpl.corps.clone(),
+                categorie: tpl.categorie.clone(),
+                variables: Some(trigger_no_exclusion.into()),
+                agenda_link_id: tpl.agenda_link_id.clone(),
+                relance_template_id: tpl.relance_template_id,
+                tutoiement_template_id: tpl.tutoiement_template_id,
+            },
+        )
+        .unwrap();
+
+        let pending_after: i64 = db
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM contact_template_envois
+                 WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 0",
+                rusqlite::params![cid, tpl.id],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(pending_after, 1);
+    }
+
+    #[test]
     fn template_periode_annee_trigger_reschedules_after_period_reset() {
         use crate::database::models::{NewContact, NewTemplateEmail};
 

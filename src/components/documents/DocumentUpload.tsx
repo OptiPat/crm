@@ -34,6 +34,7 @@ import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { assessRioImport } from "@/lib/documents/rio-import-guard";
 
 interface DocumentUploadProps {
@@ -504,6 +505,7 @@ export function DocumentUpload({
               : "max-w-2xl overflow-y-auto"
           )}
         >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         {isStelliumWizardMode ? (
           <RioImportWizard
             embedded
@@ -832,6 +834,7 @@ export function DocumentUpload({
         </form>
           </>
         )}
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
     </>

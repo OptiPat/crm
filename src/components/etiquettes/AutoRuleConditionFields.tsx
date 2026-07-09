@@ -30,6 +30,17 @@ import {
   type ConditionEvenementSouscription,
 } from "@/lib/api/tauri-etiquettes";
 import { SouscriptionRepeatModeRadios } from "@/components/etiquettes/SouscriptionRepeatModeRadios";
+import {
+  IrNetConditionFields,
+  RevenusAnnuelsConditionFields,
+  TmiTranchePicker,
+} from "@/components/etiquettes/FiscalRuleFields";
+import {
+  parseConditionIrNetConfig,
+  parseConditionRevenusAnnuelsConfig,
+  parseConditionTmiConfig,
+  type IrNetOperator,
+} from "@/lib/etiquettes/fiscal-tmi";
 import { useMemo } from "react";
 
 const MOIS_LABELS = [
@@ -120,6 +131,22 @@ export function AutoRuleConditionFields({
       },
     [conditionConfig]
   );
+  const tmiCfg = useMemo(
+    () => parseConditionTmiConfig(conditionConfig) ?? { tranches: [] },
+    [conditionConfig]
+  );
+  const irNetCfg = useMemo(
+    () => parseConditionIrNetConfig(conditionConfig) ?? { operator: "gte" as IrNetOperator, montant: 0 },
+    [conditionConfig]
+  );
+  const revenusCfg = useMemo(
+    () =>
+      parseConditionRevenusAnnuelsConfig(conditionConfig) ?? {
+        operator: "gte" as IrNetOperator,
+        montant: 0,
+      },
+    [conditionConfig]
+  );
 
   const toggleCategory = (next: string[]) => {
     emit(conditionType, conditionConfig, next);
@@ -135,8 +162,14 @@ export function AutoRuleConditionFields({
             let config: string | null = null;
             if (type === "DELAI_SANS_CONTACT") {
               config = stringifyConditionConfig({ jours: 365, inclure_sans_date: true });
-            } else if (type === "EVENEMENT_SOUSCRIPTION") {
+            } else             if (type === "EVENEMENT_SOUSCRIPTION") {
               config = stringifyConditionConfig({ types: [], a_chaque_souscription: true });
+            } else if (type === "TMI") {
+              config = stringifyConditionConfig({ tranches: [30] });
+            } else if (type === "IR_NET") {
+              config = stringifyConditionConfig({ operator: "gte", montant: 4000 });
+            } else if (type === "REVENUS_ANNUELS") {
+              config = stringifyConditionConfig({ operator: "gte", montant: 60_000 });
             }
             emit(type, config, categories);
           }}
@@ -482,6 +515,88 @@ export function AutoRuleConditionFields({
               </SelectContent>
             </Select>
           </div>
+        </div>
+      )}
+
+      {conditionType === "TMI" && (
+        <div className="space-y-2">
+          <Label>Tranche(s) TMI</Label>
+          <p className="text-xs text-muted-foreground">
+            Fiche contact ou foyer — « 30 », « 30 % » et « TMI 30 » sont reconnus.
+          </p>
+          <TmiTranchePicker
+            selected={tmiCfg.tranches}
+            onToggle={(rate) => {
+              const next = tmiCfg.tranches.includes(rate)
+                ? tmiCfg.tranches.filter((r) => r !== rate)
+                : [...tmiCfg.tranches, rate].sort((a, b) => a - b);
+              emit(
+                conditionType,
+                stringifyConditionConfig({ tranches: next }),
+                categories
+              );
+            }}
+          />
+        </div>
+      )}
+
+      {conditionType === "IR_NET" && (
+        <div className="space-y-2">
+          <Label>IR net à payer</Label>
+          <p className="text-xs text-muted-foreground">
+            Montant renseigné sur la fiche contact (ou le foyer).
+          </p>
+          <IrNetConditionFields
+            operator={irNetCfg.operator}
+            onOperatorChange={(op) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig({ ...irNetCfg, operator: op }),
+                categories
+              )
+            }
+            montant={irNetCfg.montant > 0 ? irNetCfg.montant : ""}
+            onMontantChange={(v) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig({
+                  ...irNetCfg,
+                  montant: v === "" ? "" : v,
+                }),
+                categories
+              )
+            }
+          />
+        </div>
+      )}
+
+      {conditionType === "REVENUS_ANNUELS" && (
+        <div className="space-y-2">
+          <Label>Revenus annuels</Label>
+          <p className="text-xs text-muted-foreground">
+            Revenus annuels du contact, sinon revenu brut global (RBG) du foyer.
+          </p>
+          <RevenusAnnuelsConditionFields
+            operator={revenusCfg.operator}
+            onOperatorChange={(op) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig({ ...revenusCfg, operator: op }),
+                categories
+              )
+            }
+            montant={revenusCfg.montant > 0 ? revenusCfg.montant : ""}
+            onMontantChange={(v) =>
+              emit(
+                conditionType,
+                stringifyConditionConfig({
+                  ...revenusCfg,
+                  montant: v === "" ? "" : v,
+                }),
+                categories
+              )
+            }
+          />
         </div>
       )}
 

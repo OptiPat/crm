@@ -78,7 +78,8 @@ export function VirtualizedDocumentsPortfolio({
 
   return (
     <VirtualizedContactList
-      className="max-h-[min(70vh,720px)] overflow-y-auto pr-1"
+      pageScroll
+      className="pr-1"
       items={flatRows}
       getKey={(row) => row.key}
       getItemHeight={(row) => {

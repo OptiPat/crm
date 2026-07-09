@@ -11,6 +11,8 @@ import { deleteContact, type Contact } from "@/lib/api/tauri-contacts";
 import { List } from "lucide-react";
 import { toast } from "sonner";
 import { STACKED_CONTACT_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
+import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 
 interface DashboardContactDetailSheetProps {
   open: boolean;
@@ -66,30 +68,32 @@ export function DashboardContactDetailSheet({
         side="right"
         hideOverlay={hideOverlay}
         className={`${STACKED_CONTACT_SHEET_Z} flex h-svh max-h-svh min-h-0 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl lg:max-w-3xl [&>button.absolute]:hidden`}
-        onInteractOutside={hideOverlay ? (event) => event.preventDefault() : undefined}
-        onPointerDownOutside={hideOverlay ? (event) => event.preventDefault() : undefined}
+        onInteractOutside={hideOverlay ? preventStackedSheetOutsideDismiss : undefined}
+        onPointerDownOutside={hideOverlay ? preventStackedSheetOutsideDismiss : undefined}
       >
         <SheetHeader className="sr-only">
           <SheetTitle>Fiche contact — {label}</SheetTitle>
           <SheetDescription>Consultation et modification du contact</SheetDescription>
         </SheetHeader>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-2 pt-4">
-          <ContactDetail
-            key={contact.id}
-            embedded
-            open
-            contact={contact}
-            nestedInvestissementSheet
-            onOpenChange={onOpenChange}
-            onDelete={handleDelete}
-            onUpdate={onUpdate}
-            onContactRefreshed={onContactRefreshed}
-            onNavigate={handleNavigate}
-            onOpenContact={(linked) => {
-              if (linked.id) onContactRefreshed?.(linked);
-            }}
-          />
-        </div>
+        <PortalLayerProvider layer="stacked">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-2 pt-4">
+            <ContactDetail
+              key={contact.id}
+              embedded
+              open
+              contact={contact}
+              nestedInvestissementSheet
+              onOpenChange={onOpenChange}
+              onDelete={handleDelete}
+              onUpdate={onUpdate}
+              onContactRefreshed={onContactRefreshed}
+              onNavigate={handleNavigate}
+              onOpenContact={(linked) => {
+                if (linked.id) onContactRefreshed?.(linked);
+              }}
+            />
+          </div>
+        </PortalLayerProvider>
         {onBackToList ? (
           <div className="shrink-0 border-t bg-background px-4 py-3">
             <Button

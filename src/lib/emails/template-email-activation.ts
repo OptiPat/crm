@@ -5,6 +5,10 @@ import {
 } from "@/lib/emails/template-email-relance";
 import { parseTemplateEmailTrigger } from "@/lib/emails/template-email-trigger";
 import {
+  formatTemplateEmailTriggerScheduleBadge,
+} from "@/lib/emails/template-email-trigger-summary";
+import { formatRuleTreeBrief } from "@/lib/etiquettes/etiquette-card-summary";
+import {
   isEphemeralTemplate,
   parseEphemeralCampaignConfig,
 } from "@/lib/emails/template-email-ephemeral";
@@ -51,7 +55,25 @@ const TRIGGER_SHORT_LABELS: Record<string, string> = {
   DATE_APPROCHE_INVESTISSEMENT: "Date investissement",
   AGE_APPROCHE: "Âge cible",
   EVENEMENT_SOUSCRIPTION: "Souscription",
+  TMI: "TMI",
+  IR_NET: "IR net",
+  REVENUS_ANNUELS: "Revenus annuels",
+  RULE_TREE: "Règle combinée",
 };
+
+function triggerTypeBadgeLabel(
+  trigger: ReturnType<typeof parseTemplateEmailTrigger>
+): string | null {
+  const type = trigger.condition_type?.trim();
+  if (!type) return null;
+  if (type === "RULE_TREE") {
+    return formatRuleTreeBrief(trigger.condition_config) ?? TRIGGER_SHORT_LABELS.RULE_TREE;
+  }
+  return (
+    TRIGGER_SHORT_LABELS[type] ??
+    type.replace(/_/g, " ").toLowerCase()
+  );
+}
 
 export function getTemplateActivationFlags(
   template: TemplateEmail,
@@ -81,10 +103,10 @@ export function getTemplateTriggerShortLabel(
 ): string | null {
   const trigger = parseTemplateEmailTrigger(template.variables);
   if (!trigger.enabled || !trigger.condition_type?.trim()) return null;
-  return (
-    TRIGGER_SHORT_LABELS[trigger.condition_type] ??
-    trigger.condition_type.replace(/_/g, " ").toLowerCase()
-  );
+  const typeLabel = triggerTypeBadgeLabel(trigger);
+  if (!typeLabel) return null;
+  const schedule = formatTemplateEmailTriggerScheduleBadge(trigger);
+  return schedule ? `${typeLabel} · ${schedule}` : typeLabel;
 }
 
 export function getTemplateRelanceBadgeLabel(

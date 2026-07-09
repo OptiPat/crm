@@ -11,7 +11,7 @@ import {
   sumPatrimoineLineAmountCentimes,
 } from "@/lib/investissements/investissements-portfolio-utils";
 
-export const INVESTISSEMENTS_VIRTUALIZE_THRESHOLD = 50;
+export const INVESTISSEMENTS_VIRTUALIZE_THRESHOLD = 80;
 
 const SECTION_HEADER_ESTIMATE_PX = 56;
 const CARD_ESTIMATE_PX = 132;
@@ -97,7 +97,8 @@ export function VirtualizedInvestissementsPortfolio({
 
   return (
     <VirtualizedContactList
-      className="max-h-[min(70vh,720px)] overflow-y-auto pr-1"
+      pageScroll
+      className="pr-1"
       items={flatRows}
       getKey={(row) => row.key}
       getItemHeight={(row) =>

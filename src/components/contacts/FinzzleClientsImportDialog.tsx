@@ -16,9 +16,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { FinzzleClientImportPreviewLine } from "@/components/contacts/FinzzleClientImportPreviewLine";
+import { IMPORT_PREVIEW_LIST_CLASS, ImportPreviewSection } from "@/components/contacts/import-preview-ui";
 import { FileUp, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/api/tauri-contacts";
@@ -27,11 +26,9 @@ import {
   applyFinzzleClientsImport,
   buildFinzzleClientsImportPreview,
   defaultSelectedFinzzleClientLineKeys,
-  dateInputToIso,
-  FINZZLE_CLIENT_CATEGORIE_OPTIONS,
-  FINZZLE_CLIENT_CIVILITE_OPTIONS,
   FINZZLE_DUPLICATE_ACTION_OPTIONS,
-  isoToDateInput,
+  getFinzzleEnrichFieldHighlights,
+  groupFinzzleClientPreviewLines,
   isFinzzleClientLineSelectable,
   parseFinzzleClientRows,
   patchFinzzleClientPreviewLines,
@@ -50,27 +47,6 @@ import {
 } from "@/components/investissements/import-dialog-fullscreen";
 
 type Step = "pick" | "preview";
-
-const STATUS_LABEL: Record<FinzzleClientPreviewLine["status"], string> = {
-  ready: "À importer",
-  enrich: "Enrichir",
-  duplicate_homonym: "Homonyme",
-  invalid: "Invalide",
-  duplicate_csv: "Doublon fichier",
-  imported: "Importé",
-};
-
-const STATUS_VARIANT: Record<
-  FinzzleClientPreviewLine["status"],
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  ready: "default",
-  enrich: "default",
-  duplicate_homonym: "destructive",
-  invalid: "destructive",
-  duplicate_csv: "destructive",
-  imported: "secondary",
-};
 
 export function FinzzleClientsImportDialog({
   open,
@@ -95,6 +71,8 @@ export function FinzzleClientsImportDialog({
   linesRef.current = lines;
 
   const summary = useMemo(() => summarizeFinzzleClientsImportPreview(lines), [lines]);
+  const groupedLines = useMemo(() => groupFinzzleClientPreviewLines(lines), [lines]);
+  const contactById = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
 
   const reset = useCallback(() => {
     setStep("pick");
@@ -303,268 +281,53 @@ export function FinzzleClientsImportDialog({
               </div>
               {summary.duplicateHomonym > 0 && duplicateAction === "consolidate" && (
                 <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Les homonymes (même nom, email/tél différents) ne sont pas importables — vérifiez
+                  Les homonymes (noms ou coordonnées différents) ne sont pas importables — vérifiez
                   manuellement ou choisissez « Créer des homonymes ».
                 </p>
               )}
-              <div className="border rounded-md overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="p-2 w-8" />
-                      <th className="p-2 text-left whitespace-nowrap">Ligne</th>
-                      <th className="p-2 text-left whitespace-nowrap">Statut</th>
-                      <th className="p-2 text-left whitespace-nowrap">Civ.</th>
-                      <th className="p-2 text-left whitespace-nowrap">Nom</th>
-                      <th className="p-2 text-left whitespace-nowrap">Prénom</th>
-                      <th className="p-2 text-left whitespace-nowrap">Email</th>
-                      <th className="p-2 text-left whitespace-nowrap">Téléphone</th>
-                      <th className="p-2 text-left whitespace-nowrap">Adresse</th>
-                      <th className="p-2 text-left whitespace-nowrap">CP</th>
-                      <th className="p-2 text-left whitespace-nowrap">Ville</th>
-                      <th className="p-2 text-left whitespace-nowrap">Pays</th>
-                      <th className="p-2 text-left whitespace-nowrap">Naissance</th>
-                      <th className="p-2 text-left whitespace-nowrap">Origine</th>
-                      <th className="p-2 text-left whitespace-nowrap">TMI</th>
-                      <th className="p-2 text-left whitespace-nowrap">État</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line) => {
-                      const selectable = isFinzzleClientLineSelectable(line, duplicateAction);
-                      const editable = line.status !== "imported";
+              <div className={IMPORT_PREVIEW_LIST_CLASS}>
+                {groupedLines.map((section) => (
+                  <ImportPreviewSection
+                    key={section.status}
+                    title={section.label}
+                    count={section.lines.length}
+                  >
+                    {section.status === "enrich" ? (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="inline-block rounded bg-emerald-50 px-1 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:ring-emerald-800">
+                          Vert
+                        </span>{" "}
+                        = champ vide complété ·{" "}
+                        <span className="inline-block rounded bg-amber-50 px-1 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:ring-amber-800">
+                          Ambre
+                        </span>{" "}
+                        = valeur différente de la fiche CRM
+                      </p>
+                    ) : null}
+                    {section.lines.map((line) => {
+                      const existing =
+                        line.status === "enrich" && line.contactId
+                          ? contactById.get(line.contactId)
+                          : undefined;
                       return (
-                        <tr key={line.lineKey} className="border-b last:border-0 align-top">
-                          <td className="p-2">
-                            {selectable && (
-                              <Checkbox
-                                checked={selected.has(line.lineKey)}
-                                onCheckedChange={(c) => toggleLine(line.lineKey, c === true)}
-                              />
-                            )}
-                          </td>
-                          <td className="p-2 text-muted-foreground">{line.rowIndex}</td>
-                          <td className="p-2">
-                            {editable ? (
-                              <select
-                                className="h-8 min-w-[100px] rounded-md border border-input bg-background px-2 text-xs"
-                                value={line.categorie}
-                                onChange={(e) =>
-                                  commitLineEdit(line.lineKey, {
-                                    categorie: e.target.value as FinzzleClientPreviewLine["categorie"],
-                                  })
-                                }
-                              >
-                                {FINZZLE_CLIENT_CATEGORIE_OPTIONS.map((opt) => (
-                                  <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              line.categorie.replace(/_/g, " ")
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <select
-                                className="h-8 min-w-[90px] rounded-md border border-input bg-background px-2 text-xs"
-                                value={line.civilite}
-                                onChange={(e) =>
-                                  commitLineEdit(line.lineKey, { civilite: e.target.value })
-                                }
-                              >
-                                {FINZZLE_CLIENT_CIVILITE_OPTIONS.map((opt) => (
-                                  <option key={opt.value || "none"} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              line.civilite || "—"
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[100px]"
-                                defaultValue={line.nom}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (!v || v === line.nom) return;
-                                  commitLineEdit(line.lineKey, { nom: v });
-                                }}
-                              />
-                            ) : (
-                              line.nom
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[100px]"
-                                defaultValue={line.prenom}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (!v || v === line.prenom) return;
-                                  commitLineEdit(line.lineKey, { prenom: v });
-                                }}
-                              />
-                            ) : (
-                              line.prenom
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[160px]"
-                                defaultValue={line.email}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim().toLowerCase();
-                                  if (v === line.email) return;
-                                  commitLineEdit(line.lineKey, { email: v });
-                                }}
-                              />
-                            ) : (
-                              line.email
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[120px]"
-                                defaultValue={line.telephone}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.telephone) return;
-                                  commitLineEdit(line.lineKey, { telephone: v });
-                                }}
-                              />
-                            ) : (
-                              line.telephone
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[140px]"
-                                defaultValue={line.adresse}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.adresse) return;
-                                  commitLineEdit(line.lineKey, { adresse: v });
-                                }}
-                              />
-                            ) : (
-                              line.adresse
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 w-20"
-                                defaultValue={line.codePostal}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.codePostal) return;
-                                  commitLineEdit(line.lineKey, { codePostal: v });
-                                }}
-                              />
-                            ) : (
-                              line.codePostal
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[100px]"
-                                defaultValue={line.ville}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.ville) return;
-                                  commitLineEdit(line.lineKey, { ville: v });
-                                }}
-                              />
-                            ) : (
-                              line.ville
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[80px]"
-                                defaultValue={line.pays}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.pays) return;
-                                  commitLineEdit(line.lineKey, { pays: v });
-                                }}
-                              />
-                            ) : (
-                              line.pays
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                type="date"
-                                className="h-8"
-                                defaultValue={isoToDateInput(line.dateNaissanceIso)}
-                                onBlur={(e) => {
-                                  const iso = dateInputToIso(e.target.value);
-                                  if (iso === line.dateNaissanceIso) return;
-                                  commitLineEdit(line.lineKey, { dateNaissanceIso: iso });
-                                }}
-                              />
-                            ) : (
-                              isoToDateInput(line.dateNaissanceIso)
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[120px]"
-                                defaultValue={line.sourceLead}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.sourceLead) return;
-                                  commitLineEdit(line.lineKey, { sourceLead: v });
-                                }}
-                              />
-                            ) : (
-                              line.sourceLead
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 w-16"
-                                defaultValue={line.tmi}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.tmi) return;
-                                  commitLineEdit(line.lineKey, { tmi: v });
-                                }}
-                              />
-                            ) : (
-                              line.tmi || "—"
-                            )}
-                          </td>
-                          <td className="p-2">
-                            <Badge variant={STATUS_VARIANT[line.status]}>
-                              {STATUS_LABEL[line.status]}
-                            </Badge>
-                            {line.statusMessage ? (
-                              <p className="text-xs text-muted-foreground mt-1 max-w-[140px]">
-                                {line.statusMessage}
-                              </p>
-                            ) : null}
-                          </td>
-                        </tr>
+                        <FinzzleClientImportPreviewLine
+                          key={line.lineKey}
+                          line={line}
+                          editable={line.status !== "imported"}
+                          selectable={isFinzzleClientLineSelectable(line, duplicateAction)}
+                          checked={selected.has(line.lineKey)}
+                          onToggle={(c) => toggleLine(line.lineKey, c)}
+                          onEdit={(patch) => commitLineEdit(line.lineKey, patch)}
+                          enrichHighlights={
+                            existing
+                              ? getFinzzleEnrichFieldHighlights(line, existing)
+                              : undefined
+                          }
+                        />
                       );
                     })}
-                  </tbody>
-                </table>
+                  </ImportPreviewSection>
+                ))}
               </div>
             </div>
           )}

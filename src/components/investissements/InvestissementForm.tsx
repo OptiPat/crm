@@ -135,6 +135,8 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
+import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 import type { LucideIcon } from "lucide-react";
 import { Plus } from "lucide-react";
 import {
@@ -1483,6 +1485,7 @@ export function InvestissementForm({
     <PartenaireForm
       open={showPartenaireForm}
       onOpenChange={setShowPartenaireForm}
+      nestedSheet={nestedSheet}
       defaultTypePartenaire={
         typeProduit ? suggestPartenaireTypeForProduit(typeProduit) : undefined
       }
@@ -1511,6 +1514,12 @@ export function InvestissementForm({
               "flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]",
               nestedSheet && STACKED_NESTED_SHEET_Z
             )}
+            onInteractOutside={
+              nestedSheet ? preventStackedSheetOutsideDismiss : undefined
+            }
+            onPointerDownOutside={
+              nestedSheet ? preventStackedSheetOutsideDismiss : undefined
+            }
           >
             <div className="shrink-0 border-b px-6 py-4">
               <SheetHeader>
@@ -1518,17 +1527,21 @@ export function InvestissementForm({
                 <SheetDescription>{formDescription}</SheetDescription>
               </SheetHeader>
             </div>
-            <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+            <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+              <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+            </PortalLayerProvider>
           </SheetContent>
         </Sheet>
       ) : (
         <Dialog open={open} onOpenChange={onOpenChange}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{formTitle}</DialogTitle>
-              <DialogDescription>{formDescription}</DialogDescription>
-            </DialogHeader>
-            {formBody}
+            <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+              <DialogHeader>
+                <DialogTitle>{formTitle}</DialogTitle>
+                <DialogDescription>{formDescription}</DialogDescription>
+              </DialogHeader>
+              {formBody}
+            </PortalLayerProvider>
           </DialogContent>
         </Dialog>
       )}

@@ -450,7 +450,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
     return buildFoyerFlatRows(contactsGroupedByFoyer, patrimoines);
   }, [contactsGroupedByFoyer, patrimoines]);
 
-  const useFoyerVirtual = groupByFoyer && foyerFlatRows.length > 40;
+  const useFoyerVirtual = groupByFoyer && foyerFlatRows.length > 80;
 
   useEffect(() => {
     if (contacts.length === 0) {
@@ -970,7 +970,12 @@ export function Contacts({ onNavigate }: ContactsProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className={splitCardContentClassName(showSplit)}>
+        <CardContent className={splitCardContentClassName(showSplit, undefined, true)}>
+          <div
+            className={cn(
+              showSplit && "flex min-h-0 flex-1 flex-col overflow-hidden"
+            )}
+          >
           {loading ? (
             <div className="space-y-2 py-4">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -990,9 +995,16 @@ export function Contacts({ onNavigate }: ContactsProps) {
             />
           ) : groupByFoyer && contactsGroupedByFoyer ? (
             useFoyerVirtual ? (
-              <div className="border border-border/70 rounded-xl overflow-hidden divide-y divide-border">
+              <div
+                className={cn(
+                  "rounded-xl border border-border/70 divide-y divide-border overflow-hidden",
+                  showSplit && "min-h-0 flex-1"
+                )}
+              >
                 <VirtualizedFoyerContactList
                   rows={foyerFlatRows}
+                  pageScroll={!showSplit}
+                  fillParent={showSplit}
                   renderRow={(row) => (
                     <FoyerFlatRowRenderer
                       row={row}
@@ -1009,7 +1021,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 />
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className={cn("space-y-4", showSplit && "min-h-0 flex-1 overflow-y-auto overscroll-contain")}>
                 {contactsGroupedByFoyer.map((group, groupIndex) => (
                   <FoyerGroupCard
                     key={group.foyer?.id ?? `solo-${groupIndex}`}
@@ -1025,9 +1037,11 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 ))}
               </div>
             )
-          ) : filteredContacts.length > 50 ? (
+          ) : filteredContacts.length > 80 ? (
             <VirtualizedContactList
               items={filteredContacts}
+              pageScroll={!showSplit}
+              fillParent={showSplit}
               getKey={(contact) => contact.id ?? `${contact.nom}-${contact.prenom}`}
               getItemHeight={(contact) =>
                 estimateContactListRowHeight(contact, etiquettesParContact)
@@ -1040,10 +1054,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   variant="card"
                 />
               )}
-              className="pr-1"
+              className={cn("pr-1", showSplit && "min-h-0 flex-1")}
             />
           ) : (
-            <div className="space-y-2">
+            <div className={cn("space-y-2", showSplit && "min-h-0 flex-1 overflow-y-auto overscroll-contain")}>
               {filteredContacts.map((contact) => (
                 <ContactListRow
                   key={contact.id}
@@ -1055,6 +1069,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
               ))}
             </div>
           )}
+          </div>
         </CardContent>
       </Card>
         }

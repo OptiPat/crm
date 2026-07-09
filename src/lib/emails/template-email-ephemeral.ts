@@ -1,4 +1,13 @@
 import {
+  buildRuleTree,
+  isRuleTreeConfig,
+  parseRuleTree,
+  stringifyRuleTree,
+  type RuleLeaf,
+  type RuleOp,
+} from "@/lib/etiquettes/rule-ast";
+import { findFirstInvalidRuleLeafIndex } from "@/lib/etiquettes/rule-leaf-validation";
+import {
   parseTemplateEmailMeta,
   TEMPLATE_CORPS_HTML_KEY,
 } from "@/lib/emails/template-email-html";
@@ -25,6 +34,8 @@ export interface EphemeralCampaignAudience {
   produits_match_mode: EphemeralProduitsMatchMode;
   reinvestissement_dividendes: EphemeralReinvestFilter;
   versement_programme: EphemeralVersementProgrammeFilter;
+  /** Règle combinée optionnelle (JSON rule_tree v1) — TMI, revenus, type produit… */
+  rule_tree: string | null;
 }
 
 export interface EphemeralCampaignConfig {
@@ -46,6 +57,7 @@ export const DEFAULT_EPHEMERAL_CAMPAIGN_AUDIENCE: EphemeralCampaignAudience = {
   produits_match_mode: "all",
   reinvestissement_dividendes: "any",
   versement_programme: "any",
+  rule_tree: null,
 };
 
 export const DEFAULT_EPHEMERAL_CAMPAIGN: EphemeralCampaignConfig = {
@@ -85,6 +97,9 @@ function parseAudience(raw: unknown): EphemeralCampaignAudience {
   const segmentRaw = o.segment_id ?? o.segmentId;
   const segment_id =
     typeof segmentRaw === "number" && segmentRaw > 0 ? segmentRaw : null;
+  const ruleTreeRaw = o.rule_tree ?? o.ruleTree;
+  const rule_tree =
+    typeof ruleTreeRaw === "string" && ruleTreeRaw.trim() ? ruleTreeRaw.trim() : null;
   return {
     segment_id,
     categories: segment_id != null ? [] : categories.length > 0 ? categories : ["CLIENT"],
@@ -93,6 +108,7 @@ function parseAudience(raw: unknown): EphemeralCampaignAudience {
     produits_match_mode,
     reinvestissement_dividendes,
     versement_programme,
+    rule_tree,
   };
 }
 
@@ -147,6 +163,39 @@ export function hasEphemeralProductFilter(audience: EphemeralCampaignAudience): 
   return audience.types_produit.length > 0 || audience.noms_produit.length > 0;
 }
 
+export function hasEphemeralRuleTree(audience: EphemeralCampaignAudience): boolean {
+  return isRuleTreeConfig(audience.rule_tree);
+}
+
+export function isEphemeralRuleTreeValid(ruleTree: string | null | undefined): boolean {
+  const tree = parseRuleTree(ruleTree);
+  if (!tree || tree.children.length === 0) return false;
+  return findFirstInvalidRuleLeafIndex(tree.children) == null;
+}
+
+export function defaultEphemeralRuleChildren(): RuleLeaf[] {
+  return [
+    { type: "TMI", config: { tranches: [30] }, categories: ["CLIENT"] },
+    {
+      type: "REVENUS_ANNUELS",
+      config: { operator: "gte", montant: 60_000 },
+      categories: ["CLIENT"],
+    },
+  ];
+}
+
+export function ephemeralRuleTreeToJson(op: RuleOp, children: RuleLeaf[]): string {
+  return stringifyRuleTree(buildRuleTree(children, op));
+}
+
+export function parseEphemeralRuleTree(
+  ruleTree: string | null | undefined
+): { op: RuleOp; children: RuleLeaf[] } | null {
+  const tree = parseRuleTree(ruleTree);
+  if (!tree) return null;
+  return { op: tree.op, children: tree.children };
+}
+
 const EPHEMERAL_CLIENT_SIDE_CATEGORIES = new Set([
   "CLIENT",
   "PROSPECT_CLIENT",
@@ -170,7 +219,7 @@ export function isEphemeralAudienceValid(audience: EphemeralCampaignAudience): b
   if (!shouldShowEphemeralPatrimoineFilter(audience.categories)) {
     return true;
   }
-  return hasEphemeralProductFilter(audience);
+  return hasEphemeralProductFilter(audience) || isEphemeralRuleTreeValid(audience.rule_tree);
 }
 
 export function setEphemeralCampaignInMeta(
@@ -248,6 +297,7 @@ export function buildEphemeralSyncFingerprint(input: {
     audience: input.campaign.audience,
     excluded_contact_ids: [...input.campaign.excluded_contact_ids].sort((a, b) => a - b),
     send_at: input.campaign.send_at,
+    rule_tree: input.campaign.audience.rule_tree,
     // status / batch_key exclus : gérés par sync, pas par l'empreinte « brouillon »
   });
 }

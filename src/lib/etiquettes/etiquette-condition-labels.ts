@@ -10,6 +10,7 @@ export type ConditionType =
   | "AGE_APPROCHE"
   | "TMI"
   | "IR_NET"
+  | "REVENUS_ANNUELS"
   | "JAMAIS_CONTACT"
   | "A_ETIQUETTE"
   | "CHAMP_PERSO"
@@ -25,6 +26,7 @@ export const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
   AGE_APPROCHE: "Âge approchant",
   TMI: "TMI (tranche marginale d'imposition)",
   IR_NET: "IR net à payer",
+  REVENUS_ANNUELS: "Revenus annuels (ou RBG foyer)",
   JAMAIS_CONTACT: "Jamais contacté (catégories cochées)",
   A_ETIQUETTE: "Possède une étiquette",
   CHAMP_PERSO: "Champ personnalisé",

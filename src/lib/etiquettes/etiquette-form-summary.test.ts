@@ -19,6 +19,8 @@ const base = {
   tmiTranches: [],
   irNetOperator: "gte",
   irNetMontant: null,
+  revenusAnnuelsOperator: "gte",
+  revenusAnnuelsMontant: null,
   categories: ["CLIENT"],
 };
 

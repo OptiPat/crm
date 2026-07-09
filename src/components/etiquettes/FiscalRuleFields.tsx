@@ -59,12 +59,16 @@ export function IrNetConditionFields({
   montant,
   onMontantChange,
   highlight,
+  montantLabel = "Montant (€)",
+  montantPlaceholder = "Ex. 4000",
 }: {
   operator: IrNetOperator;
   onOperatorChange: (op: IrNetOperator) => void;
   montant: number | "";
   onMontantChange: (v: number | "") => void;
   highlight?: boolean;
+  montantLabel?: string;
+  montantPlaceholder?: string;
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -84,7 +88,7 @@ export function IrNetConditionFields({
         </Select>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="ir-net-montant">Montant (€)</Label>
+        <Label htmlFor="ir-net-montant">{montantLabel}</Label>
         <Input
           id="ir-net-montant"
           type="number"
@@ -95,7 +99,7 @@ export function IrNetConditionFields({
             const raw = e.target.value;
             onMontantChange(raw === "" ? "" : Math.max(0, parseFloat(raw) || 0));
           }}
-          placeholder="Ex. 4000"
+          placeholder={montantPlaceholder}
           className={cn(
             highlight &&
               "ring-2 ring-destructive ring-offset-2 ring-offset-background"
@@ -103,5 +107,21 @@ export function IrNetConditionFields({
         />
       </div>
     </div>
+  );
+}
+
+export function RevenusAnnuelsConditionFields(props: {
+  operator: IrNetOperator;
+  onOperatorChange: (op: IrNetOperator) => void;
+  montant: number | "";
+  onMontantChange: (v: number | "") => void;
+  highlight?: boolean;
+}) {
+  return (
+    <IrNetConditionFields
+      {...props}
+      montantLabel="Revenus annuels (€)"
+      montantPlaceholder="Ex. 60000"
+    />
   );
 }

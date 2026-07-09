@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -9,11 +10,16 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { ContactAutoRuleCategoryPicker } from "@/components/etiquettes/ContactAutoRuleCategoryPicker";
+import { ConditionBuilder } from "@/components/etiquettes/ConditionBuilder";
 import { TemplateEmailEphemeralProductFilter } from "@/components/emails/TemplateEmailEphemeralProductFilter";
 import { TypeProduitInvestmentOptions } from "@/components/etiquettes/TypeProduitInvestmentOptions";
 import { getAllSegments, type Segment } from "@/lib/api/tauri-segments";
 import {
   EPHEMERAL_DEFAULT_SEND_TIME,
+  defaultEphemeralRuleChildren,
+  ephemeralRuleTreeToJson,
+  hasEphemeralRuleTree,
+  parseEphemeralRuleTree,
   ephemeralSendDateTimeToUnix,
   isEphemeralSegmentAudience,
   shouldShowEphemeralPatrimoineFilter,
@@ -23,6 +29,7 @@ import {
   type EphemeralReinvestFilter,
   type EphemeralVersementProgrammeFilter,
 } from "@/lib/emails/template-email-ephemeral";
+import type { RuleLeaf, RuleOp } from "@/lib/etiquettes/rule-ast";
 
 type Props = {
   audience: EphemeralCampaignAudience;
@@ -55,6 +62,13 @@ export function TemplateEmailEphemeralAudiencePanel({
   const segmentMode = isEphemeralSegmentAudience(audience);
   const showPatrimoine =
     !segmentMode && shouldShowEphemeralPatrimoineFilter(audience.categories);
+  const useAdvancedRule = hasEphemeralRuleTree(audience);
+  const parsedRule = useMemo(
+    () => parseEphemeralRuleTree(audience.rule_tree),
+    [audience.rule_tree]
+  );
+  const ruleOp: RuleOp = parsedRule?.op ?? "and";
+  const ruleChildren: RuleLeaf[] = parsedRule?.children ?? defaultEphemeralRuleChildren();
 
   const setAudienceMode = (mode: "manual" | "segment") => {
     if (mode === "segment") {
@@ -68,6 +82,7 @@ export function TemplateEmailEphemeralAudiencePanel({
         noms_produit: [],
         reinvestissement_dividendes: "any",
         versement_programme: "any",
+        rule_tree: null,
       });
       return;
     }
@@ -89,6 +104,7 @@ export function TemplateEmailEphemeralAudiencePanel({
       noms_produit: [],
       reinvestissement_dividendes: "any",
       versement_programme: "any",
+      rule_tree: null,
     });
   };
 
@@ -101,6 +117,7 @@ export function TemplateEmailEphemeralAudiencePanel({
         noms_produit: [],
         reinvestissement_dividendes: "any",
         versement_programme: "any",
+        rule_tree: null,
       });
       return;
     }
@@ -181,6 +198,46 @@ export function TemplateEmailEphemeralAudiencePanel({
 
       {showPatrimoine && (
         <>
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium">Règle avancée (TMI, revenus…)</p>
+              <p className="text-xs text-muted-foreground">
+                Alternative ou complément au filtre patrimoine — ex. TMI 30 % et revenus ≥ 60 000 €.
+              </p>
+            </div>
+            <Switch
+              id="ephemeral-advanced-rule"
+              checked={useAdvancedRule}
+              onCheckedChange={(checked) => {
+                if (!checked) {
+                  patchAudience({ rule_tree: null });
+                  return;
+                }
+                patchAudience({
+                  rule_tree: ephemeralRuleTreeToJson("and", defaultEphemeralRuleChildren()),
+                });
+              }}
+            />
+          </div>
+
+          {useAdvancedRule && (
+            <ConditionBuilder
+              op={ruleOp}
+              onOpChange={(op) =>
+                patchAudience({
+                  rule_tree: ephemeralRuleTreeToJson(op, ruleChildren),
+                })
+              }
+              children={ruleChildren}
+              onChange={(children) =>
+                patchAudience({
+                  rule_tree: ephemeralRuleTreeToJson(ruleOp, children),
+                })
+              }
+              showPreview={false}
+            />
+          )}
+
           <TemplateEmailEphemeralProductFilter
             types={audience.types_produit}
             nomsProduit={audience.noms_produit}

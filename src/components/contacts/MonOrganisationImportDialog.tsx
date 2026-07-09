@@ -10,9 +10,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { MonOrganisationImportPreviewLine } from "@/components/contacts/MonOrganisationImportPreviewLine";
+import { IMPORT_PREVIEW_LIST_CLASS } from "@/components/contacts/import-preview-ui";
 import { FileUp, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/api/tauri-contacts";
@@ -22,8 +21,6 @@ import {
   buildMonOrganisationImportPreview,
   buildMonOrganisationPreviewSeenInFileFromLines,
   buildMonOrganisationImportNameKeys,
-  dateInputToIso,
-  isoToDateInput,
   MON_ORGANISATION_SHEET_NAME,
   parseMonOrganisationRows,
   patchMonOrganisationPreviewLines,
@@ -41,25 +38,6 @@ import {
 } from "@/components/investissements/import-dialog-fullscreen";
 
 type Step = "pick" | "preview";
-
-const STATUS_LABEL: Record<MonOrganisationPreviewLine["status"], string> = {
-  ready: "À importer",
-  invalid: "Invalide",
-  duplicate_crm: "Déjà en base",
-  duplicate_csv: "Doublon fichier",
-  imported: "Importé",
-};
-
-const STATUS_VARIANT: Record<
-  MonOrganisationPreviewLine["status"],
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  ready: "default",
-  invalid: "destructive",
-  duplicate_crm: "secondary",
-  duplicate_csv: "destructive",
-  imported: "secondary",
-};
 
 const SELECTABLE_STATUSES = new Set<MonOrganisationPreviewLine["status"]>(["ready"]);
 
@@ -261,227 +239,18 @@ export function MonOrganisationImportDialog({
                 {fileName} — {summary.ready} à importer, {summary.duplicateCrm} déjà en base,{" "}
                 {summary.duplicateCsv} doublon(s) fichier
               </p>
-              <div className="border rounded-md overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="p-2 w-8" />
-                      <th className="p-2 text-left whitespace-nowrap">Ligne</th>
-                      <th className="p-2 text-left whitespace-nowrap">Niv.</th>
-                      <th className="p-2 text-left whitespace-nowrap">Nom</th>
-                      <th className="p-2 text-left whitespace-nowrap">Prénom</th>
-                      <th className="p-2 text-left whitespace-nowrap">Email</th>
-                      <th className="p-2 text-left whitespace-nowrap">Téléphone</th>
-                      <th className="p-2 text-left whitespace-nowrap">Adresse</th>
-                      <th className="p-2 text-left whitespace-nowrap">CP</th>
-                      <th className="p-2 text-left whitespace-nowrap">Ville</th>
-                      <th className="p-2 text-left whitespace-nowrap">Pays</th>
-                      <th className="p-2 text-left whitespace-nowrap">Inscription</th>
-                      <th className="p-2 text-left whitespace-nowrap">Dernier contact</th>
-                      <th className="p-2 text-left whitespace-nowrap">Parrain</th>
-                      <th className="p-2 text-left whitespace-nowrap">Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line) => {
-                      const selectable = SELECTABLE_STATUSES.has(line.status);
-                      const editable = line.status !== "imported";
-                      return (
-                        <tr key={line.lineKey} className="border-b last:border-0 align-top">
-                          <td className="p-2">
-                            {selectable && (
-                              <Checkbox
-                                checked={selected.has(line.lineKey)}
-                                onCheckedChange={(c) => toggleLine(line.lineKey, c === true)}
-                              />
-                            )}
-                          </td>
-                          <td className="p-2 text-muted-foreground">{line.rowIndex}</td>
-                          <td className="p-2">{line.niveau}</td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[100px]"
-                                defaultValue={line.nom}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (!v || v === line.nom) return;
-                                  commitLineEdit(line.lineKey, { nom: v });
-                                }}
-                              />
-                            ) : (
-                              line.nom
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[100px]"
-                                defaultValue={line.prenom}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (!v || v === line.prenom) return;
-                                  commitLineEdit(line.lineKey, { prenom: v });
-                                }}
-                              />
-                            ) : (
-                              line.prenom
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[160px]"
-                                defaultValue={line.email}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim().toLowerCase();
-                                  if (v === line.email) return;
-                                  commitLineEdit(line.lineKey, { email: v });
-                                }}
-                              />
-                            ) : (
-                              line.email
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[120px]"
-                                defaultValue={line.telephone}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.telephone) return;
-                                  commitLineEdit(line.lineKey, { telephone: v });
-                                }}
-                              />
-                            ) : (
-                              line.telephone
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[140px]"
-                                defaultValue={line.adresse}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.adresse) return;
-                                  commitLineEdit(line.lineKey, { adresse: v });
-                                }}
-                              />
-                            ) : (
-                              line.adresse
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 w-20"
-                                defaultValue={line.codePostal}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.codePostal) return;
-                                  commitLineEdit(line.lineKey, { codePostal: v });
-                                }}
-                              />
-                            ) : (
-                              line.codePostal
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[100px]"
-                                defaultValue={line.ville}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.ville) return;
-                                  commitLineEdit(line.lineKey, { ville: v });
-                                }}
-                              />
-                            ) : (
-                              line.ville
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[80px]"
-                                defaultValue={line.pays}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (v === line.pays) return;
-                                  commitLineEdit(line.lineKey, { pays: v });
-                                }}
-                              />
-                            ) : (
-                              line.pays
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                type="date"
-                                className="h-8"
-                                defaultValue={isoToDateInput(line.dateInscriptionIso)}
-                                onBlur={(e) => {
-                                  const iso = dateInputToIso(e.target.value);
-                                  if (iso === line.dateInscriptionIso) return;
-                                  commitLineEdit(line.lineKey, { dateInscriptionIso: iso });
-                                }}
-                              />
-                            ) : (
-                              isoToDateInput(line.dateInscriptionIso)
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                type="date"
-                                className="h-8"
-                                defaultValue={isoToDateInput(line.dateDernierContactFilleulIso)}
-                                onBlur={(e) => {
-                                  const iso = dateInputToIso(e.target.value);
-                                  if (iso === line.dateDernierContactFilleulIso) return;
-                                  commitLineEdit(line.lineKey, {
-                                    dateDernierContactFilleulIso: iso,
-                                  });
-                                }}
-                              />
-                            ) : (
-                              isoToDateInput(line.dateDernierContactFilleulIso) || "—"
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                className="h-8 min-w-[140px]"
-                                defaultValue={line.parrainLabel}
-                                onBlur={(e) => {
-                                  const v = e.target.value.trim();
-                                  if (!v || v === line.parrainLabel) return;
-                                  commitLineEdit(line.lineKey, { parrainLabel: v });
-                                }}
-                              />
-                            ) : (
-                              line.parrainLabel || "—"
-                            )}
-                          </td>
-                          <td className="p-2">
-                            <Badge variant={STATUS_VARIANT[line.status]}>
-                              {STATUS_LABEL[line.status]}
-                            </Badge>
-                            {line.statusMessage ? (
-                              <p className="text-xs text-muted-foreground mt-1 max-w-[160px]">
-                                {line.statusMessage}
-                              </p>
-                            ) : null}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className={IMPORT_PREVIEW_LIST_CLASS}>
+                {lines.map((line) => (
+                  <MonOrganisationImportPreviewLine
+                    key={line.lineKey}
+                    line={line}
+                    editable={line.status !== "imported"}
+                    selectable={SELECTABLE_STATUSES.has(line.status)}
+                    checked={selected.has(line.lineKey)}
+                    onToggle={(c) => toggleLine(line.lineKey, c)}
+                    onEdit={(patch) => commitLineEdit(line.lineKey, patch)}
+                  />
+                ))}
               </div>
             </div>
           )}

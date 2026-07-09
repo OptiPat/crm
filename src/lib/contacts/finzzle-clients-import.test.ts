@@ -4,13 +4,17 @@ import { FINZZLE_SAMPLE_CSV } from "./__fixtures__/import-finzzle-fixture";
 import {
   buildFinzzleClientsImportPreview,
   defaultSelectedFinzzleClientLineKeys,
+  getFinzzleEnrichFieldHighlights,
+  groupFinzzleClientPreviewLines,
   isFinzzleClientsExport,
   parseFinzzleClientRows,
   pickEnrichClientCategory,
   reassessFinzzleClientsPreview,
   resolveEnrichDateNaissance,
   summarizeFinzzleClientsImportPreview,
+  type FinzzleClientPreviewLine,
 } from "./finzzle-clients-import";
+import type { Contact } from "@/lib/api/tauri-contacts";
 
 describe("finzzle-clients-import", () => {
   const readFixtureRows = () => {
@@ -102,7 +106,7 @@ describe("finzzle-clients-import", () => {
     expect(bernard?.status).toBe("ready");
   });
 
-  it("detecte enrichissement par email", () => {
+  it("bloque enrichissement email si noms differents", () => {
     const parsed = parseFinzzleClientRows(readFixtureRows());
     const preview = buildFinzzleClientsImportPreview(parsed, [
       {
@@ -117,9 +121,10 @@ describe("finzzle-clients-import", () => {
       },
     ]);
     const luc = preview.find((l) => l.prenom === "Luc");
-    expect(luc?.status).toBe("enrich");
+    expect(luc?.status).toBe("duplicate_homonym");
     expect(luc?.duplicateMatch).toBe("email");
-    expect(luc?.contactId).toBe(3);
+    expect(luc?.identityConflict).toBe(true);
+    expect(luc?.conflictReasons).toContain("noms différents");
   });
 
   it("bloque enrichissement email si telephones differents", () => {
@@ -167,6 +172,118 @@ describe("finzzle-clients-import", () => {
     expect(
       resolveEnrichDateNaissance(undefined, "1985-03-05T00:00:00.000Z")?.slice(0, 10)
     ).toBe("1985-03-05");
+  });
+
+  it("getFinzzleEnrichFieldHighlights signale complétion et changement", () => {
+    const existing: Contact = {
+      id: 1,
+      nom: "DUPONT",
+      prenom: "Marie",
+      email: "marie.dupont@example.com",
+      categorie: "PROSPECT_CLIENT",
+      statut_suivi: "ACTIF",
+      created_at: 0,
+      updated_at: 0,
+    };
+    const line = {
+      rowIndex: 2,
+      lineKey: "k1",
+      status: "enrich",
+      statusMessage: "",
+      categorie: "CLIENT",
+      civilite: "MME",
+      nom: "DUPONT",
+      prenom: "Marie",
+      email: "marie.dupont@example.com",
+      telephone: "+33612345678",
+      adresse: "12 rue des Acacias",
+      codePostal: "75001",
+      ville: "Paris",
+      pays: "France",
+      sourceLead: "Finzzle",
+      tmi: "30",
+      duplicateMatch: "name",
+    } as FinzzleClientPreviewLine;
+
+    expect(getFinzzleEnrichFieldHighlights(line, existing)).toEqual({
+      categorie: "change",
+      civilite: "fill",
+      telephone: "fill",
+      adresse: "fill",
+      codePostal: "fill",
+      ville: "fill",
+      pays: "fill",
+      sourceLead: "fill",
+      tmi: "fill",
+    });
+  });
+
+  it("getFinzzleEnrichFieldHighlights ignore nom si match email", () => {
+    const existing: Contact = {
+      id: 1,
+      nom: "DUPONT",
+      prenom: "Marie",
+      email: "marie.dupont@example.com",
+      telephone: "+33600000001",
+      categorie: "CLIENT",
+      statut_suivi: "ACTIF",
+      created_at: 0,
+      updated_at: 0,
+    };
+    const line = {
+      rowIndex: 2,
+      lineKey: "k2",
+      status: "enrich",
+      statusMessage: "",
+      categorie: "CLIENT",
+      civilite: "",
+      nom: "AUTRE",
+      prenom: "Nom",
+      email: "marie.dupont@example.com",
+      telephone: "+33612345678",
+      adresse: "",
+      codePostal: "",
+      ville: "",
+      pays: "",
+      sourceLead: "",
+      tmi: "",
+      duplicateMatch: "email",
+    } as FinzzleClientPreviewLine;
+
+    expect(getFinzzleEnrichFieldHighlights(line, existing)).toEqual({
+      telephone: "change",
+    });
+  });
+
+  it("groupFinzzleClientPreviewLines classe par statut", () => {
+    const parsed = parseFinzzleClientRows(readFixtureRows());
+    const preview = buildFinzzleClientsImportPreview(parsed, [
+      {
+        id: 1,
+        nom: "DUPONT",
+        prenom: "Marie",
+        email: "marie.dupont@example.com",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      },
+      {
+        id: 2,
+        nom: "BERNARD",
+        prenom: "Luc",
+        email: "autre@example.com",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      },
+    ]);
+    const groups = groupFinzzleClientPreviewLines(preview);
+    expect(groups.map((g) => g.status)).toEqual(["enrich", "ready", "duplicate_homonym"]);
+    expect(groups[0]!.label).toBe("Enrichir");
+    expect(groups[1]!.label).toBe("À importer");
+    expect(groups[2]!.label).toBe("Homonyme");
   });
 
   it("mode skip ne preselectionne pas les enrich", () => {

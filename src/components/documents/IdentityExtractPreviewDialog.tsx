@@ -27,6 +27,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 export type IdentityPreviewValues = {
   dateNaissanceFr: string;
@@ -199,6 +200,7 @@ export function IdentityExtractPreviewDialog({
           nestedSheet ? STACKED_NESTED_SHEET_Z : "z-[60]"
         )}
       >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle>{getDocumentTypeLabel("IDENTITE")}</DialogTitle>
           <DialogDescription>
@@ -339,6 +341,7 @@ export function IdentityExtractPreviewDialog({
             {loading ? "Application…" : "Appliquer à la fiche"}
           </Button>
         </DialogFooter>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

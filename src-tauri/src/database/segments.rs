@@ -298,6 +298,11 @@ impl super::Database {
     }
 
     pub fn count_contacts_for_rule_json(&self, rule_json: &str) -> Result<i64> {
+        Ok(self.list_contacts_for_rule_json(rule_json)?.len() as i64)
+    }
+
+    /// Contacts actifs (hors archive/pause) correspondant à un arbre de règle v1.
+    pub fn list_contacts_for_rule_json(&self, rule_json: &str) -> Result<Vec<super::models::Contact>> {
         let tree = super::etiquette_rule_ast::parse_rule_json(
             Some(&rule_json.to_string()),
             None,
@@ -307,16 +312,23 @@ impl super::Database {
         let contacts = self.get_all_contacts()?;
         let (now, current_month) = super::Database::auto_etiquette_now_and_month();
         let org_self_id = self.resolve_organisation_self_contact_id()?;
-        let mut n = 0i64;
-        for c in &contacts {
+        let mut out = Vec::new();
+        for c in contacts {
             if c.statut_suivi == "ARCHIVE" || c.statut_suivi == "EN_PAUSE" {
                 continue;
             }
-            if self.contact_matches_rule_tree(c, &tree, now, current_month, org_self_id)? {
-                n += 1;
+            if self.contact_matches_rule_tree(&c, &tree, now, current_month, org_self_id)? {
+                out.push(c);
             }
         }
-        Ok(n)
+        out.sort_by(|a, b| {
+            let by_nom = a.nom.cmp(&b.nom);
+            if by_nom != std::cmp::Ordering::Equal {
+                return by_nom;
+            }
+            a.prenom.cmp(&b.prenom)
+        });
+        Ok(out)
     }
 
     pub fn log_auto_etiquette_event(

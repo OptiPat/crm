@@ -69,6 +69,7 @@ describe("exceltis campaign flow (simulation frontend)", () => {
         nomsProduitSelectionnes: [],
         tmiTranchesSelectionnees: [],
         irNetMontant: null,
+        revenusAnnuelsMontant: null,
       })
     ).toBeNull();
   });

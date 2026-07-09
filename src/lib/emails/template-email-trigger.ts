@@ -21,6 +21,8 @@ export interface TemplateEmailTriggerConfig {
   envoi_jours_semaine?: string | null;
   /** Nouvelle souscription : un envoi par investissement si true. */
   a_chaque_souscription: boolean;
+  /** Contacts décochés dans l'aperçu — exclus de la file déclencheur. */
+  excluded_contact_ids: number[];
   /** @deprecated lecture seule — migré vers condition_* */
   trigger_type?: "NONE" | "EVENEMENT_SOUSCRIPTION";
   /** @deprecated migré dans condition_config.types */
@@ -36,6 +38,7 @@ export const DEFAULT_TEMPLATE_EMAIL_TRIGGER: TemplateEmailTriggerConfig = {
   envoi_heure: "09:00",
   envoi_jours_semaine: null,
   a_chaque_souscription: true,
+  excluded_contact_ids: [],
 };
 
 function migrateLegacyTrigger(
@@ -102,6 +105,9 @@ function migrateLegacyTrigger(
       return null;
     })(),
     a_chaque_souscription: aChaque,
+    excluded_contact_ids: Array.isArray(o.excluded_contact_ids)
+      ? o.excluded_contact_ids.filter((id): id is number => typeof id === "number")
+      : DEFAULT_TEMPLATE_EMAIL_TRIGGER.excluded_contact_ids,
   };
 }
 

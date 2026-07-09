@@ -139,7 +139,7 @@ export function FamillesToolbar({
   showExport?: boolean;
 }) {
   return (
-    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background/95 px-3 py-2.5 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2.5 shadow-sm">
       <ListSearchField
         value={searchQuery}
         onChange={onSearchChange}

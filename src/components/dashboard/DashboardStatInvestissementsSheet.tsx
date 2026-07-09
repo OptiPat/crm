@@ -21,6 +21,7 @@ import {
   getTypeProduitTextClass,
 } from "@/lib/investissements/investissement-display";
 import { cn } from "@/lib/utils";
+import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 import {
   immobilierInvestissementSubtitle,
   investissementOwnerLabel,
@@ -164,7 +165,7 @@ export function DashboardStatInvestissementsSheet({
         hideOverlay
         className="z-50 flex h-svh max-h-svh min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
         onInteractOutside={(event) => {
-          if (stackedContactOpen) event.preventDefault();
+          if (stackedContactOpen) preventStackedSheetOutsideDismiss(event);
         }}
         onEscapeKeyDown={(event) => {
           if (stackedContactOpen) event.preventDefault();

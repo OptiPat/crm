@@ -16,7 +16,8 @@ export type EtiquetteFormFieldId =
   | "rule-types-produit"
   | "rule-group"
   | "rule-tmi"
-  | "rule-ir-net";
+  | "rule-ir-net"
+  | "rule-revenus-annuels";
 
 export interface EtiquetteFormValidationInput {
   nom: string;
@@ -41,6 +42,7 @@ export interface EtiquetteFormValidationInput {
   nomsProduitSelectionnes: string[];
   tmiTranchesSelectionnees: number[];
   irNetMontant: number | null;
+  revenusAnnuelsMontant: number | null;
 }
 
 export interface EtiquetteFormValidationError {
@@ -49,6 +51,10 @@ export interface EtiquetteFormValidationError {
   fieldId?: EtiquetteFormFieldId;
   /** Index de la leaf combo en erreur (scroll / surbrillance). */
   ruleLeafIndex?: number;
+}
+
+function isPositiveMontant(montant: unknown): boolean {
+  return montant != null && montant !== "" && Number.isFinite(Number(montant)) && Number(montant) > 0;
 }
 
 export function validateEtiquetteFormDetailed(
@@ -133,12 +139,21 @@ export function validateEtiquetteFormDetailed(
         }
       }
       if (child.type === "IR_NET") {
-        const montant = child.config?.montant;
-        if (montant == null || montant === "" || !Number.isFinite(Number(montant))) {
+        if (!isPositiveMontant(child.config?.montant)) {
           return {
             message: "Indiquez le montant d'IR net à comparer",
             tab: "rule",
             fieldId: "rule-ir-net",
+            ruleLeafIndex: leafIndex,
+          };
+        }
+      }
+      if (child.type === "REVENUS_ANNUELS") {
+        if (!isPositiveMontant(child.config?.montant)) {
+          return {
+            message: "Indiquez les revenus annuels à comparer",
+            tab: "rule",
+            fieldId: "rule-revenus-annuels",
             ruleLeafIndex: leafIndex,
           };
         }
@@ -178,15 +193,23 @@ export function validateEtiquetteFormDetailed(
     };
   }
 
-  if (
-    autoSansSegmentNiCombo &&
-    i.conditionType === "IR_NET" &&
-    (i.irNetMontant == null || !Number.isFinite(i.irNetMontant))
-  ) {
+  if (autoSansSegmentNiCombo && i.conditionType === "IR_NET" && !isPositiveMontant(i.irNetMontant)) {
     return {
       message: "Indiquez le montant d'IR net à comparer",
       tab: "rule",
       fieldId: "rule-ir-net",
+    };
+  }
+
+  if (
+    autoSansSegmentNiCombo &&
+    i.conditionType === "REVENUS_ANNUELS" &&
+    !isPositiveMontant(i.revenusAnnuelsMontant)
+  ) {
+    return {
+      message: "Indiquez les revenus annuels à comparer",
+      tab: "rule",
+      fieldId: "rule-revenus-annuels",
     };
   }
 

@@ -6,6 +6,8 @@ import {
   defaultProchainSuiviForClientStatut,
   defaultProchainSuiviSixMois,
   formatPhoneInput,
+  getClientLabel,
+  getClientStatutSelectValue,
   normalizeImportTelephone,
   applyFoyerAddressIfEmpty,
   getEmptyForm,
@@ -130,6 +132,26 @@ describe("normalizeImportStatut", () => {
     expect(normalizeImportStatut("")).toBeUndefined();
     expect(normalizeImportStatut(null)).toBeUndefined();
     expect(normalizeImportStatut("Partenaire")).toBeUndefined();
+  });
+});
+
+describe("getClientStatutSelectValue", () => {
+  it("distingue client actif et ancien client", () => {
+    expect(getClientStatutSelectValue("CLIENT", "ACTIF")).toBe("CLIENT");
+    expect(getClientStatutSelectValue("CLIENT", "EN_PAUSE")).toBe("ANCIEN_CLIENT");
+  });
+
+  it("conserve les autres statuts", () => {
+    expect(getClientStatutSelectValue("PROSPECT_CLIENT", "ACTIF")).toBe("PROSPECT_CLIENT");
+    expect(getClientStatutSelectValue("PRESCRIPTEUR", "ACTIF")).toBe("PRESCRIPTEUR");
+    expect(getClientStatutSelectValue("AUCUN", "ACTIF")).toBe("AUCUN");
+  });
+});
+
+describe("getClientLabel", () => {
+  it("affiche Ancien client quand statut_suivi EN_PAUSE", () => {
+    expect(getClientLabel("CLIENT", "EN_PAUSE")).toBe("Ancien client");
+    expect(getClientLabel("CLIENT", "ACTIF")).toBe("Client");
   });
 });
 

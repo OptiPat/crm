@@ -18,6 +18,7 @@ import {
 import { etiquetteHasAutoRule } from "@/lib/etiquettes/etiquette-auto-rule";
 import {
   parseConditionIrNetConfig,
+  parseConditionRevenusAnnuelsConfig,
   parseConditionTmiConfig,
 } from "@/lib/etiquettes/fiscal-tmi";
 import { parseRuleTree } from "@/lib/etiquettes/rule-ast";
@@ -83,6 +84,8 @@ function storedToSummaryInput(
     tmiTranches: [],
     irNetOperator: "gte",
     irNetMontant: null,
+    revenusAnnuelsOperator: "gte",
+    revenusAnnuelsMontant: null,
     categories,
   };
 
@@ -137,6 +140,12 @@ function storedToSummaryInput(
     if (config) {
       base.irNetOperator = config.operator;
       base.irNetMontant = config.montant;
+    }
+  } else if (type === "REVENUS_ANNUELS") {
+    const config = parseConditionRevenusAnnuelsConfig(etiquette.auto_condition_config);
+    if (config) {
+      base.revenusAnnuelsOperator = config.operator;
+      base.revenusAnnuelsMontant = config.montant;
     }
   }
 

@@ -215,6 +215,7 @@ fn main() {
             delete_segment,
             evaluate_segment_for_contact,
             get_contacts_matching_segment,
+            get_contacts_matching_rule_json,
             preview_segment_rule_count,
             get_contact_auto_etiquette_log,
             get_pending_etiquette_emails,

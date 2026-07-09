@@ -136,7 +136,12 @@ export async function applySoloRioImport(
   const identityConflicts =
     existingContact &&
     getPairIdentityConflictMessages(
-      { email: data.email, telephone: data.telephone },
+      {
+        email: data.email,
+        telephone: data.telephone,
+        nom: data.nom,
+        prenom: data.prenom,
+      },
       existingContact
     );
 
@@ -144,7 +149,7 @@ export async function applySoloRioImport(
     const confirmMerge = await Promise.resolve(
       ctx.confirmIdentityMerge(
       [
-        "Même nom/prénom mais coordonnées différentes :",
+        "Conflit d'identité :",
         identityConflicts.join(", "),
         "",
         "Fiche en base :",

@@ -26,6 +26,8 @@ const base = {
   tmiTranchesSelectionnees: [] as number[],
   irNetOperator: "gte" as const,
   irNetMontant: "" as number | "",
+  revenusAnnuelsOperator: "gte" as const,
+  revenusAnnuelsMontant: "" as number | "",
 };
 
 describe("buildEtiquetteRulePreviewJson", () => {

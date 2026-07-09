@@ -60,6 +60,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
 import {
@@ -68,7 +69,6 @@ import {
   PROFIL_RISQUE_SRI_FIELD_LABEL,
 } from "@/lib/contacts/investisseur-sri";
 import {
-  type ClientStatut,
   type Civilite,
   type ContactFormContext,
   type FieldErrors,
@@ -87,6 +87,8 @@ import {
   isContactAddressEmpty,
   sanitizePhoneInput,
   getClientLabel,
+  getClientStatutSelectValue,
+  type ClientStatutSelectValue,
   getEmptyForm,
   getFilleulLabel,
   getFieldErrors,
@@ -264,7 +266,7 @@ function ContactFormSummary({
   parrainContact: Contact | null;
   prescripteurContact?: Contact | null;
 }) {
-  const clientLabel = getClientLabel(formData.categorie || "AUCUN");
+  const clientLabel = getClientLabel(formData.categorie || "AUCUN", formData.statut_suivi);
   const prescripteurRole = isPrescripteurCategorie(formData.categorie);
   const filleulLabel = getFilleulLabel(formData.filleul_categorie);
   const displayName =
@@ -753,7 +755,7 @@ export function ContactForm({
     }
   };
 
-  const setClientStatut = (value: ClientStatut | "PRESCRIPTEUR") => {
+  const setClientStatut = (value: ClientStatutSelectValue) => {
     if (value === "PRESCRIPTEUR") {
       setFormData((prev) => ({
         ...prev,
@@ -772,10 +774,22 @@ export function ContactForm({
         date_prochain_suivi: "",
         date_r1: "",
       }));
+    } else if (value === "ANCIEN_CLIENT") {
+      setFormData((prev) => ({
+        ...prev,
+        categorie: "CLIENT",
+        statut_suivi: "EN_PAUSE",
+        date_prochain_suivi:
+          prev.date_prochain_suivi || defaultProchainSuiviForClientStatut("CLIENT"),
+      }));
     } else {
       setFormData((prev) => ({
         ...prev,
         categorie: value,
+        statut_suivi:
+          value === "CLIENT" && prev.statut_suivi === "EN_PAUSE"
+            ? "ACTIF"
+            : prev.statut_suivi,
         date_prochain_suivi:
           prev.date_prochain_suivi || defaultProchainSuiviForClientStatut(value),
       }));
@@ -1227,10 +1241,8 @@ export function ContactForm({
               <div className="space-y-2">
                 <Label>Statut client</Label>
                 <Select
-                  value={formData.categorie || "AUCUN"}
-                  onValueChange={(value) =>
-                    setClientStatut(value as ClientStatut | "PRESCRIPTEUR")
-                  }
+                  value={getClientStatutSelectValue(formData.categorie, formData.statut_suivi)}
+                  onValueChange={(value) => setClientStatut(value as ClientStatutSelectValue)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1238,6 +1250,7 @@ export function ContactForm({
                   <SelectContent>
                     <SelectItem value="AUCUN">Aucun (pas client)</SelectItem>
                     <SelectItem value="CLIENT">Client</SelectItem>
+                    <SelectItem value="ANCIEN_CLIENT">Ancien client</SelectItem>
                     <SelectItem value="PROSPECT_CLIENT">Prospect client</SelectItem>
                     <SelectItem value="SUSPECT_CLIENT">Suspect client</SelectItem>
                     {isEdit && (
@@ -1600,7 +1613,7 @@ export function ContactForm({
           side="right"
           hideOverlay={nestedSheet}
           className={cn(
-            "flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]",
+            "flex min-h-0 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl sm:max-h-[100dvh]",
             nestedSheet && STACKED_NESTED_SHEET_Z
           )}
         >
@@ -1610,7 +1623,9 @@ export function ContactForm({
               <SheetDescription>{description}</SheetDescription>
             </SheetHeader>
           </div>
-          <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+          <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+            <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+          </PortalLayerProvider>
         </SheetContent>
       </Sheet>
 

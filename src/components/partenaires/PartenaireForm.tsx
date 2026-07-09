@@ -18,6 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createPartenaire, updatePartenaire, type NewPartenaire, type Partenaire } from "@/lib/api/tauri-partenaires";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface PartenaireFormProps {
   open: boolean;
@@ -26,6 +29,7 @@ interface PartenaireFormProps {
   /** Pré-sélection du type à la création (ex. depuis un placement). */
   defaultTypePartenaire?: string;
   onSuccess: (partenaireId?: number) => void;
+  nestedSheet?: boolean;
 }
 
 export function PartenaireForm({
@@ -34,6 +38,7 @@ export function PartenaireForm({
   partenaire,
   defaultTypePartenaire,
   onSuccess,
+  nestedSheet = false,
 }: PartenaireFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<NewPartenaire>({
@@ -76,8 +81,12 @@ export function PartenaireForm({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn("max-w-md", nestedSheet && STACKED_NESTED_SHEET_Z)}
+      >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle>
             {partenaire ? "Modifier le partenaire" : "Nouveau partenaire"}
@@ -137,6 +146,7 @@ export function PartenaireForm({
             </Button>
           </DialogFooter>
         </form>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

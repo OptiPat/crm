@@ -18,6 +18,7 @@ import type {
 } from "@/lib/interactions/exchange-history-filters";
 import type { ExchangeHistoryYearGroup } from "@/lib/interactions/exchange-history-groups";
 import { exchangeEntryKey } from "@/lib/interactions/exchange-history-display";
+import { cn } from "@/lib/utils";
 import {
   CalendarClock,
   ChevronDown,
@@ -284,7 +285,12 @@ export function InteractionsGroupedList({
     <div className="space-y-6">
       {groups.map((yearGroup) => (
         <section key={yearGroup.year} className="space-y-4">
-          <h3 className="text-sm font-semibold text-muted-foreground sticky top-0 bg-card/95 backdrop-blur-sm py-1 z-[1]">
+          <h3
+            className={cn(
+              "text-sm font-semibold text-muted-foreground py-1",
+              showSplit && "sticky top-0 z-[1] bg-card/95 backdrop-blur-sm"
+            )}
+          >
             {yearGroup.year}
           </h3>
           {yearGroup.months.map((monthGroup) => (

@@ -24,6 +24,9 @@ import { ListSearchField } from "@/components/layout/ListSearchField";
 import { contactMatchesSearch } from "@/lib/search-utils";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface FoyerAddMemberModalProps {
   open: boolean;
@@ -32,6 +35,7 @@ interface FoyerAddMemberModalProps {
   currentContact: Contact;
   existingMemberIds: number[];
   onSuccess: () => void;
+  nestedSheet?: boolean;
 }
 
 export function FoyerAddMemberModal({
@@ -41,6 +45,7 @@ export function FoyerAddMemberModal({
   currentContact,
   existingMemberIds,
   onSuccess,
+  nestedSheet = false,
 }: FoyerAddMemberModalProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [candidates, setCandidates] = useState<Contact[]>([]);
@@ -100,8 +105,15 @@ export function FoyerAddMemberModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn(
+          "max-w-lg max-h-[85vh] flex flex-col",
+          nestedSheet && STACKED_NESTED_SHEET_Z
+        )}
+      >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
@@ -199,6 +211,7 @@ export function FoyerAddMemberModal({
             Fermer
           </Button>
         </DialogFooter>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

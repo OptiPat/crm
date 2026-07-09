@@ -46,6 +46,15 @@ export async function previewSegmentRuleCount(ruleJson: string): Promise<number>
   return invoke<number>("preview_segment_rule_count", { ruleJson });
 }
 
+export async function getContactsMatchingRuleJson(
+  ruleJson: string
+): Promise<import("@/lib/api/tauri-contacts").Contact[]> {
+  return invoke<import("@/lib/api/tauri-contacts").Contact[]>(
+    "get_contacts_matching_rule_json",
+    { ruleJson }
+  );
+}
+
 export async function evaluateSegmentForContact(
   segmentId: number,
   contactId: number

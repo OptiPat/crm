@@ -31,6 +31,7 @@ import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface InteractionFormProps {
   open: boolean;
@@ -155,6 +156,7 @@ export function InteractionForm({
         hideOverlay={nestedSheet}
         className={cn("max-w-lg", nestedSheet && STACKED_NESTED_SHEET_Z)}
       >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle>
             {interaction ? "Modifier l'interaction" : "Nouvelle interaction"}
@@ -247,6 +249,7 @@ export function InteractionForm({
             </Button>
           </DialogFooter>
         </form>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

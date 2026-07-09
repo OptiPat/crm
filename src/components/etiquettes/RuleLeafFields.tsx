@@ -14,7 +14,7 @@ import { INVESTISSEMENT_TYPE_GROUPS } from "@/lib/etiquettes/etiquette-investiss
 import { TypeProduitConditionFields } from "@/components/etiquettes/TypeProduitConditionFields";
 import { buildTypeProduitConditionConfig, parseTypeProduitConditionConfig } from "@/lib/etiquettes/type-produit-condition";
 import { TypeProduitInvestmentOptions } from "@/components/etiquettes/TypeProduitInvestmentOptions";
-import { IrNetConditionFields, TmiTranchePicker } from "@/components/etiquettes/FiscalRuleFields";
+import { IrNetConditionFields, TmiTranchePicker, RevenusAnnuelsConditionFields } from "@/components/etiquettes/FiscalRuleFields";
 import {
   type IrNetOperator,
 } from "@/lib/etiquettes/fiscal-tmi";
@@ -269,6 +269,19 @@ export function RuleLeafFields({
 
       {leaf.type === "IR_NET" && (
         <IrNetConditionFields
+          operator={(leaf.config.operator as IrNetOperator) ?? "gte"}
+          onOperatorChange={(op) => setConfig({ operator: op })}
+          montant={
+            leaf.config.montant != null && leaf.config.montant !== ""
+              ? Number(leaf.config.montant)
+              : ""
+          }
+          onMontantChange={(v) => setConfig({ montant: v === "" ? "" : v })}
+        />
+      )}
+
+      {leaf.type === "REVENUS_ANNUELS" && (
+        <RevenusAnnuelsConditionFields
           operator={(leaf.config.operator as IrNetOperator) ?? "gte"}
           onOperatorChange={(op) => setConfig({ operator: op })}
           montant={

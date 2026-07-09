@@ -64,7 +64,12 @@ export function SplitListColumn({
       )}
     >
       {displayLabel ? (
-        <p className="sticky top-0 z-10 shrink-0 bg-card px-1 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <p
+          className={cn(
+            "shrink-0 bg-card px-1 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground",
+            showSplit && "sticky top-0 z-10"
+          )}
+        >
           {listLabel}
         </p>
       ) : null}

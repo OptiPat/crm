@@ -190,6 +190,158 @@ impl Database {
         Ok(())
     }
 
+    /// Envois modèle non envoyés (toutes lignes investissement comprises).
+    fn clear_pending_template_envois_for_contact_template(
+        &self,
+        contact_id: i64,
+        template_id: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM contact_template_envois
+             WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 0",
+            params![contact_id, template_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn purge_excluded_template_trigger_envois(&self, template_id: i64) -> Result<usize> {
+        let tpl = self.get_template_email_by_id(template_id)?;
+        let trigger = parse_template_email_trigger(tpl.variables.as_deref());
+        let mut total = 0usize;
+        for contact_id in &trigger.excluded_contact_ids {
+            total += self.conn.execute(
+                "DELETE FROM contact_template_envois
+                 WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 0",
+                params![contact_id, template_id],
+            )?;
+        }
+        Ok(total)
+    }
+
+    /// Planifie ou purge l'envoi d'un modèle pour un contact (hors souscription).
+    fn sync_template_email_trigger_for_contact(
+        &self,
+        contact_id: i64,
+        template_id: i64,
+        trigger: &super::template_email_trigger::TemplateEmailTriggerConfig,
+        contact: &Contact,
+        now: i64,
+        current_month: i32,
+        org_self_id: Option<i64>,
+    ) -> Result<bool> {
+        if !trigger.is_active() {
+            return Ok(false);
+        }
+        let Some(ref condition_type) = trigger.resolved_condition_type() else {
+            return Ok(false);
+        };
+        if condition_type == "EVENEMENT_SOUSCRIPTION" {
+            return Ok(false);
+        }
+        if trigger.is_contact_excluded(contact_id) {
+            self.clear_pending_template_envois_for_contact_template(contact_id, template_id)?;
+            return Ok(false);
+        }
+        let category_ok = Self::contact_matches_auto_categories(
+            contact,
+            &trigger.categories,
+            org_self_id,
+        );
+        let config_ref = trigger.resolved_condition_config();
+        let condition_ok = if condition_type == "RULE_TREE" {
+            if let Some(cfg) = config_ref.as_ref() {
+                use super::etiquette_rule_ast::parse_rule_json;
+                match parse_rule_json(Some(cfg), None, None, None) {
+                    Ok(tree) => self.contact_matches_rule_tree(
+                        contact,
+                        &tree,
+                        now,
+                        current_month,
+                        org_self_id,
+                    )?,
+                    Err(_) => false,
+                }
+            } else {
+                false
+            }
+        } else if category_ok {
+            self.evaluate_auto_etiquette_condition(
+                contact,
+                contact_id,
+                condition_type,
+                config_ref.as_ref(),
+                &trigger.categories,
+                now,
+                current_month,
+            )?
+        } else {
+            false
+        };
+        let eligible = if condition_type == "RULE_TREE" {
+            condition_ok
+        } else {
+            category_ok && condition_ok
+        };
+        if !eligible {
+            if template_trigger_resets_outside_period(condition_type) {
+                self.clear_periodic_template_envoi(contact_id, template_id)?;
+            }
+            return Ok(false);
+        }
+
+        let sent: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contact_template_envois
+             WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 1",
+            params![contact_id, template_id],
+            |row| row.get(0),
+        )?;
+        if sent > 0 {
+            return Ok(false);
+        }
+
+        let sched = etiquette_schedule_from_trigger(trigger);
+        let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, now);
+        self.upsert_contact_template_envoi(
+            contact_id,
+            template_id,
+            None,
+            now,
+            email_date_prevue,
+            false,
+        )
+    }
+
+    /// Recalcule la file d'envoi d'un modèle pour tous les contacts (ex. retrait d'une exclusion).
+    pub fn sync_template_email_trigger_for_all_contacts(&self, template_id: i64) -> Result<usize> {
+        let tpl = self.get_template_email_by_id(template_id)?;
+        let trigger = parse_template_email_trigger(tpl.variables.as_deref());
+        let (now, current_month) = Self::auto_etiquette_now_and_month();
+        let org_self_id = self.resolve_organisation_self_contact_id()?;
+
+        let contact_ids: Vec<i64> = {
+            let mut stmt = self.conn.prepare("SELECT id FROM contacts")?;
+            let rows = stmt.query_map([], |row| row.get(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+
+        let mut scheduled = 0usize;
+        for contact_id in contact_ids {
+            let contact = self.get_contact_by_id(contact_id)?;
+            if self.sync_template_email_trigger_for_contact(
+                contact_id,
+                template_id,
+                &trigger,
+                &contact,
+                now,
+                current_month,
+                org_self_id,
+            )? {
+                scheduled += 1;
+            }
+        }
+        Ok(scheduled)
+    }
+
     /// Règles modèle (hors « nouvelle souscription ») : même moteur que les étiquettes auto.
     pub fn sync_template_email_triggers_for_contact(&self, contact_id: i64) -> Result<usize> {
         let contact = self.get_contact_by_id(contact_id)?;
@@ -206,60 +358,14 @@ impl Database {
         let mut scheduled = 0usize;
         for (template_id, variables) in templates {
             let trigger = parse_template_email_trigger(variables.as_deref());
-            if !trigger.is_active() {
-                continue;
-            }
-            let Some(ref condition_type) = trigger.resolved_condition_type() else {
-                continue;
-            };
-            if condition_type == "EVENEMENT_SOUSCRIPTION" {
-                continue;
-            }
-            let category_ok = Self::contact_matches_auto_categories(
-                &contact,
-                &trigger.categories,
-                org_self_id,
-            );
-            let config_ref = trigger.resolved_condition_config();
-            let condition_ok = if category_ok {
-                self.evaluate_auto_etiquette_condition(
-                    &contact,
-                    contact_id,
-                    condition_type,
-                    config_ref.as_ref(),
-                    &trigger.categories,
-                    now,
-                    current_month,
-                )?
-            } else {
-                false
-            };
-            if !(category_ok && condition_ok) {
-                if template_trigger_resets_outside_period(condition_type) {
-                    self.clear_periodic_template_envoi(contact_id, template_id)?;
-                }
-                continue;
-            }
-
-            let sent: i64 = self.conn.query_row(
-                "SELECT COUNT(*) FROM contact_template_envois
-                 WHERE contact_id = ?1 AND template_id = ?2 AND email_envoye = 1",
-                params![contact_id, template_id],
-                |row| row.get(0),
-            )?;
-            if sent > 0 {
-                continue;
-            }
-
-            let sched = etiquette_schedule_from_trigger(&trigger);
-            let email_date_prevue = resolve_email_date_prevue_for_contact(&sched, now);
-            if self.upsert_contact_template_envoi(
+            if self.sync_template_email_trigger_for_contact(
                 contact_id,
                 template_id,
-                None,
+                &trigger,
+                &contact,
                 now,
-                email_date_prevue,
-                false,
+                current_month,
+                org_self_id,
             )? {
                 scheduled += 1;
             }
@@ -302,6 +408,10 @@ impl Database {
                 type_produit,
                 org_self_id,
             ) {
+                continue;
+            }
+            if trigger.is_contact_excluded(contact_id) {
+                self.clear_pending_template_envois_for_contact_template(contact_id, template_id)?;
                 continue;
             }
 

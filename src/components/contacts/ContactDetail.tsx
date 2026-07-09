@@ -1137,12 +1137,14 @@ export function ContactDetail({
             onOpenChange={setShowFoyerCreateModal}
             currentContact={contact}
             onSuccess={() => void refreshContactAfterMutation()}
+            nestedSheet={nestedInvestissementSheet}
           />
           <FoyerLinkModal
             open={showFoyerLinkModal}
             onOpenChange={setShowFoyerLinkModal}
             currentContact={contact}
             onSuccess={() => void refreshContactAfterMutation()}
+            nestedSheet={nestedInvestissementSheet}
           />
           {foyer && (
             <>
@@ -1153,12 +1155,14 @@ export function ContactDetail({
                 currentContact={contact}
                 existingMemberIds={foyerMembers.map((m) => m.id)}
                 onSuccess={() => void refreshContactAfterMutation()}
+                nestedSheet={nestedInvestissementSheet}
               />
               <FoyerForm
                 open={showFoyerEditForm}
                 onOpenChange={setShowFoyerEditForm}
                 foyer={foyer}
                 onSuccess={() => void refreshContactAfterMutation()}
+                nestedSheet={nestedInvestissementSheet}
               />
             </>
           )}
@@ -1272,7 +1276,7 @@ export function ContactDetail({
       <>
         <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           <div className="shrink-0 border-b border-border/60 px-4 py-3">{headerBlock}</div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{tabsBlock}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">{tabsBlock}</div>
         </div>
         {modals}
       </>
@@ -1282,9 +1286,9 @@ export function ContactDetail({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-y-auto shadow-md">
+        <DialogContent className="flex max-h-[90vh] max-w-3xl flex-col overflow-hidden shadow-md">
           <DialogHeader className="shrink-0 pr-12">{headerBlock}</DialogHeader>
-          <div className="min-h-0">{tabsBlock}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{tabsBlock}</div>
         </DialogContent>
       </Dialog>
       {modals}

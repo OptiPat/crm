@@ -24,6 +24,7 @@ const base: EtiquetteFormValidationInput = {
   nomsProduitSelectionnes: [],
   tmiTranchesSelectionnees: [],
   irNetMontant: null,
+  revenusAnnuelsMontant: null,
 };
 
 describe("validateEtiquetteForm", () => {

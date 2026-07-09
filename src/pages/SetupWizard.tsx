@@ -217,7 +217,7 @@ export function SetupWizard({ onWizardComplete }: SetupWizardProps) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-8">
+    <div className="h-full overflow-y-auto overscroll-contain bg-background flex flex-col items-center justify-center p-8">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-serif font-bold text-primary mb-2">
           Configuration de {displayName}

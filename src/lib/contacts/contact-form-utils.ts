@@ -14,6 +14,7 @@ export const FILLEUL_STATUTS = [
 ] as const;
 
 export type ClientStatut = (typeof CLIENT_STATUTS)[number];
+export type ClientStatutSelectValue = ClientStatut | "PRESCRIPTEUR" | "ANCIEN_CLIENT";
 export type FilleulStatut = (typeof FILLEUL_STATUTS)[number];
 export type Civilite = "M" | "MME" | "AUTRE";
 export type SituationFamiliale =
@@ -481,7 +482,21 @@ export function buildSubmitPayload(
   };
 }
 
-export function getClientLabel(categorie: string): string | null {
+/** Valeur affichée dans le sélecteur « Statut client » du formulaire. */
+export function getClientStatutSelectValue(
+  categorie?: string | null,
+  statutSuivi?: string | null
+): ClientStatutSelectValue {
+  if (isPrescripteurCategorie(categorie)) return "PRESCRIPTEUR";
+  if (categorie === "CLIENT" && statutSuivi === "EN_PAUSE") return "ANCIEN_CLIENT";
+  if ((CLIENT_STATUTS as readonly string[]).includes(categorie ?? "")) {
+    return categorie as ClientStatut;
+  }
+  return "AUCUN";
+}
+
+export function getClientLabel(categorie: string, statutSuivi?: string | null): string | null {
+  if (categorie === "CLIENT" && statutSuivi === "EN_PAUSE") return "Ancien client";
   switch (categorie) {
     case "CLIENT":
       return "Client";

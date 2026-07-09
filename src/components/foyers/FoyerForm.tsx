@@ -22,6 +22,9 @@ import { createFoyer, updateFoyer, type NewFoyer, type Foyer } from "@/lib/api/t
 import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
 import { pickFiscal, propagateFiscalToFoyerMembers } from "@/lib/foyers/foyer-fiscal-sync";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 const FOYER_TYPE_OPTIONS = [
   "CELIBATAIRE",
@@ -36,9 +39,16 @@ interface FoyerFormProps {
   onOpenChange: (open: boolean) => void;
   foyer?: Foyer | null;
   onSuccess: (createdOrUpdatedFoyerId?: number) => void;
+  nestedSheet?: boolean;
 }
 
-export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormProps) {
+export function FoyerForm({
+  open,
+  onOpenChange,
+  foyer,
+  onSuccess,
+  nestedSheet = false,
+}: FoyerFormProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<NewFoyer>({
     nom: "",
@@ -103,8 +113,15 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn(
+          "max-w-2xl max-h-[90vh] overflow-y-auto",
+          nestedSheet && STACKED_NESTED_SHEET_Z
+        )}
+      >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle>
             {foyer ? "Modifier le foyer" : "Nouveau foyer"}
@@ -281,6 +298,7 @@ export function FoyerForm({ open, onOpenChange, foyer, onSuccess }: FoyerFormPro
             </Button>
           </DialogFooter>
         </form>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

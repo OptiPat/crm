@@ -4,13 +4,32 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { AutoRuleConditionFields } from "@/components/etiquettes/AutoRuleConditionFields";
+import { ConditionBuilder } from "@/components/etiquettes/ConditionBuilder";
 import {
   stringifyConditionConfig,
   type ConditionEvenementSouscription,
 } from "@/lib/api/tauri-etiquettes";
-import type { TemplateEmailTriggerConfig } from "@/lib/emails/template-email-trigger";
-import { DEFAULT_TEMPLATE_EMAIL_TRIGGER } from "@/lib/emails/template-email-trigger";
+import {
+  type TemplateEmailTriggerConfig,
+} from "@/lib/emails/template-email-trigger";
+import { EtiquetteRuleSummaryCard } from "@/components/etiquettes/etiquette-form-ui";
+import { formatTemplateEmailTriggerSummary } from "@/lib/emails/template-email-trigger-summary";
+import { SegmentRulePreview } from "@/components/etiquettes/SegmentRulePreview";
+import { buildTemplateEmailTriggerPreviewJson } from "@/lib/emails/template-email-trigger-preview";
+import {
+  defaultTriggerRuleChildren,
+  isTriggerRuleTree,
+  parseTriggerRuleTree,
+  triggerRuleTreeToConfig,
+} from "@/lib/emails/template-email-trigger-rule-tree";
+import type { RuleLeaf, RuleOp } from "@/lib/etiquettes/rule-ast";
 import { Zap } from "lucide-react";
+import { useMemo, useRef } from "react";
+
+type SimpleTriggerSnapshot = Pick<
+  TemplateEmailTriggerConfig,
+  "condition_type" | "condition_config" | "categories"
+>;
 
 type Props = {
   trigger: TemplateEmailTriggerConfig;
@@ -20,6 +39,26 @@ type Props = {
 export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
   const patch = (partial: Partial<TemplateEmailTriggerConfig>) =>
     onChange({ ...trigger, ...partial });
+
+  const simpleTriggerBeforeComboRef = useRef<SimpleTriggerSnapshot | null>(null);
+
+  const useComboRule = isTriggerRuleTree(trigger.condition_type);
+  const parsedTree = useMemo(
+    () => parseTriggerRuleTree(trigger.condition_config),
+    [trigger.condition_config]
+  );
+  const ruleOp: RuleOp = parsedTree?.op ?? "and";
+  const ruleChildren: RuleLeaf[] = parsedTree?.children ?? defaultTriggerRuleChildren();
+
+  const triggerSummary = useMemo(
+    () => formatTemplateEmailTriggerSummary(trigger),
+    [trigger]
+  );
+
+  const triggerPreviewJson = useMemo(
+    () => buildTemplateEmailTriggerPreviewJson(trigger),
+    [trigger]
+  );
 
   const conditionType = trigger.condition_type ?? "EVENEMENT_SOUSCRIPTION";
 
@@ -46,6 +85,50 @@ export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
     }
   };
 
+  const enableComboRule = (enabled: boolean) => {
+    if (!enabled) {
+      const restored = simpleTriggerBeforeComboRef.current;
+      simpleTriggerBeforeComboRef.current = null;
+      onChange({
+        ...trigger,
+        condition_type: restored?.condition_type ?? "DELAI_SANS_CONTACT",
+        condition_config:
+          restored?.condition_config ??
+          stringifyConditionConfig({ jours: 365, inclure_sans_date: true }),
+        categories:
+          restored?.categories && restored.categories.length > 0
+            ? restored.categories
+            : trigger.categories.length > 0
+              ? trigger.categories
+              : ["CLIENT"],
+      });
+      return;
+    }
+    if (!isTriggerRuleTree(trigger.condition_type)) {
+      simpleTriggerBeforeComboRef.current = {
+        condition_type: trigger.condition_type,
+        condition_config: trigger.condition_config,
+        categories: trigger.categories,
+      };
+    }
+    const next = triggerRuleTreeToConfig("and", defaultTriggerRuleChildren());
+    onChange({
+      ...trigger,
+      condition_type: next.condition_type,
+      condition_config: next.condition_config,
+      categories: next.categories,
+    });
+  };
+
+  const updateRuleTree = (op: RuleOp, children: RuleLeaf[]) => {
+    const next = triggerRuleTreeToConfig(op, children);
+    patch({
+      condition_type: next.condition_type,
+      condition_config: next.condition_config,
+      categories: next.categories,
+    });
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/20 px-4 py-3">
@@ -68,18 +151,21 @@ export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
           checked={trigger.enabled}
           onCheckedChange={(checked) => {
             if (!checked) {
-              onChange({ ...DEFAULT_TEMPLATE_EMAIL_TRIGGER });
+              onChange({ ...trigger, enabled: false });
               return;
             }
             onChange({
               ...trigger,
               enabled: true,
-              condition_type: "EVENEMENT_SOUSCRIPTION",
-              condition_config: stringifyConditionConfig({
-                types: [],
-                a_chaque_souscription: true,
-              }),
-              categories: trigger.categories.length > 0 ? trigger.categories : ["CLIENT"],
+              condition_type: trigger.condition_type ?? "EVENEMENT_SOUSCRIPTION",
+              condition_config:
+                trigger.condition_config ??
+                stringifyConditionConfig({
+                  types: [],
+                  a_chaque_souscription: trigger.a_chaque_souscription,
+                }),
+              categories:
+                trigger.categories.length > 0 ? trigger.categories : ["CLIENT"],
             });
           }}
         />
@@ -93,20 +179,69 @@ export function TemplateEmailTriggerPanel({ trigger, onChange }: Props) {
 
       {trigger.enabled && (
         <div className="space-y-5 rounded-lg border p-4">
-          <AutoRuleConditionFields
-            conditionType={conditionType}
-            conditionConfig={trigger.condition_config}
-            categories={trigger.categories}
-            onChange={({ conditionType: ct, conditionConfig, categories }) =>
-              patch({
-                condition_type: ct,
-                condition_config: conditionConfig,
-                categories,
-              })
-            }
-            repeatEachSouscription={trigger.a_chaque_souscription}
-            onRepeatEachSouscriptionChange={setRepeatEach}
-          />
+          {triggerSummary ? <EtiquetteRuleSummaryCard summary={triggerSummary} /> : null}
+
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2.5">
+            <div>
+              <p className="text-sm font-medium">Règle combinée (ET / OU)</p>
+              <p className="text-xs text-muted-foreground">
+                Ex. TMI 30 % et revenus ≥ 60 000 € — plusieurs critères en une fois.
+              </p>
+            </div>
+            <Switch
+              id="trigger-combo-rule"
+              checked={useComboRule}
+              onCheckedChange={enableComboRule}
+            />
+          </div>
+
+          {useComboRule ? (
+            <ConditionBuilder
+              op={ruleOp}
+              onOpChange={(op) => updateRuleTree(op, ruleChildren)}
+              children={ruleChildren}
+              onChange={(children) => updateRuleTree(ruleOp, children)}
+              showPreview
+              previewSelectable
+              excludedContactIds={trigger.excluded_contact_ids}
+              onExcludedContactIdsChange={(excluded_contact_ids) =>
+                patch({ excluded_contact_ids })
+              }
+            />
+          ) : (
+            <>
+              <AutoRuleConditionFields
+                conditionType={conditionType}
+                conditionConfig={trigger.condition_config}
+                categories={trigger.categories}
+                onChange={({ conditionType: ct, conditionConfig, categories }) =>
+                  patch({
+                    condition_type: ct,
+                    condition_config: conditionConfig,
+                    categories,
+                  })
+                }
+                repeatEachSouscription={trigger.a_chaque_souscription}
+                onRepeatEachSouscriptionChange={setRepeatEach}
+              />
+              {triggerPreviewJson ? (
+                <SegmentRulePreview
+                  ruleJson={triggerPreviewJson}
+                  listTitle="Contacts du déclencheur"
+                  selectable
+                  excludedContactIds={trigger.excluded_contact_ids}
+                  onExcludedContactIdsChange={(excluded_contact_ids) =>
+                    patch({ excluded_contact_ids })
+                  }
+                />
+              ) : conditionType === "EVENEMENT_SOUSCRIPTION" ? (
+                <p className="text-sm text-muted-foreground rounded-lg border bg-muted/30 px-3 py-2">
+                  L&apos;aperçu compteur ne s&apos;applique pas aux souscriptions : le contact
+                  apparaît dans Suivi → Envois à chaque nouvel investissement éligible.
+                </p>
+              ) : null}
+            </>
+          )}
 
           <div className="space-y-2 border-t pt-4">
             <Label className="text-sm font-medium">Quand proposer l&apos;envoi ?</Label>

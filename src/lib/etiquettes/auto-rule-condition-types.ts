@@ -9,6 +9,9 @@ export const AUTO_RULE_CONDITION_TYPES: ConditionType[] = [
   "TYPE_PRODUIT",
   "DATE_APPROCHE_INVESTISSEMENT",
   "AGE_APPROCHE",
+  "TMI",
+  "IR_NET",
+  "REVENUS_ANNUELS",
 ];
 
 export type AutoRuleConditionState = {

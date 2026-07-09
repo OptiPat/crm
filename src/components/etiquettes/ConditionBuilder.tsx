@@ -27,6 +27,7 @@ const CONDITION_TYPES: ConditionType[] = [
   "AGE_APPROCHE",
   "TMI",
   "IR_NET",
+  "REVENUS_ANNUELS",
   "JAMAIS_CONTACT",
   "A_ETIQUETTE",
 ];
@@ -60,7 +61,9 @@ function newLeaf(
                       ? { tranches: [11] }
                       : type === "IR_NET"
                         ? { operator: "gte", montant: 4000 }
-                        : type === "CHAMP_PERSO"
+                        : type === "REVENUS_ANNUELS"
+                          ? { operator: "gte", montant: 60_000 }
+                          : type === "CHAMP_PERSO"
                       ? {
                           field_key: customFieldsOptions[0]?.field_key ?? "",
                           operator: "rempli",
@@ -82,6 +85,9 @@ export interface ConditionBuilderProps {
   etiquettesOptions?: { id: number; nom: string }[];
   customFieldsOptions?: CustomFieldDef[];
   showPreview?: boolean;
+  previewSelectable?: boolean;
+  excludedContactIds?: number[];
+  onExcludedContactIdsChange?: (ids: number[]) => void;
   highlightRuleLeafIndex?: number | null;
 }
 
@@ -93,6 +99,9 @@ export function ConditionBuilder({
   etiquettesOptions = [],
   customFieldsOptions = [],
   showPreview = true,
+  previewSelectable = false,
+  excludedContactIds = [],
+  onExcludedContactIdsChange,
   highlightRuleLeafIndex = null,
 }: ConditionBuilderProps) {
   const availableTypes: ConditionType[] =
@@ -178,7 +187,16 @@ export function ConditionBuilder({
       ))}
 
       {showPreview && children.length > 0 && (
-        <SegmentRulePreview op={op} children={children} />
+        <SegmentRulePreview
+          op={op}
+          children={children}
+          selectable={previewSelectable}
+          excludedContactIds={excludedContactIds}
+          onExcludedContactIdsChange={onExcludedContactIdsChange}
+          listTitle={
+            previewSelectable ? "Contacts du déclencheur" : "Contacts concernés par la règle"
+          }
+        />
       )}
     </div>
   );

@@ -87,6 +87,112 @@ export function resolveEnrichDateNaissance(
   return lineDateIso;
 }
 
+export type FinzzleEnrichHighlightField =
+  | "categorie"
+  | "civilite"
+  | "nom"
+  | "prenom"
+  | "email"
+  | "telephone"
+  | "adresse"
+  | "codePostal"
+  | "ville"
+  | "pays"
+  | "dateNaissanceIso"
+  | "sourceLead"
+  | "tmi";
+
+export type FinzzleEnrichFieldHighlight = "fill" | "change";
+
+export type FinzzleEnrichFieldHighlights = Partial<
+  Record<FinzzleEnrichHighlightField, FinzzleEnrichFieldHighlight>
+>;
+
+function strFieldNorm(value: string | undefined | null): string {
+  return (value ?? "").trim();
+}
+
+function markEnrichHighlight(
+  highlights: FinzzleEnrichFieldHighlights,
+  field: FinzzleEnrichHighlightField,
+  payloadValue: string | undefined,
+  existingValue: string | undefined,
+  incomingValue: string | undefined,
+  normalizer: (value: string | undefined | null) => string = strFieldNorm
+): void {
+  if (!strFieldNorm(incomingValue)) return;
+  const next = normalizer(payloadValue);
+  const prev = normalizer(existingValue);
+  if (next === prev) return;
+  highlights[field] = prev ? "change" : "fill";
+}
+
+/** Champs qui seront réellement modifiés à l'enrichissement (aperçu UI). */
+export function getFinzzleEnrichFieldHighlights(
+  line: FinzzleClientPreviewLine,
+  existing: Contact
+): FinzzleEnrichFieldHighlights {
+  const match = line.duplicateMatch ?? "name";
+  const payload = buildFinzzleEnrichPayload(line, existing, match);
+  const highlights: FinzzleEnrichFieldHighlights = {};
+
+  const newCategorie = payload.categorie ?? existing.categorie;
+  if (newCategorie !== existing.categorie && line.categorie !== existing.categorie) {
+    highlights.categorie = strFieldNorm(existing.categorie) ? "change" : "fill";
+  }
+
+  markEnrichHighlight(highlights, "civilite", payload.civilite, existing.civilite, line.civilite);
+  markEnrichHighlight(highlights, "nom", payload.nom, existing.nom, line.nom);
+  markEnrichHighlight(highlights, "prenom", payload.prenom, existing.prenom, line.prenom);
+  markEnrichHighlight(
+    highlights,
+    "email",
+    payload.email,
+    existing.email,
+    line.email,
+    normalizeEmail
+  );
+  markEnrichHighlight(
+    highlights,
+    "telephone",
+    payload.telephone,
+    existing.telephone,
+    line.telephone,
+    normalizePhone
+  );
+  markEnrichHighlight(highlights, "adresse", payload.adresse, existing.adresse, line.adresse);
+  markEnrichHighlight(
+    highlights,
+    "codePostal",
+    payload.code_postal,
+    existing.code_postal,
+    line.codePostal
+  );
+  markEnrichHighlight(highlights, "ville", payload.ville, existing.ville, line.ville);
+  markEnrichHighlight(highlights, "pays", payload.pays, existing.pays, line.pays);
+  markEnrichHighlight(
+    highlights,
+    "sourceLead",
+    payload.source_lead,
+    existing.source_lead,
+    line.sourceLead
+  );
+
+  if (!existing.date_naissance && line.dateNaissanceIso) {
+    highlights.dateNaissanceIso = "fill";
+  }
+
+  const incomingTmi = normalizeImportTmi(line.tmi);
+  if (incomingTmi) {
+    const existingTmi = normalizeImportTmi(existing.tranche_imposition);
+    if (incomingTmi !== existingTmi) {
+      highlights.tmi = existingTmi ? "change" : "fill";
+    }
+  }
+
+  return highlights;
+}
+
 export const FINZZLE_CLIENTS_SHEET_HINT = "contacts";
 
 export type FinzzleDuplicateAction = "consolidate" | "skip" | "merge";
@@ -239,8 +345,10 @@ function resolveCategorie(rawStatut: unknown): ClientStatut {
   return normalizeImportStatut(rawStatut) ?? "SUSPECT_CLIENT";
 }
 
-function lineIdentity(line: Pick<FinzzleClientRow, "email" | "telephone">) {
+function lineIdentity(line: Pick<FinzzleClientRow, "nom" | "prenom" | "email" | "telephone">) {
   return {
+    nom: line.nom || undefined,
+    prenom: line.prenom || undefined,
     email: line.email || undefined,
     telephone: line.telephone || undefined,
   };
@@ -584,6 +692,40 @@ export function patchFinzzleClientPreviewLines(
   );
 }
 
+export type FinzzleClientImportPreviewSection = {
+  status: FinzzleClientImportLineStatus;
+  label: string;
+  lines: FinzzleClientPreviewLine[];
+};
+
+/** Ordre d'affichage des groupes dans l'aperçu import. */
+export const FINZZLE_IMPORT_PREVIEW_SECTION_ORDER: ReadonlyArray<{
+  status: FinzzleClientImportLineStatus;
+  label: string;
+}> = [
+  { status: "enrich", label: "Enrichir" },
+  { status: "ready", label: "À importer" },
+  { status: "duplicate_homonym", label: "Homonyme" },
+  { status: "duplicate_csv", label: "Doublon fichier" },
+  { status: "invalid", label: "Invalide" },
+  { status: "imported", label: "Importé" },
+];
+
+export function groupFinzzleClientPreviewLines(
+  lines: FinzzleClientPreviewLine[]
+): FinzzleClientImportPreviewSection[] {
+  const byStatus = new Map<FinzzleClientImportLineStatus, FinzzleClientPreviewLine[]>();
+  for (const line of lines) {
+    const bucket = byStatus.get(line.status) ?? [];
+    bucket.push(line);
+    byStatus.set(line.status, bucket);
+  }
+  return FINZZLE_IMPORT_PREVIEW_SECTION_ORDER.map((section) => ({
+    ...section,
+    lines: (byStatus.get(section.status) ?? []).sort((a, b) => a.rowIndex - b.rowIndex),
+  })).filter((section) => section.lines.length > 0);
+}
+
 export function summarizeFinzzleClientsImportPreview(
   lines: FinzzleClientPreviewLine[]
 ): FinzzleClientImportPreviewSummary {
@@ -661,7 +803,7 @@ function buildNewContactPayload(line: FinzzleClientPreviewLine): NewContact {
   };
 }
 
-function buildEnrichPayload(
+export function buildFinzzleEnrichPayload(
   line: FinzzleClientPreviewLine,
   existing: Contact,
   match: FinzzleDuplicateMatchKind
@@ -715,7 +857,7 @@ async function applyFinzzleClientEnrichLine(
   const match = line.duplicateMatch ?? "name";
   const updated = await updateContact(
     existing.id,
-    contactToUpdatePayload(existing, buildEnrichPayload(line, existing, match)),
+    contactToUpdatePayload(existing, buildFinzzleEnrichPayload(line, existing, match)),
     IMPORT_SAVE_OPTS
   );
   await applyImportTmi({ contactId: existing.id, foyerId: updated.foyer_id }, line.tmi);

@@ -1786,6 +1786,18 @@ pub fn get_contacts_matching_segment(
 }
 
 #[tauri::command]
+pub fn get_contacts_matching_rule_json(
+    db: State<'_, DbState>,
+    rule_json: String,
+) -> Result<Vec<Contact>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .list_contacts_for_rule_json(&rule_json)
+        .map_err(|e| format!("Preview contacts: {}", e))
+}
+
+#[tauri::command]
 pub fn preview_segment_rule_count(
     db: State<'_, DbState>,
     rule_json: String,

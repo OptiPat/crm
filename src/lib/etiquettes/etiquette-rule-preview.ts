@@ -34,6 +34,8 @@ export interface EtiquetteRulePreviewInput {
   tmiTranchesSelectionnees: number[];
   irNetOperator: IrNetOperator;
   irNetMontant: number | "";
+  revenusAnnuelsOperator: IrNetOperator;
+  revenusAnnuelsMontant: number | "";
 }
 
 /** JSON rule_tree v1 pour previewSegmentRuleCount, ou null si non calculable. */
@@ -93,8 +95,23 @@ export function buildEtiquetteRulePreviewJson(input: EtiquetteRulePreviewInput):
       config = { tranches: input.tmiTranchesSelectionnees };
       break;
     case "IR_NET":
-      if (input.irNetMontant === "" || !Number.isFinite(Number(input.irNetMontant))) return null;
+      if (input.irNetMontant === "" || !Number.isFinite(Number(input.irNetMontant)) || Number(input.irNetMontant) <= 0) {
+        return null;
+      }
       config = { operator: input.irNetOperator, montant: Number(input.irNetMontant) };
+      break;
+    case "REVENUS_ANNUELS":
+      if (
+        input.revenusAnnuelsMontant === "" ||
+        !Number.isFinite(Number(input.revenusAnnuelsMontant)) ||
+        Number(input.revenusAnnuelsMontant) <= 0
+      ) {
+        return null;
+      }
+      config = {
+        operator: input.revenusAnnuelsOperator,
+        montant: Number(input.revenusAnnuelsMontant),
+      };
       break;
     default:
       return null;

@@ -18,6 +18,7 @@ describe("template-email-trigger", () => {
       envoi_heure: "09:00",
       categories: ["CLIENT"],
       a_chaque_souscription: true,
+      excluded_contact_ids: [],
     });
     const parsed = parseTemplateEmailTrigger(vars);
     expect(parsed.enabled).toBe(true);
@@ -42,5 +43,20 @@ describe("template-email-trigger", () => {
     );
     expect(parsed.condition_type).toBe("EVENEMENT_SOUSCRIPTION");
     expect(parsed.a_chaque_souscription).toBe(false);
+  });
+
+  it("persiste les exclusions de contacts", () => {
+    const vars = setTemplateEmailTriggerInMeta(null, {
+      enabled: true,
+      condition_type: "DELAI_SANS_CONTACT",
+      condition_config: '{"jours":30}',
+      categories: ["CLIENT"],
+      delai_jours: 0,
+      envoi_heure: "09:00",
+      envoi_jours_semaine: null,
+      a_chaque_souscription: true,
+      excluded_contact_ids: [12, 34],
+    });
+    expect(parseTemplateEmailTrigger(vars).excluded_contact_ids).toEqual([12, 34]);
   });
 });

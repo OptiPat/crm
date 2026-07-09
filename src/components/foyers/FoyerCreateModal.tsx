@@ -24,12 +24,16 @@ import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
 import { Badge } from "@/components/ui/badge";
 import { ListSearchField } from "@/components/layout/ListSearchField";
 import { contactMatchesSearch } from "@/lib/search-utils";
+import { cn } from "@/lib/utils";
+import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface FoyerCreateModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   currentContact: Contact;
   onSuccess: () => void;
+  nestedSheet?: boolean;
 }
 
 interface MemberWithRole {
@@ -42,6 +46,7 @@ export function FoyerCreateModal({
   onOpenChange,
   currentContact,
   onSuccess,
+  nestedSheet = false,
 }: FoyerCreateModalProps) {
   const [foyerName, setFoyerName] = useState("");
   const [members, setMembers] = useState<MemberWithRole[]>([]);
@@ -157,8 +162,12 @@ export function FoyerCreateModal({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+    <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
+      <DialogContent
+        hideOverlay={nestedSheet}
+        className={cn("max-w-2xl", nestedSheet && STACKED_NESTED_SHEET_Z)}
+      >
+        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Home className="h-5 w-5" />
@@ -285,6 +294,7 @@ export function FoyerCreateModal({
             {loading ? "Création..." : "Créer le foyer"}
           </Button>
         </DialogFooter>
+        </PortalLayerProvider>
       </DialogContent>
     </Dialog>
   );

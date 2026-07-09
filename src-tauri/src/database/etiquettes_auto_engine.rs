@@ -472,6 +472,9 @@ impl Database {
             "IR_NET" => self
                 .contact_matches_ir_net_condition(contact, config)
                 .unwrap_or(false),
+            "REVENUS_ANNUELS" => self
+                .contact_matches_revenus_annuels_condition(contact, config)
+                .unwrap_or(false),
             _ => false,
         };
         Ok(should_assign)

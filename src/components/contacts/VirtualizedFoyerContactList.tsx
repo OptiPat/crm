@@ -10,6 +10,10 @@ type VirtualizedFoyerContactListProps = {
   rows: FoyerFlatRow[];
   renderRow: (row: FoyerFlatRow) => ReactNode;
   className?: string;
+  /** Occupe la hauteur du parent (vue split) au lieu d'une max-height viewport. */
+  fillParent?: boolean;
+  /** Scroll porté par la page (`main`) — une seule barre de scroll. */
+  pageScroll?: boolean;
 };
 
 /**
@@ -19,6 +23,8 @@ export function VirtualizedFoyerContactList({
   rows,
   renderRow,
   className = "",
+  fillParent = false,
+  pageScroll = false,
 }: VirtualizedFoyerContactListProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scrollTop, setScrollTop] = useState(0);
@@ -37,12 +43,58 @@ export function VirtualizedFoyerContactList({
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+
+    if (pageScroll) {
+      const findScrollParent = (node: HTMLElement): HTMLElement => {
+        let parent = node.parentElement;
+        while (parent) {
+          const { overflowY } = getComputedStyle(parent);
+          if (overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") {
+            return parent;
+          }
+          parent = parent.parentElement;
+        }
+        return document.documentElement;
+      };
+
+      const scrollParent = findScrollParent(el);
+
+      const update = () => {
+        const rect = el.getBoundingClientRect();
+        const parentTop =
+          scrollParent === document.documentElement
+            ? 0
+            : scrollParent.getBoundingClientRect().top;
+        setScrollTop(Math.max(0, parentTop - rect.top));
+        setViewportHeight(
+          scrollParent === document.documentElement
+            ? window.innerHeight
+            : scrollParent.clientHeight
+        );
+      };
+
+      update();
+      scrollParent.addEventListener("scroll", update, { passive: true });
+      window.addEventListener("resize", update);
+      const ro = new ResizeObserver(update);
+      ro.observe(el);
+      if (scrollParent !== document.documentElement) {
+        ro.observe(scrollParent);
+      }
+
+      return () => {
+        scrollParent.removeEventListener("scroll", update);
+        window.removeEventListener("resize", update);
+        ro.disconnect();
+      };
+    }
+
     const update = () => setViewportHeight(el.clientHeight);
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [pageScroll, rows.length]);
 
   let startIndex = 0;
   for (let i = offsets.length - 1; i >= 0; i--) {
@@ -67,9 +119,15 @@ export function VirtualizedFoyerContactList({
   return (
     <div
       ref={scrollRef}
-      className={`overflow-y-auto ${className}`}
-      style={{ maxHeight: "min(70vh, calc(100vh - 280px))" }}
-      onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
+      className={`${pageScroll ? "" : "overflow-y-auto overscroll-contain"} ${fillParent ? "h-full min-h-0" : ""} ${className}`}
+      style={
+        fillParent || pageScroll
+          ? undefined
+          : { maxHeight: "min(70vh, calc(100vh - 280px))" }
+      }
+      onScroll={
+        pageScroll ? undefined : (e) => setScrollTop(e.currentTarget.scrollTop)
+      }
     >
       <div className="relative w-full" style={{ height: totalHeight }}>
         {slice.map((row, i) => {

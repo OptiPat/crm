@@ -123,6 +123,54 @@ impl super::Database {
         };
         Ok(compare_ir_net(actual, operator, target))
     }
+
+    /// Revenus annuels contact, sinon RBG contact/foyer (`revenu_fiscal_reference`).
+    pub(super) fn resolve_contact_revenus_annuels(
+        &self,
+        contact: &Contact,
+    ) -> rusqlite::Result<Option<f64>> {
+        if let Some(v) = contact.revenus_annuels {
+            if v.is_finite() && v > 0.0 {
+                return Ok(Some(v));
+            }
+        }
+        if let Some(v) = contact.revenu_fiscal_reference {
+            if v.is_finite() && v > 0.0 {
+                return Ok(Some(v));
+            }
+        }
+        if let Some(fid) = contact.foyer_id {
+            if let Ok(foyer) = self.get_foyer_by_id(fid) {
+                if let Some(v) = foyer.revenu_fiscal_reference {
+                    if v.is_finite() && v > 0.0 {
+                        return Ok(Some(v));
+                    }
+                }
+            }
+        }
+        Ok(None)
+    }
+
+    pub(super) fn contact_matches_revenus_annuels_condition(
+        &self,
+        contact: &Contact,
+        config: Option<&String>,
+    ) -> rusqlite::Result<bool> {
+        let Some(config_str) = config else {
+            return Ok(false);
+        };
+        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(config_str) else {
+            return Ok(false);
+        };
+        let operator = parsed["operator"].as_str().unwrap_or("gte");
+        let Some(target) = parsed["montant"].as_f64() else {
+            return Ok(false);
+        };
+        let Some(actual) = self.resolve_contact_revenus_annuels(contact)? else {
+            return Ok(false);
+        };
+        Ok(compare_ir_net(actual, operator, target))
+    }
 }
 
 #[cfg(test)]
@@ -147,5 +195,39 @@ mod tests {
         assert!(!compare_ir_net(3999.0, "gte", 4000.0));
         assert!(compare_ir_net(3000.0, "lte", 4000.0));
         assert!(compare_ir_net(4000.0, "eq", 4000.0));
+    }
+
+    #[test]
+    fn revenus_annuels_contact_then_foyer_fallback() {
+        use super::super::models::NewContact;
+        let db = super::super::Database::open_in_memory_for_tests().unwrap();
+        let c = NewContact {
+            nom: "DUPONT".into(),
+            prenom: "Jean".into(),
+            email: Some("j@example.com".into()),
+            revenus_annuels: Some(65_000.0),
+            ..Default::default()
+        };
+        let created = db.create_contact(c).unwrap();
+        let contact = db.get_contact_by_id(created.id.unwrap()).unwrap();
+        let cfg = r#"{"operator":"gte","montant":60000}"#.to_string();
+        assert!(
+            db.contact_matches_revenus_annuels_condition(&contact, Some(&cfg))
+                .unwrap()
+        );
+
+        let c2 = NewContact {
+            nom: "MARTIN".into(),
+            prenom: "Paul".into(),
+            email: Some("p@example.com".into()),
+            revenus_annuels: Some(50_000.0),
+            ..Default::default()
+        };
+        let created2 = db.create_contact(c2).unwrap();
+        let contact2 = db.get_contact_by_id(created2.id.unwrap()).unwrap();
+        assert!(
+            !db.contact_matches_revenus_annuels_condition(&contact2, Some(&cfg))
+                .unwrap()
+        );
     }
 }

@@ -118,6 +118,12 @@ import {
   isTypeProduitConditionValid,
   parseTypeProduitConditionConfig,
 } from "@/lib/etiquettes/type-produit-condition";
+import {
+  parseConditionIrNetConfig,
+  parseConditionRevenusAnnuelsConfig,
+  parseConditionTmiConfig,
+} from "@/lib/etiquettes/fiscal-tmi";
+import { isTriggerRuleTreeValid } from "@/lib/emails/template-email-trigger-rule-tree";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChevronDown, Loader2 } from "lucide-react";
@@ -602,6 +608,39 @@ export function TemplateEmailForm({
         return;
       }
     }
+    if (emailTrigger.enabled && emailTrigger.condition_type === "TMI") {
+      const cfg = parseConditionTmiConfig(emailTrigger.condition_config);
+      if (!cfg || cfg.tranches.length === 0) {
+        toast.error("Déclencheur : sélectionnez au moins une tranche TMI");
+        setFormTab("declencheur");
+        rejectPendingEphemeralSave(new Error("validation"));
+        return;
+      }
+    }
+    if (
+      emailTrigger.enabled &&
+      (emailTrigger.condition_type === "IR_NET" ||
+        emailTrigger.condition_type === "REVENUS_ANNUELS")
+    ) {
+      const cfg =
+        emailTrigger.condition_type === "IR_NET"
+          ? parseConditionIrNetConfig(emailTrigger.condition_config)
+          : parseConditionRevenusAnnuelsConfig(emailTrigger.condition_config);
+      if (!cfg || !Number.isFinite(cfg.montant) || cfg.montant <= 0) {
+        toast.error("Déclencheur : renseignez un montant valide");
+        setFormTab("declencheur");
+        rejectPendingEphemeralSave(new Error("validation"));
+        return;
+      }
+    }
+    if (emailTrigger.enabled && emailTrigger.condition_type === "RULE_TREE") {
+      if (!isTriggerRuleTreeValid(emailTrigger.condition_config)) {
+        toast.error("Déclencheur : complétez toutes les conditions de la règle combinée");
+        setFormTab("declencheur");
+        rejectPendingEphemeralSave(new Error("validation"));
+        return;
+      }
+    }
     if (isEphemeralMode && !isEphemeralAudienceValid(ephemeralCampaign.audience)) {
       const aud = ephemeralCampaign.audience;
       if (isEphemeralSegmentAudience(aud)) {
@@ -610,7 +649,7 @@ export function TemplateEmailForm({
         const needsProducts = shouldShowEphemeralPatrimoineFilter(aud.categories);
         toast.error(
           needsProducts
-            ? "Audience : sélectionnez au moins un type ou un nom de produit"
+            ? "Audience : sélectionnez un patrimoine (type/nom produit) ou une règle avancée (TMI, revenus…)"
             : "Audience : sélectionnez au moins une catégorie de contact"
         );
       }
@@ -975,7 +1014,7 @@ export function TemplateEmailForm({
         else handleRequestClose();
       }}
     >
-      <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col gap-0 p-0 overflow-hidden">
+      <DialogContent className="max-w-6xl max-h-[92vh] flex flex-col gap-0 p-0 overflow-hidden">
         <DialogHeader className="px-6 pt-6 pb-0 shrink-0">
           <DialogTitle>
             {template

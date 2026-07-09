@@ -16,6 +16,7 @@ import { getFilleulLabel } from "@/lib/contacts/contact-form-utils";
 import { formatCalendarDateFr } from "@/lib/dates/calendar-date";
 import type { DashboardDrillDownOpenContact } from "@/lib/dashboard/dashboard-drill-down";
 import { cn } from "@/lib/utils";
+import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 import { ContactInitialsAvatar } from "./dashboard-ui";
 
 interface DashboardStatContactsSheetProps {
@@ -105,7 +106,7 @@ export function DashboardStatContactsSheet({
         hideOverlay
         className="z-50 flex h-svh max-h-svh min-h-0 flex-col gap-0 overflow-hidden p-0 sm:max-w-md"
         onInteractOutside={(event) => {
-          if (stackedContactOpen) event.preventDefault();
+          if (stackedContactOpen) preventStackedSheetOutsideDismiss(event);
         }}
         onEscapeKeyDown={(event) => {
           if (stackedContactOpen) event.preventDefault();

@@ -88,9 +88,10 @@ import {
 } from "@/components/etiquettes/EtiquetteCreationPicker";
 import { SegmentForm } from "@/components/etiquettes/SegmentForm";
 import { SegmentRulePreview } from "@/components/etiquettes/SegmentRulePreview";
-import { IrNetConditionFields, TmiTranchePicker } from "@/components/etiquettes/FiscalRuleFields";
+import { IrNetConditionFields, RevenusAnnuelsConditionFields, TmiTranchePicker } from "@/components/etiquettes/FiscalRuleFields";
 import {
   parseConditionIrNetConfig,
+  parseConditionRevenusAnnuelsConfig,
   parseConditionTmiConfig,
   type IrNetOperator,
 } from "@/lib/etiquettes/fiscal-tmi";
@@ -137,6 +138,7 @@ const CONDITION_TYPES_ORDER: ConditionType[] = [
   "AGE_APPROCHE",
   "TMI",
   "IR_NET",
+  "REVENUS_ANNUELS",
 ];
 
 type FormTab = "general" | "rule" | "email" | "action";
@@ -186,6 +188,8 @@ export function EtiquetteForm({
   const [tmiTranchesSelectionnees, setTmiTranchesSelectionnees] = useState<number[]>([]);
   const [irNetOperator, setIrNetOperator] = useState<IrNetOperator>("gte");
   const [irNetMontant, setIrNetMontant] = useState<number | "">("");
+  const [revenusAnnuelsOperator, setRevenusAnnuelsOperator] = useState<IrNetOperator>("gte");
+  const [revenusAnnuelsMontant, setRevenusAnnuelsMontant] = useState<number | "">("");
   const [categoriesSelectionnees, setCategoriesSelectionnees] = useState<string[]>(["CLIENT"]);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [allEtiquettes, setAllEtiquettes] = useState<{ id: number; nom: string }[]>([]);
@@ -244,6 +248,9 @@ export function EtiquetteForm({
         tmiTranches: tmiTranchesSelectionnees,
         irNetOperator,
         irNetMontant: irNetMontant === "" ? null : Number(irNetMontant),
+        revenusAnnuelsOperator,
+        revenusAnnuelsMontant:
+          revenusAnnuelsMontant === "" ? null : Number(revenusAnnuelsMontant),
         categories: categoriesSelectionnees,
       }),
     [
@@ -267,6 +274,8 @@ export function EtiquetteForm({
       tmiTranchesSelectionnees,
       irNetOperator,
       irNetMontant,
+      revenusAnnuelsOperator,
+      revenusAnnuelsMontant,
       categoriesSelectionnees,
     ]
   );
@@ -419,6 +428,12 @@ export function EtiquetteForm({
               setIrNetOperator(config.operator);
               setIrNetMontant(config.montant);
             }
+          } else if (source.auto_condition_type === "REVENUS_ANNUELS") {
+            const config = parseConditionRevenusAnnuelsConfig(source.auto_condition_config);
+            if (config) {
+              setRevenusAnnuelsOperator(config.operator);
+              setRevenusAnnuelsMontant(config.montant);
+            }
           }
           
           setCategoriesSelectionnees(parseCategories(source.auto_categories));
@@ -469,6 +484,8 @@ export function EtiquetteForm({
         setTmiTranchesSelectionnees([]);
         setIrNetOperator("gte");
         setIrNetMontant("");
+        setRevenusAnnuelsOperator("gte");
+        setRevenusAnnuelsMontant("");
         setCategoriesSelectionnees(["CLIENT"]);
         setSegmentId(null);
         setUseGroupRule(false);
@@ -533,6 +550,8 @@ export function EtiquetteForm({
         tmiTranchesSelectionnees,
         irNetOperator,
         irNetMontant,
+        revenusAnnuelsOperator,
+        revenusAnnuelsMontant,
       }),
     [
       isAuto,
@@ -559,6 +578,8 @@ export function EtiquetteForm({
       tmiTranchesSelectionnees,
       irNetOperator,
       irNetMontant,
+      revenusAnnuelsOperator,
+      revenusAnnuelsMontant,
     ]
   );
 
@@ -660,6 +681,8 @@ export function EtiquetteForm({
       nomsProduitSelectionnes,
       tmiTranchesSelectionnees,
       irNetMontant: irNetMontant === "" ? null : Number(irNetMontant),
+      revenusAnnuelsMontant:
+        revenusAnnuelsMontant === "" ? null : Number(revenusAnnuelsMontant),
     });
     if (validationError) {
       toast.error(validationError.message);
@@ -731,6 +754,11 @@ export function EtiquetteForm({
           autoConditionConfig = stringifyConditionConfig({
             operator: irNetOperator,
             montant: Number(irNetMontant),
+          });
+        } else if (conditionType === "REVENUS_ANNUELS") {
+          autoConditionConfig = stringifyConditionConfig({
+            operator: revenusAnnuelsOperator,
+            montant: Number(revenusAnnuelsMontant),
           });
         }
         autoCategories = stringifyCategories(categoriesSelectionnees);
@@ -1464,6 +1492,28 @@ export function EtiquetteForm({
                         if (fieldHighlight === "rule-ir-net") setFieldHighlight(null);
                       }}
                       highlight={fieldHighlight === "rule-ir-net"}
+                    />
+                  </div>
+                )}
+
+                {conditionType === "REVENUS_ANNUELS" && (
+                  <div className="space-y-2">
+                    <Label>Revenus annuels</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Revenus annuels du contact, sinon revenu brut global (RBG) du foyer.
+                    </p>
+                    <RevenusAnnuelsConditionFields
+                      operator={revenusAnnuelsOperator}
+                      onOperatorChange={(op) => {
+                        setRevenusAnnuelsOperator(op);
+                        if (fieldHighlight === "rule-revenus-annuels") setFieldHighlight(null);
+                      }}
+                      montant={revenusAnnuelsMontant}
+                      onMontantChange={(v) => {
+                        setRevenusAnnuelsMontant(v);
+                        if (fieldHighlight === "rule-revenus-annuels") setFieldHighlight(null);
+                      }}
+                      highlight={fieldHighlight === "rule-revenus-annuels"}
                     />
                   </div>
                 )}
