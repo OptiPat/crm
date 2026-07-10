@@ -20,7 +20,6 @@ import {
 } from "@/lib/api/tauri-contacts";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { ContactForm } from "@/components/contacts/ContactForm";
-import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { getAllInvestissements, type Investissement } from "@/lib/api/tauri-investissements";
 import { indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
 import {
@@ -50,6 +49,7 @@ import {
   type PrescripteursNavigationIntent,
 } from "@/lib/navigation/prescripteurs-navigation";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { PrescripteurSummaryCard } from "@/components/prescripteurs/PrescripteurSummaryCard";
 import { PrescripteurTreeView } from "@/components/prescripteurs/PrescripteurTreeView";
 import { PrescripteurLinkModal } from "@/components/prescripteurs/PrescripteurLinkModal";
@@ -91,8 +91,6 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
   const [expandedPrescripteurId, setExpandedPrescripteurId] = useState<number | null>(
     () => loadPrescripteursPagePreferences().selectedPrescripteurId
   );
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [showContactDetail, setShowContactDetail] = useState(false);
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
   const [pendingRootDelete, setPendingRootDelete] = useState<Contact | null>(null);
   const pendingFocusContactIdRef = useRef<number | null>(null);
@@ -125,10 +123,6 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
 
       setInvestissementsByContact(investsByContact);
       setInvestissementsByFoyer(investsByFoyer);
-      setSelectedContact((prev) => {
-        if (!prev?.id) return prev;
-        return dataContacts.find((c) => c.id === prev.id) ?? prev;
-      });
       setExpandedPrescripteurId((prev) => {
         if (prev == null) return prev;
         return dataContacts.some((c) => c.id === prev) ? prev : null;
@@ -146,6 +140,12 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
 
   useEventAutoRefresh(loadData, subscribeContactsChanged);
 
+  const { openContactSheet, closeContactDetail, sheet: contactDetailSheet } =
+    useContactDetailSheet({
+      onNavigate,
+      onUpdate: () => void loadData(),
+    });
+
   const applyPrescripteursIntent = useCallback(
     (intent: PrescripteursNavigationIntent) => {
       if (intent.rootId != null) {
@@ -155,11 +155,10 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
       if (intent.focusContactId != null) {
         setHighlightContactId(intent.focusContactId);
         pendingFocusContactIdRef.current = intent.focusContactId;
-        setSelectedContact(null);
-        setShowContactDetail(false);
+        closeContactDetail();
       }
     },
-    [updatePrefs]
+    [updatePrefs, closeContactDetail]
   );
 
   useEffect(() => {
@@ -331,8 +330,8 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
   };
 
   const openMember = (contact: Contact) => {
-    setSelectedContact(contact);
-    setShowContactDetail(true);
+    if (contact.id == null) return;
+    void openContactSheet(contact.id);
   };
 
   const expandAllInTree = () => {
@@ -407,10 +406,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         setExpandedPrescripteurId(null);
         updatePrefs({ selectedPrescripteurId: null });
       }
-      if (selectedContact?.id === contact.id) {
-        setSelectedContact(null);
-        setShowContactDetail(false);
-      }
+      closeContactDetail();
       await loadData();
       toast.success("Contact supprimé");
     } catch (error) {
@@ -421,15 +417,6 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
 
   const handleDeleteContact = async (contact: Contact) => {
     await executeDeleteContact(contact);
-  };
-
-  const handleDeleteContactById = (id: number) => {
-    const match =
-      contacts.find((c) => c.id === id) ??
-      (selectedContact?.id === id ? selectedContact : null);
-    if (match) {
-      void executeDeleteContact(match);
-    }
   };
 
   const handleUnlinkFromNetwork = async (contact: Contact) => {
@@ -653,22 +640,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
         </>
       )}
 
-      {selectedContact && (
-        <ContactDetail
-          key={selectedContact.id}
-          open={showContactDetail}
-          onOpenChange={(open) => {
-            setShowContactDetail(open);
-            if (!open) setSelectedContact(null);
-          }}
-          contact={selectedContact}
-          onDelete={handleDeleteContactById}
-          onUpdate={() => void loadData()}
-          onContactRefreshed={setSelectedContact}
-          onNavigate={onNavigate}
-          onOpenContact={openMember}
-        />
-      )}
+      {contactDetailSheet}
 
       <AlertDialog
         open={pendingRootDelete != null}

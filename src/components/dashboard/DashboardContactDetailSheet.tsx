@@ -27,6 +27,8 @@ interface DashboardContactDetailSheetProps {
   onBackToList?: () => void;
   /** Affiche le bouton « Épingler » (liste + fiche côte à côte). */
   onPin?: () => void;
+  /** Ouvre la fiche d'un contact lié (prescripteur, parrain, etc.). */
+  onOpenLinkedContact?: (contactId: number) => void;
 }
 
 function contactDisplayName(contact: Contact): string {
@@ -43,6 +45,7 @@ export function DashboardContactDetailSheet({
   hideOverlay = false,
   onBackToList,
   onPin,
+  onOpenLinkedContact,
 }: DashboardContactDetailSheetProps) {
   if (!contact) return null;
 
@@ -108,7 +111,7 @@ export function DashboardContactDetailSheet({
               onContactRefreshed={onContactRefreshed}
               onNavigate={handleNavigate}
               onOpenContact={(linked) => {
-                if (linked.id) onContactRefreshed?.(linked);
+                if (linked.id) onOpenLinkedContact?.(linked.id);
               }}
             />
             </div>

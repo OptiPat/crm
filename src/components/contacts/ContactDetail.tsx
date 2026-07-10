@@ -49,6 +49,7 @@ import {
 } from "@/lib/api/tauri-investissements";
 import { getAllPartenaires, type Partenaire } from "@/lib/api/tauri-partenaires";
 import { InvestissementForm } from "@/components/investissements/InvestissementForm";
+import { cn } from "@/lib/utils";
 import { getAllFoyers, updateFoyer, type Foyer } from "@/lib/api/tauri-foyers";
 import { FoyerCreateModal } from "@/components/foyers/FoyerCreateModal";
 import { FoyerLinkModal } from "@/components/foyers/FoyerLinkModal";
@@ -184,6 +185,8 @@ export function ContactDetail({
   contactRef.current = contact;
   const investissementFormOpenRef = useRef(false);
   investissementFormOpenRef.current = showInvestissementForm;
+  const nestedSheetLocksContactScroll =
+    showInvestissementForm || showEditForm || showFoyerEditForm;
 
   const openEditForm = (sectionId?: ContactFormSectionId) => {
     if (contact) {
@@ -1276,7 +1279,14 @@ export function ContactDetail({
       <>
         <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border/70 bg-card shadow-sm">
           <div className="shrink-0 border-b border-border/60 px-4 py-3">{headerBlock}</div>
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">{tabsBlock}</div>
+          <div
+            className={cn(
+              "min-h-0 flex-1 overscroll-contain px-4 py-3",
+              nestedSheetLocksContactScroll ? "overflow-hidden" : "overflow-y-auto"
+            )}
+          >
+            {tabsBlock}
+          </div>
         </div>
         {modals}
       </>

@@ -144,6 +144,10 @@ import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import type { LucideIcon } from "lucide-react";
 import { Plus } from "lucide-react";
 import {
@@ -292,6 +296,8 @@ export function InvestissementForm({
   const isActifEncours = editingInvestissement
     ? isInvestissementActifEncours(editingInvestissement)
     : true;
+
+  useLockAppMainScroll(open && nestedSheet);
 
   const showEncoursSection =
     !!editingInvestissement &&
@@ -1497,6 +1503,7 @@ export function InvestissementForm({
             ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-6"
             : "contents"
         }
+        onWheel={useSheet && nestedSheet ? stopWheelPropagation : undefined}
       >
         <div className={useSheet ? "space-y-4" : undefined}>{formFields}</div>
       </div>

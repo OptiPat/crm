@@ -62,6 +62,10 @@ import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
 import {
@@ -349,6 +353,7 @@ export function ContactForm({
   nestedSheet = false,
 }: ContactFormProps) {
   const isEdit = !!contact;
+  useLockAppMainScroll(open && nestedSheet);
   const [loading, setLoading] = useState(false);
   const [allContacts, setAllContacts] = useState<Contact[]>([]);
   const [mesFilleulsCount, setMesFilleulsCount] = useState(0);
@@ -1599,7 +1604,10 @@ export function ContactForm({
           className="shrink-0 px-6 pt-3"
         />
       ) : null}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-6">
+      <div
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-6"
+        onWheel={nestedSheet ? stopWheelPropagation : undefined}
+      >
         <div className="space-y-6">{formFields}</div>
       </div>
       <SheetFooter className="mt-0 shrink-0 gap-2 border-t bg-card px-6 py-4 sm:flex-row sm:justify-end">

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Plus, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { getAllFoyers, deleteFoyer, type Foyer } from "@/lib/api/tauri-foyers";
-import { cleanupOrphanedData, deleteContact, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { cleanupOrphanedData, getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { getContactsForFoyer } from "@/lib/foyers/foyer-utils";
 import { getAllInvestissements, type Investissement } from "@/lib/api/tauri-investissements";
 import { buildPatrimoineMaps, indexInvestissementsByOwner } from "@/lib/investissements/bulk-patrimoine";
@@ -19,7 +19,6 @@ import {
   FoyersStatCards,
   FoyersToolbar,
 } from "@/components/foyers/foyers-page-ui";
-import { ContactDetail } from "@/components/contacts/ContactDetail";
 import {
   filterFoyerRowsByStat,
   filterFoyerRowsByType,
@@ -40,6 +39,7 @@ import {
   type FoyersNavigationIntent,
 } from "@/lib/navigation/foyers-navigation";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -74,8 +74,6 @@ export function Foyers({ onNavigate }: FoyersProps) {
   const [showForm, setShowForm] = useState(false);
   const [showFoyerDetail, setShowFoyerDetail] = useState(false);
   const [foyerDetailId, setFoyerDetailId] = useState<number | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [showContactDetail, setShowContactDetail] = useState(false);
 
   const updatePrefs = useCallback((patch: Partial<FoyersPagePreferences>) => {
     setPrefs((prev) => {
@@ -108,10 +106,6 @@ export function Foyers({ onNavigate }: FoyersProps) {
 
       setFoyers(foyersData);
       setPatrimoineParFoyer(patrimoines);
-      setSelectedContact((prev) => {
-        if (!prev?.id) return prev;
-        return contactsData.find((c) => c.id === prev.id) ?? prev;
-      });
     } catch (error) {
       console.error("Error loading foyers:", error);
       toast.error("Impossible de charger les foyers");
@@ -130,6 +124,12 @@ export function Foyers({ onNavigate }: FoyersProps) {
     subscribeFoyersChanged,
     subscribeInvestissementsChanged
   );
+
+  const { openContactSheet, closeContactDetail, sheet: contactDetailSheet } =
+    useContactDetailSheet({
+      onNavigate,
+      onUpdate: () => void loadFoyers(),
+    });
 
   const foyerRows = useMemo((): FoyerRow[] => {
     return foyers.map((foyer) => ({
@@ -159,11 +159,10 @@ export function Foyers({ onNavigate }: FoyersProps) {
       if (intent.focusContactId != null) {
         setHighlightContactId(intent.focusContactId);
         pendingFocusContactIdRef.current = intent.focusContactId;
-        setSelectedContact(null);
-        setShowContactDetail(false);
+        closeContactDetail();
       }
     },
-    [updatePrefs]
+    [updatePrefs, closeContactDetail]
   );
 
   useEffect(() => {
@@ -273,8 +272,8 @@ export function Foyers({ onNavigate }: FoyersProps) {
   };
 
   const openMember = (contact: Contact) => {
-    setSelectedContact(contact);
-    setShowContactDetail(true);
+    if (contact.id == null) return;
+    void openContactSheet(contact.id);
   };
 
   const openFoyerDetail = (foyerId: number) => {
@@ -298,21 +297,6 @@ export function Foyers({ onNavigate }: FoyersProps) {
     } catch (error) {
       console.error("Error deleting foyer:", error);
       toast.error("Impossible de supprimer le foyer");
-    }
-  };
-
-  const handleDeleteContact = async (id: number) => {
-    try {
-      await deleteContact(id);
-      await loadFoyers();
-      if (selectedContact?.id === id) {
-        setSelectedContact(null);
-        setShowContactDetail(false);
-      }
-      toast.success("Contact supprimé");
-    } catch (error) {
-      console.error("Erreur suppression contact:", error);
-      toast.error("Impossible de supprimer le contact");
     }
   };
 
@@ -530,22 +514,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
         />
       )}
 
-      {selectedContact && (
-        <ContactDetail
-          key={selectedContact.id}
-          open={showContactDetail}
-          onOpenChange={(open) => {
-            setShowContactDetail(open);
-            if (!open) setSelectedContact(null);
-          }}
-          contact={selectedContact}
-          onDelete={handleDeleteContact}
-          onUpdate={() => void loadFoyers()}
-          onContactRefreshed={setSelectedContact}
-          onNavigate={onNavigate}
-          onOpenContact={openMember}
-        />
-      )}
+      {contactDetailSheet}
     </div>
   );
 }

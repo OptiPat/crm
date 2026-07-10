@@ -167,9 +167,7 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
 
 
   const handleContactRefreshed = useCallback((next: Contact) => {
-
-    setContact(next);
-
+    setContact((prev) => (prev?.id === next.id ? next : prev));
   }, []);
 
 
@@ -248,6 +246,8 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
 
       onBackToList={listBackMode ? closeContactDetail : undefined}
 
+      onOpenLinkedContact={(contactId) => void loadContact(contactId)}
+
     />
 
   );
@@ -263,6 +263,8 @@ export function useContactDetailSheet(options: UseContactDetailSheetOptions = {}
     clearListBackMode,
 
     closeContactDetail,
+
+    refreshOpenContact: handleContactRefreshed,
 
     sheet,
 

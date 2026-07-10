@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Plus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
-import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import {
   getAllInvestissements,
@@ -47,6 +47,7 @@ import {
   type FamillesNavigationIntent,
 } from "@/lib/navigation/familles-navigation";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { useContactDetailSheet } from "@/hooks/useContactDetailSheet";
 import { FamilleMemberTree } from "@/components/familles/FamilleMemberTree";
 import { FamilleSummaryCard } from "@/components/familles/FamilleSummaryCard";
 import { FamilleCreateModal } from "@/components/familles/FamilleCreateModal";
@@ -56,7 +57,6 @@ import {
   FamillesStatCards,
   FamillesToolbar,
 } from "@/components/familles/familles-page-ui";
-import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { useEventAutoRefresh } from "@/hooks/useEventAutoRefresh";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { subscribeFoyersChanged } from "@/lib/foyers/foyer-events";
@@ -89,8 +89,6 @@ export function Familles({ onNavigate }: FamillesProps) {
     () => loadFamillesPagePreferences().expandedFamilleKey
   );
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
-  const [showContactDetail, setShowContactDetail] = useState(false);
   const [showCreateFamilleModal, setShowCreateFamilleModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [pendingMemberAction, setPendingMemberAction] =
@@ -129,10 +127,6 @@ export function Familles({ onNavigate }: FamillesProps) {
 
       setInvestissementsByContact(investsByContact);
       setInvestissementsByFoyer(investsByFoyer);
-      setSelectedContact((prev) => {
-        if (!prev?.id) return prev;
-        return dataContacts.find((c) => c.id === prev.id) ?? prev;
-      });
     } catch (error) {
       console.error("Erreur chargement familles:", error);
     } finally {
@@ -150,6 +144,16 @@ export function Familles({ onNavigate }: FamillesProps) {
     subscribeFoyersChanged,
     subscribeInvestissementsChanged
   );
+
+  const {
+    openContactSheet,
+    closeContactDetail,
+    refreshOpenContact,
+    sheet: contactDetailSheet,
+  } = useContactDetailSheet({
+    onNavigate,
+    onUpdate: () => void loadData(),
+  });
 
   const familleGroups = useMemo(
     () =>
@@ -173,11 +177,10 @@ export function Familles({ onNavigate }: FamillesProps) {
         updatePrefs({ searchQuery: "" });
         setHighlightContactId(intent.focusContactId);
         pendingFocusContactIdRef.current = intent.focusContactId;
-        setSelectedContact(null);
-        setShowContactDetail(false);
+        closeContactDetail();
       }
     },
-    [updatePrefs]
+    [updatePrefs, closeContactDetail]
   );
 
   useEffect(() => {
@@ -282,8 +285,8 @@ export function Familles({ onNavigate }: FamillesProps) {
   };
 
   const openMember = (contact: Contact) => {
-    setSelectedContact(contact);
-    setShowContactDetail(true);
+    if (contact.id == null) return;
+    void openContactSheet(contact.id);
   };
 
   const handleRoleFamilleChange = async (contact: Contact, newRole: string) => {
@@ -297,9 +300,7 @@ export function Familles({ onNavigate }: FamillesProps) {
           c.id === contact.id ? { ...c, role_famille: newRole } : c
         )
       );
-      setSelectedContact((prev) =>
-        prev?.id === contact.id ? { ...prev, role_famille: newRole } : prev
-      );
+      refreshOpenContact({ ...contact, role_famille: newRole });
     } catch (error) {
       console.error("Erreur mise à jour rôle famille:", error);
       toast.error("Impossible de mettre à jour le rôle famille");
@@ -340,11 +341,7 @@ export function Familles({ onNavigate }: FamillesProps) {
         contactToUpdatePayload(contact, { famille_regroupement_exclu: true })
       );
       await loadData();
-      if (selectedContact?.id === contact.id) {
-        setSelectedContact((prev) =>
-          prev ? { ...prev, famille_regroupement_exclu: true } : prev
-        );
-      }
+      refreshOpenContact({ ...contact, famille_regroupement_exclu: true });
       toast.success(`${contact.prenom} ${contact.nom} retiré du regroupement`);
     } catch (error) {
       console.error("Erreur exclusion famille:", error);
@@ -372,22 +369,6 @@ export function Familles({ onNavigate }: FamillesProps) {
       console.error("Erreur réintégration famille:", error);
       toast.error("Impossible de réintégrer ce contact");
     }
-  };
-
-  const handleDeleteContactById = (id: number) => {
-    void (async () => {
-      try {
-        await deleteContact(id);
-        await loadData();
-        if (selectedContact?.id === id) {
-          setSelectedContact(null);
-          setShowContactDetail(false);
-        }
-      } catch (error) {
-        console.error("Erreur suppression contact:", error);
-        toast.error("Erreur lors de la suppression");
-      }
-    })();
   };
 
   const today = new Intl.DateTimeFormat("fr-FR", {
@@ -627,22 +608,7 @@ export function Familles({ onNavigate }: FamillesProps) {
         />
       )}
 
-      {selectedContact && (
-        <ContactDetail
-          key={selectedContact.id}
-          open={showContactDetail}
-          onOpenChange={(open) => {
-            setShowContactDetail(open);
-            if (!open) setSelectedContact(null);
-          }}
-          contact={selectedContact}
-          onDelete={handleDeleteContactById}
-          onUpdate={() => void loadData()}
-          onContactRefreshed={setSelectedContact}
-          onNavigate={onNavigate}
-          onOpenContact={openMember}
-        />
-      )}
+      {contactDetailSheet}
 
       <AlertDialog
         open={pendingMemberAction != null}
