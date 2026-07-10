@@ -180,6 +180,8 @@ export function ContactPatrimoinePanel({
   onNavigateDocuments,
   onImportDocument,
   onViewPartenaire,
+  nestedSheet = false,
+  onEncoursDialogOpenChange,
 }: {
   contactId: number;
   contactPrenom: string;
@@ -196,6 +198,8 @@ export function ContactPatrimoinePanel({
   onNavigateDocuments?: () => void;
   onImportDocument?: () => void;
   onViewPartenaire?: (partenaireId: number, investissementId?: number) => void;
+  nestedSheet?: boolean;
+  onEncoursDialogOpenChange?: (open: boolean) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [origineFilter, setOrigineFilter] = useState<PatrimoineOrigineFilter>("all");
@@ -617,9 +621,11 @@ export function ContactPatrimoinePanel({
         open={encoursInvestissement != null}
         onOpenChange={(open) => {
           if (!open) setEncoursInvestissement(null);
+          onEncoursDialogOpenChange?.(open);
         }}
         investissement={encoursInvestissement}
         onUpdated={onRefresh}
+        nestedSheet={nestedSheet}
       />
     </div>
   );

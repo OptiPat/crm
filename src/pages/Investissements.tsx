@@ -235,7 +235,8 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
     subscribeInvestissementsChanged
   );
 
-  const { openContactSheet, sheet: contactDetailSheet } = useContactDetailSheet({
+  const { openContactSheet, sheet: contactDetailSheet, isOpen: contactSheetOpen } =
+    useContactDetailSheet({
     onNavigate,
     onUpdate: () => void loadInvestissements(),
     defaultTab: "patrimoine",
@@ -1134,6 +1135,7 @@ export function Investissements({ onNavigate }: InvestissementsProps) {
         }}
         investissement={encoursInvestissement}
         onUpdated={loadInvestissements}
+        nestedSheet={contactSheetOpen}
       />
 
       <InvestissementForm

@@ -148,6 +148,7 @@ export function ContactDetail({
   const [showEditForm, setShowEditForm] = useState(false);
   const [editSectionId, setEditSectionId] = useState<ContactFormSectionId | null>(null);
   const [showInvestissementForm, setShowInvestissementForm] = useState(false);
+  const [patrimoineEncoursOpen, setPatrimoineEncoursOpen] = useState(false);
   const [selectedInvestissement, setSelectedInvestissement] = useState<Investissement | null>(null);
   const [investissements, setInvestissements] = useState<InvestissementWithOwner[]>([]);
   const [loadingInvestissements, setLoadingInvestissements] = useState(false);
@@ -190,6 +191,7 @@ export function ContactDetail({
   const nestedSheetLocksContactScroll =
     nestedInvestissementSheet &&
     (showInvestissementForm ||
+      patrimoineEncoursOpen ||
       showEditForm ||
       showFoyerEditForm ||
       showDocUpload ||
@@ -1043,6 +1045,10 @@ export function ContactDetail({
                         });
                       }
                     : undefined
+                }
+                nestedSheet={nestedInvestissementSheet}
+                onEncoursDialogOpenChange={
+                  nestedInvestissementSheet ? setPatrimoineEncoursOpen : undefined
                 }
               />
             </TabsContent>
