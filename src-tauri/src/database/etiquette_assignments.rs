@@ -32,7 +32,7 @@ impl Database {
         &self,
         etiquette_id: i64,
         contact_ids: Vec<i64>,
-    ) -> Result<(u32, u32)> {
+    ) -> Result<(u32, u32, u32)> {
         self.get_etiquette_by_id(etiquette_id)?;
 
         let now = std::time::SystemTime::now()
@@ -49,7 +49,7 @@ impl Database {
         }
 
         if unique_ids.is_empty() {
-            return Ok((0, 0));
+            return Ok((0, 0, 0));
         }
 
         self.conn.execute("BEGIN IMMEDIATE", [])?;
@@ -69,10 +69,11 @@ impl Database {
         &self,
         etiquette_id: i64,
         contact_ids: &[i64],
-        now: i64,
-    ) -> Result<(u32, u32)> {
+        _now: i64,
+    ) -> Result<(u32, u32, u32)> {
         let mut assigned = 0u32;
         let mut skipped = 0u32;
+        let mut taches_created = 0u32;
 
         for &contact_id in contact_ids {
             if self.contact_has_etiquette(contact_id, etiquette_id)? {
@@ -80,12 +81,15 @@ impl Database {
                 continue;
             }
 
-            self.attribuer_etiquette(contact_id, etiquette_id, Some("MANUEL".into()), None)?;
-            let _ = self.apply_etiquette_tache_action(contact_id, etiquette_id, now);
+            let liaison =
+                self.attribuer_etiquette(contact_id, etiquette_id, Some("MANUEL".into()), None)?;
             assigned += 1;
+            if liaison.tache_created == Some(true) {
+                taches_created += 1;
+            }
         }
 
-        Ok((assigned, skipped))
+        Ok((assigned, skipped, taches_created))
     }
 
     /// Attribuer une étiquette à un contact
@@ -131,9 +135,11 @@ impl Database {
             params![contact_id, etiquette_id, &attribue_par, email_date_prevue],
         )?;
         self.ensure_pipeline_status_on_assignment(contact_id, etiquette_id)?;
+        // Tâche campagne : uniquement si déjà déclenchée (ex. Exceltis après mail Stellium).
+        let tache_created = self.try_apply_etiquette_tache_for_contact(contact_id, etiquette_id)?;
 
         // Récupérer la liaison créée ou mise à jour
-        self.conn.query_row(
+        let mut liaison = self.conn.query_row(
             "SELECT id, contact_id, etiquette_id, date_attribution, attribue_par,
                     email_envoye, email_date_prevue, email_date_envoi, notes
              FROM contact_etiquettes 
@@ -150,9 +156,14 @@ impl Database {
                     email_date_prevue: row.get(6)?,
                     email_date_envoi: row.get(7)?,
                     notes: row.get(8)?,
+                    tache_created: None,
                 })
             },
-        )
+        )?;
+        if tache_created {
+            liaison.tache_created = Some(true);
+        }
+        Ok(liaison)
     }
 
     /// Retirer une étiquette d'un contact

@@ -1561,20 +1561,9 @@ pub fn attribuer_etiquette(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    let result = database
+    database
         .attribuer_etiquette(contact_id, etiquette_id, attribue_par, None)
-        .map_err(|e| format!("Failed to assign etiquette: {}", e))?;
-
-    // Déclenche l'action « créer une tâche » de l'étiquette aussi sur pose manuelle.
-    // Idempotent (dédup via contact_etiquettes.tache_id) : aucun doublon. Sur pose AUTO,
-    // l'appel se fait déjà dans le moteur d'étiquettes, donc pas de double déclenchement ici.
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
-    let _ = database.apply_etiquette_tache_action(contact_id, etiquette_id, now);
-
-    Ok(result)
+        .map_err(|e| format!("Failed to assign etiquette: {}", e))
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -1582,6 +1571,7 @@ pub fn attribuer_etiquette(
 pub struct BulkEtiquetteAssignResult {
     pub assigned: u32,
     pub skipped: u32,
+    pub taches_created: u32,
 }
 
 #[tauri::command]
@@ -1593,11 +1583,15 @@ pub fn attribuer_etiquette_bulk(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
-    let (assigned, skipped) = database
+    let (assigned, skipped, taches_created) = database
         .attribuer_etiquette_bulk(etiquette_id, contact_ids)
         .map_err(|e| format!("Failed bulk etiquette assign: {e}"))?;
 
-    Ok(BulkEtiquetteAssignResult { assigned, skipped })
+    Ok(BulkEtiquetteAssignResult {
+        assigned,
+        skipped,
+        taches_created,
+    })
 }
 
 #[tauri::command]

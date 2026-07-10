@@ -33,7 +33,8 @@ export function FamillesPageHelp() {
           <strong className="text-foreground">Cette page</strong> regroupe les contacts par{" "}
           <strong className="text-foreground">nom de famille</strong> (homonymes automatiques)
           ou une <strong className="text-foreground">famille créée manuellement</strong>.
-          Les conjoints d&apos;un autre nom apparaissent à côté de leur époux(se).
+          Les conjoints d&apos;un autre nom apparaissent à côté de leur époux(se), ainsi
+          que les enfants rattachés au même foyer fiscal.
         </p>
         <p>
           <strong className="text-foreground">Fiche contact → Couple / foyer</strong> gère le
@@ -42,6 +43,9 @@ export function FamillesPageHelp() {
         </p>
         <p>
           Cliquez sur une carte pour voir les membres. Le bouton{" "}
+          <strong className="text-foreground">Ajouter un membre</strong> permet
+          d&apos;inclure un contact d&apos;un autre nom (la famille homonyme
+          devient alors une famille manuelle). Le bouton{" "}
           <strong className="text-foreground">Fiche</strong> ouvre le contact. L&apos;icône −
           retire un homonyme du regroupement auto ou un membre d&apos;une famille manuelle.
         </p>

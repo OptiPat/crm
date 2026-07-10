@@ -121,7 +121,9 @@ function MemberCard({
         "rounded-xl border overflow-hidden transition-colors",
         membre.isSpouse
           ? "border-sky-200/70 bg-sky-50/30 ml-4 sm:ml-6"
-          : "border-border/70 bg-card",
+          : membre.isFoyerChild
+            ? "border-amber-200/70 bg-amber-50/25 ml-4 sm:ml-6"
+            : "border-border/70 bg-card",
         isHighlighted && "ring-2 ring-primary/40 border-primary/30"
       )}
     >
@@ -132,7 +134,8 @@ function MemberCard({
             nom={membre.contact.nom}
             className={cn(
               "h-11 w-11 shrink-0",
-              membre.isSpouse && "ring-2 ring-sky-200/80"
+              membre.isSpouse && "ring-2 ring-sky-200/80",
+              membre.isFoyerChild && "ring-2 ring-amber-200/80"
             )}
           />
           <div className="min-w-0 flex-1">
@@ -151,6 +154,14 @@ function MemberCard({
                   className="text-xs text-sky-700 border-sky-300/80 bg-sky-50"
                 >
                   {membre.spouseOf}
+                </Badge>
+              )}
+              {membre.isFoyerChild && (
+                <Badge
+                  variant="outline"
+                  className="text-xs text-amber-800 border-amber-300/80 bg-amber-50"
+                >
+                  {membre.foyerChildOf}
                 </Badge>
               )}
             </div>
@@ -214,7 +225,7 @@ function MemberCard({
               Conjoint(e)
             </Badge>
           )}
-          {!membre.isSpouse && onExcludeFromFamille && (
+          {!membre.isSpouse && !membre.isFoyerChild && onExcludeFromFamille && (
             <Button
               type="button"
               variant="ghost"

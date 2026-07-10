@@ -11,7 +11,7 @@ export type FamilleSearchResult = {
 };
 
 export function coreMemberCount(famille: FamilleGroup): number {
-  return famille.membres.filter((m) => !m.isSpouse).length;
+  return famille.membres.filter((m) => !m.isSpouse && !m.isFoyerChild).length;
 }
 
 export function sortFamilleGroups(

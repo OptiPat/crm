@@ -567,7 +567,24 @@ impl Database {
         self.migrate_compta_tables()?;
         self.migrate_compta_sync_columns()?;
         self.migrate_notes_tables()?;
+        self.migrate_purge_premature_etiquette_taches()?;
 
+        Ok(())
+    }
+
+    /// Retire les tâches prématurées, corrige les échéances, rattrape les manquantes (une fois).
+    fn migrate_purge_premature_etiquette_taches(&self) -> Result<()> {
+        if self.get_setting("migration_etiquette_tache_reconcile_v1")?.is_some() {
+            return Ok(());
+        }
+        let (purged, fixed, backfilled) = self.reconcile_all_etiquette_tache_actions()?;
+        self.set_setting("migration_etiquette_tache_reconcile_v1", "1")?;
+        if purged > 0 || fixed > 0 || backfilled > 0 {
+            println!(
+                "✅ Migration tâches étiquette : {} supprimée(s), {} échéance(s) corrigée(s), {} créée(s)",
+                purged, fixed, backfilled
+            );
+        }
         Ok(())
     }
 

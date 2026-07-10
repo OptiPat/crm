@@ -9,6 +9,52 @@ import type {
 } from "@/lib/familles/famille-types";
 import { getContactPatrimoine } from "@/lib/investissements/contact-patrimoine";
 
+const ENFANT_ROLE_FAMILLE = new Set([
+  "FILS",
+  "FILLE",
+  "PETIT_FILS",
+  "PETITE_FILLE",
+]);
+
+function isFoyerConjointForFamilleDisplay(
+  person: Contact,
+  anchor: Contact,
+  groupNom: string,
+  coreMemberIds: ReadonlySet<number>
+): boolean {
+  if (person.id != null && coreMemberIds.has(person.id)) {
+    return false;
+  }
+  if (person.role_foyer === "ENFANT") {
+    return false;
+  }
+  if (person.role_famille && ENFANT_ROLE_FAMILLE.has(person.role_famille)) {
+    return false;
+  }
+  if (person.role_famille === "CONJOINT" || person.role_foyer === "DECLARANT_2") {
+    return true;
+  }
+  if (anchor.role_foyer === "DECLARANT_1" && person.role_foyer === "DECLARANT_2") {
+    return true;
+  }
+  return person.nom.trim().toUpperCase() !== groupNom;
+}
+
+function isFoyerEnfantForFamilleDisplay(
+  person: Contact,
+  coreMemberIds: ReadonlySet<number>
+): boolean {
+  if (person.id != null && coreMemberIds.has(person.id)) {
+    return false;
+  }
+  if (person.role_foyer === "ENFANT") {
+    return true;
+  }
+  return Boolean(
+    person.role_famille && ENFANT_ROLE_FAMILLE.has(person.role_famille)
+  );
+}
+
 function buildMembresWithInvests(
   membres: Contact[],
   groupNom: string,
@@ -20,8 +66,12 @@ function buildMembresWithInvests(
   const membresSorted = [...membres].sort(
     (a, b) => getRolePriority(a.role_famille) - getRolePriority(b.role_famille)
   );
+  const coreMemberIds = new Set(
+    membres.map((m) => m.id).filter((id): id is number => id != null)
+  );
   const membresWithInvests: MemberWithInvestments[] = [];
   const spousesAdded = new Set<number>();
+  const foyerChildrenAdded = new Set<number>();
 
   membresSorted.forEach((membre) => {
     const data = getContactPatrimoine(
@@ -48,28 +98,76 @@ function buildMembresWithInvests(
       (c) => c.foyer_id === membre.foyer_id && c.id !== membre.id
     );
     foyerMembers.forEach((spouse) => {
-      if (spouse.nom.toUpperCase() !== groupNom && !spousesAdded.has(spouse.id)) {
-        spousesAdded.add(spouse.id);
-        const spouseData = getContactPatrimoine(
-          spouse,
+      if (
+        !isFoyerConjointForFamilleDisplay(spouse, membre, groupNom, coreMemberIds) ||
+        spousesAdded.has(spouse.id!)
+      ) {
+        return;
+      }
+      spousesAdded.add(spouse.id!);
+      const spouseData = getContactPatrimoine(
+        spouse,
+        investissementsByContact,
+        investissementsByFoyer
+      );
+      membresWithInvests.push({
+        contact: spouse,
+        investissements: spouseData.investissements,
+        patrimoine: spouseData.total,
+        patrimoinePerso: spouseData.patrimoinePerso,
+        patrimoineCommun: spouseData.patrimoineCommun,
+        avecMoiPerso: spouseData.avecMoiPerso,
+        avecMoiCommun: spouseData.avecMoiCommun,
+        avecMoiTotal: spouseData.avecMoiTotal,
+        isSpouse: true,
+        spouseOf: `Conjoint de ${membre.prenom}`,
+      });
+    });
+  });
+
+  if (includeSpouses) {
+    const pendingFoyerChildren: MemberWithInvestments[] = [];
+    membresSorted.forEach((membre) => {
+      if (!membre.foyer_id) return;
+      const foyerMembers = eligible.filter(
+        (c) => c.foyer_id === membre.foyer_id && c.id !== membre.id
+      );
+      foyerMembers.forEach((child) => {
+        if (
+          !isFoyerEnfantForFamilleDisplay(child, coreMemberIds) ||
+          child.id == null ||
+          foyerChildrenAdded.has(child.id)
+        ) {
+          return;
+        }
+        foyerChildrenAdded.add(child.id);
+        const childData = getContactPatrimoine(
+          child,
           investissementsByContact,
           investissementsByFoyer
         );
-        membresWithInvests.push({
-          contact: spouse,
-          investissements: spouseData.investissements,
-          patrimoine: spouseData.total,
-          patrimoinePerso: spouseData.patrimoinePerso,
-          patrimoineCommun: spouseData.patrimoineCommun,
-          avecMoiPerso: spouseData.avecMoiPerso,
-          avecMoiCommun: spouseData.avecMoiCommun,
-          avecMoiTotal: spouseData.avecMoiTotal,
-          isSpouse: true,
-          spouseOf: `Conjoint de ${membre.prenom}`,
+        pendingFoyerChildren.push({
+          contact: child,
+          investissements: childData.investissements,
+          patrimoine: childData.total,
+          patrimoinePerso: childData.patrimoinePerso,
+          patrimoineCommun: childData.patrimoineCommun,
+          avecMoiPerso: childData.avecMoiPerso,
+          avecMoiCommun: childData.avecMoiCommun,
+          avecMoiTotal: childData.avecMoiTotal,
+          isSpouse: false,
+          isFoyerChild: true,
+          foyerChildOf: `Foyer de ${membre.prenom}`,
         });
-      }
+      });
     });
-  });
+    pendingFoyerChildren.sort(
+      (a, b) =>
+        getRolePriority(a.contact.role_famille) -
+        getRolePriority(b.contact.role_famille)
+    );
+    membresWithInvests.push(...pendingFoyerChildren);
+  }
 
   return membresWithInvests;
 }

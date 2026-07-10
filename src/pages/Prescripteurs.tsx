@@ -203,7 +203,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
     }
   }, [contacts, prescripteursRacines, updatePrefs]);
 
-  const { filteredPrescripteurs, searchFocusId } = useMemo(() => {
+  const filteredPrescripteurs = useMemo(() => {
     const searched = searchPrescripteurRoots(
       prefs.searchQuery,
       prescripteursRacines,
@@ -211,33 +211,16 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
       foyersInfo
     );
     const statFilter = prefs.statFilter ?? "all";
-    const filtered = sortPrescripteurRoots(
+    return sortPrescripteurRoots(
       filterPrescripteurRootsByStat(searched.roots, statFilter),
       prefs.sortId,
       foyersInfo
     );
-    return {
-      filteredPrescripteurs: filtered,
-      searchFocusId: searched.focusContactId,
-    };
   }, [prescripteursRacines, contacts, foyersInfo, prefs]);
-
-  const effectiveHighlightId = prefs.searchQuery.trim()
-    ? (searchFocusId ?? highlightContactId)
-    : (highlightContactId ?? searchFocusId);
 
   const expandedIsVisible =
     expandedPrescripteurId != null &&
     filteredPrescripteurs.some((p) => p.contact.id === expandedPrescripteurId);
-
-  useEffect(() => {
-    if (searchFocusId == null || !prefs.searchQuery.trim()) return;
-    const racineIds = getPrescripteurRacineIds(prescripteursRacines);
-    const rootId = findPrescripteurRacineId(searchFocusId, contacts, racineIds);
-    if (rootId != null) {
-      setExpandedPrescripteurId(rootId);
-    }
-  }, [searchFocusId, prefs.searchQuery, contacts, prescripteursRacines]);
 
   const expandedStats = useMemo(
     () =>
@@ -265,14 +248,13 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
 
   useEffect(() => {
     if (!expandedTree || expandedPrescripteurId == null) return;
-    const focusId = effectiveHighlightId;
-    if (focusId != null) {
-      const path = expandPathForContact(expandedTree, focusId);
+    if (highlightContactId != null) {
+      const path = expandPathForContact(expandedTree, highlightContactId);
       setExpandedPrescripteurs(new Set(path));
     } else {
       setExpandedPrescripteurs(new Set([expandedPrescripteurId]));
     }
-  }, [expandedTree, effectiveHighlightId, expandedPrescripteurId]);
+  }, [expandedTree, highlightContactId, expandedPrescripteurId]);
 
   useEffect(() => {
     if (loading || prescripteursRacines.length === 0) return;
@@ -496,7 +478,10 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
 
       <PrescripteursToolbar
         searchQuery={prefs.searchQuery}
-        onSearchChange={(searchQuery) => updatePrefs({ searchQuery })}
+        onSearchChange={(searchQuery) => {
+          updatePrefs({ searchQuery });
+          setHighlightContactId(null);
+        }}
         sortId={prefs.sortId}
         onSortChange={(sortId) => updatePrefs({ sortId })}
         statFilter={prefs.statFilter}
@@ -588,7 +573,7 @@ export function Prescripteurs({ onNavigate }: PrescripteursProps) {
                         onLinkClient={openLinkClientFor}
                         highlightContactId={
                           expandedPrescripteurId === prescripteur.contact.id
-                            ? (effectiveHighlightId ?? undefined)
+                            ? (highlightContactId ?? undefined)
                             : undefined
                         }
                       />

@@ -14,6 +14,7 @@ import {
   setEnvoisQueueCache,
 } from "@/lib/etiquettes/etiquette-envois-cache";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { notifyTachesChanged } from "@/lib/taches/tache-events";
 import { buildSentQueueItem } from "@/lib/etiquettes/etiquette-queue-incremental";
 import {
   getEtiquetteQueueItemKey,
@@ -199,6 +200,7 @@ export function startIndividualEtiquetteEmailSend(input: {
         skipQueueReload: true,
         skipEtiquettesChanged: true,
       });
+      notifyTachesChanged();
       toast.success(`Email envoyé à ${name}`);
       input.onSent?.({
         subject: input.subject,
@@ -286,6 +288,9 @@ export async function startEtiquetteBatchSend(input: {
       skipQueueReload: true,
       skipEtiquettesChanged: true,
     });
+    if (result.sent > 0) {
+      notifyTachesChanged();
+    }
 
     if (controller.signal.aborted) {
       toast.info(

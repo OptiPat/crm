@@ -17,6 +17,9 @@ export interface MemberWithInvestments {
   avecMoiTotal: number;
   isSpouse: boolean;
   spouseOf?: string;
+  /** Enfant au foyer d'un membre, affiché sans être rattaché via famille_id. */
+  isFoyerChild?: boolean;
+  foyerChildOf?: string;
 }
 
 export interface FamilleGroup {

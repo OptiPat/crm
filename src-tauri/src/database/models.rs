@@ -881,6 +881,9 @@ pub struct ContactEtiquette {
     pub email_date_prevue: Option<i64>,
     pub email_date_envoi: Option<i64>,
     pub notes: Option<String>,
+    /// Renseigné uniquement à l'attribution IPC (tâche campagne créée à ce moment).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tache_created: Option<bool>,
 }
 
 // Étiquette enrichie avec le compteur de contacts

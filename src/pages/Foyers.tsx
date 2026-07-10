@@ -194,30 +194,13 @@ export function Foyers({ onNavigate }: FoyersProps) {
     }
   }, [foyerRows, updatePrefs]);
 
-  const { filteredRows, searchFocusId } = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const statFilter = prefs.statFilter ?? null;
     const byType = filterFoyerRowsByType(foyerRows, prefs.typeFilter);
     const byStat = filterFoyerRowsByStat(byType, statFilter);
     const searched = searchFoyerRows(prefs.searchQuery, byStat);
-    const sorted = sortFoyerRows(searched.rows, prefs.sortId);
-    return {
-      filteredRows: sorted,
-      searchFocusId: searched.focusContactId,
-    };
+    return sortFoyerRows(searched.rows, prefs.sortId);
   }, [foyerRows, prefs]);
-
-  const effectiveHighlightId = prefs.searchQuery.trim()
-    ? (searchFocusId ?? highlightContactId)
-    : (highlightContactId ?? searchFocusId);
-
-  useEffect(() => {
-    if (searchFocusId == null || !prefs.searchQuery.trim()) return;
-    const foyerId = findFoyerIdForContact(searchFocusId, foyerRows);
-    if (foyerId != null) {
-      setExpandedFoyerId(foyerId);
-      updatePrefs({ expandedFoyerId: foyerId });
-    }
-  }, [searchFocusId, prefs.searchQuery, foyerRows, updatePrefs]);
 
   useEffect(() => {
     if (loading || expandedFoyerId == null) return;
@@ -368,7 +351,10 @@ export function Foyers({ onNavigate }: FoyersProps) {
 
       <FoyersToolbar
         searchQuery={prefs.searchQuery}
-        onSearchChange={(searchQuery) => updatePrefs({ searchQuery })}
+        onSearchChange={(searchQuery) => {
+          updatePrefs({ searchQuery });
+          setHighlightContactId(null);
+        }}
         sortId={prefs.sortId}
         onSortChange={(sortId) => updatePrefs({ sortId })}
         typeFilter={prefs.typeFilter}
@@ -470,7 +456,7 @@ export function Foyers({ onNavigate }: FoyersProps) {
                           investissementsByFoyer
                         )}
                         highlightContactId={
-                          isExpanded ? (effectiveHighlightId ?? undefined) : undefined
+                          isExpanded ? (highlightContactId ?? undefined) : undefined
                         }
                         onMemberClick={openMember}
                         showTitle

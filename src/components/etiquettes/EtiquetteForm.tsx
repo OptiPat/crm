@@ -64,6 +64,7 @@ import { EtiquetteEmailCampaignFields } from "@/components/etiquettes/EtiquetteE
 import { EtiquetteTacheActionFields } from "@/components/etiquettes/EtiquetteTacheActionFields";
 import { setEtiquettePipelineActif } from "@/lib/api/tauri-pipeline";
 import { notifyEtiquettesChanged } from "@/lib/etiquettes/etiquette-events";
+import { notifyTachesChanged } from "@/lib/taches/tache-events";
 import { isExceltisEtiquetteNom } from "@/lib/etiquettes/exceltis";
 import {
   CONDITION_TYPE_LABELS,
@@ -816,6 +817,9 @@ export function EtiquetteForm({
         tache_priorite: tachePriorite,
         tache_delai_jours: tacheDelaiJours,
       });
+      if (tacheActif) {
+        notifyTachesChanged();
+      }
       await setEtiquettePipelineActif(savedId, pipelineActif);
 
       notifyEtiquettesChanged();

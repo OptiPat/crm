@@ -54,4 +54,89 @@ describe("buildFamilleGroups", () => {
     expect(manual?.membres.map((m) => m.contact.id).sort()).toEqual([1, 2]);
     expect(groups.some((g) => g.key === "auto:DUPONT")).toBe(false);
   });
+
+  it("affiche les enfants du même foyer sans les traiter comme conjoints", () => {
+    const contacts = [
+      contact({
+        id: 1,
+        nom: "VIRE",
+        prenom: "Rachel",
+        role_famille: "MERE",
+        role_foyer: "DECLARANT_1",
+        foyer_id: 100,
+        famille_id: 20,
+      }),
+      contact({
+        id: 2,
+        nom: "ARAMENDIA",
+        prenom: "Lison",
+        role_famille: "FILLE",
+        role_foyer: "ENFANT",
+        foyer_id: 100,
+        famille_id: 20,
+      }),
+      contact({
+        id: 3,
+        nom: "ARAMENDIA",
+        prenom: "Lucas",
+        role_famille: "FILS",
+        role_foyer: "ENFANT",
+        foyer_id: 100,
+      }),
+    ];
+    const familles: Famille[] = [
+      {
+        id: 20,
+        nom: "Famille VIRE",
+        notes: null,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    const groups = buildFamilleGroups(contacts, [], familles, {}, {});
+    const manual = groups.find((g) => g.isManual);
+    expect(manual?.membres.map((m) => m.contact.id)).toEqual([1, 2, 3]);
+    expect(manual?.membres.find((m) => m.contact.id === 2)?.isSpouse).toBe(false);
+    expect(manual?.membres.find((m) => m.contact.id === 3)).toMatchObject({
+      isSpouse: false,
+      isFoyerChild: true,
+      foyerChildOf: "Foyer de Rachel",
+    });
+  });
+
+  it("ne duplique pas un enfant déjà membre ni ne le libelle conjoint", () => {
+    const contacts = [
+      contact({
+        id: 1,
+        nom: "VIRE",
+        prenom: "Rachel",
+        role_famille: "MERE",
+        role_foyer: "DECLARANT_1",
+        foyer_id: 100,
+        famille_id: 20,
+      }),
+      contact({
+        id: 2,
+        nom: "ARAMENDIA",
+        prenom: "Lison",
+        role_famille: "FILLE",
+        role_foyer: "ENFANT",
+        foyer_id: 100,
+        famille_id: 20,
+      }),
+    ];
+    const familles: Famille[] = [
+      {
+        id: 20,
+        nom: "Famille VIRE",
+        notes: null,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    const groups = buildFamilleGroups(contacts, [], familles, {}, {});
+    const manual = groups.find((g) => g.isManual);
+    expect(manual?.membres.map((m) => m.contact.id)).toEqual([1, 2]);
+    expect(manual?.membres.every((m) => !m.isSpouse)).toBe(true);
+  });
 });

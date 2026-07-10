@@ -33,8 +33,8 @@ const PRIORITES: { value: TacheActionPriorite; label: string }[] = [
 ];
 
 /**
- * Action « créer une tâche » : quand l'étiquette est posée automatiquement sur un
- * contact, une tâche de suivi est générée (une seule fois par contact).
+ * Action « créer une tâche » : une tâche de suivi est générée au déclenchement
+ * campagne (mail Stellium pour Exceltis, envoi email sinon), une fois par contact.
  */
 export function EtiquetteTacheActionFields({
   isAuto,
@@ -51,14 +51,20 @@ export function EtiquetteTacheActionFields({
   return (
     <EtiquetteFormPanel
       title="Créer une tâche"
-      description="Quand l'étiquette est posée automatiquement, une tâche de suivi est créée pour le contact (une fois)."
+      description="Quand la campagne est déclenchée pour un contact, une tâche de suivi est créée (une fois)."
     >
-      {!isAuto && (
-        <p className="text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2">
-          L&apos;action se déclenche via la règle automatique. Activez-la dans l&apos;onglet
-          « Règle auto » pour que des tâches soient créées.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2">
+        <strong>Exceltis :</strong> au mail Stellium « Remboursement Exceltis » (déblocage campagne).
+        {" "}
+        <strong>Autres campagnes email :</strong> à l&apos;envoi du mail depuis Suivi → Envois.
+        {!isAuto && (
+          <>
+            {" "}
+            La pose manuelle de l&apos;étiquette ne crée pas de tâche tant que la campagne
+            n&apos;est pas déclenchée.
+          </>
+        )}
+      </p>
 
       <div className="flex items-center justify-between">
         <Label htmlFor="tache-actif" className="text-sm font-medium">
@@ -111,7 +117,7 @@ export function EtiquetteTacheActionFields({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="tache-delai">Échéance (jours après)</Label>
+              <Label htmlFor="tache-delai">Échéance (jours après déclenchement)</Label>
               <Input
                 id="tache-delai"
                 type="number"
@@ -121,7 +127,10 @@ export function EtiquetteTacheActionFields({
                   onTacheDelaiJoursChange(Math.max(0, parseInt(e.target.value, 10) || 0))
                 }
               />
-              <p className="text-xs text-muted-foreground">0 = le jour même.</p>
+              <p className="text-xs text-muted-foreground">
+                0 = le jour du déclenchement. Ex. 15 = relance 15 jours après le mail Stellium
+                (Exceltis) ou l&apos;envoi campagne.
+              </p>
             </div>
           </div>
         </>

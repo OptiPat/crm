@@ -73,6 +73,8 @@ export interface ContactEtiquette {
   email_date_prevue: number | null;
   email_date_envoi: number | null;
   notes: string | null;
+  /** Présent après attribution si une tâche campagne vient d'être créée. */
+  tache_created?: boolean;
 }
 
 export interface EtiquetteWithCount extends Etiquette {
@@ -83,17 +85,17 @@ export interface EtiquetteWithCount extends Etiquette {
 export type TacheActionPriorite = "BASSE" | "NORMALE" | "HAUTE";
 
 /**
- * Action automatique d'une étiquette : créer une tâche quand l'étiquette est
- * posée automatiquement sur un contact (déclenchée une fois par contact).
+ * Action automatique d'une étiquette : créer une tâche au déclenchement campagne
+ * (mail Stellium pour Exceltis, envoi email pour les autres campagnes).
  */
 export interface EtiquetteAction {
   etiquette_id: number;
-  /** Active la création de tâche à l'attribution auto. */
+  /** Active la création de tâche au déclenchement campagne. */
   tache_actif: boolean;
   /** Modèle de titre — `{prenom}` et `{nom}` sont remplacés par le contact. */
   tache_titre: string | null;
   tache_priorite: TacheActionPriorite;
-  /** Échéance = jour d'attribution + N jours (0 = le jour même). */
+  /** Échéance = jour de déclenchement campagne + N jours (0 = le jour même). */
   tache_delai_jours: number;
 }
 
@@ -289,9 +291,9 @@ export async function getEtiquetteAction(
   return invoke<EtiquetteAction | null>("get_etiquette_action", { etiquetteId });
 }
 
-/** Crée ou met à jour l'action « tâche » d'une étiquette. */
+/** Crée ou met à jour l'action « tâche » (rattrape les contacts déjà en campagne). */
 export async function setEtiquetteAction(action: EtiquetteAction): Promise<void> {
-  return invoke<void>("set_etiquette_action", { action });
+  await invoke<void>("set_etiquette_action", { action });
 }
 
 /**
@@ -319,14 +321,16 @@ export async function attribuerEtiquette(
     etiquetteId, 
     attribuePar 
   });
-  // L'étiquette peut déclencher la création d'une tâche (action « créer une tâche »).
-  notifyTachesChanged();
+  if (result.tache_created) {
+    notifyTachesChanged();
+  }
   return result;
 }
 
 export interface BulkEtiquetteAssignResult {
   assigned: number;
   skipped: number;
+  taches_created: number;
 }
 
 /**
@@ -340,7 +344,7 @@ export async function attribuerEtiquetteBulk(
     contactIds,
     etiquetteId,
   });
-  if (result.assigned > 0) {
+  if (result.taches_created > 0) {
     notifyTachesChanged();
   }
   return result;

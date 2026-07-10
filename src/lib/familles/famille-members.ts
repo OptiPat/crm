@@ -2,6 +2,7 @@ import { updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { createFamille, deleteFamille } from "@/lib/api/tauri-familles";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
+import type { FamilleGroup } from "@/lib/familles/famille-types";
 
 export async function createFamilleWithMembers(
   nom: string,
@@ -33,6 +34,22 @@ export async function addContactToFamille(
     contactToUpdatePayload(contact, { famille_id: familleId })
   );
   notifyContactsChanged();
+}
+
+/** Convertit un regroupement auto (homonymes) en famille manuelle éditables. */
+export async function promoteAutoFamilleToManual(
+  familleGroup: Pick<FamilleGroup, "nom" | "membres">
+): Promise<number> {
+  const famille = await createFamille({ nom: familleGroup.nom.trim() });
+  const seen = new Set<number>();
+  for (const member of familleGroup.membres) {
+    if (member.isSpouse || member.isFoyerChild) continue;
+    const id = member.contact.id;
+    if (id == null || seen.has(id)) continue;
+    seen.add(id);
+    await addContactToFamille(member.contact, famille.id);
+  }
+  return famille.id;
 }
 
 export async function removeContactFromFamille(contact: Contact): Promise<void> {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { buildFamilleGroups } from "@/lib/familles/build-famille-groups";
 import {
+  coreMemberCount,
   filterFamilleGroupsByStat,
   findFamilleKeyForContact,
   searchFamilleGroups,
@@ -50,8 +51,47 @@ describe("familles-search", () => {
     expect(filterFamilleGroupsByStat(groups, "auto")).toHaveLength(1);
   });
 
-  it("sortFamilleGroups trie par patrimoine", () => {
+  it("sortFamilleGroups trie par nom", () => {
     const sorted = sortFamilleGroups(groups, "name_asc");
     expect(sorted[0].nom <= sorted[1].nom).toBe(true);
+  });
+
+  it("coreMemberCount ignore conjoints et enfants affichés via le foyer", () => {
+    const contacts = [
+      contact({
+        id: 1,
+        nom: "VIRE",
+        prenom: "Rachel",
+        role_famille: "MERE",
+        foyer_id: 100,
+        famille_id: 20,
+      }),
+      contact({
+        id: 2,
+        nom: "ARAMENDIA",
+        prenom: "Lison",
+        role_famille: "FILLE",
+        role_foyer: "ENFANT",
+        foyer_id: 100,
+        famille_id: 20,
+      }),
+      contact({
+        id: 3,
+        nom: "ARAMENDIA",
+        prenom: "Lucas",
+        role_famille: "FILS",
+        role_foyer: "ENFANT",
+        foyer_id: 100,
+      }),
+    ];
+    const groups = buildFamilleGroups(
+      contacts,
+      [],
+      [{ id: 20, nom: "VIRE", notes: null, created_at: 0, updated_at: 0 }],
+      {},
+      {}
+    );
+    const manual = groups.find((g) => g.isManual);
+    expect(coreMemberCount(manual!)).toBe(2);
   });
 });

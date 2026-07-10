@@ -23,7 +23,7 @@ export function FamilleSummaryCard({
   actionHint = "Voir les membres",
   onClick,
 }: FamilleSummaryCardProps) {
-  const coreMembers = famille.membres.filter((m) => !m.isSpouse);
+  const coreMembers = famille.membres.filter((m) => !m.isSpouse && !m.isFoyerChild);
   const previewMembers = coreMembers.slice(0, compact ? 3 : 4);
 
   return (

@@ -222,30 +222,13 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
     }
   }, [partenaireRows, updatePrefs]);
 
-  const { filteredRows, searchFocusId } = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const statFilter = prefs.statFilter ?? null;
     const byType = filterPartenaireRowsByType(partenaireRows, prefs.typeFilter);
     const byStat = filterPartenaireRowsByStat(byType, statFilter);
     const searched = searchPartenaireRows(prefs.searchQuery, byStat);
-    const sorted = sortPartenaireRows(searched.rows, prefs.sortId);
-    return {
-      filteredRows: sorted,
-      searchFocusId: searched.focusInvestissementId,
-    };
+    return sortPartenaireRows(searched.rows, prefs.sortId);
   }, [partenaireRows, prefs]);
-
-  const effectiveHighlightId = prefs.searchQuery.trim()
-    ? (searchFocusId ?? highlightInvestissementId)
-    : (highlightInvestissementId ?? searchFocusId);
-
-  useEffect(() => {
-    if (searchFocusId == null || !prefs.searchQuery.trim()) return;
-    const partenaireId = findPartenaireIdForInvestissement(searchFocusId, partenaireRows);
-    if (partenaireId != null) {
-      setExpandedPartenaireId(partenaireId);
-      updatePrefs({ expandedPartenaireId: partenaireId });
-    }
-  }, [searchFocusId, prefs.searchQuery, partenaireRows, updatePrefs]);
 
   useEffect(() => {
     if (loading || expandedPartenaireId == null) return;
@@ -417,7 +400,10 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
 
       <PartenairesToolbar
         searchQuery={prefs.searchQuery}
-        onSearchChange={(searchQuery) => updatePrefs({ searchQuery })}
+        onSearchChange={(searchQuery) => {
+          updatePrefs({ searchQuery });
+          setHighlightInvestissementId(null);
+        }}
         sortId={prefs.sortId}
         onSortChange={(sortId) => updatePrefs({ sortId })}
         typeFilter={prefs.typeFilter}
@@ -535,7 +521,7 @@ export function Partenaires({ onNavigate }: PartenairesProps) {
                         contactLabelById={contactLabelById}
                         foyerLabelById={foyerLabelById}
                         highlightInvestissementId={
-                          isExpanded ? (effectiveHighlightId ?? undefined) : undefined
+                          isExpanded ? (highlightInvestissementId ?? undefined) : undefined
                         }
                         onOpenContact={handleOpenContact}
                         onOpenFoyer={onNavigate ? handleOpenFoyer : undefined}

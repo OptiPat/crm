@@ -657,6 +657,18 @@ impl Database {
                     mode,
                 );
                 let _ = self.advance_pipeline_on_email_sent(contact_etiquette_id);
+                if let Some(eid) = etiquette_id {
+                    let etiquette = self.get_etiquette_by_id(eid).ok();
+                    let is_exceltis = etiquette
+                        .as_ref()
+                        .map(|e| {
+                            crate::email::stellium_exceltis::is_exceltis_etiquette_nom(&e.nom)
+                        })
+                        .unwrap_or(false);
+                    if !is_exceltis {
+                        let _ = self.try_apply_etiquette_tache_for_contact(contact_id, eid);
+                    }
+                }
                 Ok(())
             }
             Err(e) => {

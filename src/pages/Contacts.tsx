@@ -22,7 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { getAllContacts, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, getContactById, deleteContact, updateContact, type Contact } from "@/lib/api/tauri-contacts";
 import { getAlertesNonTraitees } from "@/lib/api/tauri-alertes";
 import { getAllFoyers, type Foyer } from "@/lib/api/tauri-foyers";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
@@ -586,6 +586,24 @@ export function Contacts({ onNavigate }: ContactsProps) {
       }
     },
     [onNavigate, openContactDetail]
+  );
+
+  const openLinkedContactById = useCallback(
+    async (contactId: number) => {
+      const linked = contacts.find((c) => c.id === contactId);
+      if (linked) {
+        openLinkedContact(linked);
+        return;
+      }
+      try {
+        const fetched = await getContactById(contactId);
+        openLinkedContact(fetched);
+      } catch (error) {
+        console.error("Erreur ouverture fiche liée:", error);
+        toast.error("Impossible d'ouvrir la fiche contact");
+      }
+    },
+    [contacts, openLinkedContact]
   );
 
   const handleExportCsv = () => {
@@ -1153,6 +1171,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
           onContactRefreshed={handleContactRefreshed}
           onNavigate={onNavigate}
           onUpdate={() => void loadContacts({ silent: true })}
+          onOpenLinkedContact={(contactId) => void openLinkedContactById(contactId)}
         />
       ) : null}
 

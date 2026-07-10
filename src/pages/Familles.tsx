@@ -26,6 +26,7 @@ import { buildFamilleGroups } from "@/lib/familles/build-famille-groups";
 import type { FamilleGroup } from "@/lib/familles/famille-types";
 import {
   deleteFamilleIfEmpty,
+  promoteAutoFamilleToManual,
   removeContactFromFamille,
 } from "@/lib/familles/famille-members";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
@@ -91,6 +92,7 @@ export function Familles({ onNavigate }: FamillesProps) {
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
   const [showCreateFamilleModal, setShowCreateFamilleModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [pendingMemberAction, setPendingMemberAction] =
     useState<PendingMemberAction | null>(null);
   const pendingFocusContactIdRef = useRef<number | null>(null);
@@ -211,31 +213,14 @@ export function Familles({ onNavigate }: FamillesProps) {
     }
   }, [familleGroups, updatePrefs]);
 
-  const { filteredFamilles, searchFocusId } = useMemo(() => {
+  const filteredFamilles = useMemo(() => {
     const searched = searchFamilleGroups(prefs.searchQuery, familleGroups);
     const statFilter = prefs.statFilter ?? "all";
-    const filtered = sortFamilleGroups(
+    return sortFamilleGroups(
       filterFamilleGroupsByStat(searched.groups, statFilter),
       prefs.sortId
     );
-    return {
-      filteredFamilles: filtered,
-      searchFocusId: searched.focusContactId,
-    };
   }, [familleGroups, prefs]);
-
-  const effectiveHighlightId = prefs.searchQuery.trim()
-    ? (searchFocusId ?? highlightContactId)
-    : (highlightContactId ?? searchFocusId);
-
-  useEffect(() => {
-    if (searchFocusId == null || !prefs.searchQuery.trim()) return;
-    const key = findFamilleKeyForContact(searchFocusId, familleGroups);
-    if (key != null) {
-      setExpandedFamilleKey(key);
-      updatePrefs({ expandedFamilleKey: key });
-    }
-  }, [searchFocusId, prefs.searchQuery, familleGroups, updatePrefs]);
 
   useEffect(() => {
     if (loading || expandedFamilleKey == null) return;
@@ -287,6 +272,31 @@ export function Familles({ onNavigate }: FamillesProps) {
   const openMember = (contact: Contact) => {
     if (contact.id == null) return;
     void openContactSheet(contact.id);
+  };
+
+  const handleAddMemberClick = async (famille: FamilleGroup) => {
+    if (addMemberLoading) return;
+    if (famille.familleId != null) {
+      setShowAddMemberModal(true);
+      return;
+    }
+    setAddMemberLoading(true);
+    try {
+      const familleId = await promoteAutoFamilleToManual(famille);
+      const key = `manual:${familleId}`;
+      setExpandedFamilleKey(key);
+      updatePrefs({ expandedFamilleKey: key });
+      await loadData();
+      setShowAddMemberModal(true);
+      toast.success(
+        `Famille ${famille.nom} : les membres actuels sont conservés, vous pouvez en ajouter d'autres.`
+      );
+    } catch (error) {
+      console.error("Erreur conversion famille:", error);
+      toast.error("Impossible de préparer l'ajout de membre");
+    } finally {
+      setAddMemberLoading(false);
+    }
   };
 
   const handleRoleFamilleChange = async (contact: Contact, newRole: string) => {
@@ -437,7 +447,10 @@ export function Familles({ onNavigate }: FamillesProps) {
 
       <FamillesToolbar
         searchQuery={prefs.searchQuery}
-        onSearchChange={(searchQuery) => updatePrefs({ searchQuery })}
+        onSearchChange={(searchQuery) => {
+          updatePrefs({ searchQuery });
+          setHighlightContactId(null);
+        }}
         sortId={prefs.sortId}
         onSortChange={(sortId) => updatePrefs({ sortId })}
         statFilter={prefs.statFilter}
@@ -549,18 +562,17 @@ export function Familles({ onNavigate }: FamillesProps) {
                             <span className="normal-case ml-2">· Famille manuelle</span>
                           )}
                         </p>
-                        {famille.isManual && famille.familleId != null && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="gap-1.5"
-                            onClick={() => setShowAddMemberModal(true)}
-                          >
-                            <UserPlus className="h-4 w-4" />
-                            Ajouter un membre
-                          </Button>
-                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5"
+                          disabled={addMemberLoading}
+                          onClick={() => void handleAddMemberClick(famille)}
+                        >
+                          <UserPlus className="h-4 w-4" />
+                          Ajouter un membre
+                        </Button>
                       </div>
                       <FamilleMemberTree
                         famille={famille}
@@ -572,7 +584,7 @@ export function Familles({ onNavigate }: FamillesProps) {
                           requestExcludeFromFamille(c, famille)
                         }
                         highlightContactId={
-                          isExpanded ? (effectiveHighlightId ?? undefined) : undefined
+                          isExpanded ? (highlightContactId ?? undefined) : undefined
                         }
                         showTitle
                       />
@@ -596,14 +608,14 @@ export function Familles({ onNavigate }: FamillesProps) {
         }}
       />
 
-      {expandedFamille?.isManual && expandedFamille.familleId != null && (
+      {showAddMemberModal && expandedFamille?.familleId != null && (
         <FamilleAddMemberModal
           open={showAddMemberModal}
           onOpenChange={setShowAddMemberModal}
           famille={expandedFamille}
           existingMemberIds={expandedFamille.membres
-            .filter((m) => !m.isSpouse)
-            .map((m) => m.contact.id!)}
+            .map((m) => m.contact.id!)
+            .filter(Boolean)}
           onSuccess={() => void loadData()}
         />
       )}

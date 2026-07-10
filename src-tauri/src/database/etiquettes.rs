@@ -161,6 +161,9 @@ impl Database {
                AND COALESCE(email_suivi_ignore, 0) = 0",
             params![prevue, etiquette_id],
         )?;
+        if updated > 0 {
+            let _ = self.apply_pending_tache_actions_for_etiquette(etiquette_id)?;
+        }
         Ok(updated as u32)
     }
 
