@@ -99,7 +99,7 @@ export function ImportPreviewSection({
 }) {
   return (
     <section className={cn("space-y-3", className)}>
-      <h3 className="sticky top-0 z-10 border-b bg-background/95 py-2 text-sm font-semibold backdrop-blur-sm">
+      <h3 className="border-b pb-2 text-sm font-semibold">
         {title}
         <span className="ml-2 font-normal text-muted-foreground">({count})</span>
       </h3>

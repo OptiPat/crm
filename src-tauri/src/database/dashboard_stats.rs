@@ -195,7 +195,7 @@ impl super::Database {
         let nombre_biens_immobiliers: i64 = self.conn.query_row(
             &format!(
                 "SELECT COUNT(*) FROM investissements i
-             WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'JEANBRUN', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE', 'RP', 'LOCATIF', 'RS', 'SCI', 'COLOCATION', 'MONOLOCATION')
+             WHERE i.type_produit IN ('IMMOBILIER', 'PINEL', 'DENORMANDIE', 'JEANBRUN', 'BESSON', 'SCELLIER', 'ROBIEN', 'MEHAIGNERIE', 'PERISSOL', 'DUFLOT', 'BORLOO', 'MALRAUX', 'MONUMENT_HISTORIQUE', 'DEFICIT_FONCIER', 'LMNP', 'LMP', 'NUE_PROPRIETE', 'RESIDENCE_PRINCIPALE', 'LOCATIF_CLASSIQUE', 'RP', 'LOCATIF', 'RS', 'SCI', 'COLOCATION', 'MONOLOCATION')
                AND i.origine = 'MON_CONSEIL'
                AND {INVESTISSEMENT_ACTIF_ENCOURS_WHERE_I}
                AND ((i.contact_id IS NOT NULL AND EXISTS (SELECT 1 FROM contacts c WHERE c.id = i.contact_id))

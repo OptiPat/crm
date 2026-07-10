@@ -7,21 +7,49 @@ export function parseImportDate(value: unknown): string | undefined {
 
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     const d = new Date(
-      Date.UTC(value.getFullYear(), value.getMonth(), value.getDate())
+      Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())
     );
     return d.toISOString();
+  }
+
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const serial = Math.floor(value);
+    if (serial > 1 && serial < 100000) {
+      const jsDate = new Date((serial - 25569) * 86400 * 1000);
+      if (
+        !isNaN(jsDate.getTime()) &&
+        jsDate.getUTCFullYear() > 1900 &&
+        jsDate.getUTCFullYear() < 2100
+      ) {
+        const d = new Date(
+          Date.UTC(jsDate.getUTCFullYear(), jsDate.getUTCMonth(), jsDate.getUTCDate())
+        );
+        return d.toISOString();
+      }
+    }
   }
 
   const dateStr = String(value).trim();
   if (!dateStr) return undefined;
 
-  const isoDate = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoDate) {
-    const year = parseInt(isoDate[1]!, 10);
-    const month = parseInt(isoDate[2]!, 10);
-    const day = parseInt(isoDate[3]!, 10);
+  const isoDateOnly = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDateOnly) {
+    const year = parseInt(isoDateOnly[1]!, 10);
+    const month = parseInt(isoDateOnly[2]!, 10);
+    const day = parseInt(isoDateOnly[3]!, 10);
     const d = new Date(Date.UTC(year, month - 1, day));
     if (!isNaN(d.getTime())) return d.toISOString();
+  }
+
+  const isoDateTime = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s]/);
+  if (isoDateTime) {
+    const parsed = new Date(dateStr);
+    if (!isNaN(parsed.getTime())) {
+      const d = new Date(
+        Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate())
+      );
+      return d.toISOString();
+    }
   }
 
   const excelDate = parseFloat(dateStr.replace(",", "."));
@@ -32,9 +60,17 @@ export function parseImportDate(value: unknown): string | undefined {
     excelDate > 1 &&
     excelDate < 100000
   ) {
-    const jsDate = new Date((excelDate - 25569) * 86400 * 1000);
-    if (!isNaN(jsDate.getTime()) && jsDate.getFullYear() > 1900 && jsDate.getFullYear() < 2100) {
-      return jsDate.toISOString();
+    const serial = Math.floor(excelDate);
+    const jsDate = new Date((serial - 25569) * 86400 * 1000);
+    if (
+      !isNaN(jsDate.getTime()) &&
+      jsDate.getUTCFullYear() > 1900 &&
+      jsDate.getUTCFullYear() < 2100
+    ) {
+      const d = new Date(
+        Date.UTC(jsDate.getUTCFullYear(), jsDate.getUTCMonth(), jsDate.getUTCDate())
+      );
+      return d.toISOString();
     }
   }
 
@@ -56,7 +92,7 @@ export function parseImportDate(value: unknown): string | undefined {
   return undefined;
 }
 
-/** Affiche une ISO backend dans un `<input type="date">` (partie calendaire UTC). */
+/** Affiche une ISO backend dans un `<input type="date">` (jour calendaire UTC). */
 export function isoToDateInput(iso?: string): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -65,6 +101,13 @@ export function isoToDateInput(iso?: string): string {
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** `<input type="date">` → ISO UTC (minuit calendaire). */
+export function dateInputToIso(dateInput: string): string | undefined {
+  const trimmed = dateInput.trim();
+  if (!trimmed) return undefined;
+  return parseImportDate(trimmed);
 }
 
 /** Objet Date pour calculs (démembrement, etc.). */

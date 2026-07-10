@@ -17,11 +17,7 @@ function immoTypeLabel(type: string): string {
   if (type === "RESIDENCE_PRINCIPALE" || type === "RP") return "RP";
   if (type === "RESIDENCE_SECONDAIRE" || type === "RS") return "RS";
   if (type === "SCPI") return "SCPI";
-  if (type === "PINEL") return "Pinel";
-  if (type === "LMNP") return "LMNP";
-  if (type === "LMP") return "LMP";
-  if (type === "LOCATIF") return "Locatif";
-  return type;
+  return formatNomProduit(type);
 }
 
 export function RioPatrimoineOverview({ data }: RioPatrimoineOverviewProps) {

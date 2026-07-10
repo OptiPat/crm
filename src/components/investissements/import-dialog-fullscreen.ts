@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, type RefObject } from "react";
 import { parseImportDate } from "@/lib/contacts/parse-import-date";
 
 /** Plein écran pour les assistants d'import Excel (immobilier, placements). */
@@ -7,6 +8,21 @@ export const IMPORT_DIALOG_CONTENT_CLASS =
 export const IMPORT_DIALOG_HEADER_CLASS = "shrink-0 space-y-1.5 border-b px-6 py-4 text-left";
 
 export const IMPORT_DIALOG_BODY_CLASS = "min-h-0 flex-1 overflow-y-auto px-6 py-4";
+
+/** Remet le défilement en haut à l'ouverture de l'aperçu (évite focus footer / milieu de liste). */
+export function useImportDialogPreviewBodyScroll(
+  step: "pick" | "preview",
+  scrollKey: string | number | null
+): RefObject<HTMLDivElement | null> {
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (step !== "preview" || scrollKey == null) return;
+    const el = bodyRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+  }, [step, scrollKey]);
+  return bodyRef;
+}
 
 export const IMPORT_DIALOG_FOOTER_CLASS =
   "shrink-0 border-t px-6 py-4 sm:flex-row sm:justify-end";

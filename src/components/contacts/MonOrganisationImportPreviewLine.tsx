@@ -4,6 +4,8 @@ import {
   dateInputToIso,
   isoToDateInput,
   type MonOrganisationPreviewLine,
+  type MonOrganisationCrmDiffFieldHighlights,
+  type MonOrganisationCrmDiffHighlightField,
 } from "@/lib/contacts/mon-organisation-import";
 import {
   ImportPreviewField,
@@ -37,7 +39,15 @@ type MonOrganisationImportPreviewLineProps = {
   checked: boolean;
   onToggle: (checked: boolean) => void;
   onEdit: (patch: Partial<MonOrganisationPreviewLine>) => void;
+  crmDiffHighlights?: MonOrganisationCrmDiffFieldHighlights;
 };
+
+function crmDiffHighlight(
+  highlights: MonOrganisationCrmDiffFieldHighlights | undefined,
+  field: MonOrganisationCrmDiffHighlightField
+) {
+  return highlights?.[field];
+}
 
 export function MonOrganisationImportPreviewLine({
   line,
@@ -46,6 +56,7 @@ export function MonOrganisationImportPreviewLine({
   checked,
   onToggle,
   onEdit,
+  crmDiffHighlights,
 }: MonOrganisationImportPreviewLineProps) {
   return (
     <ImportPreviewLineCard
@@ -68,7 +79,7 @@ export function MonOrganisationImportPreviewLine({
       }
     >
       <div className={IMPORT_PREVIEW_FIELD_GRID_CLASS}>
-        <ImportPreviewField label="Nom">
+        <ImportPreviewField label="Nom" highlight={crmDiffHighlight(crmDiffHighlights, "nom")}>
           {editable ? (
             <Input
               className="h-8"
@@ -84,7 +95,7 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Prénom">
+        <ImportPreviewField label="Prénom" highlight={crmDiffHighlight(crmDiffHighlights, "prenom")}>
           {editable ? (
             <Input
               className="h-8"
@@ -100,7 +111,11 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Email" wide>
+        <ImportPreviewField
+          label="Email"
+          wide
+          highlight={crmDiffHighlight(crmDiffHighlights, "email")}
+        >
           {editable ? (
             <Input
               className="h-8"
@@ -116,7 +131,10 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Téléphone">
+        <ImportPreviewField
+          label="Téléphone"
+          highlight={crmDiffHighlight(crmDiffHighlights, "telephone")}
+        >
           {editable ? (
             <Input
               className="h-8"
@@ -132,7 +150,11 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Adresse" wide>
+        <ImportPreviewField
+          label="Adresse"
+          wide
+          highlight={crmDiffHighlight(crmDiffHighlights, "adresse")}
+        >
           {editable ? (
             <Input
               className="h-8"
@@ -148,7 +170,7 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="CP">
+        <ImportPreviewField label="CP" highlight={crmDiffHighlight(crmDiffHighlights, "codePostal")}>
           {editable ? (
             <Input
               className="h-8"
@@ -164,7 +186,7 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Ville">
+        <ImportPreviewField label="Ville" highlight={crmDiffHighlight(crmDiffHighlights, "ville")}>
           {editable ? (
             <Input
               className="h-8"
@@ -180,7 +202,7 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Pays">
+        <ImportPreviewField label="Pays" highlight={crmDiffHighlight(crmDiffHighlights, "pays")}>
           {editable ? (
             <Input
               className="h-8"
@@ -196,7 +218,10 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Inscription">
+        <ImportPreviewField
+          label="Inscription"
+          highlight={crmDiffHighlight(crmDiffHighlights, "dateInscriptionIso")}
+        >
           {editable ? (
             <Input
               type="date"
@@ -213,7 +238,10 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Dernier contact">
+        <ImportPreviewField
+          label="Dernier contact"
+          highlight={crmDiffHighlight(crmDiffHighlights, "dateDernierContactFilleulIso")}
+        >
           {editable ? (
             <Input
               type="date"
@@ -232,7 +260,11 @@ export function MonOrganisationImportPreviewLine({
           )}
         </ImportPreviewField>
 
-        <ImportPreviewField label="Parrain" wide>
+        <ImportPreviewField
+          label="Parrain"
+          wide
+          highlight={crmDiffHighlight(crmDiffHighlights, "parrainLabel")}
+        >
           {editable ? (
             <Input
               className="h-8"

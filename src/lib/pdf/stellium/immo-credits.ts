@@ -1,4 +1,6 @@
 import type { BienImmobilier } from "../types";
+import { mapDispositifFiscalToTypeProduit } from "@/lib/investissements/immo-commandes-import";
+import { STELLIUM_IMMO_CREDIT_PRODUCT_TYPES } from "./immo-scheme-label";
 
 export interface StelliumMortgageCredit {
   /** Libellé lu dans la désignation (« Primo MTP », « Pinel sète », « RP », …). */
@@ -10,8 +12,7 @@ export interface StelliumMortgageCredit {
   dateFinCredit?: string;
 }
 
-const PRODUCT_TYPES =
-  "RP|Classique|Pinel|LMNP|LMP|SCPI|Denormandie|Malraux|MH|Monument Historique|D[eé]ficit Foncier|DF";
+const PRODUCT_TYPES = STELLIUM_IMMO_CREDIT_PRODUCT_TYPES;
 
 function parseAmounts(text: string): {
   echeanceRaw: string;
@@ -262,9 +263,9 @@ function bienTypeMatchesProduct(bienType: string, productType: string): boolean 
   if (product === "rp" || product.includes("residence")) {
     return type === "RESIDENCE_PRINCIPALE" || type === "RP";
   }
-  if (product.includes("pinel")) return type === "PINEL";
   if (product.includes("classique")) return type === "LOCATIF" || type === "CLASSIQUE";
-  if (product.includes("lmnp")) return type === "LMNP";
+  const mapped = mapDispositifFiscalToTypeProduit(productType);
+  if (mapped && mapped !== "AUTRE") return type === mapped;
   return true;
 }
 
@@ -295,9 +296,10 @@ function findBienForCredit(
     if (rpBiens.length === 1) return rpBiens[0];
   }
 
-  if (normalizeNom(credit.productType).includes("pinel")) {
-    const pinelBiens = candidates.filter((b) => (b.type ?? "").toUpperCase() === "PINEL");
-    if (pinelBiens.length === 1) return pinelBiens[0];
+  const mappedType = mapDispositifFiscalToTypeProduit(credit.productType);
+  if (mappedType && mappedType !== "AUTRE") {
+    const typedBiens = candidates.filter((b) => (b.type ?? "").toUpperCase() === mappedType);
+    if (typedBiens.length === 1) return typedBiens[0];
   }
 
   return undefined;
@@ -330,7 +332,13 @@ function findBienByTypeKeyword(
     return matches.length === 1 ? matches[0] : undefined;
   };
   if (words.includes("rp")) return single(["RESIDENCE_PRINCIPALE", "RP"]);
-  if (words.includes("pinel")) return single(["PINEL"]);
+  for (const word of words) {
+    const mapped = mapDispositifFiscalToTypeProduit(word);
+    if (mapped && mapped !== "AUTRE") {
+      const match = single([mapped]);
+      if (match) return match;
+    }
+  }
   return undefined;
 }
 

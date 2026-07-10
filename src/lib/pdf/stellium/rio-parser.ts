@@ -13,10 +13,12 @@ import {
 } from "./rio-couple";
 import { enrichBiensImmobiliersWithCredits } from "./immo-credits";
 import {
-  isImmoActifCategory,
-  registerFinancialActifLine,
-  hasEpargneBancaireDetail,
-} from "./financial-contracts";
+  isStelliumImmoActifCategory,
+  isStelliumLocatifAggregateType,
+  mapStelliumImmoSchemeLabel,
+  STELLIUM_IMMO_ACTIF_PREFIXES,
+} from "./immo-scheme-label";
+import { registerFinancialActifLine, hasEpargneBancaireDetail } from "./financial-contracts";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
 import { applyFiscaliteToExtractedData, parseStelliumFiscalite } from "./fiscalite";
 import { parseEpargnePrecaution } from "./rio-epargne-precaution";
@@ -58,19 +60,7 @@ function extractRioDocumentDateFromFooter(text: string): string | undefined {
 }
 
 function mapImmoType(label: string): BienImmobilier["type"] {
-  const lower = label.toLowerCase();
-  if (lower.includes("résidence principale") || lower.includes("residence principale")) {
-    return "RESIDENCE_PRINCIPALE";
-  }
-  if (lower.includes("résidence secondaire") || lower.includes("residence secondaire")) {
-    return "RESIDENCE_SECONDAIRE";
-  }
-  if (lower.includes("pinel")) return "PINEL";
-  if (lower.includes("lmnp")) return "LMNP";
-  if (lower.includes("lmp")) return "LMP";
-  if (lower.includes("scpi")) return "SCPI";
-  if (lower.includes("classique") || lower.includes("locatif")) return "LOCATIF";
-  return "IMMOBILIER";
+  return mapStelliumImmoSchemeLabel(label);
 }
 
 interface ParsedActifLine {
@@ -95,7 +85,10 @@ function parseActifLines(patrimoineSection: string): ParsedActifLine[] {
   // pour éviter que le mot « classique » de « Livret classique » soit pris pour
   // de l'immobilier locatif « Classique ».
   const patternWithDash =
-    /(Résidence principale|Résidence secondaire|Assurance vie|Compte courant|Compte sur livret|Livret(?:\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|Classique|Pinel|LMNP|LMP|Denormandie|Malraux)\s*[-–—]\s*(.+?)\s+([\d\s,]+)\s*€/gi;
+    new RegExp(
+      `(Assurance vie|Compte courant|Compte sur livret|Livret(?:\\s+[A-Za-zÀ-ÿ]+)?|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES})\\s*[-–—]\\s*(.+?)\\s+([\\d\\s,]+)\\s*€`,
+      "gi",
+    );
 
   let match: RegExpExecArray | null;
   while ((match = patternWithDash.exec(actifsBlock)) !== null) {
@@ -141,7 +134,7 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
   const biens: BienImmobilier[] = [];
 
   for (const line of actifLines) {
-    if (isImmoActifCategory(line.category)) {
+    if (isStelliumImmoActifCategory(line.category)) {
       const type = mapImmoType(line.category);
       const baseId = `immo-${slugify(`${line.category} - ${line.nom}`)}`;
       let id = baseId;
@@ -161,7 +154,7 @@ function parsePatrimoine(patrimoineSection: string, data: ExtractedData): void {
         data.residencePrincipale = { valeur: line.montant };
       } else if (type === "RESIDENCE_SECONDAIRE") {
         data.residenceSecondaire = { valeur: line.montant };
-      } else if (type === "LOCATIF" || type === "PINEL" || type === "LMNP") {
+      } else if (isStelliumLocatifAggregateType(type)) {
         data.immobilierLocatif = {
           valeur: (data.immobilierLocatif?.valeur ?? 0) + line.montant,
         };

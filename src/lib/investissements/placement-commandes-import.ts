@@ -29,7 +29,8 @@ import {
   contactNameKeyCanonical,
   findContactByNameKeyWithSwap,
 } from "@/lib/contacts/name-match";
-import { parseImportDate } from "@/lib/contacts/parse-import-date";
+import { isoToDateInput, parseImportDate } from "@/lib/contacts/parse-import-date";
+import { unixToDateInput } from "@/lib/dates/calendar-date";
 import {
   buildFoyerNomFromMembers,
   findExistingFoyerByFamilleName,
@@ -1392,6 +1393,176 @@ export function summarizePlacementImportPreview(
   };
 }
 
+export function isPlacementImportLineSelectable(line: PlacementImportPreviewLine): boolean {
+  if (line.status === "ready" || line.status === "review") return true;
+  if (line.status === "duplicate_crm" && line.investissementId != null) return true;
+  return false;
+}
+
+export function defaultSelectedPlacementLineKeys(
+  lines: PlacementImportPreviewLine[]
+): Set<string> {
+  return new Set(lines.filter(isPlacementImportLineSelectable).map((l) => l.lineKey));
+}
+
+function isPlacementImportLineApplicable(line: PlacementImportPreviewLine): boolean {
+  if (!line.contactId || !line.dateEffetIso) return false;
+  return isPlacementImportLineSelectable(line);
+}
+
+export type PlacementImportPreviewSection = {
+  status: PlacementImportLineStatus;
+  label: string;
+  lines: PlacementImportPreviewLine[];
+};
+
+export const PLACEMENT_IMPORT_PREVIEW_SECTION_ORDER: ReadonlyArray<{
+  status: PlacementImportLineStatus;
+  label: string;
+}> = [
+  { status: "ready", label: "À importer" },
+  { status: "review", label: "À vérifier" },
+  { status: "duplicate_crm", label: "Déjà en base" },
+  { status: "contact_not_found", label: "Investisseur introuvable" },
+  { status: "co_contact_not_found", label: "Co-investisseur introuvable" },
+  { status: "duplicate_csv", label: "Doublon fichier" },
+  { status: "invalid", label: "Invalide" },
+  { status: "imported", label: "Importé" },
+];
+
+export function groupPlacementPreviewLines(
+  lines: PlacementImportPreviewLine[]
+): PlacementImportPreviewSection[] {
+  const byStatus = new Map<PlacementImportLineStatus, PlacementImportPreviewLine[]>();
+  for (const line of lines) {
+    const bucket = byStatus.get(line.status) ?? [];
+    bucket.push(line);
+    byStatus.set(line.status, bucket);
+  }
+  return PLACEMENT_IMPORT_PREVIEW_SECTION_ORDER.map((section) => ({
+    ...section,
+    lines: (byStatus.get(section.status) ?? []).sort((a, b) => a.rowIndex - b.rowIndex),
+  })).filter((section) => section.lines.length > 0);
+}
+
+export function formatPlacementProduitLabel(line: PlacementImportPreviewLine): string {
+  if (line.typeProduit === "ASSURANCE_VIE") return `${line.nomProduit} (AV)`;
+  if (line.typeProduit === "PER") return `${line.nomProduit} (PER)`;
+  if (line.typeProduit === "CONTRAT_CAPITALISATION") return `${line.nomProduit} (Cap.)`;
+  if (line.typeProduit === "SCPI") return `${line.nomProduit} (SCPI)`;
+  if (line.typeProduit === "FIP_FCPI") return `${line.nomProduit} (FIP)`;
+  if (line.typeProduit === "G3F") return `${line.nomProduit} (G3F)`;
+  return line.nomProduit;
+}
+
+export type PlacementCrmDiffHighlightField =
+  | "nomProduit"
+  | "typeProduit"
+  | "montantCentimes"
+  | "montantVpCentimes"
+  | "frequenceVp"
+  | "dateEffetIso"
+  | "dateSortieIso"
+  | "numeroContrat"
+  | "partenaireNom"
+  | "reinvestissementDividendes"
+  | "pourcentageReinvestissement";
+
+export type PlacementCrmDiffFieldHighlight = "fill" | "change";
+export type PlacementCrmDiffFieldHighlights = Partial<
+  Record<PlacementCrmDiffHighlightField, PlacementCrmDiffFieldHighlight>
+>;
+
+function parsePlacementReinvestPctFromNotes(notes?: string | null): number | undefined {
+  const match = notes?.match(/Réinv\.\s*(\d+)\s*%/);
+  if (!match?.[1]) return undefined;
+  const pct = Number.parseInt(match[1], 10);
+  return Number.isFinite(pct) ? pct : undefined;
+}
+
+function partenaireLabel(partenaires: Partenaire[], partenaireId?: number | null): string {
+  if (!partenaireId) return "";
+  return partenaires.find((p) => p.id === partenaireId)?.raison_sociale?.trim() ?? "";
+}
+
+function markPlacementCrmDiff(
+  highlights: PlacementCrmDiffFieldHighlights,
+  field: PlacementCrmDiffHighlightField,
+  fileValue: string | number | boolean | undefined | null,
+  crmValue: string | number | boolean | undefined | null
+): void {
+  if (fileValue == null || fileValue === "" || fileValue === false) return;
+  const incoming = String(fileValue).trim();
+  const prev = crmValue == null || crmValue === false ? "" : String(crmValue).trim();
+  if (!incoming || incoming === prev) return;
+  highlights[field] = prev ? "change" : "fill";
+}
+
+/** Écarts fichier vs investissement CRM (aperçu « Déjà en base »). */
+export function getPlacementCrmDiffFieldHighlights(
+  line: PlacementImportPreviewLine,
+  existing: Investissement,
+  partenaires: Partenaire[]
+): PlacementCrmDiffFieldHighlights {
+  const highlights: PlacementCrmDiffFieldHighlights = {};
+
+  markPlacementCrmDiff(highlights, "nomProduit", line.nomProduit, existing.nom_produit);
+  markPlacementCrmDiff(highlights, "typeProduit", line.typeProduit, existing.type_produit);
+  markPlacementCrmDiff(
+    highlights,
+    "montantCentimes",
+    line.montantCentimes,
+    existing.montant_initial ?? 0
+  );
+  markPlacementCrmDiff(highlights, "numeroContrat", line.numeroContrat, existing.numero_contrat);
+
+  const fileDate = isoToDateInput(line.dateEffetIso);
+  const crmDate = existing.date_souscription
+    ? unixToDateInput(existing.date_souscription)
+    : "";
+  if (fileDate && fileDate !== crmDate) {
+    highlights.dateEffetIso = crmDate ? "change" : "fill";
+  }
+
+  if (line.versementProgramme && line.montantVpCentimes != null) {
+    markPlacementCrmDiff(
+      highlights,
+      "montantVpCentimes",
+      line.montantVpCentimes,
+      existing.montant_versement_programme ?? 0
+    );
+    markPlacementCrmDiff(highlights, "frequenceVp", line.frequenceVp, existing.frequence_versement);
+  }
+
+  markPlacementCrmDiff(
+    highlights,
+    "partenaireNom",
+    line.partenaireNom,
+    partenaireLabel(partenaires, existing.partenaire_id)
+  );
+
+  if (line.reinvestissementDividendes) {
+    const crmPct = parsePlacementReinvestPctFromNotes(existing.notes);
+    const filePct = line.pourcentageReinvestissement ?? 100;
+    if (!existing.reinvestissement_dividendes) {
+      highlights.reinvestissementDividendes = "fill";
+    }
+    if (filePct !== (crmPct ?? 100)) {
+      highlights.pourcentageReinvestissement = crmPct != null ? "change" : "fill";
+    }
+  }
+
+  if (line.etatCommande === "CLOSE" && line.dateSortieIso) {
+    const fileClose = isoToDateInput(line.dateSortieIso);
+    const crmClose = existing.date_cloture ? unixToDateInput(existing.date_cloture) : "";
+    if (fileClose && fileClose !== crmClose) {
+      highlights.dateSortieIso = crmClose ? "change" : "fill";
+    }
+  }
+
+  return highlights;
+}
+
 async function ensureFoyerForCoInvestors(
   contact1: Contact,
   contact2: Contact,
@@ -1494,13 +1665,11 @@ export async function applyPlacementCommandeImportLine(
     partenairesCache?: Partenaire[];
   }
 ): Promise<ApplyPlacementImportResult> {
-  if (
-    (line.status !== "ready" && line.status !== "review") ||
-    !line.contactId ||
-    !line.dateEffetIso
-  ) {
+  if (!isPlacementImportLineApplicable(line)) {
     return { ok: false, reason: "invalid" };
   }
+
+  const wasEnrich = line.status === "duplicate_crm";
 
   try {
     const contacts = ctx?.contactsCache ?? (await getAllContacts());
@@ -1537,11 +1706,11 @@ export async function applyPlacementCommandeImportLine(
       partenaireId
     );
 
-    const { match: existing } = findExistingPlacementInvestissement(
-      investissements,
-      line,
-      { contactId, foyerId }
-    );
+    const existing =
+      wasEnrich && line.investissementId
+        ? investissements.find((i) => i.id === line.investissementId)
+        : findExistingPlacementInvestissement(investissements, line, { contactId, foyerId })
+            .match;
 
     let saved: Investissement;
     if (existing) {
@@ -1567,8 +1736,9 @@ export async function applyPlacementCommandeImportLine(
       line: {
         ...line,
         status: "imported",
-        statusMessage:
-          line.etatCommande === "CLOSE"
+        statusMessage: wasEnrich
+          ? "Enrichi"
+          : line.etatCommande === "CLOSE"
             ? "Importé et clôturé (sortie encours)"
             : existing
               ? "Investissement mis à jour"
@@ -1597,10 +1767,7 @@ export async function applyPlacementCommandesImport(
 
   for (let i = 0; i < updated.length; i++) {
     const line = updated[i]!;
-    if (
-      (line.status !== "ready" && line.status !== "review") ||
-      !selectedLineKeys.has(line.lineKey)
-    ) {
+    if (!isPlacementImportLineSelectable(line) || !selectedLineKeys.has(line.lineKey)) {
       continue;
     }
     const result = await applyPlacementCommandeImportLine(line, {

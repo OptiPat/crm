@@ -1,4 +1,5 @@
 import type { Investissement } from "@/lib/api/tauri-investissements";
+import { isImmobilierType } from "@/lib/investissements/patrimoine-tab-utils";
 import { getEffectiveEncoursCentimes } from "@/lib/investissements/investissement-encours";
 import { usesRioEncoursMontant } from "@/lib/documents/rio-investissement-extras";
 import { isImmobilierFinancingType } from "@/lib/investissements/investissement-immo-financing";
@@ -17,7 +18,7 @@ export interface RioExtractedInvestissement {
 }
 
 const COMPATIBLE_TYPES: Record<string, readonly string[]> = {
-  IMMOBILIER: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "RP", "RS", "LOCATIF", "RESIDENCE_PRINCIPALE", "RESIDENCE_SECONDAIRE", "CLASSIQUE"],
+  IMMOBILIER: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "DENORMANDIE", "JEANBRUN", "BESSON", "SCELLIER", "ROBIEN", "MEHAIGNERIE", "PERISSOL", "DUFLOT", "BORLOO", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "NUE_PROPRIETE", "LOCATIF_CLASSIQUE", "RP", "RS", "LOCATIF", "RESIDENCE_PRINCIPALE", "RESIDENCE_SECONDAIRE", "CLASSIQUE"],
   LOCATIF: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "LOCATIF", "CLASSIQUE"],
   CLASSIQUE: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "LOCATIF", "CLASSIQUE"],
   PINEL: ["IMMOBILIER", "LMNP", "LMP", "PINEL", "LOCATIF"],
@@ -108,9 +109,8 @@ export function referenceMontantEuro(inv: Investissement, typeForEncours = inv.t
 function immoFamily(type: string): ImmoFamily | null {
   if (type === "RP" || type === "RESIDENCE_PRINCIPALE") return "rp";
   if (type === "RS" || type === "RESIDENCE_SECONDAIRE") return "rs";
-  if (["LOCATIF", "LMNP", "LMP", "PINEL", "IMMOBILIER", "CLASSIQUE"].includes(type)) {
-    return "locatif";
-  }
+  if (type === "CLASSIQUE") return "locatif";
+  if (isImmobilierType(type)) return "locatif";
   return null;
 }
 

@@ -1,5 +1,6 @@
 import type { ExtractedData, RioCoupleOwnerHint } from "@/lib/pdf/types";
 import type { OrigineInvestissement } from "@/lib/api/tauri-investissements";
+import { IMMOBILIER_TYPES } from "@/lib/investissements/investissement-display";
 
 export interface PatrimoineExtractItem {
   id: string;
@@ -18,9 +19,8 @@ function mapImmoTypeToProduct(type: string): string {
   if (type === "SCPI") return "SCPI";
   if (type === "RESIDENCE_PRINCIPALE") return "RP";
   if (type === "RESIDENCE_SECONDAIRE") return "RS";
-  if (type === "PINEL") return "PINEL";
-  if (type === "LMNP") return "LMNP";
-  if (type === "LMP") return "LMP";
+  const normalized = type.toUpperCase().replace(/-/g, "_");
+  if ((IMMOBILIER_TYPES as readonly string[]).includes(normalized)) return normalized;
   if (type === "LOCATIF" || type === "CLASSIQUE") return "LOCATIF";
   return "IMMOBILIER";
 }

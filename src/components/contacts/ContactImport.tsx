@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { inferTypeProduitFromImportProduitLabel } from "@/lib/investissements/infer-type-produit-from-import-label";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -795,57 +796,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
                 try {
                   const produitStr = String(row.data.produit).trim();
                   
-                  // Déterminer le type de produit depuis le nom
-                  let typeProduit = "AUTRE";
-                  const produitUpper = produitStr.toUpperCase();
-                  
-                  if (produitUpper.includes('SCPI') && produitUpper.includes('DEMEMBR')) {
-                    typeProduit = "SCPI_DEMEMBREMENT";
-                  } else if (produitUpper.includes('SCPI')) {
-                    typeProduit = "SCPI";
-                  } else if (produitUpper.includes('AV') || produitUpper.includes('ASSURANCE') || produitUpper.includes('VIE')) {
-                    typeProduit = "ASSURANCE_VIE";
-                  } else if (produitUpper.includes('PER')) {
-                    typeProduit = "PER";
-                  } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
-                    typeProduit = "FCPR";
-                  } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
-                    typeProduit = "FIP_FCPI";
-                  } else if (produitUpper.includes('G3F')) {
-                    typeProduit = "G3F";
-                  } else if (produitUpper.includes('LMNP')) {
-                    typeProduit = "LMNP";
-                  } else if (produitUpper.includes('LMP')) {
-                    typeProduit = "LMP";
-                  } else if (produitUpper.includes('PINEL')) {
-                    typeProduit = "PINEL";
-                  } else if (produitUpper.includes('MALRAUX')) {
-                    typeProduit = "MALRAUX";
-                  } else if (produitUpper.includes('DENORMANDIE')) {
-                    typeProduit = "DENORMANDIE";
-                  } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
-                    typeProduit = "RP";
-                  } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
-                    typeProduit = "RS";
-                  } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
-                    typeProduit = "DEFICIT_FONCIER";
-                  } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
-                    typeProduit = "MONUMENT_HISTORIQUE";
-                  } else if (produitUpper.includes('LOCATIF')) {
-                    typeProduit = "LOCATIF";
-                  } else if (produitUpper.includes('COLOCATION')) {
-                    typeProduit = "COLOCATION";
-                  } else if (produitUpper.includes('MONOLOCATION')) {
-                    typeProduit = "MONOLOCATION";
-                  } else if (produitUpper.includes('SCI')) {
-                    typeProduit = "SCI";
-                  } else if (
-                    produitUpper.includes('IMMOBILIER') ||
-                    produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
-                    produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
-                  ) {
-                    typeProduit = "IMMOBILIER";
-                  }
+                  let typeProduit = inferTypeProduitFromImportProduitLabel(produitStr);
                   
                   // Trouver ou créer le partenaire (avec fuzzy matching)
                   let partenaireId = null;
@@ -1523,56 +1474,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
             // Créer l'investissement pour ce contact existant (avec TOUS les champs)
             if (row.data.produit) {
               const produitStr = String(row.data.produit).trim();
-              let typeProduit = "AUTRE";
-              const produitUpper = produitStr.toUpperCase();
-              
-              if (produitUpper.includes('SCPI') && produitUpper.includes('DEMEMBR')) {
-                typeProduit = "SCPI_DEMEMBREMENT";
-              } else if (produitUpper.includes('SCPI')) {
-                typeProduit = "SCPI";
-              } else if (produitUpper.includes('AV') || produitUpper.includes('ASSURANCE') || produitUpper.includes('VIE')) {
-                typeProduit = "ASSURANCE_VIE";
-              } else if (produitUpper.includes('PER')) {
-                typeProduit = "PER";
-              } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
-                typeProduit = "FCPR";
-              } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
-                typeProduit = "FIP_FCPI";
-              } else if (produitUpper.includes('G3F')) {
-                typeProduit = "G3F";
-              } else if (produitUpper.includes('LMNP')) {
-                typeProduit = "LMNP";
-              } else if (produitUpper.includes('LMP')) {
-                typeProduit = "LMP";
-              } else if (produitUpper.includes('PINEL')) {
-                typeProduit = "PINEL";
-              } else if (produitUpper.includes('MALRAUX')) {
-                typeProduit = "MALRAUX";
-              } else if (produitUpper.includes('DENORMANDIE')) {
-                typeProduit = "DENORMANDIE";
-              } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
-                typeProduit = "RP";
-              } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
-                typeProduit = "RS";
-              } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
-                typeProduit = "DEFICIT_FONCIER";
-              } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
-                typeProduit = "MONUMENT_HISTORIQUE";
-              } else if (produitUpper.includes('LOCATIF')) {
-                typeProduit = "LOCATIF";
-              } else if (produitUpper.includes('COLOCATION')) {
-                typeProduit = "COLOCATION";
-              } else if (produitUpper.includes('MONOLOCATION')) {
-                typeProduit = "MONOLOCATION";
-              } else if (produitUpper.includes('SCI')) {
-                typeProduit = "SCI";
-              } else if (
-                produitUpper.includes('IMMOBILIER') ||
-                produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
-                produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
-              ) {
-                typeProduit = "IMMOBILIER";
-              }
+              let typeProduit = inferTypeProduitFromImportProduitLabel(produitStr);
               
               const nomProduit = row.data.nom_produit 
                 ? String(row.data.nom_produit).trim() 
@@ -1778,57 +1680,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
           try {
             const produitStr = String(row.data.produit).trim();
             
-            // Déterminer le type de produit depuis le nom
-            let typeProduit = "AUTRE";
-            const produitUpper = produitStr.toUpperCase();
-            
-            if (produitUpper.includes('SCPI') && produitUpper.includes('DEMEMBR')) {
-              typeProduit = "SCPI_DEMEMBREMENT";
-            } else if (produitUpper.includes('SCPI')) {
-              typeProduit = "SCPI";
-            } else if (produitUpper.includes('AV') || produitUpper.includes('ASSURANCE') || produitUpper.includes('VIE')) {
-              typeProduit = "ASSURANCE_VIE";
-            } else if (produitUpper.includes('PER')) {
-              typeProduit = "PER";
-            } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
-              typeProduit = "FCPR";
-            } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
-              typeProduit = "FIP_FCPI";
-            } else if (produitUpper.includes('G3F')) {
-              typeProduit = "G3F";
-            } else if (produitUpper.includes('LMNP')) {
-              typeProduit = "LMNP";
-            } else if (produitUpper.includes('LMP')) {
-              typeProduit = "LMP";
-            } else if (produitUpper.includes('PINEL')) {
-              typeProduit = "PINEL";
-            } else if (produitUpper.includes('MALRAUX')) {
-              typeProduit = "MALRAUX";
-            } else if (produitUpper.includes('DENORMANDIE')) {
-              typeProduit = "DENORMANDIE";
-            } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
-              typeProduit = "RP";
-            } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
-              typeProduit = "RS";
-            } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
-              typeProduit = "DEFICIT_FONCIER";
-            } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
-              typeProduit = "MONUMENT_HISTORIQUE";
-            } else if (produitUpper.includes('LOCATIF')) {
-              typeProduit = "LOCATIF";
-            } else if (produitUpper.includes('COLOCATION')) {
-              typeProduit = "COLOCATION";
-            } else if (produitUpper.includes('MONOLOCATION')) {
-              typeProduit = "MONOLOCATION";
-            } else if (produitUpper.includes('SCI')) {
-              typeProduit = "SCI";
-            } else if (
-              produitUpper.includes('IMMOBILIER') ||
-              produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
-              produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
-            ) {
-              typeProduit = "IMMOBILIER";
-            }
+            let typeProduit = inferTypeProduitFromImportProduitLabel(produitStr);
             
             // Trouver ou créer le partenaire (avec fuzzy matching)
             let partenaireId = null;
@@ -2028,57 +1880,7 @@ export function ContactImport({ open, onOpenChange, onSuccess }: ContactImportPr
         
         const produitStr = String(row.data.produit).trim();
         
-        // Déterminer le type de produit
-        let typeProduit = "AUTRE";
-        const produitUpper = produitStr.toUpperCase();
-        
-        if (produitUpper.includes('SCPI') && produitUpper.includes('DEMEMBR')) {
-          typeProduit = "SCPI_DEMEMBREMENT";
-        } else if (produitUpper.includes('SCPI')) {
-          typeProduit = "SCPI";
-        } else if (produitUpper.includes('AV') || produitUpper.includes('ASSURANCE') || produitUpper.includes('VIE')) {
-          typeProduit = "ASSURANCE_VIE";
-        } else if (produitUpper.includes('PER')) {
-          typeProduit = "PER";
-        } else if (produitUpper.includes('FCPR') || produitUpper.includes('FPCI')) {
-          typeProduit = "FCPR";
-        } else if (produitUpper.includes('FIP') || produitUpper.includes('FCPI')) {
-          typeProduit = "FIP_FCPI";
-        } else if (produitUpper.includes('G3F')) {
-          typeProduit = "G3F";
-        } else if (produitUpper.includes('LMNP')) {
-          typeProduit = "LMNP";
-        } else if (produitUpper.includes('LMP')) {
-          typeProduit = "LMP";
-        } else if (produitUpper.includes('PINEL')) {
-          typeProduit = "PINEL";
-        } else if (produitUpper.includes('MALRAUX')) {
-          typeProduit = "MALRAUX";
-        } else if (produitUpper.includes('DENORMANDIE')) {
-          typeProduit = "DENORMANDIE";
-        } else if (produitUpper === 'RP' || produitUpper.includes('RESIDENCE PRINCIPALE')) {
-          typeProduit = "RP";
-        } else if (produitUpper === 'RS' || produitUpper.includes('RESIDENCE SECONDAIRE')) {
-          typeProduit = "RS";
-        } else if (produitUpper === 'DF' || produitUpper.includes('DEFICIT FONCIER')) {
-          typeProduit = "DEFICIT_FONCIER";
-        } else if (produitUpper === 'MH' || produitUpper.includes('MONUMENT HISTORIQUE')) {
-          typeProduit = "MONUMENT_HISTORIQUE";
-        } else if (produitUpper.includes('LOCATIF')) {
-          typeProduit = "LOCATIF";
-        } else if (produitUpper.includes('COLOCATION')) {
-          typeProduit = "COLOCATION";
-        } else if (produitUpper.includes('MONOLOCATION')) {
-          typeProduit = "MONOLOCATION";
-        } else if (produitUpper.includes('SCI')) {
-          typeProduit = "SCI";
-        } else if (
-          produitUpper.includes('IMMOBILIER') ||
-          produitUpper.includes('VILLA') || produitUpper.includes('APPARTEMENT') || 
-          produitUpper.includes('MAISON') || produitUpper.includes('IMMEUBLE')
-        ) {
-          typeProduit = "IMMOBILIER";
-        }
+        let typeProduit = inferTypeProduitFromImportProduitLabel(produitStr);
         
         // Trouver ou créer le partenaire
         let partenaireId = null;

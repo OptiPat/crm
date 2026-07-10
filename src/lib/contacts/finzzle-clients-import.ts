@@ -17,6 +17,7 @@ import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import {
   contactToUpdatePayload,
   normalizeImportCivilite,
+  normalizeImportPlaceName,
   normalizeImportStatut,
   normalizeImportTelephone,
   normalizeImportTmi,
@@ -168,8 +169,8 @@ export function getFinzzleEnrichFieldHighlights(
     existing.code_postal,
     line.codePostal
   );
-  markEnrichHighlight(highlights, "ville", payload.ville, existing.ville, line.ville);
-  markEnrichHighlight(highlights, "pays", payload.pays, existing.pays, line.pays);
+  markEnrichHighlight(highlights, "ville", payload.ville, existing.ville, line.ville, normalizeImportPlaceName);
+  markEnrichHighlight(highlights, "pays", payload.pays, existing.pays, line.pays, normalizeImportPlaceName);
   markEnrichHighlight(
     highlights,
     "sourceLead",
@@ -505,8 +506,8 @@ export function parseFinzzleClientRows(rawRows: Record<string, unknown>[]): Finz
       telephone: normalizeImportTelephone(keys.telephone ? raw[keys.telephone] : ""),
       adresse: cellStr(keys.adresse ? raw[keys.adresse] : ""),
       codePostal: cellStr(keys.codePostal ? raw[keys.codePostal] : ""),
-      ville: cellStr(keys.ville ? raw[keys.ville] : ""),
-      pays: cellStr(keys.pays ? raw[keys.pays] : ""),
+      ville: normalizeImportPlaceName(keys.ville ? raw[keys.ville] : ""),
+      pays: normalizeImportPlaceName(keys.pays ? raw[keys.pays] : ""),
       dateNaissanceIso: parseFinzzleClientDate(
         keys.dateNaissance ? raw[keys.dateNaissance] : undefined
       ),
@@ -683,6 +684,12 @@ export function patchFinzzleClientPreviewLines(
     }
     if (patch.tmi !== undefined) {
       next.tmi = normalizeImportTmi(patch.tmi) ?? patch.tmi.trim();
+    }
+    if (patch.ville !== undefined) {
+      next.ville = normalizeImportPlaceName(patch.ville);
+    }
+    if (patch.pays !== undefined) {
+      next.pays = normalizeImportPlaceName(patch.pays);
     }
     return next;
   });

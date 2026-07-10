@@ -10,29 +10,28 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { ImmoImportPreviewLine as ImmoImportPreviewLineCard } from "@/components/investissements/ImmoImportPreviewLine";
+import { IMPORT_PREVIEW_LIST_CLASS, ImportPreviewSection } from "@/components/contacts/import-preview-ui";
 import { FileUp, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/api/tauri-contacts";
 import { getAllContacts } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
-import { isoToDateInput } from "@/lib/contacts/parse-import-date";
-import { formatEuroCentimes } from "@/lib/investissements/investissement-display";
 import {
   applyImmoCommandesImport,
   buildImmoCommandesImportPreview,
   buildImmoPreviewSeenInFileFromLines,
-  formatImmoEuroField,
+  defaultSelectedImmoLineKeys,
+  getImmoCrmDiffFieldHighlights,
+  groupImmoPreviewLines,
   IMMO_COMMANDES_SHEET_NAME,
-  IMMO_IMPORT_TYPE_PRODUIT_OPTIONS,
+  isImmoImportLineSelectable,
   parseImmoCommandeRows,
-  parseImmoEuroFieldCentimes,
   patchImmoPreviewLines,
   pickImmoCommandesSheetName,
   reassessImmoPreviewLine,
+  resolveImmoPreviewExistingInvestissement,
   summarizeImmoImportPreview,
   type ImmoImportPreviewLine,
 } from "@/lib/investissements/immo-commandes-import";
@@ -42,41 +41,24 @@ import {
   IMPORT_DIALOG_FOOTER_CLASS,
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
-  commitImportDateFieldChange,
+  useImportDialogPreviewBodyScroll,
 } from "@/components/investissements/import-dialog-fullscreen";
 
 type Step = "pick" | "preview";
 
-const STATUS_LABEL: Record<ImmoImportPreviewLine["status"], string> = {
-  ready: "À importer",
-  invalid: "Invalide",
-  contact_not_found: "Investisseur introuvable",
-  co_contact_not_found: "Co-investisseur introuvable",
-  duplicate_crm: "Déjà en base",
-  duplicate_csv: "Doublon fichier",
-  imported: "Importé",
-};
-
-const STATUS_VARIANT: Record<
-  ImmoImportPreviewLine["status"],
-  "default" | "secondary" | "destructive" | "outline"
-> = {
-  ready: "default",
-  invalid: "destructive",
-  contact_not_found: "destructive",
-  co_contact_not_found: "destructive",
-  duplicate_crm: "secondary",
-  duplicate_csv: "destructive",
-  imported: "secondary",
-};
-
-const SELECTABLE_STATUSES = new Set<ImmoImportPreviewLine["status"]>(["ready"]);
+function syncImmoSelection(prev: Set<string>, lines: ImmoImportPreviewLine[]): Set<string> {
+  const next = new Set(prev);
+  for (const line of lines) {
+    if (!isImmoImportLineSelectable(line)) next.delete(line.lineKey);
+  }
+  return next;
+}
 
 function readImmoWorkbookRows(
   file: File
 ): Promise<{ rows: Record<string, unknown>[]; missingSheet: boolean }> {
   return file.arrayBuffer().then((data) => {
-    const workbook = XLSX.read(data, { type: "array", cellDates: true });
+    const workbook = XLSX.read(data, { type: "array", cellDates: false });
     const sheetName = pickImmoCommandesSheetName(workbook.SheetNames);
     if (!sheetName) return { rows: [] as Record<string, unknown>[], missingSheet: true };
     const normalized = workbook.SheetNames.map((n) => n.trim().toLowerCase());
@@ -84,7 +66,7 @@ function readImmoWorkbookRows(
     const missingSheet = !normalized.some((n) => n === expected);
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
       workbook.Sheets[sheetName]!,
-      { defval: "" }
+      { defval: "", raw: false }
     );
     return { rows, missingSheet };
   });
@@ -109,8 +91,20 @@ export function ImmoCommandesImportDialog({
   const [busy, setBusy] = useState(false);
   const linesRef = useRef(lines);
   linesRef.current = lines;
+  const previewBodyRef = useImportDialogPreviewBodyScroll(
+    step,
+    step === "preview" ? fileName : null
+  );
 
   const summary = useMemo(() => summarizeImmoImportPreview(lines), [lines]);
+  const groupedLines = useMemo(() => groupImmoPreviewLines(lines), [lines]);
+  const hasCrmDiffPreview = useMemo(
+    () =>
+      lines.some((line) =>
+        resolveImmoPreviewExistingInvestissement(line, investissements, contacts)
+      ),
+    [lines, investissements, contacts]
+  );
 
   const reset = useCallback(() => {
     setStep("pick");
@@ -128,32 +122,22 @@ export function ImmoCommandesImportDialog({
     onOpenChange(next);
   };
 
-  const applyPreview = (preview: ImmoImportPreviewLine[]) => {
-    setLines(preview);
-    setSelected(new Set(preview.filter((l) => l.status === "ready").map((l) => l.lineKey)));
-  };
-
-  const updateLine = useCallback(
-    (
-      lineKey: string,
-      patch: Parameters<typeof patchImmoPreviewLines>[2]
-    ) => {
-      setLines((prev) => {
-        const next = patchImmoPreviewLines(prev, lineKey, patch, contacts, investissements);
-        linesRef.current = next;
-        return next;
-      });
-    },
-    [contacts, investissements]
-  );
-
   const commitLineEdit = useCallback(
     (lineKey: string, patch: Parameters<typeof patchImmoPreviewLines>[2]) => {
       flushSync(() => {
-        updateLine(lineKey, patch);
+        const next = patchImmoPreviewLines(
+          linesRef.current,
+          lineKey,
+          patch,
+          contacts,
+          investissements
+        );
+        linesRef.current = next;
+        setLines(next);
+        setSelected((selectedPrev) => syncImmoSelection(selectedPrev, next));
       });
     },
-    [updateLine]
+    [contacts, investissements]
   );
 
   const handleFile = async (file: File) => {
@@ -191,7 +175,8 @@ export function ImmoCommandesImportDialog({
       setFileName(file.name);
       setContacts(loadedContacts);
       setInvestissements(loadedInvestissements);
-      applyPreview(preview);
+      setLines(preview);
+      setSelected(defaultSelectedImmoLineKeys(preview));
       setStep("preview");
     } catch (error) {
       toast.error("Lecture impossible : " + String(error));
@@ -236,9 +221,7 @@ export function ImmoCommandesImportDialog({
         );
         linesRef.current = refreshed;
         setLines(refreshed);
-        setSelected(
-          new Set(refreshed.filter((l) => l.status === "ready").map((l) => l.lineKey))
-        );
+        setSelected(defaultSelectedImmoLineKeys(refreshed));
         toast.success(
           `${applied} investissement(s) importé(s)${failed ? `, ${failed} échec(s)` : ""}`
         );
@@ -253,7 +236,10 @@ export function ImmoCommandesImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={IMPORT_DIALOG_CONTENT_CLASS}>
+      <DialogContent
+        className={IMPORT_DIALOG_CONTENT_CLASS}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogHeader className={IMPORT_DIALOG_HEADER_CLASS}>
           <DialogTitle>Import commandes immobilier</DialogTitle>
           <DialogDescription>
@@ -263,7 +249,7 @@ export function ImmoCommandesImportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className={IMPORT_DIALOG_BODY_CLASS}>
+        <div ref={previewBodyRef} className={IMPORT_DIALOG_BODY_CLASS}>
           {step === "pick" && (
             <div className="flex h-full min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed">
               <Upload className="h-10 w-10 text-muted-foreground" />
@@ -301,175 +287,55 @@ export function ImmoCommandesImportDialog({
           {step === "preview" && (
             <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                {fileName} — {summary.ready} à importer, {summary.contactNotFound}{" "}
+                {fileName} — {summary.ready + summary.duplicateCrm} importable(s) (
+                {summary.duplicateCrm} déjà en base), {summary.contactNotFound}{" "}
                 investisseur(s) introuvable(s), {summary.coContactNotFound} co-investisseur(s)
-                manquant(s), {summary.duplicateCrm} déjà en base
+                manquant(s)
               </p>
-              <div className="border rounded-md overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="p-2 w-8" />
-                      <th className="p-2 text-left whitespace-nowrap">Ligne</th>
-                      <th className="p-2 text-left whitespace-nowrap">Contact</th>
-                      <th className="p-2 text-left whitespace-nowrap">Type</th>
-                      <th className="p-2 text-left whitespace-nowrap">Produit</th>
-                      <th className="p-2 text-right whitespace-nowrap">Montant</th>
-                      <th className="p-2 text-left whitespace-nowrap">Date acte</th>
-                      <th className="p-2 text-left whitespace-nowrap">Partenaire</th>
-                      <th className="p-2 text-left whitespace-nowrap">Notes</th>
-                      <th className="p-2 text-left whitespace-nowrap">Statut</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lines.map((line) => {
-                      const selectable = SELECTABLE_STATUSES.has(line.status);
-                      const editable = line.status !== "imported";
+              {hasCrmDiffPreview ? (
+                <p className="text-xs text-muted-foreground">
+                  <span className="inline-block rounded bg-emerald-50 px-1 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:ring-emerald-800">
+                    Vert
+                  </span>{" "}
+                  = absent en CRM ·{" "}
+                  <span className="inline-block rounded bg-amber-50 px-1 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:ring-amber-800">
+                    Ambre
+                  </span>{" "}
+                  = valeur différente de l&apos;investissement CRM
+                </p>
+              ) : null}
+              <div className={IMPORT_PREVIEW_LIST_CLASS}>
+                {groupedLines.map((section) => (
+                  <ImportPreviewSection
+                    key={section.status}
+                    title={section.label}
+                    count={section.lines.length}
+                  >
+                    {section.lines.map((line) => {
+                      const existing = resolveImmoPreviewExistingInvestissement(
+                        line,
+                        investissements,
+                        contacts
+                      );
                       return (
-                        <tr key={line.lineKey} className="border-b last:border-0 align-top">
-                          <td className="p-2">
-                            {selectable && (
-                              <Checkbox
-                                checked={selected.has(line.lineKey)}
-                                onCheckedChange={(c) => toggleLine(line.lineKey, c === true)}
-                              />
-                            )}
-                          </td>
-                          <td className="p-2 text-muted-foreground">{line.rowIndex}</td>
-                          <td className="p-2 whitespace-nowrap">
-                            {line.contactLabel}
-                            {line.coContactLabel ? (
-                              <span className="text-muted-foreground">
-                                {" "}
-                                + {line.coContactLabel}
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <select
-                                className="h-8 min-w-[120px] rounded-md border border-input bg-background px-2 text-xs"
-                                value={line.typeProduit}
-                                onChange={(e) => {
-                                  updateLine(line.lineKey, { typeProduit: e.target.value });
-                                }}
-                              >
-                                {!IMMO_IMPORT_TYPE_PRODUIT_OPTIONS.some(
-                                  (o) => o.value === line.typeProduit
-                                ) && (
-                                  <option value={line.typeProduit}>{line.typeProduit}</option>
-                                )}
-                                {IMMO_IMPORT_TYPE_PRODUIT_OPTIONS.map((opt) => (
-                                  <option key={opt.value} value={opt.value}>
-                                    {opt.label}
-                                  </option>
-                                ))}
-                              </select>
-                            ) : (
-                              line.typeProduit
-                            )}
-                          </td>
-                          <td className="p-2 max-w-[200px]">
-                            {editable ? (
-                              <Input
-                                key={`${line.lineKey}-produit-${line.nomProduit}`}
-                                className="h-8 min-w-[160px]"
-                                defaultValue={line.nomProduit}
-                                onBlur={(e) => {
-                                  const value = e.target.value.trim();
-                                  if (!value || value === line.nomProduit) return;
-                                  commitLineEdit(line.lineKey, { nomProduit: value });
-                                }}
-                              />
-                            ) : (
-                              line.nomProduit
-                            )}
-                          </td>
-                          <td className="p-2 text-right">
-                            {editable ? (
-                              <Input
-                                key={`${line.lineKey}-montant-${line.montantCentimes}`}
-                                className="h-8 w-24 text-right ml-auto"
-                                defaultValue={formatImmoEuroField(line.montantCentimes)}
-                                onBlur={(e) => {
-                                  const cents = parseImmoEuroFieldCentimes(e.target.value);
-                                  if (cents == null) return;
-                                  commitLineEdit(line.lineKey, { montantCentimes: cents });
-                                }}
-                              />
-                            ) : (
-                              formatEuroCentimes(line.montantCentimes)
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                key={`${line.lineKey}-date`}
-                                className="h-8 w-36"
-                                type="date"
-                                value={isoToDateInput(line.dateActeIso)}
-                                onChange={(e) => {
-                                  const next = commitImportDateFieldChange(
-                                    e.target.value,
-                                    line.dateActeIso
-                                  );
-                                  if (next === null) return;
-                                  commitLineEdit(line.lineKey, { dateActeIso: next });
-                                }}
-                              />
-                            ) : (
-                              <span className="text-muted-foreground whitespace-nowrap">
-                                {line.dateActeIso ? isoToDateInput(line.dateActeIso) : "—"}
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-2">
-                            {editable ? (
-                              <Input
-                                key={`${line.lineKey}-partenaire-${line.partenaireNom}`}
-                                className="h-8 min-w-[140px]"
-                                defaultValue={line.partenaireNom}
-                                placeholder="Promoteur…"
-                                onBlur={(e) => {
-                                  const value = e.target.value.trim();
-                                  if (value === line.partenaireNom) return;
-                                  commitLineEdit(line.lineKey, { partenaireNom: value });
-                                }}
-                              />
-                            ) : (
-                              line.partenaireNom || "—"
-                            )}
-                          </td>
-                          <td className="p-2 max-w-[180px]">
-                            {editable ? (
-                              <Input
-                                key={`${line.lineKey}-notes-${line.notes ?? "x"}`}
-                                className="h-8 min-w-[140px]"
-                                defaultValue={line.notes ?? ""}
-                                placeholder="Lot, état…"
-                                onBlur={(e) => {
-                                  const value = e.target.value.trim();
-                                  if (value === (line.notes ?? "")) return;
-                                  commitLineEdit(line.lineKey, { notes: value || undefined });
-                                }}
-                              />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">{line.notes ?? "—"}</span>
-                            )}
-                          </td>
-                          <td className="p-2">
-                            <Badge variant={STATUS_VARIANT[line.status]}>
-                              {STATUS_LABEL[line.status]}
-                            </Badge>
-                            <p className="text-xs text-muted-foreground mt-0.5 max-w-[180px]">
-                              {line.statusMessage}
-                            </p>
-                          </td>
-                        </tr>
+                        <ImmoImportPreviewLineCard
+                          key={line.lineKey}
+                          line={line}
+                          editable={line.status !== "imported"}
+                          selectable={isImmoImportLineSelectable(line)}
+                          checked={selected.has(line.lineKey)}
+                          onToggle={(c) => toggleLine(line.lineKey, c)}
+                          onPatch={(patch) => commitLineEdit(line.lineKey, patch)}
+                          crmDiffHighlights={
+                            existing
+                              ? getImmoCrmDiffFieldHighlights(line, existing)
+                              : undefined
+                          }
+                        />
                       );
                     })}
-                  </tbody>
-                </table>
+                  </ImportPreviewSection>
+                ))}
               </div>
             </div>
           )}
@@ -478,13 +344,10 @@ export function ImmoCommandesImportDialog({
         <DialogFooter className={IMPORT_DIALOG_FOOTER_CLASS}>
           {step === "preview" && (
             <>
-              <Button variant="outline" onClick={() => setStep("pick")} disabled={busy}>
-                Autre fichier
+              <Button variant="outline" onClick={() => reset()} disabled={busy}>
+                Changer de fichier
               </Button>
-              <Button
-                onClick={() => void handleApply()}
-                disabled={busy || selected.size === 0}
-              >
+              <Button onClick={() => void handleApply()} disabled={busy}>
                 {busy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                 Importer ({selected.size})
               </Button>

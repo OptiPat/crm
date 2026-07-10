@@ -598,6 +598,22 @@ export function normalizeImportTmi(value: unknown): string | undefined {
   return `${display} %`;
 }
 
+/** Ville / pays import : première lettre de chaque mot en majuscule, reste en minuscule. */
+export function normalizeImportPlaceName(value: unknown): string {
+  const trimmed = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!trimmed) return "";
+  return trimmed
+    .split(/(\s|-)/)
+    .map((part) => {
+      if (part === " " || part === "-") return part;
+      const lower = part.toLocaleLowerCase("fr-FR");
+      return lower.charAt(0).toLocaleUpperCase("fr-FR") + lower.slice(1);
+    })
+    .join("");
+}
+
 /**
  * Catégories client/filleul pour l'import Excel général (colonne « Prospects Filleuls »).
  * Si `explicitStatut` est fourni et reconnu (colonne « Statut » mappée), il prime sur

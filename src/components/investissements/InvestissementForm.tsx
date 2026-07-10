@@ -52,6 +52,13 @@ const KNOWN_TYPE_PRODUITS = new Set<string>([
   "PINEL",
   "DENORMANDIE",
   "JEANBRUN",
+  "BESSON",
+  "SCELLIER",
+  "ROBIEN",
+  "MEHAIGNERIE",
+  "PERISSOL",
+  "DUFLOT",
+  "BORLOO",
   "MALRAUX",
   "MONUMENT_HISTORIQUE",
   "DEFICIT_FONCIER",
@@ -897,6 +904,13 @@ export function InvestissementForm({
                   <SelectItem value="PINEL">Pinel</SelectItem>
                   <SelectItem value="DENORMANDIE">Denormandie</SelectItem>
                   <SelectItem value="JEANBRUN">Jeanbrun</SelectItem>
+                  <SelectItem value="BESSON">Besson</SelectItem>
+                  <SelectItem value="SCELLIER">Scellier</SelectItem>
+                  <SelectItem value="ROBIEN">Robien</SelectItem>
+                  <SelectItem value="MEHAIGNERIE">Méhaignerie</SelectItem>
+                  <SelectItem value="PERISSOL">Périssol</SelectItem>
+                  <SelectItem value="DUFLOT">Duflot</SelectItem>
+                  <SelectItem value="BORLOO">Borloo</SelectItem>
                   <SelectItem value="MALRAUX">Malraux</SelectItem>
                   <SelectItem value="MONUMENT_HISTORIQUE">Monument Historique</SelectItem>
                   <SelectItem value="DEFICIT_FONCIER">Déficit Foncier</SelectItem>

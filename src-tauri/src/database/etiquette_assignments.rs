@@ -385,7 +385,7 @@ impl Database {
             description: Some("Fin de prêt immobilier/SCPI dans moins d'un an".to_string()),
             priorite: Some(80),
             auto_condition_type: Some("DATE_APPROCHE_INVESTISSEMENT".to_string()),
-            auto_condition_config: Some(r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "JEANBRUN", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#.to_string()),
+            auto_condition_config: Some(r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "JEANBRUN", "BESSON", "SCELLIER", "ROBIEN", "MEHAIGNERIE", "PERISSOL", "DUFLOT", "BORLOO", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#.to_string()),
             auto_categories: Some(r#"["CLIENT"]"#.to_string()),
             email_template_id: None,
             email_delai_jours: Some(0),
@@ -679,7 +679,7 @@ impl Database {
                 "Fin de prêt immobilier/SCPI dans moins d'un an",
                 80,
                 "DATE_APPROCHE_INVESTISSEMENT",
-                r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "JEANBRUN", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#,
+                r#"{"champ": "date_fin_pret", "jours_avant": 365, "types_produit": ["SCPI", "SCPI_FISCALE", "SCPI_DEMEMBREMENT", "IMMOBILIER", "PINEL", "DENORMANDIE", "JEANBRUN", "BESSON", "SCELLIER", "ROBIEN", "MEHAIGNERIE", "PERISSOL", "DUFLOT", "BORLOO", "MALRAUX", "MONUMENT_HISTORIQUE", "DEFICIT_FONCIER", "LMNP", "LMP", "NUE_PROPRIETE", "RESIDENCE_PRINCIPALE", "LOCATIF_CLASSIQUE"]}"#,
                 r#"["CLIENT"]"#,
             ),
             (

@@ -2,11 +2,13 @@ import type { BienImmobilier, ExtractedData, RioCoupleOwnerHint } from "../types
 import { parseStelliumAmount } from "./amounts";
 import { parseAdressesPostales, parsePaysResidenceFiscale } from "./rio-adresse";
 import { parsePassifsEcheanceAnnuelle } from "./passifs-charges";
+import { registerFinancialActifLine, hasEpargneBancaireDetail } from "./financial-contracts";
 import {
-  isImmoActifCategory,
-  registerFinancialActifLine,
-  hasEpargneBancaireDetail,
-} from "./financial-contracts";
+  isStelliumImmoActifCategory,
+  isStelliumLocatifAggregateType,
+  mapStelliumImmoSchemeLabel,
+  STELLIUM_IMMO_ACTIF_PREFIXES,
+} from "./immo-scheme-label";
 import { escapeRegex } from "./sections";
 
 export interface CoupleInvestisseurs {
@@ -17,7 +19,7 @@ export interface CoupleInvestisseurs {
 }
 
 const ACTIF_CATEGORIES =
-  "Résidence principale|Résidence secondaire|Assurance vie|Compte courant|Compte sur livret|Livret A|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|Classique|Pinel|LMNP|LMP|Denormandie|Malraux";
+  `Assurance vie|Compte courant|Compte sur livret|Livret A|LDD|LDDS|PEL|CEL|PER|PERP|PEA|Compte titres|SCPI|${STELLIUM_IMMO_ACTIF_PREFIXES}`;
 
 export function detectCoupleRio(header: string): CoupleInvestisseurs | null {
   const match = header.match(
@@ -407,22 +409,7 @@ function uniqueBienId(baseLabel: string, biens: BienImmobilier[]): string {
 }
 
 function mapImmoType(label: string): BienImmobilier["type"] {
-  const lower = label.toLowerCase();
-  if (lower.includes("résidence principale") || lower.includes("residence principale")) {
-    return "RESIDENCE_PRINCIPALE";
-  }
-  if (lower.includes("résidence secondaire") || lower.includes("residence secondaire")) {
-    return "RESIDENCE_SECONDAIRE";
-  }
-  if (lower.includes("pinel")) return "PINEL";
-  if (lower.includes("lmnp")) return "LMNP";
-  if (lower.includes("lmp")) return "LMP";
-  if (lower.includes("scpi")) return "SCPI";
-  if (lower.includes("malraux")) return "IMMOBILIER";
-  if (lower.includes("classique") || lower.includes("locatif") || lower.includes("rapport")) {
-    return "LOCATIF";
-  }
-  return "IMMOBILIER";
+  return mapStelliumImmoSchemeLabel(label);
 }
 
 function parsePassifsEcheanceByPerson(
@@ -490,7 +477,7 @@ export function parseCouplePatrimoine(
     const ownerHint = inferCoupleLineOwner(amounts, hasCommunColumn);
     if (!montant || montant <= 0) continue;
 
-    if (isImmoActifCategory(category)) {
+    if (isStelliumImmoActifCategory(category)) {
       const type = mapImmoType(category);
       biens.push({
         id: uniqueBienId(`${category} - ${nom}`, biens),
@@ -504,7 +491,7 @@ export function parseCouplePatrimoine(
         data.residencePrincipale = { valeur: montant };
       } else if (type === "RESIDENCE_SECONDAIRE") {
         data.residenceSecondaire = { valeur: montant };
-      } else if (type === "LOCATIF" || type === "PINEL" || type === "LMNP") {
+      } else if (isStelliumLocatifAggregateType(type)) {
         data.immobilierLocatif = {
           valeur: (data.immobilierLocatif?.valeur ?? 0) + montant,
         };
@@ -527,7 +514,7 @@ export function parseCouplePatrimoine(
     const montant = pickFoyerAmount(amounts, hasCommunColumn, true);
     const bankOwnerHint = inferCoupleLineOwner(amounts, hasCommunColumn);
     if (!montant || montant <= 0) continue;
-    if (isImmoActifCategory(category)) continue;
+    if (isStelliumImmoActifCategory(category)) continue;
     registerFinancialActifLine(data, category, nom, montant, bankOwnerHint);
   }
 

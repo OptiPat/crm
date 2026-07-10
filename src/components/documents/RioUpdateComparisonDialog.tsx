@@ -158,6 +158,18 @@ const PRODUCT_TYPES = [
   { value: "SCPI_DEMEMBREMENT", label: "SCPI Démembrement" },
   { value: "IMMOBILIER", label: "Immobilier" },
   { value: "PINEL", label: "Pinel" },
+  { value: "DENORMANDIE", label: "Denormandie" },
+  { value: "JEANBRUN", label: "Jeanbrun" },
+  { value: "BESSON", label: "Besson" },
+  { value: "SCELLIER", label: "Scellier" },
+  { value: "ROBIEN", label: "Robien" },
+  { value: "MEHAIGNERIE", label: "Méhaignerie" },
+  { value: "PERISSOL", label: "Périssol" },
+  { value: "DUFLOT", label: "Duflot" },
+  { value: "BORLOO", label: "Borloo" },
+  { value: "MALRAUX", label: "Malraux" },
+  { value: "MONUMENT_HISTORIQUE", label: "Monument Historique" },
+  { value: "DEFICIT_FONCIER", label: "Déficit Foncier" },
   { value: "LMNP", label: "LMNP" },
   { value: "LMP", label: "LMP" },
   { value: "RP", label: "Résidence Principale" },
@@ -410,7 +422,13 @@ export function RioUpdateComparisonDialog({
       scpi: comparisons.filter(c => ["SCPI", "SCPI_DEMEMBREMENT"].includes(c.editedType)),
       assuranceViePer: comparisons.filter(c => ["ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE"].includes(c.editedType)),
       epargne: comparisons.filter(c => ["EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(c.editedType)),
-      autres: comparisons.filter(c => !["RP", "IMMOBILIER", "LOCATIF", "PINEL", "LMNP", "LMP", "SCPI", "SCPI_DEMEMBREMENT", "ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE", "EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(c.editedType)),
+      autres: comparisons.filter(
+        (c) =>
+          !isImmobilierFinancingType(c.editedType) &&
+          !["SCPI", "SCPI_DEMEMBREMENT", "ASSURANCE_VIE", "PER", "PEA", "COMPTE_TITRE", "EPARGNE_BANCAIRE", "LIVRET_A", "LDDS", "PEL", "CEL", "CSL"].includes(
+            c.editedType,
+          ),
+      ),
     };
     
     return { toUpdate, toAdd, unchanged, avecMoi, patrimoineAvant, patrimoineApres, difference, pourcentage, byCategory };

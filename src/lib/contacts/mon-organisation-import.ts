@@ -14,10 +14,16 @@ import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import {
   contactToUpdatePayload,
   normalizeImportTelephone,
-  toDateInput,
+  normalizeImportPlaceName,
+  parseDateInscriptionFromNotes,
+  setDateInscriptionInNotes,
 } from "@/lib/contacts/contact-form-utils";
 import { unwrapImportCell } from "@/lib/contacts/import-row";
 import { parseNomCompletInvestisseur } from "@/lib/contacts/investor-name-parse";
+import {
+  normalizeEmail,
+  normalizePhone,
+} from "@/lib/contacts/duplicate-identity";
 import {
   buildContactIdMap,
   contactNameKey,
@@ -25,7 +31,11 @@ import {
   findContactByNameKeyWithSwap,
   lookupParrainId,
 } from "@/lib/contacts/name-match";
-import { parseImportDate } from "@/lib/contacts/parse-import-date";
+import { unixToDateInput } from "@/lib/dates/calendar-date";
+import {
+  isoToDateInput,
+  parseImportDate,
+} from "@/lib/contacts/parse-import-date";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 
 const IMPORT_SAVE_OPTS = { skipPostSaveHooks: true } as const;
@@ -221,8 +231,8 @@ export function parseMonOrganisationRows(
       ),
       adresse: cellStr(keys.adresse ? raw[keys.adresse] : ""),
       codePostal: cellStr(keys.codePostal ? raw[keys.codePostal] : ""),
-      ville: cellStr(keys.ville ? raw[keys.ville] : ""),
-      pays: cellStr(keys.pays ? raw[keys.pays] : ""),
+      ville: normalizeImportPlaceName(keys.ville ? raw[keys.ville] : ""),
+      pays: normalizeImportPlaceName(keys.pays ? raw[keys.pays] : ""),
       dateInscriptionIso: parseMonOrganisationDate(keys.dateEntree ? raw[keys.dateEntree] : undefined),
       dateDernierContactFilleulIso: undefined,
       parrainNom: parrainParsed?.nom ?? "",
@@ -399,6 +409,12 @@ export function patchMonOrganisationPreviewLines(
     if (patch.telephone !== undefined) {
       next.telephone = cleanMonOrganisationTelephone(patch.telephone);
     }
+    if (patch.ville !== undefined) {
+      next.ville = normalizeImportPlaceName(patch.ville);
+    }
+    if (patch.pays !== undefined) {
+      next.pays = normalizeImportPlaceName(patch.pays);
+    }
     return next;
   });
   const seen = buildMonOrganisationPreviewSeenInFileFromLines(merged);
@@ -441,6 +457,215 @@ export function summarizeMonOrganisationImportPreview(
   return summary;
 }
 
+export type MonOrganisationImportPreviewSection = {
+  status: MonOrganisationImportLineStatus;
+  label: string;
+  lines: MonOrganisationPreviewLine[];
+};
+
+/** Ordre d'affichage des groupes dans l'aperçu import. */
+export const MON_ORGANISATION_IMPORT_PREVIEW_SECTION_ORDER: ReadonlyArray<{
+  status: MonOrganisationImportLineStatus;
+  label: string;
+}> = [
+  { status: "ready", label: "À importer" },
+  { status: "duplicate_crm", label: "Déjà en base" },
+  { status: "duplicate_csv", label: "Doublon fichier" },
+  { status: "invalid", label: "Invalide" },
+  { status: "imported", label: "Importé" },
+];
+
+export function isMonOrganisationLineSelectable(line: MonOrganisationPreviewLine): boolean {
+  return line.status === "ready" || (line.status === "duplicate_crm" && line.contactId != null);
+}
+
+export function defaultSelectedMonOrganisationLineKeys(
+  lines: MonOrganisationPreviewLine[]
+): Set<string> {
+  return new Set(lines.filter(isMonOrganisationLineSelectable).map((l) => l.lineKey));
+}
+
+export function groupMonOrganisationPreviewLines(
+  lines: MonOrganisationPreviewLine[]
+): MonOrganisationImportPreviewSection[] {
+  const byStatus = new Map<MonOrganisationImportLineStatus, MonOrganisationPreviewLine[]>();
+  for (const line of lines) {
+    const bucket = byStatus.get(line.status) ?? [];
+    bucket.push(line);
+    byStatus.set(line.status, bucket);
+  }
+  return MON_ORGANISATION_IMPORT_PREVIEW_SECTION_ORDER.map((section) => ({
+    ...section,
+    lines: (byStatus.get(section.status) ?? []).sort(
+      (a, b) =>
+        parseNiveauSortKey(a.niveau) - parseNiveauSortKey(b.niveau) || a.rowIndex - b.rowIndex
+    ),
+  })).filter((section) => section.lines.length > 0);
+}
+
+export type MonOrganisationCrmDiffHighlightField =
+  | "nom"
+  | "prenom"
+  | "email"
+  | "telephone"
+  | "adresse"
+  | "codePostal"
+  | "ville"
+  | "pays"
+  | "dateInscriptionIso"
+  | "dateDernierContactFilleulIso"
+  | "parrainLabel"
+  | "filleulCategorie";
+
+export type MonOrganisationCrmDiffFieldHighlight = "fill" | "change";
+
+export type MonOrganisationCrmDiffFieldHighlights = Partial<
+  Record<MonOrganisationCrmDiffHighlightField, MonOrganisationCrmDiffFieldHighlight>
+>;
+
+function strFieldNorm(value: string | undefined | null): string {
+  return (value ?? "").trim();
+}
+
+function markCrmDiffHighlight(
+  highlights: MonOrganisationCrmDiffFieldHighlights,
+  field: MonOrganisationCrmDiffHighlightField,
+  fileValue: string | undefined,
+  crmValue: string | undefined,
+  normalizer: (value: string | undefined | null) => string = strFieldNorm
+): void {
+  const incoming = normalizer(fileValue);
+  if (!incoming) return;
+  const prev = normalizer(crmValue);
+  if (incoming === prev) return;
+  highlights[field] = prev ? "change" : "fill";
+}
+
+function markCrmDiffDateHighlight(
+  highlights: MonOrganisationCrmDiffFieldHighlights,
+  field: "dateInscriptionIso" | "dateDernierContactFilleulIso",
+  fileIso: string | undefined,
+  crmDateInput: string
+): void {
+  const incoming = isoToDateInput(fileIso);
+  if (!incoming) return;
+  if (incoming === crmDateInput) return;
+  highlights[field] = crmDateInput ? "change" : "fill";
+}
+
+/** Date d'inscription telle qu'affichée en fiche contact (colonne ou notes). */
+function resolveCrmInscriptionDateInput(contact: Contact): string {
+  const fromColumn = contact.date_inscription_filleul
+    ? unixToDateInput(contact.date_inscription_filleul)
+    : "";
+  if (fromColumn) return fromColumn;
+  const fromNotes = parseDateInscriptionFromNotes(contact.notes);
+  return fromNotes ? isoToDateInput(fromNotes) : "";
+}
+
+function parrainContactLabel(contacts: Contact[], parrainId?: number | null): string {
+  if (!parrainId) return "";
+  const parrain = contacts.find((c) => c.id === parrainId);
+  if (!parrain) return "";
+  return `${parrain.prenom} ${parrain.nom}`.trim();
+}
+
+/** Écarts fichier vs fiche CRM (aperçu « Déjà en base »). */
+export function getMonOrganisationCrmDiffFieldHighlights(
+  line: MonOrganisationPreviewLine,
+  existing: Contact,
+  contacts: Contact[]
+): MonOrganisationCrmDiffFieldHighlights {
+  const highlights: MonOrganisationCrmDiffFieldHighlights = {};
+
+  markCrmDiffHighlight(highlights, "nom", line.nom, existing.nom);
+  markCrmDiffHighlight(highlights, "prenom", line.prenom, existing.prenom);
+  markCrmDiffHighlight(highlights, "email", line.email, existing.email, normalizeEmail);
+  markCrmDiffHighlight(
+    highlights,
+    "telephone",
+    line.telephone,
+    existing.telephone,
+    normalizePhone
+  );
+  markCrmDiffHighlight(highlights, "adresse", line.adresse, existing.adresse);
+  markCrmDiffHighlight(highlights, "codePostal", line.codePostal, existing.code_postal);
+  markCrmDiffHighlight(highlights, "ville", line.ville, existing.ville, normalizeImportPlaceName);
+  markCrmDiffHighlight(highlights, "pays", line.pays, existing.pays, normalizeImportPlaceName);
+  markCrmDiffDateHighlight(
+    highlights,
+    "dateInscriptionIso",
+    line.dateInscriptionIso,
+    resolveCrmInscriptionDateInput(existing)
+  );
+  markCrmDiffDateHighlight(
+    highlights,
+    "dateDernierContactFilleulIso",
+    line.dateDernierContactFilleulIso,
+    existing.date_dernier_contact_filleul
+      ? unixToDateInput(existing.date_dernier_contact_filleul)
+      : ""
+  );
+  markCrmDiffHighlight(
+    highlights,
+    "filleulCategorie",
+    line.filleulCategorie,
+    existing.filleul_categorie ?? undefined
+  );
+
+  const fileParrain = strFieldNorm(line.parrainLabel);
+  const crmParrain = strFieldNorm(parrainContactLabel(contacts, existing.parrain_id));
+  if (fileParrain && fileParrain !== crmParrain) {
+    highlights.parrainLabel = crmParrain ? "change" : "fill";
+  }
+
+  return highlights;
+}
+
+function pickEnrichField(
+  fileValue: string | undefined,
+  crmValue: string | undefined | null
+): string | undefined {
+  const incoming = (fileValue ?? "").trim();
+  if (incoming) return incoming;
+  return crmValue?.trim() || undefined;
+}
+
+function buildMonOrganisationEnrichPayload(
+  line: MonOrganisationPreviewLine,
+  existing: Contact,
+  parrainId: number | undefined
+): Partial<NewContact> {
+  const payload: Partial<NewContact> = {
+    email: pickEnrichField(line.email, existing.email),
+    telephone: pickEnrichField(line.telephone, existing.telephone),
+    adresse: pickEnrichField(line.adresse, existing.adresse),
+    code_postal: pickEnrichField(line.codePostal, existing.code_postal),
+    ville: pickEnrichField(line.ville, existing.ville)
+      ? normalizeImportPlaceName(pickEnrichField(line.ville, existing.ville))
+      : existing.ville || undefined,
+    pays: pickEnrichField(line.pays, existing.pays)
+      ? normalizeImportPlaceName(pickEnrichField(line.pays, existing.pays))
+      : existing.pays || undefined,
+    filleul_categorie: line.filleulCategorie || existing.filleul_categorie || undefined,
+  };
+
+  if (line.dateDernierContactFilleulIso) {
+    payload.date_dernier_contact_filleul = isoToDateInput(line.dateDernierContactFilleulIso);
+  }
+
+  if (line.dateInscriptionIso) {
+    payload.date_inscription_filleul = isoToDateInput(line.dateInscriptionIso);
+    payload.notes = setDateInscriptionInNotes(existing.notes, line.dateInscriptionIso);
+  }
+
+  if (line.parrainNom && line.parrainPrenom && parrainId) {
+    payload.parrain_id = parrainId;
+  }
+
+  return payload;
+}
+
 function buildNewContactPayload(line: MonOrganisationPreviewLine): NewContact {
   return {
     nom: line.nom,
@@ -454,11 +679,13 @@ function buildNewContactPayload(line: MonOrganisationPreviewLine): NewContact {
     categorie: "AUCUN",
     filleul_categorie: line.filleulCategorie || "FILLEUL",
     statut_suivi: "ACTIF",
-    date_dernier_contact_filleul: line.dateDernierContactFilleulIso,
+    date_dernier_contact_filleul: line.dateDernierContactFilleulIso
+      ? isoToDateInput(line.dateDernierContactFilleulIso)
+      : undefined,
     type_invitation_filleul: undefined,
     date_invitation_filleul: undefined,
     date_inscription_filleul: line.dateInscriptionIso
-      ? toDateInput(line.dateInscriptionIso)
+      ? isoToDateInput(line.dateInscriptionIso)
       : undefined,
     presence_invitation_filleul: undefined,
     notes: undefined,
@@ -499,6 +726,57 @@ async function ensureParrainContact(
   return id;
 }
 
+async function upgradeParrainFilleulCategorie(
+  parrainId: number | undefined,
+  allContacts: Contact[]
+): Promise<void> {
+  if (!parrainId) return;
+  const parrain = allContacts.find((c) => c.id === parrainId);
+  if (
+    parrain &&
+    (!parrain.filleul_categorie ||
+      parrain.filleul_categorie === "PROSPECT_FILLEUL" ||
+      parrain.filleul_categorie === "SUSPECT_FILLEUL")
+  ) {
+    await updateContact(
+      parrainId,
+      contactToUpdatePayload(parrain, { filleul_categorie: "FILLEUL" }),
+      IMPORT_SAVE_OPTS
+    );
+  }
+}
+
+async function applyMonOrganisationEnrichLine(
+  line: MonOrganisationPreviewLine,
+  contactsMap: Map<string, number>,
+  allContacts: Contact[]
+): Promise<MonOrganisationPreviewLine> {
+  const existing = allContacts.find((c) => c.id === line.contactId);
+  if (!existing?.id) {
+    throw new Error("Contact introuvable pour enrichissement");
+  }
+
+  const parrainId = await ensureParrainContact(line, contactsMap, allContacts);
+  await updateContact(
+    existing.id,
+    contactToUpdatePayload(
+      existing,
+      buildMonOrganisationEnrichPayload(line, existing, parrainId)
+    ),
+    IMPORT_SAVE_OPTS
+  );
+  await upgradeParrainFilleulCategorie(parrainId, allContacts);
+
+  return {
+    ...line,
+    status: "imported",
+    statusMessage: "Enrichi",
+    contactId: existing.id,
+    parrainId: parrainId ?? existing.parrain_id,
+    parrainWillCreate: undefined,
+  };
+}
+
 async function applyMonOrganisationLine(
   line: MonOrganisationPreviewLine,
   contactsMap: Map<string, number>,
@@ -512,21 +790,7 @@ async function applyMonOrganisationLine(
   contactsMap.set(contactNameKey(line.prenom, line.nom), id);
   allContacts.push(created);
 
-  if (parrainId) {
-    const parrain = allContacts.find((c) => c.id === parrainId);
-    if (
-      parrain &&
-      (!parrain.filleul_categorie ||
-        parrain.filleul_categorie === "PROSPECT_FILLEUL" ||
-        parrain.filleul_categorie === "SUSPECT_FILLEUL")
-    ) {
-      await updateContact(
-        parrainId,
-        contactToUpdatePayload(parrain, { filleul_categorie: "FILLEUL" }),
-        IMPORT_SAVE_OPTS
-      );
-    }
-  }
+  await upgradeParrainFilleulCategorie(parrainId, allContacts);
 
   return {
     ...line,
@@ -543,7 +807,7 @@ export async function applyMonOrganisationImport(
   selectedLineKeys: ReadonlySet<string>
 ): Promise<{ applied: number; failed: number; lines: MonOrganisationPreviewLine[] }> {
   const toImport = lines
-    .filter((l) => l.status === "ready" && selectedLineKeys.has(l.lineKey))
+    .filter((l) => isMonOrganisationLineSelectable(l) && selectedLineKeys.has(l.lineKey))
     .sort(
       (a, b) =>
         parseNiveauSortKey(a.niveau) - parseNiveauSortKey(b.niveau) ||
@@ -574,7 +838,10 @@ export async function applyMonOrganisationImport(
 
     for (const line of toImport) {
       try {
-        const result = await applyMonOrganisationLine(line, contactsMap, allContacts);
+        const result =
+          line.status === "duplicate_crm"
+            ? await applyMonOrganisationEnrichLine(line, contactsMap, allContacts)
+            : await applyMonOrganisationLine(line, contactsMap, allContacts);
         outcomes.push({ lineKey: line.lineKey, result });
         applied += 1;
       } catch (error) {
@@ -613,13 +880,4 @@ export async function applyMonOrganisationImport(
   }
 }
 
-export function isoToDateInput(iso?: string): string {
-  if (!iso) return "";
-  return iso.slice(0, 10);
-}
-
-export function dateInputToIso(dateInput: string): string | undefined {
-  const trimmed = dateInput.trim();
-  if (!trimmed) return undefined;
-  return parseImportDate(trimmed);
-}
+export { dateInputToIso, isoToDateInput } from "@/lib/contacts/parse-import-date";

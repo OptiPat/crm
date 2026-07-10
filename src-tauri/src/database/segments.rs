@@ -191,7 +191,7 @@ impl super::Database {
             ),
             (
                 "Fin de prêt",
-                r#"{"v":1,"op":"and","children":[{"type":"DATE_APPROCHE_INVESTISSEMENT","config":{"champ":"date_fin_pret","jours_avant":365,"types_produit":["SCPI","SCPI_FISCALE","SCPI_DEMEMBREMENT","IMMOBILIER","PINEL","DENORMANDIE","JEANBRUN","MALRAUX","MONUMENT_HISTORIQUE","DEFICIT_FONCIER","LMNP","LMP","NUE_PROPRIETE","RESIDENCE_PRINCIPALE","LOCATIF_CLASSIQUE"]},"categories":["CLIENT"]}]}"#,
+                r#"{"v":1,"op":"and","children":[{"type":"DATE_APPROCHE_INVESTISSEMENT","config":{"champ":"date_fin_pret","jours_avant":365,"types_produit":["SCPI","SCPI_FISCALE","SCPI_DEMEMBREMENT","IMMOBILIER","PINEL","DENORMANDIE","JEANBRUN","BESSON","SCELLIER","ROBIEN","MEHAIGNERIE","PERISSOL","DUFLOT","BORLOO","MALRAUX","MONUMENT_HISTORIQUE","DEFICIT_FONCIER","LMNP","LMP","NUE_PROPRIETE","RESIDENCE_PRINCIPALE","LOCATIF_CLASSIQUE"]},"categories":["CLIENT"]}]}"#,
                 "",
             ),
             (

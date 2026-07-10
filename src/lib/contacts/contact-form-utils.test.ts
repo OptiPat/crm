@@ -13,6 +13,7 @@ import {
   getEmptyForm,
   isAlerteSuiviFilleul,
   normalizeImportCivilite,
+  normalizeImportPlaceName,
   normalizeImportStatut,
   normalizeImportTmi,
   parseBirthdayFieldToIso,
@@ -188,6 +189,24 @@ describe("normalizeImportTmi", () => {
     expect(normalizeImportTmi("0")).toBeUndefined();
     expect(normalizeImportTmi(null)).toBeUndefined();
     expect(normalizeImportTmi("abc")).toBeUndefined();
+  });
+});
+
+describe("normalizeImportPlaceName", () => {
+  it("met une majuscule initiale par mot", () => {
+    expect(normalizeImportPlaceName("MONTPELLIER")).toBe("Montpellier");
+    expect(normalizeImportPlaceName("ST AUNES")).toBe("St Aunes");
+    expect(normalizeImportPlaceName("FRANCE")).toBe("France");
+    expect(normalizeImportPlaceName("  paris  ")).toBe("Paris");
+  });
+
+  it("gère les tirets", () => {
+    expect(normalizeImportPlaceName("SAINT-ETIENNE")).toBe("Saint-Etienne");
+  });
+
+  it("renvoie une chaîne vide si absent", () => {
+    expect(normalizeImportPlaceName("")).toBe("");
+    expect(normalizeImportPlaceName(null)).toBe("");
   });
 });
 

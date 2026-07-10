@@ -25,20 +25,29 @@ describe("parseImportDate", () => {
     expect(parseImportDate(null)).toBeUndefined();
   });
 
-  it("parse objet Date (cellDates Excel) sans décalage calendaire", () => {
-    const iso = parseImportDate(new Date(2024, 2, 27));
-    expect(iso!.startsWith("2024-03-27")).toBe(true);
+  it("parse objet Date (serial Excel / cellDates) en jour UTC calendaire", () => {
+    const iso = parseImportDate(new Date(Date.UTC(2024, 2, 27)));
+    expect(iso).toBe("2024-03-27T00:00:00.000Z");
+  });
+
+  it("parse serial Excel 04/02/2021 sans décalage", () => {
+    const iso = parseImportDate(44231);
+    expect(iso?.slice(0, 10)).toBe("2021-02-04");
   });
 
   it("parse input date HTML YYYY-MM-DD en UTC calendaire", () => {
     expect(parseImportDate("2024-06-15")).toBe("2024-06-15T00:00:00.000Z");
+  });
+
+  it("parse format français 04/02/2021 sans décalage", () => {
+    expect(parseImportDate("04/02/2021")?.slice(0, 10)).toBe("2021-02-04");
   });
 });
 
 describe("isoToDateInput", () => {
   it("affiche la partie calendaire UTC", () => {
     expect(isoToDateInput("2024-06-15T00:00:00.000Z")).toBe("2024-06-15");
-    expect(isoToDateInput("2024-06-14T22:00:00.000Z")).toBe("2024-06-14");
+    expect(isoToDateInput("2021-02-04T00:00:00.000Z")).toBe("2021-02-04");
   });
 });
 

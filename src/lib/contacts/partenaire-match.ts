@@ -146,6 +146,13 @@ export const deduireTypePartenaire = (typeProduit: string): string => {
     t.includes("MALRAUX") ||
     t.includes("DENORMANDIE") ||
     t.includes("JEANBRUN") ||
+    t.includes("BESSON") ||
+    t.includes("SCELLIER") ||
+    t.includes("ROBIEN") ||
+    t.includes("MEHAIGNERIE") ||
+    t.includes("PERISSOL") ||
+    t.includes("DUFLOT") ||
+    t.includes("BORLOO") ||
     t.includes("LMNP") ||
     t.includes("LMP") ||
     t.includes("DEFICIT") ||

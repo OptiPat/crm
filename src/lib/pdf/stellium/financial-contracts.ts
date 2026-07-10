@@ -1,4 +1,5 @@
 import type { ContratFinancier, ExtractedData, RioCoupleOwnerHint } from "../types";
+import { isStelliumImmoActifCategory } from "./immo-scheme-label";
 
 function slugify(value: string): string {
   return value
@@ -28,19 +29,7 @@ export function mapActifCategoryToProductType(category: string): string | null {
 }
 
 export function isImmoActifCategory(category: string): boolean {
-  const lower = category.toLowerCase();
-  // « Livret classique » est de l'épargne, pas de l'immobilier « Classique ».
-  if (lower.includes("livret")) return false;
-  return (
-    lower.includes("résidence") ||
-    lower.includes("residence") ||
-    lower.includes("classique") ||
-    lower.includes("pinel") ||
-    lower.includes("lmnp") ||
-    lower.includes("lmp") ||
-    lower.includes("denormandie") ||
-    lower.includes("malraux")
-  );
+  return isStelliumImmoActifCategory(category);
 }
 
 export function appendContratFinancier(

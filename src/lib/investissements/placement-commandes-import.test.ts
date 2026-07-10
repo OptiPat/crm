@@ -19,6 +19,9 @@ import {
   pickPlacementCommandesSheetName,
   stripPlacementNamePrefix,
   syncPlacementVpFields,
+  isPlacementImportLineSelectable,
+  defaultSelectedPlacementLineKeys,
+  type PlacementImportPreviewLine,
 } from "./placement-commandes-import";
 
 describe("placement-commandes-import", () => {
@@ -614,5 +617,21 @@ describe("placement-commandes-import", () => {
       montantVpCentimes: 5000,
       frequenceVp: "TRIMESTRIEL",
     });
+  });
+
+  it("isPlacementImportLineSelectable accepte ready, review et duplicate_crm", () => {
+    const ready = { status: "ready", lineKey: "r1" } as PlacementImportPreviewLine;
+    const review = { status: "review", lineKey: "v1" } as PlacementImportPreviewLine;
+    const dup = {
+      status: "duplicate_crm",
+      investissementId: 3,
+      lineKey: "d1",
+    } as PlacementImportPreviewLine;
+    const ambiguous = { status: "duplicate_crm", lineKey: "d2" } as PlacementImportPreviewLine;
+    expect(isPlacementImportLineSelectable(ready)).toBe(true);
+    expect(isPlacementImportLineSelectable(review)).toBe(true);
+    expect(isPlacementImportLineSelectable(dup)).toBe(true);
+    expect(isPlacementImportLineSelectable(ambiguous)).toBe(false);
+    expect(defaultSelectedPlacementLineKeys([ready, review, dup, ambiguous]).size).toBe(3);
   });
 });

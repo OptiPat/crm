@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { MonOrganisationImportPreviewLine } from "@/components/contacts/MonOrganisationImportPreviewLine";
-import { IMPORT_PREVIEW_LIST_CLASS } from "@/components/contacts/import-preview-ui";
+import { IMPORT_PREVIEW_LIST_CLASS, ImportPreviewSection } from "@/components/contacts/import-preview-ui";
 import { FileUp, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import type { Contact } from "@/lib/api/tauri-contacts";
@@ -21,6 +21,10 @@ import {
   buildMonOrganisationImportPreview,
   buildMonOrganisationPreviewSeenInFileFromLines,
   buildMonOrganisationImportNameKeys,
+  defaultSelectedMonOrganisationLineKeys,
+  getMonOrganisationCrmDiffFieldHighlights,
+  groupMonOrganisationPreviewLines,
+  isMonOrganisationLineSelectable,
   MON_ORGANISATION_SHEET_NAME,
   parseMonOrganisationRows,
   patchMonOrganisationPreviewLines,
@@ -39,13 +43,22 @@ import {
 
 type Step = "pick" | "preview";
 
-const SELECTABLE_STATUSES = new Set<MonOrganisationPreviewLine["status"]>(["ready"]);
+function syncMonOrganisationSelection(
+  prev: Set<string>,
+  lines: MonOrganisationPreviewLine[]
+): Set<string> {
+  const next = new Set(prev);
+  for (const line of lines) {
+    if (!isMonOrganisationLineSelectable(line)) next.delete(line.lineKey);
+  }
+  return next;
+}
 
 function readMonOrganisationWorkbookRows(
   file: File
 ): Promise<{ rows: Record<string, unknown>[]; missingSheet: boolean }> {
   return file.arrayBuffer().then((data) => {
-    const workbook = XLSX.read(data, { type: "array", cellDates: true });
+    const workbook = XLSX.read(data, { type: "array", cellDates: false });
     const sheetName = pickMonOrganisationSheetName(workbook.SheetNames);
     if (!sheetName) return { rows: [] as Record<string, unknown>[], missingSheet: true };
     const normalized = workbook.SheetNames.map((n) => n.trim().toLowerCase());
@@ -53,7 +66,7 @@ function readMonOrganisationWorkbookRows(
     const missingSheet = !normalized.some((n) => n === expected);
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
       workbook.Sheets[sheetName]!,
-      { defval: "" }
+      { defval: "", raw: false }
     );
     return { rows, missingSheet };
   });
@@ -79,6 +92,8 @@ export function MonOrganisationImportDialog({
   linesRef.current = lines;
 
   const summary = useMemo(() => summarizeMonOrganisationImportPreview(lines), [lines]);
+  const groupedLines = useMemo(() => groupMonOrganisationPreviewLines(lines), [lines]);
+  const contactById = useMemo(() => new Map(contacts.map((c) => [c.id, c])), [contacts]);
 
   const reset = useCallback(() => {
     setStep("pick");
@@ -96,12 +111,11 @@ export function MonOrganisationImportDialog({
 
   const commitLineEdit = (lineKey: string, patch: Partial<MonOrganisationPreviewLine>) => {
     flushSync(() => {
-      setLines((prev) => {
-        const patches = new Map([[lineKey, patch]]);
-        const next = patchMonOrganisationPreviewLines(prev, patches, contacts);
-        linesRef.current = next;
-        return next;
-      });
+      const patches = new Map([[lineKey, patch]]);
+      const next = patchMonOrganisationPreviewLines(linesRef.current, patches, contacts);
+      linesRef.current = next;
+      setLines(next);
+      setSelected((selectedPrev) => syncMonOrganisationSelection(selectedPrev, next));
     });
   };
 
@@ -123,7 +137,7 @@ export function MonOrganisationImportDialog({
       setFileName(file.name);
       setContacts(loadedContacts);
       setLines(preview);
-      setSelected(new Set(preview.filter((l) => l.status === "ready").map((l) => l.lineKey)));
+      setSelected(defaultSelectedMonOrganisationLineKeys(preview));
       setStep("preview");
       if (missingSheet) {
         toast.warning(`Feuille « ${MON_ORGANISATION_SHEET_NAME} » absente — première feuille utilisée`);
@@ -173,7 +187,7 @@ export function MonOrganisationImportDialog({
         );
         linesRef.current = refreshed;
         setLines(refreshed);
-        setSelected(new Set(refreshed.filter((l) => l.status === "ready").map((l) => l.lineKey)));
+        setSelected(defaultSelectedMonOrganisationLineKeys(refreshed));
         toast.success(
           `${applied} filleul(s) importé(s)${failed ? `, ${failed} échec(s)` : ""}`
         );
@@ -240,16 +254,47 @@ export function MonOrganisationImportDialog({
                 {summary.duplicateCsv} doublon(s) fichier
               </p>
               <div className={IMPORT_PREVIEW_LIST_CLASS}>
-                {lines.map((line) => (
-                  <MonOrganisationImportPreviewLine
-                    key={line.lineKey}
-                    line={line}
-                    editable={line.status !== "imported"}
-                    selectable={SELECTABLE_STATUSES.has(line.status)}
-                    checked={selected.has(line.lineKey)}
-                    onToggle={(c) => toggleLine(line.lineKey, c)}
-                    onEdit={(patch) => commitLineEdit(line.lineKey, patch)}
-                  />
+                {groupedLines.map((section) => (
+                  <ImportPreviewSection
+                    key={section.status}
+                    title={section.label}
+                    count={section.lines.length}
+                  >
+                    {section.status === "duplicate_crm" ? (
+                      <p className="text-xs text-muted-foreground">
+                        <span className="inline-block rounded bg-emerald-50 px-1 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:ring-emerald-800">
+                          Vert
+                        </span>{" "}
+                        = absent en CRM ·{" "}
+                        <span className="inline-block rounded bg-amber-50 px-1 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:ring-amber-800">
+                          Ambre
+                        </span>{" "}
+                        = valeur différente de la fiche CRM
+                      </p>
+                    ) : null}
+                    {section.lines.map((line) => {
+                      const existing =
+                        line.status === "duplicate_crm" && line.contactId
+                          ? contactById.get(line.contactId)
+                          : undefined;
+                      return (
+                        <MonOrganisationImportPreviewLine
+                          key={line.lineKey}
+                          line={line}
+                          editable={line.status !== "imported"}
+                          selectable={isMonOrganisationLineSelectable(line)}
+                          checked={selected.has(line.lineKey)}
+                          onToggle={(c) => toggleLine(line.lineKey, c)}
+                          onEdit={(patch) => commitLineEdit(line.lineKey, patch)}
+                          crmDiffHighlights={
+                            existing
+                              ? getMonOrganisationCrmDiffFieldHighlights(line, existing, contacts)
+                              : undefined
+                          }
+                        />
+                      );
+                    })}
+                  </ImportPreviewSection>
                 ))}
               </div>
             </div>
