@@ -39,7 +39,7 @@ import {
 import { numeroContratMatchKey } from "@/lib/investissements/investissement-display";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 import { parseNomCompletInvestisseur } from "@/lib/contacts/investor-name-parse";
-import { parseEuroInput } from "@/lib/souscription-cif/build-annexes-scpi-costs";
+import { parseImportMontantEuros } from "@/lib/investissements/parse-import-montant-euros";
 
 const IMPORT_SAVE_OPTS = { skipPostSaveHooks: true } as const;
 
@@ -277,7 +277,7 @@ export function formatPlacementEuroField(centimes: number): string {
 export function parsePlacementEuroFieldCentimes(raw: string): number | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  const euros = parseEuroInput(trimmed.replace(/\s/g, ""));
+  const euros = parseImportMontantEuros(trimmed);
   if (euros == null || euros < 0) return null;
   return Math.round(euros * 100);
 }
@@ -433,7 +433,7 @@ function parseEuroCellCentimes(value: unknown): number | null {
     if (value <= 0) return null;
     return Math.round(value * 100);
   }
-  const euros = parseEuroInput(String(value).replace(/\s/g, ""));
+  const euros = parseImportMontantEuros(String(value));
   if (euros == null || euros <= 0) return null;
   return Math.round(euros * 100);
 }
@@ -910,38 +910,192 @@ export function resolveContactForPlacementImport(
   return contacts.find((c) => c.email?.trim().toLowerCase() === em);
 }
 
+function normalizePlacementNomPart(part: string): string {
+  return cleanPlacementLibelleProduit(part)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[''`]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function placementNomWordSimilar(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+  if (a.length >= 5 && b.length >= 5 && (a.includes(b) || b.includes(a))) return true;
+  return false;
+}
+
+const PLACEMENT_NOM_GENERIC_WORDS = new Set([
+  "europe",
+  "france",
+  "premium",
+  "placement",
+  "multisupports",
+  "multi",
+  "supports",
+  "rendement",
+  "fiscal",
+  "fiscale",
+  "assurance",
+  "vie",
+  "scpi",
+  "classique",
+  "global",
+  "world",
+  "international",
+]);
+
+function distinctivePlacementNomWords(normalizedNom: string): string[] {
+  return normalizedNom
+    .split(" ")
+    .filter((w) => w.length >= 3 && !PLACEMENT_NOM_GENERIC_WORDS.has(w));
+}
+
+/** Rapprochement tolérant entre libellé Excel et fiche CRM (ALPSI/CIF ignorés). */
+export function placementNomProduitMatches(a: string, b: string): boolean {
+  if (a.toUpperCase().trim() === b.toUpperCase().trim()) return true;
+  const na = normalizePlacementNomPart(a);
+  const nb = normalizePlacementNomPart(b);
+  if (na === nb) return true;
+
+  const wordsA = distinctivePlacementNomWords(na);
+  const wordsB = distinctivePlacementNomWords(nb);
+  if (wordsA.length === 0 || wordsB.length === 0) {
+    return na === nb;
+  }
+
+  let hits = 0;
+  for (const wa of wordsA) {
+    if (wordsB.some((wb) => placementNomWordSimilar(wa, wb))) hits += 1;
+  }
+  const minDistinct = Math.min(wordsA.length, wordsB.length);
+  return hits >= minDistinct;
+}
+
+function montantPlacementRoughlyMatches(a: number, b: number): boolean {
+  const diff = Math.abs(a - b);
+  return diff <= Math.max(500_00, Math.round(Math.max(a, b) * 0.005));
+}
+
+function samePlacementInvestmentOwner(
+  inv: Investissement,
+  opts: { contactId?: number; foyerId?: number; contactFoyerId?: number }
+): boolean {
+  if (opts.foyerId != null && inv.foyer_id === opts.foyerId) return true;
+  if (opts.contactId != null && inv.contact_id === opts.contactId) return true;
+  if (
+    opts.contactFoyerId != null &&
+    inv.foyer_id != null &&
+    inv.foyer_id === opts.contactFoyerId
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function placementOwnerFromContacts(
+  contact: Contact | undefined,
+  coContact: Contact | undefined,
+  foyerId: number | undefined
+): { contactId?: number; foyerId?: number; contactFoyerId?: number } {
+  return {
+    contactId: coContact ? undefined : contact?.id,
+    foyerId,
+    contactFoyerId: !coContact && contact ? contact.foyer_id ?? undefined : undefined,
+  };
+}
+
+function findExistingPlacementInvestissementForPreview(
+  investissements: Investissement[],
+  contact: Contact,
+  coContact: Contact | undefined,
+  row: Pick<
+    PlacementCommandeRow,
+    "numeroContrat" | "typeProduit" | "nomProduit" | "montantCentimes"
+  >
+): { match?: Investissement; ambiguous?: boolean } {
+  if (coContact) {
+    const sharedFoyer =
+      contact.foyer_id && contact.foyer_id === coContact.foyer_id
+        ? contact.foyer_id
+        : undefined;
+    if (!sharedFoyer) return {};
+    return findExistingPlacementInvestissement(investissements, row, {
+      foyerId: sharedFoyer,
+    });
+  }
+  return findExistingPlacementInvestissement(investissements, row, {
+    contactId: contact.id,
+    contactFoyerId: contact.foyer_id ?? undefined,
+  });
+}
+
+/** Investissement CRM correspondant à une ligne d'aperçu (pour surlignage enrichissement). */
+export function resolvePlacementPreviewExistingInvestissement(
+  line: PlacementImportPreviewLine,
+  investissements: Investissement[],
+  contacts?: Contact[]
+): Investissement | undefined {
+  if (line.investissementId != null) {
+    return investissements.find((i) => i.id === line.investissementId);
+  }
+  if (!line.contactId && !line.foyerId) return undefined;
+  const owner = placementOwnerFromContacts(
+    line.contactId && contacts
+      ? contacts.find((c) => c.id === line.contactId)
+      : undefined,
+    line.coContactId && contacts
+      ? contacts.find((c) => c.id === line.coContactId)
+      : undefined,
+    line.foyerId
+  );
+  return findExistingPlacementInvestissement(investissements, line, owner).match;
+}
+
 export function findExistingPlacementInvestissement(
   investissements: Investissement[],
   row: Pick<
     PlacementCommandeRow,
     "numeroContrat" | "typeProduit" | "nomProduit" | "montantCentimes"
   >,
-  owner: { contactId?: number; foyerId?: number }
+  owner: { contactId?: number; foyerId?: number; contactFoyerId?: number }
 ): { match?: Investissement; ambiguous?: boolean } {
   const contratKey = numeroContratMatchKey(row.numeroContrat);
   if (contratKey) {
     const matches = investissements.filter(
       (inv) => numeroContratMatchKey(inv.numero_contrat) === contratKey
     );
-    if (matches.length > 1) return { ambiguous: true };
-    if (matches.length === 1) return { match: matches[0] };
+    const ownedMatches = matches.filter((inv) => samePlacementInvestmentOwner(inv, owner));
+    if (ownedMatches.length > 1) return { ambiguous: true };
+    if (ownedMatches.length === 1) return { match: ownedMatches[0] };
   }
 
-  const match = investissements.find((inv) => {
-    const sameOwner =
-      (owner.contactId != null && inv.contact_id === owner.contactId) ||
-      (owner.foyerId != null && inv.foyer_id === owner.foyerId);
-    if (!sameOwner) return false;
-    if (inv.type_produit !== row.typeProduit) return false;
-    if (inv.nom_produit.toUpperCase().trim() !== row.nomProduit.toUpperCase().trim()) {
-      return false;
-    }
-    if (row.montantCentimes != null && inv.montant_initial != null) {
-      if (Math.abs(inv.montant_initial - row.montantCentimes) > 100) return false;
-    }
-    return true;
+  const candidates = investissements.filter((inv) => {
+    if (!samePlacementInvestmentOwner(inv, owner)) return false;
+    return inv.type_produit === row.typeProduit;
   });
-  return { match };
+  if (candidates.length === 0) return {};
+
+  const byNom = candidates.filter((inv) =>
+    placementNomProduitMatches(inv.nom_produit, row.nomProduit)
+  );
+  if (byNom.length === 1) return { match: byNom[0] };
+  if (byNom.length > 1) {
+    if (row.montantCentimes != null) {
+      const byMontant = byNom.filter(
+        (inv) =>
+          inv.montant_initial != null &&
+          montantPlacementRoughlyMatches(inv.montant_initial, row.montantCentimes!)
+      );
+      if (byMontant.length === 1) return { match: byMontant[0] };
+    }
+    return { ambiguous: true };
+  }
+
+  return {};
 }
 
 function businessLineKey(row: PlacementCommandeRow): string {
@@ -1073,7 +1227,7 @@ function assessPlacementImportLine(
       ...row,
       lineKey,
       status: "duplicate_crm",
-      statusMessage: "Plusieurs investissements CRM avec ce n° de contrat",
+      statusMessage: "Plusieurs investissements CRM correspondent à cette ligne",
       contactId: contact.id,
       coContactId: coContact?.id,
       contactLabel,
@@ -1168,10 +1322,7 @@ export function reassessPlacementPreviewLine(
   const duplicateCsvRowIndex =
     firstRow != null && firstRow !== line.rowIndex ? firstRow : undefined;
 
-  const owner = {
-    contactId: coContact ? undefined : contact?.id,
-    foyerId,
-  };
+  const owner = placementOwnerFromContacts(contact, coContact, foyerId);
   const { match: existing, ambiguous } = findExistingPlacementInvestissement(
     investissements,
     line,
@@ -1352,15 +1503,16 @@ export function buildPlacementCommandesImportPreview(
       : undefined;
     if (!duplicateCsvRowIndex) seenInFile.set(bizKey, row.rowIndex);
 
-    const owner = {
-      contactId: coContact ? undefined : contact?.id,
-      foyerId,
-    };
-    const { match: existing, ambiguous } = findExistingPlacementInvestissement(
-      investissements,
-      row,
-      owner
-    );
+    let existing: Investissement | undefined;
+    let ambiguous: boolean | undefined;
+    if (contact) {
+      ({ match: existing, ambiguous } = findExistingPlacementInvestissementForPreview(
+        investissements,
+        contact,
+        coContact,
+        row
+      ));
+    }
 
     return assessPlacementImportLine(row, lineKey, {
       contact,
@@ -1422,9 +1574,9 @@ export const PLACEMENT_IMPORT_PREVIEW_SECTION_ORDER: ReadonlyArray<{
 }> = [
   { status: "ready", label: "À importer" },
   { status: "review", label: "À vérifier" },
-  { status: "duplicate_crm", label: "Déjà en base" },
   { status: "contact_not_found", label: "Investisseur introuvable" },
   { status: "co_contact_not_found", label: "Co-investisseur introuvable" },
+  { status: "duplicate_crm", label: "Déjà en base" },
   { status: "duplicate_csv", label: "Doublon fichier" },
   { status: "invalid", label: "Invalide" },
   { status: "imported", label: "Importé" },
@@ -1464,7 +1616,6 @@ export type PlacementCrmDiffHighlightField =
   | "dateEffetIso"
   | "dateSortieIso"
   | "numeroContrat"
-  | "partenaireNom"
   | "reinvestissementDividendes"
   | "pourcentageReinvestissement";
 
@@ -1478,11 +1629,6 @@ function parsePlacementReinvestPctFromNotes(notes?: string | null): number | und
   if (!match?.[1]) return undefined;
   const pct = Number.parseInt(match[1], 10);
   return Number.isFinite(pct) ? pct : undefined;
-}
-
-function partenaireLabel(partenaires: Partenaire[], partenaireId?: number | null): string {
-  if (!partenaireId) return "";
-  return partenaires.find((p) => p.id === partenaireId)?.raison_sociale?.trim() ?? "";
 }
 
 function markPlacementCrmDiff(
@@ -1501,13 +1647,14 @@ function markPlacementCrmDiff(
 /** Écarts fichier vs investissement CRM (aperçu « Déjà en base »). */
 export function getPlacementCrmDiffFieldHighlights(
   line: PlacementImportPreviewLine,
-  existing: Investissement,
-  partenaires: Partenaire[]
+  existing: Investissement
 ): PlacementCrmDiffFieldHighlights {
   const highlights: PlacementCrmDiffFieldHighlights = {};
 
-  markPlacementCrmDiff(highlights, "nomProduit", line.nomProduit, existing.nom_produit);
   markPlacementCrmDiff(highlights, "typeProduit", line.typeProduit, existing.type_produit);
+  if (!placementNomProduitMatches(line.nomProduit, existing.nom_produit)) {
+    markPlacementCrmDiff(highlights, "nomProduit", line.nomProduit, existing.nom_produit);
+  }
   markPlacementCrmDiff(
     highlights,
     "montantCentimes",
@@ -1533,13 +1680,6 @@ export function getPlacementCrmDiffFieldHighlights(
     );
     markPlacementCrmDiff(highlights, "frequenceVp", line.frequenceVp, existing.frequence_versement);
   }
-
-  markPlacementCrmDiff(
-    highlights,
-    "partenaireNom",
-    line.partenaireNom,
-    partenaireLabel(partenaires, existing.partenaire_id)
-  );
 
   if (line.reinvestissementDividendes) {
     const crmPct = parsePlacementReinvestPctFromNotes(existing.notes);

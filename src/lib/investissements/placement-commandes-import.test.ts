@@ -1,12 +1,16 @@
 import { describe, expect, it } from "vitest";
+import type { Contact } from "@/lib/api/tauri-contacts";
 import { PLACEMENT_COMMANDES_SAMPLE_ROWS } from "./__fixtures__/placement-commandes-fixture";
 import {
   buildPlacementCommandesImportPreview,
   cleanPlacementLibelleProduit,
   findExistingPlacementInvestissement,
+  getPlacementCrmDiffFieldHighlights,
   mapPlacementTypeProduit,
   mergePlacementScpiByInvestorProduct,
   mergePlacementVpByContract,
+  placementNomProduitMatches,
+  parsePlacementEuroFieldCentimes,
   resolvePlacementScpiRowAmounts,
   isScpiLikelyDividendReinvestmentCentimes,
   isPlacementContratVpMerge,
@@ -306,6 +310,15 @@ describe("placement-commandes-import", () => {
     expect(rows[2]?.dateSortieIso).toBeTruthy();
   });
 
+  it("resolvePlacementDateEffetIso — Date Effet JJ/MM/AA", () => {
+    expect(
+      resolvePlacementDateEffetIso(
+        { "Date Effet": "18/11/24" },
+        { dateEffet: "Date Effet" }
+      )
+    ).toBe("2024-11-18T00:00:00.000Z");
+  });
+
   it("resolvePlacementDateEffetIso — Date Effet uniquement", () => {
     expect(
       resolvePlacementDateEffetIso(
@@ -421,8 +434,8 @@ describe("placement-commandes-import", () => {
     expect(merged[0]?.montantVpCentimes).toBe(5000);
   });
 
-  it("findExistingPlacementInvestissement par numero contrat", () => {
-    const { match } = findExistingPlacementInvestissement(
+  it("findExistingPlacementInvestissement par numero contrat filtre par propriétaire", () => {
+    const { match: wrongOwner } = findExistingPlacementInvestissement(
       [
         {
           id: 1,
@@ -446,7 +459,223 @@ describe("placement-commandes-import", () => {
       },
       { contactId: 99 }
     );
+    expect(wrongOwner).toBeUndefined();
+
+    const { match } = findExistingPlacementInvestissement(
+      [
+        {
+          id: 1,
+          type_produit: "ASSURANCE_VIE",
+          nom_produit: "Test",
+          numero_contrat: "9E 271740658",
+          montant_initial: 150000,
+          contact_id: 5,
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          created_at: 0,
+          updated_at: 0,
+        },
+      ],
+      {
+        numeroContrat: "9E 271740658",
+        typeProduit: "ASSURANCE_VIE",
+        nomProduit: "Autre libellé",
+        montantCentimes: 999,
+      },
+      { contactId: 5 }
+    );
     expect(match?.id).toBe(1);
+  });
+
+  it("placementNomProduitMatches tolère ALPSI/CIF", () => {
+    expect(placementNomProduitMatches("Comète CIF", "Comète")).toBe(true);
+    expect(placementNomProduitMatches("Transitions Europe (ALPSI)", "Transitions Europe")).toBe(
+      true
+    );
+  });
+
+  it("placementNomProduitMatches rejette le rapprochement sur mots génériques seuls", () => {
+    expect(
+      placementNomProduitMatches("Transitions Europe (ALPSI)", "Epargne Pierre Europe ALPSI")
+    ).toBe(false);
+    expect(placementNomProduitMatches("Europe Premium", "Transitions Europe")).toBe(false);
+  });
+
+  it("findExistingPlacementInvestissement ne matche pas sur le montant seul", () => {
+    const result = findExistingPlacementInvestissement(
+      [
+        {
+          id: 1,
+          type_produit: "SCPI",
+          nom_produit: "Comète",
+          numero_contrat: undefined,
+          montant_initial: 1200000,
+          contact_id: 5,
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          created_at: 0,
+          updated_at: 0,
+        },
+      ],
+      {
+        numeroContrat: "",
+        typeProduit: "SCPI",
+        nomProduit: "Autre SCPI",
+        montantCentimes: 1200000,
+      },
+      { contactId: 5 }
+    );
+    expect(result.match).toBeUndefined();
+    expect(result.ambiguous).toBeUndefined();
+  });
+
+  it("findExistingPlacementInvestissement signale ambiguous si plusieurs noms correspondent", () => {
+    const invs = [
+      {
+        id: 1,
+        type_produit: "SCPI" as const,
+        nom_produit: "Comète CIF",
+        numero_contrat: undefined,
+        montant_initial: 1000000,
+        contact_id: 5,
+        versement_programme: false,
+        reinvestissement_dividendes: false,
+        origine: "MON_CONSEIL" as const,
+        created_at: 0,
+        updated_at: 0,
+      },
+      {
+        id: 2,
+        type_produit: "SCPI" as const,
+        nom_produit: "Comète",
+        numero_contrat: undefined,
+        montant_initial: 2000000,
+        contact_id: 5,
+        versement_programme: false,
+        reinvestissement_dividendes: false,
+        origine: "MON_CONSEIL" as const,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    const { ambiguous, match } = findExistingPlacementInvestissement(
+      invs,
+      {
+        numeroContrat: "",
+        typeProduit: "SCPI",
+        nomProduit: "Comète CIF",
+        montantCentimes: 1500000,
+      },
+      { contactId: 5 }
+    );
+    expect(ambiguous).toBe(true);
+    expect(match).toBeUndefined();
+  });
+
+  it("findExistingPlacementInvestissement départage par montant si plusieurs noms correspondent", () => {
+    const invs = [
+      {
+        id: 1,
+        type_produit: "SCPI" as const,
+        nom_produit: "Comète CIF",
+        numero_contrat: undefined,
+        montant_initial: 1000000,
+        contact_id: 5,
+        versement_programme: false,
+        reinvestissement_dividendes: false,
+        origine: "MON_CONSEIL" as const,
+        created_at: 0,
+        updated_at: 0,
+      },
+      {
+        id: 2,
+        type_produit: "SCPI" as const,
+        nom_produit: "Comète",
+        numero_contrat: undefined,
+        montant_initial: 2000000,
+        contact_id: 5,
+        versement_programme: false,
+        reinvestissement_dividendes: false,
+        origine: "MON_CONSEIL" as const,
+        created_at: 0,
+        updated_at: 0,
+      },
+    ];
+    const { match } = findExistingPlacementInvestissement(
+      invs,
+      {
+        numeroContrat: "",
+        typeProduit: "SCPI",
+        nomProduit: "Comète CIF",
+        montantCentimes: 2000000,
+      },
+      { contactId: 5 }
+    );
+    expect(match?.id).toBe(2);
+  });
+
+  it("parsePlacementEuroFieldCentimes — montants formatés Excel", () => {
+    expect(parsePlacementEuroFieldCentimes("187 200")).toBe(18_720_000);
+    expect(parsePlacementEuroFieldCentimes("283,792")).toBe(28_379_200);
+  });
+
+  it("buildPlacementCommandesImportPreview détecte duplicate_crm avec nom tolérant", () => {
+    const parsed = parsePlacementCommandeRows([
+      {
+        "Nom complet Investisseur": "LEGRAND Paul",
+        "Type Produit": "SCPI rendement",
+        "Libellé Produit": "Comète CIF",
+        "Date Effet": "01/03/2023",
+        "Type du dernier Mouvement VC": "Versement initial",
+        "Montant du dernier Mouvement VC": 12000,
+        "Etat Commande": "En-cours",
+      },
+    ]);
+    const preview = buildPlacementCommandesImportPreview(
+      parsed,
+      [
+        {
+          id: 1,
+          nom: "LEGRAND",
+          prenom: "Paul",
+          categorie: "CLIENT",
+          statut_suivi: "ACTIF",
+          created_at: 0,
+          updated_at: 0,
+        } as Contact,
+      ],
+      [
+        {
+          id: 10,
+          contact_id: 1,
+          type_produit: "SCPI",
+          nom_produit: "Comète",
+          montant_initial: 12_000_00,
+          versement_programme: false,
+          reinvestissement_dividendes: false,
+          origine: "MON_CONSEIL",
+          created_at: 0,
+          updated_at: 0,
+        },
+      ]
+    );
+    expect(preview[0]!.status).toBe("duplicate_crm");
+    const highlights = getPlacementCrmDiffFieldHighlights(preview[0]!, {
+      id: 10,
+      contact_id: 1,
+      type_produit: "SCPI",
+      nom_produit: "Comète",
+      montant_initial: 12_000_00,
+      versement_programme: false,
+      reinvestissement_dividendes: false,
+      origine: "MON_CONSEIL",
+      partenaire_id: 99,
+      created_at: 0,
+      updated_at: 0,
+    });
+    expect(highlights.nomProduit).toBeUndefined();
   });
 
   it("buildPlacementCommandesImportPreview — contact introuvable", () => {

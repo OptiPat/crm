@@ -2,30 +2,70 @@
  * Parse une date depuis Excel (serial), ISO ou format francais (JJ/MM/AAAA).
  * Retourne une chaine ISO UTC pour le backend Tauri.
  */
+
+function expandTwoDigitYear(year: number): number {
+  if (year >= 100) return year;
+  return year >= 50 ? 1900 + year : 2000 + year;
+}
+
+/** JJ/MM vs MM/JJ : défaut France (JJ/MM), bascule US si un segment > 12. */
+function resolveSlashDateParts(
+  first: number,
+  second: number
+): { day: number; month: number } | undefined {
+  if (first > 12 && second <= 12) return { day: first, month: second };
+  if (second > 12 && first <= 12) return { day: second, month: first };
+  if (first > 12 && second > 12) return undefined;
+  return { day: first, month: second };
+}
+
+function utcIsoFromCalendarParts(
+  year: number,
+  month: number,
+  day: number
+): string | undefined {
+  const d = new Date(Date.UTC(year, month - 1, day));
+  if (Number.isNaN(d.getTime())) return undefined;
+  if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) {
+    return undefined;
+  }
+  return d.toISOString();
+}
+
+function parseSlashDateString(dateStr: string): string | undefined {
+  const match = dateStr.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})(?:\s.*)?$/);
+  if (!match) return undefined;
+  const first = parseInt(match[1]!, 10);
+  const second = parseInt(match[2]!, 10);
+  const year = expandTwoDigitYear(parseInt(match[3]!, 10));
+  const parts = resolveSlashDateParts(first, second);
+  if (!parts) return undefined;
+  return utcIsoFromCalendarParts(year, parts.month, parts.day);
+}
+
+function parseExcelSerialToIso(serial: number): string | undefined {
+  const jsDate = new Date((serial - 25569) * 86400 * 1000);
+  if (Number.isNaN(jsDate.getTime())) return undefined;
+  const year = jsDate.getUTCFullYear();
+  if (year <= 1900 || year >= 2100) return undefined;
+  return utcIsoFromCalendarParts(year, jsDate.getUTCMonth() + 1, jsDate.getUTCDate());
+}
+
 export function parseImportDate(value: unknown): string | undefined {
   if (value == null || value === "") return undefined;
 
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const d = new Date(
-      Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate())
+    return utcIsoFromCalendarParts(
+      value.getFullYear(),
+      value.getMonth() + 1,
+      value.getDate()
     );
-    return d.toISOString();
   }
 
   if (typeof value === "number" && Number.isFinite(value)) {
     const serial = Math.floor(value);
     if (serial > 1 && serial < 100000) {
-      const jsDate = new Date((serial - 25569) * 86400 * 1000);
-      if (
-        !isNaN(jsDate.getTime()) &&
-        jsDate.getUTCFullYear() > 1900 &&
-        jsDate.getUTCFullYear() < 2100
-      ) {
-        const d = new Date(
-          Date.UTC(jsDate.getUTCFullYear(), jsDate.getUTCMonth(), jsDate.getUTCDate())
-        );
-        return d.toISOString();
-      }
+      return parseExcelSerialToIso(serial);
     }
   }
 
@@ -34,59 +74,37 @@ export function parseImportDate(value: unknown): string | undefined {
 
   const isoDateOnly = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (isoDateOnly) {
-    const year = parseInt(isoDateOnly[1]!, 10);
-    const month = parseInt(isoDateOnly[2]!, 10);
-    const day = parseInt(isoDateOnly[3]!, 10);
-    const d = new Date(Date.UTC(year, month - 1, day));
-    if (!isNaN(d.getTime())) return d.toISOString();
+    return utcIsoFromCalendarParts(
+      parseInt(isoDateOnly[1]!, 10),
+      parseInt(isoDateOnly[2]!, 10),
+      parseInt(isoDateOnly[3]!, 10)
+    );
   }
 
   const isoDateTime = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})[T\s]/);
   if (isoDateTime) {
     const parsed = new Date(dateStr);
-    if (!isNaN(parsed.getTime())) {
-      const d = new Date(
-        Date.UTC(parsed.getUTCFullYear(), parsed.getUTCMonth(), parsed.getUTCDate())
+    if (!Number.isNaN(parsed.getTime())) {
+      return utcIsoFromCalendarParts(
+        parsed.getUTCFullYear(),
+        parsed.getUTCMonth() + 1,
+        parsed.getUTCDate()
       );
-      return d.toISOString();
     }
   }
+
+  const slashIso = parseSlashDateString(dateStr);
+  if (slashIso) return slashIso;
 
   const excelDate = parseFloat(dateStr.replace(",", "."));
   if (
     !dateStr.includes("-") &&
     !dateStr.includes("/") &&
-    !isNaN(excelDate) &&
+    !Number.isNaN(excelDate) &&
     excelDate > 1 &&
     excelDate < 100000
   ) {
-    const serial = Math.floor(excelDate);
-    const jsDate = new Date((serial - 25569) * 86400 * 1000);
-    if (
-      !isNaN(jsDate.getTime()) &&
-      jsDate.getUTCFullYear() > 1900 &&
-      jsDate.getUTCFullYear() < 2100
-    ) {
-      const d = new Date(
-        Date.UTC(jsDate.getUTCFullYear(), jsDate.getUTCMonth(), jsDate.getUTCDate())
-      );
-      return d.toISOString();
-    }
-  }
-
-  const fr = dateStr.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
-  if (fr) {
-    const day = parseInt(fr[1], 10);
-    const month = parseInt(fr[2], 10);
-    const year = parseInt(fr[3], 10);
-    const d = new Date(Date.UTC(year, month - 1, day));
-    if (!isNaN(d.getTime())) return d.toISOString();
-  }
-
-  const parsed = Date.parse(dateStr);
-  if (!isNaN(parsed)) {
-    const d = new Date(parsed);
-    if (d.getFullYear() > 1900 && d.getFullYear() < 2100) return d.toISOString();
+    return parseExcelSerialToIso(Math.floor(excelDate));
   }
 
   return undefined;

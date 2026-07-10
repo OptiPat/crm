@@ -36,7 +36,7 @@ import {
   findExistingFoyerByFamilleName,
   linkContactToFoyer,
 } from "@/lib/foyers/foyer-utils";
-import { parseEuroInput } from "@/lib/souscription-cif/build-annexes-scpi-costs";
+import { parseImportMontantEuros } from "@/lib/investissements/parse-import-montant-euros";
 import { notifyInvestissementsChanged } from "@/lib/investissements/investissement-events";
 
 const IMPORT_SAVE_OPTS = { skipPostSaveHooks: true } as const;
@@ -109,7 +109,7 @@ export function formatImmoEuroField(centimes: number): string {
 export function parseImmoEuroFieldCentimes(raw: string): number | null {
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  const euros = parseImmoImportMontantEuros(trimmed);
+  const euros = parseImportMontantEuros(trimmed);
   if (euros == null || euros < 0) return null;
   return Math.round(euros * 100);
 }
@@ -292,42 +292,9 @@ export function parseImmoPrixTtcCentimes(value: unknown): number | null {
     if (value <= 0) return null;
     return Math.round(value * 100);
   }
-  const euros = parseImmoImportMontantEuros(String(value));
+  const euros = parseImportMontantEuros(String(value));
   if (euros == null || euros <= 0) return null;
   return Math.round(euros * 100);
-}
-
-/** Prix TTC Excel formaté (espaces milliers, virgule décimale ou séparateur de milliers). */
-function parseImmoImportMontantEuros(raw: string): number | null {
-  let s = raw
-    .trim()
-    .replace(/\u00a0|\u202f/g, " ")
-    .replace(/€/g, "")
-    .trim();
-  if (!s) return null;
-
-  if (/\d\s+\d/.test(s)) {
-    const compact = s.replace(/\s+/g, "");
-    const normalized = compact.includes(",")
-      ? compact.replace(/\./g, "").replace(",", ".")
-      : compact;
-    const n = Number.parseFloat(normalized);
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  }
-
-  const compact = s.replace(/\s+/g, "");
-
-  if (/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(compact)) {
-    const n = Number.parseFloat(compact.replace(/,/g, ""));
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  }
-
-  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(compact)) {
-    const n = Number.parseFloat(compact.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  }
-
-  return parseEuroInput(s);
 }
 
 function resolveColumnKeys(

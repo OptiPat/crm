@@ -3,20 +3,22 @@
  * (colonne « produit » / placement — pas le dispositif fiscal immo Finzzle).
  */
 export function inferTypeProduitFromImportProduitLabel(produitRaw: string): string {
-  const produitUpper = produitRaw.trim().toUpperCase();
+  const produitUpper = produitRaw
+    .trim()
+    .toUpperCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
   if (!produitUpper) return "AUTRE";
 
   if (produitUpper.includes("SCPI") && produitUpper.includes("DEMEMBR")) {
     return "SCPI_DEMEMBREMENT";
   }
   if (produitUpper.includes("SCPI")) return "SCPI";
-  if (
-    produitUpper.includes("AV") ||
-    produitUpper.includes("ASSURANCE") ||
-    produitUpper.includes("VIE")
-  ) {
+  if (produitUpper.includes("ASSURANCE") || produitUpper.includes("VIE")) {
     return "ASSURANCE_VIE";
   }
+  if (produitUpper.includes("AV")) return "ASSURANCE_VIE";
+  if (produitUpper.includes("PERISSOL")) return "PERISSOL";
   if (produitUpper.includes("PER")) return "PER";
   if (produitUpper.includes("FCPR") || produitUpper.includes("FPCI")) return "FCPR";
   if (produitUpper.includes("FIP") || produitUpper.includes("FCPI")) return "FIP_FCPI";

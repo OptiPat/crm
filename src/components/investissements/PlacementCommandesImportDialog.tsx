@@ -18,8 +18,6 @@ import type { Contact } from "@/lib/api/tauri-contacts";
 import { getAllContacts } from "@/lib/api/tauri-contacts";
 import type { Investissement } from "@/lib/api/tauri-investissements";
 import { getAllInvestissements } from "@/lib/api/tauri-investissements";
-import type { Partenaire } from "@/lib/api/tauri-partenaires";
-import { getAllPartenaires } from "@/lib/api/tauri-partenaires";
 import {
   applyPlacementCommandesImport,
   buildPlacementCommandesImportPreview,
@@ -33,6 +31,7 @@ import {
   pickPlacementCommandesSheetName,
   PLACEMENT_COMMANDES_SHEET_NAME,
   reassessPlacementPreviewLine,
+  resolvePlacementPreviewExistingInvestissement,
   summarizePlacementImportPreview,
   type PlacementImportPreviewLine,
 } from "@/lib/investissements/placement-commandes-import";
@@ -42,6 +41,7 @@ import {
   IMPORT_DIALOG_FOOTER_CLASS,
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
+  useImportDialogPreviewBodyScroll,
 } from "@/components/investissements/import-dialog-fullscreen";
 
 type Step = "pick" | "preview";
@@ -61,7 +61,7 @@ function readPlacementWorkbookRows(
   file: File
 ): Promise<{ rows: Record<string, unknown>[]; missingSheet: boolean }> {
   return file.arrayBuffer().then((data) => {
-    const workbook = XLSX.read(data, { type: "array", cellDates: true });
+    const workbook = XLSX.read(data, { type: "array", cellDates: false });
     const sheetName = pickPlacementCommandesSheetName(workbook.SheetNames);
     if (!sheetName) return { rows: [] as Record<string, unknown>[], missingSheet: true };
     const normalized = workbook.SheetNames.map((n) => n.trim().toLowerCase());
@@ -69,7 +69,7 @@ function readPlacementWorkbookRows(
     const missingSheet = !normalized.some((n) => n === expected);
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(
       workbook.Sheets[sheetName]!,
-      { defval: "" }
+      { defval: "", raw: false }
     );
     return { rows, missingSheet };
   });
@@ -90,17 +90,23 @@ export function PlacementCommandesImportDialog({
   const [lines, setLines] = useState<PlacementImportPreviewLine[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [investissements, setInvestissements] = useState<Investissement[]>([]);
-  const [partenaires, setPartenaires] = useState<Partenaire[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState(false);
   const linesRef = useRef(lines);
   linesRef.current = lines;
+  const previewBodyRef = useImportDialogPreviewBodyScroll(
+    step,
+    step === "preview" ? fileName : null
+  );
 
   const summary = useMemo(() => summarizePlacementImportPreview(lines), [lines]);
   const groupedLines = useMemo(() => groupPlacementPreviewLines(lines), [lines]);
-  const investissementById = useMemo(
-    () => new Map(investissements.map((i) => [i.id, i])),
-    [investissements]
+  const hasCrmDiffPreview = useMemo(
+    () =>
+      lines.some((line) =>
+        resolvePlacementPreviewExistingInvestissement(line, investissements, contacts)
+      ),
+    [lines, investissements, contacts]
   );
 
   const reset = useCallback(() => {
@@ -109,7 +115,6 @@ export function PlacementCommandesImportDialog({
     setLines([]);
     setContacts([]);
     setInvestissements([]);
-    setPartenaires([]);
     setSelected(new Set());
     setBusy(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -159,10 +164,9 @@ export function PlacementCommandesImportDialog({
         toast.error("Aucune ligne exploitable (investisseur, type, libellé requis)");
         return;
       }
-      const [loadedContacts, loadedInvestissements, loadedPartenaires] = await Promise.all([
+      const [loadedContacts, loadedInvestissements] = await Promise.all([
         getAllContacts(),
         getAllInvestissements(),
-        getAllPartenaires(),
       ]);
       const preview = buildPlacementCommandesImportPreview(
         parsed,
@@ -172,7 +176,6 @@ export function PlacementCommandesImportDialog({
       setFileName(file.name);
       setContacts(loadedContacts);
       setInvestissements(loadedInvestissements);
-      setPartenaires(loadedPartenaires);
       setLines(preview);
       setSelected(defaultSelectedPlacementLineKeys(preview));
       setStep("preview");
@@ -205,14 +208,12 @@ export function PlacementCommandesImportDialog({
         selected
       );
       if (applied > 0) {
-        const [loadedContacts, loadedInvestissements, loadedPartenaires] = await Promise.all([
+        const [loadedContacts, loadedInvestissements] = await Promise.all([
           getAllContacts(),
           getAllInvestissements(),
-          getAllPartenaires(),
         ]);
         setContacts(loadedContacts);
         setInvestissements(loadedInvestissements);
-        setPartenaires(loadedPartenaires);
         const seenInFile = buildPlacementPreviewSeenInFileFromLines(updatedLines);
         const refreshed = updatedLines.map((line) =>
           line.status === "imported"
@@ -241,7 +242,10 @@ export function PlacementCommandesImportDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={IMPORT_DIALOG_CONTENT_CLASS}>
+      <DialogContent
+        className={IMPORT_DIALOG_CONTENT_CLASS}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+      >
         <DialogHeader className={IMPORT_DIALOG_HEADER_CLASS}>
           <DialogTitle>Import commandes placement</DialogTitle>
           <DialogDescription>
@@ -251,7 +255,7 @@ export function PlacementCommandesImportDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className={IMPORT_DIALOG_BODY_CLASS}>
+        <div ref={previewBodyRef} className={IMPORT_DIALOG_BODY_CLASS}>
           {step === "pick" && (
             <div className="flex h-full min-h-[40vh] flex-col items-center justify-center gap-4 rounded-lg border border-dashed">
               <Upload className="h-10 w-10 text-muted-foreground" />
@@ -290,6 +294,18 @@ export function PlacementCommandesImportDialog({
                 {summary.review} à vérifier), {summary.contactNotFound} investisseur(s)
                 introuvable(s)
               </p>
+              {hasCrmDiffPreview ? (
+                <p className="text-xs text-muted-foreground">
+                  <span className="inline-block rounded bg-emerald-50 px-1 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:ring-emerald-800">
+                    Vert
+                  </span>{" "}
+                  = absent en CRM ·{" "}
+                  <span className="inline-block rounded bg-amber-50 px-1 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:ring-amber-800">
+                    Ambre
+                  </span>{" "}
+                  = valeur différente de l&apos;investissement CRM
+                </p>
+              ) : null}
               <div className={IMPORT_PREVIEW_LIST_CLASS}>
                 {groupedLines.map((section) => (
                   <ImportPreviewSection
@@ -297,23 +313,12 @@ export function PlacementCommandesImportDialog({
                     title={section.label}
                     count={section.lines.length}
                   >
-                    {section.status === "duplicate_crm" ? (
-                      <p className="text-xs text-muted-foreground">
-                        <span className="inline-block rounded bg-emerald-50 px-1 ring-1 ring-emerald-200 dark:bg-emerald-950/35 dark:ring-emerald-800">
-                          Vert
-                        </span>{" "}
-                        = absent en CRM ·{" "}
-                        <span className="inline-block rounded bg-amber-50 px-1 ring-1 ring-amber-200 dark:bg-amber-950/35 dark:ring-amber-800">
-                          Ambre
-                        </span>{" "}
-                        = valeur différente de l&apos;investissement CRM
-                      </p>
-                    ) : null}
                     {section.lines.map((line) => {
-                      const existing =
-                        line.status === "duplicate_crm" && line.investissementId
-                          ? investissementById.get(line.investissementId)
-                          : undefined;
+                      const existing = resolvePlacementPreviewExistingInvestissement(
+                        line,
+                        investissements,
+                        contacts
+                      );
                       return (
                         <PlacementImportPreviewLineCard
                           key={line.lineKey}
@@ -325,7 +330,7 @@ export function PlacementCommandesImportDialog({
                           onPatch={(patch) => commitLineEdit(line.lineKey, patch)}
                           crmDiffHighlights={
                             existing
-                              ? getPlacementCrmDiffFieldHighlights(line, existing, partenaires)
+                              ? getPlacementCrmDiffFieldHighlights(line, existing)
                               : undefined
                           }
                         />

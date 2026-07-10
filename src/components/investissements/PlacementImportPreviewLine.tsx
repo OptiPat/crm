@@ -117,10 +117,7 @@ export function PlacementImportPreviewLine({
           <p className="text-sm font-mono text-xs truncate">{line.numeroContrat ?? "—"}</p>
         </ImportPreviewField>
 
-        <ImportPreviewField
-          label="Partenaire"
-          highlight={crmDiffHighlight(crmDiffHighlights, "partenaireNom")}
-        >
+        <ImportPreviewField label="Partenaire">
           <p className="text-sm truncate">{line.partenaireNom || "—"}</p>
         </ImportPreviewField>
 
