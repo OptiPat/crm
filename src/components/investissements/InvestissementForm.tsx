@@ -171,7 +171,7 @@ function InvestissementFormSection({
   const meta = INVESTISSEMENT_FORM_SECTION_META[sectionKey];
   const Icon = meta.icon;
   return (
-    <div id={INVESTISSEMENT_FORM_SECTIONS[sectionKey]} className="space-y-4 scroll-mt-20">
+    <div id={INVESTISSEMENT_FORM_SECTIONS[sectionKey]} className="space-y-4 scroll-mt-4">
       <h3 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
         <Icon className={INVESTISSEMENT_FORM_SECTION_ICON_CLASS} aria-hidden />
         {meta.label}
@@ -183,13 +183,18 @@ function InvestissementFormSection({
 
 function InvestissementFormSectionNav({
   sections,
+  className,
 }: {
   sections: readonly { id: string; label: string; icon: LucideIcon }[];
+  className?: string;
 }) {
   return (
     <nav
       aria-label="Sections du formulaire placement"
-      className="sticky top-0 z-10 -mx-1 mb-1 flex flex-wrap gap-1 border-b border-border/80 bg-background/95 pb-2 backdrop-blur-sm"
+      className={cn(
+        "flex flex-wrap gap-1 border-b border-border/80 bg-card pb-2",
+        className
+      )}
     >
       {sections.map((section) => {
         const Icon = section.icon;
@@ -758,8 +763,6 @@ export function InvestissementForm({
 
   const formFields = (
     <>
-      {useSheet && <InvestissementFormSectionNav sections={navSections} />}
-
       <InvestissementFormSection sectionKey="identification">
           {/* Client (masqué si ouvert depuis la fiche contact) */}
           {lockedContactContext && defaultContact ? (
@@ -1466,13 +1469,25 @@ export function InvestissementForm({
   const formBody = (
     <form
       onSubmit={handleSubmit}
-      className={useSheet ? "flex min-h-0 flex-1 flex-col" : "space-y-4"}
+      className={useSheet ? "flex min-h-0 flex-1 flex-col overflow-hidden" : "space-y-4"}
     >
-      <div className={useSheet ? "min-h-0 flex-1 space-y-4 overflow-y-auto pr-1" : "contents"}>
-        {formFields}
+      {useSheet ? (
+        <InvestissementFormSectionNav
+          sections={navSections}
+          className="shrink-0 px-6 pt-3"
+        />
+      ) : null}
+      <div
+        className={
+          useSheet
+            ? "min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-6"
+            : "contents"
+        }
+      >
+        <div className={useSheet ? "space-y-4" : undefined}>{formFields}</div>
       </div>
       {useSheet ? (
-        <SheetFooter className="mt-0 shrink-0 border-t bg-background pt-4">
+        <SheetFooter className="mt-0 shrink-0 gap-2 border-t bg-card px-6 py-4 sm:flex-row sm:justify-end">
           {formFooter}
         </SheetFooter>
       ) : (
@@ -1511,7 +1526,7 @@ export function InvestissementForm({
             side="right"
             hideOverlay={nestedSheet}
             className={cn(
-              "flex w-full flex-col gap-0 p-0 sm:max-w-2xl sm:max-h-[100dvh]",
+              "flex h-svh max-h-svh min-h-0 w-full flex-col gap-0 overflow-hidden bg-card p-0 sm:max-w-2xl lg:max-w-3xl",
               nestedSheet && STACKED_NESTED_SHEET_Z
             )}
             onInteractOutside={
@@ -1528,7 +1543,7 @@ export function InvestissementForm({
               </SheetHeader>
             </div>
             <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
-              <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+              {formBody}
             </PortalLayerProvider>
           </SheetContent>
         </Sheet>

@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { deleteContact, type Contact } from "@/lib/api/tauri-contacts";
-import { List } from "lucide-react";
+import { List, Pin } from "lucide-react";
 import { toast } from "sonner";
 import { STACKED_CONTACT_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
@@ -25,6 +25,8 @@ interface DashboardContactDetailSheetProps {
   hideOverlay?: boolean;
   /** Ferme la fiche et réaffiche la liste (volet liste reste ouvert). */
   onBackToList?: () => void;
+  /** Affiche le bouton « Épingler » (liste + fiche côte à côte). */
+  onPin?: () => void;
 }
 
 function contactDisplayName(contact: Contact): string {
@@ -40,6 +42,7 @@ export function DashboardContactDetailSheet({
   onUpdate,
   hideOverlay = false,
   onBackToList,
+  onPin,
 }: DashboardContactDetailSheetProps) {
   if (!contact) return null;
 
@@ -63,7 +66,7 @@ export function DashboardContactDetailSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} modal={!hideOverlay}>
+    <Sheet open={open} onOpenChange={onOpenChange} modal={!hideOverlay && !onPin}>
       <SheetContent
         side="right"
         hideOverlay={hideOverlay}
@@ -77,7 +80,23 @@ export function DashboardContactDetailSheet({
         </SheetHeader>
         <PortalLayerProvider layer="stacked">
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pb-2 pt-4">
-            <ContactDetail
+            {onPin ? (
+              <div className="mb-2 flex shrink-0 justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={onPin}
+                  title="Épingler la fiche à droite de la liste"
+                >
+                  <Pin className="h-4 w-4" aria-hidden />
+                  Épingler
+                </Button>
+              </div>
+            ) : null}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <ContactDetail
               key={contact.id}
               embedded
               open
@@ -92,6 +111,7 @@ export function DashboardContactDetailSheet({
                 if (linked.id) onContactRefreshed?.(linked);
               }}
             />
+            </div>
           </div>
         </PortalLayerProvider>
         {onBackToList ? (

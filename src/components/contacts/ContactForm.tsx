@@ -61,6 +61,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
+import { preventStackedSheetOutsideDismiss } from "@/lib/ui/radix-outside-interaction";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { ContactPersonSearch } from "./ContactPersonSearch";
 import {
@@ -147,7 +148,7 @@ function FormSection({
     const meta = CONTACT_FORM_SECTION_META[sectionKey];
     const Icon = meta.icon;
     return (
-      <div id={CONTACT_FORM_SECTIONS[sectionKey]} className="space-y-3 scroll-mt-20">
+      <div id={CONTACT_FORM_SECTIONS[sectionKey]} className="space-y-3 scroll-mt-4">
         <h3 className="flex items-center gap-2 text-sm font-medium uppercase tracking-wide text-muted-foreground">
           <Icon className={CONTACT_FORM_SECTION_ICON_CLASS} aria-hidden />
           {meta.label}
@@ -158,7 +159,7 @@ function FormSection({
   }
 
   return (
-    <div className="space-y-3 scroll-mt-20">
+    <div className="space-y-3 scroll-mt-4">
       <h3 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
         {title}
       </h3>
@@ -169,13 +170,18 @@ function FormSection({
 
 function ContactFormSectionNav({
   sections,
+  className,
 }: {
   sections: readonly { id: string; label: string; icon: LucideIcon }[];
+  className?: string;
 }) {
   return (
     <nav
       aria-label="Sections du formulaire"
-      className="sticky top-0 z-10 -mx-1 mb-1 flex flex-wrap gap-1 border-b border-border/80 bg-background/95 pb-2 backdrop-blur-sm"
+      className={cn(
+        "flex flex-wrap gap-1 border-b border-border/80 bg-card pb-2",
+        className
+      )}
     >
       {sections.map((section) => {
         const Icon = section.icon;
@@ -798,8 +804,6 @@ export function ContactForm({
 
   const formFields = (
     <>
-      {!isPrescripteurForm && <ContactFormSectionNav sections={editSections} />}
-
       {(isEdit || (formData.nom && formData.prenom)) && (
         <ContactFormSummary
           formData={formData}
@@ -1585,9 +1589,22 @@ export function ContactForm({
   );
 
   const formBody = (
-    <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
-      <div className="min-h-0 flex-1 space-y-6 overflow-y-auto pr-1">{formFields}</div>
-      <SheetFooter className="mt-0 shrink-0 border-t bg-background pt-4">{formFooter}</SheetFooter>
+    <form
+      onSubmit={handleSubmit}
+      className="flex min-h-0 flex-1 flex-col overflow-hidden"
+    >
+      {!isPrescripteurForm ? (
+        <ContactFormSectionNav
+          sections={editSections}
+          className="shrink-0 px-6 pt-3"
+        />
+      ) : null}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pt-4 pb-6">
+        <div className="space-y-6">{formFields}</div>
+      </div>
+      <SheetFooter className="mt-0 shrink-0 gap-2 border-t bg-card px-6 py-4 sm:flex-row sm:justify-end">
+        {formFooter}
+      </SheetFooter>
     </form>
   );
 
@@ -1613,9 +1630,15 @@ export function ContactForm({
           side="right"
           hideOverlay={nestedSheet}
           className={cn(
-            "flex min-h-0 w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl sm:max-h-[100dvh]",
+            "flex h-svh max-h-svh min-h-0 w-full flex-col gap-0 overflow-hidden bg-card p-0 sm:max-w-2xl lg:max-w-3xl",
             nestedSheet && STACKED_NESTED_SHEET_Z
           )}
+          onInteractOutside={
+            nestedSheet ? preventStackedSheetOutsideDismiss : undefined
+          }
+          onPointerDownOutside={
+            nestedSheet ? preventStackedSheetOutsideDismiss : undefined
+          }
         >
           <div className="shrink-0 border-b px-6 py-4">
             <SheetHeader>
@@ -1624,7 +1647,7 @@ export function ContactForm({
             </SheetHeader>
           </div>
           <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
-            <div className="flex min-h-0 flex-1 flex-col px-6 py-4">{formBody}</div>
+            {formBody}
           </PortalLayerProvider>
         </SheetContent>
       </Sheet>

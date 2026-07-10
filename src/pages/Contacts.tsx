@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Filter, Users2, Tag, Download } from "lucide-react";
+import { Search, Filter, Users2, Tag, Download, PinOff } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,12 +48,14 @@ import { ContactsPageHeader } from "@/components/contacts/ContactsPageHeader";
 import { ContactsActiveFilters } from "@/components/contacts/ContactsActiveFilters";
 import { ContactsEmptyState } from "@/components/contacts/ContactsEmptyState";
 import { ContactForm } from "@/components/contacts/ContactForm";
-import { ContactDetail } from "@/components/contacts/ContactDetail";
 import { ContactImport } from "@/components/contacts/ContactImport";
 import { FinzzleClientsImportDialog } from "@/components/contacts/FinzzleClientsImportDialog";
 import { MonOrganisationImportDialog } from "@/components/contacts/MonOrganisationImportDialog";
 import { ImmoCommandesImportDialog } from "@/components/investissements/ImmoCommandesImportDialog";
 import { PlacementCommandesImportDialog } from "@/components/investissements/PlacementCommandesImportDialog";
+import { DashboardContactDetailSheet } from "@/components/dashboard/DashboardContactDetailSheet";
+import { ContactDetail } from "@/components/contacts/ContactDetail";
+import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { ContactDeduplicate } from "@/components/contacts/ContactDeduplicate";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
 import { contactMatchesSearch } from "@/lib/search-utils";
@@ -95,11 +97,10 @@ import {
 } from "@/lib/contacts/contacts-category-match";
 import { formatStatutSuiviLabel } from "@/lib/contacts/contact-form-utils";
 import {
-  SplitDetailLayout,
-  SplitDetailPane,
   splitCardClassName,
   splitCardContentClassName,
   splitCardHeaderClassName,
+  splitPanelHeightClass,
 } from "@/components/layout";
 import { toast } from "sonner";
 
@@ -133,6 +134,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const [etiquettesDisponibles, setEtiquettesDisponibles] = useState<Etiquette[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [detailPinned, setDetailPinned] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [showImportLegacy, setShowImportLegacy] = useState(false);
@@ -531,8 +533,21 @@ export function Contacts({ onNavigate }: ContactsProps) {
   }, [segmentFilter]);
 
   const isWideLayout = useMediaQuery("(min-width: 1024px)");
-  /** Grand écran : split liste / fiche latérale pleine hauteur */
-  const showSplit = isWideLayout && selectedContact != null;
+  /** Fiche épinglée : liste compacte à gauche (~58 %) + panneau à droite (~42 %). */
+  const showPinnedSplit = isWideLayout && selectedContact != null && detailPinned;
+  /** Grand écran, fiche non épinglée : volet latéral type dashboard. */
+  const showDetailSheet = isWideLayout && selectedContact != null && !detailPinned;
+  const listRowVariant = showPinnedSplit ? "plain" : "card";
+  const listRowNameSize = showPinnedSplit ? "md" : "lg";
+
+  useEffect(() => {
+    if (!isWideLayout && selectedContact) {
+      setShowDetail(true);
+      setDetailPinned(false);
+    } else if (isWideLayout) {
+      setShowDetail(false);
+    }
+  }, [isWideLayout, selectedContact]);
 
   const openContactDetail = useCallback(
     (contact: Contact) => {
@@ -591,7 +606,14 @@ export function Contacts({ onNavigate }: ContactsProps) {
   const closeContactDetail = () => {
     setSelectedContact(null);
     setShowDetail(false);
+    setDetailPinned(false);
   };
+
+  const handleContactRefreshed = useCallback((updated: Contact) => {
+    setSelectedContact(updated);
+    setContacts((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    patchContactInListCache(updated);
+  }, []);
 
   const handleDeleteContact = async (id: number) => {
     try {
@@ -711,8 +733,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
   return (
     <div
       className={cn(
-        "mx-auto space-y-6 pb-8",
-        showSplit ? "max-w-[1800px]" : "max-w-[1600px]"
+        "mx-auto max-w-[1600px] space-y-6 pb-8",
+        showPinnedSplit && "max-w-[1800px]"
       )}
     >
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -740,11 +762,19 @@ export function Contacts({ onNavigate }: ContactsProps) {
         )}
       </div>
 
-      <SplitDetailLayout
-        showSplit={showSplit}
-        list={
-      <Card className={splitCardClassName(showSplit, "min-w-0 border-border/70 shadow-sm")}>
-        <CardHeader className={splitCardHeaderClassName(showSplit)}>
+      <div
+        className={cn(
+          "min-w-0",
+          showPinnedSplit && cn("flex items-start gap-4", splitPanelHeightClass)
+        )}
+      >
+      <Card
+        className={splitCardClassName(
+          showPinnedSplit,
+          cn("min-w-0 border-border/70 shadow-sm", showPinnedSplit && "min-w-0 flex-1")
+        )}
+      >
+        <CardHeader className={splitCardHeaderClassName(showPinnedSplit)}>
           <div className="space-y-4">
             <div>
               <CardTitle className="font-serif">Liste des contacts</CardTitle>
@@ -970,10 +1000,10 @@ export function Contacts({ onNavigate }: ContactsProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent className={splitCardContentClassName(showSplit, undefined, true)}>
+        <CardContent className={splitCardContentClassName(showPinnedSplit, undefined, true)}>
           <div
             className={cn(
-              showSplit && "flex min-h-0 flex-1 flex-col overflow-hidden"
+              showPinnedSplit && "flex min-h-0 flex-1 flex-col overflow-hidden"
             )}
           >
           {loading ? (
@@ -998,13 +1028,13 @@ export function Contacts({ onNavigate }: ContactsProps) {
               <div
                 className={cn(
                   "rounded-xl border border-border/70 divide-y divide-border overflow-hidden",
-                  showSplit && "min-h-0 flex-1"
+                  showPinnedSplit && "min-h-0 flex-1"
                 )}
               >
                 <VirtualizedFoyerContactList
                   rows={foyerFlatRows}
-                  pageScroll={!showSplit}
-                  fillParent={showSplit}
+                  pageScroll={!showPinnedSplit}
+                  fillParent={showPinnedSplit}
                   renderRow={(row) => (
                     <FoyerFlatRowRenderer
                       row={row}
@@ -1021,7 +1051,7 @@ export function Contacts({ onNavigate }: ContactsProps) {
                 />
               </div>
             ) : (
-              <div className={cn("space-y-4", showSplit && "min-h-0 flex-1 overflow-y-auto overscroll-contain")}>
+              <div className={cn("space-y-4", showPinnedSplit && "min-h-0 flex-1 overflow-y-auto overscroll-contain")}>
                 {contactsGroupedByFoyer.map((group, groupIndex) => (
                   <FoyerGroupCard
                     key={group.foyer?.id ?? `solo-${groupIndex}`}
@@ -1040,8 +1070,8 @@ export function Contacts({ onNavigate }: ContactsProps) {
           ) : filteredContacts.length > 80 ? (
             <VirtualizedContactList
               items={filteredContacts}
-              pageScroll={!showSplit}
-              fillParent={showSplit}
+              pageScroll={!showPinnedSplit}
+              fillParent={showPinnedSplit}
               getKey={(contact) => contact.id ?? `${contact.nom}-${contact.prenom}`}
               getItemHeight={(contact) =>
                 estimateContactListRowHeight(contact, etiquettesParContact)
@@ -1051,20 +1081,22 @@ export function Contacts({ onNavigate }: ContactsProps) {
                   contact={contact}
                   {...listRowProps}
                   selected={selectedContact?.id === contact.id}
-                  variant="card"
+                  variant={listRowVariant}
+                  nameSize={listRowNameSize}
                 />
               )}
-              className={cn("pr-1", showSplit && "min-h-0 flex-1")}
+              className={cn("pr-1", showPinnedSplit && "min-h-0 flex-1")}
             />
           ) : (
-            <div className={cn("space-y-2", showSplit && "min-h-0 flex-1 overflow-y-auto overscroll-contain")}>
+            <div className={cn("space-y-2", showPinnedSplit && "min-h-0 flex-1 overflow-y-auto overscroll-contain")}>
               {filteredContacts.map((contact) => (
                 <ContactListRow
                   key={contact.id}
                   contact={contact}
                   {...listRowProps}
                   selected={selectedContact?.id === contact.id}
-                  variant="card"
+                  variant={listRowVariant}
+                  nameSize={listRowNameSize}
                 />
               ))}
             </div>
@@ -1072,33 +1104,57 @@ export function Contacts({ onNavigate }: ContactsProps) {
           </div>
         </CardContent>
       </Card>
-        }
-        detail={
-          selectedContact ? (
-            <SplitDetailPane>
+
+      {showPinnedSplit && selectedContact ? (
+        <aside className="hidden h-full min-h-0 w-[42%] min-w-[28rem] max-w-3xl shrink-0 flex-col lg:flex">
+          <div className="mb-2 flex shrink-0 justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setDetailPinned(false)}
+              title="Afficher la fiche en volet latéral"
+            >
+              <PinOff className="h-4 w-4" aria-hidden />
+              Volet latéral
+            </Button>
+          </div>
+          <div className="min-h-0 flex-1">
+            <PortalLayerProvider layer="stacked">
               <ContactDetail
                 key={selectedContact.id}
                 embedded
                 open
                 contact={selectedContact}
+                nestedInvestissementSheet
                 onOpenChange={(open) => {
                   if (!open) closeContactDetail();
                 }}
                 onDelete={handleDeleteContact}
-                onContactRefreshed={(updated) => {
-                  setSelectedContact(updated);
-                  setContacts((prev) =>
-                    prev.map((c) => (c.id === updated.id ? updated : c))
-                  );
-                  patchContactInListCache(updated);
-                }}
+                onContactRefreshed={handleContactRefreshed}
                 onNavigate={onNavigate}
                 onOpenContact={openLinkedContact}
               />
-            </SplitDetailPane>
-          ) : null
-        }
-      />
+            </PortalLayerProvider>
+          </div>
+        </aside>
+      ) : null}
+      </div>
+
+      {showDetailSheet && selectedContact ? (
+        <DashboardContactDetailSheet
+          open
+          onOpenChange={(open) => {
+            if (!open) closeContactDetail();
+          }}
+          contact={selectedContact}
+          onPin={() => setDetailPinned(true)}
+          onContactRefreshed={handleContactRefreshed}
+          onNavigate={onNavigate}
+          onUpdate={() => void loadContacts({ silent: true })}
+        />
+      ) : null}
 
       {/* Formulaire de création */}
       <ContactForm
@@ -1176,17 +1232,11 @@ export function Contacts({ onNavigate }: ContactsProps) {
           open={showDetail}
           onOpenChange={(open) => {
             setShowDetail(open);
-            if (!open) setSelectedContact(null);
+            if (!open) closeContactDetail();
           }}
           contact={selectedContact}
           onDelete={handleDeleteContact}
-          onContactRefreshed={(updated) => {
-            setSelectedContact(updated);
-            setContacts((prev) =>
-              prev.map((c) => (c.id === updated.id ? updated : c))
-            );
-            patchContactInListCache(updated);
-          }}
+          onContactRefreshed={handleContactRefreshed}
           onNavigate={onNavigate}
           onOpenContact={openLinkedContact}
         />

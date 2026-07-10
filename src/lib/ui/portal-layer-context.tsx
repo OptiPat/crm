@@ -21,8 +21,12 @@ export function PortalLayerProvider({
 }
 
 /** z-index des portails Radix (Select, Popover) selon le calque sheet/dialog parent. */
+export function usePortalLayer(): PortalLayer {
+  return useContext(PortalLayerContext);
+}
+
 export function usePortalLayerZ(): string {
-  const layer = useContext(PortalLayerContext);
+  const layer = usePortalLayer();
   if (layer === "nested") return STACKED_NESTED_POPOVER_Z;
   if (layer === "stacked") return STACKED_PORTAL_Z;
   return "z-50";

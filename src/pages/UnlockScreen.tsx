@@ -34,7 +34,7 @@ export function UnlockScreen({ onUnlocked }: UnlockScreenProps) {
   };
 
   return (
-    <div className="h-full overflow-y-auto overscroll-contain bg-gradient-to-b from-primary/[0.04] via-background to-background flex items-center justify-center p-6 sm:p-10">
+    <div className="min-h-screen bg-gradient-to-b from-primary/[0.04] via-background to-background flex items-center justify-center p-6 sm:p-10">
       <div className="w-full max-w-lg space-y-8">
         <header className="flex items-center justify-center gap-4 sm:gap-5">
           <img

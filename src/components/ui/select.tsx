@@ -3,13 +3,13 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
-import { usePortalLayerZ } from "@/lib/ui/portal-layer-context"
-
-const Select = SelectPrimitive.Root
+import { usePortalLayer, usePortalLayerZ } from "@/lib/ui/portal-layer-context"
 
 const SelectGroup = SelectPrimitive.Group
 
 const SelectValue = SelectPrimitive.Value
+
+const Select = SelectPrimitive.Root
 
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
@@ -69,34 +69,47 @@ SelectScrollDownButton.displayName =
 const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = "popper", ...props }, ref) => {
+>(({ className, children, position, onCloseAutoFocus, ...props }, ref) => {
   const portalZ = usePortalLayerZ()
+  const layer = usePortalLayer()
+  const inSheet = layer !== "default"
+  const resolvedPosition = position ?? (inSheet ? "item-aligned" : "popper")
 
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
         ref={ref}
         className={cn(
-          "relative max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
+          "relative max-h-96 min-w-[8rem] overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+          inSheet
+            ? null
+            : "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2",
           portalZ,
-          position === "popper" &&
+          !inSheet &&
+            resolvedPosition === "popper" &&
             "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
           className
         )}
-        position={position}
+        position={resolvedPosition}
+        onCloseAutoFocus={(event) => {
+          onCloseAutoFocus?.(event)
+          if (inSheet && !event.defaultPrevented) {
+            event.preventDefault()
+          }
+        }}
         {...props}
       >
-        <SelectScrollUpButton />
+        {resolvedPosition === "popper" ? <SelectScrollUpButton /> : null}
         <SelectPrimitive.Viewport
           className={cn(
             "p-1",
-            position === "popper" &&
-              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+            resolvedPosition === "popper" &&
+              "w-full min-w-[var(--radix-select-trigger-width)]"
           )}
         >
           {children}
         </SelectPrimitive.Viewport>
-        <SelectScrollDownButton />
+        {resolvedPosition === "popper" ? <SelectScrollDownButton /> : null}
       </SelectPrimitive.Content>
     </SelectPrimitive.Portal>
   )

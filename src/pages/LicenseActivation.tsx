@@ -75,7 +75,7 @@ export function LicenseActivation({ onComplete }: LicenseActivationProps) {
   };
 
   return (
-    <div className="h-full overflow-y-auto overscroll-contain bg-background flex items-center justify-center p-8">
+    <div className="min-h-screen bg-background flex items-center justify-center p-8">
       <div className="max-w-lg w-full">
         <div className="text-center mb-8">
           <div className="inline-flex p-3 bg-primary/10 rounded-full mb-4">
