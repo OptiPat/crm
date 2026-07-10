@@ -1275,6 +1275,22 @@ function assessPlacementImportLine(
   };
 }
 
+export type PlacementPreviewEditablePatch = Partial<
+  Pick<
+    PlacementImportPreviewLine,
+    | "montantCentimes"
+    | "montantVpCentimes"
+    | "frequenceVp"
+    | "reinvestissementDividendes"
+    | "pourcentageReinvestissement"
+    | "dateEffetIso"
+    | "dateSortieIso"
+    | "contactId"
+    | "coContactId"
+    | "nomProduit"
+  >
+>;
+
 export function reassessPlacementPreviewLine(
   line: PlacementImportPreviewLine,
   contacts: Contact[],
@@ -1304,13 +1320,17 @@ export function reassessPlacementPreviewLine(
 
   const contactLabel = contact
     ? `${contact.prenom} ${contact.nom}`
-    : `${line.investorPrenom} ${line.investorNom}`;
+    : line.contactId != null && line.contactLabel
+      ? line.contactLabel
+      : `${line.investorPrenom} ${line.investorNom}`;
   const coContactLabel =
     hasCo && coContact
       ? `${coContact.prenom} ${coContact.nom}`
-      : hasCo
-        ? `${line.coInvestorPrenom} ${line.coInvestorNom}`
-        : undefined;
+      : hasCo && line.coContactId != null && line.coContactLabel
+        ? line.coContactLabel
+        : hasCo
+          ? `${line.coInvestorPrenom} ${line.coInvestorNom}`
+          : undefined;
 
   let foyerId: number | undefined;
   if (contact && coContact?.foyer_id && contact.foyer_id === coContact.foyer_id) {
@@ -1347,18 +1367,7 @@ export function reassessPlacementPreviewLine(
 
 export function patchPlacementPreviewLine(
   line: PlacementImportPreviewLine,
-  patch: Partial<
-    Pick<
-      PlacementImportPreviewLine,
-      | "montantCentimes"
-      | "montantVpCentimes"
-      | "frequenceVp"
-      | "reinvestissementDividendes"
-      | "pourcentageReinvestissement"
-      | "dateEffetIso"
-      | "dateSortieIso"
-    >
-  >,
+  patch: PlacementPreviewEditablePatch,
   contacts: Contact[],
   investissements: Investissement[]
 ): PlacementImportPreviewLine {
@@ -1368,18 +1377,7 @@ export function patchPlacementPreviewLine(
 
 function mergePlacementPreviewPatch(
   line: PlacementImportPreviewLine,
-  patch: Partial<
-    Pick<
-      PlacementImportPreviewLine,
-      | "montantCentimes"
-      | "montantVpCentimes"
-      | "frequenceVp"
-      | "reinvestissementDividendes"
-      | "pourcentageReinvestissement"
-      | "dateEffetIso"
-      | "dateSortieIso"
-    >
-  >
+  patch: PlacementPreviewEditablePatch
 ): PlacementImportPreviewLine {
   const vpSynced = syncPlacementVpFields(
     patch.montantVpCentimes ?? line.montantVpCentimes,
@@ -1392,6 +1390,10 @@ function mergePlacementPreviewPatch(
   return {
     ...line,
     ...patch,
+    nomProduit:
+      patch.nomProduit != null
+        ? cleanPlacementLibelleProduit(patch.nomProduit)
+        : line.nomProduit,
     montantCentimes:
       patch.montantCentimes != null
         ? Math.max(0, patch.montantCentimes)
@@ -1418,30 +1420,21 @@ export function buildPlacementPreviewSeenInFileFromLines(
 export function patchPlacementPreviewLines(
   lines: PlacementImportPreviewLine[],
   lineKey: string,
-  patch: Partial<
-    Pick<
-      PlacementImportPreviewLine,
-      | "montantCentimes"
-      | "montantVpCentimes"
-      | "frequenceVp"
-      | "reinvestissementDividendes"
-      | "pourcentageReinvestissement"
-      | "dateEffetIso"
-      | "dateSortieIso"
-    >
-  >,
+  patch: PlacementPreviewEditablePatch,
   contacts: Contact[],
-  investissements: Investissement[]
+  investissements: Investissement[],
+  opts?: { reassessAll?: boolean }
 ): PlacementImportPreviewLine[] {
   const withPatch = lines.map((line) =>
     line.lineKey === lineKey ? mergePlacementPreviewPatch(line, patch) : line
   );
   const seenInFile = buildPlacementPreviewSeenInFileFromLines(withPatch);
-  return withPatch.map((line) =>
-    line.status === "imported"
-      ? line
-      : reassessPlacementPreviewLine(line, contacts, investissements, seenInFile)
-  );
+  const reassessAll = opts?.reassessAll ?? true;
+  return withPatch.map((line) => {
+    if (line.status === "imported") return line;
+    if (!reassessAll && line.lineKey !== lineKey) return line;
+    return reassessPlacementPreviewLine(line, contacts, investissements, seenInFile);
+  });
 }
 
 export function buildPlacementPreviewSeenInFile(

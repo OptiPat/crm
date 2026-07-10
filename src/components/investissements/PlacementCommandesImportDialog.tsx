@@ -34,6 +34,7 @@ import {
   resolvePlacementPreviewExistingInvestissement,
   summarizePlacementImportPreview,
   type PlacementImportPreviewLine,
+  type PlacementPreviewEditablePatch,
 } from "@/lib/investissements/placement-commandes-import";
 import {
   IMPORT_DIALOG_BODY_CLASS,
@@ -41,6 +42,7 @@ import {
   IMPORT_DIALOG_FOOTER_CLASS,
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
+  isPlacementDateOnlyPreviewPatch,
   useImportDialogPreviewBodyScroll,
 } from "@/components/investissements/import-dialog-fullscreen";
 
@@ -126,14 +128,16 @@ export function PlacementCommandesImportDialog({
   };
 
   const commitLineEdit = useCallback(
-    (lineKey: string, patch: Parameters<typeof patchPlacementPreviewLines>[2]) => {
+    (lineKey: string, patch: PlacementPreviewEditablePatch) => {
+      const reassessAll = !isPlacementDateOnlyPreviewPatch(patch);
       flushSync(() => {
         const next = patchPlacementPreviewLines(
           linesRef.current,
           lineKey,
           patch,
           contacts,
-          investissements
+          investissements,
+          { reassessAll }
         );
         linesRef.current = next;
         setLines(next);
@@ -323,6 +327,7 @@ export function PlacementCommandesImportDialog({
                         <PlacementImportPreviewLineCard
                           key={line.lineKey}
                           line={line}
+                          contacts={contacts}
                           editable={line.status !== "imported"}
                           selectable={isPlacementImportLineSelectable(line)}
                           checked={selected.has(line.lineKey)}

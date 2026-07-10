@@ -659,6 +659,20 @@ function assessImmoImportLine(
   };
 }
 
+export type ImmoPreviewEditablePatch = Partial<
+  Pick<
+    ImmoImportPreviewLine,
+    | "typeProduit"
+    | "nomProduit"
+    | "montantCentimes"
+    | "dateActeIso"
+    | "partenaireNom"
+    | "notes"
+    | "contactId"
+    | "coContactId"
+  >
+>;
+
 export function reassessImmoPreviewLine(
   line: ImmoImportPreviewLine,
   contacts: Contact[],
@@ -690,13 +704,17 @@ export function reassessImmoPreviewLine(
 
   const contactLabel = contact
     ? `${contact.prenom} ${contact.nom}`
-    : `${line.investorPrenom} ${line.investorNom}`;
+    : line.contactId != null && line.contactLabel
+      ? line.contactLabel
+      : `${line.investorPrenom} ${line.investorNom}`;
   const coContactLabel =
     hasCo && coContact
       ? `${coContact.prenom} ${coContact.nom}`
-      : hasCo
-        ? `${line.coInvestorPrenom} ${line.coInvestorNom}`
-        : undefined;
+      : hasCo && line.coContactId != null && line.coContactLabel
+        ? line.coContactLabel
+        : hasCo
+          ? `${line.coInvestorPrenom} ${line.coInvestorNom}`
+          : undefined;
 
   let foyerId: number | undefined;
   if (contact && coContact?.foyer_id && contact.foyer_id === coContact.foyer_id) {
@@ -726,17 +744,7 @@ export function reassessImmoPreviewLine(
 
 export function patchImmoPreviewLine(
   line: ImmoImportPreviewLine,
-  patch: Partial<
-    Pick<
-      ImmoImportPreviewLine,
-      | "typeProduit"
-      | "nomProduit"
-      | "montantCentimes"
-      | "dateActeIso"
-      | "partenaireNom"
-      | "notes"
-    >
-  >,
+  patch: ImmoPreviewEditablePatch,
   contacts: Contact[],
   investissements: Investissement[]
 ): ImmoImportPreviewLine {
@@ -746,17 +754,7 @@ export function patchImmoPreviewLine(
 
 function mergeImmoPreviewPatch(
   line: ImmoImportPreviewLine,
-  patch: Partial<
-    Pick<
-      ImmoImportPreviewLine,
-      | "typeProduit"
-      | "nomProduit"
-      | "montantCentimes"
-      | "dateActeIso"
-      | "partenaireNom"
-      | "notes"
-    >
-  >
+  patch: ImmoPreviewEditablePatch
 ): ImmoImportPreviewLine {
   return {
     ...line,
@@ -791,29 +789,21 @@ export function buildImmoPreviewSeenInFileFromLines(
 export function patchImmoPreviewLines(
   lines: ImmoImportPreviewLine[],
   lineKey: string,
-  patch: Partial<
-    Pick<
-      ImmoImportPreviewLine,
-      | "typeProduit"
-      | "nomProduit"
-      | "montantCentimes"
-      | "dateActeIso"
-      | "partenaireNom"
-      | "notes"
-    >
-  >,
+  patch: ImmoPreviewEditablePatch,
   contacts: Contact[],
-  investissements: Investissement[]
+  investissements: Investissement[],
+  opts?: { reassessAll?: boolean }
 ): ImmoImportPreviewLine[] {
   const withPatch = lines.map((line) =>
     line.lineKey === lineKey ? mergeImmoPreviewPatch(line, patch) : line
   );
   const seenInFile = buildImmoPreviewSeenInFileFromLines(withPatch);
-  return withPatch.map((line) =>
-    line.status === "imported"
-      ? line
-      : reassessImmoPreviewLine(line, contacts, investissements, seenInFile)
-  );
+  const reassessAll = opts?.reassessAll ?? true;
+  return withPatch.map((line) => {
+    if (line.status === "imported") return line;
+    if (!reassessAll && line.lineKey !== lineKey) return line;
+    return reassessImmoPreviewLine(line, contacts, investissements, seenInFile);
+  });
 }
 
 export function buildImmoPreviewSeenInFile(rows: ImmoCommandeRow[]): Map<string, number> {

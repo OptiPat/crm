@@ -34,6 +34,7 @@ import {
   resolveImmoPreviewExistingInvestissement,
   summarizeImmoImportPreview,
   type ImmoImportPreviewLine,
+  type ImmoPreviewEditablePatch,
 } from "@/lib/investissements/immo-commandes-import";
 import {
   IMPORT_DIALOG_BODY_CLASS,
@@ -41,6 +42,7 @@ import {
   IMPORT_DIALOG_FOOTER_CLASS,
   IMPORT_DIALOG_HEADER_CLASS,
   flushImportDialogPendingEdits,
+  isImmoDateOnlyPreviewPatch,
   useImportDialogPreviewBodyScroll,
 } from "@/components/investissements/import-dialog-fullscreen";
 
@@ -123,14 +125,16 @@ export function ImmoCommandesImportDialog({
   };
 
   const commitLineEdit = useCallback(
-    (lineKey: string, patch: Parameters<typeof patchImmoPreviewLines>[2]) => {
+    (lineKey: string, patch: ImmoPreviewEditablePatch) => {
+      const reassessAll = !isImmoDateOnlyPreviewPatch(patch);
       flushSync(() => {
         const next = patchImmoPreviewLines(
           linesRef.current,
           lineKey,
           patch,
           contacts,
-          investissements
+          investissements,
+          { reassessAll }
         );
         linesRef.current = next;
         setLines(next);
@@ -321,6 +325,7 @@ export function ImmoCommandesImportDialog({
                         <ImmoImportPreviewLineCard
                           key={line.lineKey}
                           line={line}
+                          contacts={contacts}
                           editable={line.status !== "imported"}
                           selectable={isImmoImportLineSelectable(line)}
                           checked={selected.has(line.lineKey)}

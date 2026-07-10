@@ -20,6 +20,9 @@ import {
   IMPORT_PREVIEW_FIELD_GRID_CLASS,
 } from "@/components/contacts/import-preview-ui";
 import { commitImportDateFieldChange } from "@/components/investissements/import-dialog-fullscreen";
+import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
+import type { Contact } from "@/lib/api/tauri-contacts";
+import type { PlacementPreviewEditablePatch } from "@/lib/investissements/placement-commandes-import";
 
 const STATUS_LABEL: Record<PlacementLine["status"], string> = {
   ready: "À importer",
@@ -48,11 +51,12 @@ const STATUS_VARIANT: Record<
 
 type Props = {
   line: PlacementLine;
+  contacts: Contact[];
   editable: boolean;
   selectable: boolean;
   checked: boolean;
   onToggle: (checked: boolean) => void;
-  onPatch: (patch: Partial<PlacementLine>) => void;
+  onPatch: (patch: PlacementPreviewEditablePatch) => void;
   crmDiffHighlights?: PlacementCrmDiffFieldHighlights;
 };
 
@@ -65,6 +69,7 @@ function crmDiffHighlight(
 
 export function PlacementImportPreviewLine({
   line,
+  contacts,
   editable,
   selectable,
   checked,
@@ -94,12 +99,38 @@ export function PlacementImportPreviewLine({
     >
       <div className={IMPORT_PREVIEW_FIELD_GRID_CLASS}>
         <ImportPreviewField label="Contact" wide>
-          <p className="text-sm truncate">
-            {line.contactLabel}
-            {line.coContactLabel ? (
-              <span className="text-muted-foreground"> + {line.coContactLabel}</span>
-            ) : null}
-          </p>
+          {editable ? (
+            <div className="space-y-2">
+              <ContactPersonSearch
+                placeholder="Rattacher au CRM…"
+                contacts={contacts}
+                value={line.contactId}
+                onChange={(id) => onPatch({ contactId: id })}
+              />
+              {line.investorNom ? (
+                <p className="text-xs text-muted-foreground truncate">
+                  Fichier : {line.investorPrenom} {line.investorNom}
+                </p>
+              ) : null}
+              {line.coInvestorNom && line.coInvestorPrenom ? (
+                <ContactPersonSearch
+                  label="Co-investisseur"
+                  placeholder="Co-investisseur CRM…"
+                  contacts={contacts}
+                  excludeId={line.contactId}
+                  value={line.coContactId}
+                  onChange={(id) => onPatch({ coContactId: id })}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm truncate">
+              {line.contactLabel}
+              {line.coContactLabel ? (
+                <span className="text-muted-foreground"> + {line.coContactLabel}</span>
+              ) : null}
+            </p>
+          )}
         </ImportPreviewField>
 
         <ImportPreviewField
@@ -107,7 +138,19 @@ export function PlacementImportPreviewLine({
           wide
           highlight={crmDiffHighlight(crmDiffHighlights, "nomProduit")}
         >
-          <p className="text-sm truncate">{formatPlacementProduitLabel(line)}</p>
+          {editable ? (
+            <Input
+              className="h-8"
+              defaultValue={line.nomProduit}
+              onBlur={(e) => {
+                const value = e.target.value.trim();
+                if (!value || value === line.nomProduit) return;
+                onPatch({ nomProduit: value });
+              }}
+            />
+          ) : (
+            <p className="text-sm truncate">{formatPlacementProduitLabel(line)}</p>
+          )}
         </ImportPreviewField>
 
         <ImportPreviewField
@@ -245,8 +288,8 @@ export function PlacementImportPreviewLine({
               key={`${line.lineKey}-date`}
               type="date"
               className="h-8"
-              value={isoToDateInput(line.dateEffetIso)}
-              onChange={(e) => {
+              defaultValue={isoToDateInput(line.dateEffetIso)}
+              onBlur={(e) => {
                 const next = commitImportDateFieldChange(e.target.value, line.dateEffetIso);
                 if (next === null) return;
                 onPatch({ dateEffetIso: next });
@@ -273,8 +316,8 @@ export function PlacementImportPreviewLine({
                   key={`${line.lineKey}-sortie`}
                   type="date"
                   className="h-8"
-                  value={isoToDateInput(line.dateSortieIso)}
-                  onChange={(e) => {
+                  defaultValue={isoToDateInput(line.dateSortieIso)}
+                  onBlur={(e) => {
                     const next = commitImportDateFieldChange(e.target.value, line.dateSortieIso);
                     if (next === null) return;
                     onPatch({ dateSortieIso: next });

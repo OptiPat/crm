@@ -16,6 +16,9 @@ import {
   IMPORT_PREVIEW_FIELD_GRID_CLASS,
 } from "@/components/contacts/import-preview-ui";
 import { commitImportDateFieldChange } from "@/components/investissements/import-dialog-fullscreen";
+import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
+import type { Contact } from "@/lib/api/tauri-contacts";
+import type { ImmoPreviewEditablePatch } from "@/lib/investissements/immo-commandes-import";
 
 const STATUS_LABEL: Record<ImmoLine["status"], string> = {
   ready: "À importer",
@@ -42,11 +45,12 @@ const STATUS_VARIANT: Record<
 
 type Props = {
   line: ImmoLine;
+  contacts: Contact[];
   editable: boolean;
   selectable: boolean;
   checked: boolean;
   onToggle: (checked: boolean) => void;
-  onPatch: (patch: Partial<ImmoLine>) => void;
+  onPatch: (patch: ImmoPreviewEditablePatch) => void;
   crmDiffHighlights?: ImmoCrmDiffFieldHighlights;
 };
 
@@ -59,6 +63,7 @@ function crmDiffHighlight(
 
 export function ImmoImportPreviewLine({
   line,
+  contacts,
   editable,
   selectable,
   checked,
@@ -85,12 +90,38 @@ export function ImmoImportPreviewLine({
     >
       <div className={IMPORT_PREVIEW_FIELD_GRID_CLASS}>
         <ImportPreviewField label="Contact" wide>
-          <p className="text-sm truncate">
-            {line.contactLabel}
-            {line.coContactLabel ? (
-              <span className="text-muted-foreground"> + {line.coContactLabel}</span>
-            ) : null}
-          </p>
+          {editable ? (
+            <div className="space-y-2">
+              <ContactPersonSearch
+                placeholder="Rattacher au CRM…"
+                contacts={contacts}
+                value={line.contactId}
+                onChange={(id) => onPatch({ contactId: id })}
+              />
+              {line.investorNom ? (
+                <p className="text-xs text-muted-foreground truncate">
+                  Fichier : {line.investorPrenom} {line.investorNom}
+                </p>
+              ) : null}
+              {line.coInvestorNom && line.coInvestorPrenom ? (
+                <ContactPersonSearch
+                  label="Co-investisseur"
+                  placeholder="Co-investisseur CRM…"
+                  contacts={contacts}
+                  excludeId={line.contactId}
+                  value={line.coContactId}
+                  onChange={(id) => onPatch({ coContactId: id })}
+                />
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-sm truncate">
+              {line.contactLabel}
+              {line.coContactLabel ? (
+                <span className="text-muted-foreground"> + {line.coContactLabel}</span>
+              ) : null}
+            </p>
+          )}
         </ImportPreviewField>
 
         <ImportPreviewField
@@ -164,8 +195,8 @@ export function ImmoImportPreviewLine({
             <Input
               type="date"
               className="h-8"
-              value={isoToDateInput(line.dateActeIso)}
-              onChange={(e) => {
+              defaultValue={isoToDateInput(line.dateActeIso)}
+              onBlur={(e) => {
                 const next = commitImportDateFieldChange(e.target.value, line.dateActeIso);
                 if (next === null) return;
                 onPatch({ dateActeIso: next });

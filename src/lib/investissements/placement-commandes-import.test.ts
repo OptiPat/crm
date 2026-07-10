@@ -26,6 +26,7 @@ import {
   isPlacementImportLineSelectable,
   defaultSelectedPlacementLineKeys,
   type PlacementImportPreviewLine,
+  patchPlacementPreviewLines,
 } from "./placement-commandes-import";
 
 describe("placement-commandes-import", () => {
@@ -862,5 +863,147 @@ describe("placement-commandes-import", () => {
     expect(isPlacementImportLineSelectable(dup)).toBe(true);
     expect(isPlacementImportLineSelectable(ambiguous)).toBe(false);
     expect(defaultSelectedPlacementLineKeys([ready, review, dup, ambiguous]).size).toBe(3);
+  });
+
+  it("patchPlacementPreviewLines — correction date seule garde le contact des autres lignes", () => {
+    const contacts: Contact[] = [
+      {
+        id: 1,
+        nom: "DUPONT",
+        prenom: "Jean",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      } as Contact,
+      {
+        id: 2,
+        nom: "MARTIN",
+        prenom: "Paul",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      } as Contact,
+    ];
+    const line1 = {
+      lineKey: "row-1",
+      rowIndex: 1,
+      status: "ready",
+      contactId: 1,
+      contactLabel: "Jean DUPONT",
+      investorNom: "DUPONT",
+      investorPrenom: "Jean",
+      typeProduit: "SCPI",
+      nomProduit: "Comète",
+      montantCentimes: 10_000_00,
+      dateEffetIso: "2024-01-15T00:00:00.000Z",
+      etatCommande: "EN_COURS",
+      versementProgramme: false,
+      partenaireNom: "",
+    } as PlacementImportPreviewLine;
+    const line2 = {
+      ...line1,
+      lineKey: "row-2",
+      rowIndex: 2,
+      contactId: 2,
+      contactLabel: "Paul MARTIN",
+      investorNom: "MARTIN",
+      investorPrenom: "Paul",
+      nomProduit: "Corum",
+    } as PlacementImportPreviewLine;
+
+    const updated = patchPlacementPreviewLines(
+      [line1, line2],
+      line1.lineKey,
+      { dateEffetIso: "2024-02-01T00:00:00.000Z" },
+      contacts,
+      [],
+      { reassessAll: false }
+    );
+    expect(updated[0]!.dateEffetIso).toBe("2024-02-01T00:00:00.000Z");
+    expect(updated[0]!.contactId).toBe(1);
+    expect(updated[1]!.contactId).toBe(2);
+    expect(updated[1]!.contactLabel).toBe("Paul MARTIN");
+  });
+
+  it("patchPlacementPreviewLines — choix manuel du contact CRM", () => {
+    const contacts: Contact[] = [
+      {
+        id: 5,
+        nom: "BERNARD",
+        prenom: "Luc",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      } as Contact,
+    ];
+    const line = {
+      lineKey: "row-1",
+      rowIndex: 1,
+      status: "contact_not_found",
+      investorNom: "INCONNU",
+      investorPrenom: "X",
+      typeProduit: "SCPI",
+      nomProduit: "Comète",
+      montantCentimes: 10_000_00,
+      dateEffetIso: "2024-01-15T00:00:00.000Z",
+      etatCommande: "EN_COURS",
+      versementProgramme: false,
+      partenaireNom: "",
+      contactLabel: "X INCONNU",
+    } as PlacementImportPreviewLine;
+
+    const updated = patchPlacementPreviewLines(
+      [line],
+      line.lineKey,
+      { contactId: 5 },
+      contacts,
+      []
+    );
+    expect(updated[0]!.status).toBe("ready");
+    expect(updated[0]!.contactId).toBe(5);
+    expect(updated[0]!.contactLabel).toBe("Luc BERNARD");
+  });
+
+  it("patchPlacementPreviewLines — correction libellé produit", () => {
+    const contacts: Contact[] = [
+      {
+        id: 1,
+        nom: "DUPONT",
+        prenom: "Jean",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      } as Contact,
+    ];
+    const line = {
+      lineKey: "row-1",
+      rowIndex: 1,
+      status: "ready",
+      contactId: 1,
+      contactLabel: "Jean DUPONT",
+      investorNom: "DUPONT",
+      investorPrenom: "Jean",
+      typeProduit: "SCPI",
+      nomProduit: "Comète ALPSI",
+      montantCentimes: 10_000_00,
+      dateEffetIso: "2024-01-15T00:00:00.000Z",
+      etatCommande: "EN_COURS",
+      versementProgramme: false,
+      partenaireNom: "",
+    } as PlacementImportPreviewLine;
+
+    const updated = patchPlacementPreviewLines(
+      [line],
+      line.lineKey,
+      { nomProduit: "Corum Origine" },
+      contacts,
+      []
+    );
+    expect(updated[0]!.nomProduit).toBe("Corum Origine");
+    expect(updated[0]!.status).toBe("ready");
   });
 });

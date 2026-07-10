@@ -54,3 +54,19 @@ export function commitImportDateFieldChange(
   if (!iso || iso === currentIso) return null;
   return iso;
 }
+
+const PLACEMENT_DATE_PATCH_KEYS = new Set(["dateEffetIso", "dateSortieIso"]);
+const IMMO_DATE_PATCH_KEYS = new Set(["dateActeIso"]);
+
+/** Patch date seul : ne pas réévaluer toutes les lignes (évite effets de bord / sauts de section). */
+export function isPlacementDateOnlyPreviewPatch(
+  patch: Record<string, unknown>
+): boolean {
+  const keys = Object.keys(patch);
+  return keys.length > 0 && keys.every((k) => PLACEMENT_DATE_PATCH_KEYS.has(k));
+}
+
+export function isImmoDateOnlyPreviewPatch(patch: Record<string, unknown>): boolean {
+  const keys = Object.keys(patch);
+  return keys.length > 0 && keys.every((k) => IMMO_DATE_PATCH_KEYS.has(k));
+}

@@ -264,6 +264,44 @@ describe("immo-commandes-import", () => {
     expect(updated[1]!.status).toBe("ready");
   });
 
+  it("patchImmoPreviewLines — choix manuel du contact CRM", () => {
+    const contacts: Contact[] = [
+      {
+        id: 3,
+        nom: "LEGRAND",
+        prenom: "Paul",
+        categorie: "CLIENT",
+        statut_suivi: "ACTIF",
+        created_at: 0,
+        updated_at: 0,
+      } as Contact,
+    ];
+    const line = {
+      lineKey: "row-1",
+      rowIndex: 1,
+      status: "contact_not_found",
+      investorNom: "FAUX",
+      investorPrenom: "Nom",
+      typeProduit: "PINEL",
+      nomProduit: "Prog — Ville",
+      montantCentimes: 200_000_00,
+      dateActeIso: "2020-06-01T00:00:00.000Z",
+      partenaireNom: "Nexity",
+      contactLabel: "Nom FAUX",
+    } as ImmoImportPreviewLine;
+
+    const updated = patchImmoPreviewLines(
+      [line],
+      line.lineKey,
+      { contactId: 3 },
+      contacts,
+      []
+    );
+    expect(updated[0]!.status).toBe("ready");
+    expect(updated[0]!.contactId).toBe(3);
+    expect(updated[0]!.contactLabel).toBe("Paul LEGRAND");
+  });
+
   it("resolveContactForImmoImport par nom puis email", () => {
     const contacts: Contact[] = [
       {
