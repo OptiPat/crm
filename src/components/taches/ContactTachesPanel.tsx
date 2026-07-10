@@ -15,13 +15,23 @@ import { toast } from "sonner";
 
 interface ContactTachesPanelProps {
   contactId: number;
+  nestedSheet?: boolean;
+  onNestedFormOpenChange?: (open: boolean) => void;
 }
 
-export function ContactTachesPanel({ contactId }: ContactTachesPanelProps) {
+export function ContactTachesPanel({
+  contactId,
+  nestedSheet = false,
+  onNestedFormOpenChange,
+}: ContactTachesPanelProps) {
   const [taches, setTaches] = useState<Tache[]>([]);
   const [loading, setLoading] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Tache | null>(null);
+
+  useEffect(() => {
+    onNestedFormOpenChange?.(formOpen);
+  }, [formOpen, onNestedFormOpenChange]);
 
   const load = useCallback(async () => {
     try {
@@ -132,6 +142,7 @@ export function ContactTachesPanel({ contactId }: ContactTachesPanelProps) {
         tache={editing}
         fixedContactId={contactId}
         onSuccess={() => void load()}
+        nestedSheet={nestedSheet}
       />
     </div>
   );

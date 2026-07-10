@@ -62,6 +62,10 @@ interface ContactInteractionsPanelProps {
   dateDernierContactFilleul?: number | null;
   onContactUpdated?: () => void;
   onNavigate?: (page: string) => void;
+  /** Volet fiche empilé (dashboard, foyers, familles…) */
+  nestedSheet?: boolean;
+  /** Notifie l’ouverture d’un formulaire imbriqué (verrou scroll fiche). */
+  onNestedFormOpenChange?: (open: boolean) => void;
 }
 
 /** Délai mini entre deux sync mail auto pour un même contact. */
@@ -178,6 +182,8 @@ export function ContactInteractionsPanel({
   dateDernierContactFilleul,
   onContactUpdated,
   onNavigate,
+  nestedSheet = false,
+  onNestedFormOpenChange,
 }: ContactInteractionsPanelProps) {
   const [timeline, setTimeline] = useState<ContactRelationTimelineItem[]>([]);
   const [relationStatus, setRelationStatus] = useState<ContactRelationStatus | null>(null);
@@ -194,6 +200,10 @@ export function ContactInteractionsPanel({
   /** Dernière sync auto par contact (évite spam, permet re-sync à la réouverture de l’onglet). */
   const lastAutoSyncRef = useRef<Map<number, number>>(new Map());
   const syncLockRef = useRef(false);
+
+  useEffect(() => {
+    onNestedFormOpenChange?.(showForm);
+  }, [showForm, onNestedFormOpenChange]);
 
   useEffect(() => {
     setSyncing(false);
@@ -705,6 +715,7 @@ export function ContactInteractionsPanel({
         interaction={editing}
         defaultContactId={contactId}
         onSuccess={handleInteractionSuccess}
+        nestedSheet={nestedSheet}
       />
     </>
   );

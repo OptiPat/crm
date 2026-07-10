@@ -1,10 +1,11 @@
 import { createContext, useContext, type ReactNode } from "react";
 import {
+  STACKED_DEEP_NESTED_POPOVER_Z,
   STACKED_NESTED_POPOVER_Z,
   STACKED_PORTAL_Z,
 } from "@/lib/ui/stacked-sheet-layers";
 
-export type PortalLayer = "default" | "stacked" | "nested";
+export type PortalLayer = "default" | "stacked" | "nested" | "deepNested";
 
 const PortalLayerContext = createContext<PortalLayer>("default");
 
@@ -27,6 +28,7 @@ export function usePortalLayer(): PortalLayer {
 
 export function usePortalLayerZ(): string {
   const layer = usePortalLayer();
+  if (layer === "deepNested") return STACKED_DEEP_NESTED_POPOVER_Z;
   if (layer === "nested") return STACKED_NESTED_POPOVER_Z;
   if (layer === "stacked") return STACKED_PORTAL_Z;
   return "z-50";

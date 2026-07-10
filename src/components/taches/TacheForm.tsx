@@ -50,8 +50,15 @@ import {
 import { TacheRecurrenceFields } from "@/components/taches/TacheRecurrenceFields";
 import { isActiveRecurrence, type TacheRecurrence } from "@/lib/taches/tache-recurrence";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface TacheFormProps {
@@ -151,6 +158,7 @@ export function TacheForm({
   onSuccess,
   nestedSheet = false,
 }: TacheFormProps) {
+  useLockAppMainScroll(open && nestedSheet);
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [existingTaches, setExistingTaches] = useState<Tache[]>([]);
@@ -374,13 +382,15 @@ export function TacheForm({
     <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
-        className={cn(
-          "max-w-xl max-h-[90vh] overflow-y-auto",
-          nestedSheet && STACKED_NESTED_SHEET_Z
+        className={nestedStackedDialogClass(
+          "flex max-h-[90vh] max-w-xl flex-col overflow-hidden",
+          nestedSheet
         )}
+        onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        {...nestedStackedOutsideHandlers(nestedSheet)}
       >
-        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
-        <DialogHeader>
+        <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
+        <DialogHeader className="shrink-0">
           <DialogTitle>{tache ? "Modifier la tâche" : "Nouvelle tâche"}</DialogTitle>
           <DialogDescription>
             {isCreate
@@ -405,6 +415,10 @@ export function TacheForm({
           </div>
         )}
 
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
+          onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        >
         <form onSubmit={handleSubmit} className="space-y-4">
           {contactFirst ? (
             <>
@@ -462,6 +476,7 @@ export function TacheForm({
             </Button>
           </DialogFooter>
         </form>
+        </div>
         </PortalLayerProvider>
       </DialogContent>
     </Dialog>

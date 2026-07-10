@@ -174,6 +174,8 @@ export function ContactDetail({
   const [showDeleteContactDialog, setShowDeleteContactDialog] = useState(false);
   const [etiquetteSelectorOpen, setEtiquetteSelectorOpen] = useState(false);
   const [showDocUpload, setShowDocUpload] = useState(false);
+  const [interactionFormOpen, setInteractionFormOpen] = useState(false);
+  const [tacheFormOpen, setTacheFormOpen] = useState(false);
   const [foyerRenamePrompt, setFoyerRenamePrompt] = useState<{
     foyer: Foyer;
     suggestedNom: string;
@@ -186,7 +188,16 @@ export function ContactDetail({
   const investissementFormOpenRef = useRef(false);
   investissementFormOpenRef.current = showInvestissementForm;
   const nestedSheetLocksContactScroll =
-    showInvestissementForm || showEditForm || showFoyerEditForm;
+    nestedInvestissementSheet &&
+    (showInvestissementForm ||
+      showEditForm ||
+      showFoyerEditForm ||
+      showDocUpload ||
+      showFoyerCreateModal ||
+      showFoyerLinkModal ||
+      showFoyerAddMemberModal ||
+      interactionFormOpen ||
+      tacheFormOpen);
 
   const openEditForm = (sectionId?: ContactFormSectionId) => {
     if (contact) {
@@ -969,6 +980,8 @@ export function ContactDetail({
                 dateDernierContact={contact.date_dernier_contact}
                 dateDernierContactFilleul={contact.date_dernier_contact_filleul}
                 onContactUpdated={() => void refreshContactAfterMutation()}
+                nestedSheet={nestedInvestissementSheet}
+                onNestedFormOpenChange={setInteractionFormOpen}
                 onNavigate={
                   onNavigate
                     ? (page) => {
@@ -982,7 +995,11 @@ export function ContactDetail({
 
             {contact.id && (
               <div className="mt-4 border-t border-border pt-4">
-                <ContactTachesPanel contactId={contact.id} />
+                <ContactTachesPanel
+                  contactId={contact.id}
+                  nestedSheet={nestedInvestissementSheet}
+                  onNestedFormOpenChange={setTacheFormOpen}
+                />
               </div>
             )}
 

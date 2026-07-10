@@ -18,8 +18,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createPartenaire, updatePartenaire, type NewPartenaire, type Partenaire } from "@/lib/api/tauri-partenaires";
-import { cn } from "@/lib/utils";
-import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface PartenaireFormProps {
@@ -45,6 +52,8 @@ export function PartenaireForm({
     type_partenaire: partenaire?.type_partenaire || "SOCIETE_GESTION_SCPI",
     raison_sociale: partenaire?.raison_sociale || "",
   });
+
+  useLockAppMainScroll(open && nestedSheet);
 
   // Réinitialiser le formulaire quand on ouvre/ferme ou change de partenaire
   useEffect(() => {
@@ -84,9 +93,11 @@ export function PartenaireForm({
     <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
-        className={cn("max-w-md", nestedSheet && STACKED_NESTED_SHEET_Z)}
+        className={nestedStackedDialogClass("max-w-md", nestedSheet, "deep")}
+        onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        {...nestedStackedOutsideHandlers(nestedSheet)}
       >
-        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+        <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet, "deep")}>
         <DialogHeader>
           <DialogTitle>
             {partenaire ? "Modifier le partenaire" : "Nouveau partenaire"}
@@ -97,7 +108,6 @@ export function PartenaireForm({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Nom du partenaire */}
           <div className="space-y-2">
             <Label htmlFor="raison_sociale">Nom *</Label>
             <Input
@@ -112,7 +122,6 @@ export function PartenaireForm({
             />
           </div>
 
-          {/* Type de partenaire */}
           <div className="space-y-2">
             <Label htmlFor="type_partenaire">Type *</Label>
             <Select

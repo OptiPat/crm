@@ -33,7 +33,15 @@ import type { IdentityImportMode } from "@/lib/documents/identity-document-apply
 import { getDocumentTypeLabel } from "@/lib/documents/document-type-labels";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
 import { cn } from "@/lib/utils";
-import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 import { assessRioImport } from "@/lib/documents/rio-import-guard";
 
@@ -78,6 +86,7 @@ export function DocumentUpload({
   contactLieuNaissance,
   nestedSheet = false,
 }: DocumentUploadProps) {
+  useLockAppMainScroll(open && nestedSheet);
   const [loading, setLoading] = useState(false);
   const [extracting, setExtracting] = useState(false);
   const [autoExtract, setAutoExtract] = useState(true);
@@ -497,15 +506,19 @@ export function DocumentUpload({
       <Dialog open={open && !identityImport.showIdentityPreview} onOpenChange={onOpenChange} modal={!nestedSheet}>
         <DialogContent
           hideOverlay={nestedSheet}
-          className={cn(
-            "max-h-[90vh] transition-[max-width] duration-200 ease-out",
-            nestedSheet && STACKED_NESTED_SHEET_Z,
-            isStelliumWizardMode
-              ? "flex h-[90vh] max-w-6xl flex-col overflow-hidden p-6"
-              : "max-w-2xl overflow-y-auto"
+          className={nestedStackedDialogClass(
+            cn(
+              "max-h-[90vh] transition-[max-width] duration-200 ease-out",
+              isStelliumWizardMode
+                ? "flex h-[90vh] max-w-6xl flex-col overflow-hidden p-6"
+                : "flex max-w-2xl flex-col overflow-hidden"
+            ),
+            nestedSheet
           )}
+          onWheel={nestedSheet ? stopWheelPropagation : undefined}
+          {...nestedStackedOutsideHandlers(nestedSheet)}
         >
-        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+        <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
         {isStelliumWizardMode ? (
           <RioImportWizard
             embedded
@@ -550,6 +563,10 @@ export function DocumentUpload({
           </DialogDescription>
         </DialogHeader>
 
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
+          onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        >
         <form onSubmit={handleSubmit} className="space-y-4">
           {!contactLocked && (
             <ContactPersonSearch
@@ -832,6 +849,7 @@ export function DocumentUpload({
             </Button>
           </DialogFooter>
         </form>
+        </div>
           </>
         )}
         </PortalLayerProvider>

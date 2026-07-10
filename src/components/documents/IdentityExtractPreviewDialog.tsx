@@ -25,8 +25,15 @@ import { normalizeIdentityDate } from "@/lib/identity/visual-identity-parser";
 import { contactHasStoredBirthPlace, contactHasStoredTimestamp } from "@/lib/identity/merge-identity-fields";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 export type IdentityPreviewValues = {
@@ -159,6 +166,7 @@ export function IdentityExtractPreviewDialog({
   versoPreviewPath,
   nestedSheet = false,
 }: IdentityExtractPreviewDialogProps) {
+  useLockAppMainScroll(open && nestedSheet);
   const [dateNaissanceFr, setDateNaissanceFr] = useState("");
   const [dateExpirationFr, setDateExpirationFr] = useState("");
   const [lieuNaissance, setLieuNaissance] = useState("");
@@ -195,12 +203,14 @@ export function IdentityExtractPreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
-        className={cn(
+        className={nestedStackedDialogClass(
           "flex max-h-[90vh] max-w-5xl flex-col overflow-hidden",
-          nestedSheet ? STACKED_NESTED_SHEET_Z : "z-[60]"
+          nestedSheet
         )}
+        onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        {...nestedStackedOutsideHandlers(nestedSheet)}
       >
-        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+        <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
         <DialogHeader>
           <DialogTitle>{getDocumentTypeLabel("IDENTITE")}</DialogTitle>
           <DialogDescription>

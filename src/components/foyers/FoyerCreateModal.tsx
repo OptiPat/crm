@@ -24,8 +24,15 @@ import { linkContactToFoyer } from "@/lib/foyers/foyer-utils";
 import { Badge } from "@/components/ui/badge";
 import { ListSearchField } from "@/components/layout/ListSearchField";
 import { contactMatchesSearch } from "@/lib/search-utils";
-import { cn } from "@/lib/utils";
-import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface FoyerCreateModalProps {
@@ -48,6 +55,7 @@ export function FoyerCreateModal({
   onSuccess,
   nestedSheet = false,
 }: FoyerCreateModalProps) {
+  useLockAppMainScroll(open && nestedSheet);
   const [foyerName, setFoyerName] = useState("");
   const [members, setMembers] = useState<MemberWithRole[]>([]);
   const [availableContacts, setAvailableContacts] = useState<Contact[]>([]);
@@ -165,9 +173,14 @@ export function FoyerCreateModal({
     <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
-        className={cn("max-w-2xl", nestedSheet && STACKED_NESTED_SHEET_Z)}
+        className={nestedStackedDialogClass(
+          "flex max-h-[90vh] max-w-2xl flex-col overflow-hidden",
+          nestedSheet
+        )}
+        onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        {...nestedStackedOutsideHandlers(nestedSheet)}
       >
-        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+        <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Home className="h-5 w-5" />
@@ -179,7 +192,11 @@ export function FoyerCreateModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain py-4 pr-1"
+          onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        >
+        <div className="space-y-4">
           {/* Nom du foyer */}
           <div className="space-y-2">
             <Label htmlFor="foyerName">Nom du foyer</Label>
@@ -284,6 +301,7 @@ export function FoyerCreateModal({
               </div>
             </div>
           )}
+        </div>
         </div>
 
         <DialogFooter>

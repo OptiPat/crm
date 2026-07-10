@@ -22,8 +22,15 @@ import { createFoyer, updateFoyer, type NewFoyer, type Foyer } from "@/lib/api/t
 import { getFoyerTypeLabel } from "@/lib/foyers/foyer-display";
 import { pickFiscal, propagateFiscalToFoyerMembers } from "@/lib/foyers/foyer-fiscal-sync";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 const FOYER_TYPE_OPTIONS = [
@@ -49,6 +56,7 @@ export function FoyerForm({
   onSuccess,
   nestedSheet = false,
 }: FoyerFormProps) {
+  useLockAppMainScroll(open && nestedSheet);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<NewFoyer>({
     nom: "",
@@ -116,12 +124,14 @@ export function FoyerForm({
     <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
-        className={cn(
-          "max-w-2xl max-h-[90vh] overflow-y-auto",
-          nestedSheet && STACKED_NESTED_SHEET_Z
+        className={nestedStackedDialogClass(
+          "flex max-h-[90vh] max-w-2xl flex-col overflow-hidden",
+          nestedSheet
         )}
+        onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        {...nestedStackedOutsideHandlers(nestedSheet)}
       >
-        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
+        <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
         <DialogHeader>
           <DialogTitle>
             {foyer ? "Modifier le foyer" : "Nouveau foyer"}
@@ -131,7 +141,11 @@ export function FoyerForm({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div
+            className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1"
+            onWheel={nestedSheet ? stopWheelPropagation : undefined}
+          >
           {/* Nom et Type */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -285,7 +299,9 @@ export function FoyerForm({
             />
           </div>
 
-          <DialogFooter>
+          </div>
+
+          <DialogFooter className="shrink-0 pt-4">
             <Button
               type="button"
               variant="outline"

@@ -29,8 +29,15 @@ import {
 import { touchContactAfterInteraction } from "@/lib/interactions/touch-contact-after-interaction";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
-import { STACKED_NESTED_SHEET_Z } from "@/lib/ui/stacked-sheet-layers";
+import {
+  nestedStackedDialogClass,
+  nestedStackedOutsideHandlers,
+  nestedStackedPortalLayer,
+} from "@/lib/ui/nested-stacked-dialog";
+import {
+  stopWheelPropagation,
+  useLockAppMainScroll,
+} from "@/lib/ui/nested-sheet-scroll";
 import { PortalLayerProvider } from "@/lib/ui/portal-layer-context";
 
 interface InteractionFormProps {
@@ -70,6 +77,7 @@ export function InteractionForm({
   onSuccess,
   nestedSheet = false,
 }: InteractionFormProps) {
+  useLockAppMainScroll(open && nestedSheet);
   const [loading, setLoading] = useState(false);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [formData, setFormData] = useState(emptyForm(defaultContactId));
@@ -154,10 +162,15 @@ export function InteractionForm({
     <Dialog open={open} onOpenChange={onOpenChange} modal={!nestedSheet}>
       <DialogContent
         hideOverlay={nestedSheet}
-        className={cn("max-w-lg", nestedSheet && STACKED_NESTED_SHEET_Z)}
+        className={nestedStackedDialogClass(
+          "flex max-h-[90vh] max-w-lg flex-col overflow-hidden",
+          nestedSheet
+        )}
+        onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        {...nestedStackedOutsideHandlers(nestedSheet)}
       >
-        <PortalLayerProvider layer={nestedSheet ? "nested" : "default"}>
-        <DialogHeader>
+        <PortalLayerProvider layer={nestedStackedPortalLayer(nestedSheet)}>
+        <DialogHeader className="shrink-0">
           <DialogTitle>
             {interaction ? "Modifier l'interaction" : "Nouvelle interaction"}
           </DialogTitle>
@@ -166,6 +179,10 @@ export function InteractionForm({
           </DialogDescription>
         </DialogHeader>
 
+        <div
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1"
+          onWheel={nestedSheet ? stopWheelPropagation : undefined}
+        >
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label>Contact *</Label>
@@ -249,6 +266,7 @@ export function InteractionForm({
             </Button>
           </DialogFooter>
         </form>
+        </div>
         </PortalLayerProvider>
       </DialogContent>
     </Dialog>
