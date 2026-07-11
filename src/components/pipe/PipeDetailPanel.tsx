@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +17,7 @@ import { formatPipeContactLabel, isPipeType, pipeTypeUsesStage } from "@/lib/pip
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 import { PipeStageStepper } from "@/components/pipe/PipeStageStepper";
+import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { PipeTimelineSection } from "@/components/pipe/PipeTimelineSection";
 import { toast } from "sonner";
 
@@ -46,6 +47,21 @@ export function PipeDetailPanel({ pipe, onEdit, onDeleted }: PipeDetailPanelProp
 
   const showStageStepper =
     isPipeType(pipe.pipe_type) && pipeTypeUsesStage(pipe.pipe_type) && pipe.stage;
+
+  const showProspectionFields =
+    isPipeType(pipe.pipe_type) &&
+    pipeTypeUsesStage(pipe.pipe_type) &&
+    pipe.stage === "PROSPECTION";
+
+  const prospectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showProspectionFields) return;
+    const frame = requestAnimationFrame(() => {
+      prospectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [showProspectionFields, pipe.id, pipe.stage]);
 
   return (
     <>
@@ -81,6 +97,12 @@ export function PipeDetailPanel({ pipe, onEdit, onDeleted }: PipeDetailPanelProp
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
           {showStageStepper && (
             <PipeStageStepper pipeId={pipe.id} currentStage={pipe.stage} />
+          )}
+
+          {showProspectionFields && (
+            <div ref={prospectionRef} id="pipe-prospection-section">
+              <PipeProspectionContactSection contactId={pipe.contact_id} />
+            </div>
           )}
 
           {pipe.notes && (

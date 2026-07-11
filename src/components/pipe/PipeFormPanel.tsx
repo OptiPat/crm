@@ -3,7 +3,7 @@ import { Briefcase, ClipboardList, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import {
   Select,
   SelectContent,
@@ -311,15 +311,13 @@ export function PipeFormPanel({
           </div>
         )}
 
-        <div className="space-y-2">
-          <Label>Notes</Label>
-          <Textarea
-            value={form.notes}
-            onChange={(e) => setForm((prev) => ({ ...prev, notes: e.target.value }))}
-            rows={3}
-            placeholder="Contexte, prochaine étape…"
-          />
-        </div>
+        <DictationTextarea
+          label="Notes"
+          value={form.notes}
+          onChange={(notes) => setForm((prev) => ({ ...prev, notes }))}
+          rows={3}
+          placeholder="Contexte, prochaine étape…"
+        />
       </div>
 
       <div className="border-t px-5 py-4 flex justify-end gap-2">

@@ -159,18 +159,15 @@ export function Pipe() {
     }
   };
 
-  const showDetailPanel =
-    panelMode === "create" || panelMode === "edit" || (panelMode === "view" && selectedPipe);
-
   const detailPanel = (
     <>
       {panelMode === "empty" && viewMode === "board" && (
         <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
           <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
-          <p className="text-sm font-medium">Sélectionnez une affaire</p>
+          <p className="text-sm font-medium">Sélectionnez une affaire dans le tableau</p>
           <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-            Cliquez une carte ou glissez-la vers une autre colonne pour mettre à jour
-            l&apos;avancement.
+            Cliquez une carte (ex. colonne Prospection). Le panneau à droite affiche
+            l&apos;avancement ; en Prospection, prescripteur et source du lead.
           </p>
         </div>
       )}
@@ -214,11 +211,11 @@ export function Pipe() {
       {viewMode === "board" ? (
         <div
           className={cn(
-            "flex flex-1 min-h-0 flex-col xl:flex-row gap-4",
+            "flex flex-1 min-h-0 flex-col lg:flex-row gap-0",
             "rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden"
           )}
         >
-          <div className="flex flex-1 min-h-[360px] min-w-0 flex-col">
+          <div className="flex flex-1 min-h-[280px] min-w-0 flex-col lg:min-h-0">
             {loading ? (
               <p className="px-4 py-6 text-sm text-muted-foreground">Chargement…</p>
             ) : (
@@ -230,16 +227,14 @@ export function Pipe() {
             )}
           </div>
 
-          {showDetailPanel && (
-            <aside
-              className={cn(
-                "min-h-[320px] xl:min-h-0 xl:w-[min(100%,420px)] xl:shrink-0",
-                "border-t xl:border-t-0 xl:border-l border-border/70 bg-background/50"
-              )}
-            >
-              {detailPanel}
-            </aside>
-          )}
+          <aside
+            className={cn(
+              "min-h-[280px] lg:min-h-0 lg:w-[min(100%,400px)] lg:shrink-0",
+              "border-t lg:border-t-0 lg:border-l border-border/70 bg-background/50"
+            )}
+          >
+            {detailPanel}
+          </aside>
         </div>
       ) : (
         <div

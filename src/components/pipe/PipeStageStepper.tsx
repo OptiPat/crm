@@ -68,7 +68,15 @@ export function PipeStageStepper({ pipeId, currentStage }: PipeStageStepperProps
               <div key={step} className="flex items-center">
                 <button
                   type="button"
-                  onClick={() => void handleSetStage(step)}
+                  onClick={() => {
+                    if (step === "PROSPECTION" && step === stage) {
+                      document
+                        .getElementById("pipe-prospection-section")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      return;
+                    }
+                    void handleSetStage(step);
+                  }}
                   title={PIPE_STAGE_DESCRIPTIONS[step]}
                   className={cn(
                     "flex flex-col items-center gap-1 min-w-[3.75rem] rounded-lg px-1 py-1 transition-colors",

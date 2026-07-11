@@ -3,7 +3,7 @@ import { Calendar, FileText, Phone, Send, Trash2, TrendingUp } from "lucide-reac
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { Badge } from "@/components/ui/badge";
 import {
   createPipeTimelineEntry,
@@ -155,15 +155,13 @@ export function PipeTimelineSection({ pipeId }: PipeTimelineSectionProps) {
               <Input value={titre} onChange={(e) => setTitre(e.target.value)} />
             </div>
           </div>
-          <div className="space-y-2">
-            <Label>Détail</Label>
-            <Textarea
-              value={contenu}
-              onChange={(e) => setContenu(e.target.value)}
-              rows={3}
-              placeholder="Compte-rendu, prochaine étape…"
-            />
-          </div>
+          <DictationTextarea
+            label="Détail"
+            value={contenu}
+            onChange={setContenu}
+            rows={3}
+            placeholder="Compte-rendu, prochaine étape…"
+          />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" size="sm" onClick={cancelAdd}>
               Annuler
