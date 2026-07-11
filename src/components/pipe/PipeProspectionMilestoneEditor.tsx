@@ -12,7 +12,13 @@ import {
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { PipeTimelinePhaseEntryRow } from "@/components/pipe/PipeTimelinePhaseEntryRow";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import {
+  addPipeTimelineEntryWithRdvStage,
+  toastAfterRdvSave,
+} from "@/lib/pipe/pipe-rdv-entry-actions";
+import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import {
   PIPE_TIMELINE_TYPE_LABELS,
   type PipeTimelineUserType,
@@ -29,6 +35,7 @@ const QUICK_ADD_ICONS = {
 
 interface PipeProspectionMilestoneEditorProps {
   contactId: number;
+  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   phaseEntries: PipeTimelineEntryRecord[];
   draftNotes: string;
   saving: boolean;
@@ -40,6 +47,7 @@ interface PipeProspectionMilestoneEditorProps {
 
 export function PipeProspectionMilestoneEditor({
   contactId,
+  pipe,
   phaseEntries,
   draftNotes,
   saving,
@@ -52,6 +60,7 @@ export function PipeProspectionMilestoneEditor({
   const [occurredAt, setOccurredAt] = useState("");
   const [titre, setTitre] = useState("");
   const [contenu, setContenu] = useState("");
+  const [rdvStage, setRdvStage] = useState<PipeRdvStage>("R1");
   const [adding, setAdding] = useState(false);
 
   const openAdd = (type: PipeTimelineUserType) => {
@@ -60,6 +69,7 @@ export function PipeProspectionMilestoneEditor({
     setOccurredAt(state.occurredAt);
     setTitre(state.titre);
     setContenu("");
+    if (type === "RDV") setRdvStage("R1");
   };
 
   const cancelAdd = () => {
@@ -73,13 +83,22 @@ export function PipeProspectionMilestoneEditor({
     if (!addingType) return;
     setAdding(true);
     try {
-      await timeline.addEntry({
-        entry_type: addingType,
+      const occurredAtUnix = datetimeLocalToUnix(occurredAt);
+      const result = await addPipeTimelineEntryWithRdvStage({
+        timeline,
+        pipe,
+        entryType: addingType,
+        rdvStage: addingType === "RDV" ? rdvStage : undefined,
         titre: titre.trim() || defaultTimelineEntryTitle(addingType),
         contenu: contenu.trim() || null,
-        occurred_at: datetimeLocalToUnix(occurredAt),
+        occurredAtUnix,
       });
-      toast.success(`${PIPE_TIMELINE_TYPE_LABELS[addingType]} ajouté`);
+
+      if (addingType === "RDV") {
+        toastAfterRdvSave(rdvStage, result, `${PIPE_TIMELINE_TYPE_LABELS[addingType]} ajouté`);
+      } else {
+        toast.success(`${PIPE_TIMELINE_TYPE_LABELS[addingType]} ajouté`);
+      }
       cancelAdd();
     } catch (err) {
       toast.error(String(err));
@@ -140,6 +159,7 @@ export function PipeProspectionMilestoneEditor({
               <PipeTimelinePhaseEntryRow
                 key={entry.id}
                 entry={entry}
+                pipe={pipe}
                 timeline={timeline}
                 disabled={rowDisabled}
               />
@@ -153,10 +173,12 @@ export function PipeProspectionMilestoneEditor({
             occurredAt={occurredAt}
             titre={titre}
             contenu={contenu}
+            rdvStage={rdvStage}
             saving={adding}
             onOccurredAtChange={setOccurredAt}
             onTitreChange={setTitre}
             onContenuChange={setContenu}
+            onRdvStageChange={setRdvStage}
             onCancel={cancelAdd}
             onSubmit={(e) => void handleAdd(e)}
           />

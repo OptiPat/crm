@@ -5,8 +5,17 @@ import {
   datetimeLocalToUnix,
   PipeTimelineAddForm,
 } from "@/components/pipe/PipeTimelineAddForm";
+import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import { toastAfterRdvSave } from "@/lib/pipe/pipe-rdv-entry-actions";
+import {
+  applyRdvStageOnSave,
+  formatRdvEntryDisplayLabel,
+  formatRdvEntryTitle,
+  rdvStageFromEntryTitre,
+  type PipeRdvStage,
+} from "@/lib/pipe/pipe-rdv-stage";
 import {
   formatTimelineOccurredAt,
   PIPE_TIMELINE_TYPE_LABELS,
@@ -24,12 +33,14 @@ const TYPE_ICONS = {
 
 interface PipeTimelinePhaseEntryRowProps {
   entry: PipeTimelineEntryRecord;
+  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   timeline: ReturnType<typeof usePipeTimeline>;
   disabled?: boolean;
 }
 
 export function PipeTimelinePhaseEntryRow({
   entry,
+  pipe,
   timeline,
   disabled = false,
 }: PipeTimelinePhaseEntryRowProps) {
@@ -37,6 +48,9 @@ export function PipeTimelinePhaseEntryRow({
   const [occurredAt, setOccurredAt] = useState(() => unixToDatetimeLocalInput(entry.occurred_at));
   const [titre, setTitre] = useState(entry.titre ?? "");
   const [contenu, setContenu] = useState(entry.contenu ?? "");
+  const [rdvStage, setRdvStage] = useState<PipeRdvStage>(
+    () => rdvStageFromEntryTitre(entry.titre) ?? "R1"
+  );
   const [saving, setSaving] = useState(false);
 
   const userType = entry.entry_type as PipeTimelineUserType;
@@ -44,12 +58,16 @@ export function PipeTimelinePhaseEntryRow({
     entry.entry_type in TYPE_ICONS
       ? TYPE_ICONS[entry.entry_type as keyof typeof TYPE_ICONS]
       : null;
-  const typeLabel = PIPE_TIMELINE_TYPE_LABELS[userType] ?? entry.entry_type;
+  const typeLabel =
+    entry.entry_type === "RDV"
+      ? (formatRdvEntryDisplayLabel(entry) ?? "RDV")
+      : (PIPE_TIMELINE_TYPE_LABELS[userType] ?? entry.entry_type);
 
   const startEdit = () => {
     setOccurredAt(unixToDatetimeLocalInput(entry.occurred_at));
     setTitre(entry.titre ?? "");
     setContenu(entry.contenu ?? "");
+    setRdvStage(rdvStageFromEntryTitre(entry.titre) ?? "R1");
     setEditing(true);
   };
 
@@ -59,12 +77,27 @@ export function PipeTimelinePhaseEntryRow({
     e.preventDefault();
     setSaving(true);
     try {
+      const occurredAtUnix = datetimeLocalToUnix(occurredAt);
+      const nextTitre =
+        userType === "RDV" ? formatRdvEntryTitle(rdvStage) : titre.trim() || null;
+
       await timeline.updateEntry(entry.id, {
-        titre: titre.trim() || null,
+        titre: nextTitre,
         contenu: contenu.trim() || null,
-        occurred_at: datetimeLocalToUnix(occurredAt),
+        occurred_at: occurredAtUnix,
       });
-      toast.success("Entrée mise à jour");
+
+      if (userType === "RDV" && pipe) {
+        const result = await applyRdvStageOnSave({
+          pipe,
+          rdvStage,
+          occurredAt: occurredAtUnix,
+          notes: contenu.trim() || null,
+        });
+        toastAfterRdvSave(rdvStage, result, "Entrée mise à jour");
+      } else {
+        toast.success("Entrée mise à jour");
+      }
       setEditing(false);
     } catch (err) {
       toast.error(String(err));
@@ -90,10 +123,12 @@ export function PipeTimelinePhaseEntryRow({
           occurredAt={occurredAt}
           titre={titre}
           contenu={contenu}
+          rdvStage={rdvStage}
           saving={saving}
           onOccurredAtChange={setOccurredAt}
           onTitreChange={setTitre}
           onContenuChange={setContenu}
+          onRdvStageChange={setRdvStage}
           onCancel={cancelEdit}
           onSubmit={(e) => void saveEdit(e)}
           submitLabel="Enregistrer"
@@ -110,7 +145,7 @@ export function PipeTimelinePhaseEntryRow({
           <span className="font-medium text-foreground/80">{typeLabel}</span>
           <time>{formatTimelineOccurredAt(entry.occurred_at)}</time>
         </div>
-        {entry.titre?.trim() && (
+        {entry.entry_type !== "RDV" && entry.titre?.trim() && (
           <p className="text-sm font-medium leading-snug">{entry.titre.trim()}</p>
         )}
         {entry.contenu?.trim() && (

@@ -7,7 +7,13 @@ import {
   defaultTimelineEntryTitle,
   PipeTimelineAddForm,
 } from "@/components/pipe/PipeTimelineAddForm";
+import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import {
+  addPipeTimelineEntryWithRdvStage,
+  toastAfterRdvSave,
+} from "@/lib/pipe/pipe-rdv-entry-actions";
+import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import {
   PIPE_TIMELINE_TYPE_LABELS,
   PIPE_TIMELINE_USER_TYPES,
@@ -24,14 +30,16 @@ const TYPE_ICONS = {
 
 interface PipeTimelineQuickAddProps {
   timeline: ReturnType<typeof usePipeTimeline>;
+  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   onAdded?: () => void;
 }
 
-export function PipeTimelineQuickAdd({ timeline, onAdded }: PipeTimelineQuickAddProps) {
+export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQuickAddProps) {
   const [addingType, setAddingType] = useState<PipeTimelineUserType | null>(null);
   const [occurredAt, setOccurredAt] = useState(() => createEmptyTimelineAddState("APPEL").occurredAt);
   const [titre, setTitre] = useState("");
   const [contenu, setContenu] = useState("");
+  const [rdvStage, setRdvStage] = useState<PipeRdvStage>("R1");
   const [saving, setSaving] = useState(false);
 
   const openAdd = (type: PipeTimelineUserType) => {
@@ -40,6 +48,7 @@ export function PipeTimelineQuickAdd({ timeline, onAdded }: PipeTimelineQuickAdd
     setOccurredAt(state.occurredAt);
     setTitre(state.titre);
     setContenu("");
+    if (type === "RDV") setRdvStage("R1");
   };
 
   const cancelAdd = () => {
@@ -53,13 +62,22 @@ export function PipeTimelineQuickAdd({ timeline, onAdded }: PipeTimelineQuickAdd
     if (!addingType) return;
     setSaving(true);
     try {
-      await timeline.addEntry({
-        entry_type: addingType,
+      const occurredAtUnix = datetimeLocalToUnix(occurredAt);
+      const result = await addPipeTimelineEntryWithRdvStage({
+        timeline,
+        pipe,
+        entryType: addingType,
+        rdvStage: addingType === "RDV" ? rdvStage : undefined,
         titre: titre.trim() || defaultTimelineEntryTitle(addingType),
         contenu: contenu.trim() || null,
-        occurred_at: datetimeLocalToUnix(occurredAt),
+        occurredAtUnix,
       });
-      toast.success("Entrée ajoutée");
+
+      if (addingType === "RDV") {
+        toastAfterRdvSave(rdvStage, result);
+      } else {
+        toast.success("Entrée ajoutée");
+      }
       cancelAdd();
       onAdded?.();
     } catch (err) {
@@ -104,10 +122,12 @@ export function PipeTimelineQuickAdd({ timeline, onAdded }: PipeTimelineQuickAdd
           occurredAt={occurredAt}
           titre={titre}
           contenu={contenu}
+          rdvStage={rdvStage}
           saving={saving}
           onOccurredAtChange={setOccurredAt}
           onTitreChange={setTitre}
           onContenuChange={setContenu}
+          onRdvStageChange={setRdvStage}
           onCancel={cancelAdd}
           onSubmit={(e) => void handleAdd(e)}
         />

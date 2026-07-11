@@ -8,6 +8,7 @@ import {
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
 import { formatPrescripteurLabel } from "@/lib/pipe/pipe-prospection-prefill";
+import { formatRdvEntryDisplayLabel } from "@/lib/pipe/pipe-rdv-stage";
 
 const TYPE_ICONS = {
   APPEL: Phone,
@@ -65,17 +66,17 @@ export function PipeProspectionMilestoneReadSummary({
   return (
     <div className="space-y-2">
       {hasMeta && (
-        <dl className="grid gap-1.5 text-sm rounded-md border bg-background/50 px-3 py-2">
+        <dl className="flex flex-col gap-0.5 text-[11px] leading-snug text-muted-foreground">
           {prescripteurLabel && (
-            <div className="flex gap-2">
-              <dt className="shrink-0 text-muted-foreground">Prescripteur</dt>
-              <dd className="font-medium">{prescripteurLabel}</dd>
+            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+              <dt className="shrink-0">Prescripteur</dt>
+              <dd className="text-foreground/70">{prescripteurLabel}</dd>
             </div>
           )}
           {source && (
-            <div className="flex gap-2">
-              <dt className="shrink-0 text-muted-foreground">Source</dt>
-              <dd>{source}</dd>
+            <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0">
+              <dt className="shrink-0">Source</dt>
+              <dd className="text-foreground/70">{source}</dd>
             </div>
           )}
         </dl>
@@ -89,8 +90,10 @@ export function PipeProspectionMilestoneReadSummary({
                 ? TYPE_ICONS[entry.entry_type as keyof typeof TYPE_ICONS]
                 : null;
             const typeLabel =
-              PIPE_TIMELINE_TYPE_LABELS[entry.entry_type as PipeTimelineUserType] ??
-              entry.entry_type;
+              entry.entry_type === "RDV"
+                ? (formatRdvEntryDisplayLabel(entry) ?? "RDV")
+                : (PIPE_TIMELINE_TYPE_LABELS[entry.entry_type as PipeTimelineUserType] ??
+                  entry.entry_type);
             const detail = entry.contenu?.trim() || entry.titre?.trim();
             return (
               <li

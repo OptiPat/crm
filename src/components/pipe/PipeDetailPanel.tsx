@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { deletePipe } from "@/lib/api/tauri-pipe";
 import { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import { usePipeRdvStageSync } from "@/hooks/usePipeRdvStageSync";
 import {
   formatPipeContactLabel,
   isPipeType,
@@ -48,6 +49,8 @@ export function PipeDetailPanel({
   const [activeTab, setActiveTab] = useState("suivi");
   const [focusProspectionToken, setFocusProspectionToken] = useState(0);
   const timeline = usePipeTimeline(pipe.id);
+
+  usePipeRdvStageSync(pipe, timeline.entries, timeline.loading);
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -158,7 +161,7 @@ export function PipeDetailPanel({
               </div>
             )}
 
-            <PipeTimelineQuickAdd timeline={timeline} onAdded={() => setActiveTab("historique")} />
+            <PipeTimelineQuickAdd timeline={timeline} pipe={pipe} onAdded={() => setActiveTab("historique")} />
           </TabsContent>
 
           <TabsContent
