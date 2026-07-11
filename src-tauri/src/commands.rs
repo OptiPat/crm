@@ -17,7 +17,8 @@ use crate::database::{
         NewInvestissementVersement, NewPartenaire, CloseInvestissementPayload,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation,
         InvestissementVersement, NewInteraction,
-        NewTemplateEmail, NewSegment, NewTache, Partenaire,
+        NewTemplateEmail, NewSegment, NewTache, NewPipe, NewPipeTimelineEntry, UpdatePipe,
+        Partenaire, Pipe, PipeTimelineEntry,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
         ConversionClientStats, ConversionFilleulStats, DashboardStatContact, ActivityPeriodSummary,
         TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
@@ -402,6 +403,96 @@ pub fn get_all_partenaires(db: State<'_, DbState>) -> Result<Vec<Partenaire>, St
     database
         .get_all_partenaires()
         .map_err(|e| format!("Failed to get partenaires: {}", e))
+}
+
+#[tauri::command]
+pub fn list_pipes(db: State<'_, DbState>) -> Result<Vec<Pipe>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .list_pipes()
+        .map_err(|e| format!("Failed to list pipes: {}", e))
+}
+
+#[tauri::command]
+pub fn get_pipe_by_id(db: State<'_, DbState>, id: i64) -> Result<Pipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .get_pipe_by_id(id)
+        .map_err(|e| format!("Failed to get pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn create_pipe(db: State<'_, DbState>, new_pipe: NewPipe) -> Result<Pipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .create_pipe(new_pipe)
+        .map_err(|e| format!("Failed to create pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn update_pipe(
+    db: State<'_, DbState>,
+    id: i64,
+    update: UpdatePipe,
+) -> Result<Pipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .update_pipe(id, update)
+        .map_err(|e| format!("Failed to update pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_pipe(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .delete_pipe(id)
+        .map_err(|e| format!("Failed to delete pipe: {}", e))
+}
+
+#[tauri::command]
+pub fn list_pipe_timeline_entries(
+    db: State<'_, DbState>,
+    pipe_id: i64,
+) -> Result<Vec<PipeTimelineEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .list_pipe_timeline_entries(pipe_id)
+        .map_err(|e| format!("Failed to list pipe timeline: {}", e))
+}
+
+#[tauri::command]
+pub fn create_pipe_timeline_entry(
+    db: State<'_, DbState>,
+    entry: NewPipeTimelineEntry,
+) -> Result<PipeTimelineEntry, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .create_pipe_timeline_entry(entry)
+        .map_err(|e| format!("Failed to create pipe timeline entry: {}", e))
+}
+
+#[tauri::command]
+pub fn delete_pipe_timeline_entry(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .delete_pipe_timeline_entry(id)
+        .map_err(|e| format!("Failed to delete pipe timeline entry: {}", e))
 }
 
 #[tauri::command]

@@ -1300,3 +1300,64 @@ pub struct ContactMailSyncState {
     /// Reprise de la liste Gmail si l'import a été interrompu.
     pub list_page_token: Option<String>,
 }
+
+/// Affaire commerciale (domaine Pipe).
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Pipe {
+    pub id: i64,
+    pub contact_id: i64,
+    pub pipe_type: String,
+    pub parent_pipe_id: Option<i64>,
+    pub titre: String,
+    pub stage: String,
+    pub notes: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_nom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub contact_prenom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent_titre: Option<String>,
+}
+
+/// Entrée timeline d'un pipe.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeTimelineEntry {
+    pub id: i64,
+    pub pipe_id: i64,
+    pub entry_type: String,
+    pub titre: Option<String>,
+    pub contenu: Option<String>,
+    pub occurred_at: i64,
+    pub created_at: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewPipeTimelineEntry {
+    pub pipe_id: i64,
+    pub entry_type: String,
+    pub titre: Option<String>,
+    pub contenu: Option<String>,
+    pub occurred_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct NewPipe {
+    pub contact_id: i64,
+    pub pipe_type: String,
+    pub parent_pipe_id: Option<i64>,
+    pub titre: String,
+    pub stage: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdatePipe {
+    pub contact_id: i64,
+    pub pipe_type: String,
+    pub parent_pipe_id: Option<i64>,
+    pub titre: String,
+    pub stage: Option<String>,
+    pub notes: Option<String>,
+}

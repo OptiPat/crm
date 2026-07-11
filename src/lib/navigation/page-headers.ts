@@ -8,6 +8,10 @@ const PAGE_HEADERS: Record<string, PageHeaderMeta> = {
     title: "Tableau de bord",
     subtitle: "Vue d'ensemble de votre activité",
   },
+  pipe: {
+    title: "Pipe",
+    subtitle: "Affaires commerciales en cours",
+  },
   contacts: {
     title: "Contacts",
     subtitle: "Clients, prospects et filleuls",

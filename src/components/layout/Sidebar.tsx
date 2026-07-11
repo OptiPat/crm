@@ -24,6 +24,7 @@ import {
   GitBranch,
   Calculator,
   StickyNote,
+  Briefcase,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -98,6 +99,8 @@ const patrimoineGroup: NavGroup = {
     { id: "documents", label: "Documents", icon: FileText },
   ],
 };
+
+const pipeNavItem: NavItem = { id: "pipe", label: "Pipe", icon: Briefcase };
 
 const standaloneItems: NavItem[] = [
   { id: "dashboard", label: "Tableau de bord", icon: Home },
@@ -335,6 +338,7 @@ export function Sidebar({ currentPage, onPageChange }: SidebarProps) {
 
       <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {renderNavItem(dashboard)}
+        {renderNavItem(pipeNavItem)}
 
         {collapsed
           ? navGroups.map(renderCollapsedGroup)

@@ -29,6 +29,8 @@ pub mod investissement_produit_match;
 pub mod investissements;
 pub mod type_produit_condition;
 pub mod partenaires;
+pub mod pipe;
+pub mod pipe_timeline;
 pub mod settings;
 pub mod templates_email;
 pub mod models;
@@ -567,6 +569,8 @@ impl Database {
         self.migrate_compta_tables()?;
         self.migrate_compta_sync_columns()?;
         self.migrate_notes_tables()?;
+        self.migrate_pipes_table()?;
+        self.migrate_pipe_timeline_table()?;
         self.migrate_purge_premature_etiquette_taches()?;
 
         Ok(())

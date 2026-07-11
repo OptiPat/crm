@@ -24,6 +24,7 @@ import { Notes } from "@/pages/Notes";
 import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
+import { Pipe } from "@/pages/Pipe";
 import { Newsletter } from "@/pages/Newsletter";
 import { AppBrandingProvider } from "@/components/app-branding/AppBrandingProvider";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
@@ -182,6 +183,8 @@ function AppInner() {
             onNavigate={setCurrentPage}
           />
         );
+      case "pipe":
+        return <Pipe />;
       case "contacts":
         return (
           <ErrorBoundary>
