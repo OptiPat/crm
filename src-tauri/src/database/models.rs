@@ -1302,6 +1302,22 @@ pub struct GoogleCalendarWeekEvent {
     pub all_day: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub html_link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipe_timeline_entry_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pipe_id: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct AgendaGooglePipeSyncResult {
+    pub rescheduled: u32,
+    pub cancelled: u32,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AgendaWeekListResult {
+    pub events: Vec<GoogleCalendarWeekEvent>,
+    pub sync: AgendaGooglePipeSyncResult,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

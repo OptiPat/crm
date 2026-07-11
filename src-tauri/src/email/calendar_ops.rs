@@ -1,7 +1,10 @@
 //! Création et synchronisation RDV Google Calendar.
 
 use super::oauth_send::resolve_google_calendar_connection;
-use crate::database::models::{CalendarEventEntry, CalendarSyncResult, GoogleCalendarWeekEvent};
+use crate::database::models::{
+    AgendaGooglePipeSyncResult, AgendaWeekListResult, CalendarEventEntry, CalendarSyncResult,
+    GoogleCalendarWeekEvent,
+};
 use crate::database::Database;
 use chrono::{NaiveDate, TimeZone};
 use serde::{Deserialize, Serialize};
@@ -10,6 +13,7 @@ use tauri::AppHandle;
 const WEEK_SECONDS: i64 = 7 * 86_400;
 const WEEK_EVENTS_PAGE_SIZE: &str = "250";
 const WEEK_EVENTS_MAX_PAGES: u32 = 4;
+const PIPE_SYNC_TIME_TOLERANCE_SEC: i64 = 60;
 
 #[derive(Debug, Serialize)]
 struct CreateEventBody<'a> {
@@ -150,7 +154,113 @@ fn map_google_list_event(event: GoogleCalendarListEvent) -> Option<GoogleCalenda
         end_at,
         all_day: start_all_day,
         html_link: event.html_link,
+        pipe_timeline_entry_id: None,
+        pipe_id: None,
     })
+}
+
+fn sync_pipe_rdv_from_google_week(
+    db: &Database,
+    week_start_at: i64,
+    google_events: &[GoogleCalendarWeekEvent],
+) -> Result<AgendaGooglePipeSyncResult, String> {
+    let mut rescheduled = 0u32;
+    let mut cancelled = 0u32;
+    let mut contact_ids_to_sync = std::collections::HashSet::new();
+    let week_end_at = week_start_at.saturating_add(WEEK_SECONDS);
+
+    for ge in google_events {
+        let Some(ce) = db
+            .get_calendar_event_by_google_event_id(&ge.google_event_id)
+            .map_err(|e| e.to_string())?
+        else {
+            continue;
+        };
+        let Some(timeline_id) = ce.pipe_timeline_entry_id else {
+            continue;
+        };
+        let pipe_out_of_sync = db
+            .get_pipe_timeline_entry(timeline_id)
+            .ok()
+            .is_some_and(|entry| entry.occurred_at != ge.start_at);
+        let times_differ = (ce.start_at - ge.start_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC
+            || (ce.end_at - ge.end_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC
+            || pipe_out_of_sync;
+        if !times_differ {
+            continue;
+        }
+        db.update_pipe_timeline_occurred_at(timeline_id, ge.start_at)
+            .map_err(|e| e.to_string())?;
+        db.update_calendar_event_times(&ge.google_event_id, &ge.title, ge.start_at, ge.end_at)
+            .map_err(|e| e.to_string())?;
+        if let Ok(entry) = db.get_pipe_timeline_entry(timeline_id) {
+            if let Ok(pipe) = db.get_pipe_by_id(entry.pipe_id) {
+                contact_ids_to_sync.insert(pipe.contact_id);
+            }
+        }
+        rescheduled += 1;
+    }
+
+    let linked = db
+        .list_pipe_linked_calendar_events_between(week_start_at, week_end_at)
+        .map_err(|e| e.to_string())?;
+    let google_ids: std::collections::HashSet<&str> = google_events
+        .iter()
+        .map(|ev| ev.google_event_id.as_str())
+        .collect();
+    for ce in linked {
+        if google_ids.contains(ce.google_event_id.as_str()) {
+            continue;
+        }
+        db.mark_calendar_event_cancelled(&ce.google_event_id)
+            .map_err(|e| e.to_string())?;
+        if let Some(timeline_id) = ce.pipe_timeline_entry_id {
+            let _ = db.set_pipe_timeline_google_event_id(timeline_id, None);
+            if let Ok(entry) = db.get_pipe_timeline_entry(timeline_id) {
+                if let Ok(pipe) = db.get_pipe_by_id(entry.pipe_id) {
+                    contact_ids_to_sync.insert(pipe.contact_id);
+                }
+            }
+        }
+        cancelled += 1;
+    }
+
+    for contact_id in contact_ids_to_sync {
+        let _ = db.sync_contact_dates_for_contact(contact_id);
+    }
+
+    Ok(AgendaGooglePipeSyncResult {
+        rescheduled,
+        cancelled,
+    })
+}
+
+fn enrich_week_events_with_pipe_links(
+    db: &Database,
+    events: &mut [GoogleCalendarWeekEvent],
+) -> Result<(), String> {
+    let ids: Vec<String> = events.iter().map(|ev| ev.google_event_id.clone()).collect();
+    let links = db
+        .pipe_links_for_google_event_ids(&ids)
+        .map_err(|e| e.to_string())?;
+    for ev in events.iter_mut() {
+        if let Some((timeline_id, pipe_id)) = links.get(&ev.google_event_id) {
+            ev.pipe_timeline_entry_id = Some(*timeline_id);
+            ev.pipe_id = Some(*pipe_id);
+        }
+    }
+    Ok(())
+}
+
+pub fn list_google_calendar_week_with_pipe_sync(
+    app: &AppHandle,
+    db: &Database,
+    week_start_at: i64,
+) -> Result<AgendaWeekListResult, String> {
+    let mut events = list_google_calendar_week_events(app, week_start_at)?;
+    let sync = sync_pipe_rdv_from_google_week(db, week_start_at, &events)?;
+    enrich_week_events_with_pipe_links(db, &mut events)?;
+    Ok(AgendaWeekListResult { events, sync })
 }
 
 pub fn list_google_calendar_week_events(

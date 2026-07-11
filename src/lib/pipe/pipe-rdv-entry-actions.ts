@@ -136,6 +136,7 @@ export async function updatePipeRdvWithGoogleSync(options: {
   occurredAtUnix: number;
   endAtUnix?: number;
   contenu?: string | null;
+  calendarTitle?: string | null;
 }): Promise<PipeRdvCalendarSyncResult | undefined> {
   const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
   return syncGoogleCalendarForPipeRdv({
@@ -146,5 +147,6 @@ export async function updatePipeRdvWithGoogleSync(options: {
     endAtUnix,
     pipeTimelineEntryId: options.entry.id,
     existingGoogleEventId: options.entry.google_event_id,
+    calendarTitle: options.calendarTitle,
   });
 }

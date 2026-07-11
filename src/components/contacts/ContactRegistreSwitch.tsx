@@ -42,6 +42,71 @@ type Props = {
   className?: string;
 };
 
+export function ContactRegistreToggle({
+  value,
+  onChange,
+  disabled = false,
+  loading = false,
+  className,
+}: {
+  value: ContactRegistre;
+  onChange: (value: ContactRegistre) => void;
+  disabled?: boolean;
+  loading?: boolean;
+  className?: string;
+}) {
+  const btn = (option: ContactRegistre, label: string) => {
+    const active = value === option;
+    return (
+      <button
+        type="button"
+        disabled={disabled}
+        aria-pressed={active}
+        className={cn(
+          "px-2.5 py-1 text-xs font-semibold rounded-sm border transition-colors",
+          active && option === "VOUS" && "bg-sky-100 text-sky-950 border-sky-400 shadow-sm",
+          active && option === "TU" && "bg-violet-100 text-violet-950 border-violet-400 shadow-sm",
+          !active && "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+        )}
+        onClick={() => onChange(option)}
+      >
+        {label}
+      </button>
+    );
+  };
+
+  const containerTint =
+    value === "TU"
+      ? "border-violet-300 bg-violet-50/60"
+      : "border-sky-300 bg-sky-50/60";
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-0.5 rounded-md border p-0.5",
+        containerTint,
+        disabled && "opacity-60 pointer-events-none",
+        className
+      )}
+      title="Registre des emails (campagnes et relances)"
+    >
+      {loading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin mx-1.5 text-muted-foreground" />
+      ) : (
+        <MessageCircle
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 ml-1",
+            value === "TU" ? "text-violet-700" : "text-sky-700"
+          )}
+          aria-hidden
+        />
+      )}
+      {btn("VOUS", "Vous")}
+      {btn("TU", "Tu")}
+    </div>
+  );
+}
+
 export function ContactRegistreSwitch({
   contact,
   onUpdated,
@@ -72,54 +137,13 @@ export function ContactRegistreSwitch({
 
   if (contactId == null) return null;
 
-  const btn = (value: ContactRegistre, label: string) => {
-    const active = registre === value;
-    return (
-      <button
-        type="button"
-        disabled={disabled || saving}
-        aria-pressed={active}
-        className={cn(
-          "px-2.5 py-1 text-xs font-semibold rounded-sm border transition-colors",
-          active && value === "VOUS" && "bg-sky-100 text-sky-950 border-sky-400 shadow-sm",
-          active && value === "TU" && "bg-violet-100 text-violet-950 border-violet-400 shadow-sm",
-          !active && "border-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-        )}
-        onClick={() => void setRegistre(value)}
-      >
-        {label}
-      </button>
-    );
-  };
-
-  const containerTint =
-    registre === "TU"
-      ? "border-violet-300 bg-violet-50/60"
-      : "border-sky-300 bg-sky-50/60";
-
   return (
-    <div
-      className={cn(
-        "inline-flex items-center gap-0.5 rounded-md border p-0.5",
-        containerTint,
-        (disabled || saving) && "opacity-60 pointer-events-none",
-        className
-      )}
-      title="Registre des emails (campagnes et relances)"
-    >
-      {saving ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin mx-1.5 text-muted-foreground" />
-      ) : (
-        <MessageCircle
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 ml-1",
-            registre === "TU" ? "text-violet-700" : "text-sky-700"
-          )}
-          aria-hidden
-        />
-      )}
-      {btn("VOUS", "Vous")}
-      {btn("TU", "Tu")}
-    </div>
+    <ContactRegistreToggle
+      value={registre}
+      onChange={(next) => void setRegistre(next)}
+      disabled={disabled || saving}
+      loading={saving}
+      className={className}
+    />
   );
 }

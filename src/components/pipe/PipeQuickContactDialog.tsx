@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
+import { Button } from "@/components/ui/button";import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -18,8 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createContact, type Contact } from "@/lib/api/tauri-contacts";
+import { ContactRegistreToggle } from "@/components/contacts/ContactRegistreSwitch";
 import { toast } from "sonner";
-
 const PIPE_CONTACT_CATEGORIES = [
   { value: "SUSPECT_CLIENT", label: "Suspect client" },
   { value: "PROSPECT_CLIENT", label: "Prospect client" },
@@ -54,6 +53,7 @@ export function PipeQuickContactDialog({
   const [nom, setNom] = useState(hint.nom);
   const [prenom, setPrenom] = useState(hint.prenom);
   const [categorie, setCategorie] = useState<string>("PROSPECT_CLIENT");
+  const [registre, setRegistre] = useState<"TU" | "VOUS">("VOUS");
   const [email, setEmail] = useState("");
   const [telephone, setTelephone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -63,6 +63,7 @@ export function PipeQuickContactDialog({
     setNom(next.nom);
     setPrenom(next.prenom);
     setCategorie("PROSPECT_CLIENT");
+    setRegistre("VOUS");
     setEmail("");
     setTelephone("");
   };
@@ -88,6 +89,7 @@ export function PipeQuickContactDialog({
         nom: nom.trim().toUpperCase(),
         prenom: prenom.trim(),
         categorie,
+        registre,
         email: email.trim() || undefined,
         telephone: telephone.trim() || undefined,
         statut_suivi: "ACTIF",
@@ -132,24 +134,34 @@ export function PipeQuickContactDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Catégorie</Label>
-            <Select value={categorie} onValueChange={setCategorie}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PIPE_CONTACT_CATEGORIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    {c.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-2 min-w-[10rem] flex-1">
+              <Label>Catégorie</Label>
+              <Select value={categorie} onValueChange={setCategorie}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PIPE_CONTACT_CATEGORIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Registre</Label>
+              <ContactRegistreToggle
+                value={registre}
+                onChange={setRegistre}
+                disabled={loading}
+              />
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-3">            <div className="space-y-2">
               <Label>Email</Label>
               <Input
                 type="email"

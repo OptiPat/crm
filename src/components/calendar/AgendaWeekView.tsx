@@ -26,6 +26,11 @@ interface AgendaWeekViewProps {
   highlightStartAt?: number | null;
   highlightEndAt?: number | null;
   onSlotClick?: (slot: { startAt: number; endAt: number; dayIndex: number }) => void;
+  onPipeEventClick?: (event: GoogleCalendarWeekEvent) => void;
+}
+
+function isPipeLinkedEvent(ev: GoogleCalendarWeekEvent): boolean {
+  return ev.pipe_timeline_entry_id != null && ev.pipe_id != null;
 }
 
 function formatEventTime(startAt: number, endAt: number, allDay: boolean): string {
@@ -41,6 +46,7 @@ export function AgendaWeekView({
   highlightStartAt = null,
   highlightEndAt = null,
   onSlotClick,
+  onPipeEventClick,
 }: AgendaWeekViewProps) {
   const hours = hourLabels();
   const gridHeight = agendaGridHeightPx();
@@ -85,9 +91,21 @@ export function AgendaWeekView({
                       <button
                         key={ev.google_event_id}
                         type="button"
-                        className="w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] bg-slate-200/80 hover:bg-slate-300/80"
+                        className={cn(
+                          "w-full truncate rounded px-1.5 py-0.5 text-left text-[10px]",
+                          isPipeLinkedEvent(ev)
+                            ? "bg-emerald-200/80 hover:bg-emerald-300/80 border border-emerald-400/50"
+                            : "bg-slate-200/80 hover:bg-slate-300/80"
+                        )}
                         title={ev.title}
-                        onClick={() => ev.html_link && void openExternalUrl(ev.html_link)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isPipeLinkedEvent(ev) && onPipeEventClick) {
+                            onPipeEventClick(ev);
+                          } else if (ev.html_link) {
+                            void openExternalUrl(ev.html_link);
+                          }
+                        }}
                       >
                         {ev.title}
                       </button>
@@ -168,15 +186,26 @@ export function AgendaWeekView({
                       <button
                         key={ev.google_event_id}
                         type="button"
-                        className="absolute left-1 right-1 z-20 m-0 overflow-hidden rounded border border-blue-200/80 bg-blue-100/90 px-1.5 py-0.5 text-left text-[10px] leading-tight hover:bg-blue-200/90 box-border"
+                        className={cn(
+                          "absolute left-1 right-1 z-20 m-0 overflow-hidden rounded border px-1.5 py-0.5 text-left text-[10px] leading-tight box-border",
+                          isPipeLinkedEvent(ev)
+                            ? "border-emerald-400/80 bg-emerald-100/90 hover:bg-emerald-200/90"
+                            : "border-blue-200/80 bg-blue-100/90 hover:bg-blue-200/90"
+                        )}
                         style={{
                           top: Math.max(0, top),
                           height: Math.max(18, height),
                         }}
-                        title={`${ev.title}\n${formatEventTime(ev.start_at, ev.end_at, ev.all_day)}`}
+                        title={`${ev.title}\n${formatEventTime(ev.start_at, ev.end_at, ev.all_day)}${
+                          isPipeLinkedEvent(ev) ? "\nRDV Pipe — clic pour décaler / annuler" : ""
+                        }`}
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (ev.html_link) void openExternalUrl(ev.html_link);
+                          if (isPipeLinkedEvent(ev) && onPipeEventClick) {
+                            onPipeEventClick(ev);
+                          } else if (ev.html_link) {
+                            void openExternalUrl(ev.html_link);
+                          }
                         }}
                       >
                         <span className="block font-medium truncate">{ev.title}</span>
@@ -200,9 +229,9 @@ export function AgendaWeekView({
 
       <p className="px-4 py-2 text-[11px] text-muted-foreground border-t">
         Affichage {AGENDA_GRID_START_HOUR}h–{AGENDA_GRID_END_HOUR}h
-        {onSlotClick
-          ? " · clic sur un créneau libre pour planifier un RDV"
-          : " · clic sur un événement pour l'ouvrir dans Google Agenda"}
+        {onSlotClick ? " · clic créneau libre = planifier" : ""}
+        {onPipeEventClick ? " · vert = RDV Pipe (décaler / annuler)" : ""}
+        {!onPipeEventClick && !onSlotClick ? " · clic = ouvrir dans Google Agenda" : ""}
       </p>
     </div>
   );

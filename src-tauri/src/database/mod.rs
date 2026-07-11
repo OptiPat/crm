@@ -30,6 +30,7 @@ pub mod investissements;
 pub mod type_produit_condition;
 pub mod partenaires;
 pub mod pipe;
+pub mod pipe_contact_sync;
 pub mod pipe_timeline;
 pub mod settings;
 pub mod templates_email;

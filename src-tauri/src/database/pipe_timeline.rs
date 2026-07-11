@@ -219,7 +219,9 @@ impl super::Database {
             ],
         )?;
         let id = self.conn.last_insert_rowid();
-        self.get_pipe_timeline_entry(id)
+        let entry = self.get_pipe_timeline_entry(id)?;
+        self.sync_contact_dates_from_pipe(input.pipe_id)?;
+        Ok(entry)
     }
 
     pub fn get_pipe_timeline_entry(&self, id: i64) -> Result<super::models::PipeTimelineEntry> {
@@ -229,6 +231,24 @@ impl super::Database {
             params![id],
             map_timeline_row,
         )
+    }
+
+    pub fn update_pipe_timeline_occurred_at(&self, id: i64, occurred_at: i64) -> Result<()> {
+        let updated = self.conn.execute(
+            "UPDATE pipe_timeline_entries SET occurred_at = ?1
+             WHERE id = ?2 AND entry_type = 'RDV'",
+            params![occurred_at, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        let pipe_id: i64 = self.conn.query_row(
+            "SELECT pipe_id FROM pipe_timeline_entries WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        self.sync_contact_dates_from_pipe(pipe_id)?;
+        Ok(())
     }
 
     pub fn set_pipe_timeline_google_event_id(
@@ -244,10 +264,10 @@ impl super::Database {
     }
 
     pub fn delete_pipe_timeline_entry(&self, id: i64) -> Result<()> {
-        let entry_type: String = self.conn.query_row(
-            "SELECT entry_type FROM pipe_timeline_entries WHERE id = ?1",
+        let (entry_type, pipe_id): (String, i64) = self.conn.query_row(
+            "SELECT entry_type, pipe_id FROM pipe_timeline_entries WHERE id = ?1",
             params![id],
-            |row| row.get(0),
+            |row| Ok((row.get(0)?, row.get(1)?)),
         )?;
         if entry_type == TIMELINE_CREATION || entry_type == TIMELINE_AVANCEMENT {
             return Err(rusqlite::Error::InvalidParameterName(
@@ -260,6 +280,7 @@ impl super::Database {
         if deleted == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
+        self.sync_contact_dates_from_pipe(pipe_id)?;
         Ok(())
     }
 
@@ -397,7 +418,14 @@ impl super::Database {
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
-        self.get_pipe_timeline_entry(id)
+        let entry = self.get_pipe_timeline_entry(id)?;
+        let pipe_id: i64 = self.conn.query_row(
+            "SELECT pipe_id FROM pipe_timeline_entries WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        self.sync_contact_dates_from_pipe(pipe_id)?;
+        Ok(entry)
     }
 
     pub(crate) fn delete_pipe_timeline_for_pipe(&self, pipe_id: i64) -> Result<()> {

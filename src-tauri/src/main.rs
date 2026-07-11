@@ -121,6 +121,7 @@ fn main() {
             delete_pipe,
             set_pipe_stage,
             list_pipe_timeline_entries,
+            get_pipe_timeline_entry,
             create_pipe_timeline_entry,
             delete_pipe_timeline_entry,
             update_pipe_timeline_milestone_notes,

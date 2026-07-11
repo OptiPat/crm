@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
 import type { PipeTimelineUserType } from "@/lib/pipe/pipe-timeline-types";
 
@@ -34,12 +35,20 @@ export async function createPipeTimelineEntry(
     entry: input,
   });
   notifyPipeChanged();
+  notifyContactsChanged();
   return entry;
 }
 
 export async function deletePipeTimelineEntry(id: number): Promise<void> {
   await invoke<void>("delete_pipe_timeline_entry", { id });
   notifyPipeChanged();
+  notifyContactsChanged();
+}
+
+export async function getPipeTimelineEntry(
+  id: number
+): Promise<PipeTimelineEntryRecord> {
+  return invoke<PipeTimelineEntryRecord>("get_pipe_timeline_entry", { id });
 }
 
 export async function updatePipeTimelineMilestoneNotes(
@@ -69,5 +78,6 @@ export async function updatePipeTimelineEntry(
     entry: input,
   });
   notifyPipeChanged();
+  notifyContactsChanged();
   return entry;
 }

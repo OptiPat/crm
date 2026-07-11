@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AgendaWeekView } from "@/components/calendar/AgendaWeekView";
+import { AgendaPipeRdvManageDialog } from "@/components/calendar/AgendaPipeRdvManageDialog";
 import {
   RdvPlanifierDialog,
   type RdvPlanifierContext,
@@ -18,9 +19,12 @@ import {
   isCurrentWeek,
   startOfWeekMonday,
 } from "@/lib/calendar/agenda-week";
+import type { GoogleCalendarWeekEvent } from "@/lib/api/tauri-calendar";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
+import { notifyContactsChanged } from "@/lib/contacts/contact-events";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface AgendaProps {
   onNavigate?: (page: string) => void;
@@ -35,6 +39,7 @@ export function Agenda({ onNavigate }: AgendaProps) {
     loading,
     error,
     connected,
+    lastSync,
     goPrevWeek,
     goNextWeek,
     goToday,
@@ -44,10 +49,33 @@ export function Agenda({ onNavigate }: AgendaProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [planifierOpen, setPlanifierOpen] = useState(false);
   const [planifierContext, setPlanifierContext] = useState<RdvPlanifierContext>({ kind: "agenda" });
+  const [pipeManageOpen, setPipeManageOpen] = useState(false);
+  const [selectedPipeEvent, setSelectedPipeEvent] = useState<GoogleCalendarWeekEvent | null>(null);
   const [slotDefaults, setSlotDefaults] = useState<{
     startAt?: number;
     endAt?: number;
   }>({});
+
+  useEffect(() => {
+    if (!lastSync) return;
+    if (lastSync.rescheduled > 0) {
+      toast.success(
+        lastSync.rescheduled === 1
+          ? "1 RDV Pipe mis à jour depuis Google Agenda"
+          : `${lastSync.rescheduled} RDV Pipe mis à jour depuis Google Agenda`
+      );
+    }
+    if (lastSync.cancelled > 0) {
+      toast.warning(
+        lastSync.cancelled === 1
+          ? "1 RDV retiré de Google Agenda — vérifiez le journal Pipe"
+          : `${lastSync.cancelled} RDV retirés de Google Agenda — vérifiez le journal Pipe`
+      );
+    }
+    if (lastSync.rescheduled > 0 || lastSync.cancelled > 0) {
+      notifyContactsChanged();
+    }
+  }, [lastSync]);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -159,6 +187,17 @@ export function Agenda({ onNavigate }: AgendaProps) {
           setSlotDefaults({ startAt, endAt });
           setPlanifierOpen(true);
         }}
+        onPipeEventClick={(ev) => {
+          setSelectedPipeEvent(ev);
+          setPipeManageOpen(true);
+        }}
+      />
+
+      <AgendaPipeRdvManageDialog
+        open={pipeManageOpen}
+        onOpenChange={setPipeManageOpen}
+        event={selectedPipeEvent}
+        onChanged={() => void refreshWeek()}
       />
 
       <RdvPlanifierDialog

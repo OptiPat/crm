@@ -35,6 +35,18 @@ export interface GoogleCalendarWeekEvent {
   end_at: number;
   all_day: boolean;
   html_link?: string | null;
+  pipe_timeline_entry_id?: number | null;
+  pipe_id?: number | null;
+}
+
+export interface AgendaGooglePipeSyncResult {
+  rescheduled: number;
+  cancelled: number;
+}
+
+export interface AgendaWeekListResult {
+  events: GoogleCalendarWeekEvent[];
+  sync: AgendaGooglePipeSyncResult;
 }
 
 export async function createCalendarRdv(input: {
@@ -89,8 +101,8 @@ export async function getCalendarEventsToday(): Promise<CalendarEventEntry[]> {
 
 export async function listGoogleCalendarWeek(
   weekStartAt: number
-): Promise<GoogleCalendarWeekEvent[]> {
-  return invoke<GoogleCalendarWeekEvent[]>("list_google_calendar_week", {
+): Promise<AgendaWeekListResult> {
+  return invoke<AgendaWeekListResult>("list_google_calendar_week", {
     weekStartAt,
   });
 }

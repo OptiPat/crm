@@ -23,7 +23,7 @@ use crate::database::{
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
         ConversionClientStats, ConversionFilleulStats, DashboardStatContact, ActivityPeriodSummary,
         TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
-        CalendarEventEntry, CalendarSyncResult, GoogleCalendarWeekEvent,
+        CalendarEventEntry, CalendarSyncResult,
     },
     Database,
 };
@@ -2208,9 +2208,28 @@ pub fn get_calendar_events_today(
 #[tauri::command]
 pub fn list_google_calendar_week(
     app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
     week_start_at: i64,
-) -> Result<Vec<GoogleCalendarWeekEvent>, String> {
-    crate::email::calendar_ops::list_google_calendar_week_events(&app_handle, week_start_at)
+) -> Result<crate::database::models::AgendaWeekListResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    crate::email::calendar_ops::list_google_calendar_week_with_pipe_sync(
+        &app_handle,
+        database,
+        week_start_at,
+    )
+}
+
+#[tauri::command]
+pub fn get_pipe_timeline_entry(
+    db: State<'_, DbState>,
+    id: i64,
+) -> Result<crate::database::models::PipeTimelineEntry, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_pipe_timeline_entry(id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

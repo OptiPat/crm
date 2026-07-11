@@ -219,7 +219,7 @@ export function RdvPlanifierDialog({
     const weekStart = weekStartFromDatetimeLocal(start);
     if (weekStart == null) return;
     try {
-      const events = await listGoogleCalendarWeek(weekStart);
+      const { events } = await listGoogleCalendarWeek(weekStart);
       const durationSec = rdvDurationMinutesFromPreset(durationPreset) * 60;
       const slot = findNextFreeSlot(events, {
         durationSec,

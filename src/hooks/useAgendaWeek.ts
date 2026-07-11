@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { listGoogleCalendarWeek, type GoogleCalendarWeekEvent } from "@/lib/api/tauri-calendar";
+import {
+  listGoogleCalendarWeek,
+  type AgendaGooglePipeSyncResult,
+  type GoogleCalendarWeekEvent,
+} from "@/lib/api/tauri-calendar";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { addWeeks, weekKey, weekStartUnix } from "@/lib/calendar/agenda-week";
 
 type WeekCache = Map<string, GoogleCalendarWeekEvent[]>;
 
-async function fetchWeek(weekStartAt: number): Promise<GoogleCalendarWeekEvent[]> {
+async function fetchWeek(weekStartAt: number) {
   return listGoogleCalendarWeek(weekStartAt);
 }
 
@@ -19,12 +23,13 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [lastSync, setLastSync] = useState<AgendaGooglePipeSyncResult | null>(null);
 
   const prefetchWeek = useCallback((targetWeekStartAt: number) => {
     const key = weekKey(targetWeekStartAt);
     if (cacheRef.current.has(key)) return;
     void fetchWeek(targetWeekStartAt)
-      .then((items) => {
+      .then(({ events: items }) => {
         cacheRef.current.set(key, items);
       })
       .catch(() => {
@@ -33,16 +38,21 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
   }, []);
 
   const loadWeek = useCallback(
-    async (targetWeekStartAt: number, options?: { silent?: boolean }) => {
+    async (
+      targetWeekStartAt: number,
+      options?: { silent?: boolean; skipCache?: boolean }
+    ) => {
       const key = weekKey(targetWeekStartAt);
-      const cached = cacheRef.current.get(key);
-      if (cached) {
-        setEvents(cached);
-        setError(null);
-        setLoading(false);
-        prefetchWeek(addWeeks(targetWeekStartAt, -1));
-        prefetchWeek(addWeeks(targetWeekStartAt, 1));
-        return;
+      if (!options?.skipCache) {
+        const cached = cacheRef.current.get(key);
+        if (cached) {
+          setEvents(cached);
+          setError(null);
+          setLoading(false);
+          prefetchWeek(addWeeks(targetWeekStartAt, -1));
+          prefetchWeek(addWeeks(targetWeekStartAt, 1));
+          return null;
+        }
       }
 
       if (!options?.silent) {
@@ -50,16 +60,19 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
       }
       setError(null);
       try {
-        const items = await fetchWeek(targetWeekStartAt);
-        cacheRef.current.set(key, items);
+        const result = await fetchWeek(targetWeekStartAt);
+        cacheRef.current.set(key, result.events);
         if (activeWeekRef.current === targetWeekStartAt) {
-          setEvents(items);
+          setEvents(result.events);
+          setLastSync(result.sync);
         }
         prefetchWeek(addWeeks(targetWeekStartAt, -1));
         prefetchWeek(addWeeks(targetWeekStartAt, 1));
+        return result.sync;
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
         setEvents([]);
+        return null;
       } finally {
         setLoading(false);
       }
@@ -115,7 +128,7 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
 
   const refreshWeek = useCallback(async () => {
     cacheRef.current.delete(weekKey(weekStartAt));
-    await loadWeek(weekStartAt);
+    return loadWeek(weekStartAt, { skipCache: true });
   }, [loadWeek, weekStartAt]);
 
   const getWeekEvents = useCallback((targetWeekStartAt: number) => {
@@ -128,6 +141,7 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
     loading,
     error,
     connected,
+    lastSync,
     goToWeek,
     goPrevWeek,
     goNextWeek,
