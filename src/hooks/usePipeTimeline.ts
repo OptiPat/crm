@@ -3,9 +3,11 @@ import {
   createPipeTimelineEntry,
   deletePipeTimelineEntry,
   listPipeTimelineEntries,
+  updatePipeTimelineEntry,
   updatePipeTimelineMilestoneNotes,
   type NewPipeTimelineEntryInput,
   type PipeTimelineEntryRecord,
+  type UpdatePipeTimelineEntryInput,
 } from "@/lib/api/tauri-pipe-timeline";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 import { toast } from "sonner";
@@ -59,6 +61,15 @@ export function usePipeTimeline(pipeId: number) {
     [reload]
   );
 
+  const updateEntry = useCallback(
+    async (id: number, input: UpdatePipeTimelineEntryInput) => {
+      const entry = await updatePipeTimelineEntry(id, input);
+      await reload();
+      return entry;
+    },
+    [reload]
+  );
+
   return {
     entries,
     loading,
@@ -66,5 +77,6 @@ export function usePipeTimeline(pipeId: number) {
     addEntry,
     removeEntry,
     updateMilestoneNotes,
+    updateEntry,
   };
 }

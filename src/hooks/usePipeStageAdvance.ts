@@ -7,6 +7,7 @@ export interface PendingPipeStageAdvance {
   pipeId: number;
   targetStage: PipeStage;
   pipeTitle?: string;
+  initialNotes?: string;
 }
 
 export function usePipeStageAdvance(onApplied?: (pipe: PipeRecord) => void) {
@@ -14,8 +15,13 @@ export function usePipeStageAdvance(onApplied?: (pipe: PipeRecord) => void) {
   const [saving, setSaving] = useState(false);
 
   const requestStageChange = useCallback(
-    (pipeId: number, targetStage: PipeStage, pipeTitle?: string) => {
-      setPending({ pipeId, targetStage, pipeTitle });
+    (
+      pipeId: number,
+      targetStage: PipeStage,
+      pipeTitle?: string,
+      initialNotes?: string
+    ) => {
+      setPending({ pipeId, targetStage, pipeTitle, initialNotes });
     },
     []
   );

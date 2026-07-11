@@ -22,6 +22,7 @@ interface PipeTimelineAddFormProps {
   onContenuChange: (value: string) => void;
   onCancel: () => void;
   onSubmit: (e: FormEvent) => void;
+  submitLabel?: string;
 }
 
 export function PipeTimelineAddForm({
@@ -35,6 +36,7 @@ export function PipeTimelineAddForm({
   onContenuChange,
   onCancel,
   onSubmit,
+  submitLabel = "Ajouter",
 }: PipeTimelineAddFormProps) {
   return (
     <form onSubmit={onSubmit} className="rounded-lg border bg-muted/20 p-4 space-y-3">
@@ -67,7 +69,7 @@ export function PipeTimelineAddForm({
           Annuler
         </Button>
         <Button type="submit" size="sm" disabled={saving}>
-          {saving ? "Ajout…" : "Ajouter"}
+          {saving ? "Enregistrement…" : submitLabel}
         </Button>
       </div>
     </form>

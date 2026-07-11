@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Calendar, Phone, Trash2 } from "lucide-react";
+import { Calendar, FileText, Phone, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { Label } from "@/components/ui/label";
@@ -10,18 +10,21 @@ import {
   PipeTimelineAddForm,
 } from "@/components/pipe/PipeTimelineAddForm";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
+import { PipeTimelinePhaseEntryRow } from "@/components/pipe/PipeTimelinePhaseEntryRow";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
-import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
 import {
   PIPE_TIMELINE_TYPE_LABELS,
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
 import { toast } from "sonner";
 
-const PHASE_TYPE_ICONS = {
+const QUICK_ADD_TYPES = ["APPEL", "RDV", "NOTE"] as const;
+const QUICK_ADD_ICONS = {
   APPEL: Phone,
   RDV: Calendar,
+  NOTE: FileText,
+  PROPOSITION: Send,
 } as const;
 
 interface PipeProspectionMilestoneEditorProps {
@@ -45,13 +48,13 @@ export function PipeProspectionMilestoneEditor({
   onCancel,
   onSaveNotes,
 }: PipeProspectionMilestoneEditorProps) {
-  const [addingType, setAddingType] = useState<"APPEL" | "RDV" | null>(null);
+  const [addingType, setAddingType] = useState<PipeTimelineUserType | null>(null);
   const [occurredAt, setOccurredAt] = useState("");
   const [titre, setTitre] = useState("");
   const [contenu, setContenu] = useState("");
   const [adding, setAdding] = useState(false);
 
-  const openAdd = (type: "APPEL" | "RDV") => {
+  const openAdd = (type: PipeTimelineUserType) => {
     const state = createEmptyTimelineAddState(type);
     setAddingType(type);
     setOccurredAt(state.occurredAt);
@@ -85,14 +88,7 @@ export function PipeProspectionMilestoneEditor({
     }
   };
 
-  const handleDeletePhaseEntry = async (entry: PipeTimelineEntryRecord) => {
-    try {
-      await timeline.removeEntry(entry.id);
-      toast.success("Entrée supprimée");
-    } catch (err) {
-      toast.error(String(err));
-    }
-  };
+  const rowDisabled = saving || adding;
 
   return (
     <div className="space-y-4">
@@ -112,10 +108,10 @@ export function PipeProspectionMilestoneEditor({
 
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-sm font-medium">Appels et RDV (phase prospection)</p>
-          <div className="flex gap-1">
-            {(["APPEL", "RDV"] as const).map((type) => {
-              const Icon = PHASE_TYPE_ICONS[type];
+          <p className="text-sm font-medium">Journal prospection</p>
+          <div className="flex flex-wrap justify-end gap-1">
+            {QUICK_ADD_TYPES.map((type) => {
+              const Icon = QUICK_ADD_ICONS[type];
               return (
                 <Button
                   key={type}
@@ -124,7 +120,7 @@ export function PipeProspectionMilestoneEditor({
                   size="sm"
                   className="h-7 gap-1 text-xs"
                   onClick={() => openAdd(type)}
-                  disabled={saving || adding}
+                  disabled={rowDisabled}
                 >
                   <Icon className="h-3 w-3" />
                   {PIPE_TIMELINE_TYPE_LABELS[type]}
@@ -136,52 +132,18 @@ export function PipeProspectionMilestoneEditor({
 
         {phaseEntries.length === 0 ? (
           <p className="text-xs text-muted-foreground italic rounded-md border border-dashed px-3 py-2">
-            Aucun appel ni RDV enregistré pendant la prospection.
+            Aucune activité enregistrée pendant la prospection.
           </p>
         ) : (
           <ul className="space-y-2 m-0 list-none p-0">
-            {phaseEntries.map((entry) => {
-              const Icon =
-                entry.entry_type in PHASE_TYPE_ICONS
-                  ? PHASE_TYPE_ICONS[entry.entry_type as keyof typeof PHASE_TYPE_ICONS]
-                  : null;
-              const typeLabel =
-                PIPE_TIMELINE_TYPE_LABELS[entry.entry_type as PipeTimelineUserType] ??
-                entry.entry_type;
-              return (
-                <li
-                  key={entry.id}
-                  className="flex items-start justify-between gap-2 rounded-md border bg-background/60 px-3 py-2"
-                >
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      {Icon && <Icon className="h-3 w-3 shrink-0" />}
-                      <span className="font-medium text-foreground/80">{typeLabel}</span>
-                      <time>{formatTimelineOccurredAt(entry.occurred_at)}</time>
-                    </div>
-                    {entry.titre?.trim() && (
-                      <p className="text-sm font-medium leading-snug">{entry.titre.trim()}</p>
-                    )}
-                    {entry.contenu?.trim() && (
-                      <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-                        {entry.contenu.trim()}
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0"
-                    aria-label="Supprimer"
-                    onClick={() => void handleDeletePhaseEntry(entry)}
-                    disabled={saving || adding}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                </li>
-              );
-            })}
+            {phaseEntries.map((entry) => (
+              <PipeTimelinePhaseEntryRow
+                key={entry.id}
+                entry={entry}
+                timeline={timeline}
+                disabled={rowDisabled}
+              />
+            ))}
           </ul>
         )}
 

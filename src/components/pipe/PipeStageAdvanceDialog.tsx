@@ -28,7 +28,7 @@ export function PipeStageAdvanceDialog({
   const [notes, setNotes] = useState("");
 
   useEffect(() => {
-    if (pending) setNotes("");
+    if (pending) setNotes(pending.initialNotes ?? "");
   }, [pending]);
 
   const stageLabel = pending ? PIPE_STAGE_LABELS[pending.targetStage] : "";

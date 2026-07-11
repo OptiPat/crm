@@ -52,3 +52,21 @@ export async function updatePipeTimelineMilestoneNotes(
   notifyPipeChanged();
   return entry;
 }
+
+export interface UpdatePipeTimelineEntryInput {
+  titre?: string | null;
+  contenu?: string | null;
+  occurred_at?: number | null;
+}
+
+export async function updatePipeTimelineEntry(
+  id: number,
+  input: UpdatePipeTimelineEntryInput
+): Promise<PipeTimelineEntryRecord> {
+  const entry = await invoke<PipeTimelineEntryRecord>("update_pipe_timeline_entry", {
+    id,
+    entry: input,
+  });
+  notifyPipeChanged();
+  return entry;
+}

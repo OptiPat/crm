@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Calendar, FileText, Pencil, Phone, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { PipeProspectionMilestoneEditor } from "@/components/pipe/PipeProspectionMilestoneEditor";
+import { PipeProspectionMilestoneReadSummary } from "@/components/pipe/PipeProspectionMilestoneReadSummary";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
@@ -22,7 +23,6 @@ import {
   getProspectionPhaseUserEntries,
   isProspectionMilestoneEntry,
   isProspectionPhaseUserEntry,
-  summarizeProspectionPhaseEntries,
 } from "@/lib/pipe/pipe-prospection-phase";
 import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
 import { cn } from "@/lib/utils";
@@ -38,6 +38,7 @@ const TYPE_ICONS = {
 interface PipeTimelineHistoryProps {
   timeline: ReturnType<typeof usePipeTimeline>;
   pipe: Pick<PipeRecord, "pipe_type" | "contact_id">;
+  focusProspectionToken?: number;
 }
 
 function TimelineEntryRow({
@@ -50,6 +51,8 @@ function TimelineEntryRow({
   onDelete,
   onSaveMilestoneNotes,
   isLast,
+  prospectionMilestoneRef,
+  highlightProspection,
 }: {
   entry: PipeTimelineEntryRecord;
   allEntries: PipeTimelineEntryRecord[];
@@ -60,6 +63,8 @@ function TimelineEntryRow({
   onDelete?: () => void;
   onSaveMilestoneNotes?: (contenu: string | null) => Promise<void>;
   isLast: boolean;
+  prospectionMilestoneRef?: React.RefObject<HTMLLIElement | null>;
+  highlightProspection?: boolean;
 }) {
   const milestone = isStageMilestoneEntry(entry.entry_type);
   const prospectionMilestone = isProspectionMilestoneEntry(entry, context);
@@ -77,9 +82,6 @@ function TimelineEntryRow({
   const displayContenu = formatTimelineEntryContenu(entry);
   const style = getPipeTimelineEntryStyle(entry, context);
   const durationLabel = getMilestoneDurationLabel(entry, allEntries, context);
-  const phaseSummary = prospectionMilestone
-    ? summarizeProspectionPhaseEntries(phaseEntries)
-    : null;
 
   const startEdit = () => {
     setDraftNotes(entry.contenu ?? "");
@@ -107,7 +109,16 @@ function TimelineEntryRow({
   };
 
   return (
-    <li className={cn("relative pl-6", !isLast && "pb-6")}>
+    <li
+      ref={prospectionMilestone ? prospectionMilestoneRef : undefined}
+      className={cn(
+        "relative pl-6",
+        !isLast && "pb-6",
+        highlightProspection &&
+          prospectionMilestone &&
+          "rounded-lg ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
+      )}
+    >
       {!isLast && (
         <span className="absolute left-[0.4375rem] top-3 bottom-0 w-px bg-border" aria-hidden />
       )}
@@ -179,6 +190,22 @@ function TimelineEntryRow({
                   </Button>
                 </div>
               </div>
+            ) : prospectionMilestone && contactId > 0 ? (
+              <>
+                {displayContenu ? (
+                  <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+                    {displayContenu}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">
+                    Aucune note pour cette étape.
+                  </p>
+                )}
+                <PipeProspectionMilestoneReadSummary
+                  contactId={contactId}
+                  phaseEntries={phaseEntries}
+                />
+              </>
             ) : (
               <>
                 {displayContenu ? (
@@ -190,9 +217,6 @@ function TimelineEntryRow({
                     Aucune note pour cette étape.
                   </p>
                 ) : null}
-                {phaseSummary && (
-                  <p className="text-xs text-muted-foreground">{phaseSummary}</p>
-                )}
               </>
             )}
           </div>
@@ -233,8 +257,14 @@ function TimelineEntryRow({
   );
 }
 
-export function PipeTimelineHistory({ timeline, pipe }: PipeTimelineHistoryProps) {
+export function PipeTimelineHistory({
+  timeline,
+  pipe,
+  focusProspectionToken = 0,
+}: PipeTimelineHistoryProps) {
   const { entries, loading, removeEntry, updateMilestoneNotes } = timeline;
+  const prospectionMilestoneRef = useRef<HTMLLIElement>(null);
+  const [highlightProspection, setHighlightProspection] = useState(false);
   const context: PipeTimelineDisplayContext = {
     pipeType: pipe.pipe_type,
   };
@@ -243,6 +273,22 @@ export function PipeTimelineHistory({ timeline, pipe }: PipeTimelineHistoryProps
   const visibleEntries = entries.filter(
     (entry) => !isProspectionPhaseUserEntry(entry, entries, context)
   );
+
+  useEffect(() => {
+    if (!focusProspectionToken) return;
+    const frame = requestAnimationFrame(() => {
+      prospectionMilestoneRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "nearest",
+      });
+      setHighlightProspection(true);
+    });
+    const timer = window.setTimeout(() => setHighlightProspection(false), 2400);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timer);
+    };
+  }, [focusProspectionToken]);
 
   const handleDelete = async (entry: PipeTimelineEntryRecord) => {
     if (isPipeTimelineSystemEntry(entry.entry_type)) return;
@@ -289,6 +335,8 @@ export function PipeTimelineHistory({ timeline, pipe }: PipeTimelineHistoryProps
                     contactId={pipe.contact_id}
                     phaseEntries={phaseEntries}
                     timeline={timeline}
+                    prospectionMilestoneRef={prospectionMilestoneRef}
+                    highlightProspection={highlightProspection}
                     isLast={index === monthGroup.items.length - 1}
                     onSaveMilestoneNotes={
                       isStageMilestoneEntry(entry.entry_type)

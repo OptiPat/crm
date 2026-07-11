@@ -329,6 +329,57 @@ impl super::Database {
         self.get_pipe_timeline_entry(id)
     }
 
+    pub fn update_pipe_timeline_entry(
+        &self,
+        id: i64,
+        input: super::models::UpdatePipeTimelineEntry,
+    ) -> Result<super::models::PipeTimelineEntry> {
+        let entry_type: String = self.conn.query_row(
+            "SELECT entry_type FROM pipe_timeline_entries WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if !is_valid_user_timeline_type(&entry_type) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "seules les entrées utilisateur sont modifiables".into(),
+            ));
+        }
+        let titre = input
+            .titre
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let contenu = input
+            .contenu
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        if titre.is_none() && contenu.is_none() {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "titre ou contenu requis".into(),
+            ));
+        }
+        let occurred_at = input.occurred_at.unwrap_or_else(|| {
+            self.conn
+                .query_row(
+                    "SELECT occurred_at FROM pipe_timeline_entries WHERE id = ?1",
+                    params![id],
+                    |row| row.get(0),
+                )
+                .unwrap_or_else(|_| now_unix())
+        });
+        let updated = self.conn.execute(
+            "UPDATE pipe_timeline_entries SET titre = ?1, contenu = ?2, occurred_at = ?3 WHERE id = ?4",
+            params![titre.as_deref(), contenu.as_deref(), occurred_at, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        self.get_pipe_timeline_entry(id)
+    }
+
     pub(crate) fn delete_pipe_timeline_for_pipe(&self, pipe_id: i64) -> Result<()> {
         self.conn.execute(
             "DELETE FROM pipe_timeline_entries WHERE pipe_id = ?1",
@@ -475,5 +526,55 @@ mod tests {
         let entries = db.list_pipe_timeline_entries(orphan_id).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].entry_type, TIMELINE_CREATION);
+    }
+
+    #[test]
+    fn pipe_user_timeline_entry_is_updatable() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact id");
+
+        let pipe = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let apel = db
+            .create_pipe_timeline_entry(NewPipeTimelineEntry {
+                pipe_id: pipe.id,
+                entry_type: TIMELINE_APPEL.into(),
+                titre: Some("Appel".into()),
+                contenu: Some("Premier contact".into()),
+                occurred_at: None,
+            })
+            .unwrap();
+
+        let updated = db
+            .update_pipe_timeline_entry(
+                apel.id,
+                crate::database::models::UpdatePipeTimelineEntry {
+                    titre: Some("Appel corrigé".into()),
+                    contenu: Some("CR mis à jour".into()),
+                    occurred_at: Some(1_700_000_000),
+                },
+            )
+            .unwrap();
+        assert_eq!(updated.titre.as_deref(), Some("Appel corrigé"));
+        assert_eq!(updated.contenu.as_deref(), Some("CR mis à jour"));
+        assert_eq!(updated.occurred_at, 1_700_000_000);
     }
 }

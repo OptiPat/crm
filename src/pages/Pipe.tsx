@@ -9,13 +9,14 @@ import {
   savePipeViewMode,
   type PipeViewMode,
 } from "@/lib/pipe/pipe-board-utils";
-import { type PipeType } from "@/lib/pipe/pipe-types";
+import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
 import { PipeList } from "@/components/pipe/PipeList";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
 import { usePipeStageAdvance } from "@/hooks/usePipeStageAdvance";
+import { loadProspectionToR1Prefill } from "@/lib/pipe/pipe-prospection-prefill";
 import { cn } from "@/lib/utils";
 
 type PanelMode = "empty" | "create" | "view" | "edit";
@@ -167,6 +168,22 @@ export function Pipe() {
     }
   };
 
+  const handleRequestStageChange = async (pipe: PipeRecord, target: PipeStage) => {
+    let initialNotes: string | undefined;
+    if (
+      pipe.pipe_type === "AFFAIRE" &&
+      pipe.stage === "PROSPECTION" &&
+      target === "R1"
+    ) {
+      try {
+        initialNotes = await loadProspectionToR1Prefill(pipe);
+      } catch {
+        initialNotes = undefined;
+      }
+    }
+    stageAdvance.requestStageChange(pipe.id, target, pipe.titre, initialNotes);
+  };
+
   const detailPanel = (
     <>
       {panelMode === "empty" && viewMode === "board" && (
@@ -206,9 +223,7 @@ export function Pipe() {
           pipe={selectedPipe}
           onEdit={openEdit}
           onDeleted={handleDeleted}
-          onRequestStageChange={(target) =>
-            stageAdvance.requestStageChange(selectedPipe.id, target, selectedPipe.titre)
-          }
+          onRequestStageChange={(target) => void handleRequestStageChange(selectedPipe, target)}
         />
       )}
     </>
@@ -239,7 +254,7 @@ export function Pipe() {
                 selectedId={selectedPipe?.id ?? null}
                 onSelect={openView}
                 onRequestStageChange={(pipe, stage) =>
-                  stageAdvance.requestStageChange(pipe.id, stage, pipe.titre)
+                  void handleRequestStageChange(pipe, stage)
                 }
               />
             )}

@@ -1343,6 +1343,13 @@ pub struct NewPipeTimelineEntry {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct UpdatePipeTimelineEntry {
+    pub titre: Option<String>,
+    pub contenu: Option<String>,
+    pub occurred_at: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct NewPipe {
     pub contact_id: i64,
     pub pipe_type: String,

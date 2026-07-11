@@ -15,11 +15,13 @@ import { cn } from "@/lib/utils";
 interface PipeStageStepperProps {
   currentStage: string;
   onRequestStageChange: (target: PipeStage) => void;
+  onViewProspection?: () => void;
 }
 
 export function PipeStageStepper({
   currentStage,
   onRequestStageChange,
+  onViewProspection,
 }: PipeStageStepperProps) {
   if (!isPipeStage(currentStage)) return null;
 
@@ -65,6 +67,10 @@ export function PipeStageStepper({
                 <button
                   type="button"
                   onClick={() => {
+                    if (step === "PROSPECTION" && step !== stage) {
+                      onViewProspection?.();
+                      return;
+                    }
                     if (step === "PROSPECTION" && step === stage) {
                       document
                         .getElementById("pipe-prospection-section")

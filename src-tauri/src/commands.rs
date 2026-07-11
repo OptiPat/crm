@@ -17,7 +17,8 @@ use crate::database::{
         NewInvestissementVersement, NewPartenaire, CloseInvestissementPayload,
         ExchangeHistoryEntry, Interaction, InteractionWithContact, InvestissementValorisation,
         InvestissementVersement, NewInteraction,
-        NewTemplateEmail, NewSegment, NewTache, NewPipe, NewPipeTimelineEntry, UpdatePipe,
+        NewTemplateEmail, NewSegment, NewTache, NewPipe, NewPipeTimelineEntry,
+        UpdatePipeTimelineEntry, UpdatePipe,
         Partenaire, Pipe, PipeTimelineEntry,
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
         ConversionClientStats, ConversionFilleulStats, DashboardStatContact, ActivityPeriodSummary,
@@ -507,6 +508,20 @@ pub fn update_pipe_timeline_milestone_notes(
     database
         .update_pipe_timeline_milestone_notes(id, contenu.as_deref())
         .map_err(|e| format!("Failed to update pipe timeline milestone notes: {}", e))
+}
+
+#[tauri::command]
+pub fn update_pipe_timeline_entry(
+    db: State<'_, DbState>,
+    id: i64,
+    entry: UpdatePipeTimelineEntry,
+) -> Result<PipeTimelineEntry, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .update_pipe_timeline_entry(id, entry)
+        .map_err(|e| format!("Failed to update pipe timeline entry: {}", e))
 }
 
 #[tauri::command]
