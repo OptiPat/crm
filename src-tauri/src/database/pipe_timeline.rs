@@ -7,6 +7,7 @@ pub const TIMELINE_RDV: &str = "RDV";
 pub const TIMELINE_NOTE: &str = "NOTE";
 pub const TIMELINE_PROPOSITION: &str = "PROPOSITION";
 pub const TIMELINE_CREATION: &str = "CREATION";
+pub const TIMELINE_AVANCEMENT: &str = "AVANCEMENT";
 
 const USER_TIMELINE_TYPES: &[&str] = &[
     TIMELINE_APPEL,
@@ -152,9 +153,9 @@ impl super::Database {
             params![id],
             |row| row.get(0),
         )?;
-        if entry_type == TIMELINE_CREATION {
+        if entry_type == TIMELINE_CREATION || entry_type == TIMELINE_AVANCEMENT {
             return Err(rusqlite::Error::InvalidParameterName(
-                "impossible de supprimer l'entrée de création".into(),
+                "impossible de supprimer cette entrée système".into(),
             ));
         }
         let deleted = self
@@ -163,6 +164,24 @@ impl super::Database {
         if deleted == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
+        Ok(())
+    }
+
+    pub(crate) fn insert_avancement_timeline_entry(
+        &self,
+        pipe_id: i64,
+        new_stage: &str,
+    ) -> Result<()> {
+        let titre = format!(
+            "Avancement passé à {}",
+            super::pipe::pipe_stage_label(new_stage)
+        );
+        let now = now_unix();
+        self.conn.execute(
+            "INSERT INTO pipe_timeline_entries (pipe_id, entry_type, titre, contenu, occurred_at, created_at)
+             VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
+            params![pipe_id, TIMELINE_AVANCEMENT, titre, now],
+        )?;
         Ok(())
     }
 

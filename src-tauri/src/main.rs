@@ -119,6 +119,7 @@ fn main() {
             create_pipe,
             update_pipe,
             delete_pipe,
+            set_pipe_stage,
             list_pipe_timeline_entries,
             create_pipe_timeline_entry,
             delete_pipe_timeline_entry,

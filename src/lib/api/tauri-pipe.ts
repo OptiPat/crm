@@ -52,3 +52,9 @@ export async function deletePipe(id: number): Promise<void> {
   await invoke<void>("delete_pipe", { id });
   notifyPipeChanged();
 }
+
+export async function setPipeStage(id: number, stage: PipeStage): Promise<PipeRecord> {
+  const pipe = await invoke<PipeRecord>("set_pipe_stage", { id, stage });
+  notifyPipeChanged();
+  return pipe;
+}

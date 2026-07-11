@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Calendar, FileText, Phone, Send, Trash2 } from "lucide-react";
+import { Calendar, FileText, Phone, Send, Trash2, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -99,7 +99,7 @@ export function PipeTimelineSection({ pipeId }: PipeTimelineSectionProps) {
   };
 
   const handleDelete = async (entry: PipeTimelineEntryRecord) => {
-    if (entry.entry_type === "CREATION") return;
+    if (entry.entry_type === "CREATION" || entry.entry_type === "AVANCEMENT") return;
     try {
       await deletePipeTimelineEntry(entry.id);
       toast.success("Entrée supprimée");
@@ -184,12 +184,15 @@ export function PipeTimelineSection({ pipeId }: PipeTimelineSectionProps) {
       ) : (
         <ol className="relative space-y-0 border-l border-border ml-2 pl-4">
           {entries.map((entry) => {
+            const isSystem = entry.entry_type === "CREATION" || entry.entry_type === "AVANCEMENT";
             const isCreation = entry.entry_type === "CREATION";
             const userType = entry.entry_type as PipeTimelineUserType;
             const Icon =
-              !isCreation && userType in TYPE_ICONS
-                ? TYPE_ICONS[userType as keyof typeof TYPE_ICONS]
-                : null;
+              entry.entry_type === "AVANCEMENT"
+                ? TrendingUp
+                : !isCreation && userType in TYPE_ICONS
+                  ? TYPE_ICONS[userType as keyof typeof TYPE_ICONS]
+                  : null;
             const label =
               PIPE_TIMELINE_TYPE_LABELS[entry.entry_type as keyof typeof PIPE_TIMELINE_TYPE_LABELS] ??
               entry.entry_type;
@@ -200,7 +203,7 @@ export function PipeTimelineSection({ pipeId }: PipeTimelineSectionProps) {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={isCreation ? "secondary" : "outline"} className="font-normal gap-1">
+                      <Badge variant={isSystem ? "secondary" : "outline"} className="font-normal gap-1">
                         {Icon && <Icon className="h-3 w-3" />}
                         {label}
                       </Badge>
@@ -209,7 +212,7 @@ export function PipeTimelineSection({ pipeId }: PipeTimelineSectionProps) {
                       </span>
                     </div>
                     {entry.titre && (
-                      <p className={cn("text-sm", isCreation && "text-muted-foreground")}>
+                      <p className={cn("text-sm", isSystem && "text-muted-foreground")}>
                         {entry.titre}
                       </p>
                     )}
@@ -217,7 +220,7 @@ export function PipeTimelineSection({ pipeId }: PipeTimelineSectionProps) {
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">{entry.contenu}</p>
                     )}
                   </div>
-                  {!isCreation && (
+                  {!isSystem && (
                     <Button
                       type="button"
                       variant="ghost"

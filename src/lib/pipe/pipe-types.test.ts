@@ -5,6 +5,9 @@ import {
   isPipeStage,
   isPipeType,
   pipeTypeUsesStage,
+  getNextLinearStage,
+  isTerminalPipeStage,
+  formatStageAdvancementMessage,
   validatePipeForm,
 } from "./pipe-types";
 
@@ -26,6 +29,15 @@ describe("pipe-types", () => {
   it("parents autorisés", () => {
     expect(canBePipeParent("ACTE_GESTION")).toBe(true);
     expect(canBePipeParent("ACTION")).toBe(false);
+  });
+
+  it("enchaîne les étapes linéaires", () => {
+    expect(getNextLinearStage("PROSPECTION")).toBe("R1");
+    expect(getNextLinearStage("R3")).toBe("GAGNEE");
+    expect(getNextLinearStage("GAGNEE")).toBeNull();
+    expect(isTerminalPipeStage("GAGNEE")).toBe(true);
+    expect(isTerminalPipeStage("R2")).toBe(false);
+    expect(formatStageAdvancementMessage("R1")).toBe("Avancement passé à R1");
   });
 
   it("valide le formulaire", () => {

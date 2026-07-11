@@ -2,7 +2,7 @@ export const PIPE_TIMELINE_USER_TYPES = ["APPEL", "RDV", "NOTE", "PROPOSITION"] 
 
 export type PipeTimelineUserType = (typeof PIPE_TIMELINE_USER_TYPES)[number];
 
-export type PipeTimelineType = PipeTimelineUserType | "CREATION";
+export type PipeTimelineType = PipeTimelineUserType | "CREATION" | "AVANCEMENT";
 
 export const PIPE_TIMELINE_TYPE_LABELS: Record<PipeTimelineType, string> = {
   APPEL: "Appel",
@@ -10,6 +10,7 @@ export const PIPE_TIMELINE_TYPE_LABELS: Record<PipeTimelineType, string> = {
   NOTE: "Note",
   PROPOSITION: "Proposition",
   CREATION: "Création",
+  AVANCEMENT: "Avancement",
 };
 
 export function isPipeTimelineUserType(value: string): value is PipeTimelineUserType {

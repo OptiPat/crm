@@ -40,6 +40,18 @@ pub(crate) fn is_valid_pipe_stage(value: &str) -> bool {
     VALID_PIPE_STAGES.contains(&value)
 }
 
+pub(crate) fn pipe_stage_label(stage: &str) -> String {
+    match stage {
+        PIPE_STAGE_PROSPECTION => "Prospection".into(),
+        PIPE_STAGE_R1 => "R1".into(),
+        PIPE_STAGE_R2 => "R2".into(),
+        PIPE_STAGE_R3 => "R3".into(),
+        PIPE_STAGE_GAGNEE => "Gagnée".into(),
+        PIPE_STAGE_PERDUE_OU_EN_ATTENTE => "Perdue ou en attente".into(),
+        _ => stage.to_string(),
+    }
+}
+
 fn default_stage_for_type(pipe_type: &str) -> &'static str {
     if pipe_type == PIPE_TYPE_AFFAIRE {
         PIPE_STAGE_PROSPECTION
@@ -275,6 +287,7 @@ impl super::Database {
         id: i64,
         input: super::models::UpdatePipe,
     ) -> Result<super::models::Pipe> {
+        let old = self.get_pipe_by_id(id)?;
         let titre = input.titre.trim().to_string();
         let stage = input
             .stage
@@ -310,6 +323,36 @@ impl super::Database {
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
+        if old.pipe_type == PIPE_TYPE_AFFAIRE && old.stage != stage {
+            self.insert_avancement_timeline_entry(id, &stage)?;
+        }
+        self.get_pipe_by_id(id)
+    }
+
+    pub fn set_pipe_stage(&self, id: i64, new_stage: &str) -> Result<super::models::Pipe> {
+        let current = self.get_pipe_by_id(id)?;
+        if current.pipe_type != PIPE_TYPE_AFFAIRE {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "l'avancement ne s'applique qu'aux affaires".into(),
+            ));
+        }
+        if !is_valid_pipe_stage(new_stage) {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "stage invalide".into(),
+            ));
+        }
+        if current.stage == new_stage {
+            return Ok(current);
+        }
+        let now = now_unix();
+        let updated = self.conn.execute(
+            "UPDATE pipes SET stage = ?1, updated_at = ?2 WHERE id = ?3",
+            params![new_stage, now, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        self.insert_avancement_timeline_entry(id, new_stage)?;
         self.get_pipe_by_id(id)
     }
 
@@ -403,5 +446,45 @@ mod tests {
         db.delete_pipe(acte.id).unwrap();
         db.delete_pipe(affaire.id).unwrap();
         assert!(db.list_pipes().unwrap().is_empty());
+    }
+
+    #[test]
+    fn set_pipe_stage_updates_and_logs_timeline() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+
+        use crate::database::models::NewPipe;
+        use crate::database::pipe_timeline::TIMELINE_AVANCEMENT;
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "SCPI test".into(),
+                stage: Some(PIPE_STAGE_PROSPECTION.into()),
+                notes: None,
+            })
+            .unwrap();
+
+        let updated = db.set_pipe_stage(affaire.id, PIPE_STAGE_R1).unwrap();
+        assert_eq!(updated.stage, PIPE_STAGE_R1);
+
+        let entries = db.list_pipe_timeline_entries(affaire.id).unwrap();
+        let avancement = entries
+            .iter()
+            .find(|e| e.entry_type == TIMELINE_AVANCEMENT)
+            .expect("timeline avancement");
+        assert!(avancement.titre.as_deref().unwrap_or("").contains("R1"));
+
+        db.set_pipe_stage(affaire.id, PIPE_STAGE_R1).unwrap();
+        assert_eq!(
+            db.list_pipe_timeline_entries(affaire.id)
+                .unwrap()
+                .iter()
+                .filter(|e| e.entry_type == TIMELINE_AVANCEMENT)
+                .count(),
+            1
+        );
     }
 }

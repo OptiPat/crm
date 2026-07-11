@@ -13,15 +13,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { deletePipe } from "@/lib/api/tauri-pipe";
-import {
-  formatPipeContactLabel,
-  isPipeStage,
-  PIPE_STAGE_DESCRIPTIONS,
-  PIPE_STAGE_FIELD_LABEL,
-  PIPE_STAGE_LABELS,
-} from "@/lib/pipe/pipe-types";
+import { formatPipeContactLabel, isPipeType, pipeTypeUsesStage } from "@/lib/pipe/pipe-types";
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
+import { PipeStageStepper } from "@/components/pipe/PipeStageStepper";
 import { PipeTimelineSection } from "@/components/pipe/PipeTimelineSection";
 import { toast } from "sonner";
 
@@ -49,8 +44,8 @@ export function PipeDetailPanel({ pipe, onEdit, onDeleted }: PipeDetailPanelProp
     }
   };
 
-  const stageHint =
-    pipe.stage && isPipeStage(pipe.stage) ? PIPE_STAGE_DESCRIPTIONS[pipe.stage] : null;
+  const showStageStepper =
+    isPipeType(pipe.pipe_type) && pipeTypeUsesStage(pipe.pipe_type) && pipe.stage;
 
   return (
     <>
@@ -84,14 +79,8 @@ export function PipeDetailPanel({ pipe, onEdit, onDeleted }: PipeDetailPanelProp
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
-          {pipe.stage && isPipeStage(pipe.stage) && (
-            <div>
-              <p className="text-sm font-medium">{PIPE_STAGE_FIELD_LABEL}</p>
-              <p className="text-sm mt-1">{PIPE_STAGE_LABELS[pipe.stage]}</p>
-              {stageHint && (
-                <p className="text-xs text-muted-foreground mt-1">{stageHint}</p>
-              )}
-            </div>
+          {showStageStepper && (
+            <PipeStageStepper pipeId={pipe.id} currentStage={pipe.stage} />
           )}
 
           {pipe.notes && (

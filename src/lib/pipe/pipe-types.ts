@@ -67,6 +67,35 @@ export function defaultPipeStage(pipeType: PipeType): PipeStage | "" {
   return pipeType === "AFFAIRE" ? "PROSPECTION" : "";
 }
 
+/** Étapes linéaires du funnel commercial (hors « perdue / en attente »). */
+export const PIPE_LINEAR_STAGES = [
+  "PROSPECTION",
+  "R1",
+  "R2",
+  "R3",
+  "GAGNEE",
+] as const satisfies readonly PipeStage[];
+
+export type PipeLinearStage = (typeof PIPE_LINEAR_STAGES)[number];
+
+export function getLinearStageIndex(stage: PipeStage): number {
+  return PIPE_LINEAR_STAGES.indexOf(stage as PipeLinearStage);
+}
+
+export function getNextLinearStage(current: PipeStage): PipeLinearStage | null {
+  const idx = getLinearStageIndex(current);
+  if (idx < 0 || idx >= PIPE_LINEAR_STAGES.length - 1) return null;
+  return PIPE_LINEAR_STAGES[idx + 1];
+}
+
+export function isTerminalPipeStage(stage: PipeStage): boolean {
+  return stage === "GAGNEE" || stage === "PERDUE_OU_EN_ATTENTE";
+}
+
+export function formatStageAdvancementMessage(stage: PipeStage): string {
+  return `Avancement passé à ${PIPE_STAGE_LABELS[stage]}`;
+}
+
 export function formatPipeContactLabel(
   pipe: Pick<PipeRecordLike, "contact_prenom" | "contact_nom">
 ): string {
