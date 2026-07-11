@@ -13,8 +13,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { PipeRecord } from "@/lib/api/tauri-pipe";
-import { deletePipe } from "@/lib/api/tauri-pipe";
+import { getContactById, type Contact } from "@/lib/api/tauri-contacts";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
+import { deletePipe, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { usePipeRdvStageSync } from "@/hooks/usePipeRdvStageSync";
 import {
@@ -45,6 +46,9 @@ export function PipeDetailPanel({
   const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("suivi");
   const [focusProspectionToken, setFocusProspectionToken] = useState(0);
+  const [contactInfo, setContactInfo] = useState<Pick<Contact, "email" | "telephone"> | null>(
+    null
+  );
   const timeline = usePipeTimeline(pipe.id);
 
   usePipeRdvStageSync(pipe, timeline.entries, timeline.loading);
@@ -77,6 +81,36 @@ export function PipeDetailPanel({
   }, [pipe.id]);
 
   useEffect(() => {
+    if (pipe.contact_id <= 0) {
+      setContactInfo(null);
+      return;
+    }
+    let cancelled = false;
+    const loadContact = () => {
+      void getContactById(pipe.contact_id).then((c) => {
+        if (!cancelled) {
+          setContactInfo({ email: c.email, telephone: c.telephone });
+        }
+      });
+    };
+    loadContact();
+    const unsub = subscribeContactsChanged((detail) => {
+      if (detail.patchedContact?.id === pipe.contact_id) {
+        setContactInfo({
+          email: detail.patchedContact.email,
+          telephone: detail.patchedContact.telephone,
+        });
+      } else if (detail.removedContactId !== pipe.contact_id) {
+        loadContact();
+      }
+    });
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [pipe.contact_id]);
+
+  useEffect(() => {
     if (!showProspectionFields || activeTab !== "suivi" || pipe.stage !== "PROSPECTION") return;
     const frame = requestAnimationFrame(() => {
       prospectionRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -103,6 +137,9 @@ export function PipeDetailPanel({
               {formatPipeContactLabel(pipe)}
               {pipe.parent_titre ? ` · rattaché à ${pipe.parent_titre}` : ""}
             </p>
+            {contactInfo?.email?.trim() && (
+              <p className="text-xs text-muted-foreground">{contactInfo.email.trim()}</p>
+            )}
           </div>
           <div className="flex shrink-0 gap-1">
             <Button type="button" variant="outline" size="icon" onClick={onEdit} aria-label="Modifier">

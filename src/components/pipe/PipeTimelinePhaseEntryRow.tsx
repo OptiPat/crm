@@ -9,7 +9,8 @@ import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
-import { toastAfterRdvSave } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { toastAfterRdvSave, notifyGoogleCalendarSync, updatePipeRdvWithGoogleSync } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { isPipeRdvCalendarSyncEligible } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   applyRdvStageOnSave,
   formatRdvEntryDisplayLabel,
@@ -34,7 +35,10 @@ const TYPE_ICONS = {
 
 interface PipeTimelinePhaseEntryRowProps {
   entry: PipeTimelineEntryRecord;
-  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
+  pipe?:
+    | (Pick<PipeRecord, "id" | "stage" | "pipe_type"> &
+        Partial<Pick<PipeRecord, "contact_id" | "contact_prenom" | "contact_nom" | "titre">>)
+    | null;
   timeline: ReturnType<typeof usePipeTimeline>;
   disabled?: boolean;
 }
@@ -96,6 +100,30 @@ export function PipeTimelinePhaseEntryRow({
           occurredAt: occurredAtUnix,
           notes: contenu.trim() || null,
         });
+
+        if (
+          isPipeRdvCalendarSyncEligible(occurredAtUnix) &&
+          pipe.contact_id != null &&
+          pipe.contact_id > 0
+        ) {
+          const calendar = await updatePipeRdvWithGoogleSync({
+            entry,
+            pipe: pipe as Pick<
+              PipeRecord,
+              | "id"
+              | "stage"
+              | "pipe_type"
+              | "contact_id"
+              | "contact_prenom"
+              | "contact_nom"
+              | "titre"
+            >,
+            rdvStage,
+            occurredAtUnix,
+          });
+          notifyGoogleCalendarSync(calendar);
+        }
+
         toastAfterRdvSave(rdvStage, result, "Entrée mise à jour");
       } else {
         toast.success("Entrée mise à jour");
@@ -130,6 +158,7 @@ export function PipeTimelinePhaseEntryRow({
           titre={titre}
           contenu={contenu}
           rdvStage={rdvStage}
+          pipe={pipe}
           saving={saving}
           onOccurredAtChange={setOccurredAt}
           onTitreChange={setTitre}

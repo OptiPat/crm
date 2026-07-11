@@ -25,6 +25,7 @@ import { TemplatesEmail } from "@/pages/TemplatesEmail";
 import { Suivi } from "@/pages/Suivi";
 import { Etiquettes } from "@/pages/Etiquettes";
 import { Pipe } from "@/pages/Pipe";
+import { Agenda } from "@/pages/Agenda";
 import { Newsletter } from "@/pages/Newsletter";
 import { AppBrandingProvider } from "@/components/app-branding/AppBrandingProvider";
 import { ErrorBoundary } from "@/components/contacts/ErrorBoundary";
@@ -212,6 +213,8 @@ function AppInner() {
         );
       case "taches":
         return <Taches onNavigate={setCurrentPage} />;
+      case "agenda":
+        return <Agenda onNavigate={setCurrentPage} />;
       case "templates-email":
         return <TemplatesEmail onNavigate={setCurrentPage} currentPage={currentPage} />;
       case "newsletter":

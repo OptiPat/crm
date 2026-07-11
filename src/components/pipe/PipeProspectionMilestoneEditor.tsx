@@ -182,6 +182,7 @@ export function PipeProspectionMilestoneEditor({
             titre={titre}
             contenu={contenu}
             rdvStage={rdvStage}
+            pipe={pipe}
             saving={adding}
             onOccurredAtChange={setOccurredAt}
             onTitreChange={setTitre}

@@ -74,8 +74,14 @@ export const PARAMETRES_SEARCH_INDEX: ParametresSearchItem[] = [
   },
   {
     id: "agenda",
-    label: "Liens Google Agenda",
-    keywords: ["agenda", "rdv", "rendez-vous", "réservation", "lien_agenda"],
+    label: "Agenda & RDV",
+    keywords: ["agenda", "rdv", "rendez-vous", "réservation", "lien_agenda", "visio", "zoom", "teams", "meet"],
+    section: "suivi",
+  },
+  {
+    id: "visio-defaut",
+    label: "Lien Zoom / Teams",
+    keywords: ["visio", "zoom", "teams", "lien", "rdv", "agenda"],
     section: "suivi",
   },
   {

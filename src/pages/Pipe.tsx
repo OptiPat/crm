@@ -3,6 +3,7 @@ import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall } from "lucide-re
 import { Button } from "@/components/ui/button";
 import { listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   filterAffairesForBoard,
   loadPipeViewMode,
@@ -122,9 +123,16 @@ export function Pipe() {
 
   useEffect(() => {
     void loadPipes();
-    return subscribePipeChanged(() => {
+    const unsubPipe = subscribePipeChanged(() => {
       void loadPipes();
     });
+    const unsubContacts = subscribeContactsChanged(() => {
+      void loadPipes();
+    });
+    return () => {
+      unsubPipe();
+      unsubContacts();
+    };
   }, [loadPipes]);
 
   const setViewModePersisted = (mode: PipeViewMode) => {

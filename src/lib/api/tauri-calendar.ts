@@ -5,6 +5,7 @@ export interface CalendarEventEntry {
   contact_id: number;
   alerte_id: number | null;
   tache_id: number | null;
+  pipe_timeline_entry_id: number | null;
   google_event_id: string;
   title: string;
   start_at: number;
@@ -27,22 +28,55 @@ export interface CalendarSyncResult {
   errors: string[];
 }
 
+export interface GoogleCalendarWeekEvent {
+  google_event_id: string;
+  title: string;
+  start_at: number;
+  end_at: number;
+  all_day: boolean;
+  html_link?: string | null;
+}
+
 export async function createCalendarRdv(input: {
   contactId: number;
   alerteId?: number | null;
   tacheId?: number | null;
+  pipeTimelineEntryId?: number | null;
   title: string;
   startAt: number;
   endAt: number;
+  addGoogleMeet?: boolean;
+  visioLink?: string | null;
 }): Promise<CalendarEventEntry> {
   return invoke<CalendarEventEntry>("create_calendar_rdv", {
     contactId: input.contactId,
     alerteId: input.alerteId ?? null,
     tacheId: input.tacheId ?? null,
+    pipeTimelineEntryId: input.pipeTimelineEntryId ?? null,
+    title: input.title,
+    startAt: input.startAt,
+    endAt: input.endAt,
+    addGoogleMeet: input.addGoogleMeet ?? false,
+    visioLink: input.visioLink ?? null,
+  });
+}
+
+export async function updateCalendarRdv(input: {
+  googleEventId: string;
+  title: string;
+  startAt: number;
+  endAt: number;
+}): Promise<void> {
+  return invoke<void>("update_calendar_rdv", {
+    googleEventId: input.googleEventId,
     title: input.title,
     startAt: input.startAt,
     endAt: input.endAt,
   });
+}
+
+export async function cancelCalendarRdv(googleEventId: string): Promise<void> {
+  return invoke<void>("cancel_calendar_rdv", { googleEventId });
 }
 
 export async function syncCalendarRdv(): Promise<CalendarSyncResult> {
@@ -51,6 +85,14 @@ export async function syncCalendarRdv(): Promise<CalendarSyncResult> {
 
 export async function getCalendarEventsToday(): Promise<CalendarEventEntry[]> {
   return invoke<CalendarEventEntry[]>("get_calendar_events_today");
+}
+
+export async function listGoogleCalendarWeek(
+  weekStartAt: number
+): Promise<GoogleCalendarWeekEvent[]> {
+  return invoke<GoogleCalendarWeekEvent[]>("list_google_calendar_week", {
+    weekStartAt,
+  });
 }
 
 export async function markCalendarRdvEffectue(

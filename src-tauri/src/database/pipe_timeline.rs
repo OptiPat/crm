@@ -60,6 +60,7 @@ fn map_timeline_row(row: &Row<'_>) -> Result<super::models::PipeTimelineEntry> {
         contenu: row.get(4)?,
         occurred_at: row.get(5)?,
         created_at: row.get(6)?,
+        google_event_id: row.get(7)?,
     })
 }
 
@@ -80,6 +81,12 @@ impl super::Database {
                 ON pipe_timeline_entries(pipe_id, occurred_at DESC);
             ",
         )?;
+        if !self.table_has_column("pipe_timeline_entries", "google_event_id")? {
+            self.conn.execute(
+                "ALTER TABLE pipe_timeline_entries ADD COLUMN google_event_id TEXT",
+                [],
+            )?;
+        }
         self.backfill_pipe_creation_timeline_entries()?;
         Ok(())
     }
@@ -152,7 +159,7 @@ impl super::Database {
         pipe_id: i64,
     ) -> Result<Vec<super::models::PipeTimelineEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, pipe_id, entry_type, titre, contenu, occurred_at, created_at
+            "SELECT id, pipe_id, entry_type, titre, contenu, occurred_at, created_at, google_event_id
              FROM pipe_timeline_entries
              WHERE pipe_id = ?1
              ORDER BY occurred_at DESC, id DESC",
@@ -217,11 +224,23 @@ impl super::Database {
 
     pub fn get_pipe_timeline_entry(&self, id: i64) -> Result<super::models::PipeTimelineEntry> {
         self.conn.query_row(
-            "SELECT id, pipe_id, entry_type, titre, contenu, occurred_at, created_at
+            "SELECT id, pipe_id, entry_type, titre, contenu, occurred_at, created_at, google_event_id
              FROM pipe_timeline_entries WHERE id = ?1",
             params![id],
             map_timeline_row,
         )
+    }
+
+    pub fn set_pipe_timeline_google_event_id(
+        &self,
+        id: i64,
+        google_event_id: Option<&str>,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE pipe_timeline_entries SET google_event_id = ?1 WHERE id = ?2",
+            params![google_event_id, id],
+        )?;
+        Ok(())
     }
 
     pub fn delete_pipe_timeline_entry(&self, id: i64) -> Result<()> {

@@ -9,6 +9,7 @@ import {
   type Contact,
 } from "@/lib/api/tauri-contacts";
 import { contactToUpdatePayload } from "@/lib/contacts/contact-form-utils";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { toast } from "sonner";
 
 interface PipeProspectionContactSectionProps {
@@ -48,7 +49,15 @@ export function PipeProspectionContactSection({
 
   useEffect(() => {
     void load();
-  }, [load]);
+    return subscribeContactsChanged((detail) => {
+      if (detail.patchedContact?.id === contactId) {
+        setContact(detail.patchedContact);
+        setSourceLead(detail.patchedContact.source_lead ?? "");
+      } else if (detail.removedContactId !== contactId) {
+        void load();
+      }
+    });
+  }, [load, contactId]);
 
   const persistContact = async (
     overrides: Parameters<typeof contactToUpdatePayload>[1]

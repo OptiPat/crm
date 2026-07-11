@@ -47,6 +47,8 @@ export interface CgpConfig {
   cif_orias?: string | null;
   /** Pied de page légal CIF personnalisé (remplace le modèle par défaut si renseigné). */
   cif_pied_de_page?: string | null;
+  /** Lien Zoom / Teams par défaut pour la planification RDV (Meet = auto). */
+  default_visio_link?: string | null;
 }
 
 // ========== SETTINGS GÉNÉRIQUES ==========

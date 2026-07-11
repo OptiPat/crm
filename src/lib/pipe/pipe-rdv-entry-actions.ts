@@ -2,10 +2,9 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 import type { PipeTimelineUserType } from "@/lib/pipe/pipe-timeline-types";
-import {
-  syncPipeRdvToGoogleCalendarIfConnected,
-  type PipeRdvCalendarSyncResult,
-} from "@/lib/pipe/pipe-rdv-google-calendar";
+import { syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
+import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
+import { formatPipeRdvCalendarContactLabel, pipeRdvCalendarEndAt } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   applyRdvStageOnSave,
   formatRdvEntryTitle,
@@ -22,24 +21,23 @@ export type PipeRdvStageSaveResult = {
 export async function addPipeTimelineEntryWithRdvStage(options: {
   timeline: ReturnType<typeof usePipeTimeline>;
   pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
-  /** Contact de l'affaire — utilisé pour Google Agenda si connecté. */
   calendar?: {
     contactId: number;
     contactLabel: string;
-    pipeTitre?: string | null;
   };
   entryType: PipeTimelineUserType;
   rdvStage?: PipeRdvStage;
   titre: string;
   contenu: string | null;
   occurredAtUnix: number;
+  endAtUnix?: number;
 }): Promise<PipeRdvStageSaveResult | null> {
   const titre =
     options.entryType === "RDV" && options.rdvStage
       ? formatRdvEntryTitle(options.rdvStage)
       : options.titre;
 
-  await options.timeline.addEntry({
+  const entry = await options.timeline.addEntry({
     entry_type: options.entryType,
     titre,
     contenu: options.contenu,
@@ -50,30 +48,48 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
     return null;
   }
 
-  const stageResult = await applyRdvStageOnSave({
-    pipe: options.pipe,
-    rdvStage: options.rdvStage,
-    occurredAt: options.occurredAtUnix,
-    notes: options.contenu,
-  });
+  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
 
-  const calendar = options.calendar
-    ? await syncPipeRdvToGoogleCalendarIfConnected({
+  const calendarPromise = options.calendar
+    ? syncGoogleCalendarForPipeRdv({
         contactId: options.calendar.contactId,
         contactLabel: options.calendar.contactLabel,
-        pipeTitre: options.calendar.pipeTitre,
         rdvStage: options.rdvStage,
         startAtUnix: options.occurredAtUnix,
+        endAtUnix,
+        pipeTimelineEntryId: entry.id,
       })
-    : undefined;
+    : Promise.resolve(undefined);
+
+  const [stageResult, calendar] = await Promise.all([
+    applyRdvStageOnSave({
+      pipe: options.pipe,
+      rdvStage: options.rdvStage,
+      occurredAt: options.occurredAtUnix,
+      notes: options.contenu,
+    }),
+    calendarPromise,
+  ]);
 
   return { ...stageResult, calendar };
 }
 
-function notifyGoogleCalendarSync(calendar?: PipeRdvCalendarSyncResult): void {
+export function notifyGoogleCalendarSync(calendar?: PipeRdvCalendarSyncResult): void {
   if (!calendar) return;
   if (calendar.synced) {
     toast.success("RDV planifié dans Google Agenda");
+    return;
+  }
+  if (calendar.reason === "past") {
+    toast.warning(
+      "RDV enregistré dans le Pipe, mais pas dans Google Agenda : choisissez une date/heure future."
+    );
+    return;
+  }
+  if (calendar.reason === "not_connected") {
+    toast.warning(
+      "RDV enregistré dans le Pipe — connectez Google Agenda dans Paramètres pour synchroniser."
+    );
     return;
   }
   if (calendar.reason === "error") {
@@ -108,4 +124,27 @@ export function toastAfterRdvSave(
   }
   toast.success(fallbackSuccess);
   notifyGoogleCalendarSync(result.calendar);
+}
+
+export async function updatePipeRdvWithGoogleSync(options: {
+  entry: { id: number; google_event_id?: string | null };
+  pipe: Pick<
+    PipeRecord,
+    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
+  >;
+  rdvStage: PipeRdvStage;
+  occurredAtUnix: number;
+  endAtUnix?: number;
+  contenu?: string | null;
+}): Promise<PipeRdvCalendarSyncResult | undefined> {
+  const endAtUnix = options.endAtUnix ?? pipeRdvCalendarEndAt(options.occurredAtUnix);
+  return syncGoogleCalendarForPipeRdv({
+    contactId: options.pipe.contact_id,
+    contactLabel: formatPipeRdvCalendarContactLabel(options.pipe),
+    rdvStage: options.rdvStage,
+    startAtUnix: options.occurredAtUnix,
+    endAtUnix,
+    pipeTimelineEntryId: options.entry.id,
+    existingGoogleEventId: options.entry.google_event_id,
+  });
 }

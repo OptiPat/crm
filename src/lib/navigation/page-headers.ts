@@ -48,6 +48,10 @@ const PAGE_HEADERS: Record<string, PageHeaderMeta> = {
     title: "Suivi & alertes",
     subtitle: "Relances, étiquettes et envois",
   },
+  agenda: {
+    title: "Agenda",
+    subtitle: "Google Agenda — semaine par semaine",
+  },
   etiquettes: {
     title: "Étiquettes",
     subtitle: "Segments et campagnes",

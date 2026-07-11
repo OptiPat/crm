@@ -20,6 +20,7 @@ import {
   LucideIcon,
   Newspaper,
   ListTodo,
+  Calendar,
   FileSignature,
   GitBranch,
   Calculator,
@@ -81,6 +82,7 @@ const relationGroup: NavGroup = {
   landingLabel: "Suivi & alertes",
   children: [
     { id: "suivi", label: "Suivi & alertes", icon: Bell },
+    { id: "agenda", label: "Agenda", icon: Calendar },
     { id: "taches", label: "Tâches & rappels", icon: ListTodo },
     { id: "newsletter", label: "Newsletter", icon: Newspaper },
     { id: "interactions", label: "Historique des échanges", icon: History },

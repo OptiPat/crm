@@ -10,6 +10,7 @@ export interface PipeTimelineEntryRecord {
   contenu?: string | null;
   occurred_at: number;
   created_at: number;
+  google_event_id?: string | null;
 }
 
 export interface NewPipeTimelineEntryInput {

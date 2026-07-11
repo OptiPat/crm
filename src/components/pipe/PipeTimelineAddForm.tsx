@@ -3,6 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
+import type { PipeRecord } from "@/lib/api/tauri-pipe";
+import { AgendaRdvConflicts } from "@/components/calendar/AgendaRdvConflicts";
+import type { AgendaRdvPipeDraft } from "@/lib/navigation/agenda-navigation";
+import { syncEndFromStartAndDuration } from "@/lib/calendar/rdv-duration";
 import {
   Select,
   SelectContent,
@@ -29,6 +33,10 @@ interface PipeTimelineAddFormProps {
   titre: string;
   contenu: string;
   rdvStage?: PipeRdvStage;
+  pipe?:
+    | (Pick<PipeRecord, "id" | "stage" | "pipe_type"> &
+        Partial<Pick<PipeRecord, "contact_id" | "contact_prenom" | "contact_nom" | "titre">>)
+    | null;
   saving: boolean;
   onOccurredAtChange: (value: string) => void;
   onTitreChange: (value: string) => void;
@@ -45,6 +53,7 @@ export function PipeTimelineAddForm({
   titre,
   contenu,
   rdvStage = "R1",
+  pipe = null,
   saving,
   onOccurredAtChange,
   onTitreChange,
@@ -101,6 +110,21 @@ export function PipeTimelineAddForm({
           L&apos;affaire passera à l&apos;étape choisie le jour du RDV (ou tout de suite si la date
           est déjà passée).
         </p>
+      )}
+      {isRdv && (
+        <AgendaRdvConflicts
+          occurredAt={occurredAt}
+          endAt={syncEndFromStartAndDuration(occurredAt, 60)}
+          pipeDraft={
+            pipe && pipe.contact_id != null && pipe.contact_id > 0
+              ? {
+                  pipe: pipe as AgendaRdvPipeDraft["pipe"],
+                  rdvStage,
+                  contenu: contenu.trim() || null,
+                }
+              : null
+          }
+        />
       )}
       <DictationTextarea
         label="Détail"

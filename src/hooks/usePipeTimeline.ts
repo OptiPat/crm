@@ -12,6 +12,15 @@ import {
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
 import { toast } from "sonner";
 
+function mergeTimelineEntry(
+  entries: PipeTimelineEntryRecord[],
+  entry: PipeTimelineEntryRecord
+): PipeTimelineEntryRecord[] {
+  const next = [...entries.filter((e) => e.id !== entry.id), entry];
+  next.sort((a, b) => b.occurred_at - a.occurred_at || b.id - a.id);
+  return next;
+}
+
 export function usePipeTimeline(pipeId: number) {
   const [entries, setEntries] = useState<PipeTimelineEntryRecord[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,10 +47,11 @@ export function usePipeTimeline(pipeId: number) {
   const addEntry = useCallback(
     async (input: Omit<NewPipeTimelineEntryInput, "pipe_id">) => {
       const entry = await createPipeTimelineEntry({ ...input, pipe_id: pipeId });
-      await reload();
+      setEntries((prev) => mergeTimelineEntry(prev, entry));
+      setLoading(false);
       return entry;
     },
-    [pipeId, reload]
+    [pipeId]
   );
 
   const removeEntry = useCallback(

@@ -23,7 +23,7 @@ use crate::database::{
         PipelineStats, ProductStats, Segment, SegmentWithCount, Setting, SetTacheStatutResult, Tache,
         ConversionClientStats, ConversionFilleulStats, DashboardStatContact, ActivityPeriodSummary,
         TemplateEmail, YearlyActivityStats, EmailSendLogEntry, EtiquettePipelineBoard,
-        CalendarEventEntry, CalendarSyncResult,
+        CalendarEventEntry, CalendarSyncResult, GoogleCalendarWeekEvent,
     },
     Database,
 };
@@ -2123,9 +2123,12 @@ pub fn create_calendar_rdv(
     contact_id: i64,
     alerte_id: Option<i64>,
     tache_id: Option<i64>,
+    pipe_timeline_entry_id: Option<i64>,
     title: String,
     start_at: i64,
     end_at: i64,
+    add_google_meet: Option<bool>,
+    visio_link: Option<String>,
 ) -> Result<CalendarEventEntry, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -2135,10 +2138,45 @@ pub fn create_calendar_rdv(
         contact_id,
         alerte_id,
         tache_id,
+        pipe_timeline_entry_id,
+        &title,
+        start_at,
+        end_at,
+        add_google_meet.unwrap_or(false),
+        visio_link.as_deref(),
+    )
+}
+
+#[tauri::command]
+pub fn update_calendar_rdv(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+    google_event_id: String,
+    title: String,
+    start_at: i64,
+    end_at: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    crate::email::calendar_ops::update_google_calendar_rdv(
+        &app_handle,
+        database,
+        &google_event_id,
         &title,
         start_at,
         end_at,
     )
+}
+
+#[tauri::command]
+pub fn cancel_calendar_rdv(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+    google_event_id: String,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    crate::email::calendar_ops::cancel_google_calendar_rdv(&app_handle, database, &google_event_id)
 }
 
 #[tauri::command]
@@ -2165,6 +2203,14 @@ pub fn get_calendar_events_today(
     database
         .get_calendar_events_today()
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_google_calendar_week(
+    app_handle: tauri::AppHandle,
+    week_start_at: i64,
+) -> Result<Vec<GoogleCalendarWeekEvent>, String> {
+    crate::email::calendar_ops::list_google_calendar_week_events(&app_handle, week_start_at)
 }
 
 #[tauri::command]

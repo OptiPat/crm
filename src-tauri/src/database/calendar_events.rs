@@ -18,6 +18,7 @@ impl Database {
         contact_id: i64,
         alerte_id: Option<i64>,
         tache_id: Option<i64>,
+        pipe_timeline_entry_id: Option<i64>,
         google_event_id: &str,
         title: &str,
         start_at: i64,
@@ -30,13 +31,14 @@ impl Database {
             .as_secs() as i64;
         self.conn.execute(
             "INSERT INTO calendar_events (
-                contact_id, alerte_id, tache_id, google_event_id, title,
+                contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id, title,
                 start_at, end_at, attendee_email, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
             params![
                 contact_id,
                 alerte_id,
                 tache_id,
+                pipe_timeline_entry_id,
                 google_event_id,
                 title,
                 start_at,
@@ -47,6 +49,30 @@ impl Database {
             ],
         )?;
         Ok(self.conn.last_insert_rowid())
+    }
+
+    pub fn update_calendar_event_times(
+        &self,
+        google_event_id: &str,
+        title: &str,
+        start_at: i64,
+        end_at: i64,
+    ) -> Result<()> {
+        self.conn.execute(
+            "UPDATE calendar_events SET title = ?1, start_at = ?2, end_at = ?3, updated_at = unixepoch()
+             WHERE google_event_id = ?4",
+            params![title, start_at, end_at, google_event_id],
+        )?;
+        Ok(())
+    }
+
+    pub fn mark_calendar_event_cancelled(&self, google_event_id: &str) -> Result<()> {
+        self.conn.execute(
+            "UPDATE calendar_events SET event_status = 'cancelled', updated_at = unixepoch()
+             WHERE google_event_id = ?1",
+            params![google_event_id],
+        )?;
+        Ok(())
     }
 
     pub fn update_calendar_event_sync(
@@ -114,8 +140,8 @@ impl Database {
             .unwrap()
             .as_secs() as i64;
         let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, alerte_id, tache_id, google_event_id, title,
-                    start_at, end_at, attendee_email, attendee_status, event_status,
+            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
+                    title, start_at, end_at, attendee_email, attendee_status, event_status,
                     rdv_effectue, created_at, updated_at
              FROM calendar_events
              WHERE rdv_effectue = 0
@@ -136,10 +162,10 @@ impl Database {
         let day_start = now - (now % 86400);
         let day_end = day_start + 86400;
         let mut stmt = self.conn.prepare(
-            "SELECT ce.id, ce.contact_id, ce.alerte_id, ce.tache_id, ce.google_event_id,
-                    ce.title, ce.start_at, ce.end_at, ce.attendee_email, ce.attendee_status,
-                    ce.event_status, ce.rdv_effectue, ce.created_at, ce.updated_at,
-                    c.prenom, c.nom
+            "SELECT ce.id, ce.contact_id, ce.alerte_id, ce.tache_id, ce.pipe_timeline_entry_id,
+                    ce.google_event_id, ce.title, ce.start_at, ce.end_at, ce.attendee_email,
+                    ce.attendee_status, ce.event_status, ce.rdv_effectue, ce.created_at,
+                    ce.updated_at, c.prenom, c.nom
              FROM calendar_events ce
              INNER JOIN contacts c ON c.id = ce.contact_id
              WHERE ce.start_at >= ?1 AND ce.start_at < ?2
@@ -152,18 +178,19 @@ impl Database {
                 contact_id: row.get(1)?,
                 alerte_id: row.get(2)?,
                 tache_id: row.get(3)?,
-                google_event_id: row.get(4)?,
-                title: row.get(5)?,
-                start_at: row.get(6)?,
-                end_at: row.get(7)?,
-                attendee_email: row.get(8)?,
-                attendee_status: row.get(9)?,
-                event_status: row.get(10)?,
-                rdv_effectue: row.get::<_, i64>(11)? != 0,
-                created_at: row.get(12)?,
-                updated_at: row.get(13)?,
-                contact_prenom: Some(row.get(14)?),
-                contact_nom: Some(row.get(15)?),
+                pipe_timeline_entry_id: row.get(4)?,
+                google_event_id: row.get(5)?,
+                title: row.get(6)?,
+                start_at: row.get(7)?,
+                end_at: row.get(8)?,
+                attendee_email: row.get(9)?,
+                attendee_status: row.get(10)?,
+                event_status: row.get(11)?,
+                rdv_effectue: row.get::<_, i64>(12)? != 0,
+                created_at: row.get(13)?,
+                updated_at: row.get(14)?,
+                contact_prenom: Some(row.get(15)?),
+                contact_nom: Some(row.get(16)?),
             })
         })?;
         rows.collect()
@@ -171,8 +198,8 @@ impl Database {
 
     pub fn get_calendar_event_by_id(&self, id: i64) -> Result<CalendarEventEntry> {
         self.conn.query_row(
-            "SELECT id, contact_id, alerte_id, tache_id, google_event_id, title,
-                    start_at, end_at, attendee_email, attendee_status, event_status,
+            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
+                    title, start_at, end_at, attendee_email, attendee_status, event_status,
                     rdv_effectue, created_at, updated_at
              FROM calendar_events WHERE id = ?1",
             params![id],
@@ -187,16 +214,17 @@ fn map_calendar_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalendarE
         contact_id: row.get(1)?,
         alerte_id: row.get(2)?,
         tache_id: row.get(3)?,
-        google_event_id: row.get(4)?,
-        title: row.get(5)?,
-        start_at: row.get(6)?,
-        end_at: row.get(7)?,
-        attendee_email: row.get(8)?,
-        attendee_status: row.get(9)?,
-        event_status: row.get(10)?,
-        rdv_effectue: row.get::<_, i64>(11)? != 0,
-        created_at: row.get(12)?,
-        updated_at: row.get(13)?,
+        pipe_timeline_entry_id: row.get(4)?,
+        google_event_id: row.get(5)?,
+        title: row.get(6)?,
+        start_at: row.get(7)?,
+        end_at: row.get(8)?,
+        attendee_email: row.get(9)?,
+        attendee_status: row.get(10)?,
+        event_status: row.get(11)?,
+        rdv_effectue: row.get::<_, i64>(12)? != 0,
+        created_at: row.get(13)?,
+        updated_at: row.get(14)?,
         contact_prenom: None,
         contact_nom: None,
     })

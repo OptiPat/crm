@@ -1,21 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatPipeRdvCalendarContactLabel,
   formatPipeRdvGoogleCalendarTitle,
   isPipeRdvCalendarSyncEligible,
   pipeRdvCalendarEndAt,
   PIPE_RDV_CALENDAR_DURATION_SEC,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 
+describe("formatPipeRdvCalendarContactLabel", () => {
+  it("affiche nom puis prénom", () => {
+    expect(
+      formatPipeRdvCalendarContactLabel({
+        contact_nom: "DUPONT",
+        contact_prenom: "Jean",
+      })
+    ).toBe("DUPONT Jean");
+  });
+});
+
 describe("formatPipeRdvGoogleCalendarTitle", () => {
-  it("formate titre RDV avec contact", () => {
-    expect(formatPipeRdvGoogleCalendarTitle("R1", "Jean DUPONT")).toBe(
-      "RDV R1 — Jean DUPONT"
+  it("formate R1 sans titre d'affaire", () => {
+    expect(formatPipeRdvGoogleCalendarTitle("R1", "DUPONT Jean")).toBe(
+      "Premier rendez-vous patrimonial - DUPONT Jean"
     );
   });
 
-  it("ajoute le titre de l'affaire entre parenthèses", () => {
-    expect(formatPipeRdvGoogleCalendarTitle("R2", "Jean DUPONT", "Assurance vie")).toBe(
-      "RDV R2 — Jean DUPONT (Assurance vie)"
+  it("formate R2 et R3 avec le même libellé métier", () => {
+    expect(formatPipeRdvGoogleCalendarTitle("R2", "DUPONT Jean")).toBe(
+      "Présentation des solutions patrimoniales - DUPONT Jean"
+    );
+    expect(formatPipeRdvGoogleCalendarTitle("R3", "DUPONT Jean")).toBe(
+      "Présentation des solutions patrimoniales - DUPONT Jean"
     );
   });
 });

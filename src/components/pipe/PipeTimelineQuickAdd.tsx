@@ -122,6 +122,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
           titre={titre}
           contenu={contenu}
           rdvStage={rdvStage}
+          pipe={pipe}
           saving={saving}
           onOccurredAtChange={setOccurredAt}
           onTitreChange={setTitre}

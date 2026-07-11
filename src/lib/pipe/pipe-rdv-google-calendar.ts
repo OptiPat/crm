@@ -1,7 +1,16 @@
 import { createCalendarRdv } from "@/lib/api/tauri-calendar";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
-import { formatRdvStageLabel, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import type { PipeRecordLike } from "@/lib/pipe/pipe-types";
+import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
+import { rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
+
+const PIPE_RDV_GOOGLE_CALENDAR_LABELS: Record<PipeRdvStage, string> = {
+  R1: "Premier rendez-vous patrimonial",
+  R2: "Présentation des solutions patrimoniales",
+  R3: "Présentation des solutions patrimoniales",
+};
 
 export const PIPE_RDV_CALENDAR_DURATION_SEC = 3600;
 
@@ -17,15 +26,21 @@ export function isPipeRdvCalendarSyncEligible(
   return startAtUnix * 1000 > nowMs;
 }
 
+/** Libellé agenda : nom puis prénom (ex. DUPONT Jean). */
+export function formatPipeRdvCalendarContactLabel(
+  contact: Pick<PipeRecordLike, "contact_prenom" | "contact_nom">
+): string {
+  const prenom = contact.contact_prenom?.trim() ?? "";
+  const nom = contact.contact_nom?.trim() ?? "";
+  return [nom, prenom].filter(Boolean).join(" ") || "Contact";
+}
+
 export function formatPipeRdvGoogleCalendarTitle(
   rdvStage: PipeRdvStage,
-  contactLabel: string,
-  pipeTitre?: string | null
+  contactLabel: string
 ): string {
   const contact = contactLabel.trim() || "Contact";
-  const base = `RDV ${formatRdvStageLabel(rdvStage)} — ${contact}`;
-  const pipeTitle = pipeTitre?.trim();
-  return pipeTitle ? `${base} (${pipeTitle})` : base;
+  return `${PIPE_RDV_GOOGLE_CALENDAR_LABELS[rdvStage]} - ${contact}`;
 }
 
 export function pipeRdvCalendarEndAt(startAtUnix: number): number {
@@ -35,9 +50,9 @@ export function pipeRdvCalendarEndAt(startAtUnix: number): number {
 export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
   contactId: number;
   contactLabel: string;
-  pipeTitre?: string | null;
   rdvStage: PipeRdvStage;
   startAtUnix: number;
+  visio?: RdvVisioOptions;
 }): Promise<PipeRdvCalendarSyncResult> {
   if (options.contactId <= 0) {
     return { synced: false, reason: "no_contact" };
@@ -61,10 +76,10 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
 
   const title = formatPipeRdvGoogleCalendarTitle(
     options.rdvStage,
-    options.contactLabel,
-    options.pipeTitre
+    options.contactLabel
   );
   const endAtUnix = pipeRdvCalendarEndAt(options.startAtUnix);
+  const visioPayload = rdvVisioToApiPayload(options.visio ?? { mode: "none" });
 
   try {
     await createCalendarRdv({
@@ -72,6 +87,8 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
       title,
       startAt: options.startAtUnix,
       endAt: endAtUnix,
+      addGoogleMeet: visioPayload.addGoogleMeet,
+      visioLink: visioPayload.visioLink,
     });
   } catch (e) {
     return {

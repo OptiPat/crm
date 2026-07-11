@@ -109,7 +109,7 @@ export const SETTINGS_NAV_GROUPS: SettingsNavGroup[] = [
       {
         id: "suivi",
         label: "Agenda & RDV",
-        description: "Liens Google Agenda",
+        description: "Agenda, liens et visio",
         icon: CalendarClock,
       },
       {

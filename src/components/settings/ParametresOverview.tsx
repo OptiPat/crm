@@ -144,7 +144,7 @@ export function ParametresOverview({
               ? "Configuré"
               : "À configurer"
           }
-          subtitle="Liens Google Agenda pour les templates"
+          subtitle="Agenda, liens templates et visio"
           icon={CalendarClock}
           accentColor="#0D9488"
           iconBg="bg-teal-50"

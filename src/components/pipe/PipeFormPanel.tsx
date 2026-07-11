@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   createPipe,
   updatePipe,
@@ -119,13 +120,18 @@ export function PipeFormPanel({
   useEffect(() => {
     setForm(buildFormState(pipe, initialType, defaultContactId));
     let cancelled = false;
-    void getAllContacts()
-      .then((list) => {
-        if (!cancelled) setContacts(list);
-      })
-      .catch(console.error);
+    const loadContacts = () => {
+      void getAllContacts()
+        .then((list) => {
+          if (!cancelled) setContacts(list);
+        })
+        .catch(console.error);
+    };
+    loadContacts();
+    const unsub = subscribeContactsChanged(() => loadContacts());
     return () => {
       cancelled = true;
+      unsub();
     };
   }, [pipe, initialType, defaultContactId]);
 

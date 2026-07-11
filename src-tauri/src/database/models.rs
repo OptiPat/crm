@@ -1201,6 +1201,9 @@ pub struct CgpConfig {
     /// Pied de page légal CIF (remplace le modèle par défaut).
     #[serde(default)]
     pub cif_pied_de_page: Option<String>,
+    /// Lien visio par défaut (Zoom, Teams, etc.) pour les RDV planifiés.
+    #[serde(default)]
+    pub default_visio_link: Option<String>,
 }
 
 /// Message boîte mail synchronisé pour un contact (hors logique campagne / en attente de réponse).
@@ -1264,6 +1267,7 @@ pub struct CalendarEventEntry {
     pub contact_id: i64,
     pub alerte_id: Option<i64>,
     pub tache_id: Option<i64>,
+    pub pipe_timeline_entry_id: Option<i64>,
     pub google_event_id: String,
     pub title: String,
     pub start_at: i64,
@@ -1287,6 +1291,17 @@ pub struct CalendarSyncResult {
     pub declined: u32,
     pub cancelled: u32,
     pub errors: Vec<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GoogleCalendarWeekEvent {
+    pub google_event_id: String,
+    pub title: String,
+    pub start_at: i64,
+    pub end_at: i64,
+    pub all_day: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub html_link: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1331,6 +1346,8 @@ pub struct PipeTimelineEntry {
     pub contenu: Option<String>,
     pub occurred_at: i64,
     pub created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_event_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]

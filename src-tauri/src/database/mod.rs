@@ -1119,6 +1119,12 @@ impl Database {
             "CREATE INDEX IF NOT EXISTS calendar_events_start_idx ON calendar_events (start_at)",
             [],
         )?;
+        if !self.table_has_column("calendar_events", "pipe_timeline_entry_id")? {
+            self.conn.execute(
+                "ALTER TABLE calendar_events ADD COLUMN pipe_timeline_entry_id INTEGER",
+                [],
+            )?;
+        }
         Ok(())
     }
 

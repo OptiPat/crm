@@ -9,9 +9,12 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import { cancelLinkedGoogleRdv } from "@/lib/calendar/rdv-planifier";
 import {
   applyRdvCancelled,
   toastAfterRdvCancelled,
@@ -39,10 +42,16 @@ export function PipeRdvOutcomeDialog({
   onReschedule,
 }: PipeRdvOutcomeDialogProps) {
   const [note, setNote] = useState("");
+  const [cancelGoogle, setCancelGoogle] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const hasGoogleLink = Boolean(entry?.google_event_id?.trim());
+
   useEffect(() => {
-    if (open) setNote("");
+    if (open) {
+      setNote("");
+      setCancelGoogle(true);
+    }
   }, [open, entry?.id]);
 
   if (!entry) return null;
@@ -57,8 +66,14 @@ export function PipeRdvOutcomeDialog({
   const handleCancelled = async () => {
     setSaving(true);
     try {
+      if (cancelGoogle && hasGoogleLink) {
+        await cancelLinkedGoogleRdv(entry.google_event_id);
+      }
       const result = await applyRdvCancelled({ timeline, pipe, entry, note });
-      toast.success(toastAfterRdvCancelled(rdvLabel, result));
+      const message = toastAfterRdvCancelled(rdvLabel, result);
+      toast.success(
+        cancelGoogle && hasGoogleLink ? `${message} — événement Google retiré` : message
+      );
       onClose();
     } catch (err) {
       toast.error(String(err));
@@ -90,6 +105,20 @@ export function PipeRdvOutcomeDialog({
           placeholder="Motif d'annulation, report, contexte…"
           disabled={saving}
         />
+
+        {hasGoogleLink && (
+          <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+            <Checkbox
+              id="cancel-google-rdv"
+              checked={cancelGoogle}
+              onCheckedChange={(v) => setCancelGoogle(v === true)}
+              disabled={saving}
+            />
+            <Label htmlFor="cancel-google-rdv" className="text-sm font-normal leading-snug">
+              Supprimer aussi l&apos;événement Google Agenda lié
+            </Label>
+          </div>
+        )}
 
         {willRevertToProspection && (
           <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
