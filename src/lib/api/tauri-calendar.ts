@@ -78,12 +78,20 @@ export async function updateCalendarRdv(input: {
   title: string;
   startAt: number;
   endAt: number;
+  addGoogleMeet?: boolean;
+  visioLink?: string | null;
+  preserveVisio?: boolean;
+  clearVisio?: boolean;
 }): Promise<void> {
   return invoke<void>("update_calendar_rdv", {
     googleEventId: input.googleEventId,
     title: input.title,
     startAt: input.startAt,
     endAt: input.endAt,
+    addGoogleMeet: input.addGoogleMeet ?? false,
+    visioLink: input.visioLink ?? null,
+    preserveVisio: input.preserveVisio ?? false,
+    clearVisio: input.clearVisio ?? false,
   });
 }
 
@@ -100,11 +108,31 @@ export async function getCalendarEventsToday(): Promise<CalendarEventEntry[]> {
 }
 
 export async function listGoogleCalendarWeek(
-  weekStartAt: number
+  weekStartAt: number,
+  options?: { syncPipe?: boolean }
 ): Promise<AgendaWeekListResult> {
   return invoke<AgendaWeekListResult>("list_google_calendar_week", {
     weekStartAt,
+    syncPipe: options?.syncPipe ?? true,
   });
+}
+
+export async function syncPipeGoogleRdvs(): Promise<AgendaGooglePipeSyncResult> {
+  return invoke<AgendaGooglePipeSyncResult>("sync_pipe_google_rdvs");
+}
+
+export async function resolvePipeRdvGoogleEventId(
+  timelineEntryId: number
+): Promise<string | null> {
+  return invoke<string | null>("resolve_pipe_rdv_google_event_id", {
+    timelineEntryId,
+  });
+}
+
+export async function markPipeRdvCalendarCancelled(
+  timelineEntryId: number
+): Promise<void> {
+  return invoke<void>("mark_pipe_rdv_calendar_cancelled", { timelineEntryId });
 }
 
 export async function markCalendarRdvEffectue(

@@ -9,7 +9,9 @@ import {
   type PipeTimelineEntryRecord,
   type UpdatePipeTimelineEntryInput,
 } from "@/lib/api/tauri-pipe-timeline";
-import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
+import { syncPipeGoogleRdvs } from "@/lib/api/tauri-calendar";
+import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
+import { subscribePipeChanged, notifyPipeChanged } from "@/lib/pipe/pipe-events";
 import { toast } from "sonner";
 
 function mergeTimelineEntry(
@@ -27,6 +29,17 @@ export function usePipeTimeline(pipeId: number) {
 
   const reload = useCallback(async () => {
     try {
+      try {
+        const status = await getEmailConnectionStatus();
+        if (status.google_calendar_connected) {
+          const sync = await syncPipeGoogleRdvs();
+          if (sync.cancelled > 0 || sync.rescheduled > 0) {
+            notifyPipeChanged();
+          }
+        }
+      } catch {
+        /* sync Google best effort */
+      }
       const rows = await listPipeTimelineEntries(pipeId);
       setEntries(rows);
     } catch (err) {

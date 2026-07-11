@@ -9,6 +9,7 @@ import {
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
 import { rdvStageFromEntryTitre } from "@/lib/pipe/pipe-rdv-stage";
+import { parseRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
 import type { PipeStage } from "@/lib/pipe/pipe-types";
 
 const USER_TYPES = new Set<string>(PIPE_TIMELINE_USER_TYPES);
@@ -74,7 +75,8 @@ export function getCanonicalStageMilestones(
 
 export function resolveUserEntryMilestoneId(
   entry: PipeTimelineEntryRecord,
-  milestones: StageMilestoneRef[]
+  milestones: StageMilestoneRef[],
+  _entries: PipeTimelineEntryRecord[] = []
 ): number | null {
   if (isPipeTimelineSystemEntry(entry.entry_type) || !USER_TYPES.has(entry.entry_type)) {
     return null;
@@ -86,6 +88,11 @@ export function resolveUserEntryMilestoneId(
       const stageMilestone = [...milestones].reverse().find((m) => m.stage === rdvStage);
       if (stageMilestone) return stageMilestone.entry.id;
     }
+  }
+
+  const trace = parseRdvTimelineTraceNote(entry.contenu);
+  if (trace) {
+    return null;
   }
 
   for (let index = milestones.length - 1; index >= 0; index -= 1) {
@@ -107,7 +114,7 @@ export function getPhaseUserEntriesForMilestone(
   if (milestones.findIndex((m) => m.entry.id === milestone.id) < 0) return [];
 
   return entries
-    .filter((e) => resolveUserEntryMilestoneId(e, milestones) === milestone.id)
+    .filter((e) => resolveUserEntryMilestoneId(e, milestones, entries) === milestone.id)
     .sort(compareTimelineEntries);
 }
 
@@ -164,4 +171,29 @@ export function summarizePhaseEntries(entries: PipeTimelineEntryRecord[]): strin
   }
 
   return parts.length > 0 ? parts.join(", ") : null;
+}
+
+/** Jalon PROSPECTION AVANCEMENT créé au retour prospection — déjà couvert par CREATION. */
+export function isHiddenStageMilestoneEntry(
+  entry: PipeTimelineEntryRecord,
+  entries: PipeTimelineEntryRecord[],
+  context?: PipeTimelineDisplayContext
+): boolean {
+  if (entry.entry_type !== "AVANCEMENT") return false;
+  const stage = timelineStageFromEntry(entry, context);
+  if (stage !== "PROSPECTION" || context?.pipeType !== "AFFAIRE") return false;
+  return entries.some(
+    (candidate) =>
+      candidate.entry_type === "CREATION" &&
+      timelineStageFromEntry(candidate, context) === "PROSPECTION"
+  );
+}
+
+export function getVisiblePipeTimelineEntries(
+  entries: PipeTimelineEntryRecord[],
+  context?: PipeTimelineDisplayContext
+): PipeTimelineEntryRecord[] {
+  return entries.filter(
+    (entry) => !isHiddenStageMilestoneEntry(entry, entries, context)
+  );
 }

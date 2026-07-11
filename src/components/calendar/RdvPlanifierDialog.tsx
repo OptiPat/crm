@@ -31,15 +31,13 @@ import {
   unixToDatetimeLocalInput,
   type RdvDurationPresetId,
 } from "@/lib/calendar/rdv-duration";
-import { findNextFreeSlot } from "@/lib/calendar/agenda-free-slot";
-import { listGoogleCalendarWeek } from "@/lib/api/tauri-calendar";
+import { findNextFreeSlot, loadGoogleEventsForHorizon } from "@/lib/calendar/agenda-free-slot";
 import {
   planifyPipeRdv,
   planifyStandaloneGoogleRdv,
 } from "@/lib/calendar/rdv-planifier";
 import type { RdvVisioMode } from "@/lib/calendar/rdv-visio";
 import { defaultRdvVisioFromCgp } from "@/lib/calendar/rdv-visio";
-import { weekStartFromDatetimeLocal } from "@/lib/calendar/agenda-week";
 import {
   formatRdvStageLabel,
   PIPE_RDV_STAGE_OPTIONS,
@@ -216,14 +214,13 @@ export function RdvPlanifierDialog({
   };
 
   const suggestNextSlot = async () => {
-    const weekStart = weekStartFromDatetimeLocal(start);
-    if (weekStart == null) return;
+    const fromUnix = datetimeLocalToUnix(start) || Math.floor(Date.now() / 1000);
     try {
-      const { events } = await listGoogleCalendarWeek(weekStart);
+      const events = await loadGoogleEventsForHorizon(fromUnix, 5);
       const durationSec = rdvDurationMinutesFromPreset(durationPreset) * 60;
       const slot = findNextFreeSlot(events, {
         durationSec,
-        fromUnix: datetimeLocalToUnix(start) || Math.floor(Date.now() / 1000),
+        fromUnix,
       });
       if (!slot) {
         toast.message("Aucun créneau libre trouvé sur les 5 prochains jours ouvrés.");

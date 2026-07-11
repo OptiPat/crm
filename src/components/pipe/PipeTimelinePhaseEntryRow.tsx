@@ -9,8 +9,9 @@ import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
-import { toastAfterRdvSave, notifyGoogleCalendarSync, updatePipeRdvWithGoogleSync } from "@/lib/pipe/pipe-rdv-entry-actions";
-import { isPipeRdvCalendarSyncEligible } from "@/lib/pipe/pipe-rdv-google-calendar";
+import { toastAfterRdvSave, notifyGoogleCalendarSync } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { applyPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-reschedule-actions";
+import { isRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
 import {
   applyRdvStageOnSave,
   formatRdvEntryDisplayLabel,
@@ -59,7 +60,9 @@ export function PipeTimelinePhaseEntryRow({
   );
   const [saving, setSaving] = useState(false);
 
-  const userType = entry.entry_type as PipeTimelineUserType;
+  const liveEntry = timeline.entries.find((e) => e.id === entry.id) ?? entry;
+
+  const userType = liveEntry.entry_type as PipeTimelineUserType;
   const Icon =
     entry.entry_type in TYPE_ICONS
       ? TYPE_ICONS[entry.entry_type as keyof typeof TYPE_ICONS]
@@ -87,6 +90,30 @@ export function PipeTimelinePhaseEntryRow({
       const nextTitre =
         userType === "RDV" ? formatRdvEntryTitle(rdvStage) : titre.trim() || null;
 
+      if (userType === "RDV" && pipe && occurredAtUnix !== entry.occurred_at) {
+        const calendar = await applyPipeRdvReschedule({
+          timeline,
+          entry,
+          pipe: pipe as Pick<
+            PipeRecord,
+            | "id"
+            | "stage"
+            | "pipe_type"
+            | "contact_id"
+            | "contact_prenom"
+            | "contact_nom"
+            | "titre"
+          >,
+          rdvStage,
+          newOccurredAtUnix: occurredAtUnix,
+          contenu: contenu.trim() || null,
+        });
+        notifyGoogleCalendarSync(calendar);
+        toast.success("RDV décalé — historique mis à jour");
+        setEditing(false);
+        return;
+      }
+
       await timeline.updateEntry(entry.id, {
         titre: nextTitre,
         contenu: contenu.trim() || null,
@@ -100,29 +127,6 @@ export function PipeTimelinePhaseEntryRow({
           occurredAt: occurredAtUnix,
           notes: contenu.trim() || null,
         });
-
-        if (
-          isPipeRdvCalendarSyncEligible(occurredAtUnix) &&
-          pipe.contact_id != null &&
-          pipe.contact_id > 0
-        ) {
-          const calendar = await updatePipeRdvWithGoogleSync({
-            entry,
-            pipe: pipe as Pick<
-              PipeRecord,
-              | "id"
-              | "stage"
-              | "pipe_type"
-              | "contact_id"
-              | "contact_prenom"
-              | "contact_nom"
-              | "titre"
-            >,
-            rdvStage,
-            occurredAtUnix,
-          });
-          notifyGoogleCalendarSync(calendar);
-        }
 
         toastAfterRdvSave(rdvStage, result, "Entrée mise à jour");
       } else {
@@ -139,6 +143,10 @@ export function PipeTimelinePhaseEntryRow({
   const handleDelete = async () => {
     if (entry.entry_type === "RDV") {
       setRdvOutcomeOpen(true);
+      return;
+    }
+    if (isRdvTimelineTraceNote(entry)) {
+      toast.error("Cette trace d'historique RDV ne peut pas être supprimée.");
       return;
     }
     try {
@@ -209,17 +217,17 @@ export function PipeTimelinePhaseEntryRow({
             className="h-7 w-7"
             aria-label="Supprimer"
             onClick={() => void handleDelete()}
-            disabled={disabled}
+            disabled={disabled || isRdvTimelineTraceNote(entry)}
           >
             <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
           </Button>
         </div>
       </li>
 
-      {entry.entry_type === "RDV" && (
+      {liveEntry.entry_type === "RDV" && (
         <PipeRdvOutcomeDialog
           open={rdvOutcomeOpen}
-          entry={entry}
+          entry={liveEntry}
           pipe={pipe}
           timeline={timeline}
           onClose={() => setRdvOutcomeOpen(false)}

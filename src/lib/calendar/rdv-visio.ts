@@ -1,3 +1,5 @@
+import { getCgpConfig } from "@/lib/api/tauri-settings";
+
 export type RdvVisioMode = "none" | "google_meet" | "custom";
 
 export interface RdvVisioOptions {
@@ -13,6 +15,12 @@ export function defaultRdvVisioFromCgp(
   if (link) return { mode: "custom", customLink: link };
   // Google Meet se crée via l'API — pas besoin de lien en paramètres.
   return { mode: "google_meet", customLink: "" };
+}
+
+/** Visio par défaut (Paramètres → Agenda & RDV) pour les RDV Pipe. */
+export async function loadDefaultPipeRdvVisio(): Promise<RdvVisioOptions> {
+  const cgp = await getCgpConfig();
+  return defaultRdvVisioFromCgp(cgp);
 }
 
 export function rdvVisioToApiPayload(visio: RdvVisioOptions): {

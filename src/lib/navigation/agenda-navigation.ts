@@ -6,6 +6,30 @@ const HIGHLIGHT_START_KEY = "crm_nav_agenda_highlight_start";
 const HIGHLIGHT_END_KEY = "crm_nav_agenda_highlight_end";
 const RDV_PIPE_DRAFT_KEY = "crm_nav_agenda_rdv_pipe_draft";
 
+export const AGENDA_NAV_WEEK_CHANGED = "crm:agenda-nav-week-changed";
+
+export type AgendaNavigationWeekDetail = {
+  weekStartAt: number;
+  highlight?: { startAt: number; endAt: number };
+};
+
+export function subscribeAgendaNavigationWeek(
+  handler: (detail: AgendaNavigationWeekDetail) => void
+): () => void {
+  const listener = (event: Event) => {
+    const detail = (event as CustomEvent<AgendaNavigationWeekDetail>).detail;
+    if (detail?.weekStartAt != null) handler(detail);
+  };
+  window.addEventListener(AGENDA_NAV_WEEK_CHANGED, listener);
+  return () => window.removeEventListener(AGENDA_NAV_WEEK_CHANGED, listener);
+}
+
+function dispatchAgendaNavigationWeek(detail: AgendaNavigationWeekDetail): void {
+  window.dispatchEvent(
+    new CustomEvent(AGENDA_NAV_WEEK_CHANGED, { detail })
+  );
+}
+
 export type AgendaRdvPipeDraft = {
   pipe: Pick<
     PipeRecord,
@@ -17,11 +41,26 @@ export type AgendaRdvPipeDraft = {
 
 export function setAgendaNavigationWeekStart(weekStartAt: number): void {
   sessionStorage.setItem(WEEK_START_KEY, String(weekStartAt));
+  dispatchAgendaNavigationWeek({ weekStartAt });
 }
 
 export function setAgendaNavigationHighlight(startAt: number, endAt: number): void {
   sessionStorage.setItem(HIGHLIGHT_START_KEY, String(startAt));
   sessionStorage.setItem(HIGHLIGHT_END_KEY, String(endAt));
+}
+
+function setAgendaNavigationWeekAndHighlight(
+  weekStartAt: number,
+  startAt: number,
+  endAt: number
+): void {
+  sessionStorage.setItem(WEEK_START_KEY, String(weekStartAt));
+  sessionStorage.setItem(HIGHLIGHT_START_KEY, String(startAt));
+  sessionStorage.setItem(HIGHLIGHT_END_KEY, String(endAt));
+  dispatchAgendaNavigationWeek({
+    weekStartAt,
+    highlight: { startAt, endAt },
+  });
 }
 
 export function setAgendaRdvPipeDraft(draft: AgendaRdvPipeDraft): void {
@@ -86,8 +125,7 @@ export function navigateToAgendaWeekWithHighlight(
   currentPage?: string,
   pipeDraft?: AgendaRdvPipeDraft | null
 ): void {
-  setAgendaNavigationWeekStart(weekStartAt);
-  setAgendaNavigationHighlight(startAt, endAt);
+  setAgendaNavigationWeekAndHighlight(weekStartAt, startAt, endAt);
   if (pipeDraft) {
     setAgendaRdvPipeDraft(pipeDraft);
   }

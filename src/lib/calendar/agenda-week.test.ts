@@ -39,8 +39,9 @@ describe("agenda-week", () => {
     const startAt = agendaSlotStartUnixFromClick(weekStart, 0, gridHeight / 4, gridHeight);
     const d = new Date(startAt * 1000);
     expect(d.getDay()).toBe(1);
-    expect(d.getHours()).toBe(10);
-    expect(d.getMinutes()).toBe(30);
+    // 1/4 de la grille 7h–22h ≈ 10h45 → arrondi 30 min → 11h00
+    expect(d.getHours()).toBe(11);
+    expect(d.getMinutes()).toBe(0);
   });
 
   it("aligne le top d'un événement sur la ligne horaire", () => {

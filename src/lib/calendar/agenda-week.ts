@@ -1,7 +1,7 @@
 export const AGENDA_WEEK_SECONDS = 7 * 86_400;
 export const AGENDA_DAY_SECONDS = 86_400;
 export const AGENDA_GRID_START_HOUR = 7;
-export const AGENDA_GRID_END_HOUR = 20;
+export const AGENDA_GRID_END_HOUR = 22;
 export const AGENDA_HOUR_HEIGHT_PX = 44;
 
 const WEEKDAY_LABELS = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."] as const;
@@ -93,7 +93,7 @@ export function hourLabels(): string[] {
 
 export const AGENDA_GRID_HOUR_COUNT = AGENDA_GRID_END_HOUR - AGENDA_GRID_START_HOUR;
 
-/** Position Y (px) d'une ligne horaire : index 0 = début 7h, index N = fin de grille (20h). */
+/** Position Y (px) d'une ligne horaire : index 0 = début 7h, index N = fin de grille (22h). */
 export function agendaHourLineTopPx(lineIndex: number): number {
   return lineIndex * AGENDA_HOUR_HEIGHT_PX;
 }

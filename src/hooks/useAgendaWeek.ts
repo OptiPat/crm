@@ -43,14 +43,30 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
       options?: { silent?: boolean; skipCache?: boolean }
     ) => {
       const key = weekKey(targetWeekStartAt);
-      if (!options?.skipCache) {
-        const cached = cacheRef.current.get(key);
-        if (cached) {
+      const cached =
+        !options?.skipCache ? cacheRef.current.get(key) : undefined;
+
+      if (cached) {
+        if (activeWeekRef.current === targetWeekStartAt) {
           setEvents(cached);
           setError(null);
           setLoading(false);
-          prefetchWeek(addWeeks(targetWeekStartAt, -1));
-          prefetchWeek(addWeeks(targetWeekStartAt, 1));
+        }
+        prefetchWeek(addWeeks(targetWeekStartAt, -1));
+        prefetchWeek(addWeeks(targetWeekStartAt, 1));
+        try {
+          const result = await fetchWeek(targetWeekStartAt);
+          cacheRef.current.set(key, result.events);
+          if (activeWeekRef.current === targetWeekStartAt) {
+            setEvents(result.events);
+            setLastSync(result.sync);
+            setError(null);
+          }
+          return result.sync;
+        } catch (e) {
+          if (activeWeekRef.current === targetWeekStartAt) {
+            setError(e instanceof Error ? e.message : String(e));
+          }
           return null;
         }
       }

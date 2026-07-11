@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
   buildRdvCancelledTimelinePayload,
+  buildRdvRescheduledTimelinePayload,
   isLastRdvForStage,
-  phaseEntriesHaveRdv,
+  parseRdvTimelineTraceNote,
+  phaseHasRdvActivityForStage,
   shouldHighlightRevertToProspection,
+  stageHasRdvCancellationTrace,
 } from "@/lib/pipe/pipe-rdv-delete";
 
 const mkRdv = (id: number, titre: string): PipeTimelineEntryRecord => ({
@@ -33,12 +36,63 @@ describe("pipe-rdv-delete", () => {
   });
 
   it("détecte l'absence de RDV dans une phase", () => {
-    expect(phaseEntriesHaveRdv([mkRdv(1, "R1")])).toBe(true);
+    expect(phaseHasRdvActivityForStage([mkRdv(1, "R1")], "R1")).toBe(true);
     expect(
-      phaseEntriesHaveRdv([
-        { ...mkRdv(1, "R1"), entry_type: "APPEL", titre: "Appel" },
-      ])
+      phaseHasRdvActivityForStage(
+        [{ ...mkRdv(1, "R1"), entry_type: "APPEL", titre: "Appel" }],
+        "R1"
+      )
     ).toBe(false);
+  });
+
+  it("compte une trace de report comme activité RDV de l'étape", () => {
+    expect(
+      phaseHasRdvActivityForStage(
+        [
+          {
+            ...mkRdv(1, "R1"),
+            entry_type: "NOTE",
+            titre: null,
+            contenu: "RDV R1 reporté : était le 01 janv. 2026, 10:00 → 08 janv. 2026, 10:00",
+          },
+        ],
+        "R1"
+      )
+    ).toBe(true);
+  });
+
+  it("détecte une annulation R1 dans la timeline", () => {
+    expect(
+      stageHasRdvCancellationTrace(
+        [
+          {
+            ...mkRdv(1, "R1"),
+            entry_type: "NOTE",
+            contenu: "RDV R1 annulé",
+          },
+        ],
+        "R1"
+      )
+    ).toBe(true);
+  });
+
+  it("trace un report avec note utilisateur", () => {
+    const rdv = mkRdv(1, "R1");
+    expect(buildRdvRescheduledTimelinePayload(rdv, 100, 200, "Client indisponible")).toEqual({
+      titre: null,
+      contenu: expect.stringContaining("RDV R1 reporté"),
+    });
+  });
+
+  it("parse les notes de trace RDV", () => {
+    expect(parseRdvTimelineTraceNote("RDV R2 annulé : motif")).toEqual({
+      stage: "R2",
+      kind: "cancelled",
+    });
+    expect(parseRdvTimelineTraceNote("RDV R3 reporté : était le x → y")).toEqual({
+      stage: "R3",
+      kind: "rescheduled",
+    });
   });
 
   it("conserve la note utilisateur seule sans libellé RDV annulé", () => {

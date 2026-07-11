@@ -39,6 +39,7 @@ import {
   reschedulePipeRdvFromAgenda,
 } from "@/lib/pipe/pipe-rdv-agenda-actions";
 import { toastAfterRdvCancelled } from "@/lib/pipe/pipe-rdv-delete-actions";
+import { toastAfterPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { formatPipeRdvCalendarContactLabel, formatPipeRdvGoogleCalendarTitle } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
   formatRdvEntryDisplayLabel,
@@ -119,7 +120,7 @@ export function AgendaPipeRdvManageDialog({
     }
     setSaving(true);
     try {
-      await reschedulePipeRdvFromAgenda({
+      const calendar = await reschedulePipeRdvFromAgenda({
         pipe,
         entry,
         rdvStage,
@@ -127,7 +128,7 @@ export function AgendaPipeRdvManageDialog({
         endAtUnix: endAt,
         calendarTitle,
       });
-      toast.success("RDV décalé — Pipe et Google Agenda mis à jour");
+      toastAfterPipeRdvReschedule(calendar);
       onOpenChange(false);
       onChanged?.();
     } catch (e) {

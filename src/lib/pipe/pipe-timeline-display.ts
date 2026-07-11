@@ -1,4 +1,5 @@
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
+import { formatRdvTimelineTraceBadge, parseRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
 import { PIPE_STAGE_BOARD_COLORS } from "@/lib/pipe/pipe-stage-colors";
 import {
   isPipeStage,
@@ -94,9 +95,13 @@ const STAGE_DOTS: Record<PipeStage, string> = {
 };
 
 export function getPipeTimelineEntryStyle(
-  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre">,
+  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre" | "contenu">,
   context?: PipeTimelineDisplayContext
 ): PipeTimelineEntryStyle {
+  if (entry.entry_type === "NOTE" && parseRdvTimelineTraceNote(entry.contenu)) {
+    return USER_TYPE_STYLES.RDV;
+  }
+
   const stage = timelineStageFromEntry(entry, context);
   if (stage) {
     const colors = PIPE_STAGE_BOARD_COLORS[stage];
@@ -134,9 +139,14 @@ export function isPipeTimelineType(value: string): value is PipeTimelineType {
 }
 
 export function formatTimelineEntryBadgeLabel(
-  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre">,
+  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre" | "contenu">,
   context?: PipeTimelineDisplayContext
 ): string {
+  if (entry.entry_type === "NOTE") {
+    const traceBadge = formatRdvTimelineTraceBadge(entry.contenu);
+    if (traceBadge) return traceBadge;
+  }
+
   const stage = timelineStageFromEntry(entry, context);
   if (stage) return PIPE_STAGE_LABELS[stage];
   return (

@@ -3,9 +3,12 @@ import { Calendar, FileText, Pencil, Phone, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { PipeTimelinePhaseEntryRow } from "@/components/pipe/PipeTimelinePhaseEntryRow";
 import { PipeProspectionMilestoneEditor } from "@/components/pipe/PipeProspectionMilestoneEditor";
 import { PipeProspectionMilestoneReadSummary } from "@/components/pipe/PipeProspectionMilestoneReadSummary";
+import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
@@ -23,17 +26,20 @@ import {
 import { getMilestoneDurationLabel } from "@/lib/pipe/pipe-timeline-duration";
 import {
   milestoneStageExpectsRdv,
-  phaseEntriesHaveRdv,
+  phaseHasRdvActivityForStage,
+  stageHasRdvCancellationTrace,
+  isRdvTimelineTraceNote,
+  listRdvEntriesForStage,
+  parseRdvTimelineTraceNote,
 } from "@/lib/pipe/pipe-rdv-delete";
-import {
-  isProspectionMilestoneEntry,
-} from "@/lib/pipe/pipe-prospection-phase";
 import {
   getAllStagePhaseUserEntryIds,
   getCanonicalStageMilestones,
   getPhaseUserEntriesForMilestone,
+  getVisiblePipeTimelineEntries,
 } from "@/lib/pipe/pipe-stage-phase";
-import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
+import { isProspectionMilestoneEntry } from "@/lib/pipe/pipe-prospection-phase";
+import { formatTimelineOccurredAt, datetimeLocalToUnix, unixToDatetimeLocalInput } from "@/lib/pipe/pipe-timeline-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -87,12 +93,22 @@ function TimelineEntryRow({
   const prospectionMilestone = isProspectionMilestoneEntry(entry, context);
   const [editing, setEditing] = useState(false);
   const [draftNotes, setDraftNotes] = useState("");
+  const [traceOccurredAt, setTraceOccurredAt] = useState("");
   const [saving, setSaving] = useState(false);
+  const [rdvOutcomeOpen, setRdvOutcomeOpen] = useState(false);
 
   const userType = entry.entry_type;
+  const traceNote = isRdvTimelineTraceNote(entry);
+  const traceMeta = traceNote ? parseRdvTimelineTraceNote(entry.contenu) : null;
+  const activeRdvForTrace =
+    traceMeta?.kind === "rescheduled"
+      ? listRdvEntriesForStage(allEntries, traceMeta.stage)[0]
+      : undefined;
   const Icon =
-    !milestone && userType in TYPE_ICONS
-      ? TYPE_ICONS[userType as keyof typeof TYPE_ICONS]
+    !milestone && (traceNote || userType in TYPE_ICONS)
+      ? traceNote
+        ? Calendar
+        : TYPE_ICONS[userType as keyof typeof TYPE_ICONS]
       : null;
   const label = formatTimelineEntryBadgeLabel(entry, context);
   const displayTitre = formatTimelineEntryTitre(entry);
@@ -104,7 +120,8 @@ function TimelineEntryRow({
     milestone &&
     !prospectionMilestone &&
     milestoneStageExpectsRdv(milestoneStage) &&
-    !phaseEntriesHaveRdv(phaseEntries);
+    !phaseHasRdvActivityForStage(phaseEntries, milestoneStage) &&
+    !stageHasRdvCancellationTrace(allEntries, milestoneStage);
 
   const startEdit = () => {
     setDraftNotes(entry.contenu ?? "");
@@ -114,6 +131,30 @@ function TimelineEntryRow({
   const cancelEdit = () => {
     setEditing(false);
     setDraftNotes("");
+    setTraceOccurredAt("");
+  };
+
+  const startTraceEdit = () => {
+    setDraftNotes(entry.contenu ?? "");
+    setTraceOccurredAt(unixToDatetimeLocalInput(entry.occurred_at));
+    setEditing(true);
+  };
+
+  const saveTraceEdit = async () => {
+    setSaving(true);
+    try {
+      await timeline.updateEntry(entry.id, {
+        titre: entry.titre,
+        contenu: draftNotes.trim() || null,
+        occurred_at: datetimeLocalToUnix(traceOccurredAt),
+      });
+      toast.success("Trace RDV mise à jour");
+      setEditing(false);
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSaving(false);
+    }
   };
 
   const saveMilestoneNotes = async () => {
@@ -173,7 +214,49 @@ function TimelineEntryRow({
               <p className="text-sm font-medium leading-snug">{displayTitre}</p>
             )}
 
-            {editing && prospectionMilestone ? (
+            {editing && traceNote && !milestone ? (
+              <div className="space-y-2">
+                <div className="space-y-1">
+                  <Label htmlFor={`trace-date-${entry.id}`} className="text-xs">
+                    Date
+                  </Label>
+                  <Input
+                    id={`trace-date-${entry.id}`}
+                    type="datetime-local"
+                    value={traceOccurredAt}
+                    onChange={(e) => setTraceOccurredAt(e.target.value)}
+                    disabled={saving}
+                  />
+                </div>
+                <DictationTextarea
+                  label="Contenu"
+                  value={draftNotes}
+                  onChange={setDraftNotes}
+                  rows={4}
+                  placeholder="Motif, contexte, suite à donner…"
+                  disabled={saving}
+                />
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={cancelEdit}
+                    disabled={saving}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void saveTraceEdit()}
+                    disabled={saving}
+                  >
+                    {saving ? "Enregistrement…" : "Enregistrer"}
+                  </Button>
+                </div>
+              </div>
+            ) : editing && prospectionMilestone ? (
               <PipeProspectionMilestoneEditor
                 contactId={contactId}
                 pipe={pipe}
@@ -186,7 +269,7 @@ function TimelineEntryRow({
                 onSaveNotes={saveMilestoneNotes}
                 onAfterEntryAdded={cancelEdit}
               />
-            ) : editing ? (
+            ) : editing && milestone ? (
               <div className="space-y-2">
                 <DictationTextarea
                   value={draftNotes}
@@ -266,6 +349,29 @@ function TimelineEntryRow({
           </div>
 
           <div className="flex shrink-0 gap-0.5">
+            {traceNote && !milestone && !editing && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                aria-label="Modifier la trace RDV"
+                onClick={startTraceEdit}
+              >
+                <Pencil className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            )}
+            {activeRdvForTrace && !editing && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => setRdvOutcomeOpen(true)}
+              >
+                Annuler le RDV
+              </Button>
+            )}
             {milestone && onSaveMilestoneNotes && !editing && (
               <Button
                 type="button"
@@ -297,6 +403,16 @@ function TimelineEntryRow({
           </div>
         </div>
       </article>
+      {activeRdvForTrace ? (
+        <PipeRdvOutcomeDialog
+          open={rdvOutcomeOpen}
+          entry={activeRdvForTrace}
+          pipe={pipe}
+          timeline={timeline}
+          onClose={() => setRdvOutcomeOpen(false)}
+          onReschedule={() => setRdvOutcomeOpen(false)}
+        />
+      ) : null}
     </li>
   );
 }
@@ -315,7 +431,9 @@ export function PipeTimelineHistory({
   const stageMilestones = getCanonicalStageMilestones(entries, context);
   const nestedPhaseEntryIds = getAllStagePhaseUserEntryIds(entries, context);
 
-  const visibleEntries = entries.filter((entry) => !nestedPhaseEntryIds.has(entry.id));
+  const visibleEntries = getVisiblePipeTimelineEntries(entries, context).filter(
+    (entry) => !nestedPhaseEntryIds.has(entry.id)
+  );
 
   useEffect(() => {
     if (!focusProspectionToken) return;
@@ -335,6 +453,19 @@ export function PipeTimelineHistory({
 
   const handleDelete = async (entry: PipeTimelineEntryRecord) => {
     if (isPipeTimelineSystemEntry(entry.entry_type)) return;
+    if (isRdvTimelineTraceNote(entry)) {
+      const trace = parseRdvTimelineTraceNote(entry.contenu);
+      const activeRdv =
+        trace?.kind === "rescheduled"
+          ? listRdvEntriesForStage(entries, trace.stage)[0]
+          : undefined;
+      toast.error(
+        activeRdv
+          ? "Utilisez « Annuler le RDV » sur la trace de report."
+          : "Cette trace d'historique RDV ne peut pas être supprimée."
+      );
+      return;
+    }
     try {
       await removeEntry(entry.id);
       toast.success("Entrée supprimée");
@@ -394,7 +525,8 @@ export function PipeTimelineHistory({
                         : undefined
                     }
                     onDelete={
-                      isPipeTimelineSystemEntry(entry.entry_type)
+                      isPipeTimelineSystemEntry(entry.entry_type) ||
+                      isRdvTimelineTraceNote(entry)
                         ? undefined
                         : () => void handleDelete(entry)
                     }

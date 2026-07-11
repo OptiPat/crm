@@ -230,6 +230,37 @@ impl Database {
         rows.collect()
     }
 
+    pub fn list_active_pipe_linked_calendar_events(
+        &self,
+        since_start_at: i64,
+    ) -> Result<Vec<CalendarEventEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
+                    title, start_at, end_at, attendee_email, attendee_status, event_status,
+                    rdv_effectue, created_at, updated_at
+             FROM calendar_events
+             WHERE pipe_timeline_entry_id IS NOT NULL
+               AND event_status != 'cancelled'
+               AND rdv_effectue = 0
+               AND start_at >= ?1",
+        )?;
+        let rows = stmt.query_map(params![since_start_at], map_calendar_event_row)?;
+        rows.collect()
+    }
+
+    pub fn get_google_event_id_for_pipe_timeline_entry(
+        &self,
+        timeline_entry_id: i64,
+    ) -> Result<Option<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT google_event_id FROM calendar_events
+             WHERE pipe_timeline_entry_id = ?1 AND event_status != 'cancelled'
+             ORDER BY updated_at DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![timeline_entry_id], |row| row.get(0))?;
+        Ok(rows.next().transpose()?)
+    }
+
     pub fn pipe_links_for_google_event_ids(
         &self,
         google_event_ids: &[String],
@@ -242,7 +273,10 @@ impl Database {
             let Some(timeline_id) = ce.pipe_timeline_entry_id else {
                 continue;
             };
-            let entry = self.get_pipe_timeline_entry(timeline_id)?;
+            let entry = match self.get_pipe_timeline_entry(timeline_id) {
+                Ok(entry) => entry,
+                Err(_) => continue,
+            };
             out.insert(google_event_id.clone(), (timeline_id, entry.pipe_id));
         }
         Ok(out)

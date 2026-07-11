@@ -12,6 +12,7 @@ import {
   consumeAgendaNavigationHighlight,
   consumeAgendaNavigationWeekStart,
   consumeAgendaRdvPipeDraft,
+  subscribeAgendaNavigationWeek,
 } from "@/lib/navigation/agenda-navigation";
 import {
   formatAgendaWeekRange,
@@ -23,6 +24,7 @@ import type { GoogleCalendarWeekEvent } from "@/lib/api/tauri-calendar";
 import { openExternalUrl } from "@/lib/api/tauri-system";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
 import { notifyContactsChanged } from "@/lib/contacts/contact-events";
+import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -40,11 +42,14 @@ export function Agenda({ onNavigate }: AgendaProps) {
     error,
     connected,
     lastSync,
+    goToWeek,
     goPrevWeek,
     goNextWeek,
     goToday,
     refreshWeek,
   } = useAgendaWeek(initialWeek ?? undefined);
+
+  const [navHighlight, setNavHighlight] = useState(initialHighlight);
 
   const [refreshing, setRefreshing] = useState(false);
   const [planifierOpen, setPlanifierOpen] = useState(false);
@@ -57,6 +62,13 @@ export function Agenda({ onNavigate }: AgendaProps) {
   }>({});
 
   useEffect(() => {
+    return subscribeAgendaNavigationWeek(({ weekStartAt: targetWeek, highlight }) => {
+      goToWeek(targetWeek);
+      setNavHighlight(highlight ?? null);
+    });
+  }, [goToWeek]);
+
+  useEffect(() => {
     if (!lastSync) return;
     if (lastSync.rescheduled > 0) {
       toast.success(
@@ -65,15 +77,16 @@ export function Agenda({ onNavigate }: AgendaProps) {
           : `${lastSync.rescheduled} RDV Pipe mis à jour depuis Google Agenda`
       );
     }
-    if (lastSync.cancelled > 0) {
-      toast.warning(
-        lastSync.cancelled === 1
-          ? "1 RDV retiré de Google Agenda — vérifiez le journal Pipe"
-          : `${lastSync.cancelled} RDV retirés de Google Agenda — vérifiez le journal Pipe`
-      );
-    }
     if (lastSync.rescheduled > 0 || lastSync.cancelled > 0) {
       notifyContactsChanged();
+      notifyPipeChanged();
+    }
+    if (lastSync.cancelled > 0) {
+      toast.success(
+        lastSync.cancelled === 1
+          ? "1 RDV annulé dans Google — Pipe mis à jour"
+          : `${lastSync.cancelled} RDV annulés dans Google — Pipe mis à jour`
+      );
     }
   }, [lastSync]);
 
@@ -170,8 +183,8 @@ export function Agenda({ onNavigate }: AgendaProps) {
         weekStartAt={weekStartAt}
         events={events}
         loading={loading}
-        highlightStartAt={initialHighlight?.startAt ?? null}
-        highlightEndAt={initialHighlight?.endAt ?? null}
+        highlightStartAt={navHighlight?.startAt ?? null}
+        highlightEndAt={navHighlight?.endAt ?? null}
         onSlotClick={({ startAt, endAt }) => {
           const draft = consumeAgendaRdvPipeDraft();
           setPlanifierContext(

@@ -2155,6 +2155,10 @@ pub fn update_calendar_rdv(
     title: String,
     start_at: i64,
     end_at: i64,
+    add_google_meet: Option<bool>,
+    visio_link: Option<String>,
+    preserve_visio: Option<bool>,
+    clear_visio: Option<bool>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -2165,6 +2169,10 @@ pub fn update_calendar_rdv(
         &title,
         start_at,
         end_at,
+        add_google_meet.unwrap_or(false),
+        visio_link.as_deref(),
+        preserve_visio.unwrap_or(false),
+        clear_visio.unwrap_or(false),
     )
 }
 
@@ -2210,6 +2218,7 @@ pub fn list_google_calendar_week(
     app_handle: tauri::AppHandle,
     db: State<'_, DbState>,
     week_start_at: i64,
+    sync_pipe: Option<bool>,
 ) -> Result<crate::database::models::AgendaWeekListResult, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -2217,7 +2226,42 @@ pub fn list_google_calendar_week(
         &app_handle,
         database,
         week_start_at,
+        sync_pipe.unwrap_or(true),
     )
+}
+
+#[tauri::command]
+pub fn sync_pipe_google_rdvs(
+    app_handle: tauri::AppHandle,
+    db: State<'_, DbState>,
+) -> Result<crate::database::models::AgendaGooglePipeSyncResult, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    crate::email::calendar_ops::sync_all_pipe_linked_google_rdvs(&app_handle, database)
+}
+
+#[tauri::command]
+pub fn mark_pipe_rdv_calendar_cancelled(
+    db: State<'_, DbState>,
+    timeline_entry_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_pipe_rdv_calendar_cancelled(timeline_entry_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn resolve_pipe_rdv_google_event_id(
+    db: State<'_, DbState>,
+    timeline_entry_id: i64,
+) -> Result<Option<String>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .google_event_id_for_pipe_timeline_entry(timeline_entry_id)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

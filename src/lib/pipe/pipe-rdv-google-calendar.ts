@@ -4,7 +4,7 @@ import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import type { PipeRecordLike } from "@/lib/pipe/pipe-types";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
-import { rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
+import { loadDefaultPipeRdvVisio, rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
 
 const PIPE_RDV_GOOGLE_CALENDAR_LABELS: Record<PipeRdvStage, string> = {
   R1: "Premier rendez-vous patrimonial",
@@ -79,7 +79,8 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
     options.contactLabel
   );
   const endAtUnix = pipeRdvCalendarEndAt(options.startAtUnix);
-  const visioPayload = rdvVisioToApiPayload(options.visio ?? { mode: "none" });
+  const visio = options.visio ?? (await loadDefaultPipeRdvVisio());
+  const visioPayload = rdvVisioToApiPayload(visio);
 
   try {
     await createCalendarRdv({

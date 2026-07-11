@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
+import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
 import { cancelLinkedGoogleRdv } from "@/lib/calendar/rdv-planifier";
 import {
   applyRdvCancelled,
@@ -44,20 +45,39 @@ export function PipeRdvOutcomeDialog({
   const [note, setNote] = useState("");
   const [cancelGoogle, setCancelGoogle] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [resolvedGoogleEventId, setResolvedGoogleEventId] = useState<string | null>(null);
 
-  const hasGoogleLink = Boolean(entry?.google_event_id?.trim());
+  const liveEntry = useMemo(() => {
+    if (!entry) return null;
+    return timeline.entries.find((e) => e.id === entry.id) ?? entry;
+  }, [entry, timeline.entries]);
 
   useEffect(() => {
-    if (open) {
-      setNote("");
-      setCancelGoogle(true);
+    if (!open || !liveEntry) {
+      setResolvedGoogleEventId(null);
+      return;
     }
-  }, [open, entry?.id]);
+    setNote("");
+    setCancelGoogle(true);
+    const direct = liveEntry.google_event_id?.trim();
+    if (direct) {
+      setResolvedGoogleEventId(direct);
+      return;
+    }
+    let cancelled = false;
+    void resolvePipeRdvGoogleEventId(liveEntry.id).then((id) => {
+      if (!cancelled) setResolvedGoogleEventId(id?.trim() || null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, liveEntry]);
 
-  if (!entry) return null;
+  if (!liveEntry) return null;
 
-  const rdvLabel = formatRdvEntryDisplayLabel(entry) ?? "RDV";
-  const occurredLabel = formatTimelineOccurredAt(entry.occurred_at);
+  const hasGoogleLink = Boolean(resolvedGoogleEventId);
+  const rdvLabel = formatRdvEntryDisplayLabel(liveEntry) ?? "RDV";
+  const occurredLabel = formatTimelineOccurredAt(liveEntry.occurred_at);
   const willRevertToProspection =
     pipe?.pipe_type === "AFFAIRE" &&
     pipe.stage !== "PROSPECTION" &&
@@ -67,9 +87,9 @@ export function PipeRdvOutcomeDialog({
     setSaving(true);
     try {
       if (cancelGoogle && hasGoogleLink) {
-        await cancelLinkedGoogleRdv(entry.google_event_id);
+        await cancelLinkedGoogleRdv(resolvedGoogleEventId);
       }
-      const result = await applyRdvCancelled({ timeline, pipe, entry, note });
+      const result = await applyRdvCancelled({ timeline, pipe, entry: liveEntry, note });
       const message = toastAfterRdvCancelled(rdvLabel, result);
       toast.success(
         cancelGoogle && hasGoogleLink ? `${message} — événement Google retiré` : message

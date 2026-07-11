@@ -101,6 +101,17 @@ export function notifyGoogleCalendarSync(calendar?: PipeRdvCalendarSyncResult): 
   }
 }
 
+export function toastAfterPipeRdvReschedule(
+  calendar?: PipeRdvCalendarSyncResult
+): void {
+  if (calendar?.synced) {
+    toast.success("RDV décalé — Pipe et Google Agenda mis à jour");
+    return;
+  }
+  toast.success("RDV décalé dans le Pipe");
+  notifyGoogleCalendarSync(calendar);
+}
+
 export function toastAfterRdvSave(
   rdvStage: PipeRdvStage,
   result: PipeRdvStageSaveResult | null,

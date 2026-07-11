@@ -13,7 +13,7 @@ use tauri::AppHandle;
 const WEEK_SECONDS: i64 = 7 * 86_400;
 const WEEK_EVENTS_PAGE_SIZE: &str = "250";
 const WEEK_EVENTS_MAX_PAGES: u32 = 4;
-const PIPE_SYNC_TIME_TOLERANCE_SEC: i64 = 60;
+const PIPE_SYNC_TIME_TOLERANCE_SEC: i64 = crate::database::pipe_rdv_google_sync::PIPE_SYNC_TIME_TOLERANCE_SEC;
 
 #[derive(Debug, Serialize)]
 struct CreateEventBody<'a> {
@@ -159,7 +159,98 @@ fn map_google_list_event(event: GoogleCalendarListEvent) -> Option<GoogleCalenda
     })
 }
 
+fn fetch_google_calendar_event_by_id(
+    app: &AppHandle,
+    google_event_id: &str,
+) -> Result<Option<GoogleCalendarWeekEvent>, String> {
+    let Some(conn) = resolve_google_calendar_connection(app)? else {
+        return Err(
+            "Connectez Google Agenda dans Paramètres → Emails & envois → Connexion.".into(),
+        );
+    };
+
+    let client = reqwest::blocking::Client::new();
+    let url = format!(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events/{google_event_id}"
+    );
+    let res = client
+        .get(&url)
+        .bearer_auth(&conn.access_token)
+        .send()
+        .map_err(|e| e.to_string())?;
+
+    if res.status() == reqwest::StatusCode::NOT_FOUND
+        || res.status() == reqwest::StatusCode::GONE
+    {
+        return Ok(None);
+    }
+
+    if !res.status().is_success() {
+        let status = res.status();
+        let err = res.text().unwrap_or_default();
+        return Err(super::google_api_errors::calendar_access_error(status, &err));
+    }
+
+    let event: GoogleCalendarListEvent = res.json().map_err(|e| e.to_string())?;
+    Ok(map_google_list_event(event))
+}
+
+fn apply_google_event_diff_to_pipe_rdv(
+    db: &Database,
+    timeline_id: i64,
+    google_event_id: &str,
+    ge: &GoogleCalendarWeekEvent,
+    ce: &CalendarEventEntry,
+    contact_ids_to_sync: &mut std::collections::HashSet<i64>,
+) -> Result<bool, String> {
+    let start_changed = (ce.start_at - ge.start_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC;
+    let end_changed = (ce.end_at - ge.end_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC;
+
+    if start_changed {
+        if db
+            .apply_pipe_rdv_rescheduled_from_google(
+                timeline_id,
+                google_event_id,
+                ge.start_at,
+                ge.end_at,
+                &ge.title,
+                ce.start_at,
+            )
+            .map_err(|e| e.to_string())?
+        {
+            if let Ok(entry) = db.get_pipe_timeline_entry(timeline_id) {
+                if let Ok(pipe) = db.get_pipe_by_id(entry.pipe_id) {
+                    contact_ids_to_sync.insert(pipe.contact_id);
+                }
+            }
+            return Ok(true);
+        }
+    } else if end_changed {
+        if db
+            .apply_pipe_rdv_duration_from_google(
+                google_event_id,
+                ge.end_at,
+                &ge.title,
+                ge.start_at,
+                ce.end_at,
+            )
+            .map_err(|e| e.to_string())?
+        {
+            contact_ids_to_sync.insert(ce.contact_id);
+            return Ok(true);
+        }
+    } else if db
+        .get_pipe_timeline_entry(timeline_id)
+        .ok()
+        .is_some_and(|entry| entry.occurred_at != ge.start_at)
+    {
+        let _ = db.align_pipe_rdv_occurred_at_from_calendar(timeline_id, ge.start_at);
+    }
+    Ok(false)
+}
+
 fn sync_pipe_rdv_from_google_week(
+    app: &AppHandle,
     db: &Database,
     week_start_at: i64,
     google_events: &[GoogleCalendarWeekEvent],
@@ -179,26 +270,17 @@ fn sync_pipe_rdv_from_google_week(
         let Some(timeline_id) = ce.pipe_timeline_entry_id else {
             continue;
         };
-        let pipe_out_of_sync = db
-            .get_pipe_timeline_entry(timeline_id)
-            .ok()
-            .is_some_and(|entry| entry.occurred_at != ge.start_at);
-        let times_differ = (ce.start_at - ge.start_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC
-            || (ce.end_at - ge.end_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC
-            || pipe_out_of_sync;
-        if !times_differ {
-            continue;
+        let changed = apply_google_event_diff_to_pipe_rdv(
+            db,
+            timeline_id,
+            &ge.google_event_id,
+            ge,
+            &ce,
+            &mut contact_ids_to_sync,
+        )?;
+        if changed {
+            rescheduled += 1;
         }
-        db.update_pipe_timeline_occurred_at(timeline_id, ge.start_at)
-            .map_err(|e| e.to_string())?;
-        db.update_calendar_event_times(&ge.google_event_id, &ge.title, ge.start_at, ge.end_at)
-            .map_err(|e| e.to_string())?;
-        if let Ok(entry) = db.get_pipe_timeline_entry(timeline_id) {
-            if let Ok(pipe) = db.get_pipe_by_id(entry.pipe_id) {
-                contact_ids_to_sync.insert(pipe.contact_id);
-            }
-        }
-        rescheduled += 1;
     }
 
     let linked = db
@@ -212,17 +294,45 @@ fn sync_pipe_rdv_from_google_week(
         if google_ids.contains(ce.google_event_id.as_str()) {
             continue;
         }
-        db.mark_calendar_event_cancelled(&ce.google_event_id)
-            .map_err(|e| e.to_string())?;
-        if let Some(timeline_id) = ce.pipe_timeline_entry_id {
-            let _ = db.set_pipe_timeline_google_event_id(timeline_id, None);
-            if let Ok(entry) = db.get_pipe_timeline_entry(timeline_id) {
-                if let Ok(pipe) = db.get_pipe_by_id(entry.pipe_id) {
-                    contact_ids_to_sync.insert(pipe.contact_id);
+        match fetch_google_calendar_event_by_id(app, ce.google_event_id.as_str()) {
+            Ok(Some(ge)) => {
+                if let Some(timeline_id) = ce.pipe_timeline_entry_id {
+                    let changed = apply_google_event_diff_to_pipe_rdv(
+                        db,
+                        timeline_id,
+                        ce.google_event_id.as_str(),
+                        &ge,
+                        &ce,
+                        &mut contact_ids_to_sync,
+                    )?;
+                    if changed {
+                        rescheduled += 1;
+                    }
                 }
             }
+            Ok(None) => {
+                if let Some(timeline_id) = ce.pipe_timeline_entry_id {
+                    if db.get_pipe_timeline_entry(timeline_id).is_ok() {
+                        db.apply_pipe_rdv_cancelled_from_google(
+                            timeline_id,
+                            ce.google_event_id.as_str(),
+                        )
+                        .map_err(|e| e.to_string())?;
+                    } else {
+                        db.mark_calendar_event_cancelled(&ce.google_event_id)
+                            .map_err(|e| e.to_string())?;
+                    }
+                } else {
+                    db.mark_calendar_event_cancelled(&ce.google_event_id)
+                        .map_err(|e| e.to_string())?;
+                }
+                contact_ids_to_sync.insert(ce.contact_id);
+                cancelled += 1;
+            }
+            Err(_) => {
+                // Indisponible (réseau, auth…) : ne pas annuler à tort.
+            }
         }
-        cancelled += 1;
     }
 
     for contact_id in contact_ids_to_sync {
@@ -256,11 +366,79 @@ pub fn list_google_calendar_week_with_pipe_sync(
     app: &AppHandle,
     db: &Database,
     week_start_at: i64,
+    sync_pipe: bool,
 ) -> Result<AgendaWeekListResult, String> {
     let mut events = list_google_calendar_week_events(app, week_start_at)?;
-    let sync = sync_pipe_rdv_from_google_week(db, week_start_at, &events)?;
+    let sync = if sync_pipe {
+        sync_pipe_rdv_from_google_week(app, db, week_start_at, &events)?
+    } else {
+        AgendaGooglePipeSyncResult {
+            rescheduled: 0,
+            cancelled: 0,
+        }
+    };
     enrich_week_events_with_pipe_links(db, &mut events)?;
     Ok(AgendaWeekListResult { events, sync })
+}
+
+const PIPE_SYNC_LOOKBACK_SEC: i64 = 7 * 86_400;
+
+pub fn sync_all_pipe_linked_google_rdvs(
+    app: &AppHandle,
+    db: &Database,
+) -> Result<AgendaGooglePipeSyncResult, String> {
+    let since = chrono::Utc::now().timestamp().saturating_sub(PIPE_SYNC_LOOKBACK_SEC);
+    let linked = db
+        .list_active_pipe_linked_calendar_events(since)
+        .map_err(|e| e.to_string())?;
+    let mut rescheduled = 0u32;
+    let mut cancelled = 0u32;
+    let mut contact_ids_to_sync = std::collections::HashSet::new();
+
+    for ce in linked {
+        let Some(timeline_id) = ce.pipe_timeline_entry_id else {
+            continue;
+        };
+        match fetch_google_calendar_event_by_id(app, ce.google_event_id.as_str()) {
+            Ok(Some(ge)) => {
+                let changed = apply_google_event_diff_to_pipe_rdv(
+                    db,
+                    timeline_id,
+                    ce.google_event_id.as_str(),
+                    &ge,
+                    &ce,
+                    &mut contact_ids_to_sync,
+                )?;
+                if changed {
+                    rescheduled += 1;
+                }
+            }
+            Ok(None) => {
+                if db.get_pipe_timeline_entry(timeline_id).is_ok() {
+                    db.apply_pipe_rdv_cancelled_from_google(
+                        timeline_id,
+                        ce.google_event_id.as_str(),
+                    )
+                    .map_err(|e| e.to_string())?;
+                } else {
+                    db.mark_calendar_event_cancelled(&ce.google_event_id)
+                        .map_err(|e| e.to_string())?;
+                }
+                contact_ids_to_sync.insert(ce.contact_id);
+                cancelled += 1;
+            }
+            Err(_) => {}
+        }
+    }
+
+    for contact_id in contact_ids_to_sync {
+        let _ = db.sync_contact_dates_for_contact(contact_id);
+    }
+
+    Ok(AgendaGooglePipeSyncResult {
+        rescheduled,
+        cancelled,
+    })
 }
 
 pub fn list_google_calendar_week_events(
@@ -430,6 +608,17 @@ pub fn create_google_calendar_rdv(
         .map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Serialize)]
+struct PatchEventBody<'a> {
+    summary: &'a str,
+    start: EventDateTime<'a>,
+    end: EventDateTime<'a>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    location: Option<serde_json::Value>,
+    #[serde(rename = "conferenceData", skip_serializing_if = "Option::is_none")]
+    conference_data: Option<serde_json::Value>,
+}
+
 pub fn update_google_calendar_rdv(
     app: &AppHandle,
     db: &Database,
@@ -437,6 +626,10 @@ pub fn update_google_calendar_rdv(
     title: &str,
     start_at: i64,
     end_at: i64,
+    add_google_meet: bool,
+    visio_link: Option<&str>,
+    preserve_visio: bool,
+    clear_visio: bool,
 ) -> Result<(), String> {
     let conn = resolve_google_calendar_connection(app)?
         .ok_or("Connectez Google Agenda dans Paramètres → Emails & envois → Connexion.")?;
@@ -448,7 +641,34 @@ pub fn update_google_calendar_rdv(
     let start_str = format_rfc3339_local(start_at);
     let end_str = format_rfc3339_local(end_at);
 
-    let body = CreateEventBody {
+    let (location, conference_data) = if preserve_visio {
+        (None, None)
+    } else if clear_visio {
+        (
+            Some(serde_json::Value::Null),
+            Some(serde_json::Value::Null),
+        )
+    } else if add_google_meet {
+        (
+            None,
+            Some(serde_json::to_value(ConferenceDataCreate {
+                create_request: ConferenceCreateRequest {
+                    request_id: format!("crm-upd-{google_event_id}-{start_at}"),
+                    conference_solution_key: ConferenceSolutionKey {
+                        type_: "hangoutsMeet",
+                    },
+                },
+            }).map_err(|e| e.to_string())?),
+        )
+    } else {
+        let link = visio_link.map(str::trim).filter(|s| !s.is_empty());
+        (
+            link.map(|value| serde_json::Value::String(value.to_string())),
+            None,
+        )
+    };
+
+    let body = PatchEventBody {
         summary,
         start: EventDateTime {
             date_time: &start_str,
@@ -458,18 +678,21 @@ pub fn update_google_calendar_rdv(
             date_time: &end_str,
             time_zone: "Europe/Paris",
         },
-        location: None,
-        attendees: None,
-        conference_data: None,
+        location,
+        conference_data,
     };
 
     let client = reqwest::blocking::Client::new();
     let url = format!(
         "https://www.googleapis.com/calendar/v3/calendars/primary/events/{google_event_id}"
     );
+    let mut query = vec![("sendUpdates", "all")];
+    if !preserve_visio && (add_google_meet || clear_visio) {
+        query.push(("conferenceDataVersion", "1"));
+    }
     let res = client
         .patch(&url)
-        .query(&[("sendUpdates", "all")])
+        .query(&query)
         .bearer_auth(&conn.access_token)
         .json(&body)
         .send()
@@ -544,6 +767,21 @@ pub fn sync_calendar_rdv_status(app: &AppHandle, db: &Database) -> Result<Calend
         };
 
         if !res.status().is_success() {
+            if res.status() == reqwest::StatusCode::NOT_FOUND
+                || res.status() == reqwest::StatusCode::GONE
+            {
+                let _ = db.update_calendar_event_sync(ev.id, None, "cancelled");
+                if let Some(timeline_id) = ev.pipe_timeline_entry_id {
+                    if db.get_pipe_timeline_entry(timeline_id).is_ok() {
+                        let _ = db.apply_pipe_rdv_cancelled_from_google(
+                            timeline_id,
+                            ev.google_event_id.as_str(),
+                        );
+                    }
+                }
+                result.cancelled += 1;
+                continue;
+            }
             if result.errors.len() < 5 {
                 result.errors.push(format!("Événement {} introuvable", ev.id));
             }
@@ -583,6 +821,14 @@ pub fn sync_calendar_rdv_status(app: &AppHandle, db: &Database) -> Result<Calend
         let _ = db.update_calendar_event_sync(ev.id, attendee_status.as_deref(), event_status);
 
         if event_status == "cancelled" {
+            if let Some(timeline_id) = ev.pipe_timeline_entry_id {
+                if db.get_pipe_timeline_entry(timeline_id).is_ok() {
+                    let _ = db.apply_pipe_rdv_cancelled_from_google(
+                        timeline_id,
+                        ev.google_event_id.as_str(),
+                    );
+                }
+            }
             result.cancelled += 1;
             continue;
         }

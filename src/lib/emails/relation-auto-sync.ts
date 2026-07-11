@@ -2,6 +2,8 @@ import { syncEmailCampaignResponses } from "@/lib/api/tauri-email";
 import { syncCalendarRdv } from "@/lib/api/tauri-calendar";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { notifyRelationChanged } from "@/lib/etiquettes/etiquette-events";
+import { notifyContactsChanged } from "@/lib/contacts/contact-events";
+import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
 
 export interface RelationAutoSyncResult {
   skipped: boolean;
@@ -74,6 +76,10 @@ export async function runRelationAutoSync(): Promise<RelationAutoSyncResult> {
 
   if (changed) {
     notifyRelationChanged();
+  }
+  if (calendarCancelled > 0) {
+    notifyContactsChanged();
+    notifyPipeChanged();
   }
 
   return {

@@ -18,7 +18,7 @@ import {
   type PipeRdvStage,
 } from "@/lib/pipe/pipe-rdv-stage";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
-import { rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
+import { loadDefaultPipeRdvVisio, rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
 
 export async function syncGoogleCalendarForPipeRdv(options: {
   contactId: number;
@@ -54,7 +54,12 @@ export async function syncGoogleCalendarForPipeRdv(options: {
   const title =
     options.calendarTitle?.trim() ||
     formatPipeRdvGoogleCalendarTitle(options.rdvStage, options.contactLabel);
-  const visioPayload = rdvVisioToApiPayload(options.visio ?? { mode: "none" });
+  const preserveVisio = options.existingGoogleEventId != null && options.visio === undefined;
+  const visio = options.visio ?? (preserveVisio ? undefined : await loadDefaultPipeRdvVisio());
+  const visioPayload =
+    visio != null
+      ? rdvVisioToApiPayload(visio)
+      : { addGoogleMeet: false, visioLink: null as string | null };
 
   try {
     if (options.existingGoogleEventId) {
@@ -63,16 +68,22 @@ export async function syncGoogleCalendarForPipeRdv(options: {
         title,
         startAt: options.startAtUnix,
         endAt: options.endAtUnix,
+        preserveVisio,
+        clearVisio: visio?.mode === "none",
+        addGoogleMeet: visioPayload.addGoogleMeet,
+        visioLink: visioPayload.visioLink,
       });
     } else {
+      const createVisio = visio ?? (await loadDefaultPipeRdvVisio());
+      const createPayload = rdvVisioToApiPayload(createVisio);
       await createCalendarRdv({
         contactId: options.contactId,
         pipeTimelineEntryId: options.pipeTimelineEntryId ?? null,
         title,
         startAt: options.startAtUnix,
         endAt: options.endAtUnix,
-        addGoogleMeet: visioPayload.addGoogleMeet,
-        visioLink: visioPayload.visioLink,
+        addGoogleMeet: createPayload.addGoogleMeet,
+        visioLink: createPayload.visioLink,
       });
     }
   } catch (e) {

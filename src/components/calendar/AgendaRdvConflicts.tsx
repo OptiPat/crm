@@ -65,7 +65,9 @@ export function AgendaRdvConflicts({
             setEvents([]);
             return;
           }
-          const { events: items } = await listGoogleCalendarWeek(weekStart);
+          const { events: items } = await listGoogleCalendarWeek(weekStart, {
+            syncPipe: false,
+          });
           if (!cancelled) setEvents(items);
         } catch (e) {
           if (!cancelled) {
