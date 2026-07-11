@@ -34,7 +34,6 @@ const TYPE_ICONS = {
 
 interface PipeTimelinePhaseEntryRowProps {
   entry: PipeTimelineEntryRecord;
-  allEntries?: PipeTimelineEntryRecord[];
   pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   timeline: ReturnType<typeof usePipeTimeline>;
   disabled?: boolean;
@@ -42,7 +41,6 @@ interface PipeTimelinePhaseEntryRowProps {
 
 export function PipeTimelinePhaseEntryRow({
   entry,
-  allEntries = [],
   pipe,
   timeline,
   disabled = false,
@@ -193,7 +191,6 @@ export function PipeTimelinePhaseEntryRow({
         <PipeRdvOutcomeDialog
           open={rdvOutcomeOpen}
           entry={entry}
-          allEntries={allEntries}
           pipe={pipe}
           timeline={timeline}
           onClose={() => setRdvOutcomeOpen(false)}

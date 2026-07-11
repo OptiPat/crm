@@ -82,7 +82,6 @@ export function PipeProspectionMilestoneReadSummary({
               <PipeTimelinePhaseEntryRow
                 key={entry.id}
                 entry={entry}
-                allEntries={timeline.entries}
                 pipe={pipe}
                 timeline={timeline}
               />

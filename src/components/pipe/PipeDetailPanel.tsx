@@ -21,7 +21,6 @@ import {
   formatPipeContactLabel,
   isPipeType,
   pipeTypeUsesStage,
-  type PipeStage,
 } from "@/lib/pipe/pipe-types";
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
@@ -35,14 +34,12 @@ interface PipeDetailPanelProps {
   pipe: PipeRecord;
   onEdit: () => void;
   onDeleted: () => void;
-  onRequestStageChange: (target: PipeStage) => void;
 }
 
 export function PipeDetailPanel({
   pipe,
   onEdit,
   onDeleted,
-  onRequestStageChange,
 }: PipeDetailPanelProps) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -150,7 +147,6 @@ export function PipeDetailPanel({
             {showStageStepper && (
               <PipeStageStepper
                 currentStage={pipe.stage}
-                onRequestStageChange={onRequestStageChange}
                 onViewProspection={handleViewProspection}
               />
             )}

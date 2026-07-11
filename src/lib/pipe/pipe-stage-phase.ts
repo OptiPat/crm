@@ -8,6 +8,7 @@ import {
   PIPE_TIMELINE_USER_TYPES,
   type PipeTimelineUserType,
 } from "@/lib/pipe/pipe-timeline-types";
+import { rdvStageFromEntryTitre } from "@/lib/pipe/pipe-rdv-stage";
 import type { PipeStage } from "@/lib/pipe/pipe-types";
 
 const USER_TYPES = new Set<string>(PIPE_TIMELINE_USER_TYPES);
@@ -41,25 +42,72 @@ export function getOrderedStageMilestones(
     .sort((a, b) => compareTimelineEntries(a.entry, b.entry));
 }
 
+/**
+ * Un jalon affiché par étape (Prospection = premier jalon, R1/R2/R3 = dernier avancement).
+ * Évite les doublons Prospection + retour prospection dans l'historique.
+ */
+export function getCanonicalStageMilestones(
+  entries: PipeTimelineEntryRecord[],
+  context?: PipeTimelineDisplayContext
+): StageMilestoneRef[] {
+  const ordered = getOrderedStageMilestones(entries, context);
+  const prospection = ordered.find((m) => m.stage === "PROSPECTION");
+  const latestByStage = new Map<PipeStage, StageMilestoneRef>();
+
+  for (const milestone of ordered) {
+    if (milestone.stage === "PROSPECTION") continue;
+    latestByStage.set(milestone.stage, milestone);
+  }
+
+  const canonical: StageMilestoneRef[] = [];
+  if (prospection) canonical.push(prospection);
+  for (const milestone of ordered) {
+    if (milestone.stage === "PROSPECTION") continue;
+    const latest = latestByStage.get(milestone.stage);
+    if (latest?.entry.id === milestone.entry.id) {
+      canonical.push(milestone);
+    }
+  }
+
+  return canonical.sort((a, b) => compareTimelineEntries(a.entry, b.entry));
+}
+
+export function resolveUserEntryMilestoneId(
+  entry: PipeTimelineEntryRecord,
+  milestones: StageMilestoneRef[]
+): number | null {
+  if (isPipeTimelineSystemEntry(entry.entry_type) || !USER_TYPES.has(entry.entry_type)) {
+    return null;
+  }
+
+  if (entry.entry_type === "RDV") {
+    const rdvStage = rdvStageFromEntryTitre(entry.titre);
+    if (rdvStage) {
+      const stageMilestone = [...milestones].reverse().find((m) => m.stage === rdvStage);
+      if (stageMilestone) return stageMilestone.entry.id;
+    }
+  }
+
+  for (let index = milestones.length - 1; index >= 0; index -= 1) {
+    const startAt = milestones[index].entry.occurred_at;
+    const endAt = milestones[index + 1]?.entry.occurred_at ?? null;
+    if (entry.occurred_at < startAt) continue;
+    if (endAt != null && entry.occurred_at >= endAt) continue;
+    return milestones[index].entry.id;
+  }
+
+  return null;
+}
+
 export function getPhaseUserEntriesForMilestone(
   milestone: PipeTimelineEntryRecord,
   milestones: StageMilestoneRef[],
   entries: PipeTimelineEntryRecord[]
 ): PipeTimelineEntryRecord[] {
-  const index = milestones.findIndex((m) => m.entry.id === milestone.id);
-  if (index < 0) return [];
-
-  const startAt = milestone.occurred_at;
-  const endAt = milestones[index + 1]?.entry.occurred_at ?? null;
+  if (milestones.findIndex((m) => m.entry.id === milestone.id) < 0) return [];
 
   return entries
-    .filter((e) => {
-      if (isPipeTimelineSystemEntry(e.entry_type)) return false;
-      if (!USER_TYPES.has(e.entry_type)) return false;
-      if (e.occurred_at < startAt) return false;
-      if (endAt != null && e.occurred_at >= endAt) return false;
-      return true;
-    })
+    .filter((e) => resolveUserEntryMilestoneId(e, milestones) === milestone.id)
     .sort(compareTimelineEntries);
 }
 
@@ -67,7 +115,7 @@ export function getAllStagePhaseUserEntryIds(
   entries: PipeTimelineEntryRecord[],
   context?: PipeTimelineDisplayContext
 ): Set<number> {
-  const milestones = getOrderedStageMilestones(entries, context);
+  const milestones = getCanonicalStageMilestones(entries, context);
   const ids = new Set<number>();
   for (const { entry } of milestones) {
     for (const phaseEntry of getPhaseUserEntriesForMilestone(entry, milestones, entries)) {

@@ -89,13 +89,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
 
   return (
     <div className="space-y-3">
-      <div className="space-y-1">
-        <p className="text-sm font-medium">Journal rapide</p>
-        <p className="text-xs text-muted-foreground">
-          Tracez un appel, un RDV ou une note — l&apos;historique complet est dans l&apos;onglet
-          Historique.
-        </p>
-      </div>
+      <p className="text-sm font-medium">Journal rapide</p>
 
       <div className="flex flex-wrap gap-1.5">
         {PIPE_TIMELINE_USER_TYPES.map((type) => {

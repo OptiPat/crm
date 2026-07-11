@@ -92,6 +92,16 @@ export function isTerminalPipeStage(stage: PipeStage): boolean {
   return stage === "GAGNEE" || stage === "PERDUE_OU_EN_ATTENTE";
 }
 
+/** Avancement manuel autorisé (hors RDV) : étapes terminales uniquement. */
+export function isManualPipeStageChangeAllowed(stage: PipeStage): boolean {
+  return isTerminalPipeStage(stage);
+}
+
+/** Colonnes kanban où le dépôt par glisser-déposer est autorisé. */
+export function isPipeBoardDropTargetStage(stage: PipeStage): boolean {
+  return isManualPipeStageChangeAllowed(stage);
+}
+
 export function formatStageAdvancementMessage(stage: PipeStage): string {
   return `Avancement passé à ${PIPE_STAGE_LABELS[stage]}`;
 }

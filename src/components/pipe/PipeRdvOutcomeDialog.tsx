@@ -14,22 +14,16 @@ import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import {
   applyRdvCancelled,
-  applyRdvRevertToProspection,
-  toastAfterRdvRevert,
+  toastAfterRdvCancelled,
 } from "@/lib/pipe/pipe-rdv-delete-actions";
-import {
-  canRevertPipeToProspection,
-  shouldHighlightRevertToProspection,
-} from "@/lib/pipe/pipe-rdv-delete";
+import { canRevertPipeToProspection } from "@/lib/pipe/pipe-rdv-delete";
 import { formatRdvEntryDisplayLabel } from "@/lib/pipe/pipe-rdv-stage";
 import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
-import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 import { toast } from "sonner";
 
 interface PipeRdvOutcomeDialogProps {
   open: boolean;
   entry: PipeTimelineEntryRecord | null;
-  allEntries: PipeTimelineEntryRecord[];
   pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   timeline: ReturnType<typeof usePipeTimeline>;
   onClose: () => void;
@@ -39,7 +33,6 @@ interface PipeRdvOutcomeDialogProps {
 export function PipeRdvOutcomeDialog({
   open,
   entry,
-  allEntries,
   pipe,
   timeline,
   onClose,
@@ -56,34 +49,16 @@ export function PipeRdvOutcomeDialog({
 
   const rdvLabel = formatRdvEntryDisplayLabel(entry) ?? "RDV";
   const occurredLabel = formatTimelineOccurredAt(entry.occurred_at);
-  const highlightRevert =
-    pipe != null && shouldHighlightRevertToProspection(entry, allEntries, pipe.stage);
-  const showRevert =
-    pipe?.pipe_type === "AFFAIRE" && pipe.stage && canRevertPipeToProspection(pipe.stage);
+  const willRevertToProspection =
+    pipe?.pipe_type === "AFFAIRE" &&
+    pipe.stage !== "PROSPECTION" &&
+    canRevertPipeToProspection(pipe.stage);
 
   const handleCancelled = async () => {
     setSaving(true);
     try {
-      await applyRdvCancelled({ timeline, entry, note });
-      toast.success(
-        highlightRevert
-          ? `${rdvLabel} annulé — aucun RDV restant pour cette étape`
-          : `${rdvLabel} annulé`
-      );
-      onClose();
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleRevert = async () => {
-    if (!pipe) return;
-    setSaving(true);
-    try {
-      await applyRdvRevertToProspection({ timeline, pipe, entry, note });
-      toast.success(toastAfterRdvRevert(true));
+      const result = await applyRdvCancelled({ timeline, pipe, entry, note });
+      toast.success(toastAfterRdvCancelled(rdvLabel, result));
       onClose();
     } catch (err) {
       toast.error(String(err));
@@ -116,10 +91,9 @@ export function PipeRdvOutcomeDialog({
           disabled={saving}
         />
 
-        {highlightRevert && (
-          <p className="text-xs text-amber-700 dark:text-amber-300 rounded-md border border-amber-200/80 bg-amber-50/80 dark:border-amber-900 dark:bg-amber-950/30 px-3 py-2">
-            C&apos;était le dernier RDV de cette étape. Vous pouvez remettre l&apos;affaire en
-            prospection si le rendez-vous ne se fera pas.
+        {willRevertToProspection && (
+          <p className="text-xs text-muted-foreground rounded-md border border-dashed px-3 py-2">
+            L&apos;annulation remettra l&apos;affaire en prospection.
           </p>
         )}
 
@@ -142,17 +116,6 @@ export function PipeRdvOutcomeDialog({
           >
             RDV décalé — reproposer une date
           </Button>
-          {showRevert && (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full"
-              disabled={saving}
-              onClick={() => void handleRevert()}
-            >
-              Revenir en {PIPE_STAGE_LABELS.PROSPECTION}
-            </Button>
-          )}
           <Button
             type="button"
             variant="ghost"

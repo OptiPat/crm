@@ -105,7 +105,10 @@ export async function applyDueRdvStageAdvance(
   if (!target) return null;
 
   const notes = target.entry.contenu?.trim() || null;
-  return setPipeStage(pipe.id, target.stage as PipeStage, { notes });
+  return setPipeStage(pipe.id, target.stage as PipeStage, {
+    notes,
+    milestoneOccurredAt: target.entry.occurred_at,
+  });
 }
 
 export async function applyRdvStageOnSave(options: {
@@ -133,6 +136,7 @@ export async function applyRdvStageOnSave(options: {
 
   await setPipeStage(options.pipe.id, options.rdvStage, {
     notes: options.notes?.trim() || null,
+    milestoneOccurredAt: options.occurredAt,
   });
   return { advanced: true };
 }

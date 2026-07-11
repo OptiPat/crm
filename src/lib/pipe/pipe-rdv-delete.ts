@@ -45,13 +45,25 @@ export function shouldHighlightRevertToProspection(
   return isLastRdvForStage(entry, entries);
 }
 
-export function formatRdvCancellationNote(
+export function buildRdvCancelledTimelinePayload(
   entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre">,
   userNote?: string | null
-): string {
+): { titre: string | null; contenu: string | null } {
   const label = formatRdvEntryDisplayLabel(entry) ?? "RDV";
   const trimmed = userNote?.trim();
-  return trimmed ? `${label} annulé : ${trimmed}` : `${label} annulé`;
+  if (trimmed) {
+    return { titre: null, contenu: `${label} annulé : ${trimmed}` };
+  }
+  return { titre: null, contenu: `${label} annulé` };
+}
+
+/** Notes pour le jalon d'étape (retour prospection). */
+export function formatRdvCancellationStageNotes(
+  entry: Pick<PipeTimelineEntryRecord, "entry_type" | "titre">,
+  userNote?: string | null
+): string | null {
+  const { contenu } = buildRdvCancelledTimelinePayload(entry, userNote);
+  return contenu?.trim() || null;
 }
 
 export function milestoneStageExpectsRdv(stage: PipeStage | null): stage is PipeRdvStage {

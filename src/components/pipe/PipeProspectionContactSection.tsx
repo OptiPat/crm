@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
 import { ContactPersonSearch } from "@/components/contacts/ContactPersonSearch";
+import { Input } from "@/components/ui/input";
 import {
   createContact,
   getAllContacts,
@@ -75,7 +74,7 @@ export function PipeProspectionContactSection({
   const handlePrescripteurChange = async (prescripteurId: number | undefined) => {
     try {
       await persistContact({ prescripteur_id: prescripteurId ?? undefined });
-      toast.success("Prescripteur enregistré sur la fiche contact");
+      toast.success("Prescripteur enregistré");
     } catch {
       /* toast déjà affiché */
     }
@@ -90,7 +89,7 @@ export function PipeProspectionContactSection({
       });
       setAllContacts((prev) => [...prev, newPrescripteur]);
       await persistContact({ prescripteur_id: newPrescripteur.id });
-      toast.success("Prescripteur créé et enregistré");
+      toast.success("Prescripteur créé");
     } catch {
       /* toast déjà affiché par persistContact */
     }
@@ -104,51 +103,52 @@ export function PipeProspectionContactSection({
     if (trimmed === previous) return;
     try {
       await persistContact({ source_lead: trimmed || undefined });
-      toast.success("Source enregistrée sur la fiche contact");
+      toast.success("Source enregistrée");
     } catch {
       setSourceLead(current.source_lead ?? "");
     }
   };
 
   if (loading) {
-    return (
-      <p className="text-sm text-muted-foreground">Chargement de la fiche contact…</p>
-    );
+    return <p className="text-xs text-muted-foreground">Chargement…</p>;
   }
 
   if (!contact) {
-    return (
-      <p className="text-sm text-destructive">Contact introuvable.</p>
-    );
+    return <p className="text-xs text-destructive">Contact introuvable.</p>;
   }
 
   return (
-    <div className="rounded-lg border bg-muted/10 p-4 space-y-4">
-      <ContactPersonSearch
-        label="Prescripteur"
-        hint="Personne qui vous a recommandé comme client CGP"
-        placeholder="Rechercher un prescripteur..."
-        contacts={allContacts}
-        excludeId={contact.id}
-        value={contact.prescripteur_id}
-        onChange={(id) => void handlePrescripteurChange(id)}
-        badgeFn={(c) => c.categorie}
-        allowCreate
-        createTitle="Créer un nouveau prescripteur"
-        onCreate={handleCreatePrescripteur}
-      />
+    <div className="rounded-md border bg-muted/10 px-3 py-2.5">
+      <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+        <div className="space-y-1 min-w-0">
+          <p className="text-[11px] font-medium text-muted-foreground">Prescripteur</p>
+          <ContactPersonSearch
+            placeholder="Rechercher…"
+            contacts={allContacts}
+            excludeId={contact.id}
+            value={contact.prescripteur_id}
+            onChange={(id) => void handlePrescripteurChange(id)}
+            badgeFn={(c) => c.categorie}
+            allowCreate
+            createTitle="Nouveau prescripteur"
+            onCreate={handleCreatePrescripteur}
+          />
+        </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="pipe-source-lead">Source / Lead</Label>
-        <Input
-          id="pipe-source-lead"
-          value={sourceLead}
-          onChange={(e) => setSourceLead(e.target.value)}
-          onBlur={() => void handleSourceLeadBlur()}
-          placeholder="Recommandation, site web…"
-          disabled={saving}
-        />
-        <p className="text-xs text-muted-foreground">Cf. fiche contact</p>
+        <div className="space-y-1 min-w-0">
+          <label htmlFor="pipe-source-lead" className="text-[11px] font-medium text-muted-foreground">
+            Source
+          </label>
+          <Input
+            id="pipe-source-lead"
+            value={sourceLead}
+            onChange={(e) => setSourceLead(e.target.value)}
+            onBlur={() => void handleSourceLeadBlur()}
+            placeholder="Recommandation…"
+            disabled={saving}
+            className="h-8 text-sm"
+          />
+        </div>
       </div>
     </div>
   );

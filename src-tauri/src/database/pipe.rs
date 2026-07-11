@@ -336,7 +336,7 @@ impl super::Database {
             && is_valid_pipe_stage(&stage)
         {
             let notes = Self::normalized_pipe_notes(input.notes.as_deref());
-            self.insert_avancement_timeline_entry(id, &stage, notes.as_deref())?;
+            self.insert_avancement_timeline_entry(id, &stage, notes.as_deref(), None)?;
         }
         self.get_pipe_by_id(id)
     }
@@ -389,7 +389,7 @@ impl super::Database {
             && is_valid_pipe_stage(&stage)
             && old.stage != stage
         {
-            self.insert_avancement_timeline_entry(id, &stage, None)?;
+            self.insert_avancement_timeline_entry(id, &stage, None, None)?;
         }
         if input.pipe_type == PIPE_TYPE_AFFAIRE {
             let notes = Self::normalized_pipe_notes(input.notes.as_deref());
@@ -406,6 +406,7 @@ impl super::Database {
         id: i64,
         new_stage: &str,
         notes: Option<&str>,
+        milestone_occurred_at: Option<i64>,
     ) -> Result<super::models::Pipe> {
         let current = self.get_pipe_by_id(id)?;
         if current.pipe_type != PIPE_TYPE_AFFAIRE {
@@ -429,7 +430,7 @@ impl super::Database {
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
-        self.insert_avancement_timeline_entry(id, new_stage, notes)?;
+        self.insert_avancement_timeline_entry(id, new_stage, notes, milestone_occurred_at)?;
         self.get_pipe_by_id(id)
     }
 
@@ -544,7 +545,7 @@ mod tests {
             })
             .unwrap();
 
-        let updated = db.set_pipe_stage(affaire.id, PIPE_STAGE_R1, None).unwrap();
+        let updated = db.set_pipe_stage(affaire.id, PIPE_STAGE_R1, None, None).unwrap();
         assert_eq!(updated.stage, PIPE_STAGE_R1);
 
         let entries = db.list_pipe_timeline_entries(affaire.id).unwrap();
@@ -554,7 +555,7 @@ mod tests {
             .expect("timeline avancement");
         assert_eq!(avancement.titre.as_deref(), Some(PIPE_STAGE_R1));
 
-        db.set_pipe_stage(affaire.id, PIPE_STAGE_R1, None).unwrap();
+        db.set_pipe_stage(affaire.id, PIPE_STAGE_R1, None, None).unwrap();
         assert_eq!(
             db.list_pipe_timeline_entries(affaire.id)
                 .unwrap()
@@ -565,7 +566,7 @@ mod tests {
         );
 
         let with_notes = db
-            .set_pipe_stage(affaire.id, PIPE_STAGE_R2, Some("CR du second RDV"))
+            .set_pipe_stage(affaire.id, PIPE_STAGE_R2, Some("CR du second RDV"), None)
             .unwrap();
         assert_eq!(with_notes.stage, PIPE_STAGE_R2);
         let r2 = db

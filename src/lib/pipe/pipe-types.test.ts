@@ -7,6 +7,8 @@ import {
   pipeTypeUsesStage,
   getNextLinearStage,
   isTerminalPipeStage,
+  isManualPipeStageChangeAllowed,
+  isPipeBoardDropTargetStage,
   formatStageAdvancementMessage,
   validatePipeForm,
 } from "./pipe-types";
@@ -37,6 +39,10 @@ describe("pipe-types", () => {
     expect(getNextLinearStage("GAGNEE")).toBeNull();
     expect(isTerminalPipeStage("GAGNEE")).toBe(true);
     expect(isTerminalPipeStage("R2")).toBe(false);
+    expect(isManualPipeStageChangeAllowed("GAGNEE")).toBe(true);
+    expect(isManualPipeStageChangeAllowed("R1")).toBe(false);
+    expect(isPipeBoardDropTargetStage("PERDUE_OU_EN_ATTENTE")).toBe(true);
+    expect(isPipeBoardDropTargetStage("R2")).toBe(false);
     expect(formatStageAdvancementMessage("R1")).toBe("Avancement passé à R1");
   });
 

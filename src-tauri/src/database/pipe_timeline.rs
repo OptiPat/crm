@@ -249,16 +249,17 @@ impl super::Database {
         pipe_id: i64,
         new_stage: &str,
         notes: Option<&str>,
+        occurred_at: Option<i64>,
     ) -> Result<()> {
         let contenu = notes
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string);
-        let now = now_unix();
+        let at = occurred_at.unwrap_or_else(now_unix);
         self.conn.execute(
             "INSERT INTO pipe_timeline_entries (pipe_id, entry_type, titre, contenu, occurred_at, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
-            params![pipe_id, TIMELINE_AVANCEMENT, new_stage, contenu, now],
+            params![pipe_id, TIMELINE_AVANCEMENT, new_stage, contenu, at],
         )?;
         Ok(())
     }

@@ -530,12 +530,13 @@ pub fn set_pipe_stage(
     id: i64,
     stage: String,
     notes: Option<String>,
+    milestone_occurred_at: Option<i64>,
 ) -> Result<Pipe, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .set_pipe_stage(id, &stage, notes.as_deref())
+        .set_pipe_stage(id, &stage, notes.as_deref(), milestone_occurred_at)
         .map_err(|e| format!("Failed to set pipe stage: {}", e))
 }
 

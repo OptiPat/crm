@@ -30,7 +30,7 @@ import {
 } from "@/lib/pipe/pipe-prospection-phase";
 import {
   getAllStagePhaseUserEntryIds,
-  getOrderedStageMilestones,
+  getCanonicalStageMilestones,
   getPhaseUserEntriesForMilestone,
 } from "@/lib/pipe/pipe-stage-phase";
 import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
@@ -249,7 +249,6 @@ function TimelineEntryRow({
                       <PipeTimelinePhaseEntryRow
                         key={phaseEntry.id}
                         entry={phaseEntry}
-                        allEntries={allEntries}
                         pipe={pipe}
                         timeline={timeline}
                       />
@@ -307,7 +306,7 @@ export function PipeTimelineHistory({
   const context: PipeTimelineDisplayContext = {
     pipeType: pipe.pipe_type,
   };
-  const stageMilestones = getOrderedStageMilestones(entries, context);
+  const stageMilestones = getCanonicalStageMilestones(entries, context);
   const nestedPhaseEntryIds = getAllStagePhaseUserEntryIds(entries, context);
 
   const visibleEntries = entries.filter((entry) => !nestedPhaseEntryIds.has(entry.id));

@@ -1,44 +1,48 @@
 import { setPipeStage, type PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
-import { formatRdvCancellationNote } from "@/lib/pipe/pipe-rdv-delete";
+import {
+  buildRdvCancelledTimelinePayload,
+  canRevertPipeToProspection,
+} from "@/lib/pipe/pipe-rdv-delete";
 import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 
 export async function applyRdvCancelled(options: {
   timeline: ReturnType<typeof usePipeTimeline>;
+  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   entry: PipeTimelineEntryRecord;
   note?: string | null;
-}) {
-  const cancellationNote = formatRdvCancellationNote(options.entry, options.note);
+}): Promise<{ revertedToProspection: boolean }> {
+  const { titre, contenu } = buildRdvCancelledTimelinePayload(options.entry, options.note);
   const now = Math.floor(Date.now() / 1000);
 
   await options.timeline.addEntry({
     entry_type: "NOTE",
-    titre: "RDV annulé",
-    contenu: cancellationNote,
+    titre,
+    contenu,
     occurred_at: now,
   });
   await options.timeline.removeEntry(options.entry.id);
-}
 
-export async function applyRdvRevertToProspection(options: {
-  timeline: ReturnType<typeof usePipeTimeline>;
-  pipe: Pick<PipeRecord, "id" | "stage" | "pipe_type">;
-  entry: PipeTimelineEntryRecord;
-  note?: string | null;
-}) {
-  const cancellationNote = formatRdvCancellationNote(options.entry, options.note);
-  await options.timeline.removeEntry(options.entry.id);
-
-  if (options.pipe.pipe_type !== "AFFAIRE") return null;
-
-  const stageNotes = cancellationNote.trim() || null;
-  return setPipeStage(options.pipe.id, "PROSPECTION", { notes: stageNotes });
-}
-
-export function toastAfterRdvRevert(reverted: boolean) {
-  if (reverted) {
-    return `Affaire remise en ${PIPE_STAGE_LABELS.PROSPECTION}`;
+  const pipe = options.pipe;
+  if (
+    pipe?.pipe_type === "AFFAIRE" &&
+    pipe.stage !== "PROSPECTION" &&
+    canRevertPipeToProspection(pipe.stage)
+  ) {
+    await setPipeStage(pipe.id, "PROSPECTION", { notes: null });
+    return { revertedToProspection: true };
   }
-  return "RDV supprimé";
+
+  return { revertedToProspection: false };
+}
+
+export function toastAfterRdvCancelled(
+  rdvLabel: string,
+  result: { revertedToProspection: boolean }
+): string {
+  if (result.revertedToProspection) {
+    return `${rdvLabel} annulé — affaire remise en ${PIPE_STAGE_LABELS.PROSPECTION}`;
+  }
+  return `${rdvLabel} annulé`;
 }

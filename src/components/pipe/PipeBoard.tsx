@@ -7,6 +7,7 @@ import { PIPE_STAGE_BOARD_COLORS } from "@/lib/pipe/pipe-stage-colors";
 import {
   formatPipeContactLabel,
   isPipeStage,
+  isPipeBoardDropTargetStage,
   PIPE_STAGE_LABELS,
   PIPE_STAGES,
   type PipeStage,
@@ -62,6 +63,7 @@ export function PipeBoard({
   } | null>(null);
 
   const requestMoveToStage = (pipeId: number, stage: PipeStage) => {
+    if (!isPipeBoardDropTargetStage(stage)) return;
     const pipe = affaires.find((p) => p.id === pipeId);
     if (!pipe || pipe.stage === stage) return;
     onRequestStageChange(pipe, stage);
@@ -92,7 +94,7 @@ export function PipeBoard({
     }
 
     const stage = stageFromElement(document.elementFromPoint(e.clientX, e.clientY));
-    setDragOverStage(stage);
+    setDragOverStage(stage && isPipeBoardDropTargetStage(stage) ? stage : null);
   };
 
   const finishPointerDrag = async (e: React.PointerEvent) => {
@@ -114,7 +116,9 @@ export function PipeBoard({
     }
 
     const stage = stageFromElement(document.elementFromPoint(e.clientX, e.clientY));
-    if (stage) requestMoveToStage(drag.pipeId, stage);
+    if (stage && isPipeBoardDropTargetStage(stage)) {
+      requestMoveToStage(drag.pipeId, stage);
+    }
   };
 
   const handlePointerCancel = (e: React.PointerEvent) => {
@@ -145,6 +149,8 @@ export function PipeBoard({
         const colors = PIPE_STAGE_BOARD_COLORS[stage];
         const isDragOver = dragOverStage === stage;
 
+        const dropAllowed = isPipeBoardDropTargetStage(stage);
+
         return (
           <section
             key={stage}
@@ -153,7 +159,7 @@ export function PipeBoard({
               "flex min-h-0 min-w-0 flex-col rounded-lg border border-t-2 transition-colors sm:rounded-xl",
               colors.column,
               colors.accent,
-              isDragOver && "border-primary bg-primary/5 ring-1 ring-primary/30"
+              isDragOver && dropAllowed && "border-primary bg-primary/5 ring-1 ring-primary/30"
             )}
           >
             <header
@@ -186,7 +192,7 @@ export function PipeBoard({
             <div className="min-h-[80px] flex-1 space-y-1.5 overflow-y-auto p-1 sm:space-y-2 sm:p-1.5">
               {list.length === 0 ? (
                 <p className="px-0.5 py-4 text-center text-[10px] text-muted-foreground sm:text-xs">
-                  Déposer ici
+                  {dropAllowed ? "Déposer ici" : "—"}
                 </p>
               ) : (
                 list.map((pipe) => {

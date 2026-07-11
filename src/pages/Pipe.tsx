@@ -9,14 +9,13 @@ import {
   savePipeViewMode,
   type PipeViewMode,
 } from "@/lib/pipe/pipe-board-utils";
-import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
+import { isManualPipeStageChangeAllowed, type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
 import { PipeList } from "@/components/pipe/PipeList";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
 import { usePipeStageAdvance } from "@/hooks/usePipeStageAdvance";
-import { loadProspectionToR1Prefill } from "@/lib/pipe/pipe-prospection-prefill";
 import { cn } from "@/lib/utils";
 
 type PanelMode = "empty" | "create" | "view" | "edit";
@@ -169,19 +168,8 @@ export function Pipe() {
   };
 
   const handleRequestStageChange = async (pipe: PipeRecord, target: PipeStage) => {
-    let initialNotes: string | undefined;
-    if (
-      pipe.pipe_type === "AFFAIRE" &&
-      pipe.stage === "PROSPECTION" &&
-      target === "R1"
-    ) {
-      try {
-        initialNotes = await loadProspectionToR1Prefill(pipe);
-      } catch {
-        initialNotes = undefined;
-      }
-    }
-    stageAdvance.requestStageChange(pipe.id, target, pipe.titre, initialNotes);
+    if (!isManualPipeStageChangeAllowed(target)) return;
+    stageAdvance.requestStageChange(pipe.id, target, pipe.titre);
   };
 
   const detailPanel = (
@@ -223,7 +211,6 @@ export function Pipe() {
           pipe={selectedPipe}
           onEdit={openEdit}
           onDeleted={handleDeleted}
-          onRequestStageChange={(target) => void handleRequestStageChange(selectedPipe, target)}
         />
       )}
     </>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
+  buildRdvCancelledTimelinePayload,
   isLastRdvForStage,
   phaseEntriesHaveRdv,
   shouldHighlightRevertToProspection,
@@ -38,5 +39,21 @@ describe("pipe-rdv-delete", () => {
         { ...mkRdv(1, "R1"), entry_type: "APPEL", titre: "Appel" },
       ])
     ).toBe(false);
+  });
+
+  it("conserve la note utilisateur seule sans libellé RDV annulé", () => {
+    const rdv = mkRdv(1, "R1");
+    expect(buildRdvCancelledTimelinePayload(rdv, "Test 2.")).toEqual({
+      titre: null,
+      contenu: "RDV R1 annulé : Test 2.",
+    });
+  });
+
+  it("trace l'annulation sans note utilisateur", () => {
+    const rdv = mkRdv(1, "R1");
+    expect(buildRdvCancelledTimelinePayload(rdv, null)).toEqual({
+      titre: null,
+      contenu: "RDV R1 annulé",
+    });
   });
 });
