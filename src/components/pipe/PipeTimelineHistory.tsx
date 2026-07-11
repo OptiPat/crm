@@ -3,6 +3,7 @@ import { Calendar, FileText, Pencil, Phone, Send, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
+import { PipeTimelinePhaseEntryRow } from "@/components/pipe/PipeTimelinePhaseEntryRow";
 import { PipeProspectionMilestoneEditor } from "@/components/pipe/PipeProspectionMilestoneEditor";
 import { PipeProspectionMilestoneReadSummary } from "@/components/pipe/PipeProspectionMilestoneReadSummary";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
@@ -16,14 +17,22 @@ import {
   getPipeTimelineEntryStyle,
   isPipeTimelineSystemEntry,
   isStageMilestoneEntry,
+  timelineStageFromEntry,
   type PipeTimelineDisplayContext,
 } from "@/lib/pipe/pipe-timeline-display";
 import { getMilestoneDurationLabel } from "@/lib/pipe/pipe-timeline-duration";
 import {
-  getProspectionPhaseUserEntries,
+  milestoneStageExpectsRdv,
+  phaseEntriesHaveRdv,
+} from "@/lib/pipe/pipe-rdv-delete";
+import {
   isProspectionMilestoneEntry,
-  isProspectionPhaseUserEntry,
 } from "@/lib/pipe/pipe-prospection-phase";
+import {
+  getAllStagePhaseUserEntryIds,
+  getOrderedStageMilestones,
+  getPhaseUserEntriesForMilestone,
+} from "@/lib/pipe/pipe-stage-phase";
 import { formatTimelineOccurredAt } from "@/lib/pipe/pipe-timeline-types";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -84,6 +93,12 @@ function TimelineEntryRow({
   const displayContenu = formatTimelineEntryContenu(entry);
   const style = getPipeTimelineEntryStyle(entry, context);
   const durationLabel = getMilestoneDurationLabel(entry, allEntries, context);
+  const milestoneStage = timelineStageFromEntry(entry, context);
+  const showNoRdvHint =
+    milestone &&
+    !prospectionMilestone &&
+    milestoneStageExpectsRdv(milestoneStage) &&
+    !phaseEntriesHaveRdv(phaseEntries);
 
   const startEdit = () => {
     setDraftNotes(entry.contenu ?? "");
@@ -208,6 +223,8 @@ function TimelineEntryRow({
                 <PipeProspectionMilestoneReadSummary
                   contactId={contactId}
                   phaseEntries={phaseEntries}
+                  pipe={pipe}
+                  timeline={timeline}
                 />
               </>
             ) : (
@@ -220,6 +237,24 @@ function TimelineEntryRow({
                   <p className="text-xs text-muted-foreground italic">
                     Aucune note pour cette étape.
                   </p>
+                ) : null}
+                {showNoRdvHint ? (
+                  <p className="text-xs text-muted-foreground italic mt-2 rounded-md border border-dashed px-3 py-2">
+                    Aucun RDV enregistré pour cette étape.
+                  </p>
+                ) : null}
+                {milestone && !prospectionMilestone && phaseEntries.length > 0 ? (
+                  <ul className="space-y-2 m-0 list-none p-0 mt-2">
+                    {phaseEntries.map((phaseEntry) => (
+                      <PipeTimelinePhaseEntryRow
+                        key={phaseEntry.id}
+                        entry={phaseEntry}
+                        allEntries={allEntries}
+                        pipe={pipe}
+                        timeline={timeline}
+                      />
+                    ))}
+                  </ul>
                 ) : null}
               </>
             )}
@@ -272,11 +307,10 @@ export function PipeTimelineHistory({
   const context: PipeTimelineDisplayContext = {
     pipeType: pipe.pipe_type,
   };
-  const phaseEntries = getProspectionPhaseUserEntries(entries, context);
+  const stageMilestones = getOrderedStageMilestones(entries, context);
+  const nestedPhaseEntryIds = getAllStagePhaseUserEntryIds(entries, context);
 
-  const visibleEntries = entries.filter(
-    (entry) => !isProspectionPhaseUserEntry(entry, entries, context)
-  );
+  const visibleEntries = entries.filter((entry) => !nestedPhaseEntryIds.has(entry.id));
 
   useEffect(() => {
     if (!focusProspectionToken) return;
@@ -338,7 +372,11 @@ export function PipeTimelineHistory({
                     context={context}
                     pipe={pipe}
                     contactId={pipe.contact_id}
-                    phaseEntries={phaseEntries}
+                    phaseEntries={
+                      isStageMilestoneEntry(entry.entry_type)
+                        ? getPhaseUserEntriesForMilestone(entry, stageMilestones, entries)
+                        : []
+                    }
                     timeline={timeline}
                     prospectionMilestoneRef={prospectionMilestoneRef}
                     highlightProspection={highlightProspection}

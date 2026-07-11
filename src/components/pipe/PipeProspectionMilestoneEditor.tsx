@@ -162,6 +162,7 @@ export function PipeProspectionMilestoneEditor({
               <PipeTimelinePhaseEntryRow
                 key={entry.id}
                 entry={entry}
+                allEntries={timeline.entries}
                 pipe={pipe}
                 timeline={timeline}
                 disabled={rowDisabled}

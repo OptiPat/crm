@@ -5,6 +5,7 @@ import {
   datetimeLocalToUnix,
   PipeTimelineAddForm,
 } from "@/components/pipe/PipeTimelineAddForm";
+import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
@@ -33,6 +34,7 @@ const TYPE_ICONS = {
 
 interface PipeTimelinePhaseEntryRowProps {
   entry: PipeTimelineEntryRecord;
+  allEntries?: PipeTimelineEntryRecord[];
   pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   timeline: ReturnType<typeof usePipeTimeline>;
   disabled?: boolean;
@@ -40,11 +42,13 @@ interface PipeTimelinePhaseEntryRowProps {
 
 export function PipeTimelinePhaseEntryRow({
   entry,
+  allEntries = [],
   pipe,
   timeline,
   disabled = false,
 }: PipeTimelinePhaseEntryRowProps) {
   const [editing, setEditing] = useState(false);
+  const [rdvOutcomeOpen, setRdvOutcomeOpen] = useState(false);
   const [occurredAt, setOccurredAt] = useState(() => unixToDatetimeLocalInput(entry.occurred_at));
   const [titre, setTitre] = useState(entry.titre ?? "");
   const [contenu, setContenu] = useState(entry.contenu ?? "");
@@ -107,6 +111,10 @@ export function PipeTimelinePhaseEntryRow({
   };
 
   const handleDelete = async () => {
+    if (entry.entry_type === "RDV") {
+      setRdvOutcomeOpen(true);
+      return;
+    }
     try {
       await timeline.removeEntry(entry.id);
       toast.success("Entrée supprimée");
@@ -138,46 +146,60 @@ export function PipeTimelinePhaseEntryRow({
   }
 
   return (
-    <li className="flex items-start justify-between gap-2 rounded-md border bg-background/60 px-3 py-2">
-      <div className="min-w-0 space-y-0.5">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          {Icon && <Icon className="h-3 w-3 shrink-0" />}
-          <span className="font-medium text-foreground/80">{typeLabel}</span>
-          <time>{formatTimelineOccurredAt(entry.occurred_at)}</time>
+    <>
+      <li className="flex items-start justify-between gap-2 rounded-md border bg-background/60 px-3 py-2">
+        <div className="min-w-0 space-y-0.5">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {Icon && <Icon className="h-3 w-3 shrink-0" />}
+            <span className="font-medium text-foreground/80">{typeLabel}</span>
+            <time>{formatTimelineOccurredAt(entry.occurred_at)}</time>
+          </div>
+          {entry.entry_type !== "RDV" && entry.titre?.trim() && (
+            <p className="text-sm font-medium leading-snug">{entry.titre.trim()}</p>
+          )}
+          {entry.contenu?.trim() && (
+            <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+              {entry.contenu.trim()}
+            </p>
+          )}
         </div>
-        {entry.entry_type !== "RDV" && entry.titre?.trim() && (
-          <p className="text-sm font-medium leading-snug">{entry.titre.trim()}</p>
-        )}
-        {entry.contenu?.trim() && (
-          <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
-            {entry.contenu.trim()}
-          </p>
-        )}
-      </div>
-      <div className="flex shrink-0 gap-0.5">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          aria-label="Modifier"
-          onClick={startEdit}
-          disabled={disabled}
-        >
-          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          aria-label="Supprimer"
-          onClick={() => void handleDelete()}
-          disabled={disabled}
-        >
-          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-        </Button>
-      </div>
-    </li>
+        <div className="flex shrink-0 gap-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label="Modifier"
+            onClick={startEdit}
+            disabled={disabled}
+          >
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label="Supprimer"
+            onClick={() => void handleDelete()}
+            disabled={disabled}
+          >
+            <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+          </Button>
+        </div>
+      </li>
+
+      {entry.entry_type === "RDV" && (
+        <PipeRdvOutcomeDialog
+          open={rdvOutcomeOpen}
+          entry={entry}
+          allEntries={allEntries}
+          pipe={pipe}
+          timeline={timeline}
+          onClose={() => setRdvOutcomeOpen(false)}
+          onReschedule={startEdit}
+        />
+      )}
+    </>
   );
 }
