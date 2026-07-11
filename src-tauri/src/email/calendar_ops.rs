@@ -10,7 +10,6 @@ use tauri::AppHandle;
 #[derive(Debug, Serialize)]
 struct CreateEventBody<'a> {
     summary: &'a str,
-    description: &'a str,
     start: EventDateTime<'a>,
     end: EventDateTime<'a>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -78,12 +77,6 @@ pub fn create_google_calendar_rdv(
     } else {
         title.trim().to_string()
     };
-    let description = format!(
-        "Patrimoine CRM — contact #{contact_id}{}",
-        alerte_id
-            .map(|id| format!(" — alerte #{id}"))
-            .unwrap_or_default()
-    );
     let start_str = format_rfc3339_local(start_at);
     let end_str = format_rfc3339_local(end_at);
     let attendees = email
@@ -93,7 +86,6 @@ pub fn create_google_calendar_rdv(
 
     let body = CreateEventBody {
         summary: &summary,
-        description: &description,
         start: EventDateTime {
             date_time: &start_str,
             time_zone: "Europe/Paris",

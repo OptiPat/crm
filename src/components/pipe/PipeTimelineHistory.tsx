@@ -46,7 +46,10 @@ const TYPE_ICONS = {
 
 interface PipeTimelineHistoryProps {
   timeline: ReturnType<typeof usePipeTimeline>;
-  pipe: Pick<PipeRecord, "pipe_type" | "contact_id" | "id" | "stage">;
+  pipe: Pick<
+    PipeRecord,
+    "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre" | "id" | "stage"
+  >;
   focusProspectionToken?: number;
 }
 
@@ -67,7 +70,10 @@ function TimelineEntryRow({
   entry: PipeTimelineEntryRecord;
   allEntries: PipeTimelineEntryRecord[];
   context: PipeTimelineDisplayContext;
-  pipe: Pick<PipeRecord, "pipe_type" | "contact_id" | "id" | "stage">;
+  pipe: Pick<
+    PipeRecord,
+    "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre" | "id" | "stage"
+  >;
   contactId: number;
   phaseEntries: PipeTimelineEntryRecord[];
   timeline: ReturnType<typeof usePipeTimeline>;

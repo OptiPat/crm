@@ -13,6 +13,7 @@ import {
   addPipeTimelineEntryWithRdvStage,
   toastAfterRdvSave,
 } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-context";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import {
   PIPE_TIMELINE_TYPE_LABELS,
@@ -30,7 +31,10 @@ const TYPE_ICONS = {
 
 interface PipeTimelineQuickAddProps {
   timeline: ReturnType<typeof usePipeTimeline>;
-  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
+  pipe?: Pick<
+    PipeRecord,
+    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
+  > | null;
   onAdded?: () => void;
 }
 
@@ -66,6 +70,7 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
       const result = await addPipeTimelineEntryWithRdvStage({
         timeline,
         pipe,
+        calendar: pipe ? buildPipeRdvCalendarContext(pipe) : undefined,
         entryType: addingType,
         rdvStage: addingType === "RDV" ? rdvStage : undefined,
         titre: titre.trim() || defaultTimelineEntryTitle(addingType),
