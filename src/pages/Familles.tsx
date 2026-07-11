@@ -92,6 +92,7 @@ export function Familles({ onNavigate }: FamillesProps) {
   const [highlightContactId, setHighlightContactId] = useState<number | null>(null);
   const [showCreateFamilleModal, setShowCreateFamilleModal] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [addMemberFamille, setAddMemberFamille] = useState<FamilleGroup | null>(null);
   const [addMemberLoading, setAddMemberLoading] = useState(false);
   const [pendingMemberAction, setPendingMemberAction] =
     useState<PendingMemberAction | null>(null);
@@ -169,11 +170,18 @@ export function Familles({ onNavigate }: FamillesProps) {
     [contacts, foyers, famillesDb, investissementsByContact, investissementsByFoyer]
   );
 
+  const setExpandedKey = useCallback(
+    (key: string | null) => {
+      setExpandedFamilleKey(key);
+      updatePrefs({ expandedFamilleKey: key });
+    },
+    [updatePrefs]
+  );
+
   const applyFamillesIntent = useCallback(
     (intent: FamillesNavigationIntent) => {
       if (intent.familleKey != null) {
-        setExpandedFamilleKey(intent.familleKey);
-        updatePrefs({ expandedFamilleKey: intent.familleKey });
+        setExpandedKey(intent.familleKey);
       }
       if (intent.focusContactId != null) {
         updatePrefs({ searchQuery: "" });
@@ -182,7 +190,7 @@ export function Familles({ onNavigate }: FamillesProps) {
         closeContactDetail();
       }
     },
-    [updatePrefs, closeContactDetail]
+    [setExpandedKey, updatePrefs, closeContactDetail]
   );
 
   useEffect(() => {
@@ -208,10 +216,9 @@ export function Familles({ onNavigate }: FamillesProps) {
     pendingFocusContactIdRef.current = null;
     const key = findFamilleKeyForContact(focusId, familleGroups);
     if (key != null) {
-      setExpandedFamilleKey(key);
-      updatePrefs({ expandedFamilleKey: key });
+      setExpandedKey(key);
     }
-  }, [familleGroups, updatePrefs]);
+  }, [familleGroups, setExpandedKey]);
 
   const filteredFamilles = useMemo(() => {
     const searched = searchFamilleGroups(prefs.searchQuery, familleGroups);
@@ -225,14 +232,17 @@ export function Familles({ onNavigate }: FamillesProps) {
   useEffect(() => {
     if (loading || expandedFamilleKey == null) return;
     if (familleGroups.some((g) => g.key === expandedFamilleKey)) return;
-    const saved = prefs.expandedFamilleKey;
-    if (saved != null && familleGroups.some((g) => g.key === saved)) {
-      setExpandedFamilleKey(saved);
-    } else {
-      setExpandedFamilleKey(null);
-      updatePrefs({ expandedFamilleKey: null });
+
+    // Après promotion auto→manuelle, le groupe peut ne pas être recalculé tout de suite.
+    if (expandedFamilleKey.startsWith("manual:")) {
+      const id = parseInt(expandedFamilleKey.slice("manual:".length), 10);
+      if (Number.isFinite(id) && famillesDb.some((f) => f.id === id)) {
+        return;
+      }
     }
-  }, [loading, familleGroups, expandedFamilleKey, prefs.expandedFamilleKey, updatePrefs]);
+
+    setExpandedKey(null);
+  }, [loading, familleGroups, expandedFamilleKey, famillesDb, setExpandedKey]);
 
   const expandedFamille = useMemo(
     () =>
@@ -261,12 +271,8 @@ export function Familles({ onNavigate }: FamillesProps) {
   const withFoyerCount = familleGroups.filter((g) => g.foyers.length > 0).length;
 
   const toggleFamille = (famille: FamilleGroup) => {
-    const key = famille.key;
-    setExpandedFamilleKey((prev) => {
-      const next = prev === key ? null : key;
-      updatePrefs({ expandedFamilleKey: next });
-      return next;
-    });
+    const next = expandedFamilleKey === famille.key ? null : famille.key;
+    setExpandedKey(next);
   };
 
   const openMember = (contact: Contact) => {
@@ -277,16 +283,23 @@ export function Familles({ onNavigate }: FamillesProps) {
   const handleAddMemberClick = async (famille: FamilleGroup) => {
     if (addMemberLoading) return;
     if (famille.familleId != null) {
+      setAddMemberFamille(famille);
       setShowAddMemberModal(true);
       return;
     }
     setAddMemberLoading(true);
     try {
       const familleId = await promoteAutoFamilleToManual(famille);
-      const key = `manual:${familleId}`;
-      setExpandedFamilleKey(key);
-      updatePrefs({ expandedFamilleKey: key });
       await loadData();
+      const key = `manual:${familleId}`;
+      const promoted: FamilleGroup = {
+        ...famille,
+        key,
+        familleId,
+        isManual: true,
+      };
+      setExpandedKey(key);
+      setAddMemberFamille(promoted);
       setShowAddMemberModal(true);
       toast.success(
         `Famille ${famille.nom} : les membres actuels sont conservés, vous pouvez en ajouter d'autres.`
@@ -332,8 +345,7 @@ export function Familles({ onNavigate }: FamillesProps) {
           (c) => c.famille_id === famille.familleId
         );
         if (!stillHasMembers) {
-          setExpandedFamilleKey(null);
-          updatePrefs({ expandedFamilleKey: null });
+          setExpandedKey(null);
         }
       }
       await loadData();
@@ -568,7 +580,10 @@ export function Familles({ onNavigate }: FamillesProps) {
                           variant="outline"
                           className="gap-1.5"
                           disabled={addMemberLoading}
-                          onClick={() => void handleAddMemberClick(famille)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void handleAddMemberClick(famille);
+                          }}
                         >
                           <UserPlus className="h-4 w-4" />
                           Ajouter un membre
@@ -601,19 +616,20 @@ export function Familles({ onNavigate }: FamillesProps) {
         open={showCreateFamilleModal}
         onOpenChange={setShowCreateFamilleModal}
         onSuccess={(familleId) => {
-          const key = `manual:${familleId}`;
-          setExpandedFamilleKey(key);
-          updatePrefs({ expandedFamilleKey: key });
+          setExpandedKey(`manual:${familleId}`);
           void loadData();
         }}
       />
 
-      {showAddMemberModal && expandedFamille?.familleId != null && (
+      {showAddMemberModal && addMemberFamille?.familleId != null && (
         <FamilleAddMemberModal
           open={showAddMemberModal}
-          onOpenChange={setShowAddMemberModal}
-          famille={expandedFamille}
-          existingMemberIds={expandedFamille.membres
+          onOpenChange={(open) => {
+            setShowAddMemberModal(open);
+            if (!open) setAddMemberFamille(null);
+          }}
+          famille={addMemberFamille}
+          existingMemberIds={addMemberFamille.membres
             .map((m) => m.contact.id!)
             .filter(Boolean)}
           onSuccess={() => void loadData()}

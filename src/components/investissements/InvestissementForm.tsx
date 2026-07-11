@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -113,10 +113,20 @@ import {
   type ExceltisFormChoice,
 } from "@/components/contacts/ContactFormExceltisSection";
 import {
+  buildExceltisFormProposals,
+  contactHasExceltisAssignment,
   ensureExceltisEtiquetteAndAssign,
+  formatExceltisEtiquetteNom,
   getExceltisMillesimeProposals,
+  inferExceltisFormChoice,
   isExceltisEligibleProductType,
+  type ExceltisMillesimeProposalView,
 } from "@/lib/etiquettes/exceltis";
+import {
+  getAllEtiquettes,
+  getEtiquettesByContact,
+  type ContactEtiquetteDetails,
+} from "@/lib/api/tauri-etiquettes";
 import { dateFieldToIso } from "@/lib/contacts/contact-form-utils";
 import { unixToDateInput } from "@/lib/dates/calendar-date";
 import {
@@ -280,6 +290,13 @@ export function InvestissementForm({
   const [exceltisChoice, setExceltisChoice] = useState<ExceltisFormChoice>({
     hasExceltis: false,
   });
+  const [exceltisProposals, setExceltisProposals] = useState<
+    ExceltisMillesimeProposalView[] | null
+  >(null);
+  const [contactExceltisEtiquettes, setContactExceltisEtiquettes] = useState<
+    ContactEtiquetteDetails[]
+  >([]);
+  const exceltisChoiceTouchedRef = useRef(false);
   const [liveEncours, setLiveEncours] = useState<{
     actuel?: number;
     date?: number;
@@ -350,6 +367,8 @@ export function InvestissementForm({
     }
     if (!isExceltisEligibleProductType(typeProduit)) {
       setExceltisChoice({ hasExceltis: false });
+      setExceltisProposals(null);
+      setContactExceltisEtiquettes([]);
     }
     if (typeProduit !== "SCPI_DEMEMBREMENT") {
       setDemembrementKind("TEMPORAIRE");
@@ -357,6 +376,47 @@ export function InvestissementForm({
       setDetentionMode(null);
     }
   }, [typeProduit, accepteVersementProgramme, accepteReinvestissement, isPrevoyance]);
+
+  useEffect(() => {
+    if (!open || !showExceltisSection || !contactId) {
+      setExceltisProposals(null);
+      setContactExceltisEtiquettes([]);
+      exceltisChoiceTouchedRef.current = false;
+      return;
+    }
+
+    exceltisChoiceTouchedRef.current = false;
+    let cancelled = false;
+    const contactNumericId = parseInt(contactId, 10);
+
+    void (async () => {
+      try {
+        const [allEtiquettes, contactEtiquettes] = await Promise.all([
+          getAllEtiquettes(),
+          getEtiquettesByContact(contactNumericId),
+        ]);
+        if (cancelled) {
+          return;
+        }
+        const proposals = buildExceltisFormProposals(allEtiquettes, contactEtiquettes);
+        setExceltisProposals(proposals);
+        setContactExceltisEtiquettes(contactEtiquettes);
+        if (!exceltisChoiceTouchedRef.current) {
+          setExceltisChoice(inferExceltisFormChoice(proposals));
+        }
+      } catch (error) {
+        console.error("Error loading Exceltis proposals:", error);
+        if (!cancelled) {
+          setExceltisProposals(null);
+          setContactExceltisEtiquettes([]);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, showExceltisSection, contactId]);
 
   useEffect(() => {
     if (!open || !typeProduit || !partenaireId) {
@@ -547,7 +607,15 @@ export function InvestissementForm({
     setNotes("");
     setOrigine("MON_CONSEIL");
     setExceltisChoice({ hasExceltis: false });
+    setExceltisProposals(null);
+    setContactExceltisEtiquettes([]);
+    exceltisChoiceTouchedRef.current = false;
     setLiveEncours({});
+  };
+
+  const handleExceltisChoiceChange = (choice: ExceltisFormChoice) => {
+    exceltisChoiceTouchedRef.current = true;
+    setExceltisChoice(choice);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -658,13 +726,29 @@ export function InvestissementForm({
         await createInvestissement(newInvestissement);
 
         if (exceltisOption && exceltisChoice.hasExceltis) {
-          const etiquetteNom = await ensureExceltisEtiquetteAndAssign(
-            parseInt(contactId, 10),
-            exceltisOption,
-            exceltisChoice.gamme
+          const alreadyAssigned = contactHasExceltisAssignment(
+            contactExceltisEtiquettes,
+            exceltisChoice.gamme,
+            exceltisOption
           );
-          notifyEtiquettesChanged();
-          toast.success(`Investissement créé — étiquette « ${etiquetteNom} »`);
+          if (alreadyAssigned) {
+            const etiquetteNom = formatExceltisEtiquetteNom(
+              exceltisChoice.gamme,
+              exceltisOption.month,
+              exceltisOption.year
+            );
+            toast.success(
+              `Investissement créé — étiquette « ${etiquetteNom} » déjà présente`
+            );
+          } else {
+            const etiquetteNom = await ensureExceltisEtiquetteAndAssign(
+              parseInt(contactId, 10),
+              exceltisOption,
+              exceltisChoice.gamme
+            );
+            notifyEtiquettesChanged();
+            toast.success(`Investissement créé — étiquette « ${etiquetteNom} »`);
+          }
         } else {
           toast.success("Investissement créé");
         }
@@ -953,7 +1037,8 @@ export function InvestissementForm({
           {showExceltisSection && (
             <ContactFormExceltisSection
               value={exceltisChoice}
-              onChange={setExceltisChoice}
+              onChange={handleExceltisChoiceChange}
+              proposals={exceltisProposals ?? undefined}
             />
           )}
 

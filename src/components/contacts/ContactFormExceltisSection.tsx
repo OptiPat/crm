@@ -1,9 +1,13 @@
 import { Label } from "@/components/ui/label";
 import {
   EXCELITIS_GAMME_OPTIONS,
+  catalogueHasExceltisEtiquette,
+  contactHasGammeForProposal,
+  findCatalogueMatchForGamme,
+  formatExceltisEtiquetteNom,
   getExceltisMillesimeProposals,
   type ExceltisGamme,
-  type ExceltisMillesimeOption,
+  type ExceltisMillesimeProposalView,
 } from "@/lib/etiquettes/exceltis";
 
 export type ExceltisFormChoice =
@@ -13,25 +17,44 @@ export type ExceltisFormChoice =
 interface ContactFormExceltisSectionProps {
   value: ExceltisFormChoice;
   onChange: (value: ExceltisFormChoice) => void;
-  proposals?: ExceltisMillesimeOption[];
+  proposals?: ExceltisMillesimeProposalView[];
+}
+
+function defaultProposals(): ExceltisMillesimeProposalView[] {
+  return getExceltisMillesimeProposals().map((option) => ({
+    ...option,
+    catalogueMatches: [],
+    contactGammes: {},
+  }));
 }
 
 export function ContactFormExceltisSection({
   value,
   onChange,
-  proposals = getExceltisMillesimeProposals(),
+  proposals = defaultProposals(),
 }: ContactFormExceltisSectionProps) {
   const defaultGamme: ExceltisGamme = "Rendement";
   const selectedKey =
     value.hasExceltis && value.millesimeKey ? value.millesimeKey : proposals[2]?.key ?? "";
   const selectedGamme = value.hasExceltis ? value.gamme : defaultGamme;
+  const selectedProposal = proposals.find((p) => p.key === selectedKey);
+
+  const catalogueExists =
+    value.hasExceltis &&
+    catalogueHasExceltisEtiquette(proposals, selectedGamme, selectedKey);
+  const alreadyOnContact =
+    value.hasExceltis &&
+    selectedProposal != null &&
+    contactHasGammeForProposal(selectedProposal, selectedGamme);
 
   return (
     <div className="space-y-3 rounded-lg border border-amber-200/80 bg-amber-50/50 px-3 py-3">
       <div>
         <p className="text-sm font-medium">Exceltis (UC structurée)</p>
         <p className="text-xs text-muted-foreground mt-0.5">
-          Sur assurance-vie ou PER uniquement. Les anciens clients : étiquette à la main.
+          Sur assurance-vie ou PER uniquement. Chaque gamme a sa propre étiquette
+          (ex. « Exceltis Sérénité — Août 2026 ») : réutilisée si déjà créée, sinon
+          création automatique à l&apos;enregistrement.
         </p>
       </div>
 
@@ -96,35 +119,79 @@ export function ContactFormExceltisSection({
 
           <div className="space-y-2">
             <Label className="text-xs text-muted-foreground">
-              Millésime (M+1, M+2, M+3 par rapport au mois en cours)
+              Millésime {value.gamme} (M+1, M+2, M+3)
             </Label>
             <div className="flex flex-col gap-2">
-              {proposals.map((opt) => (
-                <label
-                  key={opt.key}
-                  className="flex items-center gap-2 text-sm cursor-pointer rounded-md border border-transparent hover:border-amber-300/60 px-2 py-1"
-                >
-                  <input
-                    type="radio"
-                    name="exceltis-millesime"
-                    className="h-4 w-4"
-                    checked={value.millesimeKey === opt.key}
-                    onChange={() =>
-                      onChange({
-                        hasExceltis: true,
-                        gamme: value.gamme,
-                        millesimeKey: opt.key,
-                      })
-                    }
-                  />
-                  <span>
-                    {opt.label}
-                    <span className="text-muted-foreground text-xs ml-1">(M+{opt.offset})</span>
-                  </span>
-                </label>
-              ))}
+              {proposals.map((opt) => {
+                const catalogueMatch = findCatalogueMatchForGamme(opt, value.gamme);
+                const onContactForGamme = contactHasGammeForProposal(opt, value.gamme);
+                const plannedNom = formatExceltisEtiquetteNom(
+                  value.gamme,
+                  opt.month,
+                  opt.year
+                );
+
+                return (
+                  <label
+                    key={opt.key}
+                    className="flex items-start gap-2 text-sm cursor-pointer rounded-md border border-transparent hover:border-amber-300/60 px-2 py-1"
+                  >
+                    <input
+                      type="radio"
+                      name="exceltis-millesime"
+                      className="h-4 w-4 mt-0.5"
+                      checked={value.millesimeKey === opt.key}
+                      onChange={() =>
+                        onChange({
+                          hasExceltis: true,
+                          gamme: value.gamme,
+                          millesimeKey: opt.key,
+                        })
+                      }
+                    />
+                    <span className="min-w-0">
+                      <span>
+                        {opt.label}
+                        <span className="text-muted-foreground text-xs ml-1">
+                          (M+{opt.offset})
+                        </span>
+                      </span>
+                      {catalogueMatch ? (
+                        <span className="block text-xs text-amber-800/90 mt-0.5">
+                          Étiquette existante : {catalogueMatch.nom}
+                        </span>
+                      ) : (
+                        <span className="block text-xs text-muted-foreground mt-0.5">
+                          À créer : {plannedNom}
+                        </span>
+                      )}
+                      {onContactForGamme && (
+                        <span className="block text-xs text-muted-foreground mt-0.5">
+                          Déjà sur ce client ({value.gamme})
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
             </div>
           </div>
+
+          {alreadyOnContact && (
+            <p className="text-xs text-muted-foreground">
+              Ce client a déjà « {formatExceltisEtiquetteNom(selectedGamme, selectedProposal!.month, selectedProposal!.year)} » — pas de doublon.
+            </p>
+          )}
+          {!alreadyOnContact && catalogueExists && selectedProposal && (
+            <p className="text-xs text-muted-foreground">
+              « {findCatalogueMatchForGamme(selectedProposal, selectedGamme)?.nom} » sera réutilisée à l&apos;enregistrement.
+            </p>
+          )}
+          {!alreadyOnContact && !catalogueExists && selectedProposal && (
+            <p className="text-xs text-muted-foreground">
+              « {formatExceltisEtiquetteNom(selectedGamme, selectedProposal.month, selectedProposal.year)} » sera créée à l&apos;enregistrement.
+            </p>
+          )}
         </div>
       )}
     </div>
