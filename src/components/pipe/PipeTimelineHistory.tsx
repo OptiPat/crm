@@ -163,6 +163,7 @@ function TimelineEntryRow({
                 onDraftNotesChange={setDraftNotes}
                 onCancel={cancelEdit}
                 onSaveNotes={saveMilestoneNotes}
+                onAfterEntryAdded={cancelEdit}
               />
             ) : editing ? (
               <div className="space-y-2">

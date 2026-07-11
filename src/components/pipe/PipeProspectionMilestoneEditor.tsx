@@ -43,6 +43,7 @@ interface PipeProspectionMilestoneEditorProps {
   onDraftNotesChange: (value: string) => void;
   onCancel: () => void;
   onSaveNotes: () => Promise<void>;
+  onAfterEntryAdded?: () => void;
 }
 
 export function PipeProspectionMilestoneEditor({
@@ -55,6 +56,7 @@ export function PipeProspectionMilestoneEditor({
   onDraftNotesChange,
   onCancel,
   onSaveNotes,
+  onAfterEntryAdded,
 }: PipeProspectionMilestoneEditorProps) {
   const [addingType, setAddingType] = useState<PipeTimelineUserType | null>(null);
   const [occurredAt, setOccurredAt] = useState("");
@@ -100,6 +102,7 @@ export function PipeProspectionMilestoneEditor({
         toast.success(`${PIPE_TIMELINE_TYPE_LABELS[addingType]} ajouté`);
       }
       cancelAdd();
+      onAfterEntryAdded?.();
     } catch (err) {
       toast.error(String(err));
     } finally {
