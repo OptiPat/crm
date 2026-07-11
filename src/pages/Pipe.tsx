@@ -1,23 +1,103 @@
-import { useCallback, useEffect, useState } from "react";
-import { Briefcase, ClipboardList, PhoneCall } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { subscribePipeChanged } from "@/lib/pipe/pipe-events";
+import {
+  filterAffairesForBoard,
+  loadPipeViewMode,
+  savePipeViewMode,
+  type PipeViewMode,
+} from "@/lib/pipe/pipe-board-utils";
 import { type PipeType } from "@/lib/pipe/pipe-types";
 import { PipeList } from "@/components/pipe/PipeList";
+import { PipeBoard } from "@/components/pipe/PipeBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { cn } from "@/lib/utils";
 
 type PanelMode = "empty" | "create" | "view" | "edit";
 
+function PipeCreateButtons({ onCreate }: { onCreate: (type: PipeType) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => onCreate("AFFAIRE")}
+      >
+        <Briefcase className="h-3.5 w-3.5" />
+        Affaire
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => onCreate("ACTE_GESTION")}
+      >
+        <ClipboardList className="h-3.5 w-3.5" />
+        Acte
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="gap-1.5"
+        onClick={() => onCreate("ACTION")}
+      >
+        <PhoneCall className="h-3.5 w-3.5" />
+        Action
+      </Button>
+    </div>
+  );
+}
+
+function PipeViewToggle({
+  mode,
+  onChange,
+}: {
+  mode: PipeViewMode;
+  onChange: (mode: PipeViewMode) => void;
+}) {
+  return (
+    <div className="inline-flex rounded-lg border p-1 bg-muted/30">
+      <Button
+        type="button"
+        variant={mode === "board" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-8 gap-1.5 px-3"
+        onClick={() => onChange("board")}
+      >
+        <LayoutGrid className="h-3.5 w-3.5" />
+        Tableau
+      </Button>
+      <Button
+        type="button"
+        variant={mode === "list" ? "secondary" : "ghost"}
+        size="sm"
+        className="h-8 gap-1.5 px-3"
+        onClick={() => onChange("list")}
+      >
+        <List className="h-3.5 w-3.5" />
+        Liste
+      </Button>
+    </div>
+  );
+}
+
 export function Pipe() {
   const [pipes, setPipes] = useState<PipeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<PipeViewMode>(() => loadPipeViewMode());
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
   const [selectedPipe, setSelectedPipe] = useState<PipeRecord | null>(null);
   const [createType, setCreateType] = useState<PipeType>("AFFAIRE");
+
+  const affaires = useMemo(() => filterAffairesForBoard(pipes), [pipes]);
 
   const loadPipes = useCallback(async () => {
     try {
@@ -38,6 +118,11 @@ export function Pipe() {
       void loadPipes();
     });
   }, [loadPipes]);
+
+  const setViewModePersisted = (mode: PipeViewMode) => {
+    setViewMode(mode);
+    savePipeViewMode(mode);
+  };
 
   const openCreate = (type: PipeType) => {
     setCreateType(type);
@@ -74,105 +159,124 @@ export function Pipe() {
     }
   };
 
+  const showDetailPanel =
+    panelMode === "create" || panelMode === "edit" || (panelMode === "view" && selectedPipe);
+
+  const detailPanel = (
+    <>
+      {panelMode === "empty" && viewMode === "board" && (
+        <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
+          <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
+          <p className="text-sm font-medium">Sélectionnez une affaire</p>
+          <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+            Cliquez une carte ou glissez-la vers une autre colonne pour mettre à jour
+            l&apos;avancement.
+          </p>
+        </div>
+      )}
+
+      {panelMode === "empty" && viewMode === "list" && (
+        <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
+          <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
+          <p className="text-sm font-medium">Sélectionnez un pipe ou créez-en un</p>
+          <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+            Affaires, actes de gestion et actions — tous liés à un contact.
+          </p>
+        </div>
+      )}
+
+      {(panelMode === "create" || panelMode === "edit") && (
+        <PipeFormPanel
+          key={panelMode === "edit" ? `edit-${selectedPipe?.id}` : `create-${createType}`}
+          pipe={panelMode === "edit" ? selectedPipe : null}
+          allPipes={pipes}
+          initialType={panelMode === "edit" ? undefined : createType}
+          onSuccess={handleSaved}
+          onCancel={cancelPanel}
+        />
+      )}
+
+      {panelMode === "view" && selectedPipe && (
+        <PipeDetailPanel pipe={selectedPipe} onEdit={openEdit} onDeleted={handleDeleted} />
+      )}
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-4 min-h-[calc(100vh-10rem)]">
-      <div
-        className={cn(
-          "flex flex-1 min-h-0 flex-col lg:flex-row gap-4",
-          "rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden"
-        )}
-      >
-        {/* Liste — colonne gauche */}
-        <aside className="flex flex-col lg:w-[min(100%,380px)] lg:shrink-0 lg:border-r border-border/70 min-h-[320px] lg:min-h-0">
-          <div className="border-b px-4 py-3 space-y-3">
-            <div>
-              <p className="text-sm font-medium">{pipes.length} pipe{pipes.length !== 1 ? "s" : ""}</p>
-              <p className="text-xs text-muted-foreground">
-                Affaire, acte de gestion ou action — lié à un contact.
-              </p>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-auto flex-col gap-1 py-2 px-1 text-xs"
-                onClick={() => openCreate("AFFAIRE")}
-              >
-                <Briefcase className="h-3.5 w-3.5" />
-                Affaire
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-auto flex-col gap-1 py-2 px-1 text-xs"
-                onClick={() => openCreate("ACTE_GESTION")}
-              >
-                <ClipboardList className="h-3.5 w-3.5" />
-                Acte
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-auto flex-col gap-1 py-2 px-1 text-xs"
-                onClick={() => openCreate("ACTION")}
-              >
-                <PhoneCall className="h-3.5 w-3.5" />
-                Action
-              </Button>
-            </div>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <PipeViewToggle mode={viewMode} onChange={setViewModePersisted} />
+        <PipeCreateButtons onCreate={openCreate} />
+      </div>
 
-          <div className="flex-1 overflow-y-auto min-h-0">
-            {loading && (
+      {error && <p className="text-sm text-destructive px-1">{error}</p>}
+
+      {viewMode === "board" ? (
+        <div
+          className={cn(
+            "flex flex-1 min-h-0 flex-col xl:flex-row gap-4",
+            "rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden"
+          )}
+        >
+          <div className="flex flex-1 min-h-[360px] min-w-0 flex-col">
+            {loading ? (
               <p className="px-4 py-6 text-sm text-muted-foreground">Chargement…</p>
-            )}
-            {error && <p className="px-4 py-6 text-sm text-destructive">{error}</p>}
-            {!loading && !error && (
-              <PipeList
-                pipes={pipes}
+            ) : (
+              <PipeBoard
+                affaires={affaires}
                 selectedId={selectedPipe?.id ?? null}
                 onSelect={openView}
               />
             )}
           </div>
-        </aside>
 
-        {/* Panneau droit — détail / formulaire */}
-        <main className="flex-1 min-w-0 min-h-[360px] lg:min-h-0 bg-background/50">
-          {panelMode === "empty" && (
-            <div className="flex h-full flex-col items-center justify-center px-6 py-12 text-center">
-              <Briefcase className="h-10 w-10 text-muted-foreground/50 mb-4" />
-              <p className="text-sm font-medium">Sélectionnez un pipe ou créez-en un</p>
-              <p className="text-sm text-muted-foreground mt-2 max-w-sm">
-                Utilisez les boutons Affaire, Acte ou Action à gauche — le formulaire s&apos;ouvre ici,
-                sans fenêtre flottante.
+          {showDetailPanel && (
+            <aside
+              className={cn(
+                "min-h-[320px] xl:min-h-0 xl:w-[min(100%,420px)] xl:shrink-0",
+                "border-t xl:border-t-0 xl:border-l border-border/70 bg-background/50"
+              )}
+            >
+              {detailPanel}
+            </aside>
+          )}
+        </div>
+      ) : (
+        <div
+          className={cn(
+            "flex flex-1 min-h-0 flex-col lg:flex-row gap-4",
+            "rounded-xl border border-border/70 bg-card shadow-sm overflow-hidden"
+          )}
+        >
+          <aside className="flex flex-col lg:w-[min(100%,380px)] lg:shrink-0 lg:border-r border-border/70 min-h-[320px] lg:min-h-0">
+            <div className="border-b px-4 py-3">
+              <p className="text-sm font-medium">
+                {pipes.length} pipe{pipes.length !== 1 ? "s" : ""}
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {affaires.length} affaire{affaires.length !== 1 ? "s" : ""} · actes et actions
+                inclus
               </p>
             </div>
-          )}
 
-          {(panelMode === "create" || panelMode === "edit") && (
-            <PipeFormPanel
-              key={panelMode === "edit" ? `edit-${selectedPipe?.id}` : `create-${createType}`}
-              pipe={panelMode === "edit" ? selectedPipe : null}
-              allPipes={pipes}
-              initialType={panelMode === "edit" ? undefined : createType}
-              onSuccess={handleSaved}
-              onCancel={cancelPanel}
-            />
-          )}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {loading ? (
+                <p className="px-4 py-6 text-sm text-muted-foreground">Chargement…</p>
+              ) : (
+                <PipeList
+                  pipes={pipes}
+                  selectedId={selectedPipe?.id ?? null}
+                  onSelect={openView}
+                />
+              )}
+            </div>
+          </aside>
 
-          {panelMode === "view" && selectedPipe && (
-            <PipeDetailPanel
-              pipe={selectedPipe}
-              onEdit={openEdit}
-              onDeleted={handleDeleted}
-            />
-          )}
-        </main>
-      </div>
+          <main className="flex-1 min-w-0 min-h-[360px] lg:min-h-0 bg-background/50">
+            {detailPanel}
+          </main>
+        </div>
+      )}
     </div>
   );
 }
