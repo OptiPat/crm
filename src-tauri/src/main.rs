@@ -123,6 +123,7 @@ fn main() {
             list_pipe_timeline_entries,
             create_pipe_timeline_entry,
             delete_pipe_timeline_entry,
+            update_pipe_timeline_milestone_notes,
             create_partenaire,
             get_partenaire_by_id,
             update_partenaire,

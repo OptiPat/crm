@@ -198,6 +198,9 @@ impl super::Database {
                     "un pipe ne peut pas être son propre parent".into(),
                 ));
             }
+            if let Some(pipe_id) = editing_id {
+                self.assert_no_parent_cycle(pipe_id, parent_id)?;
+            }
             let parent: (String, i64) = self.conn.query_row(
                 "SELECT pipe_type, contact_id FROM pipes WHERE id = ?1",
                 params![parent_id],
@@ -217,13 +220,62 @@ impl super::Database {
         Ok(())
     }
 
+    fn assert_no_parent_cycle(&self, pipe_id: i64, parent_pipe_id: i64) -> Result<()> {
+        let mut current = Some(parent_pipe_id);
+        while let Some(id) = current {
+            if id == pipe_id {
+                return Err(rusqlite::Error::InvalidParameterName(
+                    "cycle de parenté interdit entre pipes".into(),
+                ));
+            }
+            current = match self.conn.query_row(
+                "SELECT parent_pipe_id FROM pipes WHERE id = ?1",
+                params![id],
+                |row| row.get::<_, Option<i64>>(0),
+            ) {
+                Ok(next) => next,
+                Err(rusqlite::Error::QueryReturnedNoRows) => None,
+                Err(e) => return Err(e),
+            };
+        }
+        Ok(())
+    }
+
+    fn sync_pipe_descendants_contact_id(&self, root_id: i64, contact_id: i64) -> Result<()> {
+        let now = now_unix();
+        let mut stack = vec![root_id];
+        while let Some(parent_id) = stack.pop() {
+            let mut stmt = self
+                .conn
+                .prepare("SELECT id FROM pipes WHERE parent_pipe_id = ?1")?;
+            let children: Vec<i64> = stmt
+                .query_map(params![parent_id], |row| row.get(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            for child_id in children {
+                self.conn.execute(
+                    "UPDATE pipes SET contact_id = ?1, updated_at = ?2 WHERE id = ?3",
+                    params![contact_id, now, child_id],
+                )?;
+                stack.push(child_id);
+            }
+        }
+        Ok(())
+    }
+
+    fn normalized_pipe_notes(notes: Option<&str>) -> Option<String> {
+        notes
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+    }
+
     pub fn list_pipes(&self) -> Result<Vec<super::models::Pipe>> {
         let mut stmt = self.conn.prepare(
             "SELECT p.id, p.contact_id, p.pipe_type, p.parent_pipe_id, p.titre, p.stage, p.notes,
                     p.created_at, p.updated_at,
                     c.nom, c.prenom, pp.titre
              FROM pipes p
-             INNER JOIN contacts c ON c.id = p.contact_id
+             LEFT JOIN contacts c ON c.id = p.contact_id
              LEFT JOIN pipes pp ON pp.id = p.parent_pipe_id
              ORDER BY p.updated_at DESC",
         )?;
@@ -238,7 +290,7 @@ impl super::Database {
                     p.created_at, p.updated_at,
                     c.nom, c.prenom, pp.titre
              FROM pipes p
-             INNER JOIN contacts c ON c.id = p.contact_id
+             LEFT JOIN contacts c ON c.id = p.contact_id
              LEFT JOIN pipes pp ON pp.id = p.parent_pipe_id
              WHERE p.id = ?1",
             params![id],
@@ -279,6 +331,13 @@ impl super::Database {
         )?;
         let id = self.conn.last_insert_rowid();
         self.seed_pipe_creation_timeline_entry(id)?;
+        if input.pipe_type == PIPE_TYPE_AFFAIRE
+            && stage != PIPE_STAGE_PROSPECTION
+            && is_valid_pipe_stage(&stage)
+        {
+            let notes = Self::normalized_pipe_notes(input.notes.as_deref());
+            self.insert_avancement_timeline_entry(id, &stage, notes.as_deref())?;
+        }
         self.get_pipe_by_id(id)
     }
 
@@ -323,13 +382,31 @@ impl super::Database {
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
-        if old.pipe_type == PIPE_TYPE_AFFAIRE && old.stage != stage {
-            self.insert_avancement_timeline_entry(id, &stage)?;
+        if old.contact_id != input.contact_id {
+            self.sync_pipe_descendants_contact_id(id, input.contact_id)?;
+        }
+        if input.pipe_type == PIPE_TYPE_AFFAIRE
+            && is_valid_pipe_stage(&stage)
+            && old.stage != stage
+        {
+            self.insert_avancement_timeline_entry(id, &stage, None)?;
+        }
+        if input.pipe_type == PIPE_TYPE_AFFAIRE {
+            let notes = Self::normalized_pipe_notes(input.notes.as_deref());
+            let old_notes = Self::normalized_pipe_notes(old.notes.as_deref());
+            if notes != old_notes {
+                self.sync_pipe_creation_timeline_notes(id, notes.as_deref())?;
+            }
         }
         self.get_pipe_by_id(id)
     }
 
-    pub fn set_pipe_stage(&self, id: i64, new_stage: &str) -> Result<super::models::Pipe> {
+    pub fn set_pipe_stage(
+        &self,
+        id: i64,
+        new_stage: &str,
+        notes: Option<&str>,
+    ) -> Result<super::models::Pipe> {
         let current = self.get_pipe_by_id(id)?;
         if current.pipe_type != PIPE_TYPE_AFFAIRE {
             return Err(rusqlite::Error::InvalidParameterName(
@@ -352,7 +429,7 @@ impl super::Database {
         if updated == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
-        self.insert_avancement_timeline_entry(id, new_stage)?;
+        self.insert_avancement_timeline_entry(id, new_stage, notes)?;
         self.get_pipe_by_id(id)
     }
 
@@ -467,7 +544,7 @@ mod tests {
             })
             .unwrap();
 
-        let updated = db.set_pipe_stage(affaire.id, PIPE_STAGE_R1).unwrap();
+        let updated = db.set_pipe_stage(affaire.id, PIPE_STAGE_R1, None).unwrap();
         assert_eq!(updated.stage, PIPE_STAGE_R1);
 
         let entries = db.list_pipe_timeline_entries(affaire.id).unwrap();
@@ -475,9 +552,9 @@ mod tests {
             .iter()
             .find(|e| e.entry_type == TIMELINE_AVANCEMENT)
             .expect("timeline avancement");
-        assert!(avancement.titre.as_deref().unwrap_or("").contains("R1"));
+        assert_eq!(avancement.titre.as_deref(), Some(PIPE_STAGE_R1));
 
-        db.set_pipe_stage(affaire.id, PIPE_STAGE_R1).unwrap();
+        db.set_pipe_stage(affaire.id, PIPE_STAGE_R1, None).unwrap();
         assert_eq!(
             db.list_pipe_timeline_entries(affaire.id)
                 .unwrap()
@@ -486,5 +563,229 @@ mod tests {
                 .count(),
             1
         );
+
+        let with_notes = db
+            .set_pipe_stage(affaire.id, PIPE_STAGE_R2, Some("CR du second RDV"))
+            .unwrap();
+        assert_eq!(with_notes.stage, PIPE_STAGE_R2);
+        let r2 = db
+            .list_pipe_timeline_entries(affaire.id)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.entry_type == TIMELINE_AVANCEMENT && e.titre.as_deref() == Some(PIPE_STAGE_R2))
+            .expect("timeline R2");
+        assert_eq!(r2.contenu.as_deref(), Some("CR du second RDV"));
+    }
+
+    #[test]
+    fn update_pipe_to_acte_does_not_log_avancement() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+
+        use crate::database::models::{NewPipe, UpdatePipe};
+        use crate::database::pipe_timeline::TIMELINE_AVANCEMENT;
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: Some(PIPE_STAGE_PROSPECTION.into()),
+                notes: None,
+            })
+            .unwrap();
+
+        db.update_pipe(
+            affaire.id,
+            UpdatePipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_ACTION.into(),
+                parent_pipe_id: None,
+                titre: "Action".into(),
+                stage: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(
+            db.list_pipe_timeline_entries(affaire.id)
+                .unwrap()
+                .iter()
+                .filter(|e| e.entry_type == TIMELINE_AVANCEMENT)
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn create_affaire_with_initial_r1_logs_avancement() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+
+        use crate::database::models::NewPipe;
+        use crate::database::pipe_timeline::TIMELINE_AVANCEMENT;
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Direct R1".into(),
+                stage: Some(PIPE_STAGE_R1.into()),
+                notes: Some("Note initiale".into()),
+            })
+            .unwrap();
+
+        let avancements: Vec<_> = db
+            .list_pipe_timeline_entries(affaire.id)
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.entry_type == TIMELINE_AVANCEMENT)
+            .collect();
+        assert_eq!(avancements.len(), 1);
+        assert_eq!(avancements[0].titre.as_deref(), Some(PIPE_STAGE_R1));
+        assert_eq!(avancements[0].contenu.as_deref(), Some("Note initiale"));
+    }
+
+    #[test]
+    fn parent_cycle_is_rejected() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+
+        use crate::database::models::{NewPipe, UpdatePipe};
+
+        let a = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "A".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let b = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_ACTION.into(),
+                parent_pipe_id: Some(a.id),
+                titre: "B".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        let err = db
+            .update_pipe(
+                a.id,
+                UpdatePipe {
+                    contact_id,
+                    pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                    parent_pipe_id: Some(b.id),
+                    titre: "A".into(),
+                    stage: Some(PIPE_STAGE_PROSPECTION.into()),
+                    notes: None,
+                },
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("cycle"));
+    }
+
+    #[test]
+    fn update_parent_contact_syncs_children() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = seed_contact(&db);
+        let contact_b = db
+            .create_contact(NewContact {
+                nom: "MARTIN".into(),
+                prenom: "Paul".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact b");
+
+        use crate::database::models::{NewPipe, UpdatePipe};
+
+        let acte = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Acte".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+        let action = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                pipe_type: PIPE_TYPE_ACTION.into(),
+                parent_pipe_id: Some(acte.id),
+                titre: "Action".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        db.update_pipe(
+            acte.id,
+            UpdatePipe {
+                contact_id: contact_b,
+                pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
+                parent_pipe_id: None,
+                titre: "Acte".into(),
+                stage: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+
+        let updated_action = db.get_pipe_by_id(action.id).unwrap();
+        assert_eq!(updated_action.contact_id, contact_b);
+    }
+
+    #[test]
+    fn update_affaire_notes_syncs_creation_timeline() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+
+        use crate::database::models::{NewPipe, UpdatePipe};
+        use crate::database::pipe_timeline::TIMELINE_CREATION;
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: None,
+                notes: Some("Initial".into()),
+            })
+            .unwrap();
+
+        db.update_pipe(
+            affaire.id,
+            UpdatePipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: Some(PIPE_STAGE_PROSPECTION.into()),
+                notes: Some("Modifié".into()),
+            },
+        )
+        .unwrap();
+
+        let creation = db
+            .list_pipe_timeline_entries(affaire.id)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.entry_type == TIMELINE_CREATION)
+            .expect("creation");
+        assert_eq!(creation.contenu.as_deref(), Some("Modifié"));
     }
 }

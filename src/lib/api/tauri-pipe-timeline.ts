@@ -40,3 +40,15 @@ export async function deletePipeTimelineEntry(id: number): Promise<void> {
   await invoke<void>("delete_pipe_timeline_entry", { id });
   notifyPipeChanged();
 }
+
+export async function updatePipeTimelineMilestoneNotes(
+  id: number,
+  contenu: string | null
+): Promise<PipeTimelineEntryRecord> {
+  const entry = await invoke<PipeTimelineEntryRecord>("update_pipe_timeline_milestone_notes", {
+    id,
+    contenu,
+  });
+  notifyPipeChanged();
+  return entry;
+}

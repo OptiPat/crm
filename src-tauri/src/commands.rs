@@ -496,12 +496,31 @@ pub fn delete_pipe_timeline_entry(db: State<'_, DbState>, id: i64) -> Result<(),
 }
 
 #[tauri::command]
-pub fn set_pipe_stage(db: State<'_, DbState>, id: i64, stage: String) -> Result<Pipe, String> {
+pub fn update_pipe_timeline_milestone_notes(
+    db: State<'_, DbState>,
+    id: i64,
+    contenu: Option<String>,
+) -> Result<PipeTimelineEntry, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
 
     database
-        .set_pipe_stage(id, &stage)
+        .update_pipe_timeline_milestone_notes(id, contenu.as_deref())
+        .map_err(|e| format!("Failed to update pipe timeline milestone notes: {}", e))
+}
+
+#[tauri::command]
+pub fn set_pipe_stage(
+    db: State<'_, DbState>,
+    id: i64,
+    stage: String,
+    notes: Option<String>,
+) -> Result<Pipe, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    database
+        .set_pipe_stage(id, &stage, notes.as_deref())
         .map_err(|e| format!("Failed to set pipe stage: {}", e))
 }
 

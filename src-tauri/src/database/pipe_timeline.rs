@@ -24,6 +24,33 @@ pub(crate) fn is_valid_user_timeline_type(value: &str) -> bool {
     USER_TIMELINE_TYPES.contains(&value)
 }
 
+fn format_pipe_creation_timeline_title(pipe_titre: &str) -> String {
+    pipe_titre.trim().to_string()
+}
+
+fn normalize_avancement_timeline_stage(titre: &str) -> String {
+    let raw = titre.trim();
+    const PREFIX: &str = "Avancement passé à ";
+    if let Some(label) = raw.strip_prefix(PREFIX) {
+        for stage in [
+            super::pipe::PIPE_STAGE_PROSPECTION,
+            super::pipe::PIPE_STAGE_R1,
+            super::pipe::PIPE_STAGE_R2,
+            super::pipe::PIPE_STAGE_R3,
+            super::pipe::PIPE_STAGE_GAGNEE,
+            super::pipe::PIPE_STAGE_PERDUE_OU_EN_ATTENTE,
+        ] {
+            if super::pipe::pipe_stage_label(stage) == label.trim() {
+                return stage.to_string();
+            }
+        }
+    }
+    if super::pipe::is_valid_pipe_stage(raw) {
+        return raw.to_string();
+    }
+    raw.to_string()
+}
+
 fn map_timeline_row(row: &Row<'_>) -> Result<super::models::PipeTimelineEntry> {
     Ok(super::models::PipeTimelineEntry {
         id: row.get(0)?,
@@ -58,15 +85,65 @@ impl super::Database {
     }
 
     fn backfill_pipe_creation_timeline_entries(&self) -> Result<()> {
-        self.conn.execute(
-            "INSERT INTO pipe_timeline_entries (pipe_id, entry_type, titre, contenu, occurred_at, created_at)
-             SELECT p.id, ?1, 'Pipe créé', NULL, p.created_at, p.created_at
-             FROM pipes p
+        let mut stmt = self.conn.prepare(
+            "SELECT p.id FROM pipes p
              WHERE NOT EXISTS (
                SELECT 1 FROM pipe_timeline_entries e WHERE e.pipe_id = p.id
              )",
-            params![TIMELINE_CREATION],
         )?;
+        let pipe_ids: Vec<i64> = stmt
+            .query_map([], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        for pipe_id in pipe_ids {
+            if let Err(e) = self.seed_pipe_creation_timeline_entry(pipe_id) {
+                eprintln!(
+                    "⚠️ Backfill timeline ignoré pour pipe {}: {}",
+                    pipe_id, e
+                );
+            }
+        }
+        self.rewrite_pipe_creation_timeline_entries()?;
+        self.rewrite_avancement_timeline_entries()?;
+        Ok(())
+    }
+
+    fn rewrite_avancement_timeline_entries(&self) -> Result<()> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, titre FROM pipe_timeline_entries WHERE entry_type = ?1",
+        )?;
+        let rows: Vec<(i64, Option<String>)> = stmt
+            .query_map(params![TIMELINE_AVANCEMENT], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        for (entry_id, titre) in rows {
+            let Some(raw) = titre else { continue };
+            let normalized = normalize_avancement_timeline_stage(&raw);
+            if normalized != raw {
+                self.conn.execute(
+                    "UPDATE pipe_timeline_entries SET titre = ?1 WHERE id = ?2",
+                    params![normalized, entry_id],
+                )?;
+            }
+        }
+        Ok(())
+    }
+
+    fn rewrite_pipe_creation_timeline_entries(&self) -> Result<()> {
+        let mut stmt = self.conn.prepare(
+            "SELECT e.id, p.titre
+             FROM pipe_timeline_entries e
+             INNER JOIN pipes p ON p.id = e.pipe_id
+             WHERE e.entry_type = ?1",
+        )?;
+        let rows: Vec<(i64, String)> = stmt
+            .query_map(params![TIMELINE_CREATION], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<Result<Vec<_>, _>>()?;
+        for (entry_id, pipe_titre) in rows {
+            let titre = format_pipe_creation_timeline_title(&pipe_titre);
+            self.conn.execute(
+                "UPDATE pipe_timeline_entries SET titre = ?1 WHERE id = ?2",
+                params![titre, entry_id],
+            )?;
+        }
         Ok(())
     }
 
@@ -171,28 +248,85 @@ impl super::Database {
         &self,
         pipe_id: i64,
         new_stage: &str,
+        notes: Option<&str>,
     ) -> Result<()> {
-        let titre = format!(
-            "Avancement passé à {}",
-            super::pipe::pipe_stage_label(new_stage)
-        );
+        let contenu = notes
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
         let now = now_unix();
         self.conn.execute(
             "INSERT INTO pipe_timeline_entries (pipe_id, entry_type, titre, contenu, occurred_at, created_at)
-             VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
-            params![pipe_id, TIMELINE_AVANCEMENT, titre, now],
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+            params![pipe_id, TIMELINE_AVANCEMENT, new_stage, contenu, now],
         )?;
         Ok(())
     }
 
     pub(crate) fn seed_pipe_creation_timeline_entry(&self, pipe_id: i64) -> Result<()> {
-        let now = now_unix();
+        let (titre, notes, occurred_at): (String, Option<String>, i64) = self.conn.query_row(
+            "SELECT titre, notes, created_at FROM pipes WHERE id = ?1",
+            params![pipe_id],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+        let titre = format_pipe_creation_timeline_title(&titre);
+        let contenu = notes
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
         self.conn.execute(
             "INSERT INTO pipe_timeline_entries (pipe_id, entry_type, titre, contenu, occurred_at, created_at)
-             VALUES (?1, ?2, ?3, NULL, ?4, ?4)",
-            params![pipe_id, TIMELINE_CREATION, "Pipe créé", now],
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5)",
+            params![pipe_id, TIMELINE_CREATION, titre, contenu, occurred_at],
         )?;
         Ok(())
+    }
+
+    pub(crate) fn sync_pipe_creation_timeline_notes(
+        &self,
+        pipe_id: i64,
+        contenu: Option<&str>,
+    ) -> Result<()> {
+        let normalized = contenu
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        self.conn.execute(
+            "UPDATE pipe_timeline_entries SET contenu = ?1
+             WHERE pipe_id = ?2 AND entry_type = ?3",
+            params![normalized, pipe_id, TIMELINE_CREATION],
+        )?;
+        Ok(())
+    }
+
+    pub fn update_pipe_timeline_milestone_notes(
+        &self,
+        id: i64,
+        contenu: Option<&str>,
+    ) -> Result<super::models::PipeTimelineEntry> {
+        let entry_type: String = self.conn.query_row(
+            "SELECT entry_type FROM pipe_timeline_entries WHERE id = ?1",
+            params![id],
+            |row| row.get(0),
+        )?;
+        if entry_type != TIMELINE_CREATION && entry_type != TIMELINE_AVANCEMENT {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "seules les notes des jalons d'étape sont modifiables".into(),
+            ));
+        }
+        let normalized = contenu
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string);
+        let updated = self.conn.execute(
+            "UPDATE pipe_timeline_entries SET contenu = ?1 WHERE id = ?2",
+            params![normalized, id],
+        )?;
+        if updated == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        self.get_pipe_timeline_entry(id)
     }
 
     pub(crate) fn delete_pipe_timeline_for_pipe(&self, pipe_id: i64) -> Result<()> {
@@ -239,6 +373,10 @@ mod tests {
         let entries = db.list_pipe_timeline_entries(pipe.id).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].entry_type, TIMELINE_CREATION);
+        assert_eq!(
+            entries[0].titre.as_deref(),
+            Some("Affaire test")
+        );
 
         let apel = db
             .create_pipe_timeline_entry(NewPipeTimelineEntry {
@@ -256,5 +394,86 @@ mod tests {
 
         db.delete_pipe_timeline_entry(apel.id).unwrap();
         assert_eq!(db.list_pipe_timeline_entries(pipe.id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn pipe_creation_timeline_includes_notes() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact id");
+
+        let pipe = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Test".into(),
+                stage: None,
+                notes: Some("Premier contexte".into()),
+            })
+            .unwrap();
+
+        let entries = db.list_pipe_timeline_entries(pipe.id).unwrap();
+        assert_eq!(entries[0].contenu.as_deref(), Some("Premier contexte"));
+    }
+
+    #[test]
+    fn pipe_milestone_notes_are_editable() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact id");
+
+        let pipe = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Test".into(),
+                stage: None,
+                notes: Some("Initial".into()),
+            })
+            .unwrap();
+
+        let creation = db.list_pipe_timeline_entries(pipe.id).unwrap()[0].id;
+        let updated = db
+            .update_pipe_timeline_milestone_notes(creation, Some("Notes mises à jour"))
+            .unwrap();
+        assert_eq!(updated.contenu.as_deref(), Some("Notes mises à jour"));
+    }
+
+    #[test]
+    fn backfill_timeline_skips_orphan_pipe() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        db.get_connection()
+            .execute(
+                "INSERT INTO pipes (contact_id, pipe_type, titre, stage, created_at, updated_at)
+                 VALUES (NULL, 'AFFAIRE', 'Orphelin', 'PROSPECTION', 1, 1)",
+                [],
+            )
+            .unwrap();
+        assert!(db.migrate_pipe_timeline_table().is_ok());
+        let orphan_id: i64 = db
+            .get_connection()
+            .query_row("SELECT id FROM pipes WHERE titre = 'Orphelin'", [], |r| r.get(0))
+            .unwrap();
+        let entries = db.list_pipe_timeline_entries(orphan_id).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].entry_type, TIMELINE_CREATION);
     }
 }

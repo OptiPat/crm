@@ -82,14 +82,18 @@ export function PipeProspectionContactSection({
   };
 
   const handleCreatePrescripteur = async (nom: string, prenom: string) => {
-    const newPrescripteur = await createContact({
-      nom,
-      prenom,
-      categorie: "PRESCRIPTEUR",
-    });
-    setAllContacts((prev) => [...prev, newPrescripteur]);
-    await handlePrescripteurChange(newPrescripteur.id);
-    toast.success("Prescripteur créé");
+    try {
+      const newPrescripteur = await createContact({
+        nom,
+        prenom,
+        categorie: "PRESCRIPTEUR",
+      });
+      setAllContacts((prev) => [...prev, newPrescripteur]);
+      await persistContact({ prescripteur_id: newPrescripteur.id });
+      toast.success("Prescripteur créé et enregistré");
+    } catch {
+      /* toast déjà affiché par persistContact */
+    }
   };
 
   const handleSourceLeadBlur = async () => {

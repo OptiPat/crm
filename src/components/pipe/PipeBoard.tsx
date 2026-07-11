@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { setPipeStage, type PipeRecord } from "@/lib/api/tauri-pipe";
+import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { groupAffairesByStage } from "@/lib/pipe/pipe-board-utils";
 import { PIPE_STAGE_BOARD_COLORS } from "@/lib/pipe/pipe-stage-colors";
 import {
@@ -12,7 +12,6 @@ import {
   type PipeStage,
 } from "@/lib/pipe/pipe-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 const DRAG_THRESHOLD_PX = 6;
 
@@ -43,13 +42,18 @@ interface PipeBoardProps {
   affaires: PipeRecord[];
   selectedId: number | null;
   onSelect: (pipe: PipeRecord) => void;
+  onRequestStageChange: (pipe: PipeRecord, stage: PipeStage) => void;
 }
 
-export function PipeBoard({ affaires, selectedId, onSelect }: PipeBoardProps) {
+export function PipeBoard({
+  affaires,
+  selectedId,
+  onSelect,
+  onRequestStageChange,
+}: PipeBoardProps) {
   const byStage = useMemo(() => groupAffairesByStage(affaires), [affaires]);
   const [dragOverStage, setDragOverStage] = useState<PipeStage | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
-  const [movingId, setMovingId] = useState<number | null>(null);
   const pointerDragRef = useRef<{
     pipeId: number;
     startX: number;
@@ -57,24 +61,14 @@ export function PipeBoard({ affaires, selectedId, onSelect }: PipeBoardProps) {
     active: boolean;
   } | null>(null);
 
-  const movePipeToStage = async (pipeId: number, stage: PipeStage) => {
+  const requestMoveToStage = (pipeId: number, stage: PipeStage) => {
     const pipe = affaires.find((p) => p.id === pipeId);
     if (!pipe || pipe.stage === stage) return;
-
-    setMovingId(pipeId);
-    try {
-      const updated = await setPipeStage(pipeId, stage);
-      toast.success(`Avancement : ${PIPE_STAGE_LABELS[stage]}`);
-      onSelect(updated);
-    } catch (err) {
-      toast.error(String(err));
-    } finally {
-      setMovingId(null);
-    }
+    onRequestStageChange(pipe, stage);
   };
 
   const handlePointerDown = (e: React.PointerEvent, pipe: PipeRecord) => {
-    if (e.button !== 0 || movingId != null) return;
+    if (e.button !== 0) return;
     pointerDragRef.current = {
       pipeId: pipe.id,
       startX: e.clientX,
@@ -120,7 +114,7 @@ export function PipeBoard({ affaires, selectedId, onSelect }: PipeBoardProps) {
     }
 
     const stage = stageFromElement(document.elementFromPoint(e.clientX, e.clientY));
-    if (stage) await movePipeToStage(drag.pipeId, stage);
+    if (stage) requestMoveToStage(drag.pipeId, stage);
   };
 
   const handlePointerCancel = (e: React.PointerEvent) => {
@@ -197,7 +191,6 @@ export function PipeBoard({ affaires, selectedId, onSelect }: PipeBoardProps) {
               ) : (
                 list.map((pipe) => {
                   const selected = pipe.id === selectedId;
-                  const moving = pipe.id === movingId;
                   const dragging = pipe.id === draggingId;
                   return (
                     <article
@@ -211,7 +204,7 @@ export function PipeBoard({ affaires, selectedId, onSelect }: PipeBoardProps) {
                         "cursor-grab active:cursor-grabbing",
                         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                         selected && "border-primary ring-1 ring-primary/40",
-                        (moving || dragging) && "opacity-50"
+                        dragging && "opacity-50"
                       )}
                     >
                       <div className="flex items-start gap-1 select-none">

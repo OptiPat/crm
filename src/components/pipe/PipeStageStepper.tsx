@@ -1,6 +1,5 @@
 import { ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { setPipeStage } from "@/lib/api/tauri-pipe";
 import {
   getNextLinearStage,
   isPipeStage,
@@ -12,28 +11,25 @@ import {
   type PipeStage,
 } from "@/lib/pipe/pipe-types";
 import { cn } from "@/lib/utils";
-import { toast } from "sonner";
 
 interface PipeStageStepperProps {
-  pipeId: number;
   currentStage: string;
+  onRequestStageChange: (target: PipeStage) => void;
 }
 
-export function PipeStageStepper({ pipeId, currentStage }: PipeStageStepperProps) {
+export function PipeStageStepper({
+  currentStage,
+  onRequestStageChange,
+}: PipeStageStepperProps) {
   if (!isPipeStage(currentStage)) return null;
 
   const stage = currentStage;
   const nextStage = getNextLinearStage(stage);
   const terminal = isTerminalPipeStage(stage);
 
-  const handleSetStage = async (target: PipeStage) => {
+  const handleSetStage = (target: PipeStage) => {
     if (target === stage) return;
-    try {
-      await setPipeStage(pipeId, target);
-      toast.success(`Avancement : ${PIPE_STAGE_LABELS[target]}`);
-    } catch (err) {
-      toast.error(String(err));
-    }
+    onRequestStageChange(target);
   };
 
   const linearIndex = PIPE_LINEAR_STAGES.indexOf(

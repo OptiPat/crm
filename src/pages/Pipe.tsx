@@ -14,6 +14,8 @@ import { PipeList } from "@/components/pipe/PipeList";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
+import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
+import { usePipeStageAdvance } from "@/hooks/usePipeStageAdvance";
 import { cn } from "@/lib/utils";
 
 type PanelMode = "empty" | "create" | "view" | "edit";
@@ -96,6 +98,12 @@ export function Pipe() {
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
   const [selectedPipe, setSelectedPipe] = useState<PipeRecord | null>(null);
   const [createType, setCreateType] = useState<PipeType>("AFFAIRE");
+
+  const stageAdvance = usePipeStageAdvance((pipe) => {
+    setSelectedPipe(pipe);
+    setPanelMode("view");
+    void loadPipes();
+  });
 
   const affaires = useMemo(() => filterAffairesForBoard(pipes), [pipes]);
 
@@ -194,7 +202,14 @@ export function Pipe() {
       )}
 
       {panelMode === "view" && selectedPipe && (
-        <PipeDetailPanel pipe={selectedPipe} onEdit={openEdit} onDeleted={handleDeleted} />
+        <PipeDetailPanel
+          pipe={selectedPipe}
+          onEdit={openEdit}
+          onDeleted={handleDeleted}
+          onRequestStageChange={(target) =>
+            stageAdvance.requestStageChange(selectedPipe.id, target, selectedPipe.titre)
+          }
+        />
       )}
     </>
   );
@@ -223,6 +238,9 @@ export function Pipe() {
                 affaires={affaires}
                 selectedId={selectedPipe?.id ?? null}
                 onSelect={openView}
+                onRequestStageChange={(pipe, stage) =>
+                  stageAdvance.requestStageChange(pipe.id, stage, pipe.titre)
+                }
               />
             )}
           </div>
@@ -272,6 +290,12 @@ export function Pipe() {
           </main>
         </div>
       )}
+      <PipeStageAdvanceDialog
+        pending={stageAdvance.pending}
+        saving={stageAdvance.saving}
+        onCancel={stageAdvance.cancelStageChange}
+        onConfirm={stageAdvance.confirmStageChange}
+      />
     </div>
   );
 }
