@@ -9,7 +9,7 @@ import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
-import { toastAfterRdvSave, notifyGoogleCalendarSync } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { toastAfterRdvSave, toastAfterPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { applyPipeRdvReschedule } from "@/lib/pipe/pipe-rdv-reschedule-actions";
 import { isRdvTimelineTraceNote } from "@/lib/pipe/pipe-rdv-delete";
 import {
@@ -126,8 +126,7 @@ export function PipeTimelinePhaseEntryRow({
           newOccurredAtUnix: occurredAtUnix,
           contenu: contenu.trim() || null,
         });
-        notifyGoogleCalendarSync(calendar);
-        toast.success("RDV décalé — historique mis à jour");
+        toastAfterPipeRdvReschedule(calendar);
         setEditing(false);
         return;
       }

@@ -45,7 +45,7 @@ import {
 } from "@/lib/pipe/pipe-rdv-stage";
 import { isPipeType } from "@/lib/pipe/pipe-types";
 import { formatPipeRdvCalendarContactLabel, formatPipeRdvGoogleCalendarTitle } from "@/lib/pipe/pipe-rdv-google-calendar";
-import { notifyGoogleCalendarSync } from "@/lib/pipe/pipe-rdv-entry-actions";
+import { toastPipeRdvOutcome } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import { toast } from "sonner";
 
@@ -289,8 +289,11 @@ export function RdvPlanifierDialog({
           physicalAddress,
           calendarTitle: title.trim() || null,
         });
-        toast.success("RDV enregistré dans le Pipe");
-        notifyGoogleCalendarSync(result.calendar);
+        toastPipeRdvOutcome(
+          "RDV enregistré dans le Pipe.",
+          result.calendar,
+          result.calendar && !result.calendar.synced ? "warning" : "success"
+        );
       } else {
         await planifyStandaloneGoogleRdv({
           contactId,

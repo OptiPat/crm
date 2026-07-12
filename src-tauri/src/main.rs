@@ -4,6 +4,7 @@
 mod app_runtime;
 mod app_branding;
 mod auth;
+mod automation_toast;
 mod birthday_notifications;
 mod backup;
 mod backup_sidecar;
@@ -26,6 +27,7 @@ use app_runtime::{
     hide_main_window_if_minimized_arg, is_force_quit_requested, load_runtime_prefs,
     focus_main_window_cmd, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray, start_background_automation_worker,
 };
+use automation_toast::{send_automation_desktop_toast_cmd, take_pending_automation_notification_nav_cmd};
 use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
 use auth::commands::*;
 use auth::AuthManager;
@@ -325,6 +327,8 @@ fn main() {
             save_app_runtime_prefs,
             quit_app_fully_cmd,
             focus_main_window_cmd,
+            send_automation_desktop_toast_cmd,
+            take_pending_automation_notification_nav_cmd,
             create_master_password,
             verify_master_password,
             unlock,

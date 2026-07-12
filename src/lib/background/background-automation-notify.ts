@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import {
   isPermissionGranted,
   registerActionTypes,
@@ -10,6 +11,10 @@ import {
   type AutomationNotificationTarget,
   serializeAutomationNotificationTarget,
 } from "@/lib/background/automation-notification-nav";
+import { persistPendingAutomationNav } from "@/lib/background/automation-notification-pending";
+import { AUTOMATION_NOTIFICATION_ACTIVATED_EVENT } from "@/lib/background/automation-notification-events";
+
+export { AUTOMATION_NOTIFICATION_ACTIVATED_EVENT };
 
 const ERROR_NOTIFY_COOLDOWN_MS = 60 * 60_000;
 const PERMISSION_TOAST_COOLDOWN_MS = 60 * 60_000;
@@ -42,7 +47,12 @@ async function ensureNotificationPermission(): Promise<boolean> {
   return permissionGranted;
 }
 
-/** Enregistre le type d'action « Ouvrir » pour le clic sur les notifications bureau. */
+function isWindowsDesktop(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return navigator.userAgent.includes("Windows");
+}
+
+/** Enregistre le type d'action « Ouvrir » (fallback macOS / Linux). */
 export async function registerAutomationNotificationActions(): Promise<void> {
   if (actionsRegistered) return;
   actionsRegistered = true;
@@ -70,6 +80,46 @@ export type AutomationNotifyOptions = {
   nav?: AutomationNotificationTarget;
 };
 
+async function sendTrayDesktopNotification(
+  title: string,
+  body: string,
+  nav: AutomationNotificationTarget
+): Promise<boolean> {
+  const navJson = serializeAutomationNotificationTarget(nav);
+  persistPendingAutomationNav(navJson);
+
+  if (isWindowsDesktop()) {
+    try {
+      await invoke("send_automation_desktop_toast_cmd", {
+        title,
+        body,
+        navJson,
+      });
+      return true;
+    } catch (error) {
+      console.warn("Toast WinRT indisponible, repli plugin notification:", error);
+    }
+  }
+
+  const ok = await ensureNotificationPermission();
+  if (!ok) {
+    notifyNotificationPermissionDenied();
+    return false;
+  }
+
+  await registerAutomationNotificationActions();
+  await sendNotification({
+    title,
+    body,
+    actionTypeId: AUTOMATION_NOTIFICATION_ACTION_TYPE,
+    autoCancel: true,
+    extra: {
+      nav: navJson,
+    },
+  });
+  return true;
+}
+
 export async function notifyAutomationEvent(
   title: string,
   body: string,
@@ -82,24 +132,9 @@ export async function notifyAutomationEvent(
     toast.info(body ? `${title} — ${body}` : title);
     return true;
   }
-  const ok = await ensureNotificationPermission();
-  if (!ok) {
-    notifyNotificationPermissionDenied();
-    return false;
-  }
-  await registerAutomationNotificationActions();
 
   const nav = options.nav ?? { page: "dashboard" as const };
-  await sendNotification({
-    title,
-    body,
-    actionTypeId: AUTOMATION_NOTIFICATION_ACTION_TYPE,
-    autoCancel: true,
-    extra: {
-      nav: serializeAutomationNotificationTarget(nav),
-    },
-  });
-  return true;
+  return sendTrayDesktopNotification(title, body, nav);
 }
 
 export function notifyAutomationError(

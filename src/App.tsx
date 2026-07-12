@@ -308,7 +308,7 @@ function AppInner() {
             {renderPage()}
           </Layout>
         </AppUpdateProvider>
-        <Toaster richColors position="top-right" />
+        <Toaster richColors position="top-right" visibleToasts={4} expand />
       </>
     );
   } catch (error) {

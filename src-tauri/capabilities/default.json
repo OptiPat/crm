@@ -33,6 +33,7 @@
     "fs:scope-document",
     "fs:allow-document-read-recursive",
     "fs:scope-download",
-    "fs:allow-download-read-recursive"
+    "fs:allow-download-read-recursive",
+    "core:webview:deny-internal-toggle-devtools"
   ]
 }

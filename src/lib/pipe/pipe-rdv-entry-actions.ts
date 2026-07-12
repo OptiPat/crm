@@ -19,6 +19,53 @@ export type PipeRdvStageSaveResult = {
   calendar?: PipeRdvCalendarSyncResult;
 };
 
+/** Ligne complémentaire Agenda Google (sans toast). */
+export function describeGoogleCalendarSyncLine(
+  calendar?: PipeRdvCalendarSyncResult
+): string | null {
+  if (!calendar) return null;
+  if (calendar.synced) return "Synchronisé avec Google Agenda.";
+  if (calendar.reason === "past") {
+    return "Non ajouté à Google Agenda : choisissez une date/heure future.";
+  }
+  if (calendar.reason === "not_connected") {
+    return "Google Agenda non connecté (Paramètres).";
+  }
+  if (calendar.reason === "no_contact") {
+    return "Google Agenda : contact introuvable.";
+  }
+  if (calendar.reason === "error") {
+    return calendar.message.includes("connexion") || calendar.message.includes("Connectez")
+      ? calendar.message
+      : `Google Agenda : ${calendar.message}`;
+  }
+  return null;
+}
+
+const PIPE_RDV_TOAST_ID = "pipe-rdv-outcome";
+
+function calendarToastLevel(
+  calendar?: PipeRdvCalendarSyncResult
+): "success" | "warning" {
+  return calendar && !calendar.synced ? "warning" : "success";
+}
+
+/** Un seul toast Pipe à la fois (remplace le précédent au lieu de s'empiler). */
+export function toastPipeRdvOutcome(
+  primary: string,
+  calendar?: PipeRdvCalendarSyncResult,
+  level: "success" | "warning" = "success"
+): void {
+  const detail = describeGoogleCalendarSyncLine(calendar);
+  const message = detail ? `${primary} ${detail}` : primary;
+  const options = { id: PIPE_RDV_TOAST_ID };
+  if (level === "warning") {
+    toast.warning(message, options);
+  } else {
+    toast.success(message, options);
+  }
+}
+
 export async function addPipeTimelineEntryWithRdvStage(options: {
   timeline: ReturnType<typeof usePipeTimeline>;
   pipe?: Pick<
@@ -105,42 +152,18 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   return { ...stageResult, calendar };
 }
 
-export function notifyGoogleCalendarSync(calendar?: PipeRdvCalendarSyncResult): void {
-  if (!calendar) return;
-  if (calendar.synced) {
-    toast.success("RDV planifié dans Google Agenda");
-    return;
-  }
-  if (calendar.reason === "past") {
-    toast.warning(
-      "RDV enregistré dans le Pipe, mais pas dans Google Agenda : choisissez une date/heure future."
-    );
-    return;
-  }
-  if (calendar.reason === "not_connected") {
-    toast.warning(
-      "RDV enregistré dans le Pipe — connectez Google Agenda dans Paramètres pour synchroniser."
-    );
-    return;
-  }
-  if (calendar.reason === "error") {
-    toast.warning(
-      calendar.message.includes("connexion") || calendar.message.includes("Connectez")
-        ? calendar.message
-        : `Google Agenda : ${calendar.message}`
-    );
-  }
-}
-
 export function toastAfterPipeRdvReschedule(
   calendar?: PipeRdvCalendarSyncResult
 ): void {
   if (calendar?.synced) {
-    toast.success("RDV décalé — Pipe et Google Agenda mis à jour");
+    toastPipeRdvOutcome("RDV décalé — Pipe et Google Agenda mis à jour.");
     return;
   }
-  toast.success("RDV décalé dans le Pipe");
-  notifyGoogleCalendarSync(calendar);
+  toastPipeRdvOutcome(
+    "RDV décalé dans le Pipe.",
+    calendar,
+    calendarToastLevel(calendar)
+  );
 }
 
 export function toastAfterRdvSave(
@@ -149,23 +172,28 @@ export function toastAfterRdvSave(
   fallbackSuccess = "RDV ajouté"
 ) {
   if (!result) {
-    toast.success(fallbackSuccess);
+    toast.success(fallbackSuccess, { id: PIPE_RDV_TOAST_ID });
     return;
   }
+  const level = calendarToastLevel(result.calendar);
+
   if (result.advanced) {
-    toast.success(`RDV enregistré — avancement : ${PIPE_STAGE_LABELS[rdvStage]}`);
-    notifyGoogleCalendarSync(result.calendar);
+    toastPipeRdvOutcome(
+      `RDV enregistré — avancement : ${PIPE_STAGE_LABELS[rdvStage]}.`,
+      result.calendar,
+      level
+    );
     return;
   }
   if (result.scheduledDateLabel) {
-    toast.success(
-      `RDV planifié. Passage en ${PIPE_STAGE_LABELS[rdvStage]} le ${result.scheduledDateLabel}.`
+    toastPipeRdvOutcome(
+      `RDV planifié. Passage en ${PIPE_STAGE_LABELS[rdvStage]} le ${result.scheduledDateLabel}.`,
+      result.calendar,
+      level
     );
-    notifyGoogleCalendarSync(result.calendar);
     return;
   }
-  toast.success(fallbackSuccess);
-  notifyGoogleCalendarSync(result.calendar);
+  toastPipeRdvOutcome(fallbackSuccess, result.calendar, level);
 }
 
 export async function updatePipeRdvWithGoogleSync(options: {

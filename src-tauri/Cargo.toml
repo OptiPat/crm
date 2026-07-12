@@ -50,5 +50,8 @@ lto = true
 opt-level = "s"
 strip = true
 
+[target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "0.8"
+
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
