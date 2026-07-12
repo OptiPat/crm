@@ -5,6 +5,10 @@ import {
 } from "@/lib/emails/template-email-relance";
 import { parseTemplateEmailTrigger } from "@/lib/emails/template-email-trigger";
 import {
+  parseTemplateEmailPipeRdvTrigger,
+  pipeRdvTriggerBadgeLabel,
+} from "@/lib/emails/template-email-pipe-rdv";
+import {
   formatTemplateEmailTriggerScheduleBadge,
 } from "@/lib/emails/template-email-trigger-summary";
 import { formatRuleTreeBrief } from "@/lib/etiquettes/etiquette-card-summary";
@@ -40,8 +44,9 @@ export interface TemplateActivationFlags {
   hasTrigger: boolean;
   hasEtiquetteLink: boolean;
   hasRelance: boolean;
+  hasPipeRdv: boolean;
   hasTutoiement: boolean;
-  /** Au moins un canal de 1er envoi (déclencheur ou étiquette). */
+  /** Au moins un canal de 1er envoi (déclencheur, étiquette ou Pipe RDV). */
   hasSendChannel: boolean;
   /** Aucun canal de 1er envoi — message stocké seulement. */
   isLibraryOnly: boolean;
@@ -85,13 +90,16 @@ export function getTemplateActivationFlags(
   const hasRelance =
     template.relance_template_id != null &&
     isTemplateEmailRelanceEnabledForQueue(template.variables);
+  const pipeRdvTrigger = parseTemplateEmailPipeRdvTrigger(template.variables);
+  const hasPipeRdv = pipeRdvTrigger.enabled && pipeRdvTrigger.stages.length > 0;
   const hasTutoiement = template.tutoiement_template_id != null;
-  const hasSendChannel = hasTrigger || hasEtiquetteLink;
+  const hasSendChannel = hasTrigger || hasEtiquetteLink || hasPipeRdv;
 
   return {
     hasTrigger,
     hasEtiquetteLink,
     hasRelance,
+    hasPipeRdv,
     hasTutoiement,
     hasSendChannel,
     isLibraryOnly: !hasSendChannel,
@@ -107,6 +115,12 @@ export function getTemplateTriggerShortLabel(
   if (!typeLabel) return null;
   const schedule = formatTemplateEmailTriggerScheduleBadge(trigger);
   return schedule ? `${typeLabel} · ${schedule}` : typeLabel;
+}
+
+export function getTemplatePipeRdvBadgeLabel(
+  template: Pick<TemplateEmail, "variables">
+): string | null {
+  return pipeRdvTriggerBadgeLabel(template.variables);
 }
 
 export function getTemplateRelanceBadgeLabel(
@@ -199,6 +213,9 @@ export function getTemplateActivationPreviewHint(flags: TemplateActivationFlags)
   }
   if (flags.hasEtiquetteLink) {
     return "Lié à des étiquettes — envoi via campagne étiquette dans Suivi → Envois.";
+  }
+  if (flags.hasPipeRdv) {
+    return "Actif pour les RDV Pipe — envoi à la planification / replanification depuis le CRM.";
   }
   return "Bibliothèque seule — activez un déclencheur ou liez une étiquette pour alimenter Suivi → Envois.";
 }

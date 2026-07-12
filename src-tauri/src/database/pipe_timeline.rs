@@ -274,6 +274,9 @@ impl super::Database {
                 "impossible de supprimer cette entrée système".into(),
             ));
         }
+        if entry_type == TIMELINE_RDV {
+            let _ = self.cancel_pipe_rdv_reminder_schedules(id);
+        }
         let deleted = self
             .conn
             .execute("DELETE FROM pipe_timeline_entries WHERE id = ?1", params![id])?;

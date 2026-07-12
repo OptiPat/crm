@@ -4,7 +4,8 @@ import type {
   PipeTimelineEntryRecord,
 } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
-import { syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
+import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
+import { sendPipeRdvConfirmationAfterCalendar, syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
 import { buildPipeRdvCalendarContext, warnPipeRdvMissingAttendeeEmails } from "@/lib/pipe/pipe-rdv-calendar-context";
@@ -30,23 +31,22 @@ export async function executePipeRdvReschedule(options: {
   entry: PipeTimelineEntryRecord;
   pipe: Pick<
     PipeRecord,
-    | "id"
-    | "stage"
-    | "pipe_type"
-    | "contact_id"
-    | "contact_prenom"
-    | "contact_nom"
-    | "secondary_contact_id"
-    | "secondary_contact_prenom"
-    | "secondary_contact_nom"
-    | "titre"
-  >;
+    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom"
+  > &
+    Partial<
+      Pick<
+        PipeRecord,
+        "secondary_contact_id" | "secondary_contact_prenom" | "secondary_contact_nom" | "titre"
+      >
+    >;
   rdvStage: PipeRdvStage;
   newOccurredAtUnix: number;
   endAtUnix?: number;
   contenu?: string | null;
   calendarTitle?: string | null;
   userNote?: string | null;
+  visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
   updateEntry: TimelineEntryUpdater;
   addEntry: TimelineEntryWriter;
 }): Promise<PipeRdvCalendarSyncResult | undefined> {
@@ -105,6 +105,19 @@ export async function executePipeRdvReschedule(options: {
     }),
   ]);
 
+  if (dateChanged) {
+    await sendPipeRdvConfirmationAfterCalendar({
+      pipe: options.pipe,
+      rdvStage: options.rdvStage,
+      pipeTimelineEntryId: options.entry.id,
+      calendar,
+      startAtUnix: options.newOccurredAtUnix,
+      endAtUnix,
+      visio: options.visio,
+      physicalAddress: options.physicalAddress,
+    });
+  }
+
   return calendar;
 }
 
@@ -113,17 +126,14 @@ export async function applyPipeRdvReschedule(options: {
   entry: PipeTimelineEntryRecord;
   pipe: Pick<
     PipeRecord,
-    | "id"
-    | "stage"
-    | "pipe_type"
-    | "contact_id"
-    | "contact_prenom"
-    | "contact_nom"
-    | "secondary_contact_id"
-    | "secondary_contact_prenom"
-    | "secondary_contact_nom"
-    | "titre"
-  >;
+    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom"
+  > &
+    Partial<
+      Pick<
+        PipeRecord,
+        "secondary_contact_id" | "secondary_contact_prenom" | "secondary_contact_nom" | "titre"
+      >
+    >;
   rdvStage: PipeRdvStage;
   newOccurredAtUnix: number;
   endAtUnix?: number;

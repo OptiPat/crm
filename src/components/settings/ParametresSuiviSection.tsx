@@ -42,6 +42,18 @@ export function ParametresSuiviSection({ cgpConfig, onConfigChange }: Parametres
             placeholder="https://zoom.us/j/… ou https://teams.microsoft.com/l/meetup-join/…"
           />
         </div>
+
+        <div className="rounded-xl border border-dashed border-border/80 bg-muted/20 p-4 text-sm text-muted-foreground">
+          <p className="font-medium text-foreground">Emails RDV Pipe</p>
+          <p className="mt-1">
+            Configurez les modèles dans <strong>Modèles email → onglet Pipe RDV</strong> : choisissez
+            les étapes (R1, R2, R3), le message de confirmation et un rappel planifié (ex. 24 h
+            avant). Variables :{" "}
+            <code className="text-xs">{"{{date_rdv}}"}</code>,{" "}
+            <code className="text-xs">{"{{lien_visio}}"}</code>,{" "}
+            <code className="text-xs">{"{{co_contact}}"}</code>…
+          </p>
+        </div>
       </div>
     </SettingsPanel>
   );

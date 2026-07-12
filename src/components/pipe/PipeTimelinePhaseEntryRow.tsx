@@ -38,7 +38,18 @@ interface PipeTimelinePhaseEntryRowProps {
   entry: PipeTimelineEntryRecord;
   pipe?:
     | (Pick<PipeRecord, "id" | "stage" | "pipe_type"> &
-        Partial<Pick<PipeRecord, "contact_id" | "contact_prenom" | "contact_nom" | "titre">>)
+        Partial<
+          Pick<
+            PipeRecord,
+            | "contact_id"
+            | "contact_prenom"
+            | "contact_nom"
+            | "secondary_contact_id"
+            | "secondary_contact_prenom"
+            | "secondary_contact_nom"
+            | "titre"
+          >
+        >)
     | null;
   timeline: ReturnType<typeof usePipeTimeline>;
   disabled?: boolean;
@@ -90,20 +101,27 @@ export function PipeTimelinePhaseEntryRow({
       const nextTitre =
         userType === "RDV" ? formatRdvEntryTitle(rdvStage) : titre.trim() || null;
 
-      if (userType === "RDV" && pipe && occurredAtUnix !== entry.occurred_at) {
+      if (
+        userType === "RDV" &&
+        pipe?.contact_id != null &&
+        pipe.contact_id > 0 &&
+        occurredAtUnix !== entry.occurred_at
+      ) {
         const calendar = await applyPipeRdvReschedule({
           timeline,
           entry,
-          pipe: pipe as Pick<
-            PipeRecord,
-            | "id"
-            | "stage"
-            | "pipe_type"
-            | "contact_id"
-            | "contact_prenom"
-            | "contact_nom"
-            | "titre"
-          >,
+          pipe: {
+            id: pipe.id,
+            stage: pipe.stage,
+            pipe_type: pipe.pipe_type,
+            contact_id: pipe.contact_id,
+            contact_prenom: pipe.contact_prenom ?? "",
+            contact_nom: pipe.contact_nom ?? "",
+            secondary_contact_id: pipe.secondary_contact_id,
+            secondary_contact_prenom: pipe.secondary_contact_prenom,
+            secondary_contact_nom: pipe.secondary_contact_nom,
+            titre: pipe.titre,
+          },
           rdvStage,
           newOccurredAtUnix: occurredAtUnix,
           contenu: contenu.trim() || null,

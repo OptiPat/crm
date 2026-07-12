@@ -84,6 +84,7 @@ impl super::Database {
         let pipe = self.get_pipe_by_id(entry.pipe_id)?;
 
         self.mark_calendar_event_cancelled(google_event_id)?;
+        let _ = self.cancel_pipe_rdv_reminder_schedules(timeline_entry_id);
         self.create_pipe_timeline_entry(NewPipeTimelineEntry {
             pipe_id: entry.pipe_id,
             entry_type: TIMELINE_NOTE.into(),
@@ -121,6 +122,8 @@ impl super::Database {
         if (previous_start_at - new_start_at).abs() <= PIPE_SYNC_TIME_TOLERANCE_SEC {
             return Ok(false);
         }
+
+        let _ = self.cancel_pipe_rdv_reminder_schedules(timeline_entry_id);
 
         self.create_pipe_timeline_entry(NewPipeTimelineEntry {
             pipe_id: entry.pipe_id,

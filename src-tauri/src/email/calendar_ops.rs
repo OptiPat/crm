@@ -105,6 +105,48 @@ struct Attendee<'a> {
 #[derive(Debug, Deserialize)]
 struct GoogleEventCreated {
     id: String,
+    #[serde(default)]
+    location: Option<String>,
+    #[serde(rename = "hangoutLink", default)]
+    hangout_link: Option<String>,
+    #[serde(rename = "conferenceData", default)]
+    conference_data: Option<GoogleConferenceData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleConferenceData {
+    #[serde(rename = "entryPoints", default)]
+    entry_points: Vec<GoogleConferenceEntryPoint>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GoogleConferenceEntryPoint {
+    #[serde(rename = "entryPointType", default)]
+    entry_point_type: Option<String>,
+    uri: Option<String>,
+}
+
+fn extract_google_event_visio_link(event: &GoogleEventCreated) -> Option<String> {
+    if let Some(link) = event.hangout_link.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        return Some(link.to_string());
+    }
+    event
+        .conference_data
+        .as_ref()?
+        .entry_points
+        .iter()
+        .find(|ep| ep.entry_point_type.as_deref() == Some("video"))
+        .and_then(|ep| ep.uri.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+        .map(str::to_string)
+}
+
+fn extract_google_event_location(event: &GoogleEventCreated) -> Option<String> {
+    event
+        .location
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 #[derive(Debug, Deserialize)]
@@ -243,6 +285,7 @@ fn apply_google_event_diff_to_pipe_rdv(
     ge: &GoogleCalendarWeekEvent,
     ce: &CalendarEventEntry,
     contact_ids_to_sync: &mut std::collections::HashSet<i64>,
+    rescheduled_timeline_entry_ids: &mut Vec<i64>,
 ) -> Result<bool, String> {
     let start_changed = (ce.start_at - ge.start_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC;
     let end_changed = (ce.end_at - ge.end_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC;
@@ -267,6 +310,7 @@ fn apply_google_event_diff_to_pipe_rdv(
                     }
                 }
             }
+            rescheduled_timeline_entry_ids.push(timeline_id);
             return Ok(true);
         }
     } else if end_changed {
@@ -281,6 +325,7 @@ fn apply_google_event_diff_to_pipe_rdv(
             .map_err(|e| e.to_string())?
         {
             contact_ids_to_sync.insert(ce.contact_id);
+            rescheduled_timeline_entry_ids.push(timeline_id);
             return Ok(true);
         }
     } else if db
@@ -302,6 +347,7 @@ fn sync_pipe_rdv_from_google_week(
     let mut rescheduled = 0u32;
     let mut cancelled = 0u32;
     let mut contact_ids_to_sync = std::collections::HashSet::new();
+    let mut rescheduled_timeline_entry_ids = Vec::new();
     let week_end_at = week_start_at.saturating_add(WEEK_SECONDS);
 
     for ge in google_events {
@@ -321,6 +367,7 @@ fn sync_pipe_rdv_from_google_week(
             ge,
             &ce,
             &mut contact_ids_to_sync,
+            &mut rescheduled_timeline_entry_ids,
         )?;
         if changed {
             rescheduled += 1;
@@ -348,6 +395,7 @@ fn sync_pipe_rdv_from_google_week(
                         &ge,
                         &ce,
                         &mut contact_ids_to_sync,
+                        &mut rescheduled_timeline_entry_ids,
                     )?;
                     if changed {
                         rescheduled += 1;
@@ -386,6 +434,7 @@ fn sync_pipe_rdv_from_google_week(
     Ok(AgendaGooglePipeSyncResult {
         rescheduled,
         cancelled,
+        rescheduled_timeline_entry_ids,
     })
 }
 
@@ -416,10 +465,7 @@ pub fn list_google_calendar_week_with_pipe_sync(
     let sync = if sync_pipe {
         sync_pipe_rdv_from_google_week(app, db, week_start_at, &events)?
     } else {
-        AgendaGooglePipeSyncResult {
-            rescheduled: 0,
-            cancelled: 0,
-        }
+        AgendaGooglePipeSyncResult::default()
     };
     enrich_week_events_with_pipe_links(db, &mut events)?;
     Ok(AgendaWeekListResult { events, sync })
@@ -438,6 +484,7 @@ pub fn sync_all_pipe_linked_google_rdvs(
     let mut rescheduled = 0u32;
     let mut cancelled = 0u32;
     let mut contact_ids_to_sync = std::collections::HashSet::new();
+    let mut rescheduled_timeline_entry_ids = Vec::new();
 
     for ce in linked {
         let Some(timeline_id) = ce.pipe_timeline_entry_id else {
@@ -452,6 +499,7 @@ pub fn sync_all_pipe_linked_google_rdvs(
                     &ge,
                     &ce,
                     &mut contact_ids_to_sync,
+                    &mut rescheduled_timeline_entry_ids,
                 )?;
                 if changed {
                     rescheduled += 1;
@@ -482,6 +530,7 @@ pub fn sync_all_pipe_linked_google_rdvs(
     Ok(AgendaGooglePipeSyncResult {
         rescheduled,
         cancelled,
+        rescheduled_timeline_entry_ids,
     })
 }
 
@@ -649,6 +698,8 @@ pub fn create_google_calendar_rdv(
     }
 
     let created: GoogleEventCreated = res.json().map_err(|e| e.to_string())?;
+    let visio_link = extract_google_event_visio_link(&created);
+    let event_location = extract_google_event_location(&created);
     let row_id = db
         .insert_calendar_event(
             contact_id,
@@ -667,8 +718,12 @@ pub fn create_google_calendar_rdv(
         let _ = db.set_pipe_timeline_google_event_id(entry_id, Some(&created.id));
     }
 
-    db.get_calendar_event_by_id(row_id)
-        .map_err(|e| e.to_string())
+    let mut entry = db
+        .get_calendar_event_by_id(row_id)
+        .map_err(|e| e.to_string())?;
+    entry.visio_link = visio_link;
+    entry.event_location = event_location;
+    Ok(entry)
 }
 
 #[derive(Debug, Serialize)]
@@ -697,7 +752,7 @@ pub fn update_google_calendar_rdv(
     preserve_visio: bool,
     clear_visio: bool,
     additional_contact_ids: &[i64],
-) -> Result<(), String> {
+) -> Result<crate::database::models::CalendarRdvSyncDetails, String> {
     let conn = resolve_google_calendar_connection(app)?
         .ok_or("Connectez Google Agenda dans Paramètres → Emails & envois → Connexion.")?;
 
@@ -802,8 +857,15 @@ pub fn update_google_calendar_rdv(
         return Err(super::google_api_errors::calendar_access_error(status, &err));
     }
 
+    let updated: GoogleEventCreated = res.json().map_err(|e| e.to_string())?;
+
     db.update_calendar_event_times(google_event_id, summary, start_at, end_at)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    Ok(crate::database::models::CalendarRdvSyncDetails {
+        visio_link: extract_google_event_visio_link(&updated),
+        event_location: extract_google_event_location(&updated),
+    })
 }
 
 pub fn cancel_google_calendar_rdv(app: &AppHandle, db: &Database, google_event_id: &str) -> Result<(), String> {

@@ -21,6 +21,39 @@ import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import { loadDefaultPipeRdvVisio, rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import { buildPipeRdvCalendarContext, warnPipeRdvMissingAttendeeEmails } from "@/lib/pipe/pipe-rdv-calendar-context";
+import { maybeSendPipeRdvConfirmationEmail } from "@/lib/pipe/pipe-rdv-confirmation-email";
+
+export async function sendPipeRdvConfirmationAfterCalendar(options: {
+  pipe: Pick<
+    PipeRecord,
+    | "id"
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+  >;
+  rdvStage: PipeRdvStage;
+  pipeTimelineEntryId: number;
+  calendar?: PipeRdvCalendarSyncResult;
+  startAtUnix: number;
+  endAtUnix: number;
+  visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
+}): Promise<void> {
+  await maybeSendPipeRdvConfirmationEmail({
+    pipe: options.pipe,
+    rdvStage: options.rdvStage,
+    pipeTimelineEntryId: options.pipeTimelineEntryId,
+    startAtUnix: options.startAtUnix,
+    endAtUnix: options.endAtUnix,
+    visioLink: options.calendar?.synced ? options.calendar.visioLink : undefined,
+    eventLocation: options.calendar?.synced ? options.calendar.eventLocation : undefined,
+    visio: options.visio,
+    physicalAddress: options.physicalAddress,
+  });
+}
 
 export async function syncGoogleCalendarForPipeRdv(options: {
   contactId: number;
@@ -66,8 +99,10 @@ export async function syncGoogleCalendarForPipeRdv(options: {
       : { addGoogleMeet: false, visioLink: null as string | null, eventLocation: null as string | null };
 
   try {
+    let visioLink: string | null = null;
+    let eventLocation: string | null = null;
     if (options.existingGoogleEventId) {
-      await updateCalendarRdv({
+      const details = await updateCalendarRdv({
         googleEventId: options.existingGoogleEventId,
         title,
         startAt: options.startAtUnix,
@@ -79,21 +114,24 @@ export async function syncGoogleCalendarForPipeRdv(options: {
         eventLocation: visioPayload.eventLocation,
         additionalAttendeeContactIds: options.additionalAttendeeContactIds,
       });
+      visioLink = details.visio_link ?? null;
+      eventLocation = details.event_location ?? null;
     } else {
-      const createVisio = visio ?? (await loadDefaultPipeRdvVisio());
-      const createPayload = rdvVisioToApiPayload(createVisio, options.physicalAddress);
-      await createCalendarRdv({
+      const created = await createCalendarRdv({
         contactId: options.contactId,
         pipeTimelineEntryId: options.pipeTimelineEntryId ?? null,
         title,
         startAt: options.startAtUnix,
         endAt: options.endAtUnix,
-        addGoogleMeet: createPayload.addGoogleMeet,
-        visioLink: createPayload.visioLink,
-        eventLocation: createPayload.eventLocation,
+        addGoogleMeet: visioPayload.addGoogleMeet,
+        visioLink: visioPayload.visioLink,
+        eventLocation: visioPayload.eventLocation,
         additionalAttendeeContactIds: options.additionalAttendeeContactIds,
       });
+      visioLink = created.visio_link ?? null;
+      eventLocation = created.event_location ?? null;
     }
+    return { synced: true, clientAlreadyAccepted: false, visioLink, eventLocation };
   } catch (e) {
     return {
       synced: false,
@@ -102,7 +140,6 @@ export async function syncGoogleCalendarForPipeRdv(options: {
     };
   }
 
-  return { synced: true, clientAlreadyAccepted: false };
 }
 
 export async function planifyPipeRdv(options: {
@@ -162,6 +199,17 @@ export async function planifyPipeRdv(options: {
       additionalAttendeeContactIds: calendarCtx?.additionalAttendeeContactIds,
     }),
   ]);
+
+  await sendPipeRdvConfirmationAfterCalendar({
+    pipe: options.pipe,
+    rdvStage: options.rdvStage,
+    pipeTimelineEntryId: entry.id,
+    calendar,
+    startAtUnix: options.startAtUnix,
+    endAtUnix: options.endAtUnix,
+    visio: options.visio,
+    physicalAddress: options.physicalAddress,
+  });
 
   return { calendar };
 }

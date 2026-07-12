@@ -69,6 +69,10 @@ import {
   type TemplateRelanceDraft,
 } from "@/components/emails/TemplateEmailRelancePanel";
 import {
+  TemplateEmailPipeRdvPanel,
+  type TemplatePipeRdvDraft,
+} from "@/components/emails/TemplateEmailPipeRdvPanel";
+import {
   TemplateEmailTutoiementPanel,
   type TemplateTutoiementDraft,
 } from "@/components/emails/TemplateEmailTutoiementPanel";
@@ -84,6 +88,16 @@ import {
   TEMPLATE_EMAIL_RELANCE_KEY,
 } from "@/lib/emails/template-email-relance";
 import {
+  buildPipeRdvReminderTemplateNom,
+  DEFAULT_PIPE_RDV_REMINDER,
+  DEFAULT_PIPE_RDV_TRIGGER,
+  findPipeRdvStageOverlapError,
+  parseTemplateEmailPipeRdvReminder,
+  parseTemplateEmailPipeRdvTrigger,
+  setTemplateEmailPipeRdvReminderInMeta,
+  setTemplateEmailPipeRdvTriggerInMeta,
+} from "@/lib/emails/template-email-pipe-rdv";
+import {
   serializeEmailEnvoiJoursSemaine,
 } from "@/lib/emails/email-envoi-schedule";
 import {
@@ -97,6 +111,7 @@ import { archiveEphemeralCampaign } from "@/lib/api/tauri-ephemeral-campaign";
 import {
   EMAIL_TEMPLATE_CATEGORIES,
   EMAIL_TEMPLATE_VARIABLES,
+  PIPE_RDV_TEMPLATE_VARIABLES,
   getAgendaVariableTokens,
   getTemplateCategoryMeta,
   normalizeAgendaLinks,
@@ -168,6 +183,7 @@ export function TemplateEmailForm({
     | "message"
     | "tutoiement"
     | "relance"
+    | "pipe-rdv"
     | "declencheur"
     | "liaisons"
     | "audience"
@@ -198,6 +214,20 @@ export function TemplateEmailForm({
     corpsHtml: "",
   });
   const [relanceTuTemplateId, setRelanceTuTemplateId] = useState<number | null>(null);
+  const [pipeRdvDraft, setPipeRdvDraft] = useState<TemplatePipeRdvDraft>({
+    trigger: { ...DEFAULT_PIPE_RDV_TRIGGER },
+    reminder: { ...DEFAULT_PIPE_RDV_REMINDER },
+    reminderSujet: "",
+    reminderCorpsHtml: "",
+    reminderTuSujet: "",
+    reminderTuCorpsHtml: "",
+  });
+  const [pipeRdvReminderTemplateId, setPipeRdvReminderTemplateId] = useState<number | null>(
+    null
+  );
+  const [pipeRdvReminderTuTemplateId, setPipeRdvReminderTuTemplateId] = useState<number | null>(
+    null
+  );
   const [previewRegistre, setPreviewRegistre] = useState<"VOUS" | "TU">("VOUS");
   const [emailTrigger, setEmailTrigger] = useState<TemplateEmailTriggerConfig>(
     DEFAULT_TEMPLATE_EMAIL_TRIGGER
@@ -324,6 +354,44 @@ export function TemplateEmailForm({
         })
         .catch(() => undefined);
     }
+    const pipeTrigger = parseTemplateEmailPipeRdvTrigger(source.variables);
+    const pipeReminder = parseTemplateEmailPipeRdvReminder(source.variables);
+    setPipeRdvDraft({
+      trigger: pipeTrigger,
+      reminder: pipeReminder,
+      reminderSujet: "",
+      reminderCorpsHtml: "",
+      reminderTuSujet: "",
+      reminderTuCorpsHtml: "",
+    });
+    setPipeRdvReminderTemplateId(pipeReminder.reminder_template_id);
+    setPipeRdvReminderTuTemplateId(pipeReminder.reminder_tutoiement_template_id);
+    if (pipeReminder.reminder_template_id) {
+      void getTemplateEmailById(pipeReminder.reminder_template_id)
+        .then((rem) => {
+          const remHtml = getTemplateCorpsHtml(rem.variables);
+          setPipeRdvDraft((prev) => ({
+            ...prev,
+            reminderSujet: rem.sujet,
+            reminderCorpsHtml: remHtml ?? plainTextToTemplateHtml(rem.corps),
+          }));
+          const remTuId = rem.tutoiement_template_id ?? null;
+          setPipeRdvReminderTuTemplateId(remTuId);
+          if (remTuId != null) {
+            void getTemplateEmailById(remTuId)
+              .then((remTu) => {
+                const remTuHtml = getTemplateCorpsHtml(remTu.variables);
+                setPipeRdvDraft((prev) => ({
+                  ...prev,
+                  reminderTuSujet: remTu.sujet,
+                  reminderTuCorpsHtml: remTuHtml ?? plainTextToTemplateHtml(remTu.corps),
+                }));
+              })
+              .catch(() => undefined);
+          }
+        })
+        .catch(() => undefined);
+    }
     const ephemeralCfg =
       parseEphemeralCampaignConfig(source.variables) ?? { ...DEFAULT_EPHEMERAL_CAMPAIGN };
     setEphemeralCampaign(ephemeralCfg);
@@ -371,6 +439,16 @@ export function TemplateEmailForm({
     setTutoiementVariables(null);
     setRelanceTuDraft({ enabled: false, sujet: "", corpsHtml: "" });
     setRelanceTuTemplateId(null);
+    setPipeRdvDraft({
+      trigger: { ...DEFAULT_PIPE_RDV_TRIGGER },
+      reminder: { ...DEFAULT_PIPE_RDV_REMINDER },
+      reminderSujet: "",
+      reminderCorpsHtml: "",
+      reminderTuSujet: "",
+      reminderTuCorpsHtml: "",
+    });
+    setPipeRdvReminderTemplateId(null);
+    setPipeRdvReminderTuTemplateId(null);
     setPreviewRegistre("VOUS");
     setPreviewContactId("sample");
     setLinkedEtiquetteIds([]);
@@ -598,6 +676,37 @@ export function TemplateEmailForm({
         return;
       }
     }
+    if (!isEphemeralMode && pipeRdvDraft.trigger.enabled && pipeRdvDraft.trigger.stages.length === 0) {
+      toast.error("Pipe RDV : sélectionnez au moins une étape (onglet Pipe RDV)");
+      setFormTab("pipe-rdv");
+      rejectPendingEphemeralSave(new Error("validation"));
+      return;
+    }
+    if (!isEphemeralMode && pipeRdvDraft.trigger.enabled) {
+      const overlap = await findPipeRdvStageOverlapError(
+        effectiveTemplateId,
+        pipeRdvDraft.trigger.stages
+      );
+      if (overlap) {
+        toast.error(overlap);
+        setFormTab("pipe-rdv");
+        rejectPendingEphemeralSave(new Error("validation"));
+        return;
+      }
+    }
+    if (
+      !isEphemeralMode &&
+      pipeRdvDraft.reminder.enabled &&
+      !pipeRdvDraft.reminder.use_same_message
+    ) {
+      const remPlain = htmlToPlainEmail(pipeRdvDraft.reminderCorpsHtml);
+      if (!pipeRdvDraft.reminderSujet.trim() || !remPlain) {
+        toast.error("Rappel RDV : renseignez l'objet et le message (onglet Pipe RDV)");
+        setFormTab("pipe-rdv");
+        rejectPendingEphemeralSave(new Error("validation"));
+        return;
+      }
+    }
     if (emailTrigger.enabled && emailTrigger.condition_type === "TYPE_PRODUIT") {
       const cfg = parseConditionConfig<ConditionTypeProduit>(emailTrigger.condition_config);
       const { types, nomsProduit } = parseTypeProduitConditionConfig(cfg);
@@ -740,6 +849,57 @@ export function TemplateEmailForm({
         }
       }
 
+      let linkedPipeRdvReminderId = pipeRdvReminderTemplateId;
+      let linkedPipeRdvReminderTuId = pipeRdvReminderTuTemplateId;
+      if (
+        !isEphemeralMode &&
+        pipeRdvDraft.trigger.enabled &&
+        pipeRdvDraft.reminder.enabled &&
+        !pipeRdvDraft.reminder.use_same_message
+      ) {
+        const remCorpsHtml = canonicalizeCorpsHtmlForSave(pipeRdvDraft.reminderCorpsHtml);
+        const remPlain = htmlToPlainEmail(remCorpsHtml);
+        const remNom = buildPipeRdvReminderTemplateNom(formData.nom);
+        if (tutoiementDraft.enabled) {
+          const remTuCorpsHtml = canonicalizeCorpsHtmlForSave(pipeRdvDraft.reminderTuCorpsHtml);
+          const remTuPlain = htmlToPlainEmail(remTuCorpsHtml);
+          const remTuPayload: NewTemplateEmail = {
+            nom: buildTutoiementTemplateNom(remNom),
+            sujet: pipeRdvDraft.reminderTuSujet.trim(),
+            corps: remTuPlain,
+            categorie: "RELANCE",
+            variables: setTemplateCorpsHtmlInMeta(null, remTuCorpsHtml || null),
+            agenda_link_id: formData.agenda_link_id,
+            relance_template_id: null,
+            tutoiement_template_id: null,
+          };
+          if (linkedPipeRdvReminderTuId != null) {
+            await updateTemplateEmail(linkedPipeRdvReminderTuId, remTuPayload);
+          } else {
+            const createdRemTu = await createTemplateEmail(remTuPayload);
+            linkedPipeRdvReminderTuId = createdRemTu.id;
+          }
+        }
+        const remPayload: NewTemplateEmail = {
+          nom: remNom,
+          sujet: pipeRdvDraft.reminderSujet.trim(),
+          corps: remPlain,
+          categorie: "RELANCE",
+          variables: setTemplateCorpsHtmlInMeta(null, remCorpsHtml || null),
+          agenda_link_id: formData.agenda_link_id,
+          relance_template_id: null,
+          tutoiement_template_id: tutoiementDraft.enabled ? linkedPipeRdvReminderTuId : null,
+        };
+        if (linkedPipeRdvReminderId != null) {
+          await updateTemplateEmail(linkedPipeRdvReminderId, remPayload);
+        } else {
+          const createdRem = await createTemplateEmail(remPayload);
+          linkedPipeRdvReminderId = createdRem.id;
+        }
+        setPipeRdvReminderTemplateId(linkedPipeRdvReminderId);
+        setPipeRdvReminderTuTemplateId(linkedPipeRdvReminderTuId);
+      }
+
       let variables = setTemplateCorpsHtmlInMeta(formData.variables, corpsHtmlForSave || null);
       let ephemeralCampaignSaved = ephemeralCampaign;
       if (isEphemeralMode) {
@@ -789,6 +949,31 @@ export function TemplateEmailForm({
       variables = setTemplateEmailSuiviReponseInMeta(variables, {
         attendre_reponse: relanceEnabled ? relanceDraft.attendreReponse : false,
       });
+      if (!isEphemeralMode) {
+        variables = setTemplateEmailPipeRdvTriggerInMeta(variables, {
+          enabled: pipeRdvDraft.trigger.enabled,
+          stages: pipeRdvDraft.trigger.enabled ? pipeRdvDraft.trigger.stages : [],
+        });
+        variables = setTemplateEmailPipeRdvReminderInMeta(variables, {
+          enabled: pipeRdvDraft.trigger.enabled && pipeRdvDraft.reminder.enabled,
+          delai_heures: pipeRdvDraft.reminder.delai_heures,
+          envoi_heure: pipeRdvDraft.reminder.envoi_heure,
+          use_same_message: pipeRdvDraft.reminder.use_same_message,
+          reminder_template_id:
+            pipeRdvDraft.trigger.enabled &&
+            pipeRdvDraft.reminder.enabled &&
+            !pipeRdvDraft.reminder.use_same_message
+              ? linkedPipeRdvReminderId
+              : null,
+          reminder_tutoiement_template_id:
+            pipeRdvDraft.trigger.enabled &&
+            pipeRdvDraft.reminder.enabled &&
+            !pipeRdvDraft.reminder.use_same_message &&
+            tutoiementDraft.enabled
+              ? linkedPipeRdvReminderTuId
+              : null,
+        });
+      }
       variables = stampStelliumPerfTemplateMeta(
         stampScpiBulletinTemplateMeta(variables, formData.nom),
         formData.nom
@@ -1043,7 +1228,7 @@ export function TemplateEmailForm({
                 <TabsList
                   className={cn(
                     "mx-6 mt-4 grid w-auto shrink-0",
-                    isEphemeralMode ? "grid-cols-5" : "grid-cols-5"
+                    isEphemeralMode ? "grid-cols-5" : "grid-cols-6"
                   )}
                 >
                   <TabsTrigger value="message">Message</TabsTrigger>
@@ -1059,6 +1244,14 @@ export function TemplateEmailForm({
                       <span className="ml-1.5 text-[10px] text-orange-700">on</span>
                     )}
                   </TabsTrigger>
+                  {!isEphemeralMode && (
+                    <TabsTrigger value="pipe-rdv">
+                      Pipe RDV
+                      {pipeRdvDraft.trigger.enabled && (
+                        <span className="ml-1.5 text-[10px] text-emerald-700">on</span>
+                      )}
+                    </TabsTrigger>
+                  )}
                   {isEphemeralMode ? (
                     <>
                       <TabsTrigger value="audience">Audience</TabsTrigger>
@@ -1142,7 +1335,7 @@ export function TemplateEmailForm({
                         onMouseDownCapture={captureSelectionsBeforeVariableInsert}
                       >
                         <div className="flex flex-wrap gap-2 pt-2">
-                          {EMAIL_TEMPLATE_VARIABLES.map((v) => (
+                          {[...EMAIL_TEMPLATE_VARIABLES, ...PIPE_RDV_TEMPLATE_VARIABLES].map((v) => (
                             <span key={v.token} className="inline-flex gap-0.5">
                               <Badge
                                 variant="outline"
@@ -1332,6 +1525,18 @@ export function TemplateEmailForm({
                       onTutoiementChange={setRelanceTuDraft}
                     />
                   </TabsContent>
+
+                  {!isEphemeralMode && (
+                    <TabsContent value="pipe-rdv" className="mt-0 data-[state=inactive]:hidden">
+                      <TemplateEmailPipeRdvPanel
+                        draft={pipeRdvDraft}
+                        onChange={setPipeRdvDraft}
+                        parentNom={formData.nom}
+                        mainTutoiementEnabled={tutoiementDraft.enabled}
+                        tutoiementDraft={tutoiementDraft}
+                      />
+                    </TabsContent>
+                  )}
 
                   <TabsContent value="declencheur" className="mt-0 data-[state=inactive]:hidden">
                     {souscriptionDuplicateWarning && (

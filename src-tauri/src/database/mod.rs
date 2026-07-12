@@ -32,6 +32,7 @@ pub mod partenaires;
 pub mod pipe;
 pub mod pipe_contact_sync;
 pub mod pipe_rdv_google_sync;
+pub mod pipe_rdv_scheduled_emails;
 pub mod pipe_timeline;
 pub mod settings;
 pub mod templates_email;
@@ -573,6 +574,7 @@ impl Database {
         self.migrate_notes_tables()?;
         self.migrate_pipes_table()?;
         self.migrate_pipe_timeline_table()?;
+        self.migrate_pipe_rdv_scheduled_emails_table()?;
         self.migrate_purge_premature_etiquette_taches()?;
 
         Ok(())

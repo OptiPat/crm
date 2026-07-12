@@ -16,7 +16,12 @@ export const PIPE_RDV_CALENDAR_DURATION_SEC = 3600;
 
 export type PipeRdvCalendarSyncResult =
   | { synced: false; reason: "not_connected" | "no_contact" | "past" }
-  | { synced: true; clientAlreadyAccepted: boolean }
+  | {
+      synced: true;
+      clientAlreadyAccepted: boolean;
+      visioLink?: string | null;
+      eventLocation?: string | null;
+    }
   | { synced: false; reason: "error"; message: string };
 
 export function isPipeRdvCalendarSyncEligible(

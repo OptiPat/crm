@@ -65,6 +65,7 @@ import { ensureStelliumPerfEmailTemplates } from "@/lib/api/tauri-stellium-perf-
 import { useTemplatesEmailAutoRefresh } from "@/hooks/useTemplatesEmailAutoRefresh";
 import { navigateToEtiquetteEdit } from "@/lib/navigation/etiquettes-navigation";
 import { resolveTemplateSouscriptionDuplicateWarning } from "@/lib/emails/template-etiquette-duplicate";
+import { migrateLegacyPipeRdvConfirmationTemplate } from "@/lib/emails/template-email-pipe-rdv";
 import {
   loadTemplatesEmailPagePreferences,
   saveTemplatesEmailPagePreferences,
@@ -159,6 +160,11 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
         await ensureStelliumPerfEmailTemplates();
       } catch (error) {
         console.error("ensure Stellium perf templates:", error);
+      }
+      try {
+        await migrateLegacyPipeRdvConfirmationTemplate();
+      } catch (error) {
+        console.warn("Migration modèle Pipe RDV legacy:", error);
       }
       await Promise.all([loadTemplates(), loadEtiquetteLinks()]);
       void getCgpConfig().then(setCgp).catch(() => setCgp(null));

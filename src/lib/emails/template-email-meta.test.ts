@@ -102,4 +102,20 @@ describe("renderTemplatePreview", () => {
     expect(out.body).toContain("Exceltis — Février 2025");
     expect(out.body).toContain("performance 9 %/an");
   });
+
+  it("forSend n'injecte pas de données fictives Exceltis", () => {
+    const out = renderTemplatePreview(
+      "Exceltis {{millesime}} — {{prenom}}",
+      "Support {{etiquette_nom}} — performance {{rendement_exceltis}}.",
+      SAMPLE_PREVIEW_CONTACT,
+      null,
+      undefined,
+      undefined,
+      undefined,
+      { forSend: true }
+    );
+    expect(out.subject).toBe("Exceltis {{millesime}} — Marie");
+    expect(out.body).not.toContain("Février 2025");
+    expect(out.body).not.toContain("9 %/an");
+  });
 });

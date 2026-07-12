@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/tauri-stellium-exceltis";
 import { beginBackgroundActivity } from "@/lib/background-activity";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
+import { processDuePipeRdvReminders } from "@/lib/pipe/pipe-rdv-reminder-processor";
 import { syncSharedNotes } from "@/lib/api/tauri-notes";
 import { notifyNotesChanged } from "@/lib/notes/note-events";
 import { toast } from "sonner";
@@ -43,6 +44,7 @@ export function useBackgroundSync(enabled = true): void {
         if (result.errors.length > 0) {
           console.warn("Sync relation:", result.errors.join(" ; "));
         }
+        await processDuePipeRdvReminders(10);
       } finally {
         endActivity();
       }

@@ -18,6 +18,7 @@ import {
   getTemplateActivationFlags,
   getTemplateActivationPreviewHint,
   getTemplateRelanceBadgeLabel,
+  getTemplatePipeRdvBadgeLabel,
   getEphemeralCampaignBadgeLabel,
   getTemplateTriggerShortLabel,
   TEMPLATE_ACTIVATION_MODE_OPTIONS,
@@ -35,6 +36,7 @@ import { requestOpenParametres } from "@/lib/navigation/app-navigation";
 import {
   ArrowRight,
   AlertTriangle,
+  CalendarClock,
   ChevronDown,
   Copy,
   Mail,
@@ -237,6 +239,7 @@ export function TemplateActivationBadges({
   const flags = getTemplateActivationFlags(template, etiquetteLinkCount);
   const triggerLabel = getTemplateTriggerShortLabel(template);
   const relanceLabel = getTemplateRelanceBadgeLabel(template);
+  const pipeRdvLabel = getTemplatePipeRdvBadgeLabel(template);
   const ephemeralLabel = getEphemeralCampaignBadgeLabel(template);
 
   return (
@@ -266,6 +269,12 @@ export function TemplateActivationBadges({
         <TemplateActivationBadge className="border-orange-200 bg-orange-50 text-orange-900">
           <RefreshCw className="h-3 w-3 shrink-0" />
           {relanceLabel}
+        </TemplateActivationBadge>
+      )}
+      {pipeRdvLabel && (
+        <TemplateActivationBadge className="border-emerald-200 bg-emerald-50 text-emerald-900">
+          <CalendarClock className="h-3 w-3 shrink-0" />
+          {pipeRdvLabel}
         </TemplateActivationBadge>
       )}
       {flags.hasTutoiement && (

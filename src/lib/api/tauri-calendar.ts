@@ -18,6 +18,13 @@ export interface CalendarEventEntry {
   updated_at: number;
   contact_prenom?: string;
   contact_nom?: string;
+  visio_link?: string | null;
+  event_location?: string | null;
+}
+
+export interface CalendarRdvSyncDetails {
+  visio_link?: string | null;
+  event_location?: string | null;
 }
 
 export interface CalendarSyncResult {
@@ -42,6 +49,8 @@ export interface GoogleCalendarWeekEvent {
 export interface AgendaGooglePipeSyncResult {
   rescheduled: number;
   cancelled: number;
+  /** Entrées timeline RDV reportées côté Google (replanification des rappels email). */
+  rescheduled_timeline_entry_ids?: number[];
 }
 
 export interface AgendaWeekListResult {
@@ -88,8 +97,8 @@ export async function updateCalendarRdv(input: {
   preserveVisio?: boolean;
   clearVisio?: boolean;
   additionalAttendeeContactIds?: number[];
-}): Promise<void> {
-  return invoke<void>("update_calendar_rdv", {
+}): Promise<CalendarRdvSyncDetails> {
+  return invoke<CalendarRdvSyncDetails>("update_calendar_rdv", {
     googleEventId: input.googleEventId,
     title: input.title,
     startAt: input.startAt,
@@ -127,6 +136,17 @@ export async function listGoogleCalendarWeek(
 
 export async function syncPipeGoogleRdvs(): Promise<AgendaGooglePipeSyncResult> {
   return invoke<AgendaGooglePipeSyncResult>("sync_pipe_google_rdvs");
+}
+
+export async function getPipeRdvCalendarEventForTimeline(
+  timelineEntryId: number
+): Promise<Pick<CalendarEventEntry, "start_at" | "end_at"> | null> {
+  const row = await invoke<CalendarEventEntry | null>(
+    "get_pipe_rdv_calendar_event_for_timeline",
+    { timelineEntryId }
+  );
+  if (!row) return null;
+  return { start_at: row.start_at, end_at: row.end_at };
 }
 
 export async function resolvePipeRdvGoogleEventId(

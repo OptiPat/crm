@@ -222,6 +222,8 @@ impl Database {
                 updated_at: row.get(14)?,
                 contact_prenom: Some(row.get(15)?),
                 contact_nom: Some(row.get(16)?),
+                visio_link: None,
+                event_location: None,
             })
         })?;
         rows.collect()
@@ -292,6 +294,22 @@ impl Database {
         Ok(rows.next().transpose()?)
     }
 
+    pub fn get_active_calendar_event_for_pipe_timeline(
+        &self,
+        timeline_entry_id: i64,
+    ) -> Result<Option<super::models::CalendarEventEntry>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
+                    title, start_at, end_at, attendee_email, attendee_status, event_status,
+                    rdv_effectue, created_at, updated_at
+             FROM calendar_events
+             WHERE pipe_timeline_entry_id = ?1 AND event_status != 'cancelled'
+             ORDER BY updated_at DESC LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![timeline_entry_id], map_calendar_event_row)?;
+        Ok(rows.next().transpose()?)
+    }
+
     pub fn pipe_links_for_google_event_ids(
         &self,
         google_event_ids: &[String],
@@ -344,5 +362,7 @@ fn map_calendar_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalendarE
         updated_at: row.get(14)?,
         contact_prenom: None,
         contact_nom: None,
+        visio_link: None,
+        event_location: None,
     })
 }

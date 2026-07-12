@@ -6,6 +6,7 @@ import {
 } from "@/lib/api/tauri-calendar";
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { addWeeks, weekKey, weekStartUnix } from "@/lib/calendar/agenda-week";
+import { handlePipeGoogleAgendaSyncResult } from "@/lib/pipe/pipe-rdv-google-sync-reminders";
 
 type WeekCache = Map<string, GoogleCalendarWeekEvent[]>;
 
@@ -56,6 +57,7 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
         prefetchWeek(addWeeks(targetWeekStartAt, 1));
         try {
           const result = await fetchWeek(targetWeekStartAt);
+          await handlePipeGoogleAgendaSyncResult(result.sync);
           cacheRef.current.set(key, result.events);
           if (activeWeekRef.current === targetWeekStartAt) {
             setEvents(result.events);
@@ -77,6 +79,7 @@ export function useAgendaWeek(initialWeekStartAt?: number) {
       setError(null);
       try {
         const result = await fetchWeek(targetWeekStartAt);
+        await handlePipeGoogleAgendaSyncResult(result.sync);
         cacheRef.current.set(key, result.events);
         if (activeWeekRef.current === targetWeekStartAt) {
           setEvents(result.events);

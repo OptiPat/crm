@@ -49,6 +49,8 @@ export interface CgpConfig {
   cif_pied_de_page?: string | null;
   /** Lien Zoom / Teams par défaut pour la planification RDV (Meet = auto). */
   default_visio_link?: string | null;
+  /** Modèle email de confirmation à l'envoi / replanification d'un RDV Pipe. */
+  pipe_rdv_confirmation_template_id?: number | null;
 }
 
 // ========== SETTINGS GÉNÉRIQUES ==========

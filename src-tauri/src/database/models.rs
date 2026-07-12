@@ -1204,6 +1204,43 @@ pub struct CgpConfig {
     /// Lien visio par défaut (Zoom, Teams, etc.) pour les RDV planifiés.
     #[serde(default)]
     pub default_visio_link: Option<String>,
+    /// Modèle email envoyé à la planification / replanification d'un RDV Pipe.
+    #[serde(default)]
+    pub pipe_rdv_confirmation_template_id: Option<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeRdvReminderSchedule {
+    pub id: i64,
+    pub pipe_timeline_entry_id: i64,
+    pub pipe_id: i64,
+    pub contact_id: i64,
+    pub template_id: i64,
+    pub send_at: i64,
+    pub rdv_at: i64,
+    pub rdv_end_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visio_link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_location: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ReplacePipeRdvReminderSchedulesInput {
+    pub pipe_timeline_entry_id: i64,
+    pub rows: Vec<PipeRdvReminderScheduleUpsert>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PipeRdvReminderScheduleUpsert {
+    pub pipe_id: i64,
+    pub contact_id: i64,
+    pub template_id: i64,
+    pub send_at: i64,
+    pub rdv_at: i64,
+    pub rdv_end_at: i64,
+    pub visio_link: Option<String>,
+    pub event_location: Option<String>,
 }
 
 /// Message boîte mail synchronisé pour un contact (hors logique campagne / en attente de réponse).
@@ -1282,6 +1319,19 @@ pub struct CalendarEventEntry {
     pub contact_prenom: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contact_nom: Option<String>,
+    /// Lien visio Google Meet / Zoom (réponse API Google, non persisté en base).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visio_link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_location: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CalendarRdvSyncDetails {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visio_link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_location: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -1312,6 +1362,9 @@ pub struct GoogleCalendarWeekEvent {
 pub struct AgendaGooglePipeSyncResult {
     pub rescheduled: u32,
     pub cancelled: u32,
+    /// Entrées timeline RDV reportées côté Google (pour replanifier les rappels email côté UI).
+    #[serde(default)]
+    pub rescheduled_timeline_entry_ids: Vec<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

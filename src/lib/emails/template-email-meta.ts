@@ -127,6 +127,51 @@ export const EMAIL_TEMPLATE_VARIABLES: {
   },
 ];
 
+/** Variables injectées à la planification / replanification d'un RDV Pipe. */
+export const PIPE_RDV_TEMPLATE_VARIABLES: {
+  token: string;
+  key: string;
+  label: string;
+  hint: string;
+}[] = [
+  {
+    token: "{{date_rdv}}",
+    key: "date_rdv",
+    label: "Date du RDV",
+    hint: "Ex. lundi 15 juillet 2026",
+  },
+  {
+    token: "{{heure_rdv}}",
+    key: "heure_rdv",
+    label: "Heure de début",
+    hint: "Ex. 14:00",
+  },
+  {
+    token: "{{heure_fin_rdv}}",
+    key: "heure_fin_rdv",
+    label: "Heure de fin",
+    hint: "Ex. 15:00",
+  },
+  {
+    token: "{{lien_visio}}",
+    key: "lien_visio",
+    label: "Lien visio (Meet, Zoom…)",
+    hint: "Lien Google Meet ou Zoom/Teams du RDV",
+  },
+  {
+    token: "{{lieu_rdv}}",
+    key: "lieu_rdv",
+    label: "Lieu présentiel",
+    hint: "Adresse si RDV sur place",
+  },
+  {
+    token: "{{co_contact}}",
+    key: "co_contact",
+    label: "Co-participant (nom prénom)",
+    hint: "Autre personne du couple sur l'affaire pipe ; vide si RDV solo",
+  },
+];
+
 export function getAgendaVariableTokens(links: AgendaLink[]) {
   const tokens: { token: string; label: string; hint: string }[] = [
     {
@@ -215,6 +260,9 @@ export function renderTemplatePreview(
   options?: {
     templateNom?: string | null;
     registre?: ContactRegistre | null;
+    extraVariables?: Record<string, string>;
+    /** Envoi production : pas de données fictives SCPI/Stellium/Exceltis. */
+    forSend?: boolean;
   }
 ): { subject: string; body: string; body_html: string | null } {
   const corpsHtmlStored =
@@ -228,13 +276,19 @@ export function renderTemplatePreview(
     isStelliumPerfTemplateNom(options?.templateNom ?? "") ||
     templateUsesStelliumPerfVariables(sujet, corps, corpsHtmlStored);
   const registre = options?.registre ?? "VOUS";
+  const baseVars = {
+    ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
+    ...options?.extraVariables,
+  };
   const vars = alignStelliumVarsForRegistre(
-    {
-      ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
-      ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
-      ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
-      ...(usesStelliumPerf ? buildStelliumPerfPreviewVariables() : {}),
-    },
+    options?.forSend
+      ? baseVars
+      : {
+          ...baseVars,
+          ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
+          ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
+          ...(usesStelliumPerf ? buildStelliumPerfPreviewVariables() : {}),
+        },
     registre
   );
   const subject = replaceTemplateVariables(sujet, vars);

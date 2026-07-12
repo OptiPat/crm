@@ -3,7 +3,7 @@ import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 import type { PipeTimelineUserType } from "@/lib/pipe/pipe-timeline-types";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
-import { syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
+import { sendPipeRdvConfirmationAfterCalendar, syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { formatPipeRdvCalendarContactLabel, pipeRdvCalendarEndAt } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
@@ -21,7 +21,18 @@ export type PipeRdvStageSaveResult = {
 
 export async function addPipeTimelineEntryWithRdvStage(options: {
   timeline: ReturnType<typeof usePipeTimeline>;
-  pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
+  pipe?: Pick<
+    PipeRecord,
+    | "id"
+    | "stage"
+    | "pipe_type"
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+  > | null;
   calendar?: {
     contactId: number;
     contactLabel: string;
@@ -77,6 +88,19 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
     }),
     calendarPromise,
   ]);
+
+  if (options.pipe) {
+    await sendPipeRdvConfirmationAfterCalendar({
+      pipe: options.pipe,
+      rdvStage: options.rdvStage,
+      pipeTimelineEntryId: entry.id,
+      calendar,
+      startAtUnix: options.occurredAtUnix,
+      endAtUnix,
+      visio: options.visio,
+      physicalAddress: options.physicalAddress,
+    });
+  }
 
   return { ...stageResult, calendar };
 }

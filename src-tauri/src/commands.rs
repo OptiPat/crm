@@ -2166,7 +2166,7 @@ pub fn update_calendar_rdv(
     preserve_visio: Option<bool>,
     clear_visio: Option<bool>,
     additional_attendee_contact_ids: Option<Vec<i64>>,
-) -> Result<(), String> {
+) -> Result<crate::database::models::CalendarRdvSyncDetails, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     let extra = additional_attendee_contact_ids.unwrap_or_default();
@@ -2258,7 +2258,75 @@ pub fn mark_pipe_rdv_calendar_cancelled(
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
+        .cancel_pipe_rdv_reminder_schedules(timeline_entry_id)
+        .map_err(|e| e.to_string())?;
+    database
         .mark_pipe_rdv_calendar_cancelled(timeline_entry_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn replace_pipe_rdv_reminder_schedules(
+    db: State<'_, DbState>,
+    input: crate::database::models::ReplacePipeRdvReminderSchedulesInput,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let rows: Vec<crate::database::models::PipeRdvReminderSchedule> = input
+        .rows
+        .into_iter()
+        .map(|r| crate::database::models::PipeRdvReminderSchedule {
+            id: 0,
+            pipe_timeline_entry_id: input.pipe_timeline_entry_id,
+            pipe_id: r.pipe_id,
+            contact_id: r.contact_id,
+            template_id: r.template_id,
+            send_at: r.send_at,
+            rdv_at: r.rdv_at,
+            rdv_end_at: r.rdv_end_at,
+            visio_link: r.visio_link,
+            event_location: r.event_location,
+        })
+        .collect();
+    database
+        .replace_pipe_rdv_reminder_schedules(input.pipe_timeline_entry_id, &rows)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn cancel_pipe_rdv_reminder_schedules(
+    db: State<'_, DbState>,
+    pipe_timeline_entry_id: i64,
+) -> Result<u32, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .cancel_pipe_rdv_reminder_schedules(pipe_timeline_entry_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn list_due_pipe_rdv_reminder_schedules(
+    db: State<'_, DbState>,
+    limit: Option<u32>,
+) -> Result<Vec<crate::database::models::PipeRdvReminderSchedule>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let now = chrono::Utc::now().timestamp();
+    database
+        .list_due_pipe_rdv_reminder_schedules(now, limit.unwrap_or(20))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn mark_pipe_rdv_reminder_schedule_sent(
+    db: State<'_, DbState>,
+    schedule_id: i64,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .mark_pipe_rdv_reminder_schedule_sent(schedule_id)
         .map_err(|e| e.to_string())
 }
 
@@ -2271,6 +2339,18 @@ pub fn resolve_pipe_rdv_google_event_id(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
         .google_event_id_for_pipe_timeline_entry(timeline_entry_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn get_pipe_rdv_calendar_event_for_timeline(
+    db: State<'_, DbState>,
+    timeline_entry_id: i64,
+) -> Result<Option<crate::database::models::CalendarEventEntry>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_active_calendar_event_for_pipe_timeline(timeline_entry_id)
         .map_err(|e| e.to_string())
 }
 
