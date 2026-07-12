@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";import {
+import { Button } from "@/components/ui/button";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -75,6 +76,7 @@ export function PipeQuickContactDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!nom.trim()) {
       toast.error("Le nom est obligatoire.");
       return;
@@ -85,7 +87,7 @@ export function PipeQuickContactDialog({
     }
     setLoading(true);
     try {
-      const contact = await createContact({
+      const created = await createContact({
         nom: nom.trim().toUpperCase(),
         prenom: prenom.trim(),
         categorie,
@@ -94,6 +96,11 @@ export function PipeQuickContactDialog({
         telephone: telephone.trim() || undefined,
         statut_suivi: "ACTIF",
       });
+      const contact: Contact = {
+        ...created,
+        prenom: prenom.trim(),
+        nom: nom.trim().toUpperCase(),
+      };
       toast.success("Contact créé");
       onCreated(contact);
       onOpenChange(false);

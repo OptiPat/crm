@@ -52,7 +52,6 @@ export function PipeContactSelect({
 
   const handleCreated = (contact: Contact) => {
     onContactCreated?.(contact);
-    if (contact.id) onChange(contact.id);
   };
 
   return (

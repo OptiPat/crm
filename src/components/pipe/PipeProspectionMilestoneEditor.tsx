@@ -20,6 +20,8 @@ import {
 } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-context";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import { formatRdvEntryTitle } from "@/lib/pipe/pipe-rdv-stage";
+import type { PipeRdvSubmitPayload } from "@/components/pipe/PipeTimelineAddForm";
 import {
   PIPE_TIMELINE_TYPE_LABELS,
   type PipeTimelineUserType,
@@ -86,26 +88,45 @@ export function PipeProspectionMilestoneEditor({
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addingType) return;
+    if (!addingType || addingType === "RDV") return;
     setAdding(true);
     try {
       const occurredAtUnix = datetimeLocalToUnix(occurredAt);
-      const result = await addPipeTimelineEntryWithRdvStage({
+      await addPipeTimelineEntryWithRdvStage({
         timeline,
         pipe,
         calendar: pipe ? buildPipeRdvCalendarContext(pipe) : undefined,
         entryType: addingType,
-        rdvStage: addingType === "RDV" ? rdvStage : undefined,
         titre: titre.trim() || defaultTimelineEntryTitle(addingType),
         contenu: contenu.trim() || null,
         occurredAtUnix,
       });
+      toast.success(`${PIPE_TIMELINE_TYPE_LABELS[addingType]} ajouté`);
+      cancelAdd();
+      onAfterEntryAdded?.();
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setAdding(false);
+    }
+  };
 
-      if (addingType === "RDV") {
-        toastAfterRdvSave(rdvStage, result, `${PIPE_TIMELINE_TYPE_LABELS[addingType]} ajouté`);
-      } else {
-        toast.success(`${PIPE_TIMELINE_TYPE_LABELS[addingType]} ajouté`);
-      }
+  const handleRdvSubmit = async (payload: PipeRdvSubmitPayload) => {
+    setAdding(true);
+    try {
+      const result = await addPipeTimelineEntryWithRdvStage({
+        timeline,
+        pipe,
+        calendar: pipe ? buildPipeRdvCalendarContext(pipe) : undefined,
+        entryType: "RDV",
+        rdvStage: payload.rdvStage,
+        titre: formatRdvEntryTitle(payload.rdvStage),
+        contenu: payload.contenu,
+        occurredAtUnix: payload.occurredAtUnix,
+        visio: payload.visio,
+        physicalAddress: payload.physicalAddress,
+      });
+      toastAfterRdvSave(payload.rdvStage, result, `${PIPE_TIMELINE_TYPE_LABELS.RDV} ajouté`);
       cancelAdd();
       onAfterEntryAdded?.();
     } catch (err) {
@@ -183,11 +204,13 @@ export function PipeProspectionMilestoneEditor({
             contenu={contenu}
             rdvStage={rdvStage}
             pipe={pipe}
+            contactId={pipe?.contact_id ?? contactId}
             saving={adding}
             onOccurredAtChange={setOccurredAt}
             onTitreChange={setTitre}
             onContenuChange={setContenu}
             onRdvStageChange={setRdvStage}
+            onRdvSubmit={addingType === "RDV" ? handleRdvSubmit : undefined}
             onCancel={cancelAdd}
             onSubmit={(e) => void handleAdd(e)}
           />

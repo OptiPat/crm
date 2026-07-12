@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, ClipboardList, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, getContactById, type Contact } from "@/lib/api/tauri-contacts";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   createPipe,
@@ -30,6 +30,7 @@ import {
   PIPE_TYPE_LABELS,
   canBePipeParent,
   defaultPipeStage,
+  defaultPipeTitreFromContact,
   pipeTypeUsesStage,
   validatePipeForm,
   type PipeStage,
@@ -116,9 +117,14 @@ export function PipeFormPanel({
     buildFormState(pipe, initialType, defaultContactId)
   );
   const [loading, setLoading] = useState(false);
+  const contactHintRef = useRef<Contact | null>(null);
 
   useEffect(() => {
     setForm(buildFormState(pipe, initialType, defaultContactId));
+    contactHintRef.current = null;
+  }, [pipe, initialType, defaultContactId]);
+
+  useEffect(() => {
     let cancelled = false;
     const loadContacts = () => {
       void getAllContacts()
@@ -133,14 +139,74 @@ export function PipeFormPanel({
       cancelled = true;
       unsub();
     };
-  }, [pipe, initialType, defaultContactId]);
+  }, []);
+
+  useEffect(() => {
+    if (form.titre.trim() || form.contactId <= 0) return;
+    const contact =
+      contacts.find((c) => c.id === form.contactId) ??
+      (contactHintRef.current?.id === form.contactId ? contactHintRef.current : null);
+    if (!contact) return;
+    const titre = defaultPipeTitreFromContact(contact);
+    if (!titre) return;
+    setForm((prev) => (prev.titre.trim() ? prev : { ...prev, titre }));
+  }, [contacts, form.contactId, form.titre]);
 
   const handleContactCreated = (contact: Contact) => {
+    if (!contact.id) {
+      toast.error("Contact créé sans identifiant — réessayez.");
+      return;
+    }
+    contactHintRef.current = contact;
+    const titre = defaultPipeTitreFromContact(contact);
     setContacts((prev) => {
       if (prev.some((c) => c.id === contact.id)) return prev;
       return [...prev, contact];
     });
-    setForm((prev) => ({ ...prev, contactId: contact.id!, parentPipeId: null }));
+    setForm((prev) => ({
+      ...prev,
+      contactId: contact.id,
+      parentPipeId: null,
+      titre,
+    }));
+  };
+
+  const handleContactChange = (contactId: number) => {
+    const contact =
+      contacts.find((c) => c.id === contactId) ??
+      (contactHintRef.current?.id === contactId ? contactHintRef.current : undefined);
+    if (contact) contactHintRef.current = contact;
+    setForm((prev) => ({
+      ...prev,
+      contactId,
+      parentPipeId: null,
+      titre: prev.titre.trim()
+        ? prev.titre
+        : contact
+          ? defaultPipeTitreFromContact(contact)
+          : prev.titre,
+    }));
+  };
+
+  const resolveTitreFromState = (state: FormState) => {
+    const trimmed = state.titre.trim();
+    if (trimmed) return trimmed;
+    const contact =
+      contacts.find((c) => c.id === state.contactId) ??
+      (contactHintRef.current?.id === state.contactId ? contactHintRef.current : null);
+    return contact ? defaultPipeTitreFromContact(contact) : "";
+  };
+
+  const resolveTitre = async (state: FormState) => {
+    const fromState = resolveTitreFromState(state);
+    if (fromState || !state.contactId) return fromState;
+    try {
+      const contact = await getContactById(state.contactId);
+      contactHintRef.current = contact;
+      return defaultPipeTitreFromContact(contact);
+    } catch {
+      return "";
+    }
   };
 
   const parentOptions = useMemo(
@@ -168,8 +234,22 @@ export function PipeFormPanel({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.contactId) {
+      toast.error("Le contact est obligatoire.");
+      return;
+    }
+    let titre = await resolveTitre(form);
+    if (!titre.trim()) {
+      toast.error(
+        "Impossible de déduire le titre depuis le contact. Saisissez un titre ou complétez prénom/nom."
+      );
+      return;
+    }
+    if (titre !== form.titre.trim()) {
+      setForm((prev) => ({ ...prev, titre }));
+    }
     const error = validatePipeForm({
-      titre: form.titre,
+      titre,
       contactId: form.contactId,
       pipeType: form.pipeType,
       stage: form.stage || defaultPipeStage(form.pipeType),
@@ -180,7 +260,7 @@ export function PipeFormPanel({
     }
     setLoading(true);
     try {
-      const payload = toPayload(form);
+      const payload = toPayload({ ...form, titre });
       const saved = pipe
         ? await updatePipe(pipe.id, payload)
         : await createPipe(payload);
@@ -236,9 +316,7 @@ export function PipeFormPanel({
         <PipeContactSelect
           contacts={contacts}
           value={form.contactId}
-          onChange={(contactId) =>
-            setForm((prev) => ({ ...prev, contactId, parentPipeId: null }))
-          }
+          onChange={handleContactChange}
           onContactCreated={handleContactCreated}
         />
 
@@ -275,11 +353,13 @@ export function PipeFormPanel({
             value={form.titre}
             onChange={(e) => setForm((prev) => ({ ...prev, titre: e.target.value }))}
             placeholder={
-              form.pipeType === "ACTION"
-                ? "Ex. Appel de prise de contact"
-                : form.pipeType === "ACTE_GESTION"
-                  ? "Ex. Dossier Dupont 2026"
-                  : "Ex. SCPI Corum 50 k€"
+              form.contactId
+                ? resolveTitreFromState(form) || "Prénom Nom du contact"
+                : form.pipeType === "ACTION"
+                  ? "Ex. Appel de prise de contact"
+                  : form.pipeType === "ACTE_GESTION"
+                    ? "Ex. Dossier Dupont 2026"
+                    : "Ex. SCPI Corum 50 k€"
             }
             autoFocus
           />

@@ -19,6 +19,7 @@ import {
 } from "@/lib/pipe/pipe-rdv-stage";
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import { loadDefaultPipeRdvVisio, rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
+import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 
 export async function syncGoogleCalendarForPipeRdv(options: {
   contactId: number;
@@ -29,6 +30,7 @@ export async function syncGoogleCalendarForPipeRdv(options: {
   pipeTimelineEntryId?: number | null;
   existingGoogleEventId?: string | null;
   visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
   calendarTitle?: string | null;
 }): Promise<PipeRdvCalendarSyncResult> {
   if (options.contactId <= 0) {
@@ -58,8 +60,8 @@ export async function syncGoogleCalendarForPipeRdv(options: {
   const visio = options.visio ?? (preserveVisio ? undefined : await loadDefaultPipeRdvVisio());
   const visioPayload =
     visio != null
-      ? rdvVisioToApiPayload(visio)
-      : { addGoogleMeet: false, visioLink: null as string | null };
+      ? rdvVisioToApiPayload(visio, options.physicalAddress)
+      : { addGoogleMeet: false, visioLink: null as string | null, eventLocation: null as string | null };
 
   try {
     if (options.existingGoogleEventId) {
@@ -72,10 +74,11 @@ export async function syncGoogleCalendarForPipeRdv(options: {
         clearVisio: visio?.mode === "none",
         addGoogleMeet: visioPayload.addGoogleMeet,
         visioLink: visioPayload.visioLink,
+        eventLocation: visioPayload.eventLocation,
       });
     } else {
       const createVisio = visio ?? (await loadDefaultPipeRdvVisio());
-      const createPayload = rdvVisioToApiPayload(createVisio);
+      const createPayload = rdvVisioToApiPayload(createVisio, options.physicalAddress);
       await createCalendarRdv({
         contactId: options.contactId,
         pipeTimelineEntryId: options.pipeTimelineEntryId ?? null,
@@ -84,6 +87,7 @@ export async function syncGoogleCalendarForPipeRdv(options: {
         endAt: options.endAtUnix,
         addGoogleMeet: createPayload.addGoogleMeet,
         visioLink: createPayload.visioLink,
+        eventLocation: createPayload.eventLocation,
       });
     }
   } catch (e) {
@@ -109,6 +113,7 @@ export async function planifyPipeRdv(options: {
   alerteId?: number | null;
   tacheId?: number | null;
   visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
   calendarTitle?: string | null;
 }): Promise<{ calendar?: PipeRdvCalendarSyncResult }> {
   const contactLabel = formatPipeRdvCalendarContactLabel(options.pipe);
@@ -136,6 +141,7 @@ export async function planifyPipeRdv(options: {
       endAtUnix: options.endAtUnix,
       pipeTimelineEntryId: entry.id,
       visio: options.visio,
+      physicalAddress: options.physicalAddress,
       calendarTitle: options.calendarTitle,
     }),
   ]);
@@ -152,8 +158,12 @@ export async function planifyStandaloneGoogleRdv(options: {
   alerteId?: number | null;
   tacheId?: number | null;
   visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
 }): Promise<void> {
-  const visioPayload = rdvVisioToApiPayload(options.visio ?? { mode: "none" });
+  const visioPayload = rdvVisioToApiPayload(
+    options.visio ?? { mode: "none" },
+    options.physicalAddress
+  );
   await createCalendarRdv({
     contactId: options.contactId,
     alerteId: options.alerteId,
@@ -163,7 +173,14 @@ export async function planifyStandaloneGoogleRdv(options: {
     endAt: options.endAtUnix,
     addGoogleMeet: visioPayload.addGoogleMeet,
     visioLink: visioPayload.visioLink,
+    eventLocation: visioPayload.eventLocation,
   });
+
+  try {
+    await runRelationAutoSync();
+  } catch {
+    /* sync statut RDV / pipeline — best effort */
+  }
 }
 
 export async function cancelLinkedGoogleRdv(googleEventId: string | null | undefined): Promise<void> {

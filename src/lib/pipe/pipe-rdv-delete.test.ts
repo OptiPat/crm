@@ -8,6 +8,7 @@ import {
   phaseHasRdvActivityForStage,
   shouldHighlightRevertToProspection,
   stageHasRdvCancellationTrace,
+  canResumeRdvFromCancelledTrace,
 } from "@/lib/pipe/pipe-rdv-delete";
 
 const mkRdv = (id: number, titre: string): PipeTimelineEntryRecord => ({
@@ -109,5 +110,19 @@ describe("pipe-rdv-delete", () => {
       titre: null,
       contenu: "RDV R1 annulé",
     });
+  });
+
+  it("autorise la reprise RDV après annulation sans RDV actif", () => {
+    const trace = parseRdvTimelineTraceNote("RDV R1 annulé");
+    expect(canResumeRdvFromCancelledTrace(trace, [], "AFFAIRE")).toBe(true);
+    expect(canResumeRdvFromCancelledTrace(trace, [mkRdv(2, "R1")], "AFFAIRE")).toBe(false);
+    expect(canResumeRdvFromCancelledTrace(trace, [], "PROSPECTION")).toBe(false);
+    expect(
+      canResumeRdvFromCancelledTrace(
+        parseRdvTimelineTraceNote("RDV R1 reporté : était le x → y"),
+        [],
+        "AFFAIRE"
+      )
+    ).toBe(false);
   });
 });

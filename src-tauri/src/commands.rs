@@ -2129,6 +2129,7 @@ pub fn create_calendar_rdv(
     end_at: i64,
     add_google_meet: Option<bool>,
     visio_link: Option<String>,
+    event_location: Option<String>,
 ) -> Result<CalendarEventEntry, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
@@ -2144,6 +2145,7 @@ pub fn create_calendar_rdv(
         end_at,
         add_google_meet.unwrap_or(false),
         visio_link.as_deref(),
+        event_location.as_deref(),
     )
 }
 
@@ -2157,6 +2159,7 @@ pub fn update_calendar_rdv(
     end_at: i64,
     add_google_meet: Option<bool>,
     visio_link: Option<String>,
+    event_location: Option<String>,
     preserve_visio: Option<bool>,
     clear_visio: Option<bool>,
 ) -> Result<(), String> {
@@ -2171,6 +2174,7 @@ pub fn update_calendar_rdv(
         end_at,
         add_google_meet.unwrap_or(false),
         visio_link.as_deref(),
+        event_location.as_deref(),
         preserve_visio.unwrap_or(false),
         clear_visio.unwrap_or(false),
     )

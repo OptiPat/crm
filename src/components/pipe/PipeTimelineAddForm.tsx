@@ -3,10 +3,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
+import { RdvVisioLocationFields } from "@/components/calendar/RdvVisioLocationFields";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { AgendaRdvConflicts } from "@/components/calendar/AgendaRdvConflicts";
 import type { AgendaRdvPipeDraft } from "@/lib/navigation/agenda-navigation";
 import { syncEndFromStartAndDuration } from "@/lib/calendar/rdv-duration";
+import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
+import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import {
   Select,
   SelectContent,
@@ -26,6 +29,15 @@ import {
   PIPE_RDV_STAGE_OPTIONS,
   type PipeRdvStage,
 } from "@/lib/pipe/pipe-rdv-stage";
+import { toast } from "sonner";
+
+export interface PipeRdvSubmitPayload {
+  occurredAtUnix: number;
+  rdvStage: PipeRdvStage;
+  contenu: string | null;
+  visio: RdvVisioOptions;
+  physicalAddress: string | null;
+}
 
 interface PipeTimelineAddFormProps {
   type: PipeTimelineUserType;
@@ -42,6 +54,10 @@ interface PipeTimelineAddFormProps {
   onTitreChange: (value: string) => void;
   onContenuChange: (value: string) => void;
   onRdvStageChange?: (value: PipeRdvStage) => void;
+  /** Étape RDV figée (ex. reprise après annulation). */
+  rdvStageReadOnly?: boolean;
+  contactId?: number;
+  onRdvSubmit?: (payload: PipeRdvSubmitPayload) => Promise<void>;
   onCancel: () => void;
   onSubmit: (e: FormEvent) => void;
   submitLabel?: string;
@@ -59,14 +75,45 @@ export function PipeTimelineAddForm({
   onTitreChange,
   onContenuChange,
   onRdvStageChange,
+  rdvStageReadOnly = false,
+  contactId = 0,
+  onRdvSubmit,
   onCancel,
   onSubmit,
   submitLabel = "Ajouter",
 }: PipeTimelineAddFormProps) {
   const isRdv = type === "RDV";
+  const rdvLocation = useRdvVisioLocation(contactId > 0 ? contactId : undefined, isRdv);
+
+  const handleFormSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (isRdv && onRdvSubmit && contactId > 0) {
+      void (async () => {
+        const validationError = rdvLocation.validate();
+        if (validationError) {
+          toast.error(validationError);
+          return;
+        }
+        try {
+          await rdvLocation.persistContactAddress();
+          await onRdvSubmit({
+            occurredAtUnix: datetimeLocalToUnix(occurredAt),
+            rdvStage,
+            contenu: contenu.trim() || null,
+            visio: rdvLocation.getVisioOptions(),
+            physicalAddress: rdvLocation.getPhysicalAddress(),
+          });
+        } catch (err) {
+          toast.error(String(err));
+        }
+      })();
+      return;
+    }
+    onSubmit(e);
+  };
 
   return (
-    <form onSubmit={onSubmit} className="rounded-lg border bg-muted/20 p-4 space-y-3">
+    <form onSubmit={handleFormSubmit} className="rounded-lg border bg-muted/20 p-4 space-y-3">
       <p className="text-sm font-medium">
         Nouvelle entrée — {PIPE_TIMELINE_TYPE_LABELS[type]}
       </p>
@@ -82,21 +129,25 @@ export function PipeTimelineAddForm({
         {isRdv ? (
           <div className="space-y-2">
             <Label>Type de RDV</Label>
-            <Select
-              value={rdvStage}
-              onValueChange={(value) => onRdvStageChange?.(value as PipeRdvStage)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Choisir…" />
-              </SelectTrigger>
-              <SelectContent>
-                {PIPE_RDV_STAGE_OPTIONS.map((stage) => (
-                  <SelectItem key={stage} value={stage}>
-                    {formatRdvStageLabel(stage)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {rdvStageReadOnly ? (
+              <p className="text-sm font-medium pt-2">{formatRdvStageLabel(rdvStage)}</p>
+            ) : (
+              <Select
+                value={rdvStage}
+                onValueChange={(value) => onRdvStageChange?.(value as PipeRdvStage)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choisir…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {PIPE_RDV_STAGE_OPTIONS.map((stage) => (
+                    <SelectItem key={stage} value={stage}>
+                      {formatRdvStageLabel(stage)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         ) : (
           <div className="space-y-2">
@@ -110,6 +161,17 @@ export function PipeTimelineAddForm({
           L&apos;affaire passera à l&apos;étape choisie le jour du RDV (ou tout de suite si la date
           est déjà passée).
         </p>
+      )}
+      {isRdv && contactId > 0 && (
+        <RdvVisioLocationFields
+          visioMode={rdvLocation.visioMode}
+          visioLink={rdvLocation.visioLink}
+          address={rdvLocation.address}
+          disabled={saving}
+          onVisioModeChange={rdvLocation.setVisioMode}
+          onVisioLinkChange={rdvLocation.setVisioLink}
+          onAddressFieldChange={rdvLocation.setAddressField}
+        />
       )}
       {isRdv && (
         <AgendaRdvConflicts

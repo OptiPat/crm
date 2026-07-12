@@ -10,6 +10,7 @@ import {
   isManualPipeStageChangeAllowed,
   isPipeBoardDropTargetStage,
   formatStageAdvancementMessage,
+  defaultPipeTitreFromContact,
   validatePipeForm,
 } from "./pipe-types";
 
@@ -46,6 +47,15 @@ describe("pipe-types", () => {
     expect(formatStageAdvancementMessage("R1")).toBe("Avancement passé à R1");
   });
 
+  it("titre pipe par défaut depuis le contact", () => {
+    expect(defaultPipeTitreFromContact({ prenom: "Jean", nom: "DUPONT" })).toBe(
+      "Jean DUPONT"
+    );
+    expect(
+      defaultPipeTitreFromContact({ contact_prenom: "Luc", contact_nom: "BERNARD" })
+    ).toBe("Luc BERNARD");
+  });
+
   it("valide le formulaire", () => {
     expect(
       validatePipeForm({
@@ -54,7 +64,15 @@ describe("pipe-types", () => {
         pipeType: "AFFAIRE",
         stage: "PROSPECTION",
       })
-    ).toMatch(/titre/i);
+    ).toBeNull();
+    expect(
+      validatePipeForm({
+        titre: "",
+        contactId: 0,
+        pipeType: "AFFAIRE",
+        stage: "PROSPECTION",
+      })
+    ).toMatch(/contact/i);
     expect(
       validatePipeForm({
         titre: "Test",

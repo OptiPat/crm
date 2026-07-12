@@ -112,6 +112,17 @@ export function stageHasRdvCancellationTrace(
   });
 }
 
+/** Reprendre un RDV depuis une trace d'annulation (aucun RDV actif pour l'étape). */
+export function canResumeRdvFromCancelledTrace(
+  trace: RdvTimelineTraceNote | null,
+  allEntries: PipeTimelineEntryRecord[],
+  pipeType: string
+): boolean {
+  if (pipeType !== "AFFAIRE") return false;
+  if (!trace || trace.kind !== "cancelled") return false;
+  return listRdvEntriesForStage(allEntries, trace.stage).length === 0;
+}
+
 export function formatRdvTimelineTraceBadge(contenu: string | null | undefined): string | null {
   const trace = parseRdvTimelineTraceNote(contenu);
   if (!trace) return null;

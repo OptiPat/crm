@@ -53,6 +53,7 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
   rdvStage: PipeRdvStage;
   startAtUnix: number;
   visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
 }): Promise<PipeRdvCalendarSyncResult> {
   if (options.contactId <= 0) {
     return { synced: false, reason: "no_contact" };
@@ -80,7 +81,7 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
   );
   const endAtUnix = pipeRdvCalendarEndAt(options.startAtUnix);
   const visio = options.visio ?? (await loadDefaultPipeRdvVisio());
-  const visioPayload = rdvVisioToApiPayload(visio);
+  const visioPayload = rdvVisioToApiPayload(visio, options.physicalAddress);
 
   try {
     await createCalendarRdv({
@@ -90,6 +91,7 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
       endAt: endAtUnix,
       addGoogleMeet: visioPayload.addGoogleMeet,
       visioLink: visioPayload.visioLink,
+      eventLocation: visioPayload.eventLocation,
     });
   } catch (e) {
     return {

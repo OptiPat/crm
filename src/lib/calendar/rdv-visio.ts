@@ -23,16 +23,21 @@ export async function loadDefaultPipeRdvVisio(): Promise<RdvVisioOptions> {
   return defaultRdvVisioFromCgp(cgp);
 }
 
-export function rdvVisioToApiPayload(visio: RdvVisioOptions): {
+export function rdvVisioToApiPayload(
+  visio: RdvVisioOptions,
+  physicalAddress?: string | null
+): {
   addGoogleMeet: boolean;
   visioLink: string | null;
+  eventLocation: string | null;
 } {
   if (visio.mode === "google_meet") {
-    return { addGoogleMeet: true, visioLink: null };
+    return { addGoogleMeet: true, visioLink: null, eventLocation: null };
   }
   if (visio.mode === "custom") {
     const link = visio.customLink?.trim() ?? "";
-    return { addGoogleMeet: false, visioLink: link || null };
+    return { addGoogleMeet: false, visioLink: link || null, eventLocation: link || null };
   }
-  return { addGoogleMeet: false, visioLink: null };
+  const addr = physicalAddress?.trim() ?? "";
+  return { addGoogleMeet: false, visioLink: null, eventLocation: addr || null };
 }

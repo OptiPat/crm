@@ -59,6 +59,7 @@ export async function createCalendarRdv(input: {
   endAt: number;
   addGoogleMeet?: boolean;
   visioLink?: string | null;
+  eventLocation?: string | null;
 }): Promise<CalendarEventEntry> {
   return invoke<CalendarEventEntry>("create_calendar_rdv", {
     contactId: input.contactId,
@@ -70,6 +71,7 @@ export async function createCalendarRdv(input: {
     endAt: input.endAt,
     addGoogleMeet: input.addGoogleMeet ?? false,
     visioLink: input.visioLink ?? null,
+    eventLocation: input.eventLocation ?? null,
   });
 }
 
@@ -80,6 +82,7 @@ export async function updateCalendarRdv(input: {
   endAt: number;
   addGoogleMeet?: boolean;
   visioLink?: string | null;
+  eventLocation?: string | null;
   preserveVisio?: boolean;
   clearVisio?: boolean;
 }): Promise<void> {
@@ -90,6 +93,7 @@ export async function updateCalendarRdv(input: {
     endAt: input.endAt,
     addGoogleMeet: input.addGoogleMeet ?? false,
     visioLink: input.visioLink ?? null,
+    eventLocation: input.eventLocation ?? null,
     preserveVisio: input.preserveVisio ?? false,
     clearVisio: input.clearVisio ?? false,
   });

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { DictationTextarea } from "@/components/ui/dictation-textarea";
 import { AgendaRdvConflicts } from "@/components/calendar/AgendaRdvConflicts";
+import { RdvVisioLocationFields } from "@/components/calendar/RdvVisioLocationFields";
 import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
 import { getAllContacts, type Contact } from "@/lib/api/tauri-contacts";
 import { listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
@@ -36,8 +37,7 @@ import {
   planifyPipeRdv,
   planifyStandaloneGoogleRdv,
 } from "@/lib/calendar/rdv-planifier";
-import type { RdvVisioMode } from "@/lib/calendar/rdv-visio";
-import { defaultRdvVisioFromCgp } from "@/lib/calendar/rdv-visio";
+import { useRdvVisioLocation } from "@/hooks/useRdvVisioLocation";
 import {
   formatRdvStageLabel,
   PIPE_RDV_STAGE_OPTIONS,
@@ -47,7 +47,6 @@ import { isPipeType } from "@/lib/pipe/pipe-types";
 import { formatPipeRdvCalendarContactLabel, formatPipeRdvGoogleCalendarTitle } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { notifyGoogleCalendarSync } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
-import { getCgpConfig } from "@/lib/api/tauri-settings";
 import { toast } from "sonner";
 
 export type RdvPlanifierContext =
@@ -105,9 +104,20 @@ export function RdvPlanifierDialog({
   const [title, setTitle] = useState("");
   const [titleEdited, setTitleEdited] = useState(false);
   const [contenu, setContenu] = useState("");
-  const [visioMode, setVisioMode] = useState<RdvVisioMode>("none");
-  const [visioLink, setVisioLink] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const effectiveContactId =
+    context.kind === "linked"
+      ? context.contactId
+      : context.kind === "pipe"
+        ? context.pipe.contact_id
+        : contactId;
+
+  const rdvLocation = useRdvVisioLocation(
+    effectiveContactId > 0 ? effectiveContactId : undefined,
+    open
+  );
+  const { reset: resetRdvLocation } = rdvLocation;
 
   const fixedContact =
     context.kind === "linked"
@@ -150,11 +160,7 @@ export function RdvPlanifierDialog({
     setRdvStage(context.kind === "pipe" ? (context.rdvStage ?? "R1") : "R1");
     setContenu(context.kind === "pipe" ? (context.contenu ?? "") : "");
     setTitleEdited(false);
-    void getCgpConfig().then((cgp) => {
-      const visioDefault = defaultRdvVisioFromCgp(cgp);
-      setVisioMode(visioDefault.mode);
-      setVisioLink(visioDefault.customLink);
-    });
+    void resetRdvLocation();
     if (context.kind === "pipe") {
       setContactId(context.pipe.contact_id);
       setPipeId(context.pipe.id);
@@ -168,7 +174,7 @@ export function RdvPlanifierDialog({
       setPipeId(null);
       setTitle("");
     }
-  }, [open, context, defaultStartUnix, defaultEndUnix]);
+  }, [open, context, defaultStartUnix, defaultEndUnix, resetRdvLocation]);
 
   const contactAffaires = useMemo(
     () =>
@@ -247,15 +253,18 @@ export function RdvPlanifierDialog({
       toast.error("Choisissez un contact.");
       return;
     }
-    if (visioMode === "custom" && !visioLink.trim()) {
-      toast.error("Indiquez votre lien Zoom ou Teams (ou enregistrez-le dans Paramètres).");
+    const validationError = rdvLocation.validate();
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
 
-    const visio = { mode: visioMode, customLink: visioLink };
+    const visio = rdvLocation.getVisioOptions();
+    const physicalAddress = rdvLocation.getPhysicalAddress();
 
     setSubmitting(true);
     try {
+      await rdvLocation.persistContactAddress();
       if (pipeForPlanify) {
         const result = await planifyPipeRdv({
           pipe: pipeForPlanify,
@@ -264,6 +273,7 @@ export function RdvPlanifierDialog({
           endAtUnix: endAt,
           contenu: contenu.trim() || null,
           visio,
+          physicalAddress,
           calendarTitle: title.trim() || null,
         });
         toast.success("RDV enregistré dans le Pipe");
@@ -278,6 +288,7 @@ export function RdvPlanifierDialog({
           alerteId: context.kind === "linked" ? context.alerteId : null,
           tacheId: context.kind === "linked" ? context.tacheId : null,
           visio,
+          physicalAddress,
         });
         toast.success("RDV planifié dans Google Agenda");
       }
@@ -383,34 +394,15 @@ export function RdvPlanifierDialog({
             />
           </div>
 
-          <div className="space-y-2">
-            <Label>Visio</Label>
-            <Select value={visioMode} onValueChange={(v) => setVisioMode(v as RdvVisioMode)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Sans visio (présentiel)</SelectItem>
-                <SelectItem value="google_meet">Google Meet — lien créé automatiquement</SelectItem>
-                <SelectItem value="custom">Zoom / Teams — mon lien</SelectItem>
-              </SelectContent>
-            </Select>
-            {visioMode === "custom" && (
-              <>
-                <Input
-                  type="url"
-                  value={visioLink}
-                  onChange={(e) => setVisioLink(e.target.value)}
-                  placeholder="https://zoom.us/j/… ou https://teams.microsoft.com/…"
-                />
-                {!visioLink.trim() && (
-                  <p className="text-xs text-muted-foreground">
-                    Enregistrez votre lien une fois dans Paramètres → Agenda &amp; RDV.
-                  </p>
-                )}
-              </>
-            )}
-          </div>
+          <RdvVisioLocationFields
+            visioMode={rdvLocation.visioMode}
+            visioLink={rdvLocation.visioLink}
+            address={rdvLocation.address}
+            disabled={submitting}
+            onVisioModeChange={rdvLocation.setVisioMode}
+            onVisioLinkChange={rdvLocation.setVisioLink}
+            onAddressFieldChange={rdvLocation.setAddressField}
+          />
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">

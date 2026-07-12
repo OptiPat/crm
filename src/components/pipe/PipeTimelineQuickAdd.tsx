@@ -6,6 +6,7 @@ import {
   datetimeLocalToUnix,
   defaultTimelineEntryTitle,
   PipeTimelineAddForm,
+  type PipeRdvSubmitPayload,
 } from "@/components/pipe/PipeTimelineAddForm";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
@@ -15,6 +16,7 @@ import {
 } from "@/lib/pipe/pipe-rdv-entry-actions";
 import { buildPipeRdvCalendarContext } from "@/lib/pipe/pipe-rdv-calendar-context";
 import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import { formatRdvEntryTitle } from "@/lib/pipe/pipe-rdv-stage";
 import {
   PIPE_TIMELINE_TYPE_LABELS,
   PIPE_TIMELINE_USER_TYPES,
@@ -63,26 +65,45 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addingType) return;
+    if (!addingType || addingType === "RDV") return;
     setSaving(true);
     try {
       const occurredAtUnix = datetimeLocalToUnix(occurredAt);
-      const result = await addPipeTimelineEntryWithRdvStage({
+      await addPipeTimelineEntryWithRdvStage({
         timeline,
         pipe,
         calendar: pipe ? buildPipeRdvCalendarContext(pipe) : undefined,
         entryType: addingType,
-        rdvStage: addingType === "RDV" ? rdvStage : undefined,
         titre: titre.trim() || defaultTimelineEntryTitle(addingType),
         contenu: contenu.trim() || null,
         occurredAtUnix,
       });
+      toast.success("Entrée ajoutée");
+      cancelAdd();
+      onAdded?.();
+    } catch (err) {
+      toast.error(String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
 
-      if (addingType === "RDV") {
-        toastAfterRdvSave(rdvStage, result);
-      } else {
-        toast.success("Entrée ajoutée");
-      }
+  const handleRdvSubmit = async (payload: PipeRdvSubmitPayload) => {
+    setSaving(true);
+    try {
+      const result = await addPipeTimelineEntryWithRdvStage({
+        timeline,
+        pipe,
+        calendar: pipe ? buildPipeRdvCalendarContext(pipe) : undefined,
+        entryType: "RDV",
+        rdvStage: payload.rdvStage,
+        titre: formatRdvEntryTitle(payload.rdvStage),
+        contenu: payload.contenu,
+        occurredAtUnix: payload.occurredAtUnix,
+        visio: payload.visio,
+        physicalAddress: payload.physicalAddress,
+      });
+      toastAfterRdvSave(payload.rdvStage, result);
       cancelAdd();
       onAdded?.();
     } catch (err) {
@@ -123,11 +144,13 @@ export function PipeTimelineQuickAdd({ timeline, pipe, onAdded }: PipeTimelineQu
           contenu={contenu}
           rdvStage={rdvStage}
           pipe={pipe}
+          contactId={pipe?.contact_id}
           saving={saving}
           onOccurredAtChange={setOccurredAt}
           onTitreChange={setTitre}
           onContenuChange={setContenu}
           onRdvStageChange={setRdvStage}
+          onRdvSubmit={addingType === "RDV" ? handleRdvSubmit : undefined}
           onCancel={cancelAdd}
           onSubmit={(e) => void handleAdd(e)}
         />

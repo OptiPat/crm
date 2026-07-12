@@ -94,6 +94,11 @@ impl super::Database {
             .collect::<Result<Vec<_>>>()?;
 
         if pipe_ids.is_empty() {
+            let now = Utc::now().timestamp();
+            self.conn.execute(
+                "UPDATE contacts SET date_dernier_contact = NULL, date_r1 = NULL, updated_at = ?1 WHERE id = ?2",
+                params![now, contact_id],
+            )?;
             return Ok(());
         }
 
@@ -123,12 +128,10 @@ impl super::Database {
         let contact = self.get_contact_by_id(contact_id)?;
         let now = Utc::now().timestamp();
 
-        if let Some(ts) = prospection_last_contact {
-            self.conn.execute(
-                "UPDATE contacts SET date_dernier_contact = ?1, updated_at = ?2 WHERE id = ?3",
-                params![ts, now, contact_id],
-            )?;
-        }
+        self.conn.execute(
+            "UPDATE contacts SET date_dernier_contact = ?1, updated_at = ?2 WHERE id = ?3",
+            params![prospection_last_contact, now, contact_id],
+        )?;
 
         let mut categorie = contact.categorie.clone();
         if date_r1.is_some()
@@ -275,6 +278,82 @@ mod tests {
     }
 
     #[test]
+    fn sync_prospection_appel_clears_dernier_contact_when_deleted() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let pipe_id = seed_affaire(&db, contact_id);
+        let creation_ts = db
+            .list_pipe_timeline_entries(pipe_id)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.entry_type == TIMELINE_CREATION)
+            .expect("creation")
+            .occurred_at;
+        let ts = creation_ts + 3_600;
+
+        let appel = db
+            .create_pipe_timeline_entry(NewPipeTimelineEntry {
+                pipe_id,
+                entry_type: TIMELINE_APPEL.into(),
+                titre: Some("Premier appel".into()),
+                contenu: Some("Message".into()),
+                occurred_at: Some(ts),
+            })
+            .unwrap();
+        assert_eq!(
+            db.get_contact_by_id(contact_id).unwrap().date_dernier_contact,
+            Some(ts)
+        );
+
+        db.delete_pipe_timeline_entry(appel.id).unwrap();
+        assert!(db
+            .get_contact_by_id(contact_id)
+            .unwrap()
+            .date_dernier_contact
+            .is_none());
+    }
+
+    #[test]
+    fn delete_pipe_clears_contact_dates_when_last_affaire() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+        let pipe_id = seed_affaire(&db, contact_id);
+        let creation_ts = db
+            .list_pipe_timeline_entries(pipe_id)
+            .unwrap()
+            .into_iter()
+            .find(|e| e.entry_type == TIMELINE_CREATION)
+            .expect("creation")
+            .occurred_at;
+
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id,
+            entry_type: TIMELINE_APPEL.into(),
+            titre: Some("Appel".into()),
+            contenu: Some("OK".into()),
+            occurred_at: Some(creation_ts + 3_600),
+        })
+        .unwrap();
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id,
+            entry_type: TIMELINE_RDV.into(),
+            titre: Some("R1".into()),
+            contenu: Some("RDV".into()),
+            occurred_at: Some(creation_ts + 7_200),
+        })
+        .unwrap();
+
+        let contact = db.get_contact_by_id(contact_id).unwrap();
+        assert!(contact.date_dernier_contact.is_some());
+        assert!(contact.date_r1.is_some());
+
+        db.delete_pipe(pipe_id).unwrap();
+        let after = db.get_contact_by_id(contact_id).unwrap();
+        assert!(after.date_dernier_contact.is_none());
+        assert!(after.date_r1.is_none());
+    }
+
+    #[test]
     fn sync_ignores_post_prospection_entries_for_dernier_contact() {
         let db = Database::open_in_memory_for_tests().unwrap();
         let contact_id = seed_contact(&db);
@@ -286,7 +365,7 @@ mod tests {
             .find(|e| e.entry_type == TIMELINE_CREATION)
             .expect("creation")
             .occurred_at;
-        let appel_ts = creation_ts + 3_600;
+        let appel_ts = creation_ts + 10;
 
         db.create_pipe_timeline_entry(NewPipeTimelineEntry {
             pipe_id,
@@ -297,7 +376,7 @@ mod tests {
         })
         .unwrap();
 
-        db.set_pipe_stage(pipe_id, PIPE_STAGE_R1, None, None)
+        db.set_pipe_stage(pipe_id, PIPE_STAGE_R1, None, Some(appel_ts + 100))
             .unwrap();
 
         db.create_pipe_timeline_entry(NewPipeTimelineEntry {

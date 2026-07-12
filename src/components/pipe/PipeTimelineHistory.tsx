@@ -9,6 +9,7 @@ import { PipeTimelinePhaseEntryRow } from "@/components/pipe/PipeTimelinePhaseEn
 import { PipeProspectionMilestoneEditor } from "@/components/pipe/PipeProspectionMilestoneEditor";
 import { PipeProspectionMilestoneReadSummary } from "@/components/pipe/PipeProspectionMilestoneReadSummary";
 import { PipeRdvOutcomeDialog } from "@/components/pipe/PipeRdvOutcomeDialog";
+import { PipeTimelineResumeRdvForm } from "@/components/pipe/PipeTimelineResumeRdvForm";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
@@ -28,6 +29,7 @@ import {
   milestoneStageExpectsRdv,
   phaseHasRdvActivityForStage,
   stageHasRdvCancellationTrace,
+  canResumeRdvFromCancelledTrace,
   isRdvTimelineTraceNote,
   listRdvEntriesForStage,
   parseRdvTimelineTraceNote,
@@ -96,6 +98,7 @@ function TimelineEntryRow({
   const [traceOccurredAt, setTraceOccurredAt] = useState("");
   const [saving, setSaving] = useState(false);
   const [rdvOutcomeOpen, setRdvOutcomeOpen] = useState(false);
+  const [resumeRdvOpen, setResumeRdvOpen] = useState(false);
 
   const userType = entry.entry_type;
   const traceNote = isRdvTimelineTraceNote(entry);
@@ -104,6 +107,8 @@ function TimelineEntryRow({
     traceMeta?.kind === "rescheduled"
       ? listRdvEntriesForStage(allEntries, traceMeta.stage)[0]
       : undefined;
+  const canResumeCancelledRdv =
+    canResumeRdvFromCancelledTrace(traceMeta, allEntries, pipe.pipe_type) && !resumeRdvOpen;
   const Icon =
     !milestone && (traceNote || userType in TYPE_ICONS)
       ? traceNote
@@ -132,6 +137,7 @@ function TimelineEntryRow({
     setEditing(false);
     setDraftNotes("");
     setTraceOccurredAt("");
+    setResumeRdvOpen(false);
   };
 
   const startTraceEdit = () => {
@@ -372,6 +378,17 @@ function TimelineEntryRow({
                 Annuler le RDV
               </Button>
             )}
+            {canResumeCancelledRdv && !editing && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 shrink-0"
+                onClick={() => setResumeRdvOpen(true)}
+              >
+                Reprendre RDV
+              </Button>
+            )}
             {milestone && onSaveMilestoneNotes && !editing && (
               <Button
                 type="button"
@@ -402,6 +419,17 @@ function TimelineEntryRow({
             )}
           </div>
         </div>
+        {resumeRdvOpen && traceMeta?.kind === "cancelled" ? (
+          <div className="mt-3">
+            <PipeTimelineResumeRdvForm
+              rdvStage={traceMeta.stage}
+              pipe={pipe}
+              timeline={timeline}
+              onCancel={() => setResumeRdvOpen(false)}
+              onSuccess={() => setResumeRdvOpen(false)}
+            />
+          </div>
+        ) : null}
       </article>
       {activeRdvForTrace ? (
         <PipeRdvOutcomeDialog

@@ -114,6 +114,18 @@ export function formatPipeContactLabel(
   return [prenom, nom].filter(Boolean).join(" ") || "Contact";
 }
 
+/** Titre pipe par défaut = prénom + nom du contact (création rapide depuis Pipe). */
+export function defaultPipeTitreFromContact(contact: {
+  prenom?: string | null;
+  nom?: string | null;
+  contact_prenom?: string | null;
+  contact_nom?: string | null;
+}): string {
+  const prenom = (contact.contact_prenom ?? contact.prenom)?.trim() ?? "";
+  const nom = (contact.contact_nom ?? contact.nom)?.trim() ?? "";
+  return [prenom, nom].filter(Boolean).join(" ");
+}
+
 export interface PipeRecordLike {
   contact_prenom?: string | null;
   contact_nom?: string | null;
@@ -125,8 +137,8 @@ export function validatePipeForm(input: {
   pipeType: PipeType;
   stage: string;
 }): string | null {
-  if (!input.titre.trim()) return "Le titre est obligatoire.";
   if (!input.contactId) return "Le contact est obligatoire.";
+  if (!input.titre.trim()) return null;
   if (!isPipeType(input.pipeType)) return "Type invalide.";
   if (pipeTypeUsesStage(input.pipeType) && !isPipeStage(input.stage)) {
     return "Avancement invalide pour une affaire.";

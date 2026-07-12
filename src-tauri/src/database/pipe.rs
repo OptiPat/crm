@@ -28,6 +28,21 @@ const VALID_PIPE_STAGES: &[&str] = &[
     PIPE_STAGE_PERDUE_OU_EN_ATTENTE,
 ];
 
+fn default_pipe_titre_from_contact(prenom: &str, nom: &str) -> String {
+    let prenom = prenom.trim();
+    let nom = nom.trim();
+    if prenom.is_empty() && nom.is_empty() {
+        return String::new();
+    }
+    if prenom.is_empty() {
+        return nom.to_string();
+    }
+    if nom.is_empty() {
+        return prenom.to_string();
+    }
+    format!("{prenom} {nom}")
+}
+
 fn now_unix() -> i64 {
     chrono::Utc::now().timestamp()
 }
@@ -144,6 +159,15 @@ impl super::Database {
             [],
         )?;
         Ok(())
+    }
+
+    fn resolve_pipe_titre(&self, contact_id: i64, titre: &str) -> Result<String> {
+        let trimmed = titre.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.to_string());
+        }
+        let contact = self.get_contact_by_id(contact_id)?;
+        Ok(default_pipe_titre_from_contact(&contact.prenom, &contact.nom))
     }
 
     fn validate_pipe_input(
@@ -299,7 +323,7 @@ impl super::Database {
     }
 
     pub fn create_pipe(&self, input: super::models::NewPipe) -> Result<super::models::Pipe> {
-        let titre = input.titre.trim().to_string();
+        let titre = self.resolve_pipe_titre(input.contact_id, &input.titre)?;
         let stage = input
             .stage
             .as_deref()
@@ -347,13 +371,14 @@ impl super::Database {
         input: super::models::UpdatePipe,
     ) -> Result<super::models::Pipe> {
         let old = self.get_pipe_by_id(id)?;
-        let titre = input.titre.trim().to_string();
-        let stage = input
-            .stage
-            .as_deref()
-            .filter(|s| !s.is_empty())
-            .unwrap_or(default_stage_for_type(&input.pipe_type))
-            .to_string();
+        let titre = self.resolve_pipe_titre(input.contact_id, &input.titre)?;
+        let stage = match input.stage.as_deref().filter(|s| !s.is_empty()) {
+            Some(s) => s.to_string(),
+            None if input.pipe_type == PIPE_TYPE_AFFAIRE && old.pipe_type == PIPE_TYPE_AFFAIRE => {
+                old.stage.clone()
+            }
+            None => default_stage_for_type(&input.pipe_type).to_string(),
+        };
         self.validate_pipe_input(
             input.contact_id,
             &input.pipe_type,
@@ -435,6 +460,8 @@ impl super::Database {
     }
 
     pub fn delete_pipe(&self, id: i64) -> Result<()> {
+        let pipe = self.get_pipe_by_id(id)?;
+        let contact_id = pipe.contact_id;
         let child_count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM pipes WHERE parent_pipe_id = ?1",
             params![id],
@@ -452,6 +479,7 @@ impl super::Database {
         if deleted == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
+        self.sync_contact_dates_for_contact(contact_id)?;
         Ok(())
     }
 }
@@ -472,6 +500,27 @@ mod tests {
         .unwrap()
         .id
         .expect("contact id")
+    }
+
+    #[test]
+    fn create_pipe_defaults_titre_from_contact_name() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+
+        use crate::database::models::NewPipe;
+
+        let pipe = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "   ".into(),
+                stage: Some(PIPE_STAGE_PROSPECTION.into()),
+                notes: None,
+            })
+            .unwrap();
+
+        assert_eq!(pipe.titre, "Jean DUPONT");
     }
 
     #[test]
@@ -788,5 +837,40 @@ mod tests {
             .find(|e| e.entry_type == TIMELINE_CREATION)
             .expect("creation");
         assert_eq!(creation.contenu.as_deref(), Some("Modifié"));
+    }
+
+    #[test]
+    fn update_affaire_without_stage_preserves_current_stage() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_id = seed_contact(&db);
+
+        use crate::database::models::{NewPipe, UpdatePipe};
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Affaire".into(),
+                stage: Some(PIPE_STAGE_R2.into()),
+                notes: None,
+            })
+            .unwrap();
+
+        let updated = db
+            .update_pipe(
+                affaire.id,
+                UpdatePipe {
+                    contact_id,
+                    pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                    parent_pipe_id: None,
+                    titre: "Affaire renommée".into(),
+                    stage: None,
+                    notes: None,
+                },
+            )
+            .unwrap();
+
+        assert_eq!(updated.stage, PIPE_STAGE_R2);
     }
 }

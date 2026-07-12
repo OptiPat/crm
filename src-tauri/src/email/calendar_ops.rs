@@ -513,6 +513,7 @@ pub fn create_google_calendar_rdv(
     end_at: i64,
     add_google_meet: bool,
     visio_link: Option<&str>,
+    event_location: Option<&str>,
 ) -> Result<CalendarEventEntry, String> {
     let conn = resolve_google_calendar_connection(app)?
         .ok_or("Connectez Google Agenda dans Paramètres → Emails & envois → Connexion pour planifier un RDV.")?;
@@ -536,7 +537,10 @@ pub fn create_google_calendar_rdv(
     let location = if add_google_meet {
         None
     } else {
-        visio_link.map(str::trim).filter(|s| !s.is_empty())
+        event_location
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .or_else(|| visio_link.map(str::trim).filter(|s| !s.is_empty()))
     };
     let conference_data = if add_google_meet {
         Some(ConferenceDataCreate {
@@ -628,6 +632,7 @@ pub fn update_google_calendar_rdv(
     end_at: i64,
     add_google_meet: bool,
     visio_link: Option<&str>,
+    event_location: Option<&str>,
     preserve_visio: bool,
     clear_visio: bool,
 ) -> Result<(), String> {
@@ -661,9 +666,12 @@ pub fn update_google_calendar_rdv(
             }).map_err(|e| e.to_string())?),
         )
     } else {
-        let link = visio_link.map(str::trim).filter(|s| !s.is_empty());
+        let loc = event_location
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .or_else(|| visio_link.map(str::trim).filter(|s| !s.is_empty()));
         (
-            link.map(|value| serde_json::Value::String(value.to_string())),
+            loc.map(|value| serde_json::Value::String(value.to_string())),
             None,
         )
     };

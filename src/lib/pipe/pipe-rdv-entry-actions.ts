@@ -2,6 +2,7 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 import type { PipeTimelineUserType } from "@/lib/pipe/pipe-timeline-types";
+import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import { syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { formatPipeRdvCalendarContactLabel, pipeRdvCalendarEndAt } from "@/lib/pipe/pipe-rdv-google-calendar";
@@ -31,6 +32,8 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   contenu: string | null;
   occurredAtUnix: number;
   endAtUnix?: number;
+  visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
 }): Promise<PipeRdvStageSaveResult | null> {
   const titre =
     options.entryType === "RDV" && options.rdvStage
@@ -58,6 +61,8 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
         startAtUnix: options.occurredAtUnix,
         endAtUnix,
         pipeTimelineEntryId: entry.id,
+        visio: options.visio,
+        physicalAddress: options.physicalAddress,
       })
     : Promise.resolve(undefined);
 
