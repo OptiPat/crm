@@ -39,10 +39,11 @@ export function useBackgroundSync(enabled = true): void {
       const endActivity = beginBackgroundActivity("relation-sync");
       try {
         const result = await runRelationAutoSync();
-        if (result.skipped) return;
-        lastRelationSyncRef.current = Date.now();
-        if (result.errors.length > 0) {
-          console.warn("Sync relation:", result.errors.join(" ; "));
+        if (!result.skipped) {
+          lastRelationSyncRef.current = Date.now();
+          if (result.errors.length > 0) {
+            console.warn("Sync relation:", result.errors.join(" ; "));
+          }
         }
         await processDuePipeRdvReminders(10);
       } finally {

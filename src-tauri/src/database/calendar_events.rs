@@ -90,24 +90,6 @@ impl Database {
         Ok(self.conn.last_insert_rowid())
     }
 
-    pub fn update_calendar_event_times(
-        &self,
-        google_event_id: &str,
-        title: &str,
-        start_at: i64,
-        end_at: i64,
-    ) -> Result<()> {
-        self.update_calendar_event_sync_details(
-            google_event_id,
-            title,
-            start_at,
-            end_at,
-            None,
-            None,
-            false,
-        )
-    }
-
     /// Met à jour horaires et/ou visio/lieu depuis Google ou le CRM.
     pub fn update_calendar_event_sync_details(
         &self,

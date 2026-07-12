@@ -188,12 +188,13 @@ impl super::Database {
         rows.collect()
     }
 
-    pub fn mark_pipe_rdv_reminder_schedule_sent(&self, id: i64) -> Result<()> {
-        self.conn.execute(
-            "UPDATE pipe_rdv_scheduled_emails SET sent_at = strftime('%s','now') WHERE id = ?1",
+    pub fn mark_pipe_rdv_reminder_schedule_sent(&self, id: i64) -> Result<bool> {
+        let n = self.conn.execute(
+            "UPDATE pipe_rdv_scheduled_emails SET sent_at = strftime('%s','now')
+             WHERE id = ?1 AND sent_at IS NULL AND cancelled_at IS NULL",
             params![id],
         )?;
-        Ok(())
+        Ok(n > 0)
     }
 }
 
@@ -278,6 +279,9 @@ mod tests {
         assert_eq!(due[0].contact_id, contact_id);
         db.mark_pipe_rdv_reminder_schedule_sent(due[0].id)
             .expect("sent");
+        assert!(!db
+            .mark_pipe_rdv_reminder_schedule_sent(due[0].id)
+            .expect("idempotent"));
         let empty = db
             .list_due_pipe_rdv_reminder_schedules(1_700_000_001, 10)
             .expect("list2");

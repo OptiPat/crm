@@ -2327,6 +2327,7 @@ pub fn mark_pipe_rdv_reminder_schedule_sent(
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
     database
         .mark_pipe_rdv_reminder_schedule_sent(schedule_id)
+        .map(|_| ())
         .map_err(|e| e.to_string())
 }
 

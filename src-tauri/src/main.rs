@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_runtime;
 mod app_branding;
 mod auth;
 mod birthday_notifications;
@@ -20,6 +21,11 @@ mod newsletter;
 mod scpi_bulletin;
 mod system_commands;
 
+use app_runtime::{
+    apply_startup_launch_prefs, get_app_runtime_prefs, hide_main_window_if_minimized_arg,
+    load_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray,
+    start_pipe_rdv_reminder_worker,
+};
 use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
 use auth::commands::*;
 use auth::AuthManager;
@@ -56,6 +62,7 @@ use newsletter::*;
 use std::sync::Mutex;
 use system_commands::*;
 use tauri::Manager;
+use tauri_plugin_autostart::MacosLauncher;
 
 // Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
 #[tauri::command]
@@ -69,17 +76,26 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_autostart::init(
+            MacosLauncher::LaunchAgent,
+            Some(vec!["--minimized"]),
+        ))
         .setup(|app| {
             // Initialiser l'authentification
             let auth = AuthManager::new(&app.handle()).expect("Failed to initialize auth");
             app.manage(Mutex::new(Some(auth)));
 
             // La base reste FERMÉE tant que l'utilisateur n'a pas saisi son mot de passe
-            // (simple verrou d'accès). Elle est ouverte par les commandes
-            // `create_master_password` / `unlock`.
             app.manage(Mutex::new(Option::<Database>::None));
 
             email::legacy_cleanup::remove_legacy_smtp_config(&app.handle());
+
+            if let Err(e) = setup_tray(&app.handle()) {
+                eprintln!("⚠️ Tray : {e}");
+            }
+            let _ = apply_startup_launch_prefs(&app.handle());
+            start_pipe_rdv_reminder_worker(app.handle().clone());
+            hide_main_window_if_minimized_arg(&app.handle());
 
             Ok(())
         })
@@ -300,6 +316,9 @@ fn main() {
             // Auth
             is_first_launch,
             is_database_unlocked,
+            get_app_runtime_prefs,
+            save_app_runtime_prefs,
+            quit_app_fully_cmd,
             create_master_password,
             verify_master_password,
             unlock,
@@ -410,6 +429,14 @@ fn main() {
             compute_compta_driving_distance_km,
             reset_compta_distance_cache,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                let prefs = load_runtime_prefs(app_handle);
+                if prefs.close_to_tray {
+                    api.prevent_exit();
+                }
+            }
+        });
 }

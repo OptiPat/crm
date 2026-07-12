@@ -36,6 +36,7 @@ import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { needsLicenseActivation } from "@/lib/api/tauri-license";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
+import { usePipeRdvReminderBackgroundListener } from "@/hooks/usePipeRdvReminderBackgroundListener";
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -53,6 +54,8 @@ function AppInner() {
       setCurrentPage(detail.page);
     }
   });
+
+  usePipeRdvReminderBackgroundListener(isAuthenticated);
 
   useEffect(() => {
     // Vérifier si c'est le premier lancement

@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SettingsPanel } from "@/components/settings/parametres-ui";
 import { ParametresAppBrandingSection } from "@/components/settings/ParametresAppBrandingSection";
+import { ParametresBackgroundSection } from "@/components/settings/ParametresBackgroundSection";
 import { ParametresLicenseSection } from "@/components/settings/ParametresLicenseSection";
 import { CheckForUpdatesButton } from "@/components/system/AppUpdateChecker";
 import { useAppUpdate } from "@/components/system/app-update-context";
@@ -18,6 +19,8 @@ export function ParametresApplicationSection() {
       <ParametresLicenseSection />
 
       <ParametresAppBrandingSection />
+
+      <ParametresBackgroundSection />
 
       <SettingsPanel
         title="Mises à jour"

@@ -69,7 +69,9 @@ async function sendDueReminder(schedule: PipeRdvReminderSchedule): Promise<"sent
 }
 
 /** Traite les rappels RDV Pipe échus (appelé en arrière-plan). */
-export async function processDuePipeRdvReminders(
+let reminderProcessInFlight: Promise<PipeRdvReminderProcessResult> | null = null;
+
+async function processDuePipeRdvRemindersInner(
   limit = 10
 ): Promise<PipeRdvReminderProcessResult> {
   const status = await getEmailConnectionStatus();
@@ -100,4 +102,14 @@ export async function processDuePipeRdvReminders(
   }
 
   return { processed: due.length, sent, skipped, errors };
+}
+
+export async function processDuePipeRdvReminders(
+  limit = 10
+): Promise<PipeRdvReminderProcessResult> {
+  if (reminderProcessInFlight) return reminderProcessInFlight;
+  reminderProcessInFlight = processDuePipeRdvRemindersInner(limit).finally(() => {
+    reminderProcessInFlight = null;
+  });
+  return reminderProcessInFlight;
 }
