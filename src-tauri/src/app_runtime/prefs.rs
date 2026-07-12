@@ -25,6 +25,8 @@ pub struct AppRuntimePrefs {
     /// Notification anniversaires du jour en tray.
     #[serde(default, alias = "background_birthday_telegram")]
     pub background_birthday_notifications: bool,
+    /// Point du jour tray (RDV 2 h, alertes, tâches, emails prêts — 1 notif max).
+    pub background_tray_digest: bool,
 }
 
 impl Default for AppRuntimePrefs {
@@ -38,6 +40,7 @@ impl Default for AppRuntimePrefs {
             background_notes_sync: true,
             background_pipe_rdv_reminders: true,
             background_birthday_notifications: true,
+            background_tray_digest: true,
         }
     }
 }
@@ -50,8 +53,9 @@ impl AppRuntimePrefs {
         self.background_relation_sync
             || self.background_stellium_scan
             || self.background_notes_sync
-            || self.background_pipe_rdv_reminders
+            ||         self.background_pipe_rdv_reminders
             || self.background_birthday_notifications
+            || self.background_tray_digest
     }
 }
 

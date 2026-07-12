@@ -22,9 +22,9 @@ mod scpi_bulletin;
 mod system_commands;
 
 use app_runtime::{
-    apply_startup_launch_prefs, get_app_runtime_prefs, hide_main_window_if_minimized_arg,
-    load_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray,
-    start_background_automation_worker,
+    apply_startup_launch_prefs, focus_main_window, get_app_runtime_prefs,
+    hide_main_window_if_minimized_arg, is_force_quit_requested, load_runtime_prefs,
+    focus_main_window_cmd, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray, start_background_automation_worker,
 };
 use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
 use auth::commands::*;
@@ -72,6 +72,9 @@ fn greet(name: &str) -> String {
 
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            focus_main_window(app);
+        }))
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
@@ -174,6 +177,7 @@ fn main() {
             get_all_alertes,
             get_alertes_non_traitees,
             get_app_notifications_summary,
+            get_tray_digest_snapshot,
             create_alerte,
             marquer_alerte_lue,
             marquer_alerte_traitee,
@@ -320,6 +324,7 @@ fn main() {
             get_app_runtime_prefs,
             save_app_runtime_prefs,
             quit_app_fully_cmd,
+            focus_main_window_cmd,
             create_master_password,
             verify_master_password,
             unlock,
@@ -435,7 +440,7 @@ fn main() {
         .run(|app_handle, event| {
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
                 let prefs = load_runtime_prefs(app_handle);
-                if prefs.close_to_tray {
+                if prefs.close_to_tray && !is_force_quit_requested() {
                     api.prevent_exit();
                 }
             }

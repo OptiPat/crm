@@ -21,6 +21,7 @@ import {
   notifyAutomationError,
   notifyAutomationEvent,
 } from "@/lib/background/background-automation-notify";
+import { resolveRelationSyncNavTarget } from "@/lib/background/automation-notification-nav";
 import {
   birthdayNotificationsAlreadySentToday,
   formatBirthdayNotification,
@@ -29,6 +30,12 @@ import {
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import { notifyNotesChanged } from "@/lib/notes/note-events";
 import { processDuePipeRdvReminders } from "@/lib/pipe/pipe-rdv-reminder-processor";
+import { getTrayDigestSnapshot } from "@/lib/api/tauri-tray-digest";
+import {
+  decideTrayDigestNotification,
+  loadTrayDigestNotifyState,
+  persistTrayDigestNotifyState,
+} from "@/lib/background/tray-digest-notify";
 
 export type AutomationSurface = "foreground" | "tray";
 
@@ -60,6 +67,8 @@ function jobEnabledInTray(
       return prefs.background_pipe_rdv_reminders;
     case "birthdays":
       return prefs.background_birthday_notifications;
+    case "tray_digest":
+      return prefs.background_tray_digest;
   }
 }
 
@@ -111,7 +120,16 @@ async function runRelationJob(surface: AutomationSurface): Promise<void> {
       await notifyAutomationEvent(
         "CRM W.Y.S — Sync mail & agenda",
         parts.join(" · "),
-        { tray: true }
+        {
+          tray: true,
+          nav: resolveRelationSyncNavTarget({
+            mail_detected: result.mail_detected,
+            rdv_campaign_detected: result.rdv_campaign_detected,
+            calendar_accepted: result.calendar_accepted,
+            calendar_declined: result.calendar_declined,
+            calendar_cancelled: result.calendar_cancelled,
+          }),
+        }
       );
     }
     if (result.errors.length > 0) {
@@ -119,7 +137,7 @@ async function runRelationJob(surface: AutomationSurface): Promise<void> {
         "relation-sync",
         "CRM W.Y.S — Sync mail & agenda",
         result.errors[0] ?? "Erreur de synchronisation",
-        { tray }
+        { tray, nav: { page: "dashboard" } }
       );
     }
   } finally {
@@ -127,7 +145,7 @@ async function runRelationJob(surface: AutomationSurface): Promise<void> {
   }
 }
 
-async function runPipeRdvJob(surface: AutomationSurface): Promise<void> {
+async function runPipeRdvJob(surface: AutomationSurface): Promise<number> {
   const tray = isTray(surface);
   const result = await processDuePipeRdvReminders(10);
   markAutomationJobRun("pipe_rdv");
@@ -137,7 +155,7 @@ async function runPipeRdvJob(surface: AutomationSurface): Promise<void> {
       result.sent === 1
         ? "1 rappel email RDV envoyé."
         : `${result.sent} rappels email RDV envoyés.`,
-      { tray: true }
+      { tray: true, nav: { page: "pipe" } }
     );
   }
   if (result.errors.length > 0) {
@@ -145,9 +163,10 @@ async function runPipeRdvJob(surface: AutomationSurface): Promise<void> {
       "pipe-rdv-reminder",
       "CRM W.Y.S — Rappel RDV Pipe",
       result.errors[0] ?? "Échec d'envoi",
-      { tray }
+      { tray, nav: { page: "pipe" } }
     );
   }
+  return result.sent;
 }
 
 async function runStelliumJob(surface: AutomationSurface): Promise<void> {
@@ -171,7 +190,7 @@ async function runStelliumJob(surface: AutomationSurface): Promise<void> {
       await notifyAutomationEvent(
         "CRM W.Y.S — Stellium Exceltis",
         `Remboursement détecté (${label}). Voir les notifications.`,
-        { tray }
+        { tray, nav: { page: "suivi", tab: "etiquettes" } }
       );
     }
   } catch (error) {
@@ -185,7 +204,7 @@ async function runStelliumJob(surface: AutomationSurface): Promise<void> {
         "stellium-scan",
         "CRM W.Y.S — Stellium Exceltis",
         msg,
-        { tray }
+        { tray, nav: { page: "suivi", tab: "etiquettes" } }
       );
     }
   } finally {
@@ -219,6 +238,7 @@ async function runBirthdaysJob(surface: AutomationSurface): Promise<void> {
 
     const sent = await notifyAutomationEvent(payload.title, payload.body, {
       tray: document.hidden,
+      nav: { page: "contacts" },
     });
     if (sent) markBirthdayNotificationsSentToday();
   } catch (error) {
@@ -227,7 +247,66 @@ async function runBirthdaysJob(surface: AutomationSurface): Promise<void> {
       "birthday-notify",
       "CRM W.Y.S — Anniversaires",
       msg,
-      { tray: isTray(surface) }
+      { tray: isTray(surface), nav: { page: "contacts" } }
+    );
+  }
+}
+
+async function runTrayDigestJob(
+  surface: AutomationSurface,
+  skipImminentRdv: boolean
+): Promise<void> {
+  if (!isTray(surface)) return;
+
+  try {
+    const snapshot = await getTrayDigestSnapshot();
+    markAutomationJobRun("tray_digest");
+
+    const digestSnapshot = skipImminentRdv
+      ? { ...snapshot, pipe_rdvs_within_2h: [] }
+      : snapshot;
+
+    const state = loadTrayDigestNotifyState();
+    const decision = decideTrayDigestNotification(digestSnapshot, {
+      lastFingerprint: state.lastFingerprint,
+      lastSentAtMs: state.lastSentAtMs,
+      notifiedRdvIds: state.notifiedRdvIds,
+    });
+    if (!decision.shouldSend) return;
+
+    const sent = await notifyAutomationEvent(decision.title, decision.body, {
+      tray: true,
+      nav: decision.navTarget,
+    });
+    if (!sent) return;
+
+    const realImminentIds = snapshot.pipe_rdvs_within_2h.map((r) => r.calendar_event_id);
+    /** Ne pas effacer l'état RDV quand le digest a omis les RDV (rappel Pipe même cycle). */
+    const imminentIdsForPersist = skipImminentRdv
+      ? realImminentIds
+      : digestSnapshot.pipe_rdvs_within_2h.map((r) => r.calendar_event_id);
+    const nextNotified = new Set(state.notifiedRdvIds);
+    for (const id of decision.rdvIdsToMark) {
+      nextNotified.add(id);
+    }
+    if (skipImminentRdv) {
+      for (const id of realImminentIds) {
+        nextNotified.add(id);
+      }
+    }
+    persistTrayDigestNotifyState(
+      decision.fingerprint,
+      Date.now(),
+      nextNotified,
+      imminentIdsForPersist
+    );
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    notifyAutomationError(
+      "tray-digest",
+      "CRM W.Y.S — Point du jour",
+      msg,
+      { tray: true, nav: { page: "dashboard" } }
     );
   }
 }
@@ -249,8 +328,9 @@ async function runBackgroundAutomationCycleInner(
   if (shouldRunJob("relation", prefs, options)) {
     await runRelationJob(options.surface);
   }
+  let pipeRdvRemindersSent = 0;
   if (shouldRunJob("pipe_rdv", prefs, options)) {
-    await runPipeRdvJob(options.surface);
+    pipeRdvRemindersSent = await runPipeRdvJob(options.surface);
   }
   if (shouldRunJob("stellium", prefs, options)) {
     await runStelliumJob(options.surface);
@@ -260,6 +340,9 @@ async function runBackgroundAutomationCycleInner(
   }
   if (shouldRunJob("birthdays", prefs, options)) {
     await runBirthdaysJob(options.surface);
+  }
+  if (shouldRunJob("tray_digest", prefs, options)) {
+    await runTrayDigestJob(options.surface, pipeRdvRemindersSent > 0);
   }
 }
 

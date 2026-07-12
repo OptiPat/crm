@@ -18,3 +18,9 @@ pub fn quit_app_fully_cmd(app: AppHandle) -> Result<(), String> {
     quit_app_fully(&app);
     Ok(())
 }
+
+#[tauri::command]
+pub fn focus_main_window_cmd(app: AppHandle) -> Result<(), String> {
+    super::tray::focus_main_window(&app);
+    Ok(())
+}

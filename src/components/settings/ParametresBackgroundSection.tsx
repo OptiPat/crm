@@ -125,7 +125,7 @@ export function ParametresBackgroundSection() {
           <AutomationToggle
             id="pref-bg-master"
             label="Automatisations en arrière-plan"
-              description="Sync mail/agenda, Stellium, notes, rappels RDV, anniversaires (tray uniquement)."
+              description="Sync mail/agenda, Stellium, notes, rappels RDV, anniversaires, point du jour (tray uniquement)."
             checked={prefs.background_automations}
             disabled={loading || saving}
             onCheckedChange={(checked) => void patch({ background_automations: checked })}
@@ -179,6 +179,14 @@ export function ParametresBackgroundSection() {
               onCheckedChange={(checked) =>
                 void patch({ background_birthday_notifications: checked })
               }
+            />
+            <AutomationToggle
+              id="pref-bg-tray-digest"
+              label="Point du jour (tray)"
+              description="Une seule notif regroupée (~1 h) : RDV Pipe dans 2 h, alertes Suivi, tâches, emails prêts."
+              checked={prefs.background_tray_digest}
+              disabled={automationsDisabled}
+              onCheckedChange={(checked) => void patch({ background_tray_digest: checked })}
             />
           </div>
         </div>

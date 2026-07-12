@@ -35,6 +35,7 @@ sha2 = "0.10"
 ico = "0.4"
 tauri-plugin-autostart = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-single-instance = "2"
 
 [profile.dev]
 # debug = 0 evite LNK1318 ; codegen-units = 1 limite le pic RAM au link (Windows)

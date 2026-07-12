@@ -5,6 +5,7 @@ use tauri::{
 };
 
 use super::prefs::{load_runtime_prefs, save_runtime_prefs, AppRuntimePrefs};
+use super::shutdown::request_force_quit;
 
 const MENU_OPEN_ID: &str = "tray-open";
 const MENU_QUIT_ID: &str = "tray-quit";
@@ -26,7 +27,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id.as_ref() {
-            MENU_OPEN_ID => show_main_window(app),
+            MENU_OPEN_ID => focus_main_window(app),
             MENU_QUIT_ID => quit_app_fully(app),
             _ => {}
         })
@@ -37,8 +38,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 ..
             } = event
             {
-                let app = tray.app_handle();
-                show_main_window(app);
+                focus_main_window(tray.app_handle());
             }
         })
         .build(app)?;
@@ -50,7 +50,7 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn show_main_window(app: &AppHandle) {
+pub fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -59,6 +59,7 @@ fn show_main_window(app: &AppHandle) {
 }
 
 pub fn quit_app_fully(app: &AppHandle) {
+    request_force_quit();
     app.exit(0);
 }
 

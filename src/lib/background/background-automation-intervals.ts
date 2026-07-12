@@ -2,6 +2,7 @@ export const RELATION_INTERVAL_MS = 3 * 60_000;
 export const STELLIUM_INTERVAL_MS = 60 * 60_000;
 export const NOTES_INTERVAL_MS = 5 * 60_000;
 export const BIRTHDAY_INTERVAL_MS = 60 * 60_000;
+export const TRAY_DIGEST_INTERVAL_MS = 60 * 60_000;
 export const RELATION_COOLDOWN_MS = 90_000;
 export const STELLIUM_COOLDOWN_MS = 60 * 60_000;
 export const NOTES_COOLDOWN_MS = 4 * 60_000;
@@ -13,7 +14,8 @@ export type BackgroundAutomationJob =
   | "stellium"
   | "notes"
   | "pipe_rdv"
-  | "birthdays";
+  | "birthdays"
+  | "tray_digest";
 
 export const JOB_INTERVAL_MS: Record<BackgroundAutomationJob, number> = {
   relation: RELATION_INTERVAL_MS,
@@ -21,6 +23,7 @@ export const JOB_INTERVAL_MS: Record<BackgroundAutomationJob, number> = {
   notes: NOTES_INTERVAL_MS,
   pipe_rdv: RELATION_INTERVAL_MS,
   birthdays: BIRTHDAY_INTERVAL_MS,
+  tray_digest: TRAY_DIGEST_INTERVAL_MS,
 };
 
 export const JOB_COOLDOWN_MS: Partial<Record<BackgroundAutomationJob, number>> = {

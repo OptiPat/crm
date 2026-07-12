@@ -933,6 +933,17 @@ pub fn get_app_notifications_summary(
 }
 
 #[tauri::command]
+pub fn get_tray_digest_snapshot(
+    db: State<'_, DbState>,
+) -> Result<crate::database::notifications_summary::TrayDigestSnapshotDto, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    database
+        .get_tray_digest_snapshot()
+        .map_err(|e| format!("Failed to get tray digest: {}", e))
+}
+
+#[tauri::command]
 pub fn create_alerte(db: State<'_, DbState>, new_alerte: NewAlerte) -> Result<Alerte, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;

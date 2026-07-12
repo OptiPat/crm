@@ -38,6 +38,7 @@ import { needsLicenseActivation } from "@/lib/api/tauri-license";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
 import { runBackgroundAutomationAfterUnlock } from "@/lib/background/background-automation-runner";
 import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomationListener";
+import { useAutomationNotificationListener } from "@/hooks/useAutomationNotificationListener";
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -57,6 +58,7 @@ function AppInner() {
   });
 
   useBackgroundAutomationListener(isAuthenticated);
+  useAutomationNotificationListener(isAuthenticated, setCurrentPage);
 
   useEffect(() => {
     // Vérifier si c'est le premier lancement

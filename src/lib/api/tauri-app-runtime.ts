@@ -9,6 +9,7 @@ export interface AppRuntimePrefs {
   background_notes_sync: boolean;
   background_pipe_rdv_reminders: boolean;
   background_birthday_notifications: boolean;
+  background_tray_digest: boolean;
 }
 
 export const DEFAULT_APP_RUNTIME_PREFS: AppRuntimePrefs = {
@@ -20,6 +21,7 @@ export const DEFAULT_APP_RUNTIME_PREFS: AppRuntimePrefs = {
   background_notes_sync: true,
   background_pipe_rdv_reminders: true,
   background_birthday_notifications: true,
+  background_tray_digest: true,
 };
 
 type LegacyAppRuntimePrefs = Partial<AppRuntimePrefs> & {
@@ -44,7 +46,8 @@ export function trayAutomationTickEnabled(prefs: AppRuntimePrefs): boolean {
     prefs.background_stellium_scan ||
     prefs.background_notes_sync ||
     prefs.background_pipe_rdv_reminders ||
-    prefs.background_birthday_notifications
+    prefs.background_birthday_notifications ||
+    prefs.background_tray_digest
   );
 }
 
