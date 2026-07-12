@@ -6,6 +6,8 @@ import {
   RELATION_INTERVAL_MS,
   STELLIUM_COOLDOWN_MS,
   STELLIUM_INTERVAL_MS,
+  BIRTHDAY_COOLDOWN_MS,
+  BIRTHDAY_INTERVAL_MS,
 } from "@/hooks/useBackgroundSync";
 
 describe("useBackgroundSync timing", () => {
@@ -23,5 +25,10 @@ describe("useBackgroundSync timing", () => {
   it("Notes : intervalle 5 min, cooldown 4 min", () => {
     expect(NOTES_INTERVAL_MS).toBe(5 * 60_000);
     expect(NOTES_COOLDOWN_MS).toBe(4 * 60_000);
+  });
+
+  it("Anniversaires : intervalle et cooldown", () => {
+    expect(BIRTHDAY_INTERVAL_MS).toBe(60 * 60_000);
+    expect(BIRTHDAY_COOLDOWN_MS).toBe(30 * 60_000);
   });
 });

@@ -24,7 +24,7 @@ mod system_commands;
 use app_runtime::{
     apply_startup_launch_prefs, get_app_runtime_prefs, hide_main_window_if_minimized_arg,
     load_runtime_prefs, quit_app_fully_cmd, save_app_runtime_prefs, setup_tray,
-    start_pipe_rdv_reminder_worker,
+    start_background_automation_worker,
 };
 use app_branding::commands::{apply_app_branding_os, get_app_branding, save_app_branding};
 use auth::commands::*;
@@ -80,6 +80,7 @@ fn main() {
             MacosLauncher::LaunchAgent,
             Some(vec!["--minimized"]),
         ))
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Initialiser l'authentification
             let auth = AuthManager::new(&app.handle()).expect("Failed to initialize auth");
@@ -94,7 +95,7 @@ fn main() {
                 eprintln!("⚠️ Tray : {e}");
             }
             let _ = apply_startup_launch_prefs(&app.handle());
-            start_pipe_rdv_reminder_worker(app.handle().clone());
+            start_background_automation_worker(app.handle().clone());
             hide_main_window_if_minimized_arg(&app.handle());
 
             Ok(())

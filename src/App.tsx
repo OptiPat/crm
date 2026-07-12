@@ -36,7 +36,8 @@ import { seedDefaultEmailTemplates } from "@/lib/api/tauri-templates-email";
 import { runFullEtiquettesRecalc } from "@/lib/etiquettes/sync-etiquettes-auto";
 import { needsLicenseActivation } from "@/lib/api/tauri-license";
 import { useAppNavigationListener } from "@/hooks/useAppNavigationListener";
-import { usePipeRdvReminderBackgroundListener } from "@/hooks/usePipeRdvReminderBackgroundListener";
+import { runBackgroundAutomationAfterUnlock } from "@/lib/background/background-automation-runner";
+import { useBackgroundAutomationListener } from "@/hooks/useBackgroundAutomationListener";
 
 function AppInner() {
   const [isFirstLaunch, setIsFirstLaunch] = useState<boolean | null>(null);
@@ -55,7 +56,7 @@ function AppInner() {
     }
   });
 
-  usePipeRdvReminderBackgroundListener(isAuthenticated);
+  useBackgroundAutomationListener(isAuthenticated);
 
   useEffect(() => {
     // Vérifier si c'est le premier lancement
@@ -82,6 +83,7 @@ function AppInner() {
         const unlocked = await invoke<boolean>("is_database_unlocked");
         if (!unlocked) return;
         setIsAuthenticated(true);
+        void runBackgroundAutomationAfterUnlock();
         const needsLicense = await needsLicenseActivation();
         if (needsLicense) {
           setShowLicense(true);
@@ -137,6 +139,7 @@ function AppInner() {
     } catch (error) {
       console.error("Error checking wizard status:", error);
     }
+    runBackgroundAutomationAfterUnlock();
   };
 
   const handleLogout = async () => {

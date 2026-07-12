@@ -1,144 +1,21 @@
-import { useCallback, useEffect, useRef } from "react";
-import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
+import { useEffect } from "react";
 import {
-  notifyStelliumExceltisChanged,
-  scanStelliumExceltisEmails,
-} from "@/lib/api/tauri-stellium-exceltis";
-import { beginBackgroundActivity } from "@/lib/background-activity";
-import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
-import { processDuePipeRdvReminders } from "@/lib/pipe/pipe-rdv-reminder-processor";
-import { syncSharedNotes } from "@/lib/api/tauri-notes";
-import { notifyNotesChanged } from "@/lib/notes/note-events";
-import { toast } from "sonner";
-
-export const RELATION_INTERVAL_MS = 3 * 60_000;
-export const STELLIUM_INTERVAL_MS = 60 * 60_000;
-export const NOTES_INTERVAL_MS = 5 * 60_000;
-export const RELATION_COOLDOWN_MS = 90_000;
-export const STELLIUM_COOLDOWN_MS = 60 * 60_000;
-export const NOTES_COOLDOWN_MS = 4 * 60_000;
-const WAKE_DEBOUNCE_MS = 300;
+  NOTES_INTERVAL_MS,
+  RELATION_INTERVAL_MS,
+  STELLIUM_INTERVAL_MS,
+  BIRTHDAY_INTERVAL_MS,
+  WAKE_DEBOUNCE_MS,
+} from "@/lib/background/background-automation-intervals";
+import {
+  automationJobCooldownRemainingMs,
+  shouldRunAutomationJobWithCooldown,
+} from "@/lib/background/background-automation-state";
+import { runBackgroundAutomationCycle } from "@/lib/background/background-automation-runner";
 
 /**
- * Sync Gmail/Agenda (3 min) + scan Stellium (1 h) — une tâche à la fois.
- * Stellium au focus uniquement si la dernière passe date de > 1 h (cooldown).
+ * Automatisations fenêtre visible : sync Gmail/Agenda, Stellium, notes, rappels RDV, anniversaires.
  */
 export function useBackgroundSync(enabled = true): void {
-  const runningRef = useRef(false);
-  const lastRelationSyncRef = useRef(0);
-  const lastStelliumScanRef = useRef(0);
-  const lastNotesSyncRef = useRef(0);
-
-  const runRelationSync = useCallback(
-    async (options?: { force?: boolean; reason?: string }) => {
-      if (!enabled) return;
-      const now = Date.now();
-      if (!options?.force && now - lastRelationSyncRef.current < RELATION_COOLDOWN_MS) {
-        return;
-      }
-      const endActivity = beginBackgroundActivity("relation-sync");
-      try {
-        const result = await runRelationAutoSync();
-        if (!result.skipped) {
-          lastRelationSyncRef.current = Date.now();
-          if (result.errors.length > 0) {
-            console.warn("Sync relation:", result.errors.join(" ; "));
-          }
-        }
-        await processDuePipeRdvReminders(10);
-      } finally {
-        endActivity();
-      }
-    },
-    [enabled]
-  );
-
-  const runStelliumScan = useCallback(
-    async (options?: { force?: boolean }) => {
-      if (!enabled) return;
-      const now = Date.now();
-      if (!options?.force && now - lastStelliumScanRef.current < STELLIUM_COOLDOWN_MS) {
-        return;
-      }
-      const endActivity = beginBackgroundActivity("stellium-scan");
-      try {
-        const status = await getEmailConnectionStatus();
-        const mailReady =
-          status.connected &&
-          (status.provider === "google" || status.provider === "microsoft");
-        if (!mailReady) {
-          lastStelliumScanRef.current = Date.now();
-          return;
-        }
-
-        const result = await scanStelliumExceltisEmails();
-        lastStelliumScanRef.current = Date.now();
-        notifyStelliumExceltisChanged();
-        if (result.new_signals > 0) {
-          const label =
-            result.signals[result.signals.length - 1]?.millesime_label ?? "millésime";
-          toast.info(
-            `Stellium : remboursement Exceltis détecté (${label}). Voir les notifications.`
-          );
-        }
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        if (
-          !msg.includes("Aucun compte") &&
-          !msg.includes("connectez Google") &&
-          !msg.includes("nécessite")
-        ) {
-          console.warn("Scan Stellium Exceltis:", msg);
-        }
-      } finally {
-        endActivity();
-      }
-    },
-    [enabled]
-  );
-
-  const runNotesSync = useCallback(
-    async (options?: { force?: boolean }) => {
-      if (!enabled) return;
-      const now = Date.now();
-      if (!options?.force && now - lastNotesSyncRef.current < NOTES_COOLDOWN_MS) {
-        return;
-      }
-      const endActivity = beginBackgroundActivity("notes-sync");
-      try {
-        await syncSharedNotes();
-        lastNotesSyncRef.current = Date.now();
-        notifyNotesChanged();
-      } catch (error) {
-        console.warn("Sync notes partagées:", error);
-      } finally {
-        endActivity();
-      }
-    },
-    [enabled]
-  );
-
-  const runSequential = useCallback(
-    async (options?: { relation?: boolean; stellium?: boolean; notes?: boolean; force?: boolean }) => {
-      if (!enabled || runningRef.current) return;
-      runningRef.current = true;
-      try {
-        if (options?.relation !== false) {
-          await runRelationSync({ force: options?.force });
-        }
-        if (options?.stellium) {
-          await runStelliumScan({ force: options?.force });
-        }
-        if (options?.notes) {
-          await runNotesSync({ force: options?.force });
-        }
-      } finally {
-        runningRef.current = false;
-      }
-    },
-    [enabled, runRelationSync, runStelliumScan, runNotesSync]
-  );
-
   useEffect(() => {
     if (!enabled) return;
 
@@ -149,26 +26,59 @@ export function useBackgroundSync(enabled = true): void {
       if (wakeTimer != null) globalThis.clearTimeout(wakeTimer);
       wakeTimer = globalThis.setTimeout(() => {
         wakeTimer = null;
-        void runSequential({ relation: true, stellium: true, notes: true });
+        void runBackgroundAutomationCycle({
+          surface: "foreground",
+          force: true,
+        });
       }, WAKE_DEBOUNCE_MS) as unknown as number;
     };
 
     const relationInterval = globalThis.setInterval(() => {
-      if (!document.hidden) void runSequential({ relation: true, stellium: false });
+      if (document.hidden) return;
+      if (automationJobCooldownRemainingMs("relation") > 0) return;
+      void runBackgroundAutomationCycle({
+        surface: "foreground",
+        jobs: { relation: true, pipe_rdv: true, stellium: false, notes: false, birthdays: false },
+      });
     }, RELATION_INTERVAL_MS);
 
     const stelliumInterval = globalThis.setInterval(() => {
-      if (!document.hidden) void runSequential({ relation: false, stellium: true });
+      if (document.hidden) return;
+      if (!shouldRunAutomationJobWithCooldown("stellium")) return;
+      void runBackgroundAutomationCycle({
+        surface: "foreground",
+        jobs: { relation: false, pipe_rdv: false, stellium: true, notes: false, birthdays: false },
+      });
     }, STELLIUM_INTERVAL_MS);
 
     const notesInterval = globalThis.setInterval(() => {
-      if (!document.hidden) void runSequential({ relation: false, stellium: false, notes: true });
+      if (document.hidden) return;
+      if (!shouldRunAutomationJobWithCooldown("notes")) return;
+      void runBackgroundAutomationCycle({
+        surface: "foreground",
+        jobs: { relation: false, pipe_rdv: false, stellium: false, notes: true, birthdays: false },
+      });
     }, NOTES_INTERVAL_MS);
+
+    const birthdaysInterval = globalThis.setInterval(() => {
+      if (document.hidden) return;
+      if (!shouldRunAutomationJobWithCooldown("birthdays")) return;
+      void runBackgroundAutomationCycle({
+        surface: "foreground",
+        jobs: {
+          relation: false,
+          pipe_rdv: false,
+          stellium: false,
+          notes: false,
+          birthdays: true,
+        },
+      });
+    }, BIRTHDAY_INTERVAL_MS);
 
     document.addEventListener("visibilitychange", onWake);
     window.addEventListener("focus", onWake);
 
-    void runSequential({ relation: true, stellium: true, notes: true, force: true });
+    void runBackgroundAutomationCycle({ surface: "foreground", force: true });
 
     return () => {
       document.removeEventListener("visibilitychange", onWake);
@@ -176,7 +86,20 @@ export function useBackgroundSync(enabled = true): void {
       globalThis.clearInterval(relationInterval);
       globalThis.clearInterval(stelliumInterval);
       globalThis.clearInterval(notesInterval);
+      globalThis.clearInterval(birthdaysInterval);
       if (wakeTimer != null) globalThis.clearTimeout(wakeTimer);
     };
-  }, [enabled, runSequential]);
+  }, [enabled]);
 }
+
+// Réexport pour les tests et compatibilité
+export {
+  NOTES_COOLDOWN_MS,
+  NOTES_INTERVAL_MS,
+  RELATION_COOLDOWN_MS,
+  RELATION_INTERVAL_MS,
+  STELLIUM_COOLDOWN_MS,
+  STELLIUM_INTERVAL_MS,
+  BIRTHDAY_COOLDOWN_MS,
+  BIRTHDAY_INTERVAL_MS,
+} from "@/lib/background/background-automation-intervals";
