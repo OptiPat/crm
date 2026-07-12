@@ -9,6 +9,8 @@ import {
   cancelPipeRdvReminderSchedules,
   replacePipeRdvReminderSchedules,
 } from "@/lib/api/tauri-pipe-rdv-email";
+import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
+import { resolveRdvEmailVisioAndLieu } from "@/lib/pipe/pipe-rdv-email-vars";
 
 export async function syncPipeRdvReminderSchedules(options: {
   pipeTimelineEntryId: number;
@@ -23,6 +25,8 @@ export async function syncPipeRdvReminderSchedules(options: {
   endAtUnix: number;
   visioLink?: string | null;
   eventLocation?: string | null;
+  visio?: RdvVisioOptions;
+  physicalAddress?: string | null;
 }): Promise<void> {
   const reminder = parseTemplateEmailPipeRdvReminder(options.template.variables);
   if (!reminder.enabled) {
@@ -53,6 +57,13 @@ export async function syncPipeRdvReminderSchedules(options: {
   );
   const uniqueIds = [...new Set(contactIds)];
 
+  const { lien_visio, lieu_rdv } = resolveRdvEmailVisioAndLieu({
+    visioLink: options.visioLink,
+    eventLocation: options.eventLocation,
+    visio: options.visio,
+    physicalAddress: options.physicalAddress,
+  });
+
   const rows = uniqueIds.map((contactId) => ({
     pipe_id: options.pipe.id,
     contact_id: contactId,
@@ -60,8 +71,8 @@ export async function syncPipeRdvReminderSchedules(options: {
     send_at: sendAt,
     rdv_at: options.startAtUnix,
     rdv_end_at: options.endAtUnix,
-    visio_link: options.visioLink ?? null,
-    event_location: options.eventLocation ?? null,
+    visio_link: lien_visio || null,
+    event_location: lieu_rdv || null,
   }));
 
   if (rows.length === 0) {

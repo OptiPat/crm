@@ -48,10 +48,12 @@ export function ParametresSuiviSection({ cgpConfig, onConfigChange }: Parametres
           <p className="mt-1">
             Configurez les modèles dans <strong>Modèles email → onglet Pipe RDV</strong> : choisissez
             les étapes (R1, R2, R3), le message de confirmation et un rappel planifié (ex. 24 h
-            avant). Variables :{" "}
+            avant).             Variables :{" "}
+            <code className="text-xs">{"{{prenom}}"}</code>,{" "}
             <code className="text-xs">{"{{date_rdv}}"}</code>,{" "}
             <code className="text-xs">{"{{lien_visio}}"}</code>,{" "}
-            <code className="text-xs">{"{{co_contact}}"}</code>…
+            <code className="text-xs">{"{{co_contact_prenom}}"}</code>,{" "}
+            <code className="text-xs">{"{{co_contact_nom}}"}</code>…
           </p>
         </div>
       </div>

@@ -128,12 +128,15 @@ export function PipeFormPanel({
   const contactHintRef = useRef<Contact | null>(null);
   const secondaryHintRef = useRef<Contact | null>(null);
   const titreEditedRef = useRef(false);
+  /** Contact pour lequel l'utilisateur a retiré le co-contact foyer (évite le re-remplissage auto). */
+  const foyerCoContactDismissedRef = useRef<number | null>(null);
 
   useEffect(() => {
     setForm(buildFormState(pipe, initialType, defaultContactId));
     contactHintRef.current = null;
     secondaryHintRef.current = null;
     titreEditedRef.current = false;
+    foyerCoContactDismissedRef.current = null;
   }, [pipe, initialType, defaultContactId]);
 
   useEffect(() => {
@@ -154,7 +157,13 @@ export function PipeFormPanel({
   }, []);
 
   useEffect(() => {
-    if (pipe || form.pipeType !== "AFFAIRE" || form.contactId <= 0 || form.secondaryContactId > 0) {
+    if (
+      pipe ||
+      form.pipeType !== "AFFAIRE" ||
+      form.contactId <= 0 ||
+      form.secondaryContactId > 0 ||
+      foyerCoContactDismissedRef.current === form.contactId
+    ) {
       return;
     }
     const primary = contacts.find((c) => c.id === form.contactId);
@@ -243,6 +252,9 @@ export function PipeFormPanel({
   ) => {
     if (secondaryHint) secondaryHintRef.current = secondaryHint;
     setForm((prev) => {
+      if (secondaryContactId === 0) {
+        foyerCoContactDismissedRef.current = prev.contactId;
+      }
       const next = { ...prev, secondaryContactId };
       return {
         ...next,
@@ -391,22 +403,35 @@ export function PipeFormPanel({
         />
 
         {form.pipeType === "AFFAIRE" && form.contactId > 0 && (
-          <PipeContactSelect
-            contacts={contacts}
-            value={form.secondaryContactId}
-            onChange={handleSecondaryContactChange}
-            onContactCreated={(contact) => {
-              setContacts((prev) => {
-                if (prev.some((c) => c.id === contact.id)) return prev;
-                return [...prev, contact];
-              });
-              handleSecondaryContactChange(contact.id ?? 0, contact);
-            }}
-            excludeContactId={form.contactId}
-            label="Co-contact (couple, optionnel)"
-            optional
-            placeholder="Ajouter le conjoint…"
-          />
+          <div className="space-y-2">
+            <PipeContactSelect
+              contacts={contacts}
+              value={form.secondaryContactId}
+              onChange={handleSecondaryContactChange}
+              onContactCreated={(contact) => {
+                setContacts((prev) => {
+                  if (prev.some((c) => c.id === contact.id)) return prev;
+                  return [...prev, contact];
+                });
+                handleSecondaryContactChange(contact.id ?? 0, contact);
+              }}
+              excludeContactId={form.contactId}
+              label="Co-contact (couple, optionnel)"
+              optional
+              placeholder="Ajouter le conjoint…"
+            />
+            {form.secondaryContactId > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs text-muted-foreground"
+                onClick={() => handleSecondaryContactChange(0)}
+              >
+                Retirer le co-contact
+              </Button>
+            )}
+          </div>
         )}
 
         {form.pipeType === "AFFAIRE" && form.secondaryContactId > 0 && (

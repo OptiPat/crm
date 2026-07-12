@@ -155,6 +155,8 @@ export async function maybeSendPipeRdvConfirmationEmail(options: {
       endAtUnix: options.endAtUnix,
       visioLink: options.visioLink,
       eventLocation: options.eventLocation,
+      visio: options.visio,
+      physicalAddress: options.physicalAddress,
     });
   } catch (e) {
     console.warn("Planification rappel RDV Pipe:", e);

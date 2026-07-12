@@ -26,11 +26,79 @@ export function formatPipeRdvEmailDate(startAtUnix: number): string {
 }
 
 export function formatPipeRdvEmailTime(unix: number): string {
-  return new Date(unix * 1000).toLocaleTimeString("fr-FR", {
-    hour: "2-digit",
+  const parts = new Intl.DateTimeFormat("fr-FR", {
+    hour: "numeric",
     minute: "2-digit",
     timeZone: PARIS_TZ,
-  });
+  }).formatToParts(new Date(unix * 1000));
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  return `${hour}h${minute}`;
+}
+
+export type PipeRdvCoContactFields = {
+  /** NOM Prénom (ex. DUPONT Jean) — cohérent agenda. */
+  co_contact: string;
+  co_contact_prenom: string;
+  co_contact_nom: string;
+  /** Couple : « et Marie » ; solo : vide — pour « Bonjour {{prenom}}{{co_contact_et_prenom}}, » */
+  co_contact_et_prenom: string;
+};
+
+const EMPTY_CO_CONTACT: PipeRdvCoContactFields = {
+  co_contact: "",
+  co_contact_prenom: "",
+  co_contact_nom: "",
+  co_contact_et_prenom: "",
+};
+
+/** « et Marie » si prénom co-contact, sinon chaîne vide. */
+export function formatCoContactEtPrenom(coContactPrenom?: string | null): string {
+  const prenom = coContactPrenom?.trim() ?? "";
+  return prenom ? ` et ${prenom}` : "";
+}
+
+export function coContactFieldsForRecipient(
+  pipe: Pick<
+    PipeRecord,
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+  >,
+  recipientContactId: number
+  ): PipeRdvCoContactFields {
+  if (
+    pipe.secondary_contact_id != null &&
+    pipe.secondary_contact_id > 0 &&
+    recipientContactId === pipe.contact_id
+  ) {
+    const co_contact_prenom = pipe.secondary_contact_prenom?.trim() ?? "";
+    return {
+      co_contact: formatPipeRdvParticipantNomPrenom(
+        pipe.secondary_contact_prenom,
+        pipe.secondary_contact_nom
+      ),
+      co_contact_prenom,
+      co_contact_nom: pipe.secondary_contact_nom?.trim() ?? "",
+      co_contact_et_prenom: formatCoContactEtPrenom(co_contact_prenom),
+    };
+  }
+  if (
+    pipe.secondary_contact_id != null &&
+    recipientContactId === pipe.secondary_contact_id
+  ) {
+    const co_contact_prenom = pipe.contact_prenom?.trim() ?? "";
+    return {
+      co_contact: formatPipeRdvParticipantNomPrenom(pipe.contact_prenom, pipe.contact_nom),
+      co_contact_prenom,
+      co_contact_nom: pipe.contact_nom?.trim() ?? "",
+      co_contact_et_prenom: formatCoContactEtPrenom(co_contact_prenom),
+    };
+  }
+  return EMPTY_CO_CONTACT;
 }
 
 export function coContactLabelForRecipient(
@@ -45,23 +113,7 @@ export function coContactLabelForRecipient(
   >,
   recipientContactId: number
 ): string {
-  if (
-    pipe.secondary_contact_id != null &&
-    pipe.secondary_contact_id > 0 &&
-    recipientContactId === pipe.contact_id
-  ) {
-    return formatPipeRdvParticipantNomPrenom(
-      pipe.secondary_contact_prenom,
-      pipe.secondary_contact_nom
-    );
-  }
-  if (
-    pipe.secondary_contact_id != null &&
-    recipientContactId === pipe.secondary_contact_id
-  ) {
-    return formatPipeRdvParticipantNomPrenom(pipe.contact_prenom, pipe.contact_nom);
-  }
-  return "";
+  return coContactFieldsForRecipient(pipe, recipientContactId).co_contact;
 }
 
 /** Couple sur l'affaire → vouvoiement pour les deux (même si tutoiement en fiche). */
@@ -116,12 +168,13 @@ export function buildPipeRdvEmailExtraVariables(options: {
   physicalAddress?: string | null;
 }): Record<string, string> {
   const { lien_visio, lieu_rdv } = resolveRdvEmailVisioAndLieu(options);
+  const co = coContactFieldsForRecipient(options.pipe, options.recipientContactId);
   return {
     date_rdv: formatPipeRdvEmailDate(options.startAtUnix),
     heure_rdv: formatPipeRdvEmailTime(options.startAtUnix),
     heure_fin_rdv: formatPipeRdvEmailTime(options.endAtUnix),
     lien_visio,
     lieu_rdv,
-    co_contact: coContactLabelForRecipient(options.pipe, options.recipientContactId),
+    ...co,
   };
 }

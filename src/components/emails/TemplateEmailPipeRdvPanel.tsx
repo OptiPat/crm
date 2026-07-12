@@ -5,13 +5,14 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { RichTextEmailEditor } from "@/components/emails/RichTextEmailEditor";
 import {
+  buildPipeRdvReminderTemplateNom,
   formatPipeRdvReminderScheduleSummary,
+  PIPE_RDV_FORMALITY_HINT,
   type TemplateEmailPipeRdvReminderConfig,
   type TemplateEmailPipeRdvTriggerConfig,
 } from "@/lib/emails/template-email-pipe-rdv";
 import { PIPE_RDV_STAGE_OPTIONS, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
-import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
-import type { TemplateTutoiementDraft } from "@/components/emails/TemplateEmailTutoiementPanel";
+import { PIPE_STAGE_DESCRIPTIONS } from "@/lib/pipe/pipe-types";
 
 export type TemplatePipeRdvDraft = {
   trigger: TemplateEmailPipeRdvTriggerConfig;
@@ -27,12 +28,12 @@ type Props = {
   onChange: (next: TemplatePipeRdvDraft) => void;
   parentNom: string;
   mainTutoiementEnabled?: boolean;
-  tutoiementDraft?: TemplateTutoiementDraft;
 };
 
 export function TemplateEmailPipeRdvPanel({
   draft,
   onChange,
+  parentNom,
   mainTutoiementEnabled = false,
 }: Props) {
   const patch = (partial: Partial<TemplatePipeRdvDraft>) =>
@@ -82,12 +83,18 @@ export function TemplateEmailPipeRdvPanel({
           <Label className="text-sm font-medium">Étapes Pipe déclenchant ce modèle</Label>
           <div className="flex flex-wrap gap-4">
             {PIPE_RDV_STAGE_OPTIONS.map((stage) => (
-              <label key={stage} className="flex items-center gap-2 text-sm">
+              <label key={stage} className="flex items-start gap-2 text-sm max-w-sm">
                 <Checkbox
+                  className="mt-0.5"
                   checked={draft.trigger.stages.includes(stage)}
                   onCheckedChange={(checked) => toggleStage(stage, checked === true)}
                 />
-                {PIPE_STAGE_LABELS[stage]} ({stage})
+                <span>
+                  <span className="font-medium">{stage}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {PIPE_STAGE_DESCRIPTIONS[stage]}
+                  </span>
+                </span>
               </label>
             ))}
           </div>
@@ -96,6 +103,14 @@ export function TemplateEmailPipeRdvPanel({
               Sélectionnez au moins une étape pour activer l&apos;envoi.
             </p>
           )}
+          <p className="text-xs text-muted-foreground">
+            Salutation :{" "}
+            <code className="text-[11px]">
+              Bonjour {"{{prenom}}"}
+              {"{{co_contact_et_prenom}}"},
+            </code>
+            . {PIPE_RDV_FORMALITY_HINT}
+          </p>
         </div>
       )}
 
@@ -110,7 +125,7 @@ export function TemplateEmailPipeRdvPanel({
             </Label>
             <p className="text-xs text-muted-foreground mt-0.5">
               Email automatique planifié avant l&apos;heure du RDV (replanifié si vous décalez le
-              RDV). L&apos;app doit rester ouverte ou reprendre focus pour l&apos;envoi.
+              RDV). Envoyé en arrière-plan tant que le CRM tourne (tray ou fenêtre ouverte).
             </p>
           </div>
         </div>
@@ -156,6 +171,10 @@ export function TemplateEmailPipeRdvPanel({
           </div>
           <p className="text-xs text-muted-foreground">{scheduleSummary}</p>
 
+          <p className="text-xs text-muted-foreground rounded-md border bg-muted/30 px-3 py-2">
+            {PIPE_RDV_FORMALITY_HINT}
+          </p>
+
           <div className="flex items-center gap-2">
             <Checkbox
               id="pipe-rdv-same-message"
@@ -170,34 +189,65 @@ export function TemplateEmailPipeRdvPanel({
           </div>
 
           {!draft.reminder.use_same_message && (
-            <div className="space-y-3 border-t pt-4">
-              <Label className="text-sm font-medium">Message de rappel dédié</Label>
-              <Input
-                placeholder="Objet du rappel"
-                value={draft.reminderSujet}
-                onChange={(e) => patch({ reminderSujet: e.target.value })}
-              />
-              <RichTextEmailEditor
-                value={draft.reminderCorpsHtml}
-                onChange={(html) => patch({ reminderCorpsHtml: html })}
-                minHeight="160px"
-              />
-              {mainTutoiementEnabled && (
-                <div className="space-y-2 pt-2">
-                  <Label className="text-sm">Variante tutoiement (rappel)</Label>
-                  <Input
-                    placeholder="Objet tutoiement"
-                    value={draft.reminderTuSujet}
-                    onChange={(e) => patch({ reminderTuSujet: e.target.value })}
-                  />
-                  <RichTextEmailEditor
-                    value={draft.reminderTuCorpsHtml}
-                    onChange={(html) => patch({ reminderTuCorpsHtml: html })}
-                    minHeight="120px"
-                  />
-                </div>
-              )}
+            <div className="space-y-4 border-t pt-4">
+              <div>
+                <Label className="text-sm font-medium">Message de rappel dédié</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Modèle lié :{" "}
+                  <strong>
+                    {parentNom.trim()
+                      ? buildPipeRdvReminderTemplateNom(parentNom)
+                      : "Rappel RDV — (nom du modèle principal)"}
+                  </strong>
+                </p>
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-sky-200 bg-sky-50/40 p-3">
+                <Label className="text-sm">Vouvoiement *</Label>
+                <Input
+                  placeholder="Objet du rappel (vous)"
+                  value={draft.reminderSujet}
+                  onChange={(e) => patch({ reminderSujet: e.target.value })}
+                />
+                <RichTextEmailEditor
+                  value={draft.reminderCorpsHtml}
+                  onChange={(html) => patch({ reminderCorpsHtml: html })}
+                  minHeight="140px"
+                />
+              </div>
+
+              <div className="space-y-2 rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+                <Label className="text-sm">
+                  Tutoiement
+                  {mainTutoiementEnabled ? " *" : " (optionnel)"}
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Contacts en tutoiement sur leur fiche recevront cette variante. Couple sur
+                  l&apos;affaire → vouvoiement pour les deux, même si la fiche est en tu.
+                  {mainTutoiementEnabled
+                    ? " Obligatoire car l'onglet Tutoiement du message principal est activé."
+                    : ""}
+                </p>
+                <Input
+                  placeholder="Objet du rappel (tu)"
+                  value={draft.reminderTuSujet}
+                  onChange={(e) => patch({ reminderTuSujet: e.target.value })}
+                />
+                <RichTextEmailEditor
+                  value={draft.reminderTuCorpsHtml}
+                  onChange={(html) => patch({ reminderTuCorpsHtml: html })}
+                  minHeight="120px"
+                />
+              </div>
             </div>
+          )}
+
+          {draft.reminder.use_same_message && (
+            <p className="text-xs text-muted-foreground rounded-md border px-3 py-2 bg-muted/20">
+              Même message que la confirmation : le rappel reprend les variantes vouvoiement et
+              tutoiement du message principal (onglets Message et Tutoiement).{" "}
+              {PIPE_RDV_FORMALITY_HINT}
+            </p>
           )}
         </div>
       )}

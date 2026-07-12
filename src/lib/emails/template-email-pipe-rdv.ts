@@ -300,3 +300,22 @@ export async function migrateLegacyPipeRdvConfirmationTemplate(): Promise<boolea
   });
   return true;
 }
+
+/** Objet / corps préremplis quand on active un message de rappel dédié. */
+export const DEFAULT_PIPE_RDV_REMINDER_SUJET = "Rappel — RDV le {{date_rdv}} à {{heure_rdv}}";
+
+export const DEFAULT_PIPE_RDV_REMINDER_CORPS_HTML = [
+  "<p>Bonjour {{prenom}},</p>",
+  "<p>Je vous rappelle notre rendez-vous prévu le <strong>{{date_rdv}}</strong> à <strong>{{heure_rdv}}</strong>.</p>",
+].join("");
+
+export const DEFAULT_PIPE_RDV_REMINDER_SUJET_TU = DEFAULT_PIPE_RDV_REMINDER_SUJET;
+
+export const DEFAULT_PIPE_RDV_REMINDER_CORPS_HTML_TU = [
+  "<p>Bonjour {{prenom}},</p>",
+  "<p>Je te rappelle notre rendez-vous prévu le <strong>{{date_rdv}}</strong> à <strong>{{heure_rdv}}</strong>.</p>",
+].join("");
+
+/** Texte d'aide tu/vous commun confirmation et rappel Pipe RDV. */
+export const PIPE_RDV_FORMALITY_HINT =
+  "Tu / vous selon le registre de la fiche contact. Couple sur l'affaire → vouvoiement pour les deux destinataires.";

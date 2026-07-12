@@ -35,6 +35,10 @@ import {
   stripOrphanStelliumFormalityLines,
   templateUsesStelliumPerfVariables,
 } from "@/lib/emails/stellium-perf-preview-vars";
+import {
+  SAMPLE_PIPE_RDV_PREVIEW_VARS,
+  templateUsesPipeRdvVariables,
+} from "@/lib/pipe/pipe-rdv-preview-vars";
 import { isStelliumPerfTemplateNom } from "@/lib/emails/stellium-template-meta";
 import { filterLibraryTemplates } from "@/lib/emails/template-library";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
@@ -69,7 +73,7 @@ export const EMAIL_TEMPLATE_VARIABLES: {
   label: string;
   hint: string;
 }[] = [
-  { token: "{{prenom}}", key: "prenom", label: "Prénom contact", hint: "Fiche contact" },
+  { token: "{{prenom}}", key: "prenom", label: "Prénom contact", hint: "Salutation : Bonjour {{prenom}}" },
   { token: "{{nom}}", key: "nom", label: "Nom contact", hint: "Fiche contact" },
   { token: "{{email}}", key: "email", label: "Email contact", hint: "Fiche contact" },
   { token: "{{telephone}}", key: "telephone", label: "Téléphone contact", hint: "Fiche contact" },
@@ -144,13 +148,13 @@ export const PIPE_RDV_TEMPLATE_VARIABLES: {
     token: "{{heure_rdv}}",
     key: "heure_rdv",
     label: "Heure de début",
-    hint: "Ex. 14:00",
+    hint: "Ex. 14h00",
   },
   {
     token: "{{heure_fin_rdv}}",
     key: "heure_fin_rdv",
     label: "Heure de fin",
-    hint: "Ex. 15:00",
+    hint: "Ex. 15h00",
   },
   {
     token: "{{lien_visio}}",
@@ -167,8 +171,26 @@ export const PIPE_RDV_TEMPLATE_VARIABLES: {
   {
     token: "{{co_contact}}",
     key: "co_contact",
-    label: "Co-participant (nom prénom)",
-    hint: "Autre personne du couple sur l'affaire pipe ; vide si RDV solo",
+    label: "Co-participant (NOM Prénom)",
+    hint: "Autre personne du couple ; ex. DUPONT Jean ; vide si RDV solo",
+  },
+  {
+    token: "{{co_contact_prenom}}",
+    key: "co_contact_prenom",
+    label: "Prénom co-participant",
+    hint: "Autre personne du couple sur l'affaire ; vide si RDV solo",
+  },
+  {
+    token: "{{co_contact_nom}}",
+    key: "co_contact_nom",
+    label: "Nom co-participant",
+    hint: "Nom de l'autre personne du couple ; vide si RDV solo",
+  },
+  {
+    token: "{{co_contact_et_prenom}}",
+    key: "co_contact_et_prenom",
+    label: "Co-participant (salutation)",
+    hint: "Couple : « et Marie » ; solo : rien — Bonjour {{prenom}}{{co_contact_et_prenom}},",
   },
 ];
 
@@ -275,6 +297,7 @@ export function renderTemplatePreview(
   const usesStelliumPerf =
     isStelliumPerfTemplateNom(options?.templateNom ?? "") ||
     templateUsesStelliumPerfVariables(sujet, corps, corpsHtmlStored);
+  const usesPipeRdv = templateUsesPipeRdvVariables(sujet, corps, corpsHtmlStored);
   const registre = options?.registre ?? "VOUS";
   const baseVars = {
     ...buildVariablesFromContact(contact, cgp, templateAgendaLinkId),
@@ -288,6 +311,7 @@ export function renderTemplatePreview(
           ...SAMPLE_EXCELITIS_TEMPLATE_VARS,
           ...(usesScpiBulletin ? buildScpiBulletinPreviewVariables() : {}),
           ...(usesStelliumPerf ? buildStelliumPerfPreviewVariables() : {}),
+          ...(usesPipeRdv ? SAMPLE_PIPE_RDV_PREVIEW_VARS : {}),
         },
     registre
   );
