@@ -1356,6 +1356,10 @@ pub struct GoogleCalendarWeekEvent {
     pub pipe_timeline_entry_id: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pipe_id: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visio_link: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_location: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]

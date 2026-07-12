@@ -1,6 +1,10 @@
 use super::{models::CalendarEventEntry, Database};
 use rusqlite::{params, OptionalExtension, Result};
 
+const CALENDAR_EVENT_ROW_SELECT: &str = "id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
+                    title, start_at, end_at, attendee_email, attendee_status, event_status,
+                    rdv_effectue, created_at, updated_at, visio_link, event_location";
+
 impl Database {
     pub fn get_contact_calendar_info(
         &self,
@@ -55,6 +59,8 @@ impl Database {
         start_at: i64,
         end_at: i64,
         attendee_email: Option<&str>,
+        visio_link: Option<&str>,
+        event_location: Option<&str>,
     ) -> Result<i64> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -63,8 +69,8 @@ impl Database {
         self.conn.execute(
             "INSERT INTO calendar_events (
                 contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id, title,
-                start_at, end_at, attendee_email, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                start_at, end_at, attendee_email, visio_link, event_location, created_at, updated_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             params![
                 contact_id,
                 alerte_id,
@@ -75,6 +81,8 @@ impl Database {
                 start_at,
                 end_at,
                 attendee_email,
+                visio_link,
+                event_location,
                 now,
                 now,
             ],
@@ -89,11 +97,42 @@ impl Database {
         start_at: i64,
         end_at: i64,
     ) -> Result<()> {
-        self.conn.execute(
-            "UPDATE calendar_events SET title = ?1, start_at = ?2, end_at = ?3, updated_at = unixepoch()
-             WHERE google_event_id = ?4",
-            params![title, start_at, end_at, google_event_id],
-        )?;
+        self.update_calendar_event_sync_details(
+            google_event_id,
+            title,
+            start_at,
+            end_at,
+            None,
+            None,
+            false,
+        )
+    }
+
+    /// Met à jour horaires et/ou visio/lieu depuis Google ou le CRM.
+    pub fn update_calendar_event_sync_details(
+        &self,
+        google_event_id: &str,
+        title: &str,
+        start_at: i64,
+        end_at: i64,
+        visio_link: Option<&str>,
+        event_location: Option<&str>,
+        touch_visio_fields: bool,
+    ) -> Result<()> {
+        if touch_visio_fields {
+            self.conn.execute(
+                "UPDATE calendar_events SET title = ?1, start_at = ?2, end_at = ?3,
+                 visio_link = ?4, event_location = ?5, updated_at = unixepoch()
+                 WHERE google_event_id = ?6",
+                params![title, start_at, end_at, visio_link, event_location, google_event_id],
+            )?;
+        } else {
+            self.conn.execute(
+                "UPDATE calendar_events SET title = ?1, start_at = ?2, end_at = ?3, updated_at = unixepoch()
+                 WHERE google_event_id = ?4",
+                params![title, start_at, end_at, google_event_id],
+            )?;
+        }
         Ok(())
     }
 
@@ -170,16 +209,14 @@ impl Database {
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
-                    title, start_at, end_at, attendee_email, attendee_status, event_status,
-                    rdv_effectue, created_at, updated_at
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CALENDAR_EVENT_ROW_SELECT}
              FROM calendar_events
              WHERE rdv_effectue = 0
                AND event_status != 'cancelled'
                AND start_at >= ?1
-             ORDER BY start_at ASC",
-        )?;
+             ORDER BY start_at ASC"
+        ))?;
         let week_ago = now - 7 * 24 * 3600;
         let rows = stmt.query_map(params![week_ago], map_calendar_event_row)?;
         rows.collect()
@@ -196,7 +233,7 @@ impl Database {
             "SELECT ce.id, ce.contact_id, ce.alerte_id, ce.tache_id, ce.pipe_timeline_entry_id,
                     ce.google_event_id, ce.title, ce.start_at, ce.end_at, ce.attendee_email,
                     ce.attendee_status, ce.event_status, ce.rdv_effectue, ce.created_at,
-                    ce.updated_at, c.prenom, c.nom
+                    ce.updated_at, ce.visio_link, ce.event_location, c.prenom, c.nom
              FROM calendar_events ce
              INNER JOIN contacts c ON c.id = ce.contact_id
              WHERE ce.start_at >= ?1 AND ce.start_at < ?2
@@ -220,10 +257,10 @@ impl Database {
                 rdv_effectue: row.get::<_, i64>(12)? != 0,
                 created_at: row.get(13)?,
                 updated_at: row.get(14)?,
-                contact_prenom: Some(row.get(15)?),
-                contact_nom: Some(row.get(16)?),
-                visio_link: None,
-                event_location: None,
+                visio_link: row.get(15)?,
+                event_location: row.get(16)?,
+                contact_prenom: Some(row.get(17)?),
+                contact_nom: Some(row.get(18)?),
             })
         })?;
         rows.collect()
@@ -233,13 +270,11 @@ impl Database {
         &self,
         google_event_id: &str,
     ) -> Result<Option<CalendarEventEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
-                    title, start_at, end_at, attendee_email, attendee_status, event_status,
-                    rdv_effectue, created_at, updated_at
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CALENDAR_EVENT_ROW_SELECT}
              FROM calendar_events
-             WHERE google_event_id = ?1 AND event_status != 'cancelled'",
-        )?;
+             WHERE google_event_id = ?1 AND event_status != 'cancelled'"
+        ))?;
         let mut rows = stmt.query_map(params![google_event_id], map_calendar_event_row)?;
         Ok(rows.next().transpose()?)
     }
@@ -249,16 +284,14 @@ impl Database {
         start_at: i64,
         end_at: i64,
     ) -> Result<Vec<CalendarEventEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
-                    title, start_at, end_at, attendee_email, attendee_status, event_status,
-                    rdv_effectue, created_at, updated_at
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CALENDAR_EVENT_ROW_SELECT}
              FROM calendar_events
              WHERE pipe_timeline_entry_id IS NOT NULL
                AND event_status != 'cancelled'
                AND rdv_effectue = 0
-               AND start_at >= ?1 AND start_at < ?2",
-        )?;
+               AND start_at >= ?1 AND start_at < ?2"
+        ))?;
         let rows = stmt.query_map(params![start_at, end_at], map_calendar_event_row)?;
         rows.collect()
     }
@@ -267,16 +300,14 @@ impl Database {
         &self,
         since_start_at: i64,
     ) -> Result<Vec<CalendarEventEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
-                    title, start_at, end_at, attendee_email, attendee_status, event_status,
-                    rdv_effectue, created_at, updated_at
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CALENDAR_EVENT_ROW_SELECT}
              FROM calendar_events
              WHERE pipe_timeline_entry_id IS NOT NULL
                AND event_status != 'cancelled'
                AND rdv_effectue = 0
-               AND start_at >= ?1",
-        )?;
+               AND start_at >= ?1"
+        ))?;
         let rows = stmt.query_map(params![since_start_at], map_calendar_event_row)?;
         rows.collect()
     }
@@ -298,14 +329,12 @@ impl Database {
         &self,
         timeline_entry_id: i64,
     ) -> Result<Option<super::models::CalendarEventEntry>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
-                    title, start_at, end_at, attendee_email, attendee_status, event_status,
-                    rdv_effectue, created_at, updated_at
+        let mut stmt = self.conn.prepare(&format!(
+            "SELECT {CALENDAR_EVENT_ROW_SELECT}
              FROM calendar_events
              WHERE pipe_timeline_entry_id = ?1 AND event_status != 'cancelled'
-             ORDER BY updated_at DESC LIMIT 1",
-        )?;
+             ORDER BY updated_at DESC LIMIT 1"
+        ))?;
         let mut rows = stmt.query_map(params![timeline_entry_id], map_calendar_event_row)?;
         Ok(rows.next().transpose()?)
     }
@@ -333,10 +362,7 @@ impl Database {
 
     pub fn get_calendar_event_by_id(&self, id: i64) -> Result<CalendarEventEntry> {
         self.conn.query_row(
-            "SELECT id, contact_id, alerte_id, tache_id, pipe_timeline_entry_id, google_event_id,
-                    title, start_at, end_at, attendee_email, attendee_status, event_status,
-                    rdv_effectue, created_at, updated_at
-             FROM calendar_events WHERE id = ?1",
+            &format!("SELECT {CALENDAR_EVENT_ROW_SELECT} FROM calendar_events WHERE id = ?1"),
             params![id],
             map_calendar_event_row,
         )
@@ -362,7 +388,7 @@ fn map_calendar_event_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalendarE
         updated_at: row.get(14)?,
         contact_prenom: None,
         contact_nom: None,
-        visio_link: None,
-        event_location: None,
+        visio_link: row.get(15)?,
+        event_location: row.get(16)?,
     })
 }

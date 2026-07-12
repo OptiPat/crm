@@ -127,26 +127,63 @@ struct GoogleConferenceEntryPoint {
 }
 
 fn extract_google_event_visio_link(event: &GoogleEventCreated) -> Option<String> {
-    if let Some(link) = event.hangout_link.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+    extract_google_visio_link_fields(
+        event.hangout_link.as_deref(),
+        event.conference_data.as_ref(),
+    )
+}
+
+fn extract_google_visio_link_fields(
+    hangout_link: Option<&str>,
+    conference_data: Option<&GoogleConferenceData>,
+) -> Option<String> {
+    if let Some(link) = hangout_link.map(str::trim).filter(|s| !s.is_empty()) {
         return Some(link.to_string());
     }
-    event
-        .conference_data
-        .as_ref()?
-        .entry_points
-        .iter()
-        .find(|ep| ep.entry_point_type.as_deref() == Some("video"))
-        .and_then(|ep| ep.uri.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+    conference_data
+        .and_then(|data| {
+            data.entry_points
+                .iter()
+                .find(|ep| ep.entry_point_type.as_deref() == Some("video"))
+                .and_then(|ep| ep.uri.as_deref().map(str::trim).filter(|s| !s.is_empty()))
+        })
         .map(str::to_string)
 }
 
 fn extract_google_event_location(event: &GoogleEventCreated) -> Option<String> {
-    event
-        .location
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(str::to_string)
+    normalize_google_location_text(event.location.as_deref())
+}
+
+fn normalize_google_location_text(raw: Option<&str>) -> Option<String> {
+    raw.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+fn normalize_google_calendar_visio_fields(
+    meet_link: Option<String>,
+    location: Option<String>,
+) -> (Option<String>, Option<String>) {
+    let location = normalize_google_location_text(location.as_deref());
+    let meet_link = meet_link.filter(|s| !s.trim().is_empty());
+    let visio_link = meet_link.or_else(|| {
+        location.as_ref().and_then(|loc| {
+            if loc.starts_with("http://") || loc.starts_with("https://") {
+                Some(loc.clone())
+            } else {
+                None
+            }
+        })
+    });
+    (visio_link, location)
+}
+
+fn google_visio_fields_from_list_event(
+    event: &GoogleCalendarListEvent,
+) -> (Option<String>, Option<String>) {
+    let meet_link = extract_google_visio_link_fields(
+        event.hangout_link.as_deref(),
+        event.conference_data.as_ref(),
+    );
+    normalize_google_calendar_visio_fields(meet_link, event.location.clone())
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,6 +213,12 @@ struct GoogleCalendarListEvent {
     summary: Option<String>,
     #[serde(rename = "htmlLink", default)]
     html_link: Option<String>,
+    #[serde(default)]
+    location: Option<String>,
+    #[serde(rename = "hangoutLink", default)]
+    hangout_link: Option<String>,
+    #[serde(rename = "conferenceData", default)]
+    conference_data: Option<GoogleConferenceData>,
     start: Option<GoogleCalendarEventTime>,
     end: Option<GoogleCalendarEventTime>,
 }
@@ -216,6 +259,7 @@ fn map_google_list_event(event: GoogleCalendarListEvent) -> Option<GoogleCalenda
     if event.status.as_deref() == Some("cancelled") {
         return None;
     }
+    let (visio_link, event_location) = google_visio_fields_from_list_event(&event);
     let google_event_id = event.id.filter(|id| !id.trim().is_empty())?;
     let start = event.start.as_ref()?;
     let end = event.end.as_ref()?;
@@ -239,6 +283,8 @@ fn map_google_list_event(event: GoogleCalendarListEvent) -> Option<GoogleCalenda
         html_link: event.html_link,
         pipe_timeline_entry_id: None,
         pipe_id: None,
+        visio_link,
+        event_location,
     })
 }
 
@@ -258,6 +304,7 @@ fn fetch_google_calendar_event_by_id(
     );
     let res = client
         .get(&url)
+        .query(&[("conferenceDataVersion", "1")])
         .bearer_auth(&conn.access_token)
         .send()
         .map_err(|e| e.to_string())?;
@@ -289,6 +336,10 @@ fn apply_google_event_diff_to_pipe_rdv(
 ) -> Result<bool, String> {
     let start_changed = (ce.start_at - ge.start_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC;
     let end_changed = (ce.end_at - ge.end_at).abs() > PIPE_SYNC_TIME_TOLERANCE_SEC;
+    let visio_link = ge.visio_link.as_deref();
+    let event_location = ge.event_location.as_deref();
+    let visio_changed = ce.visio_link.as_deref() != visio_link
+        || ce.event_location.as_deref() != event_location;
 
     if start_changed {
         if db
@@ -299,6 +350,8 @@ fn apply_google_event_diff_to_pipe_rdv(
                 ge.end_at,
                 &ge.title,
                 ce.start_at,
+                visio_link,
+                event_location,
             )
             .map_err(|e| e.to_string())?
         {
@@ -321,6 +374,24 @@ fn apply_google_event_diff_to_pipe_rdv(
                 &ge.title,
                 ge.start_at,
                 ce.end_at,
+                visio_link,
+                event_location,
+            )
+            .map_err(|e| e.to_string())?
+        {
+            contact_ids_to_sync.insert(ce.contact_id);
+            rescheduled_timeline_entry_ids.push(timeline_id);
+            return Ok(true);
+        }
+    } else if visio_changed {
+        if db
+            .apply_pipe_rdv_visio_from_google(
+                google_event_id,
+                &ge.title,
+                ge.start_at,
+                ge.end_at,
+                visio_link,
+                event_location,
             )
             .map_err(|e| e.to_string())?
         {
@@ -700,6 +771,8 @@ pub fn create_google_calendar_rdv(
     let created: GoogleEventCreated = res.json().map_err(|e| e.to_string())?;
     let visio_link = extract_google_event_visio_link(&created);
     let event_location = extract_google_event_location(&created);
+    let (visio_link, event_location) =
+        normalize_google_calendar_visio_fields(visio_link, event_location);
     let row_id = db
         .insert_calendar_event(
             contact_id,
@@ -711,6 +784,8 @@ pub fn create_google_calendar_rdv(
             start_at,
             end_at,
             primary_attendee_email,
+            visio_link.as_deref(),
+            event_location.as_deref(),
         )
         .map_err(|e| e.to_string())?;
 
@@ -718,12 +793,7 @@ pub fn create_google_calendar_rdv(
         let _ = db.set_pipe_timeline_google_event_id(entry_id, Some(&created.id));
     }
 
-    let mut entry = db
-        .get_calendar_event_by_id(row_id)
-        .map_err(|e| e.to_string())?;
-    entry.visio_link = visio_link;
-    entry.event_location = event_location;
-    Ok(entry)
+    db.get_calendar_event_by_id(row_id).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Serialize)]
@@ -858,13 +928,25 @@ pub fn update_google_calendar_rdv(
     }
 
     let updated: GoogleEventCreated = res.json().map_err(|e| e.to_string())?;
+    let visio_link = extract_google_event_visio_link(&updated);
+    let event_location = extract_google_event_location(&updated);
+    let (visio_link, event_location) =
+        normalize_google_calendar_visio_fields(visio_link, event_location);
 
-    db.update_calendar_event_times(google_event_id, summary, start_at, end_at)
-        .map_err(|e| e.to_string())?;
+    db.update_calendar_event_sync_details(
+        google_event_id,
+        summary,
+        start_at,
+        end_at,
+        visio_link.as_deref(),
+        event_location.as_deref(),
+        true,
+    )
+    .map_err(|e| e.to_string())?;
 
     Ok(crate::database::models::CalendarRdvSyncDetails {
-        visio_link: extract_google_event_visio_link(&updated),
-        event_location: extract_google_event_location(&updated),
+        visio_link,
+        event_location,
     })
 }
 
@@ -1004,4 +1086,29 @@ pub fn sync_calendar_rdv_status(app: &AppHandle, db: &Database) -> Result<Calend
     }
 
     Ok(result)
+}
+
+#[cfg(test)]
+mod visio_tests {
+    use super::normalize_google_calendar_visio_fields;
+
+    #[test]
+    fn custom_link_in_location_becomes_visio_link() {
+        let (visio, lieu) = normalize_google_calendar_visio_fields(
+            None,
+            Some("https://zoom.us/j/123".into()),
+        );
+        assert_eq!(visio.as_deref(), Some("https://zoom.us/j/123"));
+        assert_eq!(lieu.as_deref(), Some("https://zoom.us/j/123"));
+    }
+
+    #[test]
+    fn meet_link_takes_priority_over_location() {
+        let (visio, lieu) = normalize_google_calendar_visio_fields(
+            Some("https://meet.google.com/abc".into()),
+            Some("8 place du Marche".into()),
+        );
+        assert_eq!(visio.as_deref(), Some("https://meet.google.com/abc"));
+        assert_eq!(lieu.as_deref(), Some("8 place du Marche"));
+    }
 }

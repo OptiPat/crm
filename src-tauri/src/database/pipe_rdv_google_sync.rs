@@ -114,6 +114,8 @@ impl super::Database {
         new_end_at: i64,
         title: &str,
         previous_start_at: i64,
+        visio_link: Option<&str>,
+        event_location: Option<&str>,
     ) -> rusqlite::Result<bool> {
         let entry = self.get_pipe_timeline_entry(timeline_entry_id)?;
         if entry.entry_type != TIMELINE_RDV {
@@ -137,7 +139,15 @@ impl super::Database {
             occurred_at: Some(now_unix()),
         })?;
         self.update_pipe_timeline_occurred_at(timeline_entry_id, new_start_at)?;
-        self.update_calendar_event_times(google_event_id, title, new_start_at, new_end_at)?;
+        self.update_calendar_event_sync_details(
+            google_event_id,
+            title,
+            new_start_at,
+            new_end_at,
+            visio_link,
+            event_location,
+            true,
+        )?;
         Ok(true)
     }
 
@@ -149,11 +159,43 @@ impl super::Database {
         title: &str,
         start_at: i64,
         previous_end_at: i64,
+        visio_link: Option<&str>,
+        event_location: Option<&str>,
     ) -> rusqlite::Result<bool> {
         if (previous_end_at - new_end_at).abs() <= PIPE_SYNC_TIME_TOLERANCE_SEC {
             return Ok(false);
         }
-        self.update_calendar_event_times(google_event_id, title, start_at, new_end_at)?;
+        self.update_calendar_event_sync_details(
+            google_event_id,
+            title,
+            start_at,
+            new_end_at,
+            visio_link,
+            event_location,
+            true,
+        )?;
+        Ok(true)
+    }
+
+    /// Visio / lieu modifiés côté Google sans changement d'horaire.
+    pub fn apply_pipe_rdv_visio_from_google(
+        &self,
+        google_event_id: &str,
+        title: &str,
+        start_at: i64,
+        end_at: i64,
+        visio_link: Option<&str>,
+        event_location: Option<&str>,
+    ) -> rusqlite::Result<bool> {
+        self.update_calendar_event_sync_details(
+            google_event_id,
+            title,
+            start_at,
+            end_at,
+            visio_link,
+            event_location,
+            true,
+        )?;
         Ok(true)
     }
 
@@ -260,6 +302,8 @@ mod tests {
             1_000_000,
             1_003_600,
             None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -294,6 +338,8 @@ mod tests {
             1_000_000,
             1_003_600,
             None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -305,12 +351,26 @@ mod tests {
                 2_003_600,
                 "RDV R1",
                 1_000_000,
+                Some("https://meet.google.com/abc"),
+                Some("8 place du Marche"),
             )
             .unwrap();
         assert!(changed);
 
         let rdv = db.get_pipe_timeline_entry(rdv_id).unwrap();
         assert_eq!(rdv.occurred_at, 2_000_000);
+        let cal = db
+            .get_calendar_event_by_google_event_id("g-ev-2")
+            .unwrap()
+            .expect("calendar row");
+        assert_eq!(
+            cal.visio_link.as_deref(),
+            Some("https://meet.google.com/abc")
+        );
+        assert_eq!(
+            cal.event_location.as_deref(),
+            Some("8 place du Marche")
+        );
 
         let entries = db.list_pipe_timeline_entries(pipe_id).unwrap();
         assert!(
@@ -336,6 +396,8 @@ mod tests {
             1_000_000,
             1_003_600,
             None,
+            None,
+            None,
         )
         .unwrap();
 
@@ -346,6 +408,8 @@ mod tests {
                 "RDV R1",
                 1_000_000,
                 1_003_600,
+                Some("https://meet.google.com/xyz"),
+                None,
             )
             .unwrap();
         assert!(changed);

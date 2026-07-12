@@ -58,6 +58,7 @@ describe("template-email-activation", () => {
       hasTrigger: true,
       hasEtiquetteLink: true,
       hasRelance: true,
+      hasPipeRdv: false,
       hasTutoiement: true,
       hasSendChannel: true,
       isLibraryOnly: false,

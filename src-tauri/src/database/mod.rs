@@ -1129,6 +1129,18 @@ impl Database {
                 [],
             )?;
         }
+        if !self.table_has_column("calendar_events", "visio_link")? {
+            self.conn.execute(
+                "ALTER TABLE calendar_events ADD COLUMN visio_link TEXT",
+                [],
+            )?;
+        }
+        if !self.table_has_column("calendar_events", "event_location")? {
+            self.conn.execute(
+                "ALTER TABLE calendar_events ADD COLUMN event_location TEXT",
+                [],
+            )?;
+        }
         Ok(())
     }
 

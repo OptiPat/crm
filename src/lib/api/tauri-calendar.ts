@@ -140,13 +140,20 @@ export async function syncPipeGoogleRdvs(): Promise<AgendaGooglePipeSyncResult> 
 
 export async function getPipeRdvCalendarEventForTimeline(
   timelineEntryId: number
-): Promise<Pick<CalendarEventEntry, "start_at" | "end_at"> | null> {
+): Promise<
+  Pick<CalendarEventEntry, "start_at" | "end_at" | "visio_link" | "event_location"> | null
+> {
   const row = await invoke<CalendarEventEntry | null>(
     "get_pipe_rdv_calendar_event_for_timeline",
     { timelineEntryId }
   );
   if (!row) return null;
-  return { start_at: row.start_at, end_at: row.end_at };
+  return {
+    start_at: row.start_at,
+    end_at: row.end_at,
+    visio_link: row.visio_link ?? null,
+    event_location: row.event_location ?? null,
+  };
 }
 
 export async function resolvePipeRdvGoogleEventId(

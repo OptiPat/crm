@@ -38,8 +38,8 @@ export async function resyncPipeRdvRemindersAfterGoogleReschedule(
         template,
         startAtUnix,
         endAtUnix,
-        visioLink: null,
-        eventLocation: null,
+        visioLink: calendar?.visio_link ?? null,
+        eventLocation: calendar?.event_location ?? null,
       });
     } catch (e) {
       console.warn(
