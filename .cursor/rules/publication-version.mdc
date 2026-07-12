@@ -7,6 +7,8 @@ alwaysApply: false
 
 Quand l'utilisateur demande de **publier**, **release**, **tagger**, **bump** ou **mettre en ligne** une version :
 
+Skill agent détaillé : `.cursor/skills/publication-release/SKILL.md`.
+
 ## Commandes (dans l'ordre)
 
 1. `.\scripts\bump-version.ps1 X.Y.Z` — aligne `package.json`, `tauri.conf.json`, `Cargo.toml` et `Cargo.lock`
@@ -18,14 +20,37 @@ Quand l'utilisateur demande de **publier**, **release**, **tagger**, **bump** ou
 1. **`npm run verify:full`** vert sur `main` — **obligatoire** avant toute publication.
    - Le workflow release exécute `npm run build` (`tsc && vite build`) via `beforeBuildCommand` Tauri.
    - `verify:quick` / `verify` ne lancent **pas** ce build → des erreurs tsc ou Vite passent en CI.
-   - Si `src-tauri/**` modifié : `verify:full` inclut déjà Cargo via le script (utiliser `npm run verify` puis `npm run build` si besoin de séparer).
-2. **Lockfile = npm 10 (CI)** — GitHub Actions (Node 22) utilise npm 10 ; npm 11 local masque les trous du lockfile.
+   - Si `src-tauri/**` modifié : `verify:full` inclut déjà Cargo via le script.
+2. **Préchauffer Cargo** (recommandé si deps Rust récentes ou 1ʳᵉ release de la session) :
+   ```powershell
+   cd D:\crm\src-tauri; cargo check
+   ```
+   Puis `bump-version.ps1` sera rapide (~10–30 s).
+3. **Lockfile = npm 10 (CI)** — GitHub Actions (Node 22) utilise npm 10 ; npm 11 local masque les trous du lockfile.
    ```powershell
    npx npm@10.9.2 install          # si deps modifiées
    npx npm@10.9.2 ci               # doit passer avant commit lockfile
    ```
-3. **`bump-version.ps1`** — écrit UTF-8 **sans BOM** (obligatoire : sinon CI → `Couldn't locate or parse tauri config`).
-4. Committer le lockfile si modifié **avant** le commit `chore: version X.Y.Z` (normalement fait par `bump-version.ps1`).
+4. **`bump-version.ps1`** — écrit UTF-8 **sans BOM** (obligatoire : sinon CI → `Couldn't locate or parse tauri config`).
+5. Committer le lockfile si modifié **avant** le commit `chore: version X.Y.Z` (normalement fait par `bump-version.ps1`).
+
+## Si `bump-version.ps1` semble bloqué sur Cargo
+
+Ce n'est en général **pas** un crash : `cargo check` compile en silence (1–5 min cache froid, deps Windows lourdes).
+
+1. **Attendre** avec la sortie `cargo check` visible (plus de mode silencieux).
+2. Si **>5 min** sans progression : interrompre le process.
+3. Les fichiers **version sont déjà écrits** (package.json, tauri.conf.json, Cargo.toml).
+4. Récupération :
+   ```powershell
+   cd D:\crm\src-tauri; cargo check
+   cd D:\crm
+   git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock
+   git commit -m "chore: version X.Y.Z"
+   ```
+   Ou : `.\scripts\bump-version.ps1 X.Y.Z -SkipCargoCheck` après `cargo check` vert.
+
+Le script affiche désormais la sortie `cargo check` (plus de `-q`) et le temps écoulé.
 
 ## Interdits / pièges
 

@@ -1,10 +1,12 @@
 # Met a jour la version dans package.json, tauri.conf.json, Cargo.toml et Cargo.lock
 # Usage: .\scripts\bump-version.ps1 0.1.1
+#        .\scripts\bump-version.ps1 0.1.1 -SkipCargoCheck   # apres cargo check manuel
 # Ensuite: commit + push main, puis .\scripts\release-tag.ps1 0.1.1
 
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Version
+    [string]$Version,
+    [switch]$SkipCargoCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,22 +50,40 @@ $cargo = $cargo -replace '(?m)^version\s*=\s*"[^"]+"', "version = `"$Version`""
 Write-Utf8NoBom -Path $cargoPath -Content $cargo
 
 # Cargo.lock (version du crate racine alignee sur Cargo.toml)
-Write-Host "Synchronisation Cargo.lock ..." -ForegroundColor Cyan
-Push-Location (Join-Path $Root "src-tauri")
-try {
-    & cargo check -q
-    if ($LASTEXITCODE -ne 0) {
-        throw "cargo check a echoue (code $LASTEXITCODE)"
+if (-not $SkipCargoCheck) {
+    Write-Host ""
+    Write-Host "Synchronisation Cargo.lock (cargo check) ..." -ForegroundColor Cyan
+    Write-Host "  Cache froid ou nouvelle dep Rust : compter 1 a 5 min (sortie ci-dessous)." -ForegroundColor DarkGray
+    Write-Host "  Si interrompu : les fichiers version sont deja mis a jour ; relancer :" -ForegroundColor DarkGray
+    Write-Host "    cd src-tauri; cargo check; cd ..; git add ...; git commit" -ForegroundColor DarkGray
+    Write-Host ""
+
+    $sw = [System.Diagnostics.Stopwatch]::StartNew()
+    Push-Location (Join-Path $Root "src-tauri")
+    try {
+        & cargo check
+        if ($LASTEXITCODE -ne 0) {
+            throw "cargo check a echoue (code $LASTEXITCODE)"
+        }
+    } finally {
+        Pop-Location
     }
-} finally {
-    Pop-Location
+    $sw.Stop()
+    $sec = [math]::Round($sw.Elapsed.TotalSeconds, 1)
+    Write-Host ""
+    Write-Host "Cargo.lock synchronise (${sec}s)." -ForegroundColor Green
+} else {
+    Write-Host "SkipCargoCheck : Cargo.lock non regenere (faire cargo check manuellement si besoin)." -ForegroundColor Yellow
 }
 
+Write-Host ""
 Write-Host "Version $Version appliquee:" -ForegroundColor Green
 Write-Host "  package.json     : $oldPkg -> $Version"
 Write-Host "  tauri.conf.json  : $oldTauri -> $Version"
 Write-Host "  Cargo.toml       : $oldCargo -> $Version"
-Write-Host "  Cargo.lock       : synchronise"
+if (-not $SkipCargoCheck) {
+    Write-Host "  Cargo.lock       : synchronise"
+}
 Write-Host ""
 Write-Host "Etapes suivantes:" -ForegroundColor Cyan
 Write-Host "  git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml src-tauri/Cargo.lock"
