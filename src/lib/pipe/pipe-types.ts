@@ -126,18 +126,65 @@ export function defaultPipeTitreFromContact(contact: {
   return [prenom, nom].filter(Boolean).join(" ");
 }
 
+/** Titre suggéré pour un couple sur le même pipe. */
+export function defaultPipeTitreFromCouple(
+  primary: {
+    prenom?: string | null;
+    nom?: string | null;
+    contact_prenom?: string | null;
+    contact_nom?: string | null;
+  },
+  secondary?: {
+    prenom?: string | null;
+    nom?: string | null;
+    contact_prenom?: string | null;
+    contact_nom?: string | null;
+  } | null
+): string {
+  const a = defaultPipeTitreFromContact(primary);
+  const b = secondary ? defaultPipeTitreFromContact(secondary) : "";
+  if (a && b) return `${a} & ${b}`;
+  return a || b;
+}
+
+export function formatPipeParticipantsLabel(
+  pipe: Pick<
+    PipeRecordLike,
+    "contact_prenom" | "contact_nom" | "secondary_contact_prenom" | "secondary_contact_nom"
+  > & { secondary_contact_id?: number | null }
+): string {
+  const primary = formatPipeContactLabel(pipe);
+  if (!pipe.secondary_contact_id) return primary;
+  const secondary = formatPipeContactLabel({
+    contact_prenom: pipe.secondary_contact_prenom,
+    contact_nom: pipe.secondary_contact_nom,
+  });
+  if (!secondary || secondary === "Contact") return primary;
+  return `${primary} & ${secondary}`;
+}
+
 export interface PipeRecordLike {
   contact_prenom?: string | null;
   contact_nom?: string | null;
+  secondary_contact_prenom?: string | null;
+  secondary_contact_nom?: string | null;
 }
 
 export function validatePipeForm(input: {
   titre: string;
   contactId: number;
+  secondaryContactId?: number;
   pipeType: PipeType;
   stage: string;
 }): string | null {
   if (!input.contactId) return "Le contact est obligatoire.";
+  if (
+    input.secondaryContactId != null &&
+    input.secondaryContactId > 0 &&
+    input.secondaryContactId === input.contactId
+  ) {
+    return "Le co-contact doit être différent du contact principal.";
+  }
   if (!input.titre.trim()) return null;
   if (!isPipeType(input.pipeType)) return "Type invalide.";
   if (pipeTypeUsesStage(input.pipeType) && !isPipeStage(input.stage)) {

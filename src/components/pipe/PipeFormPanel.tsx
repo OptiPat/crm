@@ -12,7 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { getAllContacts, getContactById, type Contact } from "@/lib/api/tauri-contacts";
+import { getAllContacts, getContactById, getContactsByFoyer, type Contact } from "@/lib/api/tauri-contacts";
 import { subscribeContactsChanged } from "@/lib/contacts/contact-events";
 import {
   createPipe,
@@ -31,6 +31,7 @@ import {
   canBePipeParent,
   defaultPipeStage,
   defaultPipeTitreFromContact,
+  defaultPipeTitreFromCouple,
   pipeTypeUsesStage,
   validatePipeForm,
   type PipeStage,
@@ -56,6 +57,7 @@ interface PipeFormPanelProps {
 
 interface FormState {
   contactId: number;
+  secondaryContactId: number;
   pipeType: PipeType;
   parentPipeId: number | null;
   titre: string;
@@ -71,6 +73,7 @@ function buildFormState(
   if (pipe) {
     return {
       contactId: pipe.contact_id,
+      secondaryContactId: pipe.secondary_contact_id ?? 0,
       pipeType: (pipe.pipe_type as PipeType) ?? "AFFAIRE",
       parentPipeId: pipe.parent_pipe_id ?? null,
       titre: pipe.titre,
@@ -83,6 +86,7 @@ function buildFormState(
   }
   return {
     contactId: defaultContactId ?? 0,
+    secondaryContactId: 0,
     pipeType: initialType,
     parentPipeId: null,
     titre: "",
@@ -94,6 +98,10 @@ function buildFormState(
 function toPayload(form: FormState): NewPipeInput {
   return {
     contact_id: form.contactId,
+    secondary_contact_id:
+      form.pipeType === "AFFAIRE" && form.secondaryContactId > 0
+        ? form.secondaryContactId
+        : null,
     pipe_type: form.pipeType,
     parent_pipe_id: form.parentPipeId,
     titre: form.titre.trim(),
@@ -118,10 +126,14 @@ export function PipeFormPanel({
   );
   const [loading, setLoading] = useState(false);
   const contactHintRef = useRef<Contact | null>(null);
+  const secondaryHintRef = useRef<Contact | null>(null);
+  const titreEditedRef = useRef(false);
 
   useEffect(() => {
     setForm(buildFormState(pipe, initialType, defaultContactId));
     contactHintRef.current = null;
+    secondaryHintRef.current = null;
+    titreEditedRef.current = false;
   }, [pipe, initialType, defaultContactId]);
 
   useEffect(() => {
@@ -142,15 +154,47 @@ export function PipeFormPanel({
   }, []);
 
   useEffect(() => {
-    if (form.titre.trim() || form.contactId <= 0) return;
-    const contact =
-      contacts.find((c) => c.id === form.contactId) ??
-      (contactHintRef.current?.id === form.contactId ? contactHintRef.current : null);
-    if (!contact) return;
-    const titre = defaultPipeTitreFromContact(contact);
-    if (!titre) return;
-    setForm((prev) => (prev.titre.trim() ? prev : { ...prev, titre }));
-  }, [contacts, form.contactId, form.titre]);
+    if (pipe || form.pipeType !== "AFFAIRE" || form.contactId <= 0 || form.secondaryContactId > 0) {
+      return;
+    }
+    const primary = contacts.find((c) => c.id === form.contactId);
+    if (!primary?.foyer_id) return;
+    let cancelled = false;
+    void getContactsByFoyer(primary.foyer_id).then((members) => {
+      if (cancelled) return;
+      const conjoint = members.find((m) => m.id !== form.contactId);
+      if (!conjoint?.id) return;
+      setForm((prev) => {
+        if (prev.contactId !== form.contactId || prev.secondaryContactId > 0) return prev;
+        return {
+          ...prev,
+          secondaryContactId: conjoint.id,
+          titre: titreEditedRef.current
+            ? prev.titre
+            : defaultPipeTitreFromCouple(primary, conjoint),
+        };
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pipe, contacts, form.contactId, form.pipeType, form.secondaryContactId]);
+
+  const resolveCoupleTitre = (state: FormState, secondaryHint?: Contact | null) => {
+    const primary =
+      contacts.find((c) => c.id === state.contactId) ??
+      (contactHintRef.current?.id === state.contactId ? contactHintRef.current : null);
+    const secondary =
+      state.secondaryContactId > 0
+        ? (secondaryHint ??
+          contacts.find((c) => c.id === state.secondaryContactId) ??
+          (secondaryHintRef.current?.id === state.secondaryContactId
+            ? secondaryHintRef.current
+            : null))
+        : null;
+    if (!primary) return "";
+    return defaultPipeTitreFromCouple(primary, secondary);
+  };
 
   const handleContactCreated = (contact: Contact) => {
     if (!contact.id) {
@@ -158,7 +202,6 @@ export function PipeFormPanel({
       return;
     }
     contactHintRef.current = contact;
-    const titre = defaultPipeTitreFromContact(contact);
     setContacts((prev) => {
       if (prev.some((c) => c.id === contact.id)) return prev;
       return [...prev, contact];
@@ -167,7 +210,7 @@ export function PipeFormPanel({
       ...prev,
       contactId: contact.id,
       parentPipeId: null,
-      titre,
+      titre: titreEditedRef.current ? prev.titre : defaultPipeTitreFromContact(contact),
     }));
   };
 
@@ -176,25 +219,44 @@ export function PipeFormPanel({
       contacts.find((c) => c.id === contactId) ??
       (contactHintRef.current?.id === contactId ? contactHintRef.current : undefined);
     if (contact) contactHintRef.current = contact;
-    setForm((prev) => ({
-      ...prev,
-      contactId,
-      parentPipeId: null,
-      titre: prev.titre.trim()
-        ? prev.titre
-        : contact
-          ? defaultPipeTitreFromContact(contact)
-          : prev.titre,
-    }));
+    setForm((prev) => {
+      const secondaryContactId =
+        prev.secondaryContactId === contactId ? 0 : prev.secondaryContactId;
+      const next = {
+        ...prev,
+        contactId,
+        secondaryContactId,
+        parentPipeId: null,
+      };
+      return {
+        ...next,
+        titre: titreEditedRef.current
+          ? prev.titre
+          : resolveCoupleTitre({ ...next, contactId, secondaryContactId }),
+      };
+    });
+  };
+
+  const handleSecondaryContactChange = (
+    secondaryContactId: number,
+    secondaryHint?: Contact
+  ) => {
+    if (secondaryHint) secondaryHintRef.current = secondaryHint;
+    setForm((prev) => {
+      const next = { ...prev, secondaryContactId };
+      return {
+        ...next,
+        titre: titreEditedRef.current
+          ? prev.titre
+          : resolveCoupleTitre({ ...next, secondaryContactId }, secondaryHint),
+      };
+    });
   };
 
   const resolveTitreFromState = (state: FormState) => {
     const trimmed = state.titre.trim();
     if (trimmed) return trimmed;
-    const contact =
-      contacts.find((c) => c.id === state.contactId) ??
-      (contactHintRef.current?.id === state.contactId ? contactHintRef.current : null);
-    return contact ? defaultPipeTitreFromContact(contact) : "";
+    return resolveCoupleTitre(state);
   };
 
   const resolveTitre = async (state: FormState) => {
@@ -203,7 +265,13 @@ export function PipeFormPanel({
     try {
       const contact = await getContactById(state.contactId);
       contactHintRef.current = contact;
-      return defaultPipeTitreFromContact(contact);
+      let secondary: Contact | null = null;
+      if (state.secondaryContactId > 0) {
+        secondary =
+          contacts.find((c) => c.id === state.secondaryContactId) ??
+          (await getContactById(state.secondaryContactId).catch(() => null));
+      }
+      return defaultPipeTitreFromCouple(contact, secondary);
     } catch {
       return "";
     }
@@ -224,6 +292,7 @@ export function PipeFormPanel({
     setForm((prev) => ({
       ...prev,
       pipeType,
+      secondaryContactId: pipeType === "AFFAIRE" ? prev.secondaryContactId : 0,
       stage: pipeTypeUsesStage(pipeType) ? defaultPipeStage(pipeType) : "",
       parentPipeId:
         prev.parentPipeId && parentOptions.some((p) => p.id === prev.parentPipeId)
@@ -251,6 +320,7 @@ export function PipeFormPanel({
     const error = validatePipeForm({
       titre,
       contactId: form.contactId,
+      secondaryContactId: form.secondaryContactId,
       pipeType: form.pipeType,
       stage: form.stage || defaultPipeStage(form.pipeType),
     });
@@ -320,6 +390,32 @@ export function PipeFormPanel({
           onContactCreated={handleContactCreated}
         />
 
+        {form.pipeType === "AFFAIRE" && form.contactId > 0 && (
+          <PipeContactSelect
+            contacts={contacts}
+            value={form.secondaryContactId}
+            onChange={handleSecondaryContactChange}
+            onContactCreated={(contact) => {
+              setContacts((prev) => {
+                if (prev.some((c) => c.id === contact.id)) return prev;
+                return [...prev, contact];
+              });
+              handleSecondaryContactChange(contact.id ?? 0, contact);
+            }}
+            excludeContactId={form.contactId}
+            label="Co-contact (couple, optionnel)"
+            optional
+            placeholder="Ajouter le conjoint…"
+          />
+        )}
+
+        {form.pipeType === "AFFAIRE" && form.secondaryContactId > 0 && (
+          <p className="text-xs text-muted-foreground -mt-3">
+            Les dates de prospection (R1, dernier contact) sont synchronisées sur les deux fiches
+            contact.
+          </p>
+        )}
+
         {parentOptions.length > 0 && (
           <div className="space-y-2">
             <Label>Rattaché à (optionnel)</Label>
@@ -351,7 +447,10 @@ export function PipeFormPanel({
           <Label>Titre *</Label>
           <Input
             value={form.titre}
-            onChange={(e) => setForm((prev) => ({ ...prev, titre: e.target.value }))}
+            onChange={(e) => {
+              titreEditedRef.current = true;
+              setForm((prev) => ({ ...prev, titre: e.target.value }));
+            }}
             placeholder={
               form.contactId
                 ? resolveTitreFromState(form) || "Prénom Nom du contact"

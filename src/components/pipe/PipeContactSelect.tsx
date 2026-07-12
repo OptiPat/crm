@@ -26,6 +26,13 @@ interface PipeContactSelectProps {
   onChange: (contactId: number) => void;
   onContactCreated?: (contact: Contact) => void;
   disabled?: boolean;
+  /** Masque ce contact (ex. co-contact ≠ contact principal). */
+  excludeContactId?: number;
+  label?: string;
+  /** Affiche « Aucun » et autorise value = 0. */
+  optional?: boolean;
+  placeholder?: string;
+  showCreateButton?: boolean;
 }
 
 export function PipeContactSelect({
@@ -34,15 +41,22 @@ export function PipeContactSelect({
   onChange,
   onContactCreated,
   disabled = false,
+  excludeContactId,
+  label = "Contact *",
+  optional = false,
+  placeholder = "Rechercher un contact…",
+  showCreateButton = true,
 }: PipeContactSelectProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
-  const sorted = [...contacts].sort((a, b) =>
-    `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, "fr")
-  );
-  const selected = sorted.find((c) => c.id === value);
+  const sorted = [...contacts]
+    .filter((c) => c.id !== excludeContactId)
+    .sort((a, b) =>
+      `${a.nom} ${a.prenom}`.localeCompare(`${b.nom} ${b.prenom}`, "fr")
+    );
+  const selected = value > 0 ? sorted.find((c) => c.id === value) : undefined;
 
   const openCreate = (hint?: string) => {
     setOpen(false);
@@ -57,18 +71,20 @@ export function PipeContactSelect({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
-        <Label>Contact *</Label>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="h-7 text-xs gap-1"
-          disabled={disabled}
-          onClick={() => openCreate(search)}
-        >
-          <UserPlus className="h-3.5 w-3.5" />
-          Nouveau contact
-        </Button>
+        <Label>{label}</Label>
+        {showCreateButton ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            disabled={disabled}
+            onClick={() => openCreate(search)}
+          >
+            <UserPlus className="h-3.5 w-3.5" />
+            Nouveau contact
+          </Button>
+        ) : null}
       </div>
 
       <Popover open={open} onOpenChange={setOpen}>
@@ -81,7 +97,7 @@ export function PipeContactSelect({
             disabled={disabled}
             className="w-full justify-between font-normal"
           >
-            {selected ? `${selected.prenom} ${selected.nom}` : "Rechercher un contact…"}
+            {selected ? `${selected.prenom} ${selected.nom}` : optional ? "Aucun" : placeholder}
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
@@ -103,6 +119,24 @@ export function PipeContactSelect({
                 </div>
               </CommandEmpty>
               <CommandGroup>
+                {optional ? (
+                  <CommandItem
+                    value="__none__"
+                    onSelect={() => {
+                      onChange(0);
+                      setOpen(false);
+                      setSearch("");
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value <= 0 ? "opacity-100" : "opacity-0"
+                      )}
+                    />
+                    Aucun
+                  </CommandItem>
+                ) : null}
                 {sorted.map((c) => (
                   <CommandItem
                     key={c.id}
@@ -124,12 +158,14 @@ export function PipeContactSelect({
                 ))}
               </CommandGroup>
               <Separator className="my-1" />
-              <CommandGroup>
-                <CommandItem onSelect={() => openCreate(search)}>
-                  <UserPlus className="mr-2 h-4 w-4" />
-                  Créer un nouveau contact
-                </CommandItem>
-              </CommandGroup>
+              {showCreateButton ? (
+                <CommandGroup>
+                  <CommandItem onSelect={() => openCreate(search)}>
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    Créer un nouveau contact
+                  </CommandItem>
+                </CommandGroup>
+              ) : null}
             </CommandList>
           </Command>
         </PopoverContent>

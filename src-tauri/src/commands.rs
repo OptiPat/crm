@@ -2130,9 +2130,11 @@ pub fn create_calendar_rdv(
     add_google_meet: Option<bool>,
     visio_link: Option<String>,
     event_location: Option<String>,
+    additional_attendee_contact_ids: Option<Vec<i64>>,
 ) -> Result<CalendarEventEntry, String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let extra = additional_attendee_contact_ids.unwrap_or_default();
     crate::email::calendar_ops::create_google_calendar_rdv(
         &app_handle,
         database,
@@ -2146,6 +2148,7 @@ pub fn create_calendar_rdv(
         add_google_meet.unwrap_or(false),
         visio_link.as_deref(),
         event_location.as_deref(),
+        &extra,
     )
 }
 
@@ -2162,9 +2165,11 @@ pub fn update_calendar_rdv(
     event_location: Option<String>,
     preserve_visio: Option<bool>,
     clear_visio: Option<bool>,
+    additional_attendee_contact_ids: Option<Vec<i64>>,
 ) -> Result<(), String> {
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let extra = additional_attendee_contact_ids.unwrap_or_default();
     crate::email::calendar_ops::update_google_calendar_rdv(
         &app_handle,
         database,
@@ -2177,6 +2182,7 @@ pub fn update_calendar_rdv(
         event_location.as_deref(),
         preserve_visio.unwrap_or(false),
         clear_visio.unwrap_or(false),
+        &extra,
     )
 }
 

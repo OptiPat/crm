@@ -19,7 +19,7 @@ import { deletePipe, type PipeRecord } from "@/lib/api/tauri-pipe";
 import { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { usePipeRdvStageSync } from "@/hooks/usePipeRdvStageSync";
 import {
-  formatPipeContactLabel,
+  formatPipeParticipantsLabel,
   isPipeType,
   pipeTypeUsesStage,
 } from "@/lib/pipe/pipe-types";
@@ -134,7 +134,7 @@ export function PipeDetailPanel({
             </div>
             <h2 className="text-lg font-semibold leading-tight">{pipe.titre}</h2>
             <p className="text-sm text-muted-foreground">
-              {formatPipeContactLabel(pipe)}
+              {formatPipeParticipantsLabel(pipe)}
               {pipe.parent_titre ? ` · rattaché à ${pipe.parent_titre}` : ""}
             </p>
             {contactInfo?.email?.trim() && (

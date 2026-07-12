@@ -15,6 +15,47 @@ const WEEK_EVENTS_PAGE_SIZE: &str = "250";
 const WEEK_EVENTS_MAX_PAGES: u32 = 4;
 const PIPE_SYNC_TIME_TOLERANCE_SEC: i64 = crate::database::pipe_rdv_google_sync::PIPE_SYNC_TIME_TOLERANCE_SEC;
 
+fn resolve_rdv_attendee_contact_ids(
+    db: &Database,
+    contact_id: i64,
+    additional_contact_ids: &[i64],
+    pipe_timeline_entry_id: Option<i64>,
+) -> Result<Vec<i64>, String> {
+    if contact_id <= 0 {
+        return Err("contact_id obligatoire".into());
+    }
+    let mut ids = vec![contact_id];
+    if let Some(entry_id) = pipe_timeline_entry_id {
+        if let Ok(entry) = db.get_pipe_timeline_entry(entry_id) {
+            if let Ok(pipe) = db.get_pipe_by_id(entry.pipe_id) {
+                if let Some(sec) = pipe
+                    .secondary_contact_id
+                    .filter(|id| *id > 0 && *id != contact_id)
+                {
+                    ids.push(sec);
+                }
+                return Ok(ids);
+            }
+        }
+    }
+    for id in additional_contact_ids
+        .iter()
+        .copied()
+        .filter(|id| *id > 0 && *id != contact_id)
+    {
+        ids.push(id);
+    }
+    Ok(ids)
+}
+
+fn attendee_emails_from_contact_ids(
+    db: &Database,
+    contact_ids: &[i64],
+) -> Result<Vec<String>, String> {
+    db.collect_calendar_attendee_emails(contact_ids)
+        .map_err(|e| e.to_string())
+}
+
 #[derive(Debug, Serialize)]
 struct CreateEventBody<'a> {
     summary: &'a str,
@@ -221,6 +262,9 @@ fn apply_google_event_diff_to_pipe_rdv(
             if let Ok(entry) = db.get_pipe_timeline_entry(timeline_id) {
                 if let Ok(pipe) = db.get_pipe_by_id(entry.pipe_id) {
                     contact_ids_to_sync.insert(pipe.contact_id);
+                    if let Some(sec) = pipe.secondary_contact_id.filter(|id| *id > 0) {
+                        contact_ids_to_sync.insert(sec);
+                    }
                 }
             }
             return Ok(true);
@@ -514,11 +558,12 @@ pub fn create_google_calendar_rdv(
     add_google_meet: bool,
     visio_link: Option<&str>,
     event_location: Option<&str>,
+    additional_contact_ids: &[i64],
 ) -> Result<CalendarEventEntry, String> {
     let conn = resolve_google_calendar_connection(app)?
         .ok_or("Connectez Google Agenda dans Paramètres → Emails & envois → Connexion pour planifier un RDV.")?;
 
-    let (prenom, nom, email) = db
+    let (prenom, nom, _email) = db
         .get_contact_calendar_info(contact_id)
         .map_err(|e| e.to_string())?;
 
@@ -529,10 +574,24 @@ pub fn create_google_calendar_rdv(
     };
     let start_str = format_rfc3339_local(start_at);
     let end_str = format_rfc3339_local(end_at);
-    let attendees = email
-        .as_deref()
-        .filter(|e| e.contains('@'))
-        .map(|e| vec![Attendee { email: e }]);
+    let mut attendee_contact_ids =
+        resolve_rdv_attendee_contact_ids(db, contact_id, additional_contact_ids, pipe_timeline_entry_id)?;
+    attendee_contact_ids.sort_unstable();
+    attendee_contact_ids.dedup();
+    let attendee_emails = attendee_emails_from_contact_ids(db, &attendee_contact_ids)?;
+    let attendees = if attendee_emails.is_empty() {
+        None
+    } else {
+        Some(
+            attendee_emails
+                .iter()
+                .map(|email| Attendee {
+                    email: email.as_str(),
+                })
+                .collect(),
+        )
+    };
+    let primary_attendee_email = attendee_emails.first().map(String::as_str);
 
     let location = if add_google_meet {
         None
@@ -600,7 +659,7 @@ pub fn create_google_calendar_rdv(
             &summary,
             start_at,
             end_at,
-            email.as_deref(),
+            primary_attendee_email,
         )
         .map_err(|e| e.to_string())?;
 
@@ -619,6 +678,8 @@ struct PatchEventBody<'a> {
     end: EventDateTime<'a>,
     #[serde(skip_serializing_if = "Option::is_none")]
     location: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    attendees: Option<Vec<Attendee<'a>>>,
     #[serde(rename = "conferenceData", skip_serializing_if = "Option::is_none")]
     conference_data: Option<serde_json::Value>,
 }
@@ -635,6 +696,7 @@ pub fn update_google_calendar_rdv(
     event_location: Option<&str>,
     preserve_visio: bool,
     clear_visio: bool,
+    additional_contact_ids: &[i64],
 ) -> Result<(), String> {
     let conn = resolve_google_calendar_connection(app)?
         .ok_or("Connectez Google Agenda dans Paramètres → Emails & envois → Connexion.")?;
@@ -645,6 +707,33 @@ pub fn update_google_calendar_rdv(
     }
     let start_str = format_rfc3339_local(start_at);
     let end_str = format_rfc3339_local(end_at);
+
+    let calendar_event = db
+        .get_calendar_event_by_google_event_id(google_event_id)
+        .map_err(|e| e.to_string())?;
+    let attendee_emails = if let Some(ref ce) = calendar_event {
+        let attendee_contact_ids = resolve_rdv_attendee_contact_ids(
+            db,
+            ce.contact_id,
+            additional_contact_ids,
+            ce.pipe_timeline_entry_id,
+        )?;
+        attendee_emails_from_contact_ids(db, &attendee_contact_ids)?
+    } else {
+        Vec::new()
+    };
+    let attendees = if attendee_emails.is_empty() {
+        None
+    } else {
+        Some(
+            attendee_emails
+                .iter()
+                .map(|email| Attendee {
+                    email: email.as_str(),
+                })
+                .collect(),
+        )
+    };
 
     let (location, conference_data) = if preserve_visio {
         (None, None)
@@ -687,6 +776,7 @@ pub fn update_google_calendar_rdv(
             time_zone: "Europe/Paris",
         },
         location,
+        attendees,
         conference_data,
     };
 

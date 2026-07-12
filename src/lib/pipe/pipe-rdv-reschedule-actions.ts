@@ -7,6 +7,7 @@ import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { syncGoogleCalendarForPipeRdv } from "@/lib/calendar/rdv-planifier";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
+import { buildPipeRdvCalendarContext, warnPipeRdvMissingAttendeeEmails } from "@/lib/pipe/pipe-rdv-calendar-context";
 import { pipeRdvCalendarEndAt, formatPipeRdvCalendarContactLabel } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { buildRdvRescheduledTimelinePayload } from "@/lib/pipe/pipe-rdv-delete";
 import {
@@ -29,7 +30,16 @@ export async function executePipeRdvReschedule(options: {
   entry: PipeTimelineEntryRecord;
   pipe: Pick<
     PipeRecord,
-    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
+    | "id"
+    | "stage"
+    | "pipe_type"
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+    | "titre"
   >;
   rdvStage: PipeRdvStage;
   newOccurredAtUnix: number;
@@ -47,6 +57,10 @@ export async function executePipeRdvReschedule(options: {
     options.contenu !== undefined
       ? options.contenu?.trim() || null
       : options.entry.contenu?.trim() || null;
+
+  const calendarCtx = buildPipeRdvCalendarContext(options.pipe);
+
+  await warnPipeRdvMissingAttendeeEmails(options.pipe);
 
   await options.updateEntry(options.entry.id, {
     titre: formatRdvEntryTitle(options.rdvStage),
@@ -87,6 +101,7 @@ export async function executePipeRdvReschedule(options: {
         options.entry.google_event_id?.trim() ||
         (await resolvePipeRdvGoogleEventId(options.entry.id)),
       calendarTitle: options.calendarTitle,
+      additionalAttendeeContactIds: calendarCtx?.additionalAttendeeContactIds,
     }),
   ]);
 
@@ -98,7 +113,16 @@ export async function applyPipeRdvReschedule(options: {
   entry: PipeTimelineEntryRecord;
   pipe: Pick<
     PipeRecord,
-    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
+    | "id"
+    | "stage"
+    | "pipe_type"
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+    | "titre"
   >;
   rdvStage: PipeRdvStage;
   newOccurredAtUnix: number;

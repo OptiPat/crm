@@ -11,6 +11,7 @@ import {
   isPipeBoardDropTargetStage,
   formatStageAdvancementMessage,
   defaultPipeTitreFromContact,
+  defaultPipeTitreFromCouple,
   validatePipeForm,
 } from "./pipe-types";
 
@@ -97,5 +98,26 @@ describe("pipe-types", () => {
         stage: "",
       })
     ).toBeNull();
+  });
+
+  it("defaultPipeTitreFromCouple joint les deux contacts", () => {
+    expect(
+      defaultPipeTitreFromCouple(
+        { prenom: "Nicolas", nom: "TEST" },
+        { prenom: "Nicolas", nom: "PLAZA" }
+      )
+    ).toBe("Nicolas TEST & Nicolas PLAZA");
+  });
+
+  it("rejette un co-contact identique au principal", () => {
+    expect(
+      validatePipeForm({
+        titre: "Couple",
+        contactId: 1,
+        secondaryContactId: 1,
+        pipeType: "AFFAIRE",
+        stage: "PROSPECTION",
+      })
+    ).toContain("co-contact");
   });
 });

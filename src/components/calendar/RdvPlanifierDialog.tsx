@@ -63,7 +63,16 @@ export type RdvPlanifierContext =
       kind: "pipe";
       pipe: Pick<
         PipeRecord,
-        "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
+        | "id"
+        | "stage"
+        | "pipe_type"
+        | "contact_id"
+        | "contact_prenom"
+        | "contact_nom"
+        | "secondary_contact_id"
+        | "secondary_contact_prenom"
+        | "secondary_contact_nom"
+        | "titre"
       >;
       rdvStage?: PipeRdvStage;
       contenu?: string | null;
@@ -180,7 +189,7 @@ export function RdvPlanifierDialog({
     () =>
       pipes.filter(
         (p) =>
-          p.contact_id === contactId &&
+          (p.contact_id === contactId || p.secondary_contact_id === contactId) &&
           isPipeType(p.pipe_type) &&
           p.pipe_type === "AFFAIRE"
       ),
@@ -197,17 +206,21 @@ export function RdvPlanifierDialog({
   const selectedPipe =
     pipeId != null ? pipes.find((p) => p.id === pipeId) ?? null : null;
 
-  const pipeForPlanify =
-    context.kind === "pipe"
-      ? context.pipe
-      : selectedPipe && isPipeType(selectedPipe.pipe_type)
-        ? selectedPipe
-        : null;
+  const pipeForPlanify = useMemo(() => {
+    if (context.kind === "pipe") {
+      return pipes.find((p) => p.id === context.pipe.id) ?? context.pipe;
+    }
+    return selectedPipe && isPipeType(selectedPipe.pipe_type) ? selectedPipe : null;
+  }, [context, pipes, selectedPipe]);
+
+  const pipeContactLabel = pipeForPlanify
+    ? formatPipeRdvCalendarContactLabel(pipeForPlanify)
+    : contactLabel;
 
   useEffect(() => {
-    if (!open || titleEdited || !pipeForPlanify || !contactLabel) return;
-    setTitle(formatPipeRdvGoogleCalendarTitle(rdvStage, contactLabel));
-  }, [open, pipeForPlanify, rdvStage, contactLabel, titleEdited]);
+    if (!open || titleEdited || !pipeForPlanify || !pipeContactLabel) return;
+    setTitle(formatPipeRdvGoogleCalendarTitle(rdvStage, pipeContactLabel));
+  }, [open, pipeForPlanify, rdvStage, pipeContactLabel, titleEdited]);
 
   const handleStartChange = (value: string) => {
     setStart(value);
@@ -387,8 +400,8 @@ export function RdvPlanifierDialog({
                 setTitle(e.target.value);
               }}
               placeholder={
-                pipeForPlanify && contactLabel
-                  ? formatPipeRdvGoogleCalendarTitle(rdvStage, contactLabel)
+                pipeForPlanify && pipeContactLabel
+                  ? formatPipeRdvGoogleCalendarTitle(rdvStage, pipeContactLabel)
                   : `RDV — ${contactLabel || "…"}`
               }
             />

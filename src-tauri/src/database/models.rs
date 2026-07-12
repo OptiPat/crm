@@ -1337,6 +1337,8 @@ pub struct ContactMailSyncState {
 pub struct Pipe {
     pub id: i64,
     pub contact_id: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secondary_contact_id: Option<i64>,
     pub pipe_type: String,
     pub parent_pipe_id: Option<i64>,
     pub titre: String,
@@ -1348,6 +1350,10 @@ pub struct Pipe {
     pub contact_nom: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub contact_prenom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secondary_contact_nom: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub secondary_contact_prenom: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub parent_titre: Option<String>,
 }
@@ -1385,6 +1391,8 @@ pub struct UpdatePipeTimelineEntry {
 #[derive(Debug, Deserialize)]
 pub struct NewPipe {
     pub contact_id: i64,
+    #[serde(default)]
+    pub secondary_contact_id: Option<i64>,
     pub pipe_type: String,
     pub parent_pipe_id: Option<i64>,
     pub titre: String,
@@ -1395,6 +1403,8 @@ pub struct NewPipe {
 #[derive(Debug, Deserialize)]
 pub struct UpdatePipe {
     pub contact_id: i64,
+    #[serde(default)]
+    pub secondary_contact_id: Option<i64>,
     pub pipe_type: String,
     pub parent_pipe_id: Option<i64>,
     pub titre: String,

@@ -5,6 +5,7 @@ import type { PipeStage, PipeType } from "@/lib/pipe/pipe-types";
 export interface PipeRecord {
   id: number;
   contact_id: number;
+  secondary_contact_id?: number | null;
   pipe_type: PipeType | string;
   parent_pipe_id?: number | null;
   titre: string;
@@ -14,11 +15,14 @@ export interface PipeRecord {
   updated_at: number;
   contact_nom?: string | null;
   contact_prenom?: string | null;
+  secondary_contact_nom?: string | null;
+  secondary_contact_prenom?: string | null;
   parent_titre?: string | null;
 }
 
 export interface NewPipeInput {
   contact_id: number;
+  secondary_contact_id?: number | null;
   pipe_type: PipeType;
   parent_pipe_id?: number | null;
   titre: string;

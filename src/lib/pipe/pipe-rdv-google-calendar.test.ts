@@ -16,6 +16,18 @@ describe("formatPipeRdvCalendarContactLabel", () => {
       })
     ).toBe("DUPONT Jean");
   });
+
+  it("affiche un couple", () => {
+    expect(
+      formatPipeRdvCalendarContactLabel({
+        contact_nom: "DUPONT",
+        contact_prenom: "Jean",
+        secondary_contact_id: 2,
+        secondary_contact_nom: "MARTIN",
+        secondary_contact_prenom: "Marie",
+      })
+    ).toBe("DUPONT Jean & MARTIN Marie");
+  });
 });
 
 describe("formatPipeRdvGoogleCalendarTitle", () => {

@@ -5,7 +5,7 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import { groupAffairesByStage } from "@/lib/pipe/pipe-board-utils";
 import { PIPE_STAGE_BOARD_COLORS } from "@/lib/pipe/pipe-stage-colors";
 import {
-  formatPipeContactLabel,
+  formatPipeParticipantsLabel,
   isPipeStage,
   isPipeBoardDropTargetStage,
   PIPE_STAGE_LABELS,
@@ -223,7 +223,7 @@ export function PipeBoard({
                             {pipe.titre}
                           </p>
                           <p className="mt-0.5 truncate text-[10px] text-muted-foreground sm:text-[11px]">
-                            {formatPipeContactLabel(pipe)}
+                            {formatPipeParticipantsLabel(pipe)}
                           </p>
                           <p className="mt-0.5 text-[9px] text-muted-foreground/80 sm:text-[10px]">
                             {formatUpdatedAt(pipe.updated_at)}

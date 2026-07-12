@@ -82,12 +82,30 @@ fn latest_r1_rdv_day_start(entries: &[super::models::PipeTimelineEntry]) -> Opti
 impl super::Database {
     pub(crate) fn sync_contact_dates_from_pipe(&self, pipe_id: i64) -> Result<()> {
         let pipe = self.get_pipe_by_id(pipe_id)?;
-        self.sync_contact_dates_for_contact(pipe.contact_id)
+        self.sync_contact_dates_for_contact(pipe.contact_id)?;
+        if let Some(secondary_id) = pipe.secondary_contact_id.filter(|id| *id > 0) {
+            if secondary_id != pipe.contact_id {
+                let _ = self.sync_contact_dates_for_contact(secondary_id);
+            }
+        }
+        Ok(())
     }
 
     pub(crate) fn sync_contact_dates_for_contact(&self, contact_id: i64) -> Result<()> {
+        if contact_id <= 0 {
+            return Ok(());
+        }
+        let contact_exists: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM contacts WHERE id = ?1",
+            params![contact_id],
+            |row| row.get(0),
+        )?;
+        if contact_exists == 0 {
+            return Ok(());
+        }
+
         let mut stmt = self.conn.prepare(
-            "SELECT id FROM pipes WHERE contact_id = ?1 AND pipe_type = ?2",
+            "SELECT id FROM pipes WHERE pipe_type = ?2 AND (contact_id = ?1 OR secondary_contact_id = ?1)",
         )?;
         let pipe_ids: Vec<i64> = stmt
             .query_map(params![contact_id, PIPE_TYPE_AFFAIRE], |row| row.get(0))?
@@ -171,6 +189,7 @@ mod tests {
     fn seed_affaire(db: &Database, contact_id: i64) -> i64 {
         db.create_pipe(NewPipe {
             contact_id,
+            secondary_contact_id: None,
             pipe_type: PIPE_TYPE_AFFAIRE.into(),
             parent_pipe_id: None,
             titre: "Affaire test".into(),
@@ -392,5 +411,137 @@ mod tests {
             db.get_contact_by_id(contact_id).unwrap().date_dernier_contact,
             Some(appel_ts)
         );
+    }
+
+    #[test]
+    fn sync_r1_rdv_sets_date_r1_on_secondary_contact() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = seed_contact(&db);
+        let contact_b = db
+            .create_contact(NewContact {
+                nom: "MARTIN".into(),
+                prenom: "Marie".into(),
+                categorie: "SUSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact b");
+        let pipe_id = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                secondary_contact_id: Some(contact_b),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Couple".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap()
+            .id;
+        let ts = 1_735_689_600_i64;
+
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id,
+            entry_type: TIMELINE_RDV.into(),
+            titre: Some("R1".into()),
+            contenu: Some("Premier RDV".into()),
+            occurred_at: Some(ts),
+        })
+        .unwrap();
+
+        assert_eq!(db.get_contact_by_id(contact_a).unwrap().date_r1, Some(ts));
+        assert_eq!(db.get_contact_by_id(contact_b).unwrap().date_r1, Some(ts));
+    }
+
+    #[test]
+    fn sync_skips_deleted_secondary_contact_on_pipe() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = seed_contact(&db);
+        let contact_b = db
+            .create_contact(NewContact {
+                nom: "MARTIN".into(),
+                prenom: "Marie".into(),
+                categorie: "SUSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact b");
+        let pipe_id = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                secondary_contact_id: Some(contact_b),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Couple".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap()
+            .id;
+
+        db.conn
+            .execute("DELETE FROM contacts WHERE id = ?1", params![contact_b])
+            .unwrap();
+
+        db.sync_contact_dates_from_pipe(pipe_id).unwrap();
+    }
+
+    #[test]
+    fn update_pipe_adds_secondary_and_syncs_date_r1() {
+        use crate::database::models::UpdatePipe;
+
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = seed_contact(&db);
+        let contact_b = db
+            .create_contact(NewContact {
+                nom: "MARTIN".into(),
+                prenom: "Marie".into(),
+                categorie: "SUSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact b");
+        let pipe_id = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                secondary_contact_id: None,
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Solo".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap()
+            .id;
+        let ts = 1_735_689_600_i64;
+
+        db.create_pipe_timeline_entry(NewPipeTimelineEntry {
+            pipe_id,
+            entry_type: TIMELINE_RDV.into(),
+            titre: Some("R1".into()),
+            contenu: Some("Premier RDV".into()),
+            occurred_at: Some(ts),
+        })
+        .unwrap();
+        assert!(db.get_contact_by_id(contact_b).unwrap().date_r1.is_none());
+
+        db.update_pipe(
+            pipe_id,
+            UpdatePipe {
+                contact_id: contact_a,
+                secondary_contact_id: Some(contact_b),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Couple".into(),
+                stage: None,
+                notes: None,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(db.get_contact_by_id(contact_b).unwrap().date_r1, Some(ts));
     }
 }

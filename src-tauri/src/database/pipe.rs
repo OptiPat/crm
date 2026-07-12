@@ -79,18 +79,25 @@ fn map_pipe_row(row: &Row<'_>) -> Result<super::models::Pipe> {
     Ok(super::models::Pipe {
         id: row.get(0)?,
         contact_id: row.get(1)?,
-        pipe_type: row.get(2)?,
-        parent_pipe_id: row.get(3)?,
-        titre: row.get(4)?,
-        stage: row.get(5)?,
-        notes: row.get(6)?,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
-        contact_nom: row.get(9)?,
-        contact_prenom: row.get(10)?,
-        parent_titre: row.get(11)?,
+        secondary_contact_id: row.get(2)?,
+        pipe_type: row.get(3)?,
+        parent_pipe_id: row.get(4)?,
+        titre: row.get(5)?,
+        stage: row.get(6)?,
+        notes: row.get(7)?,
+        created_at: row.get(8)?,
+        updated_at: row.get(9)?,
+        contact_nom: row.get(10)?,
+        contact_prenom: row.get(11)?,
+        secondary_contact_nom: row.get(12)?,
+        secondary_contact_prenom: row.get(13)?,
+        parent_titre: row.get(14)?,
     })
 }
+
+const PIPE_SELECT_FIELDS: &str = "p.id, p.contact_id, p.secondary_contact_id, p.pipe_type, p.parent_pipe_id, p.titre, p.stage, p.notes,
+                    p.created_at, p.updated_at,
+                    c.nom, c.prenom, c2.nom, c2.prenom, pp.titre";
 
 impl super::Database {
     pub fn migrate_pipes_table(&self) -> Result<()> {
@@ -138,6 +145,10 @@ impl super::Database {
             self.conn.execute("ALTER TABLE pipes ADD COLUMN notes TEXT", [])?;
             println!("✅ Migration: notes sur pipes");
         }
+        if !self.table_has_column("pipes", "secondary_contact_id")? {
+            self.conn.execute("ALTER TABLE pipes ADD COLUMN secondary_contact_id INTEGER", [])?;
+            println!("✅ Migration: secondary_contact_id sur pipes");
+        }
         self.migrate_pipes_legacy_stages()?;
         Ok(())
     }
@@ -168,6 +179,35 @@ impl super::Database {
         }
         let contact = self.get_contact_by_id(contact_id)?;
         Ok(default_pipe_titre_from_contact(&contact.prenom, &contact.nom))
+    }
+
+    fn normalize_secondary_contact_id(
+        &self,
+        contact_id: i64,
+        secondary_contact_id: Option<i64>,
+        old_secondary_contact_id: Option<i64>,
+    ) -> Result<Option<i64>> {
+        let Some(secondary_id) = secondary_contact_id.filter(|id| *id > 0) else {
+            return Ok(None);
+        };
+        if secondary_id == contact_id {
+            return Err(rusqlite::Error::InvalidParameterName(
+                "le co-contact doit être différent du contact principal".into(),
+            ));
+        }
+        match self.get_contact_by_id(secondary_id) {
+            Ok(_) => Ok(Some(secondary_id)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {
+                if old_secondary_contact_id == Some(secondary_id) {
+                    Ok(None)
+                } else {
+                    Err(rusqlite::Error::InvalidParameterName(
+                        "co-contact introuvable".into(),
+                    ))
+                }
+            }
+            Err(e) => Err(e),
+        }
     }
 
     fn validate_pipe_input(
@@ -294,36 +334,43 @@ impl super::Database {
     }
 
     pub fn list_pipes(&self) -> Result<Vec<super::models::Pipe>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT p.id, p.contact_id, p.pipe_type, p.parent_pipe_id, p.titre, p.stage, p.notes,
-                    p.created_at, p.updated_at,
-                    c.nom, c.prenom, pp.titre
+        let sql = format!(
+            "SELECT {PIPE_SELECT_FIELDS}
              FROM pipes p
              LEFT JOIN contacts c ON c.id = p.contact_id
+             LEFT JOIN contacts c2 ON c2.id = p.secondary_contact_id
              LEFT JOIN pipes pp ON pp.id = p.parent_pipe_id
-             ORDER BY p.updated_at DESC",
-        )?;
+             ORDER BY p.updated_at DESC"
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
 
         let rows = stmt.query_map([], map_pipe_row)?;
         rows.collect()
     }
 
     pub fn get_pipe_by_id(&self, id: i64) -> Result<super::models::Pipe> {
-        self.conn.query_row(
-            "SELECT p.id, p.contact_id, p.pipe_type, p.parent_pipe_id, p.titre, p.stage, p.notes,
-                    p.created_at, p.updated_at,
-                    c.nom, c.prenom, pp.titre
+        let sql = format!(
+            "SELECT {PIPE_SELECT_FIELDS}
              FROM pipes p
              LEFT JOIN contacts c ON c.id = p.contact_id
+             LEFT JOIN contacts c2 ON c2.id = p.secondary_contact_id
              LEFT JOIN pipes pp ON pp.id = p.parent_pipe_id
-             WHERE p.id = ?1",
-            params![id],
-            map_pipe_row,
-        )
+             WHERE p.id = ?1"
+        );
+        self.conn.query_row(&sql, params![id], map_pipe_row)
     }
 
     pub fn create_pipe(&self, input: super::models::NewPipe) -> Result<super::models::Pipe> {
         let titre = self.resolve_pipe_titre(input.contact_id, &input.titre)?;
+        let secondary_contact_id = if input.pipe_type == PIPE_TYPE_AFFAIRE {
+            self.normalize_secondary_contact_id(
+                input.contact_id,
+                input.secondary_contact_id,
+                None,
+            )?
+        } else {
+            None
+        };
         let stage = input
             .stage
             .as_deref()
@@ -340,10 +387,11 @@ impl super::Database {
         )?;
         let now = now_unix();
         self.conn.execute(
-            "INSERT INTO pipes (contact_id, pipe_type, parent_pipe_id, titre, stage, notes, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO pipes (contact_id, secondary_contact_id, pipe_type, parent_pipe_id, titre, stage, notes, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 input.contact_id,
+                secondary_contact_id,
                 &input.pipe_type,
                 input.parent_pipe_id,
                 &titre,
@@ -372,6 +420,15 @@ impl super::Database {
     ) -> Result<super::models::Pipe> {
         let old = self.get_pipe_by_id(id)?;
         let titre = self.resolve_pipe_titre(input.contact_id, &input.titre)?;
+        let secondary_contact_id = if input.pipe_type == PIPE_TYPE_AFFAIRE {
+            self.normalize_secondary_contact_id(
+                input.contact_id,
+                input.secondary_contact_id,
+                old.secondary_contact_id,
+            )?
+        } else {
+            None
+        };
         let stage = match input.stage.as_deref().filter(|s| !s.is_empty()) {
             Some(s) => s.to_string(),
             None if input.pipe_type == PIPE_TYPE_AFFAIRE && old.pipe_type == PIPE_TYPE_AFFAIRE => {
@@ -390,11 +447,12 @@ impl super::Database {
         let now = now_unix();
         let updated = self.conn.execute(
             "UPDATE pipes
-             SET contact_id = ?1, pipe_type = ?2, parent_pipe_id = ?3, titre = ?4, stage = ?5,
-                 notes = ?6, updated_at = ?7
-             WHERE id = ?8",
+             SET contact_id = ?1, secondary_contact_id = ?2, pipe_type = ?3, parent_pipe_id = ?4, titre = ?5, stage = ?6,
+                 notes = ?7, updated_at = ?8
+             WHERE id = ?9",
             params![
                 input.contact_id,
+                secondary_contact_id,
                 &input.pipe_type,
                 input.parent_pipe_id,
                 &titre,
@@ -421,6 +479,20 @@ impl super::Database {
             let old_notes = Self::normalized_pipe_notes(old.notes.as_deref());
             if notes != old_notes {
                 self.sync_pipe_creation_timeline_notes(id, notes.as_deref())?;
+            }
+        }
+        if input.pipe_type == PIPE_TYPE_AFFAIRE || old.pipe_type == PIPE_TYPE_AFFAIRE {
+            self.sync_contact_dates_from_pipe(id)?;
+            if old.contact_id != input.contact_id {
+                let _ = self.sync_contact_dates_for_contact(old.contact_id);
+            }
+            if let Some(old_sec) = old
+                .secondary_contact_id
+                .filter(|sec| *sec > 0 && *sec != old.contact_id)
+            {
+                if Some(old_sec) != secondary_contact_id {
+                    let _ = self.sync_contact_dates_for_contact(old_sec);
+                }
             }
         }
         self.get_pipe_by_id(id)
@@ -462,6 +534,7 @@ impl super::Database {
     pub fn delete_pipe(&self, id: i64) -> Result<()> {
         let pipe = self.get_pipe_by_id(id)?;
         let contact_id = pipe.contact_id;
+        let secondary_contact_id = pipe.secondary_contact_id;
         let child_count: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM pipes WHERE parent_pipe_id = ?1",
             params![id],
@@ -480,6 +553,9 @@ impl super::Database {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
         self.sync_contact_dates_for_contact(contact_id)?;
+        if let Some(sec) = secondary_contact_id.filter(|id| *id > 0 && *id != contact_id) {
+            self.sync_contact_dates_for_contact(sec)?;
+        }
         Ok(())
     }
 }
@@ -512,6 +588,7 @@ mod tests {
         let pipe = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "   ".into(),
@@ -533,6 +610,7 @@ mod tests {
         let affaire = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "SCPI Corum 50 k€".into(),
@@ -545,6 +623,7 @@ mod tests {
         let acte = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
                 parent_pipe_id: None,
                 titre: "Dossier Dupont 2026".into(),
@@ -556,6 +635,7 @@ mod tests {
         let action = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_ACTION.into(),
                 parent_pipe_id: Some(acte.id),
                 titre: "Appel de prise de contact".into(),
@@ -586,6 +666,7 @@ mod tests {
         let affaire = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "SCPI test".into(),
@@ -638,6 +719,7 @@ mod tests {
         let affaire = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Affaire".into(),
@@ -650,6 +732,7 @@ mod tests {
             affaire.id,
             UpdatePipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_ACTION.into(),
                 parent_pipe_id: None,
                 titre: "Action".into(),
@@ -680,6 +763,7 @@ mod tests {
         let affaire = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Direct R1".into(),
@@ -709,6 +793,7 @@ mod tests {
         let a = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "A".into(),
@@ -719,6 +804,7 @@ mod tests {
         let b = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_ACTION.into(),
                 parent_pipe_id: Some(a.id),
                 titre: "B".into(),
@@ -732,6 +818,7 @@ mod tests {
                 a.id,
                 UpdatePipe {
                     contact_id,
+                    secondary_contact_id: None,
                     pipe_type: PIPE_TYPE_AFFAIRE.into(),
                     parent_pipe_id: Some(b.id),
                     titre: "A".into(),
@@ -763,6 +850,7 @@ mod tests {
         let acte = db
             .create_pipe(NewPipe {
                 contact_id: contact_a,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
                 parent_pipe_id: None,
                 titre: "Acte".into(),
@@ -773,6 +861,7 @@ mod tests {
         let action = db
             .create_pipe(NewPipe {
                 contact_id: contact_a,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_ACTION.into(),
                 parent_pipe_id: Some(acte.id),
                 titre: "Action".into(),
@@ -785,6 +874,7 @@ mod tests {
             acte.id,
             UpdatePipe {
                 contact_id: contact_b,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_ACTE_GESTION.into(),
                 parent_pipe_id: None,
                 titre: "Acte".into(),
@@ -809,6 +899,7 @@ mod tests {
         let affaire = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Affaire".into(),
@@ -821,6 +912,7 @@ mod tests {
             affaire.id,
             UpdatePipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Affaire".into(),
@@ -849,6 +941,7 @@ mod tests {
         let affaire = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Affaire".into(),
@@ -862,6 +955,7 @@ mod tests {
                 affaire.id,
                 UpdatePipe {
                     contact_id,
+                    secondary_contact_id: None,
                     pipe_type: PIPE_TYPE_AFFAIRE.into(),
                     parent_pipe_id: None,
                     titre: "Affaire renommée".into(),
@@ -872,5 +966,131 @@ mod tests {
             .unwrap();
 
         assert_eq!(updated.stage, PIPE_STAGE_R2);
+    }
+
+    #[test]
+    fn pipe_secondary_contact_is_stored_and_validated() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = seed_contact(&db);
+        let contact_b = db
+            .create_contact(NewContact {
+                nom: "MARTIN".into(),
+                prenom: "Marie".into(),
+                email: Some("marie@example.com".into()),
+                categorie: "SUSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact b");
+
+        use crate::database::models::NewPipe;
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                secondary_contact_id: Some(contact_b),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Couple test".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        assert_eq!(affaire.secondary_contact_id, Some(contact_b));
+        assert_eq!(affaire.secondary_contact_nom.as_deref(), Some("MARTIN"));
+    }
+
+    #[test]
+    fn pipe_secondary_rejects_same_as_primary() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = seed_contact(&db);
+        use crate::database::models::NewPipe;
+
+        let err = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                secondary_contact_id: Some(contact_a),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Invalid".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap_err();
+        assert!(err.to_string().contains("co-contact"));
+    }
+
+    #[test]
+    fn pipe_orphan_secondary_cleared_on_update() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = seed_contact(&db);
+        let contact_b = db
+            .create_contact(NewContact {
+                nom: "MARTIN".into(),
+                prenom: "Marie".into(),
+                categorie: "SUSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact b");
+
+        use crate::database::models::{NewPipe, UpdatePipe};
+
+        let affaire = db
+            .create_pipe(NewPipe {
+                contact_id: contact_a,
+                secondary_contact_id: Some(contact_b),
+                pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                parent_pipe_id: None,
+                titre: "Couple".into(),
+                stage: None,
+                notes: None,
+            })
+            .unwrap();
+
+        db.conn
+            .execute("DELETE FROM contacts WHERE id = ?1", params![contact_b])
+            .unwrap();
+
+        let updated = db
+            .update_pipe(
+                affaire.id,
+                UpdatePipe {
+                    contact_id: contact_a,
+                    secondary_contact_id: Some(contact_b),
+                    pipe_type: PIPE_TYPE_AFFAIRE.into(),
+                    parent_pipe_id: None,
+                    titre: "Couple corrigé".into(),
+                    stage: None,
+                    notes: None,
+                },
+            )
+            .unwrap();
+
+        assert!(updated.secondary_contact_id.is_none());
+    }
+
+    #[test]
+    fn collect_calendar_attendee_emails_skips_missing_contact() {
+        let db = Database::open_in_memory_for_tests().unwrap();
+        let contact_a = db
+            .create_contact(NewContact {
+                nom: "DUPONT".into(),
+                prenom: "Jean".into(),
+                email: Some("jean@example.com".into()),
+                categorie: "PROSPECT_CLIENT".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .id
+            .expect("contact a");
+
+        let emails = db
+            .collect_calendar_attendee_emails(&[contact_a, 99_999])
+            .unwrap();
+        assert_eq!(emails, vec!["jean@example.com".to_string()]);
     }
 }

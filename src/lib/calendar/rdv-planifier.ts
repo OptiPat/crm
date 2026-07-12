@@ -20,6 +20,7 @@ import {
 import type { RdvVisioOptions } from "@/lib/calendar/rdv-visio";
 import { loadDefaultPipeRdvVisio, rdvVisioToApiPayload } from "@/lib/calendar/rdv-visio";
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
+import { buildPipeRdvCalendarContext, warnPipeRdvMissingAttendeeEmails } from "@/lib/pipe/pipe-rdv-calendar-context";
 
 export async function syncGoogleCalendarForPipeRdv(options: {
   contactId: number;
@@ -32,6 +33,7 @@ export async function syncGoogleCalendarForPipeRdv(options: {
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
   calendarTitle?: string | null;
+  additionalAttendeeContactIds?: number[];
 }): Promise<PipeRdvCalendarSyncResult> {
   if (options.contactId <= 0) {
     return { synced: false, reason: "no_contact" };
@@ -75,6 +77,7 @@ export async function syncGoogleCalendarForPipeRdv(options: {
         addGoogleMeet: visioPayload.addGoogleMeet,
         visioLink: visioPayload.visioLink,
         eventLocation: visioPayload.eventLocation,
+        additionalAttendeeContactIds: options.additionalAttendeeContactIds,
       });
     } else {
       const createVisio = visio ?? (await loadDefaultPipeRdvVisio());
@@ -88,6 +91,7 @@ export async function syncGoogleCalendarForPipeRdv(options: {
         addGoogleMeet: createPayload.addGoogleMeet,
         visioLink: createPayload.visioLink,
         eventLocation: createPayload.eventLocation,
+        additionalAttendeeContactIds: options.additionalAttendeeContactIds,
       });
     }
   } catch (e) {
@@ -104,7 +108,16 @@ export async function syncGoogleCalendarForPipeRdv(options: {
 export async function planifyPipeRdv(options: {
   pipe: Pick<
     PipeRecord,
-    "id" | "stage" | "pipe_type" | "contact_id" | "contact_prenom" | "contact_nom" | "titre"
+    | "id"
+    | "stage"
+    | "pipe_type"
+    | "contact_id"
+    | "contact_prenom"
+    | "contact_nom"
+    | "secondary_contact_id"
+    | "secondary_contact_prenom"
+    | "secondary_contact_nom"
+    | "titre"
   >;
   rdvStage: PipeRdvStage;
   startAtUnix: number;
@@ -117,6 +130,9 @@ export async function planifyPipeRdv(options: {
   calendarTitle?: string | null;
 }): Promise<{ calendar?: PipeRdvCalendarSyncResult }> {
   const contactLabel = formatPipeRdvCalendarContactLabel(options.pipe);
+  const calendarCtx = buildPipeRdvCalendarContext(options.pipe);
+
+  await warnPipeRdvMissingAttendeeEmails(options.pipe);
 
   const entry = await createPipeTimelineEntry({
     pipe_id: options.pipe.id,
@@ -143,6 +159,7 @@ export async function planifyPipeRdv(options: {
       visio: options.visio,
       physicalAddress: options.physicalAddress,
       calendarTitle: options.calendarTitle,
+      additionalAttendeeContactIds: calendarCtx?.additionalAttendeeContactIds,
     }),
   ]);
 

@@ -26,13 +26,21 @@ export function isPipeRdvCalendarSyncEligible(
   return startAtUnix * 1000 > nowMs;
 }
 
-/** Libellé agenda : nom puis prénom (ex. DUPONT Jean). */
+/** Libellé agenda : nom puis prénom (ex. DUPONT Jean). Couple : « A & B ». */
 export function formatPipeRdvCalendarContactLabel(
-  contact: Pick<PipeRecordLike, "contact_prenom" | "contact_nom">
+  contact: Pick<
+    PipeRecordLike,
+    "contact_prenom" | "contact_nom" | "secondary_contact_prenom" | "secondary_contact_nom"
+  > & { secondary_contact_id?: number | null }
 ): string {
   const prenom = contact.contact_prenom?.trim() ?? "";
   const nom = contact.contact_nom?.trim() ?? "";
-  return [nom, prenom].filter(Boolean).join(" ") || "Contact";
+  const primary = [nom, prenom].filter(Boolean).join(" ") || "Contact";
+  if (!contact.secondary_contact_id) return primary;
+  const sp = contact.secondary_contact_prenom?.trim() ?? "";
+  const sn = contact.secondary_contact_nom?.trim() ?? "";
+  const secondary = [sn, sp].filter(Boolean).join(" ");
+  return secondary ? `${primary} & ${secondary}` : primary;
 }
 
 export function formatPipeRdvGoogleCalendarTitle(
@@ -54,6 +62,7 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
   startAtUnix: number;
   visio?: RdvVisioOptions;
   physicalAddress?: string | null;
+  additionalAttendeeContactIds?: number[];
 }): Promise<PipeRdvCalendarSyncResult> {
   if (options.contactId <= 0) {
     return { synced: false, reason: "no_contact" };
@@ -92,6 +101,7 @@ export async function syncPipeRdvToGoogleCalendarIfConnected(options: {
       addGoogleMeet: visioPayload.addGoogleMeet,
       visioLink: visioPayload.visioLink,
       eventLocation: visioPayload.eventLocation,
+      additionalAttendeeContactIds: options.additionalAttendeeContactIds,
     });
   } catch (e) {
     return {

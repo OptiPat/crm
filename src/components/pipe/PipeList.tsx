@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { PipeRecord } from "@/lib/api/tauri-pipe";
-import { formatPipeContactLabel } from "@/lib/pipe/pipe-types";
+import { formatPipeParticipantsLabel } from "@/lib/pipe/pipe-types";
 import { PipeTypeBadge } from "@/components/pipe/PipeTypeBadge";
 import { PipeStageBadge } from "@/components/pipe/PipeStageBadge";
 
@@ -46,7 +46,7 @@ export function PipeList({ pipes, selectedId, onSelect }: PipeListProps) {
             </div>
             <p className="font-medium text-sm truncate">{pipe.titre}</p>
             <p className="text-xs text-muted-foreground mt-0.5 truncate">
-              {formatPipeContactLabel(pipe)}
+              {formatPipeParticipantsLabel(pipe)}
               {" · "}
               {formatUpdatedAt(pipe.updated_at)}
             </p>

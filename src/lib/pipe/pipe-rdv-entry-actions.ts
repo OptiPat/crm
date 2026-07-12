@@ -25,6 +25,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
   calendar?: {
     contactId: number;
     contactLabel: string;
+    additionalAttendeeContactIds?: number[];
   };
   entryType: PipeTimelineUserType;
   rdvStage?: PipeRdvStage;
@@ -63,6 +64,7 @@ export async function addPipeTimelineEntryWithRdvStage(options: {
         pipeTimelineEntryId: entry.id,
         visio: options.visio,
         physicalAddress: options.physicalAddress,
+        additionalAttendeeContactIds: options.calendar?.additionalAttendeeContactIds,
       })
     : Promise.resolve(undefined);
 

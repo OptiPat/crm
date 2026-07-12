@@ -1,5 +1,5 @@
 use super::{models::CalendarEventEntry, Database};
-use rusqlite::{params, Result};
+use rusqlite::{params, OptionalExtension, Result};
 
 impl Database {
     pub fn get_contact_calendar_info(
@@ -11,6 +11,37 @@ impl Database {
             params![contact_id],
             |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
         )
+    }
+
+    /// Emails uniques (@…) pour inviter plusieurs contacts à un RDV Google.
+    /// Ignore les contacts supprimés ou sans email (ne fait pas échouer toute la création).
+    pub fn collect_calendar_attendee_emails(
+        &self,
+        contact_ids: &[i64],
+    ) -> Result<Vec<String>> {
+        let mut out = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for &contact_id in contact_ids {
+            if contact_id <= 0 {
+                continue;
+            }
+            let email: Option<String> = self
+                .conn
+                .query_row(
+                    "SELECT email FROM contacts WHERE id = ?1",
+                    params![contact_id],
+                    |row| row.get(0),
+                )
+                .optional()?
+                .flatten();
+            if let Some(raw) = email.as_deref().map(str::trim).filter(|e| e.contains('@')) {
+                let key = raw.to_lowercase();
+                if seen.insert(key) {
+                    out.push(raw.to_string());
+                }
+            }
+        }
+        Ok(out)
     }
 
     pub fn insert_calendar_event(

@@ -461,6 +461,7 @@ mod tests {
         let pipe = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Affaire test".into(),
@@ -512,6 +513,7 @@ mod tests {
         let pipe = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Test".into(),
@@ -541,6 +543,7 @@ mod tests {
         let pipe = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Test".into(),
@@ -593,6 +596,7 @@ mod tests {
         let pipe = db
             .create_pipe(NewPipe {
                 contact_id,
+                secondary_contact_id: None,
                 pipe_type: PIPE_TYPE_AFFAIRE.into(),
                 parent_pipe_id: None,
                 titre: "Affaire".into(),
