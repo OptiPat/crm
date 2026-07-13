@@ -116,7 +116,7 @@ export function ParametresBackgroundSection() {
           <AutomationToggle
             id="pref-autostart"
               label="Lancer au démarrage du système"
-              description="Démarre minimisé dans le tray (déverrouillage manuel le matin)."
+              description="Démarre minimisé dans le tray (version installée uniquement — pas dev.ps1)."
             checked={prefs.launch_at_startup}
             disabled={loading || saving}
             onCheckedChange={(checked) => void patch({ launch_at_startup: checked })}

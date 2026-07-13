@@ -81,6 +81,10 @@ fn attach_close_to_tray_handler(app: &AppHandle, window: WebviewWindow) {
 }
 
 pub fn apply_startup_launch_prefs(app: &AppHandle) -> Result<(), String> {
+    super::prefs::cleanup_dev_autostart_entry(app);
+    if super::prefs::is_dev_executable() {
+        return Ok(());
+    }
     let prefs = load_runtime_prefs(app);
     sync_autostart_from_prefs(app, &prefs)
 }

@@ -91,10 +91,52 @@ pub fn save_runtime_prefs(app: &AppHandle, prefs: &AppRuntimePrefs) -> Result<()
     Ok(())
 }
 
+/// Exécutable lancé depuis `target/debug` ou `target/release` (dev local), pas l'installateur.
+pub fn is_dev_executable() -> bool {
+    if cfg!(debug_assertions) {
+        return true;
+    }
+    let Ok(exe) = tauri::utils::platform::current_exe() else {
+        return false;
+    };
+    let Some(exe_dir) = exe.parent() else {
+        return false;
+    };
+    is_target_build_dir(&exe_dir.to_string_lossy())
+}
+
+fn is_target_build_dir(path: &str) -> bool {
+    let normalized = path.replace('/', "\\");
+    normalized.ends_with("\\target\\debug") || normalized.ends_with("\\target\\release")
+}
+
+/// Retire une entrée autostart Windows pointant vers un exe de dev (ex. après `dev.ps1`).
+pub fn cleanup_dev_autostart_entry(app: &AppHandle) {
+    if !is_dev_executable() {
+        return;
+    }
+    use tauri_plugin_autostart::ManagerExt;
+    let autolaunch = app.autolaunch();
+    if autolaunch.is_enabled().ok() == Some(true) {
+        let _ = autolaunch.disable();
+    }
+}
+
 pub fn sync_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
     use tauri_plugin_autostart::ManagerExt;
     let autolaunch = app.autolaunch();
     let is_enabled = autolaunch.is_enabled().map_err(|e| e.to_string())?;
+
+    if enabled && is_dev_executable() {
+        if is_enabled {
+            autolaunch.disable().map_err(|e| e.to_string())?;
+        }
+        return Err(
+            "Le démarrage automatique n'est disponible qu'avec CRM W.Y.S installé (pas la version développement)."
+                .into(),
+        );
+    }
+
     if enabled {
         if !is_enabled {
             autolaunch.enable().map_err(|e| e.to_string())?;
@@ -134,5 +176,18 @@ mod tests {
         let parsed: AppRuntimePrefs =
             serde_json::from_str(r#"{"background_birthday_telegram":false}"#).unwrap();
         assert!(!parsed.background_birthday_notifications);
+    }
+
+    #[test]
+    fn is_target_build_dir_detects_cargo_output() {
+        assert!(super::is_target_build_dir(
+            r"D:\crm\src-tauri\target\debug"
+        ));
+        assert!(super::is_target_build_dir(
+            "/home/dev/crm/src-tauri/target/release"
+        ));
+        assert!(!super::is_target_build_dir(
+            r"C:\Program Files\CRM W.Y.S"
+        ));
     }
 }
