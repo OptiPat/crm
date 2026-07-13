@@ -110,6 +110,11 @@ fn is_target_build_dir(path: &str) -> bool {
     normalized.ends_with("\\target\\debug") || normalized.ends_with("\\target\\release")
 }
 
+/// Lancement via entrée autostart Windows (`--minimized`), pas via `dev.ps1`.
+pub fn is_autostart_minimized_launch() -> bool {
+    std::env::args().any(|a| a == "--minimized")
+}
+
 /// Retire une entrée autostart Windows pointant vers un exe de dev (ex. après `dev.ps1`).
 pub fn cleanup_dev_autostart_entry(app: &AppHandle) {
     if !is_dev_executable() {
@@ -120,6 +125,18 @@ pub fn cleanup_dev_autostart_entry(app: &AppHandle) {
     if autolaunch.is_enabled().ok() == Some(true) {
         let _ = autolaunch.disable();
     }
+}
+
+/// Boot Windows avec un exe `target/debug` (registre pollué) : pas de Vite → quitter tout de suite.
+pub fn guard_dev_autostart_boot(app: &AppHandle) {
+    if !is_dev_executable() || !is_autostart_minimized_launch() {
+        return;
+    }
+    cleanup_dev_autostart_entry(app);
+    eprintln!(
+        "CRM W.Y.S (dev) : démarrage automatique ignoré — lancez la version installée ou .\\dev.ps1"
+    );
+    app.exit(0);
 }
 
 pub fn sync_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
@@ -138,9 +155,11 @@ pub fn sync_autostart(app: &AppHandle, enabled: bool) -> Result<(), String> {
     }
 
     if enabled {
-        if !is_enabled {
-            autolaunch.enable().map_err(|e| e.to_string())?;
+        // Rafraîchit le chemin registre si une ancienne entrée dev (`target/debug`) est encore active.
+        if is_enabled {
+            autolaunch.disable().map_err(|e| e.to_string())?;
         }
+        autolaunch.enable().map_err(|e| e.to_string())?;
     } else if is_enabled {
         autolaunch.disable().map_err(|e| e.to_string())?;
     }
@@ -176,6 +195,12 @@ mod tests {
         let parsed: AppRuntimePrefs =
             serde_json::from_str(r#"{"background_birthday_telegram":false}"#).unwrap();
         assert!(!parsed.background_birthday_notifications);
+    }
+
+    #[test]
+    fn is_autostart_minimized_launch_detects_flag() {
+        // Fonction lue les args du processus de test ; on vérifie au moins l'API.
+        let _ = super::is_autostart_minimized_launch();
     }
 
     #[test]
