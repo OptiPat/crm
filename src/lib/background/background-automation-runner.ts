@@ -30,6 +30,9 @@ import {
 import { runRelationAutoSync } from "@/lib/emails/relation-auto-sync";
 import { notifyNotesChanged } from "@/lib/notes/note-events";
 import { processDuePipeRdvReminders } from "@/lib/pipe/pipe-rdv-reminder-processor";
+import { syncPipeGoogleRdvs } from "@/lib/api/tauri-calendar";
+import { handlePipeGoogleAgendaSyncResult } from "@/lib/pipe/pipe-rdv-google-sync-reminders";
+import { notifyPipeChanged } from "@/lib/pipe/pipe-events";
 import { getTrayDigestSnapshot } from "@/lib/api/tauri-tray-digest";
 import {
   decideTrayDigestNotification,
@@ -147,6 +150,42 @@ async function runRelationJob(surface: AutomationSurface): Promise<void> {
 
 async function runPipeRdvJob(surface: AutomationSurface): Promise<number> {
   const tray = isTray(surface);
+  try {
+    const sync = await syncPipeGoogleRdvs();
+    if ((sync.rescheduled ?? 0) > 0 || (sync.cancelled ?? 0) > 0) {
+      await handlePipeGoogleAgendaSyncResult(sync);
+      notifyPipeChanged();
+      if (tray) {
+        const parts: string[] = [];
+        if (sync.rescheduled > 0) {
+          parts.push(`${sync.rescheduled} RDV reporté(s)`);
+        }
+        if (sync.cancelled > 0) {
+          parts.push(`${sync.cancelled} RDV annulé(s)`);
+        }
+        await notifyAutomationEvent(
+          "CRM W.Y.S — Agenda Pipe",
+          parts.join(" · "),
+          { tray: true, nav: { page: "pipe" } }
+        );
+      }
+    } else if ((sync.rescheduled_timeline_entry_ids?.length ?? 0) > 0) {
+      await handlePipeGoogleAgendaSyncResult(sync);
+      notifyPipeChanged();
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    console.warn("Sync Google Pipe:", msg);
+    if (tray) {
+      notifyAutomationError(
+        "pipe-google-sync",
+        "CRM W.Y.S — Agenda Pipe",
+        msg,
+        { tray: true, nav: { page: "pipe" } }
+      );
+    }
+  }
+
   const result = await processDuePipeRdvReminders(10);
   markAutomationJobRun("pipe_rdv");
   if (result.sent > 0 && tray) {

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Mail, Pencil, Phone, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -29,19 +29,24 @@ import { PipeStageStepper } from "@/components/pipe/PipeStageStepper";
 import { PipeProspectionContactSection } from "@/components/pipe/PipeProspectionContactSection";
 import { PipeTimelineQuickAdd } from "@/components/pipe/PipeTimelineQuickAdd";
 import { PipeTimelineHistory } from "@/components/pipe/PipeTimelineHistory";
+import { useGlobalContactDetailSheet } from "@/components/layout/ContactDetailSheetProvider";
+import type { PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { toast } from "sonner";
 
 interface PipeDetailPanelProps {
   pipe: PipeRecord;
   onEdit: () => void;
   onDeleted: () => void;
+  onPlanRdv?: (stage: PipeRdvStage) => void;
 }
 
 export function PipeDetailPanel({
   pipe,
   onEdit,
   onDeleted,
+  onPlanRdv,
 }: PipeDetailPanelProps) {
+  const { openContactWithTab } = useGlobalContactDetailSheet();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("suivi");
@@ -137,8 +142,37 @@ export function PipeDetailPanel({
               {formatPipeParticipantsLabel(pipe)}
               {pipe.parent_titre ? ` · rattaché à ${pipe.parent_titre}` : ""}
             </p>
-            {contactInfo?.email?.trim() && (
-              <p className="text-xs text-muted-foreground">{contactInfo.email.trim()}</p>
+            {pipe.contact_id > 0 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => void openContactWithTab(pipe.contact_id)}
+                >
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Voir la fiche contact
+                </Button>
+                {contactInfo?.email?.trim() && (
+                  <a
+                    href={`mailto:${contactInfo.email.trim()}`}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Mail className="h-3 w-3" />
+                    {contactInfo.email.trim()}
+                  </a>
+                )}
+                {contactInfo?.telephone?.trim() && (
+                  <a
+                    href={`tel:${contactInfo.telephone.trim().replace(/\s/g, "")}`}
+                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+                  >
+                    <Phone className="h-3 w-3" />
+                    {contactInfo.telephone.trim()}
+                  </a>
+                )}
+              </div>
             )}
           </div>
           <div className="flex shrink-0 gap-1">
@@ -185,6 +219,7 @@ export function PipeDetailPanel({
               <PipeStageStepper
                 currentStage={pipe.stage}
                 onViewProspection={handleViewProspection}
+                onPlanRdv={onPlanRdv}
               />
             )}
 

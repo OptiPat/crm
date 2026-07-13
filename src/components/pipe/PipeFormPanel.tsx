@@ -32,11 +32,15 @@ import {
   defaultPipeStage,
   defaultPipeTitreFromContact,
   defaultPipeTitreFromCouple,
+  isPipeFormDirectStage,
+  isTerminalPipeStage,
   pipeTypeUsesStage,
   validatePipeForm,
   type PipeStage,
   type PipeType,
 } from "@/lib/pipe/pipe-types";
+import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
+import { isPipeFormDirty, type PipeFormSnapshot } from "@/lib/pipe/pipe-form-dirty";
 import { PipeContactSelect } from "@/components/pipe/PipeContactSelect";
 import { toast } from "sonner";
 
@@ -51,6 +55,9 @@ interface PipeFormPanelProps {
   allPipes: PipeRecord[];
   initialType?: PipeType;
   defaultContactId?: number;
+  onRequestRdvStage?: (stage: PipeRdvStage, options: { isDirty: boolean }) => void;
+  onRequestTerminalStage?: (stage: PipeStage, options: { isDirty: boolean }) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
   onSuccess: (pipe: PipeRecord) => void;
   onCancel: () => void;
 }
@@ -117,6 +124,9 @@ export function PipeFormPanel({
   allPipes,
   initialType = "AFFAIRE",
   defaultContactId,
+  onRequestRdvStage,
+  onRequestTerminalStage,
+  onDirtyChange,
   onSuccess,
   onCancel,
 }: PipeFormPanelProps) {
@@ -131,8 +141,12 @@ export function PipeFormPanel({
   /** Contact pour lequel l'utilisateur a retiré le co-contact foyer (évite le re-remplissage auto). */
   const foyerCoContactDismissedRef = useRef<number | null>(null);
 
+  const initialFormRef = useRef<PipeFormSnapshot>(buildFormState(pipe, initialType, defaultContactId));
+
   useEffect(() => {
-    setForm(buildFormState(pipe, initialType, defaultContactId));
+    const next = buildFormState(pipe, initialType, defaultContactId);
+    setForm(next);
+    initialFormRef.current = next;
     contactHintRef.current = null;
     secondaryHintRef.current = null;
     titreEditedRef.current = false;
@@ -288,6 +302,15 @@ export function PipeFormPanel({
       return "";
     }
   };
+
+  const formIsDirty = useMemo(
+    () => isPipeFormDirty(initialFormRef.current, form),
+    [form]
+  );
+
+  useEffect(() => {
+    onDirtyChange?.(formIsDirty);
+  }, [formIsDirty, onDirtyChange]);
 
   const parentOptions = useMemo(
     () =>
@@ -498,11 +521,38 @@ export function PipeFormPanel({
             <div className="space-y-2">
               {PIPE_STAGES.map((stage) => {
                 const active = (form.stage || "PROSPECTION") === stage;
+                const isCreate = !pipe;
+                const rdvOnly =
+                  !isCreate &&
+                  isPipeRdvStage(stage) &&
+                  onRequestRdvStage != null;
+                const terminalViaDialog =
+                  !isCreate &&
+                  isTerminalPipeStage(stage) &&
+                  onRequestTerminalStage != null;
+                const disabledOnCreate = isCreate && stage !== "PROSPECTION";
+
+                if (disabledOnCreate) return null;
+
+                const handleStageClick = () => {
+                  if (rdvOnly) {
+                    onRequestRdvStage(stage, { isDirty: formIsDirty });
+                    return;
+                  }
+                  if (terminalViaDialog) {
+                    onRequestTerminalStage(stage, { isDirty: formIsDirty });
+                    return;
+                  }
+                  if (stage === "PROSPECTION" || (isCreate && isPipeFormDirectStage(stage))) {
+                    setForm((prev) => ({ ...prev, stage }));
+                  }
+                };
+
                 return (
                   <button
                     key={stage}
                     type="button"
-                    onClick={() => setForm((prev) => ({ ...prev, stage }))}
+                    onClick={handleStageClick}
                     className={cn(
                       "w-full rounded-lg border px-3 py-2.5 text-left transition-colors",
                       active
@@ -512,7 +562,11 @@ export function PipeFormPanel({
                   >
                     <p className="text-sm font-medium">{PIPE_STAGE_LABELS[stage]}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {PIPE_STAGE_DESCRIPTIONS[stage]}
+                      {rdvOnly
+                        ? "Planifier un RDV dans le journal"
+                        : terminalViaDialog
+                          ? "Valider avec notes d'étape"
+                          : PIPE_STAGE_DESCRIPTIONS[stage]}
                     </p>
                   </button>
                 );

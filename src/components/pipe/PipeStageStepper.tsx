@@ -1,21 +1,26 @@
-import { Check } from "lucide-react";
+import { Calendar, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import {
+  getNextLinearStage,
   isPipeStage,
   PIPE_LINEAR_STAGES,
   PIPE_STAGE_DESCRIPTIONS,
   PIPE_STAGE_FIELD_LABEL,
   PIPE_STAGE_LABELS,
 } from "@/lib/pipe/pipe-types";
+import { isPipeRdvStage, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { cn } from "@/lib/utils";
 
 interface PipeStageStepperProps {
   currentStage: string;
   onViewProspection?: () => void;
+  onPlanRdv?: (stage: PipeRdvStage) => void;
 }
 
 export function PipeStageStepper({
   currentStage,
   onViewProspection,
+  onPlanRdv,
 }: PipeStageStepperProps) {
   if (!isPipeStage(currentStage)) return null;
 
@@ -24,6 +29,10 @@ export function PipeStageStepper({
   const linearIndex = PIPE_LINEAR_STAGES.indexOf(
     stage as (typeof PIPE_LINEAR_STAGES)[number]
   );
+
+  const nextStage = getNextLinearStage(stage);
+  const nextRdvStage =
+    nextStage && isPipeRdvStage(nextStage) ? nextStage : null;
 
   const handleProspectionClick = () => {
     if (stage !== "PROSPECTION") {
@@ -45,6 +54,7 @@ export function PipeStageStepper({
             const done = linearIndex >= 0 && index < linearIndex;
             const active = step === stage;
             const isProspection = step === "PROSPECTION";
+            const isRdvStep = isPipeRdvStage(step);
 
             const stepContent = (
               <>
@@ -84,6 +94,19 @@ export function PipeStageStepper({
                   >
                     {stepContent}
                   </button>
+                ) : isRdvStep && active && onPlanRdv ? (
+                  <button
+                    type="button"
+                    onClick={() => onPlanRdv(step)}
+                    title={PIPE_STAGE_DESCRIPTIONS[step]}
+                    className={cn(
+                      "flex flex-col items-center gap-1 min-w-[3.75rem] rounded-lg px-1 py-1 transition-colors",
+                      "cursor-pointer hover:bg-muted/60",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    )}
+                  >
+                    {stepContent}
+                  </button>
                 ) : (
                   <div
                     title={PIPE_STAGE_DESCRIPTIONS[step]}
@@ -107,6 +130,19 @@ export function PipeStageStepper({
           })}
         </div>
       </div>
+
+      {nextRdvStage && onPlanRdv && stage !== "GAGNEE" && stage !== "PERDUE_OU_EN_ATTENTE" && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => onPlanRdv(nextRdvStage)}
+        >
+          <Calendar className="h-3.5 w-3.5" />
+          Planifier le RDV {PIPE_STAGE_LABELS[nextRdvStage]}
+        </Button>
+      )}
     </div>
   );
 }

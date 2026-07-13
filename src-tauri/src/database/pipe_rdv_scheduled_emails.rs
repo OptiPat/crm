@@ -125,7 +125,7 @@ impl super::Database {
                     sent_at = NULL,
                     cancelled_at = NULL,
                     created_at = strftime('%s','now')
-                WHERE sent_at IS NULL",
+                WHERE sent_at IS NULL OR rdv_at != excluded.rdv_at",
                 params![
                     row.pipe_timeline_entry_id,
                     row.pipe_id,
@@ -150,6 +150,16 @@ impl super::Database {
              WHERE pipe_timeline_entry_id = ?1 AND sent_at IS NULL AND cancelled_at IS NULL",
             params![pipe_timeline_entry_id],
         )? as u32)
+    }
+
+    pub fn cancel_pipe_rdv_reminders_for_pipe(&self, pipe_id: i64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE pipe_rdv_scheduled_emails
+             SET cancelled_at = strftime('%s','now')
+             WHERE pipe_id = ?1 AND sent_at IS NULL AND cancelled_at IS NULL",
+            params![pipe_id],
+        )?;
+        Ok(())
     }
 
     pub fn list_due_pipe_rdv_reminder_schedules(
@@ -343,6 +353,79 @@ mod tests {
             .expect("list");
         assert_eq!(due.len(), 1);
         assert_eq!(due[0].send_at, 1_700_010_000);
+    }
+
+    #[test]
+    fn pipe_rdv_reminder_replans_after_sent_when_rdv_moves() {
+        let db = Database::open_in_memory_for_tests().expect("mem db");
+        db.migrate_pipe_rdv_scheduled_emails_table()
+            .expect("migrate");
+        let (pipe_id, timeline_id, contact_id, template_id) =
+            seed_pipe_rdv_reminder_fixture(&db);
+        let row = super::super::models::PipeRdvReminderSchedule {
+            id: 0,
+            pipe_timeline_entry_id: timeline_id,
+            pipe_id,
+            contact_id,
+            template_id,
+            send_at: 1_700_000_000,
+            rdv_at: 1_700_086_400,
+            rdv_end_at: 1_700_090_000,
+            visio_link: None,
+            event_location: None,
+        };
+        db.replace_pipe_rdv_reminder_schedules(timeline_id, &[row])
+            .expect("insert");
+        db.mark_pipe_rdv_reminder_schedule_sent(1).expect("sent");
+
+        let moved = super::super::models::PipeRdvReminderSchedule {
+            id: 0,
+            pipe_timeline_entry_id: timeline_id,
+            pipe_id,
+            contact_id,
+            template_id,
+            send_at: 1_710_000_000,
+            rdv_at: 1_710_086_400,
+            rdv_end_at: 1_710_090_000,
+            visio_link: None,
+            event_location: None,
+        };
+        db.replace_pipe_rdv_reminder_schedules(timeline_id, &[moved])
+            .expect("reschedule after sent");
+
+        let due = db
+            .list_due_pipe_rdv_reminder_schedules(1_710_000_000, 10)
+            .expect("list");
+        assert_eq!(due.len(), 1);
+        assert_eq!(due[0].rdv_at, 1_710_086_400);
+    }
+
+    #[test]
+    fn delete_pipe_cancels_pending_rdv_reminders() {
+        let db = Database::open_in_memory_for_tests().expect("mem db");
+        db.migrate_pipe_rdv_scheduled_emails_table()
+            .expect("migrate");
+        let (pipe_id, timeline_id, contact_id, template_id) =
+            seed_pipe_rdv_reminder_fixture(&db);
+        let row = super::super::models::PipeRdvReminderSchedule {
+            id: 0,
+            pipe_timeline_entry_id: timeline_id,
+            pipe_id,
+            contact_id,
+            template_id,
+            send_at: 1_700_000_000,
+            rdv_at: 1_700_086_400,
+            rdv_end_at: 1_700_090_000,
+            visio_link: None,
+            event_location: None,
+        };
+        db.replace_pipe_rdv_reminder_schedules(timeline_id, &[row])
+            .expect("insert");
+        db.delete_pipe(pipe_id).expect("delete pipe");
+        let due = db
+            .list_due_pipe_rdv_reminder_schedules(1_700_100_000, 10)
+            .expect("list");
+        assert!(due.is_empty());
     }
 
     #[test]

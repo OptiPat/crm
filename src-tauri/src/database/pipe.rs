@@ -386,6 +386,7 @@ impl super::Database {
             None,
         )?;
         let now = now_unix();
+        let tx = self.conn.unchecked_transaction()?;
         self.conn.execute(
             "INSERT INTO pipes (contact_id, secondary_contact_id, pipe_type, parent_pipe_id, titre, stage, notes, created_at, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
@@ -410,6 +411,7 @@ impl super::Database {
             let notes = Self::normalized_pipe_notes(input.notes.as_deref());
             self.insert_avancement_timeline_entry(id, &stage, notes.as_deref(), None)?;
         }
+        tx.commit()?;
         self.get_pipe_by_id(id)
     }
 
@@ -445,6 +447,7 @@ impl super::Database {
             Some(id),
         )?;
         let now = now_unix();
+        let tx = self.conn.unchecked_transaction()?;
         let updated = self.conn.execute(
             "UPDATE pipes
              SET contact_id = ?1, secondary_contact_id = ?2, pipe_type = ?3, parent_pipe_id = ?4, titre = ?5, stage = ?6,
@@ -481,6 +484,7 @@ impl super::Database {
                 self.sync_pipe_creation_timeline_notes(id, notes.as_deref())?;
             }
         }
+        tx.commit()?;
         if input.pipe_type == PIPE_TYPE_AFFAIRE || old.pipe_type == PIPE_TYPE_AFFAIRE {
             self.sync_contact_dates_from_pipe(id)?;
             if old.contact_id != input.contact_id {
@@ -520,6 +524,7 @@ impl super::Database {
             return Ok(current);
         }
         let now = now_unix();
+        let tx = self.conn.unchecked_transaction()?;
         let updated = self.conn.execute(
             "UPDATE pipes SET stage = ?1, updated_at = ?2 WHERE id = ?3",
             params![new_stage, now, id],
@@ -528,6 +533,8 @@ impl super::Database {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
         self.insert_avancement_timeline_entry(id, new_stage, notes, milestone_occurred_at)?;
+        tx.commit()?;
+        self.sync_contact_dates_from_pipe(id)?;
         self.get_pipe_by_id(id)
     }
 
@@ -545,13 +552,14 @@ impl super::Database {
                 "impossible de supprimer un pipe avec des éléments rattachés".into(),
             ));
         }
+        let tx = self.conn.unchecked_transaction()?;
+        self.cancel_pipe_rdv_reminders_for_pipe(id)?;
         self.delete_pipe_timeline_for_pipe(id)?;
-        let deleted = self
-            .conn
-            .execute("DELETE FROM pipes WHERE id = ?1", params![id])?;
+        let deleted = self.conn.execute("DELETE FROM pipes WHERE id = ?1", params![id])?;
         if deleted == 0 {
             return Err(rusqlite::Error::QueryReturnedNoRows);
         }
+        tx.commit()?;
         self.sync_contact_dates_for_contact(contact_id)?;
         if let Some(sec) = secondary_contact_id.filter(|id| *id > 0 && *id != contact_id) {
             self.sync_contact_dates_for_contact(sec)?;

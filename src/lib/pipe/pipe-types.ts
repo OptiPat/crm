@@ -97,9 +97,19 @@ export function isManualPipeStageChangeAllowed(stage: PipeStage): boolean {
   return isTerminalPipeStage(stage);
 }
 
+/** Colonnes R1/R2/R3 : dépôt = planifier un RDV dans le journal. */
+export function isPipeBoardRdvDropTargetStage(stage: PipeStage): boolean {
+  return stage === "R1" || stage === "R2" || stage === "R3";
+}
+
 /** Colonnes kanban où le dépôt par glisser-déposer est autorisé. */
 export function isPipeBoardDropTargetStage(stage: PipeStage): boolean {
-  return isManualPipeStageChangeAllowed(stage);
+  return isManualPipeStageChangeAllowed(stage) || isPipeBoardRdvDropTargetStage(stage);
+}
+
+/** Étapes sélectionnables directement dans le formulaire (sans RDV). */
+export function isPipeFormDirectStage(stage: PipeStage): boolean {
+  return stage === "PROSPECTION" || isTerminalPipeStage(stage);
 }
 
 export function formatStageAdvancementMessage(stage: PipeStage): string {

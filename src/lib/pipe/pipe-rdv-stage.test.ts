@@ -1,11 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import {
+  applyDueRdvStageAdvance,
+  applyRdvStageOnSave,
   formatRdvEntryDisplayLabel,
   isRdvStageAdvanceDue,
   pickDueRdvStageAdvanceTarget,
   rdvStageFromEntryTitre,
 } from "@/lib/pipe/pipe-rdv-stage";
+import { setPipeStage } from "@/lib/api/tauri-pipe";
+
+vi.mock("@/lib/api/tauri-pipe", () => ({
+  setPipeStage: vi.fn(),
+}));
 
 const mkRdv = (
   id: number,
@@ -50,5 +57,85 @@ describe("pipe-rdv-stage", () => {
     const ts = Math.floor(new Date(2026, 6, 20, 15, 0).getTime() / 1000);
     const target = pickDueRdvStageAdvanceTarget("PROSPECTION", [mkRdv(1, "R1", ts)]);
     expect(target).toBeNull();
+  });
+});
+
+describe("applyRdvStageOnSave", () => {
+  beforeEach(() => {
+    vi.mocked(setPipeStage).mockReset();
+    vi.mocked(setPipeStage).mockResolvedValue({
+      id: 1,
+      contact_id: 1,
+      pipe_type: "AFFAIRE",
+      titre: "Test",
+      stage: "R1",
+      created_at: 1,
+      updated_at: 2,
+    });
+  });
+
+  it("n'avance pas si RDV futur", async () => {
+    const future = Math.floor(new Date(2026, 6, 20, 15, 0).getTime() / 1000);
+    const result = await applyRdvStageOnSave({
+      pipe: { id: 1, stage: "PROSPECTION", pipe_type: "AFFAIRE" },
+      rdvStage: "R1",
+      occurredAt: future,
+    });
+    expect(result.advanced).toBe(false);
+    expect(result.scheduledDateLabel).toBeTruthy();
+    expect(setPipeStage).not.toHaveBeenCalled();
+  });
+
+  it("avance en R1 si RDV échu et prospection", async () => {
+    const past = Math.floor(new Date(2026, 6, 10, 15, 0).getTime() / 1000);
+    const result = await applyRdvStageOnSave({
+      pipe: { id: 1, stage: "PROSPECTION", pipe_type: "AFFAIRE" },
+      rdvStage: "R1",
+      occurredAt: past,
+      notes: "  CR ok  ",
+    });
+    expect(result.advanced).toBe(true);
+    expect(setPipeStage).toHaveBeenCalledWith(1, "R1", {
+      notes: "CR ok",
+      milestoneOccurredAt: past,
+    });
+  });
+
+  it("n'avance pas si stage déjà au-delà", async () => {
+    const past = Math.floor(new Date(2026, 6, 10, 15, 0).getTime() / 1000);
+    const result = await applyRdvStageOnSave({
+      pipe: { id: 1, stage: "R2", pipe_type: "AFFAIRE" },
+      rdvStage: "R1",
+      occurredAt: past,
+    });
+    expect(result.advanced).toBe(false);
+    expect(setPipeStage).not.toHaveBeenCalled();
+  });
+});
+
+describe("applyDueRdvStageAdvance", () => {
+  beforeEach(() => {
+    vi.mocked(setPipeStage).mockReset();
+    vi.mocked(setPipeStage).mockResolvedValue({
+      id: 1,
+      contact_id: 1,
+      pipe_type: "AFFAIRE",
+      titre: "Test",
+      stage: "R1",
+      created_at: 1,
+      updated_at: 2,
+    });
+  });
+
+  it("appelle setPipeStage pour RDV échu", async () => {
+    const ts = Math.floor(new Date(2026, 6, 10, 15, 0).getTime() / 1000);
+    await applyDueRdvStageAdvance(
+      { id: 1, stage: "PROSPECTION", pipe_type: "AFFAIRE" },
+      [mkRdv(1, "R1", ts)]
+    );
+    expect(setPipeStage).toHaveBeenCalledWith(1, "R1", {
+      notes: "CR test",
+      milestoneOccurredAt: ts,
+    });
   });
 });

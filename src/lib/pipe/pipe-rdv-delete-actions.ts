@@ -8,7 +8,8 @@ import {
   buildRdvCancelledTimelinePayload,
   canRevertPipeToProspection,
 } from "@/lib/pipe/pipe-rdv-delete";
-import { markPipeRdvCalendarCancelled } from "@/lib/api/tauri-calendar";
+import { markPipeRdvCalendarCancelled, resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
+import { cancelLinkedGoogleRdv } from "@/lib/calendar/rdv-planifier";
 import { PIPE_STAGE_LABELS } from "@/lib/pipe/pipe-types";
 
 type TimelineEntryWriter = (
@@ -21,11 +22,24 @@ export async function executeRdvCancellation(options: {
   pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   entry: PipeTimelineEntryRecord;
   note?: string | null;
+  /** Retire l'événement Google Agenda lié (défaut : oui). */
+  cancelGoogle?: boolean;
   addEntry: TimelineEntryWriter;
   removeEntry: TimelineEntryRemover;
-}): Promise<{ revertedToProspection: boolean }> {
+}): Promise<{ revertedToProspection: boolean; googleCancelled: boolean }> {
   const { titre, contenu } = buildRdvCancelledTimelinePayload(options.entry, options.note);
   const now = Math.floor(Date.now() / 1000);
+
+  let googleCancelled = false;
+  if (options.cancelGoogle !== false) {
+    const googleId =
+      options.entry.google_event_id?.trim() ||
+      (await resolvePipeRdvGoogleEventId(options.entry.id).catch(() => null));
+    if (googleId) {
+      await cancelLinkedGoogleRdv(googleId);
+      googleCancelled = true;
+    }
+  }
 
   await options.addEntry({
     entry_type: "NOTE",
@@ -43,10 +57,10 @@ export async function executeRdvCancellation(options: {
     canRevertPipeToProspection(pipe.stage)
   ) {
     await setPipeStage(pipe.id, "PROSPECTION", { notes: null });
-    return { revertedToProspection: true };
+    return { revertedToProspection: true, googleCancelled };
   }
 
-  return { revertedToProspection: false };
+  return { revertedToProspection: false, googleCancelled };
 }
 
 export async function applyRdvCancelled(options: {
@@ -54,11 +68,13 @@ export async function applyRdvCancelled(options: {
   pipe?: Pick<PipeRecord, "id" | "stage" | "pipe_type"> | null;
   entry: PipeTimelineEntryRecord;
   note?: string | null;
-}): Promise<{ revertedToProspection: boolean }> {
+  cancelGoogle?: boolean;
+}): Promise<{ revertedToProspection: boolean; googleCancelled: boolean }> {
   return executeRdvCancellation({
     pipe: options.pipe,
     entry: options.entry,
     note: options.note,
+    cancelGoogle: options.cancelGoogle,
     addEntry: (input) => options.timeline.addEntry(input),
     removeEntry: (id) => options.timeline.removeEntry(id),
   });

@@ -9,6 +9,8 @@ import {
   isTerminalPipeStage,
   isManualPipeStageChangeAllowed,
   isPipeBoardDropTargetStage,
+  isPipeBoardRdvDropTargetStage,
+  isPipeFormDirectStage,
   formatStageAdvancementMessage,
   defaultPipeTitreFromContact,
   defaultPipeTitreFromCouple,
@@ -43,8 +45,12 @@ describe("pipe-types", () => {
     expect(isTerminalPipeStage("R2")).toBe(false);
     expect(isManualPipeStageChangeAllowed("GAGNEE")).toBe(true);
     expect(isManualPipeStageChangeAllowed("R1")).toBe(false);
+    expect(isPipeBoardRdvDropTargetStage("R2")).toBe(true);
+    expect(isPipeBoardRdvDropTargetStage("GAGNEE")).toBe(false);
     expect(isPipeBoardDropTargetStage("PERDUE_OU_EN_ATTENTE")).toBe(true);
-    expect(isPipeBoardDropTargetStage("R2")).toBe(false);
+    expect(isPipeBoardDropTargetStage("R2")).toBe(true);
+    expect(isPipeFormDirectStage("PROSPECTION")).toBe(true);
+    expect(isPipeFormDirectStage("R1")).toBe(false);
     expect(formatStageAdvancementMessage("R1")).toBe("Avancement passé à R1");
   });
 

@@ -15,7 +15,6 @@ import type { PipeRecord } from "@/lib/api/tauri-pipe";
 import type { PipeTimelineEntryRecord } from "@/lib/api/tauri-pipe-timeline";
 import type { usePipeTimeline } from "@/hooks/usePipeTimeline";
 import { resolvePipeRdvGoogleEventId } from "@/lib/api/tauri-calendar";
-import { cancelLinkedGoogleRdv } from "@/lib/calendar/rdv-planifier";
 import {
   applyRdvCancelled,
   toastAfterRdvCancelled,
@@ -86,13 +85,16 @@ export function PipeRdvOutcomeDialog({
   const handleCancelled = async () => {
     setSaving(true);
     try {
-      if (cancelGoogle && hasGoogleLink) {
-        await cancelLinkedGoogleRdv(resolvedGoogleEventId);
-      }
-      const result = await applyRdvCancelled({ timeline, pipe, entry: liveEntry, note });
+      const result = await applyRdvCancelled({
+        timeline,
+        pipe,
+        entry: liveEntry,
+        note,
+        cancelGoogle: cancelGoogle && hasGoogleLink,
+      });
       const message = toastAfterRdvCancelled(rdvLabel, result);
       toast.success(
-        cancelGoogle && hasGoogleLink ? `${message} — événement Google retiré` : message
+        result.googleCancelled ? `${message} — événement Google retiré` : message
       );
       onClose();
     } catch (err) {

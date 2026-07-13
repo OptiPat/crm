@@ -8,6 +8,7 @@ import {
   formatPipeParticipantsLabel,
   isPipeStage,
   isPipeBoardDropTargetStage,
+  isPipeBoardRdvDropTargetStage,
   PIPE_STAGE_LABELS,
   PIPE_STAGES,
   type PipeStage,
@@ -192,7 +193,11 @@ export function PipeBoard({
             <div className="min-h-[80px] flex-1 space-y-1.5 overflow-y-auto p-1 sm:space-y-2 sm:p-1.5">
               {list.length === 0 ? (
                 <p className="px-0.5 py-4 text-center text-[10px] text-muted-foreground sm:text-xs">
-                  {dropAllowed ? "Déposer ici" : "—"}
+                  {dropAllowed
+                    ? isPipeBoardRdvDropTargetStage(stage)
+                      ? "RDV ici"
+                      : "Déposer ici"
+                    : "—"}
                 </p>
               ) : (
                 list.map((pipe) => {

@@ -6,12 +6,11 @@ import {
   updatePipeTimelineEntry,
   type PipeTimelineEntryRecord,
 } from "@/lib/api/tauri-pipe-timeline";
-import { cancelLinkedGoogleRdv } from "@/lib/calendar/rdv-planifier";
 import type { PipeRdvCalendarSyncResult } from "@/lib/pipe/pipe-rdv-google-calendar";
 import {
-  pipeRdvCalendarEndAt,
   formatPipeRdvCalendarContactLabel,
   formatPipeRdvGoogleCalendarTitle,
+  pipeRdvCalendarEndAt,
 } from "@/lib/pipe/pipe-rdv-google-calendar";
 import { rdvStageFromEntryTitre, type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { executeRdvCancellation } from "@/lib/pipe/pipe-rdv-delete-actions";
@@ -67,11 +66,7 @@ export async function cancelPipeRdvFromAgenda(options: {
   entry: PipeTimelineEntryRecord;
   note?: string | null;
   cancelGoogle: boolean;
-}): Promise<{ revertedToProspection: boolean; rdvLabel: string }> {
-  if (options.cancelGoogle && options.entry.google_event_id?.trim()) {
-    await cancelLinkedGoogleRdv(options.entry.google_event_id);
-  }
-
+}): Promise<{ revertedToProspection: boolean; googleCancelled: boolean; rdvLabel: string }> {
   const rdvStage = rdvStageFromEntryTitre(options.entry.titre);
   const rdvLabel = rdvStage ? `RDV ${PIPE_STAGE_LABELS[rdvStage]}` : "RDV";
 
@@ -79,6 +74,7 @@ export async function cancelPipeRdvFromAgenda(options: {
     pipe: options.pipe,
     entry: options.entry,
     note: options.note,
+    cancelGoogle: options.cancelGoogle,
     addEntry: (input) =>
       createPipeTimelineEntry({ ...input, pipe_id: options.entry.pipe_id }),
     removeEntry: deletePipeTimelineEntry,

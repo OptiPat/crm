@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Briefcase, ClipboardList, LayoutGrid, List, PhoneCall } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { listPipes, type PipeRecord } from "@/lib/api/tauri-pipe";
@@ -10,12 +10,23 @@ import {
   savePipeViewMode,
   type PipeViewMode,
 } from "@/lib/pipe/pipe-board-utils";
-import { isManualPipeStageChangeAllowed, type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
+import {
+  filterPipesForList,
+  loadPipeListFilters,
+  savePipeListFilters,
+  type PipeListFilters,
+} from "@/lib/pipe/pipe-list-filters";
+import { resolvePipeBoardStageDrop } from "@/lib/pipe/pipe-board-stage-actions";
+import { confirmDiscardPipeFormEdits } from "@/lib/pipe/pipe-form-dirty";
+import { type PipeStage, type PipeType } from "@/lib/pipe/pipe-types";
+import { type PipeRdvStage } from "@/lib/pipe/pipe-rdv-stage";
 import { PipeList } from "@/components/pipe/PipeList";
+import { PipeListToolbar } from "@/components/pipe/PipeListToolbar";
 import { PipeBoard } from "@/components/pipe/PipeBoard";
 import { PipeFormPanel } from "@/components/pipe/PipeFormPanel";
 import { PipeDetailPanel } from "@/components/pipe/PipeDetailPanel";
 import { PipeStageAdvanceDialog } from "@/components/pipe/PipeStageAdvanceDialog";
+import { RdvPlanifierDialog } from "@/components/calendar/RdvPlanifierDialog";
 import { usePipeStageAdvance } from "@/hooks/usePipeStageAdvance";
 import { cn } from "@/lib/utils";
 
@@ -96,9 +107,24 @@ export function Pipe() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<PipeViewMode>(() => loadPipeViewMode());
+  const [listFilters, setListFilters] = useState<PipeListFilters>(() => loadPipeListFilters());
   const [panelMode, setPanelMode] = useState<PanelMode>("empty");
   const [selectedPipe, setSelectedPipe] = useState<PipeRecord | null>(null);
   const [createType, setCreateType] = useState<PipeType>("AFFAIRE");
+  const [rdvPlanifierOpen, setRdvPlanifierOpen] = useState(false);
+  const [rdvPlanifierPipe, setRdvPlanifierPipe] = useState<PipeRecord | null>(null);
+  const [rdvPlanifierStage, setRdvPlanifierStage] = useState<PipeRdvStage | undefined>();
+  const formIsDirtyRef = useRef(false);
+
+  const handleFormDirtyChange = useCallback((isDirty: boolean) => {
+    formIsDirtyRef.current = isDirty;
+  }, []);
+
+  useEffect(() => {
+    if (panelMode !== "edit") {
+      formIsDirtyRef.current = false;
+    }
+  }, [panelMode]);
 
   const stageAdvance = usePipeStageAdvance((pipe) => {
     setSelectedPipe(pipe);
@@ -107,6 +133,31 @@ export function Pipe() {
   });
 
   const affaires = useMemo(() => filterAffairesForBoard(pipes), [pipes]);
+  const filteredListPipes = useMemo(
+    () => filterPipesForList(pipes, listFilters),
+    [pipes, listFilters]
+  );
+
+  const setListFiltersPersisted = (filters: PipeListFilters) => {
+    setListFilters(filters);
+    savePipeListFilters(filters);
+  };
+
+  const openRdvPlanifier = useCallback(
+    (
+      pipe: PipeRecord,
+      rdvStage?: PipeRdvStage,
+      options?: { keepPanelMode?: boolean; isDirty?: boolean }
+    ) => {
+      if (options?.isDirty && !confirmDiscardPipeFormEdits()) return;
+      setSelectedPipe(pipe);
+      if (!options?.keepPanelMode) setPanelMode("view");
+      setRdvPlanifierPipe(pipe);
+      setRdvPlanifierStage(rdvStage);
+      setRdvPlanifierOpen(true);
+    },
+    []
+  );
 
   const loadPipes = useCallback(async () => {
     try {
@@ -175,9 +226,36 @@ export function Pipe() {
     }
   };
 
-  const handleRequestStageChange = async (pipe: PipeRecord, target: PipeStage) => {
-    if (!isManualPipeStageChangeAllowed(target)) return;
-    stageAdvance.requestStageChange(pipe.id, target, pipe.titre);
+  const handleRequestStageChange = (pipe: PipeRecord, target: PipeStage) => {
+    const action = resolvePipeBoardStageDrop(pipe, target);
+    const isDirty = panelMode === "edit" && formIsDirtyRef.current;
+    if (action.kind === "plan-rdv") {
+      openRdvPlanifier(pipe, action.rdvStage, { isDirty });
+      return;
+    }
+    if (action.kind === "manual-advance") {
+      if (isDirty && !confirmDiscardPipeFormEdits()) return;
+      if (panelMode === "edit") setPanelMode("view");
+      stageAdvance.requestStageChange(pipe.id, action.stage, pipe.titre);
+    }
+  };
+
+  const handleRequestRdvStageFromForm = (stage: PipeRdvStage, options: { isDirty: boolean }) => {
+    if (!selectedPipe) return;
+    openRdvPlanifier(selectedPipe, stage, {
+      keepPanelMode: true,
+      isDirty: options.isDirty,
+    });
+  };
+
+  const handleRequestTerminalStageFromForm = (
+    stage: PipeStage,
+    options: { isDirty: boolean }
+  ) => {
+    if (!selectedPipe) return;
+    if (options.isDirty && !confirmDiscardPipeFormEdits()) return;
+    setPanelMode("view");
+    stageAdvance.requestStageChange(selectedPipe.id, stage, selectedPipe.titre);
   };
 
   const detailPanel = (
@@ -209,6 +287,15 @@ export function Pipe() {
           pipe={panelMode === "edit" ? selectedPipe : null}
           allPipes={pipes}
           initialType={panelMode === "edit" ? undefined : createType}
+          onRequestRdvStage={
+            panelMode === "edit" && selectedPipe ? handleRequestRdvStageFromForm : undefined
+          }
+          onRequestTerminalStage={
+            panelMode === "edit" && selectedPipe
+              ? handleRequestTerminalStageFromForm
+              : undefined
+          }
+          onDirtyChange={panelMode === "edit" ? handleFormDirtyChange : undefined}
           onSuccess={handleSaved}
           onCancel={cancelPanel}
         />
@@ -219,6 +306,7 @@ export function Pipe() {
           pipe={selectedPipe}
           onEdit={openEdit}
           onDeleted={handleDeleted}
+          onPlanRdv={(stage) => openRdvPlanifier(selectedPipe, stage)}
         />
       )}
     </>
@@ -272,22 +360,19 @@ export function Pipe() {
           )}
         >
           <aside className="flex flex-col lg:w-[min(100%,380px)] lg:shrink-0 lg:border-r border-border/70 min-h-[320px] lg:min-h-0">
-            <div className="border-b px-4 py-3">
-              <p className="text-sm font-medium">
-                {pipes.length} pipe{pipes.length !== 1 ? "s" : ""}
-              </p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {affaires.length} affaire{affaires.length !== 1 ? "s" : ""} · actes et actions
-                inclus
-              </p>
-            </div>
+            <PipeListToolbar
+              filters={listFilters}
+              resultCount={filteredListPipes.length}
+              totalCount={pipes.length}
+              onChange={setListFiltersPersisted}
+            />
 
             <div className="flex-1 overflow-y-auto min-h-0">
               {loading ? (
                 <p className="px-4 py-6 text-sm text-muted-foreground">Chargement…</p>
               ) : (
                 <PipeList
-                  pipes={pipes}
+                  pipes={filteredListPipes}
                   selectedId={selectedPipe?.id ?? null}
                   onSelect={openView}
                 />
@@ -306,6 +391,26 @@ export function Pipe() {
         onCancel={stageAdvance.cancelStageChange}
         onConfirm={stageAdvance.confirmStageChange}
       />
+      {rdvPlanifierPipe && (
+        <RdvPlanifierDialog
+          open={rdvPlanifierOpen}
+          onOpenChange={(open) => {
+            setRdvPlanifierOpen(open);
+            if (!open) {
+              setRdvPlanifierPipe(null);
+              setRdvPlanifierStage(undefined);
+            }
+          }}
+          context={{
+            kind: "pipe",
+            pipe: rdvPlanifierPipe,
+            rdvStage: rdvPlanifierStage,
+          }}
+          onCreated={() => {
+            void loadPipes();
+          }}
+        />
+      )}
     </div>
   );
 }

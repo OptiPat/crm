@@ -150,7 +150,7 @@ export function AgendaPipeRdvManageDialog({
       });
       const message = toastAfterRdvCancelled(result.rdvLabel, result);
       toast.success(
-        cancelGoogle && hasGoogleLink ? `${message} — événement Google retiré` : message
+        result.googleCancelled ? `${message} — événement Google retiré` : message
       );
       onOpenChange(false);
       onChanged?.();
