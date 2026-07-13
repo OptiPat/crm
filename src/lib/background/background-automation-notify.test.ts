@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   notifyAutomationEvent,
   resetAutomationNotifyStateForTests,
+  testDesktopAutomationNotification,
 } from "@/lib/background/background-automation-notify";
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -60,5 +61,18 @@ describe("background-automation-notify", () => {
 
     expect(ok).toBe(true);
     expect(sendNotification).toHaveBeenCalled();
+  });
+
+  it("testDesktopAutomationNotification force le chemin bureau", async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined);
+
+    const ok = await testDesktopAutomationNotification();
+
+    expect(ok).toBe(true);
+    expect(invoke).toHaveBeenCalledWith("send_automation_desktop_toast_cmd", {
+      title: "CRM W.Y.S — Test",
+      body: "Si vous voyez ce message, les notifications bureau fonctionnent.",
+      navJson: '{"page":"dashboard"}',
+    });
   });
 });

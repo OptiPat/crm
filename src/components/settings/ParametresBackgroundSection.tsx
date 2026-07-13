@@ -10,7 +10,8 @@ import {
   saveAppRuntimePrefs,
   type AppRuntimePrefs,
 } from "@/lib/api/tauri-app-runtime";
-import { Monitor, Power } from "lucide-react";
+import { testDesktopAutomationNotification } from "@/lib/background/background-automation-notify";
+import { Bell, Monitor, Power } from "lucide-react";
 import { toast } from "sonner";
 
 function AutomationToggle({
@@ -50,6 +51,7 @@ export function ParametresBackgroundSection() {
   const [prefs, setPrefs] = useState<AppRuntimePrefs>(DEFAULT_APP_RUNTIME_PREFS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testingNotif, setTestingNotif] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -189,6 +191,40 @@ export function ParametresBackgroundSection() {
               onCheckedChange={(checked) => void patch({ background_tray_digest: checked })}
             />
           </div>
+        </div>
+
+        <div className="rounded-lg border px-4 py-3 space-y-2">
+          <div>
+            <p className="text-sm font-medium">Notification bureau (test)</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Envoie une notification système pour vérifier les permissions Windows / macOS.
+              Sous Windows 10, vérifiez ensuite Paramètres → Actions et notifications → CRM W.Y.S.
+              En développement (<code className="text-[11px]">dev.ps1</code>), l&apos;expéditeur peut
+              apparaître sous Windows PowerShell.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={testingNotif}
+            onClick={() => {
+              setTestingNotif(true);
+              void testDesktopAutomationNotification()
+                .then((sent) => {
+                  if (sent) {
+                    toast.success(
+                      "Notification envoyée — vérifiez la bannière Windows ou le Centre de notifications."
+                    );
+                  }
+                })
+                .catch((e) => toast.error(String(e)))
+                .finally(() => setTestingNotif(false));
+            }}
+          >
+            <Bell className="h-4 w-4 mr-1.5" />
+            {testingNotif ? "Envoi…" : "Tester la notification bureau"}
+          </Button>
         </div>
 
         <Button

@@ -153,6 +153,17 @@ export function notifyAutomationError(
   });
 }
 
+/** Notification bureau de test — enregistre l'app auprès de l'OS (Windows / macOS). */
+export async function testDesktopAutomationNotification(): Promise<boolean> {
+  permissionChecked = false;
+  permissionGranted = false;
+  return sendTrayDesktopNotification(
+    "CRM W.Y.S — Test",
+    "Si vous voyez ce message, les notifications bureau fonctionnent.",
+    { page: "dashboard" }
+  );
+}
+
 export function resetAutomationNotifyStateForTests(): void {
   lastErrorNotifiedAt.clear();
   permissionChecked = false;
