@@ -1,5 +1,6 @@
 import { getEmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { sendEmail } from "@/lib/api/tauri-email";
+import { buildSendEmailAttachmentsFromTemplate } from "@/lib/emails/template-email-attachments";
 import type { CgpConfig } from "@/lib/api/tauri-settings";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
 import { canonicalizeTemplateCorpsHtml, setTemplateCorpsHtmlInMeta } from "@/lib/emails/template-email-html";
@@ -61,6 +62,7 @@ export async function sendTemplateTestToSelf(params: {
     subject,
     body: preview.body,
     body_html: preview.body_html,
+    attachments: buildSendEmailAttachmentsFromTemplate(variables),
   });
 
   return status.email.trim();

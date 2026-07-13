@@ -4,6 +4,7 @@ import {
 } from "@/lib/api/tauri-etiquettes";
 import { logEmailSendError } from "@/lib/api/tauri-email-send-log";
 import { sendEmail } from "@/lib/api/tauri-email";
+import { buildSendEmailAttachmentsFromTemplate } from "@/lib/emails/template-email-attachments";
 import { getCgpConfig, type CgpConfig } from "@/lib/api/tauri-settings";
 import { renderEtiquetteEmailPreview } from "@/lib/etiquettes/etiquette-email-preview";
 
@@ -89,6 +90,7 @@ export async function sendEtiquetteBatch(input: {
         subject: preview.subject,
         body: preview.body,
         body_html: preview.body_html ?? undefined,
+        attachments: buildSendEmailAttachmentsFromTemplate(item.template_variables),
       });
       await markEtiquetteEmailSent(
         item.contact_etiquette_id,

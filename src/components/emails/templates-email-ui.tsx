@@ -30,6 +30,7 @@ import type {
   TemplatesEmailActiveFilterId,
 } from "@/lib/emails/templates-email-active-filters";
 import type { ContactRegistre } from "@/lib/emails/template-email-formality";
+import { parseTemplateEmailAttachments } from "@/lib/emails/template-email-attachments";
 import type { EmailConnectionStatus } from "@/lib/api/tauri-email-oauth";
 import { navigateToSuivi } from "@/lib/navigation/suivi-navigation";
 import { requestOpenParametres } from "@/lib/navigation/app-navigation";
@@ -41,6 +42,7 @@ import {
   Copy,
   Mail,
   MessageCircle,
+  Paperclip,
   Pencil,
   RefreshCw,
   Tag,
@@ -237,6 +239,7 @@ export function TemplateActivationBadges({
   souscriptionDuplicateWarning?: string;
 }) {
   const flags = getTemplateActivationFlags(template, etiquetteLinkCount);
+  const attachmentCount = parseTemplateEmailAttachments(template.variables).length;
   const triggerLabel = getTemplateTriggerShortLabel(template);
   const relanceLabel = getTemplateRelanceBadgeLabel(template);
   const pipeRdvLabel = getTemplatePipeRdvBadgeLabel(template);
@@ -253,6 +256,12 @@ export function TemplateActivationBadges({
       {souscriptionDuplicateWarning ? (
         <TemplateSouscriptionDuplicateBadge title={souscriptionDuplicateWarning} />
       ) : null}
+      {attachmentCount > 0 && (
+        <TemplateActivationBadge className="border-slate-200 bg-slate-50 text-slate-800">
+          <Paperclip className="h-3 w-3 shrink-0" />
+          {attachmentCount} PJ
+        </TemplateActivationBadge>
+      )}
       {flags.hasTrigger && triggerLabel && (
         <TemplateActivationBadge className="border-amber-200 bg-amber-50 text-amber-900">
           <Zap className="h-3 w-3 shrink-0" />

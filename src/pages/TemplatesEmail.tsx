@@ -18,6 +18,7 @@ import {
   getAllTemplatesEmail,
   deleteTemplateEmail,
   createTemplateEmail,
+  updateTemplateEmail,
   seedDefaultEmailTemplates,
   type TemplateEmail,
 } from "@/lib/api/tauri-templates-email";
@@ -46,6 +47,11 @@ import {
   duplicateTemplatePayload,
   EMAIL_TEMPLATE_CATEGORIES,
 } from "@/lib/emails/template-email-meta";
+import { copyTemplateEmailAttachments } from "@/lib/api/tauri-template-email-attachments";
+import {
+  parseTemplateEmailAttachments,
+  setTemplateEmailAttachmentsInMeta,
+} from "@/lib/emails/template-email-attachments";
 import { filterTemplatesEmail } from "@/lib/emails/filter-templates-email";
 import { filterLibraryTemplates } from "@/lib/emails/template-library";
 import {
@@ -324,8 +330,19 @@ export function TemplatesEmail({ onNavigate, currentPage }: TemplatesEmailProps)
 
   const handleDuplicate = async (template: TemplateEmail) => {
     try {
-      await createTemplateEmail(duplicateTemplatePayload(template));
+      const sourceAttachments = parseTemplateEmailAttachments(template.variables);
+      const payload = duplicateTemplatePayload(template);
+      payload.variables = setTemplateEmailAttachmentsInMeta(payload.variables, []);
+      const created = await createTemplateEmail(payload);
+      if (sourceAttachments.length > 0) {
+        const copied = await copyTemplateEmailAttachments(template.id, created.id);
+        await updateTemplateEmail(created.id, {
+          ...created,
+          variables: setTemplateEmailAttachmentsInMeta(created.variables, copied),
+        });
+      }
       toast.success("Modèle dupliqué");
+      await loadTemplates();
     } catch {
       toast.error("Erreur lors de la duplication");
     }

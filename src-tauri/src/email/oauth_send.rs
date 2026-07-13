@@ -165,6 +165,79 @@ fn build_rfc2822_html(from: &str, to: &str, subject: &str, body_html: &str) -> S
     )
 }
 
+#[derive(Debug, Clone)]
+pub struct OutgoingEmailAttachment {
+    pub filename: String,
+    pub mime_type: String,
+    pub data: Vec<u8>,
+}
+
+fn encode_content_disposition_filename(filename: &str) -> String {
+    if filename.is_ascii() {
+        format!("filename=\"{}\"", filename.replace('"', "_"))
+    } else {
+        let encoded: String = filename
+            .bytes()
+            .map(|b| match b {
+                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                    (b as char).to_string()
+                }
+                _ => format!("%{b:02X}"),
+            })
+            .collect();
+        format!("filename*=UTF-8''{encoded}")
+    }
+}
+
+fn build_rfc2822_with_attachments(
+    from: &str,
+    to: &str,
+    subject: &str,
+    body: &str,
+    body_html: Option<&str>,
+    attachments: &[OutgoingEmailAttachment],
+) -> String {
+    let boundary = format!("crm_boundary_{}", chrono::Utc::now().timestamp_millis());
+    let mut message = format!(
+        "From: {}\r\nTo: {}\r\nSubject: {}\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=\"{}\"\r\n\r\n",
+        from, to, subject, boundary
+    );
+
+    let body_part = if let Some(html) = body_html.filter(|h| !h.trim().is_empty()) {
+        format!(
+            "--{boundary}\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{html}\r\n"
+        )
+    } else {
+        format!(
+            "--{boundary}\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: 8bit\r\n\r\n{body}\r\n"
+        )
+    };
+    message.push_str(&body_part);
+
+    for att in attachments {
+        let filename = crate::template_email_attachments::sanitize_attachment_filename(&att.filename)
+            .unwrap_or_else(|_| "attachment".to_string());
+        let mime_type = crate::template_email_attachments::sanitize_mime_type(&att.mime_type)
+            .unwrap_or_else(|_| "application/octet-stream".to_string());
+        let b64 = base64::engine::general_purpose::STANDARD.encode(&att.data);
+        let disp = encode_content_disposition_filename(&filename);
+        message.push_str(&format!(
+            "--{boundary}\r\nContent-Type: {}; name=\"{}\"\r\nContent-Disposition: attachment; {disp}\r\nContent-Transfer-Encoding: base64\r\n\r\n",
+            mime_type,
+            filename.replace('"', "_"),
+        ));
+        for chunk in b64.as_bytes().chunks(76) {
+            message.push_str(std::str::from_utf8(chunk).unwrap_or(""));
+            message.push_str("\r\n");
+        }
+        message.push('\r');
+        message.push('\n');
+    }
+
+    message.push_str(&format!("--{boundary}--\r\n"));
+    message
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct GmailThreadReply {
     pub thread_id: Option<String>,
@@ -206,13 +279,18 @@ fn build_rfc2822(
     body: &str,
     body_html: Option<&str>,
     reply: Option<&GmailThreadReply>,
+    attachments: &[OutgoingEmailAttachment],
 ) -> String {
     let (from, to) = format_addresses(from_email, from_name, to_email, to_name);
     let subject_hdr = encode_mime_subject(subject);
-    let core = if let Some(html) = body_html.filter(|h| !h.trim().is_empty()) {
-        build_rfc2822_html(&from, &to, &subject_hdr, html)
+    let core = if attachments.is_empty() {
+        if let Some(html) = body_html.filter(|h| !h.trim().is_empty()) {
+            build_rfc2822_html(&from, &to, &subject_hdr, html)
+        } else {
+            build_rfc2822_plain(&from, &to, &subject_hdr, body)
+        }
     } else {
-        build_rfc2822_plain(&from, &to, &subject_hdr, body)
+        build_rfc2822_with_attachments(&from, &to, &subject_hdr, body, body_html, attachments)
     };
     append_reply_headers(&core, reply)
 }
@@ -226,9 +304,10 @@ fn send_via_gmail(
     body: &str,
     body_html: Option<&str>,
     reply: Option<&GmailThreadReply>,
+    attachments: &[OutgoingEmailAttachment],
 ) -> Result<Option<(String, String)>, String> {
     let raw = build_rfc2822(
-        &conn.email, from_name, to_email, to_name, subject, body, body_html, reply,
+        &conn.email, from_name, to_email, to_name, subject, body, body_html, reply, attachments,
     );
     let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw.as_bytes());
     let mut payload = serde_json::json!({ "raw": encoded });
@@ -259,27 +338,43 @@ fn send_via_microsoft(
     subject: &str,
     body: &str,
     body_html: Option<&str>,
+    attachments: &[OutgoingEmailAttachment],
 ) -> Result<(), String> {
     let display_name = to_name.unwrap_or(to_email);
     let (content_type, content) = match body_html.filter(|h| !h.trim().is_empty()) {
         Some(html) => ("HTML", html),
         None => ("Text", body),
     };
+    let graph_attachments: Vec<serde_json::Value> = attachments
+        .iter()
+        .map(|att| {
+            serde_json::json!({
+                "@odata.type": "#microsoft.graph.fileAttachment",
+                "name": att.filename,
+                "contentType": att.mime_type,
+                "contentBytes": base64::engine::general_purpose::STANDARD.encode(&att.data),
+            })
+        })
+        .collect();
+    let mut message = serde_json::json!({
+        "subject": subject,
+        "body": { "contentType": content_type, "content": content },
+        "toRecipients": [{
+            "emailAddress": {
+                "address": to_email,
+                "name": display_name
+            }
+        }]
+    });
+    if !graph_attachments.is_empty() {
+        message["attachments"] = serde_json::json!(graph_attachments);
+    }
     let client = reqwest::blocking::Client::new();
     let res = client
         .post("https://graph.microsoft.com/v1.0/me/sendMail")
         .bearer_auth(&conn.access_token)
         .json(&serde_json::json!({
-            "message": {
-                "subject": subject,
-                "body": { "contentType": content_type, "content": content },
-                "toRecipients": [{
-                    "emailAddress": {
-                        "address": to_email,
-                        "name": display_name
-                    }
-                }]
-            },
+            "message": message,
             "saveToSentItems": true
         }))
         .send()
@@ -305,6 +400,7 @@ pub fn send_with_oauth(
     body: &str,
     body_html: Option<&str>,
     reply: Option<&GmailThreadReply>,
+    attachments: &[OutgoingEmailAttachment],
 ) -> Result<OAuthSendResult, String> {
     let store = EmailOAuthStore::load(app)?;
     let mut conn = store
@@ -327,6 +423,7 @@ pub fn send_with_oauth(
                 body,
                 body_html,
                 reply,
+                attachments,
             )?;
             Ok(OAuthSendResult {
                 gmail_message_id: ids.as_ref().map(|(m, _)| m.clone()),
@@ -334,7 +431,7 @@ pub fn send_with_oauth(
             })
         }
         "microsoft" => {
-            send_via_microsoft(&conn, to_email, to_name, subject, body, body_html)?;
+            send_via_microsoft(&conn, to_email, to_name, subject, body, body_html, attachments)?;
             Ok(OAuthSendResult::default())
         }
         _ => Err("Fournisseur OAuth non supporté".into()),
@@ -429,6 +526,7 @@ pub fn send_test_to_self(app: &AppHandle) -> Result<String, String> {
         &body,
         body_html.as_deref(),
         None,
+        &[],
     )?;
     let sig_note = if cgp.email_signature_html.as_deref().is_some_and(|s| !s.trim().is_empty())
         || cgp.email_signature.as_deref().is_some_and(|s| !s.trim().is_empty())
@@ -455,6 +553,7 @@ mod tests {
             "Corps",
             None,
             None,
+            &[],
         );
         assert!(raw.contains("To: =?UTF-8?B?"));
         assert!(raw.contains("<celine@example.com>"));
@@ -472,6 +571,7 @@ mod tests {
             "Corps",
             None,
             None,
+            &[],
         );
         assert!(raw.starts_with("From: Jean DUPONT <cgp@example.com>"));
     }
@@ -490,11 +590,34 @@ mod tests {
                 thread_id: Some("thread1".into()),
                 in_reply_to_message_id: Some("abc123".into()),
             }),
+            &[],
         );
         assert!(raw.contains("Content-Type: text/html; charset=UTF-8"));
         assert!(!raw.contains("multipart/alternative"));
         assert!(!raw.contains("crm_boundary"));
         assert!(raw.contains("In-Reply-To:"));
         assert!(raw.contains("<p>top</p>"));
+    }
+
+    #[test]
+    fn multipart_includes_attachment_when_present() {
+        let raw = build_rfc2822(
+            "cg@example.com",
+            None,
+            "client@example.com",
+            None,
+            "Sujet",
+            "Corps",
+            Some("<p>Hi</p>"),
+            None,
+            &[OutgoingEmailAttachment {
+                filename: "doc.pdf".into(),
+                mime_type: "application/pdf".into(),
+                data: b"%PDF-1".to_vec(),
+            }],
+        );
+        assert!(raw.contains("multipart/mixed"));
+        assert!(raw.contains("Content-Disposition: attachment"));
+        assert!(raw.contains("application/pdf"));
     }
 }

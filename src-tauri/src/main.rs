@@ -21,6 +21,7 @@ mod notes;
 mod newsletter;
 mod scpi_bulletin;
 mod system_commands;
+mod template_email_attachments;
 
 use app_runtime::{
     apply_startup_launch_prefs, focus_main_window, get_app_runtime_prefs,
@@ -175,6 +176,9 @@ fn main() {
             set_template_etiquette_links,
             get_etiquette_ids_for_template,
             delete_template_email,
+            import_template_email_attachment_cmd,
+            remove_template_email_attachment_cmd,
+            copy_template_email_attachments_cmd,
             seed_default_email_templates,
             preview_ephemeral_campaign_audience,
             sync_ephemeral_campaign_queue,

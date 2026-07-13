@@ -71,6 +71,7 @@ Invoke-VerifyStep 'ESLint (regles hooks)' {
 
 Invoke-VerifyStep 'Tests frontend (Vitest)' {
     npm run test
+    if ($LASTEXITCODE -ne 0) { throw "Vitest a echoue." }
 }
 
 if (-not $Quick) {

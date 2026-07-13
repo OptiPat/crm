@@ -9,6 +9,13 @@ export interface SendEmailInput {
   body_html?: string | null;
   thread_id?: string | null;
   in_reply_to_message_id?: string | null;
+  /** Pièces jointes du modèle (mêmes fichiers pour tous les destinataires). */
+  attachments?: SendEmailAttachmentInput[];
+}
+
+export interface SendEmailAttachmentInput {
+  template_id: number;
+  stored_name: string;
 }
 
 export interface SendEmailResult {

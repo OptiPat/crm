@@ -842,13 +842,96 @@ pub fn get_etiquette_ids_for_template(
 }
 
 #[tauri::command]
-pub fn delete_template_email(db: State<'_, DbState>, id: i64) -> Result<(), String> {
+pub fn delete_template_email(app: AppHandle, db: State<'_, DbState>, id: i64) -> Result<(), String> {
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Répertoire applicatif introuvable : {e}"))?;
+    crate::template_email_attachments::delete_all_template_attachments(&app_data, id)
+        .map_err(|e| format!("Nettoyage pièces jointes : {e}"))?;
+
     let db_guard = db.lock().unwrap();
     let database = db_guard.as_ref().ok_or("Database not initialized")?;
-
     database
         .delete_template_email(id)
-        .map_err(|e| format!("Failed to delete template: {}", e))
+        .map_err(|e| format!("Failed to delete template: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn import_template_email_attachment_cmd(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    template_id: i64,
+    source_path: String,
+) -> Result<crate::template_email_attachments::TemplateEmailAttachmentRecord, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let tpl = database
+        .get_template_email_by_id(template_id)
+        .map_err(|_| format!("Modèle email {template_id} introuvable."))?;
+    let existing_count =
+        crate::template_email_attachments::parse_attachments_from_variables(tpl.variables.as_deref())
+            .len();
+
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Répertoire applicatif introuvable : {e}"))?;
+    crate::template_email_attachments::import_template_attachment(
+        &app_data,
+        template_id,
+        std::path::Path::new(&source_path),
+        existing_count,
+    )
+}
+
+#[tauri::command]
+pub fn remove_template_email_attachment_cmd(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    template_id: i64,
+    stored_name: String,
+) -> Result<(), String> {
+    let db_guard = db.lock().unwrap();
+    let _database = db_guard.as_ref().ok_or("Database not initialized")?;
+
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Répertoire applicatif introuvable : {e}"))?;
+    crate::template_email_attachments::remove_template_attachment(
+        &app_data,
+        template_id,
+        &stored_name,
+    )
+}
+
+#[tauri::command]
+pub fn copy_template_email_attachments_cmd(
+    app: AppHandle,
+    db: State<'_, DbState>,
+    from_template_id: i64,
+    to_template_id: i64,
+) -> Result<Vec<crate::template_email_attachments::TemplateEmailAttachmentRecord>, String> {
+    let db_guard = db.lock().unwrap();
+    let database = db_guard.as_ref().ok_or("Database not initialized")?;
+    let tpl = database
+        .get_template_email_by_id(from_template_id)
+        .map_err(|_| format!("Modèle source {from_template_id} introuvable."))?;
+    let source_records =
+        crate::template_email_attachments::parse_attachments_from_variables(tpl.variables.as_deref());
+
+    let app_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("Répertoire applicatif introuvable : {e}"))?;
+    crate::template_email_attachments::copy_template_attachments(
+        &app_data,
+        from_template_id,
+        to_template_id,
+        &source_records,
+    )
 }
 
 #[tauri::command]

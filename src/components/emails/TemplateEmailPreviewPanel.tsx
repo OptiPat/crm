@@ -14,9 +14,13 @@ import {
   SAMPLE_PREVIEW_CONTACT,
 } from "@/lib/emails/template-email-meta";
 import { sendTemplateTestToSelf } from "@/lib/emails/template-email-test-send";
+import {
+  formatAttachmentSize,
+  parseTemplateEmailAttachments,
+} from "@/lib/emails/template-email-attachments";
 import { EMAIL_PREVIEW_HTML_CLASS } from "@/lib/emails/email-preview-html-styles";
 import { cn } from "@/lib/utils";
-import { Loader2, Mail } from "lucide-react";
+import { Loader2, Mail, Paperclip } from "lucide-react";
 import { toast } from "sonner";
 
 type TemplateEmailPreviewPanelProps = {
@@ -70,6 +74,11 @@ export function TemplateEmailPreviewPanel({
   const mergedVariables = useMemo(
     () => setTemplateCorpsHtmlInMeta(templateVariables, corpsHtml?.trim() || null),
     [templateVariables, corpsHtml]
+  );
+
+  const previewAttachments = useMemo(
+    () => parseTemplateEmailAttachments(mergedVariables),
+    [mergedVariables]
   );
 
   const effective = useMemo(
@@ -162,6 +171,22 @@ export function TemplateEmailPreviewPanel({
         <p className="text-sm">
           <strong>Objet :</strong> {preview.subject || "(vide)"}
         </p>
+        {previewAttachments.length > 0 ? (
+          <div className="text-xs text-muted-foreground border-t pt-2 space-y-1">
+            <p className="font-medium text-foreground flex items-center gap-1">
+              <Paperclip className="h-3 w-3" />
+              {previewAttachments.length}{" "}
+              {previewAttachments.length > 1 ? "pièces jointes" : "pièce jointe"}
+            </p>
+            <ul className="space-y-0.5">
+              {previewAttachments.map((att) => (
+                <li key={att.id} className="truncate">
+                  {att.filename} ({formatAttachmentSize(att.size_bytes)})
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {preview.body_html ? (
           <div
             className={cn("border-t pt-3", EMAIL_PREVIEW_HTML_CLASS)}

@@ -175,6 +175,7 @@ pub fn send_email_unified(
     body_html: Option<&str>,
     thread_id: Option<&str>,
     in_reply_to_message_id: Option<&str>,
+    attachments: &[super::oauth_send::OutgoingEmailAttachment],
 ) -> Result<OAuthSendResult, String> {
     let oauth = EmailOAuthStore::load(app_handle)?;
     if oauth.connection.is_some() {
@@ -195,6 +196,7 @@ pub fn send_email_unified(
             body,
             body_html,
             reply_ref,
+            attachments,
         );
     }
     Err("Aucune connexion email. Paramètres → Emails & envois → Connexion : connectez Google ou Microsoft.".into())

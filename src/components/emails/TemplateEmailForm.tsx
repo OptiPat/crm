@@ -79,6 +79,16 @@ import {
 import { buildTutoiementTemplateNom } from "@/lib/emails/template-email-formality";
 import { parseTemplateEmailMeta } from "@/lib/emails/template-email-html";
 import {
+  findOrphanAttachments,
+  findRemovedAttachments,
+  mergeAttachmentsIntoVariables,
+  parseTemplateEmailAttachments,
+  setTemplateEmailAttachmentsInMeta,
+  type TemplateEmailAttachmentMeta,
+} from "@/lib/emails/template-email-attachments";
+import { TemplateEmailAttachmentsPanel } from "@/components/emails/TemplateEmailAttachmentsPanel";
+import { removeTemplateEmailAttachment } from "@/lib/api/tauri-template-email-attachments";
+import {
   buildRelanceTemplateNom,
   DEFAULT_EMAIL_RELANCE_FALLBACK_DELAI_JOURS,
   DEFAULT_TEMPLATE_EMAIL_RELANCE,
@@ -267,6 +277,8 @@ export function TemplateEmailForm({
   } | null>(null);
   const sujetSelectionRef = useRef({ start: 0, end: 0 });
   const editorSelectionRef = useRef<Range | null>(null);
+  const [attachments, setAttachments] = useState<TemplateEmailAttachmentMeta[]>([]);
+  const baselineAttachmentsRef = useRef<TemplateEmailAttachmentMeta[]>([]);
   const [formData, setFormData] = useState<NewTemplateEmail>({
     nom: "",
     sujet: "",
@@ -291,6 +303,8 @@ export function TemplateEmailForm({
     });
     const storedHtml = getTemplateCorpsHtml(source.variables);
     setCorpsHtml(storedHtml ?? plainTextToTemplateHtml(source.corps));
+    setAttachments(parseTemplateEmailAttachments(source.variables));
+    baselineAttachmentsRef.current = parseTemplateEmailAttachments(source.variables);
     setEmailTrigger(parseTemplateEmailTrigger(source.variables));
     setRelanceTemplateId(source.relance_template_id);
     setTutoiementTemplateId(source.tutoiement_template_id ?? null);
@@ -426,6 +440,7 @@ export function TemplateEmailForm({
       tutoiement_template_id: null,
     });
     setCorpsHtml("");
+    setAttachments([]);
     setEmailTrigger(DEFAULT_TEMPLATE_EMAIL_TRIGGER);
     setRelanceDraft({
       enabled: false,
@@ -605,10 +620,24 @@ export function TemplateEmailForm({
     );
   }, [confirmAbandonOnClose, effectiveTemplateId, ephemeralCampaign.status]);
 
+  const previewVariables = useMemo(() => {
+    if (effectiveTemplateId == null) return formData.variables;
+    return mergeAttachmentsIntoVariables(formData.variables, attachments, effectiveTemplateId);
+  }, [formData.variables, attachments, effectiveTemplateId]);
+
   const closeForm = useCallback(() => {
+    const templateId = effectiveTemplateId;
+    if (templateId != null) {
+      const orphans = findOrphanAttachments(attachments, baselineAttachmentsRef.current);
+      void Promise.all(
+        orphans.map((att) =>
+          removeTemplateEmailAttachment(templateId, att.stored_name).catch(() => undefined)
+        )
+      );
+    }
     rejectPendingEphemeralSave(new Error("closed"));
     onOpenChange(false);
-  }, [onOpenChange]);
+  }, [onOpenChange, effectiveTemplateId, attachments]);
 
   const handleRequestClose = useCallback(() => {
     if (shouldConfirmAbandonEphemeral()) {
@@ -1040,6 +1069,12 @@ export function TemplateEmailForm({
         stampScpiBulletinTemplateMeta(variables, formData.nom),
         formData.nom
       );
+      if (effectiveTemplateId != null) {
+        variables = setTemplateEmailAttachmentsInMeta(
+          variables,
+          attachments.map((att) => ({ ...att, template_id: effectiveTemplateId }))
+        );
+      }
 
       const payload: NewTemplateEmail = {
         ...formData,
@@ -1063,12 +1098,27 @@ export function TemplateEmailForm({
       } else {
         const created = await createTemplateEmail(payload);
         templateId = created.id;
+        await updateTemplateEmail(templateId, {
+          ...payload,
+          variables: setTemplateEmailAttachmentsInMeta(
+            variables,
+            attachments.map((att) => ({ ...att, template_id: templateId! }))
+          ),
+        });
         if (!isEphemeralMode || saveIntentAtStart === "default") {
           toast.success(isEphemeralMode ? "Campagne enregistrée" : "Modèle créé");
         }
       }
       if (templateId != null) {
         setPersistedTemplateId(templateId);
+        const removed = findRemovedAttachments(attachments, baselineAttachmentsRef.current);
+        for (const att of removed) {
+          await removeTemplateEmailAttachment(templateId, att.stored_name);
+        }
+        baselineAttachmentsRef.current = attachments.map((att) => ({
+          ...att,
+          template_id: templateId,
+        }));
       }
       if (isEphemeralMode) {
         setConfirmAbandonOnClose(false);
@@ -1481,6 +1531,13 @@ export function TemplateEmailForm({
                       </div>
                     </details>
 
+                    <TemplateEmailAttachmentsPanel
+                      templateId={effectiveTemplateId}
+                      attachments={attachments}
+                      onChange={setAttachments}
+                      disabled={loading}
+                    />
+
                     <div className="space-y-2">
                       <Label htmlFor="corps">Message *</Label>
                       <RichTextEmailEditor
@@ -1545,7 +1602,7 @@ export function TemplateEmailForm({
                         corps={formData.corps}
                         corpsHtml={corpsHtml}
                         templateNom={formData.nom}
-                        templateVariables={formData.variables}
+                        templateVariables={previewVariables}
                         cgp={cgp}
                         agendaLinkId={formData.agenda_link_id}
                         contact={previewContact}
@@ -1763,7 +1820,7 @@ export function TemplateEmailForm({
                 corps={formData.corps}
                 corpsHtml={corpsHtml}
                 templateNom={formData.nom}
-                templateVariables={formData.variables}
+                templateVariables={previewVariables}
                 cgp={cgp}
                 agendaLinkId={formData.agenda_link_id}
                 contact={previewContact}
